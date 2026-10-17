@@ -109,7 +109,7 @@ Every phase's Done-when; coverage with `backend`, `web` (and `admin-web` once ad
 `scripts/validate_*.py` except `validate_guard_gaps.py` green; the legal blockers above restated in the CR's close as
 still open or answered, with the answer's source.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 

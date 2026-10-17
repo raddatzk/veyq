@@ -82,6 +82,8 @@ work; nothing of § 3–§ 7 there is built here.
 
 ## Open questions and legal blockers
 
+**Decided (Q13).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 - **Legal blocker (ADR 0093 § Legal basis, Still open 4):** what the recorded port is worth when an operator's own NAT
   sits behind the edge, and whether the disclosure must say which edge an instance runs before a record is handed
   over — "needs counsel before the moderation CR". It blocks the **wording** of the first-layer sentence and of the
@@ -146,7 +148,7 @@ Every phase's Done-when; the enabler's criteria name their tests; every `scripts
 in the shape of `TreeRevisionBumpsTest`: every resource method that takes a contributor token (header or body) either
 calls the recorder or is listed as exempt with a reason (a read) — bite: drop the call from one → red.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 

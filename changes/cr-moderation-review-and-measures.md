@@ -79,6 +79,8 @@ and **bar a reporter** (ADR 0093 § 5). The statement of reasons and the objecti
 
 ## Open questions (owner)
 
+**Decided (Q9–Q10).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 - **Q9 — What does blocked content answer?** **Recommendation:** listings keep the item as they serve it today and mark
   it (`blockedByOperator: true`); a byte request answers `451 blocked_by_operator` (RFC 7725's
   status for exactly this), distinct from `404`, so the client draws the placeholder rather than "missing". Alternative:
@@ -148,7 +150,7 @@ a content block" rests on the two `presignGets` callers: phase 2 adds a test tha
 source scan in the shape of `TreeRevisionBumpsTest` and is red on a new caller that is neither checked nor exempt
 (bite: add an unchecked caller → red).
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 
