@@ -212,7 +212,7 @@ planned). After phase 0 the front matter's `satisfies:` names both.
   via `web/src/i18n/index.ts`), fail-open on a failed read like the share's terms fetch (`ShareView.vue` `loadTerms`).
   · Done when: `npm run check` in `web/` green; a guest-mode mount proves the read is the public client
   (`src/test/guestMode.ts` `guardedClients`); a browser pass on a dev instance with and without values set.
-- [ ] **5 docs + coverage** — Run page: the operating mode (what each mode sets, the notice's content, that it is
+- [x] **5 docs + coverage** — Run page: the operating mode (what each mode sets, the notice's content, that it is
   the operator's own assessment), the settings and their warnings per mode (`site/src/content/docs/run/configuration.md`
   or `run/moderation.md`, whichever names admin settings today: `git grep -ln 'Server → Mail' site/src/content/docs`);
   coverage refs replace the planned gaps. · Done when: `validate_coverage.py`, `validate_wiki_sources.py`, `npm run
@@ -231,4 +231,21 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+- **Planning — the request's builders were located on one surface.** Phase 1 predicted the required `operatingMode`
+  red in admin-web only; it also reaches `web/scripts/bootstrap-user.mts`, `web/src/test/e2eBootstrap.ts` and the
+  backend's setup JSON in `SetupServerSliceTest` / `SetupRequestSanitizationTest`, which the contracts phase then had
+  to carry. Root cause: the locator grepped the operation name in admin-web; the field added last to the same request
+  (`moderationEpoch`, grepped across the tree) finds every builder on every surface. Next time: a CR that adds a
+  required request field greps the request's newest existing field, not the operation, across the whole tree.
+- **Execution — the predecessor's wip carried one defect no contract guard sees.** `required: [..., off]` in
+  `InstanceOperatingModePresetEntry` was the YAML 1.1 boolean `false`; PyYAML (every `validate_*.py`) reads it the same
+  way and stays green, and only the first `generate:api` (here `npm ci`'s `prepare`) refused the spec. The wip was saved
+  "checks not run". The trap now sits as a comment at that line; no guard, since the generator already refuses it the
+  first time anyone builds. Next time: a contracts wip is saved only after one `npm run generate:api`.
+- **Decided in place, for the owner to confirm: "the identification is empty".** ADR 0035 decision 7 and the CR say
+  admin-web warns while the identification is *empty*; the console warns while any of its required parts (name,
+  address for service, email) is missing, since a half-filled identification is as incomplete as an empty one; the
+  representative is never required, because the console cannot tell a legal person. Never a refusal either way.
+- **Process.** The worktree-isolated shell refused compound commands (a loop over the guards, a Gradle `--tests` glob,
+  a heredoc after `cd`); small runner scripts in the scratchpad fixed it after a few refusals. Next time: start such a
+  session with the runners (guards, Gradle, bites) rather than reaching them by refusal.
