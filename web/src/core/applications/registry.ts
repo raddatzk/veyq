@@ -124,6 +124,12 @@ export type ContentProblem = { code: 'invalid_manifest' | 'too_large'; message: 
 export interface KindDescriptor {
   kind: NodeKind
   detail?: Component
+  /** The `detail` is drawn from the scope's tree (the nodes under the opened one), as a level is: the host keeps the tree
+   *  live while it is on screen, with the level view's own refresh and its condition (`core/node/useLevelLive.ts`, ADR
+   *  0081: an idle scope is a `304`) — Depot's drop box, whose guests' folders and their file counts are tree rows
+   *  (owner decision 2026-10-17). Omitted: an opened node's page polls nothing of the tree (a Memory's gallery has its
+   *  own revision, ADR 0033; a file's page is the one node). */
+  liveDetail?: boolean
   /** The PrimeIcons class core draws next to a node of this kind (e.g. the trash list). */
   icon: string
   /** The i18n key of the title core's delete dialog (`core/node/components/DeleteNodeDialog.vue`) shows for a node of
