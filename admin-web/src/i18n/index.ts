@@ -143,6 +143,22 @@ const en = {
     "keyUnavailable": "This server has no config-secret key, so a password can’t be stored or used. Configure the key first.",
     "keyMismatch": "The server’s config-secret key has changed, so the saved password can’t be opened. Re-enter it to save it under the current key; until then, no mail is sent."
   },
+  "guestWriteRecord": {
+    "title": "Guests' writes",
+    "sub": "When a guest of a link adds or names something, its IP address, source port and the time are kept for this many days, so that a moderator can hand them on if what it added is reported. Guests are told before they add anything.",
+    "loading": "Reading the guest-write record…",
+    "loadFailed": "Couldn’t read the guest-write record.",
+    "saveFailed": "Couldn’t save the number of days.",
+    "saved": "Saved. A shorter time reaches what is already kept at the next cleanup, within the hour; a longer one only what is kept from now on.",
+    "invalid": "Enter a whole number of days from {min} to {max}.",
+    "switchHint": "Whether anything is kept at all is the switch “Record guests’ writes” under Capabilities; choosing the private operating mode switches it off, club, organisation or company on.",
+    "days": "Keep for (days, {min} to {max})",
+    "default": "Not set yet: {days} days, the default.",
+    "chosen": "Set by you.",
+    "reasonOwed": "More than seven days needs a reason, which you write into your record of processing.",
+    "effect": "Guests are told the number of days in effect when they write; no guest is kept longer than the page told them.",
+    "save": "Save"
+  },
   "operatingMode": {
     "navTitle": "Operating mode",
     "sub": "How this instance is run, on your own assessment. It presets the switches it names and decides whether this console warns about an empty contact or provider identification. It never turns reporting or the moderators off.",
@@ -650,6 +666,22 @@ const de: typeof en = {
     "saveFailed": "Die E-Mail-Einstellungen konnten nicht gespeichert werden.",
     "keyUnavailable": "Dieser Server hat keinen Config-Secret-Schlüssel, daher kann kein Passwort gespeichert oder genutzt werden. Richte zuerst den Schlüssel ein.",
     "keyMismatch": "Der Config-Secret-Schlüssel des Servers hat sich geändert, daher kann das gespeicherte Passwort nicht geöffnet werden. Gib es erneut ein, um es unter dem aktuellen Schlüssel zu speichern; bis dahin wird keine E-Mail verschickt."
+  },
+  "guestWriteRecord": {
+    "title": "Schreibvorgänge von Gästen",
+    "sub": "Wenn ein Gast eines Links etwas hinzufügt oder benennt, werden seine IP-Adresse, sein Quellport und die Uhrzeit so viele Tage aufbewahrt – damit eine Moderatorin oder ein Moderator sie weitergeben kann, falls das Hinzugefügte gemeldet wird. Gäste werden informiert, bevor sie etwas hinzufügen.",
+    "loading": "Aufbewahrung wird gelesen…",
+    "loadFailed": "Die Aufbewahrung konnte nicht gelesen werden.",
+    "saveFailed": "Die Zahl der Tage konnte nicht gespeichert werden.",
+    "saved": "Gespeichert. Eine kürzere Zeit erreicht, was schon aufbewahrt ist, bei der nächsten Bereinigung, innerhalb einer Stunde; eine längere nur, was ab jetzt aufbewahrt wird.",
+    "invalid": "Gib eine ganze Zahl von Tagen von {min} bis {max} ein.",
+    "switchHint": "Ob überhaupt etwas aufbewahrt wird, entscheidet der Schalter „Schreibvorgänge von Gästen festhalten“ unter Funktionen; die Betriebsart „privat“ schaltet ihn aus, „Verein, Organisation oder Unternehmen“ ein.",
+    "days": "Aufbewahren für (Tage, {min} bis {max})",
+    "default": "Noch nicht festgelegt: {days} Tage, die Voreinstellung.",
+    "chosen": "Von dir festgelegt.",
+    "reasonOwed": "Mehr als sieben Tage brauchen eine Begründung, die du in dein Verzeichnis von Verarbeitungstätigkeiten schreibst.",
+    "effect": "Gäste erfahren die Zahl der Tage, die gilt, wenn sie schreiben; kein Gast wird länger aufbewahrt, als die Seite ihm gesagt hat.",
+    "save": "Speichern"
   },
   "operatingMode": {
     "navTitle": "Betriebsart",

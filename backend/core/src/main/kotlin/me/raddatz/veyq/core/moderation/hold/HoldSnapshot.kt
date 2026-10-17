@@ -41,6 +41,10 @@ class HoldSnapshot internal constructor(private val holdId: String, private val 
     internal val blobIds = LinkedHashSet<String>()
     internal val identityIds = LinkedHashSet<String>()
 
+    /** The id of every row copied so far, whatever its table — what a later contributor's rows may name as their object
+     *  (the guest-write record, [me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecordHoldSnapshot]). */
+    internal val copiedIds = LinkedHashSet<String>()
+
     /** Name a blob a copied row refers to: its row is copied and its storage key pinned. Null is ignored. */
     fun blob(id: String?) {
         if (id != null) blobIds += id
@@ -67,6 +71,7 @@ class HoldSnapshot internal constructor(private val holdId: String, private val 
                 sourceId = row["id"] ?: row[column] ?: ""
                 payload = json.writeValueAsString(row)
             }.persist()
+            row["id"]?.let { copiedIds += it }
         }
         return rows
     }

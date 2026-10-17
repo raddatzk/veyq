@@ -55,8 +55,14 @@ interface UploadCompletion {
      * Complete [item] against [node] — a live node of `scopeId` whose kind this implementation [accepts], resolved by
      * core — resolving each upload only for its [opener]. [admitted] is the caller's gate, asked again first in the
      * attach's transaction (a guest's link under the row lock its delete holds; a member's complete passes none).
+     * [attached] is told last in that same transaction, with the id of the object the item became, once and only when
+     * it was attached — a guest's caller records the write there (the guest-write record, ADR 0093 § 10); a refusal,
+     * a conflict or a rollback never tells it. A member's complete passes nothing.
      */
-    fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult
+    fun complete(
+        scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean,
+        attached: (objectId: String) -> Unit = {},
+    ): CompleteItemResult
 }
 
 /**
@@ -75,18 +81,22 @@ class UploadCompletions(
      * Verify + attach each item, scoped only by `scopeId`, resolving each upload only for its [opener] — who is also
      * whom the result is attributed to. Each item's `nodeId` is honoured (the share path sets it to the guest's target
      * — the shared root or a node below it, `ShareGuestGate.target`). [admitted] re-asks the caller's gate first in
-     * each attach's transaction (the share path's also re-decides that target under the scope lock).
+     * each attach's transaction (the share path's also re-decides that target under the scope lock); [attached] is told,
+     * last in that transaction, each object an item became ([UploadCompletion.complete]).
      */
     fun complete(
         scopeId: String, items: List<CompleteItem>, opener: UploadOpener, admitted: () -> Boolean = { true },
+        attached: (objectId: String) -> Unit = {},
     ): List<CompleteItemResult> =
-        items.map { completeOne(scopeId, it, opener, admitted) }
+        items.map { completeOne(scopeId, it, opener, admitted, attached) }
 
-    private fun completeOne(scopeId: String, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
+    private fun completeOne(
+        scopeId: String, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean, attached: (String) -> Unit,
+    ): CompleteItemResult {
         val node = nodes.findInScope(scopeId, item.nodeId)
             ?: return CompleteItemResult(null, null, "node_not_found")
         val completion = completions.filter { it.accepts(node.kind) }.singleOrNull()
             ?: return CompleteItemResult(null, null, "illegal_target")
-        return completion.complete(scopeId, node, item, opener, admitted)
+        return completion.complete(scopeId, node, item, opener, admitted, attached)
     }
 }

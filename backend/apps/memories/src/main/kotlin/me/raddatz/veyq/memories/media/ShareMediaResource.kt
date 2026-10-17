@@ -2,6 +2,7 @@ package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.RequestClient
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -28,6 +29,8 @@ import java.util.UUID
  */
 class ShareMediaResource(
     private val handler: ShareMediaHandler,
+    /** The client a guest's upload records (the guest-write record, ADR 0093 § 10): resolved once, handed down. */
+    private val client: RequestClient,
 ) : ShareMediaApi {
 
     @PermitAll
@@ -90,6 +93,7 @@ class ShareMediaResource(
         return when (
             val o = handler.complete(
                 shareId, xSharePassword, shareMediaBatchRequest.contributorToken, items, shareMediaBatchRequest.nodeId?.toString(),
+                client.seen(),
             )
         ) {
             is ShareMediaCompleteOutcome.Results -> Response.ok(

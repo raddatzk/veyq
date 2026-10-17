@@ -3,6 +3,7 @@ package me.raddatz.veyq.core
 import me.raddatz.veyq.core.blob.AttachmentGuestIdentityUsage
 import me.raddatz.veyq.core.blob.AttachmentNodeSubtreeEraser
 import me.raddatz.veyq.core.items.NodeItemsRevisionNodeSubtreeEraser
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecordNodeSubtreeEraser
 import me.raddatz.veyq.core.blob.AttachmentScopeEraser
 import me.raddatz.veyq.core.blob.AttachmentSharedSubtreeContributor
 import me.raddatz.veyq.core.blob.BlobEntity
@@ -159,8 +160,11 @@ class CoreAloneSliceTest {
     fun everySeamHoldsExactlyCoresOwnImplementations() {
         assertEquals(setOf(AttachmentScopeEraser::class.java, FavoritesScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java),
             classes(scopeErasers), "ScopeEraser: core's own four, and no application's")
-        assertEquals(setOf(AttachmentNodeSubtreeEraser::class.java, NodeItemsRevisionNodeSubtreeEraser::class.java), classes(subtreeErasers),
-            "NodeSubtreeEraser: core's attachments and item-list counters only")
+        assertEquals(
+            setOf(AttachmentNodeSubtreeEraser::class.java, NodeItemsRevisionNodeSubtreeEraser::class.java, GuestWriteRecordNodeSubtreeEraser::class.java),
+            classes(subtreeErasers),
+            "NodeSubtreeEraser: core's attachments, item-list counters and guest-write records only",
+        )
         assertEquals(setOf(AttachmentGuestIdentityUsage::class.java, NodeGuestIdentityUsage::class.java), classes(identityUsages),
             "GuestIdentityUsage: core's attachments and identity folders only")
         assertEquals(setOf(AttachmentSharedSubtreeContributor::class.java), classes(contributors),
@@ -275,7 +279,7 @@ class CoreAloneSliceTest {
             // the empty seam's, not the item's
             val forged = object : UploadCompletion {
                 override fun accepts(nodeKind: String) = nodeKind == kind
-                override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean) =
+                override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean, attached: (String) -> Unit) =
                     CompleteItemResult(null, null, "forged")
             }
             assertEquals("forged", completeOne(UploadCompletions(nodes, mutableListOf(forged)), scopeId, node).error)

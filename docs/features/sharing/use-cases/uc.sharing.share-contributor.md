@@ -119,6 +119,13 @@ sequenceDiagram
   the next visitor names itself afresh, a new identity. Nothing on the server changes — what the first one added stays,
   under its name. The same core component (`GuestNaming`) names every guest of every link: the dialog a READ_WRITE
   guest gets at its first write (a Memory link's as a folder link's), and the two drop pages of a WRITE_ONLY link.
+- **A5 — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),
+  ADR 0093 § 10): while `core.public-shares.guest-write-record` is on, the naming dialog says, before the first write,
+  that the guest's IP address, source port and the time are kept for N days (the N the resolve serves), with the right
+  to object as a sentence of its own, both linking the operator section of the terms. Each write that enters the guest
+  as last editor — naming itself, a node it creates, renames or moves, a photo or file it adds — then records that
+  address, port and time. A viewer is told nothing, since nothing is recorded; while the switch is off, nothing is
+  recorded and nothing is said.
 - **E1 — blank name:** the naming form blocks submission until a non-blank name is entered (mandatory).
 - **E2 — over budget / full / rate-limited:** an oversized upload fails the per-blob byte budget; an upload that
   would take the link over its storage limit, or the tenant over its quota, is refused whole with the visitor told

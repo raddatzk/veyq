@@ -49,7 +49,10 @@ class DepotUploadCompletion(
 
     override fun accepts(nodeKind: String): Boolean = nodeKind == DepotNodeKinds.FILE
 
-    override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
+    override fun complete(
+        scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean,
+        attached: (objectId: String) -> Unit,
+    ): CompleteItemResult {
         // A file holds one blob: an item declaring derivatives is no file upload (only reachable by a future caller of
         // the seam — the Depot contract has no derivatives field).
         if (item.derivatives.isNotEmpty()) return failed("upload_mismatch")
@@ -63,6 +66,7 @@ class DepotUploadCompletion(
         }
         val outcome = attachments.attach(
             scopeId, node.id, setOf(DepotNodeKinds.FILE), DepotBlobRoles.FILE_CONTENT, session, manifest, item.payloads[EXPECTED], admitted,
+            attached,
         )
         return when (outcome) {
             is AttachOutcome.Attached -> CompleteItemResult(outcome.blobId, node.id, null)

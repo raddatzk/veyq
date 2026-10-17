@@ -13,7 +13,11 @@
   in §§ 1–3, 6–7 and 11–13. § 14's operating mode (owner 2026-10-17) is built — the choice at first-run setup and
   later, its notice, the preset mechanism and the warnings per mode — and so is § 11's instance contact with its
   notification address's code confirmation ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
-  no catalog entry carries a preset yet (§ 10's guest-write record is the first). It is on the V1 line (owner
+  § 10's guest-write record is built and carries the catalog's first preset (cr-guest-write-record, 2026-10-17;
+  [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
+  N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
+  first-layer sentence — whose wording waits on counsel (Still open 4) and whose link waits on the operator section of
+  the terms. It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 

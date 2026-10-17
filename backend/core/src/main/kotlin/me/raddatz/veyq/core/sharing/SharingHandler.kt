@@ -32,6 +32,9 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.http.ClientSeen
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -272,6 +275,8 @@ class SharingHandler(
     /** Which application measures a link's usage, by the target node's kind (see [UploadAdmission]). */
     private val quota: StorageQuota,
     private val blocks: ModerationBlocks,
+    /** The guest-write record (ADR 0093 § 10): a guest naming itself is one of the writes it keeps. */
+    private val guestWriteRecords: GuestWriteRecords,
 ) {
 
     fun create(
@@ -652,10 +657,12 @@ class SharingHandler(
 
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------
 
-    /** Name yourself on a contributable share (READ_WRITE/WRITE_ONLY): seal-name in, an anonymous identity + token out. */
+    /** Name yourself on a contributable share (READ_WRITE/WRITE_ONLY): seal-name in, an anonymous identity + token out.
+     *  [seen] is the client its resource resolved: the new identity's name is a guest write the record keeps (ADR 0093
+     *  § 10), in this transaction, once the identity is stored — a replay stores nothing and records nothing. */
     fun createIdentity(
         shareId: String, pwToken: String?, writeToken: String?, identityId: String, sealedDisplayName: String,
-        wrappedIdentityKey: String?,
+        wrappedIdentityKey: String?, seen: ClientSeen?,
     ): CreateIdentityOutcome {
         val share = gate.activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
         when (gate.passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
@@ -681,8 +688,10 @@ class SharingHandler(
             // The link again, under the row lock its delete holds: gated only above, a guest named itself on a link
             // deleted in between, and nothing would ever drop that identity.
             if (!store.admitsGuests(shareId)) return@createOrConflict CreateIdentityOutcome.NotFound
-            store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
-                ?.let { CreateIdentityOutcome.Created(identityId, it) } ?: CreateIdentityOutcome.IdTaken
+            val token = store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
+                ?: return@createOrConflict CreateIdentityOutcome.IdTaken
+            guestWriteRecords.record(seen, identityId, share.scopeId, GuestWriteObject.IDENTITY, identityId, GuestWriteRecords.NAME)
+            CreateIdentityOutcome.Created(identityId, token)
         }
     }
 

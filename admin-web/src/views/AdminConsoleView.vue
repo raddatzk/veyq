@@ -28,6 +28,7 @@ import CapabilitiesPanel from '../features/instance/CapabilitiesPanel.vue'
 import ExternalServicesPanel from '../features/instance/ExternalServicesPanel.vue'
 import ReleaseNoticesPanel from '../features/instance/ReleaseNoticesPanel.vue'
 import InstanceMailPanel from '../features/instance/InstanceMailPanel.vue'
+import GuestWriteRecordPanel from '../features/instance/GuestWriteRecordPanel.vue'
 import ModerationPanel from '../features/instance/ModerationPanel.vue'
 import OperatingModePanel from '../features/instance/OperatingModePanel.vue'
 import OperatorPanel from '../features/instance/OperatorPanel.vue'
@@ -228,7 +229,12 @@ async function signOut() {
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
         <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
-        <ModerationPanel v-else-if="serverPanel === 'moderation'" @open-tenant="selected = $event; serverPanel = null" />
+        <!-- The roster, the key and the Server Owner's steps, then how long a guest's write keeps its address
+             (en.moderation.guest-write-record). -->
+        <div v-else-if="serverPanel === 'moderation'" class="admin-shell__stack">
+          <ModerationPanel @open-tenant="selected = $event; serverPanel = null" />
+          <GuestWriteRecordPanel />
+        </div>
         <OperatingModePanel v-else-if="serverPanel === 'mode'" />
         <OperatorPanel v-else-if="serverPanel === 'operator'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />

@@ -47,6 +47,7 @@ vi.mock('../features/instance/InstanceMailPanel.vue', () => ({ default: { templa
 vi.mock('../features/instance/ModerationPanel.vue', () => ({
   default: { emits: ['openTenant'], template: '<button class="stub-moderation" @click="$emit(\'openTenant\', \'tn-9\')" />' },
 }))
+vi.mock('../features/instance/GuestWriteRecordPanel.vue', () => ({ default: { template: '<div class="stub-guest-write-record" />' } }))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -212,6 +213,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Moderation'))!.trigger('click')
     await flushPromises()
     expect(w.find('.stub-moderation').exists()).toBe(true)
+    expect(w.find('.stub-guest-write-record').exists()).toBe(true) // the record's retention, below the roster
     expect(w.find('.stub-mail').exists()).toBe(false)
   })
 

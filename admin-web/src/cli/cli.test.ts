@@ -71,6 +71,7 @@ vi.mock('../features/instance/operator', async (importOriginal) => ({
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   instanceOperatorApi: vi.fn(),
+  instanceGuestWriteRecordApi: vi.fn(),
 }))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
@@ -102,7 +103,7 @@ import type { InstanceModeration, ModerationSteps } from '../features/instance/m
 import { clearOperator, getOperatingMode, getOperator, setOperator } from '../features/instance/operator'
 import type { InstanceOperatingMode, InstanceOperator } from '../features/instance/operator'
 import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
-import { instanceOperatorApi } from '../api/client'
+import { instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
 import { stubApi } from '../test/apiMock'
 import { httpError } from '../test/httpError'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
@@ -874,5 +875,31 @@ describe('veyq-admin — usage and refusals', () => {
     const r = await invoke(['tenant', 'suspend', '--tenant-id', 't1'])
     expect(r.code).toBe(1)
     expect(r.err).toBe('veyq-admin: request failed: HTTP 409 tenant_not_active')
+  })
+})
+
+describe('veyq-admin guest-write-record (en.moderation.guest-write-record)', () => {
+  it('show prints the days and whether they are the default', async () => {
+    stubApi(instanceGuestWriteRecordApi, { getInstanceGuestWriteRecord: { retentionDays: 7, chosen: false } })
+    const r = await invoke(['guest-write-record', 'show'])
+    expect(r.code).toBe(0)
+    expect(r.out).toBe('guest-write-record 7 days (the default)')
+  })
+
+  it('set sends whole days and says a reason is owed above seven', async () => {
+    const api = stubApi(instanceGuestWriteRecordApi, { setInstanceGuestWriteRecord: { retentionDays: 14, chosen: true } })
+    const r = await invoke(['guest-write-record', 'set', '14'])
+    expect(r.code).toBe(0)
+    expect(api.setInstanceGuestWriteRecord).toHaveBeenCalledWith({ instanceGuestWriteRecordUpdate: { retentionDays: 14 } })
+    expect(r.out).toContain('guest-write-record 14 days')
+    expect(r.out).toContain('record of processing')
+  })
+
+  it.each(['0', '31', '7.5', 'week'])('set refuses %j and sends nothing', async (days) => {
+    const api = stubApi(instanceGuestWriteRecordApi, { setInstanceGuestWriteRecord: { retentionDays: 7, chosen: true } })
+    const r = await invoke(['guest-write-record', 'set', days])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('from 1 to 30')
+    expect(api.setInstanceGuestWriteRecord).not.toHaveBeenCalled()
   })
 })

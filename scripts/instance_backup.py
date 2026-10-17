@@ -289,6 +289,12 @@ NOT_DATA = (
     "veyq_store_orphan",
 )
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
+# The tables a dump carries the SCHEMA of and none of the rows (ADR 0093 § 10): the guest-write record keeps a guest's
+# address, port and time for at most 30 days as evidence a hold copies, and a backup must not keep them past that. What is
+# lost is at most 30 days old and expiring anyway; what was reported lives in the hold tables, which are dumped whole.
+# Restored, the table exists and is empty, so the app boots and records again. `instance_backup_selftest.py` holds the
+# dump's argv and that each name is a table a migration creates.
+DUMP_SCHEMA_ONLY = ("veyq_guest_write_record",)
 # The bucket reconcile's state and its first-seen clocks (ADR 0062 § Consequences): every restore empties them after the
 # load ([Database.reset_reconcile]), so a dump's clocks never come back and no deletion stays armed across a restore.
 RECONCILE_TABLES = ("veyq_store_orphan", "veyq_store_reconcile")
@@ -407,13 +413,18 @@ class Database:
         step 7 true — the restored instance boots at the version it was captured at, so
         `quarkus.flyway.migrate-at-start=true` is a no-op rather than a re-derivation against an empty schema.
 
+        Except the rows of [DUMP_SCHEMA_ONLY] (`--ignore-table-data`, never `--ignore-table`: the table's schema stays,
+        so a restored instance has it, empty — ADR 0093 § 10).
+
         And deliberately **without** `--databases`: that form bakes `CREATE DATABASE`/`USE <source name>` into
         the file, which would make the target database's name a property of the backup. The restore rehearsal
         loads into a differently-named database on purpose, and an operator restoring onto fresh hardware has
         no reason to be bound to the old name either.
         """
         cmd = self._wrap("mariadb-dump") + self._conn() + [
-            "--single-transaction", "--default-character-set=utf8mb4", self.name,
+            "--single-transaction", "--default-character-set=utf8mb4",
+            *(f"--ignore-table-data={self.name}.{table}" for table in DUMP_SCHEMA_ONLY),
+            self.name,
         ]
         with target.open("wb") as out:
             proc = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, env=self._env())
@@ -576,7 +587,8 @@ class Database:
         alive without a `veyq_blob` row adds its keys here, as `[storage_key, chunk_count]` rows. `veyq_hold_pin` is
         that table (ADR 0093 § 4, en.moderation.hold): once a held medium's uploader deleted it, its `veyq_blob` row is
         gone and only the pin names its objects, while the database leg carries the hold that needs them — so a store
-        leg read from `veyq_blob` alone would leave them out. A key both name is listed once (`UNION`).
+        leg read from `veyq_blob` alone would leave them out. A key both name is listed once (`UNION`). A table added
+        here must also go into `run_web_e2e.seed_project_decoy`, whose decoy is the smallest instance a capture accepts.
         """
         return [[row[0], int(row[1])] for row in
                 self.query("SELECT storage_key, chunk_count FROM veyq_blob UNION "

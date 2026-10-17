@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
+  - docs/features/moderation/enablers/en.moderation.guest-write-record.md
 ---
 
 veyq splits its configuration in two
@@ -181,6 +182,7 @@ The backup gate captures the database and an index of the store before a release
 | The object store | **Server → Object store**, or `veyq-admin store set` | The bundled store, an S3-compatible store of your own, or a Garage of your own, with its endpoint, bucket, region and keys. It applies at once and is checked before a tenant can be created ([First-run setup](/veyq/run/first-run/#connect-the-object-store)) |
 | A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
 | The operating mode | first-run setup, then **Server → Operating mode**, or `veyq-admin mode set` | Private, or club, organisation or company: your own assessment, a preset over the switches it names, and whether the console warns about an empty contact or identification ([Moderation](/veyq/run/moderation/#the-operating-mode)) |
+| How long a guest's write is kept | **Server → Moderation**, or `veyq-admin guest-write-record set <days>` | N, 1 to 30 days, 7 by default: how long a link guest's IP address, source port and time are kept. Whether anything is kept is the switch *Record guests' writes*, whose default follows the operating mode ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)) |
 | Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public — and the private notification address, confirmed by a code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)) |
 
 A tenant's mail server, terms and per-link upload limit are its owner's, set in the app, not here.

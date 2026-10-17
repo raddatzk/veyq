@@ -474,7 +474,10 @@ Every CR updates `docs/coverage/` for the
 use-case(s) it `satisfies:` — each new acceptance criterion gets a test ref (or an explicit `gaps:`
 entry with a reason) — and leaves `python3 scripts/validate_coverage.py` **green**. A CR is not done
 while the trust chain is red. (A use-case refined ahead of any implementation ships a `status: planned`
-coverage file that gaps every target surface.)
+coverage file that gaps every target surface.) There is no planned *criterion*: `status: planned` is the file's, and
+every criterion of a built use-case needs a ref, so a CR that adds an alternate flow to a built use-case writes its
+criteria in the phase that brings their tests — `cr-guest-write-record`'s phase 0 promised "planned coverage" for three
+built use-cases and could write none.
 
 **A phase that renames or removes a test runs `validate_coverage.py` itself — `./gradlew check` does not read
 `docs/coverage/`.** `cr-store-connection-in-admin-web` renamed four test methods in its phase 2 commit with a Done-when
@@ -1896,6 +1899,17 @@ shows in a catalog. So a CR whose output is user-facing steps (a Use page, an on
 the running client with a test account and a fresh instance. It writes from the walk and corrects the page against
 it, and it names in its CR what it could not walk (a second device, a camera, a third-party map) instead of
 implying it. A page written from code alone is a draft.
+
+### A decision that puts a write "in its transaction" names the layer that owns that transaction
+
+`cr-guest-write-record` placed its recording "at the resource layer, after the write succeeds and in its transaction".
+No resource in the backend holds a transaction: every guest-write handler opens its own (`createOrConflict`,
+`QuarkusTransaction.requiringNew`), and an upload's lives in each application's attach behind core's completion seam.
+The implementer split the decision — the resource resolves the client once and hands it down, the handler records in
+its transaction, and the seam grew an `attached` hook the attach calls last — which held the intent but was a design
+call the CR had not made. So a refine that ties a new write to an existing one greps where that write's transaction
+begins (`@Transactional`, `QuarkusTransaction`, `createOrConflict` along the call path) and names that layer, and for
+a write behind a seam, the hook through which the seam's implementations take part.
 
 ### Every CR closes with a short, honest retrospective
 

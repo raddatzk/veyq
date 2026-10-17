@@ -35,7 +35,7 @@ class UploadCompletionPartitionCoreSliceTest {
     private class Forged(private val kind: String) : UploadCompletion {
         val offered = mutableListOf<String>()
         override fun accepts(nodeKind: String): Boolean = nodeKind == kind
-        override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
+        override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean, attached: (String) -> Unit): CompleteItemResult {
             offered += node.id
             return CompleteItemResult(null, null, "forged")
         }

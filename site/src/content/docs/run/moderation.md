@@ -14,6 +14,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.operator-details.md
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
+  - docs/features/moderation/enablers/en.moderation.guest-write-record.md
 ---
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
@@ -120,6 +121,38 @@ an organisation or a company, you are probably not exempt. Choosing *private* ne
 shown which ones would change; each stays an ordinary switch you can set on its own
 ([Capabilities](/veyq/run/capabilities/)), and choosing the mode again sets them again. A tenant's own switches are
 never touched. Nothing is required and nothing is refused in either mode: a warning is a warning.
+
+## What a guest's write keeps
+
+When a guest of a link adds or names something — names itself, creates, renames or moves a folder or file, adds a
+photo or a file — veyq keeps the guest's IP address, its source port and the time to the millisecond, with the guest
+identity and what was written, for **N days** ([en.moderation.guest-write-record](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.guest-write-record.md), [ADR 0093 § 10](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+Nothing a member does and nothing anyone only looks at is kept, and never a User-Agent or content. It is evidence: if
+what a guest added is reported, the report's hold copies these rows, and a moderator can hand them to an authority.
+Everything else expires.
+
+- **The switch** is the capability *Record guests' writes* (`core.public-shares.guest-write-record`,
+  [Capabilities](/veyq/run/capabilities/)). Its default follows the operating mode: **off** in *private*, **on** in
+  *club, organisation or company*; you can set it on its own afterwards. Off, nothing new is kept and the next cleanup
+  (hourly, and at every start) deletes what was; what a report's hold copied stays for the hold's time.
+- **N** is set under **Server → Moderation**, or with `veyq-admin guest-write-record set <days>`: 7 by default, 1 to
+  30. Seven days is the supervisory practice; a longer time needs a reason you write into your record of processing. A
+  shorter N reaches every kept row at the next cleanup, a longer one only rows written from then on, so no guest is
+  kept longer than the page told them.
+- **Guests are told** before their first write, on the page itself, with the N in effect and the right to object as a
+  sentence of its own. You are the controller, not a space's owner; the full information belongs in the operator
+  section of the terms, which comes with a later change.
+- **The address is the one the network vouches for**, never one the client wrote ([Networking](/veyq/run/networking/)).
+  On Compose it is strong by construction; on Kubernetes it is only as strong as an enforced NetworkPolicy. The source
+  port is known where your edge states it (on Compose, the recipe's Traefik always does); otherwise only the address is
+  kept, and an address without a port may name no single subscriber behind carrier-grade NAT.
+- **Keep the host's clock on NTP.** A port is only worth something with an exact time: a carrier hands it to the next
+  subscriber quickly, and a clock minutes off names the wrong one.
+- **Backups.** `veyqctl backup` (the instance backup) dumps the table's schema and none of its rows, so a capture never
+  keeps a guest past N. If you back up otherwise — volume snapshots, a dump of your own — those copies hold the rows:
+  keep such a backup at most 30 days (call it B), open it only to restore it, and let the restored instance start once
+  (its cleanup then deletes what is past N at boot). A guest's data can then live N + B days, and what you tell guests
+  has to say so.
 
 ## Who runs the instance
 

@@ -90,6 +90,7 @@ end, since the skip asks for a pin whose end is still ahead.
   pinned objects too: `scripts/instance_backup.py`'s `blob_index`),
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 - [uc.moderation.report](../use-cases/uc.moderation.report.md)
+- [en.moderation.guest-write-record](en.moderation.guest-write-record.md) — the record rows a hold copies
 - Docs site: [Report something](../../../../site/src/content/docs/help/report-something.mdx),
   [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
   [What the server sees](../../../../site/src/content/docs/security/what-the-server-sees.md)

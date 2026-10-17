@@ -149,6 +149,13 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   group's name and icon, a bucket's name, a medium's meta: the member or guest identity whose write the ciphertext is,
   served to no client and never what was written ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 8, [en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md));
+  while the Server Owner keeps it switched on (off by default in the *private* operating mode), the **guest-write
+  record**: per write a link's guest makes that enters it as a last editor, the client address of core's one resolver
+  (never one the client chose, [ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)),
+  its source port where known and the time to the millisecond, with the guest identity and the object — kept N days
+  (1 to 30, default 7), copied by a hold, left out of the instance backup's rows; never a member's write, a read, a
+  User-Agent or content ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  § 10, [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md));
   per-parent blinded tokens; to a **public share's guest**, the shared node's **scope id** — every `K_node` seal the
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
@@ -352,6 +359,15 @@ server-blind token makes this work without the server ever seeing a name:
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
   decryptable-on-report — notice-and-takedown works exactly where content is distributed.
+- **A guest's write keeps where it came from, briefly** ([en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)).
+  A link guest has no account, so the evidence a report about its upload can carry is the connection: while the
+  Server Owner keeps the record on, each write that enters a guest as last editor stores the client address the
+  network vouches for, its source port and a millisecond time, for N days (1 to 30, default 7); a report's hold copies
+  the rows of what it concerns. Guests are told before their first write, with N and the right to object. The record
+  adds operator-visible metadata about guests, never content, and nothing about members or readers; an address
+  without a port may name no single subscriber behind carrier-grade NAT, and on Helm the address is only as strong as
+  an enforced NetworkPolicy ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
+  decision 6).
 - **A link's id alone opens no write.** The share id is stored raw (members rebuild links from it, seals bind it,
   every guest request path carries it), so a database copy or an access log holds every id. Naming yourself as a
   guest — the one write the id used to open — presents a token derived from `K_share`, of which the share keeps only

@@ -76,7 +76,9 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
      *  7. the replaced blob freed ([BlobUploadStore.deleteBlobRow]: row + reclaim record, never a bare delete — there
      *     is no sweep) in this transaction;
      *  8. the scope's tree revision moved ([NodesStore.bumpTree], ADR 0081), the last write — a refusal above bumps
-     *     nothing, a [AttachOutcome.Conflict] changed no slot.
+     *     nothing, a [AttachOutcome.Conflict] changed no slot;
+     *  9. [attached] told the node, once the swap stands — a guest's caller records the write there (ADR 0093 § 10);
+     *     a refusal and a [AttachOutcome.Conflict] never tell it.
      * Every refusal before the swap rolls the transaction back, the spend included: the session stays open and expires
      * as an unfinished upload does (`UploadSessionPurge` reclaims its objects).
      */
@@ -90,6 +92,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         manifest: List<Long>?,
         expectedBlobId: String?,
         admitted: () -> Boolean = { true },
+        attached: (objectId: String) -> Unit = {},
     ): AttachOutcome {
         require(SLOT.matches(slot)) { "a slot is an application's token ${SLOT.pattern}" }
         require(session.scopeId == scopeId) { "the session is resolved in the scope it is attached in (findSession)" }
@@ -115,6 +118,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         }
         blobs.deleteBlobRow(expectedBlobId)
         nodes.bumpTree(scopeId) // a first blob or a replacement is a change of the level view (a file's uploaded state, a cover; ADR 0081)
+        attached(nodeId)
         return AttachOutcome.Attached(blobId, expectedBlobId)
     }
 

@@ -112,7 +112,7 @@ class GuestCompleteTargetRaceSliceTest {
     /** The guest's completion into the Memory, as the item's error (null = landed). */
     private fun complete(t: Tree, uploadId: String): String? {
         val item = ShareMediaItem(TestBlob.ownerOf(uploadId), uploadId, emptyList(), null, null)
-        val o = media.complete(t.link.shareId, null, t.link.token, listOf(item), t.memory)
+        val o = media.complete(t.link.shareId, null, t.link.token, listOf(item), t.memory, seen = null)
         return (o as ShareMediaCompleteOutcome.Results).items.single().error
     }
 

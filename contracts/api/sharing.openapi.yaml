@@ -1861,6 +1861,15 @@ components:
           contentEncoding: base64
           maxLength: 2048
           example: null
+        guestWriteRecordDays:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          description: >
+            While the instance records guest writes (`core.public-shares.guest-write-record` on): N, the days a guest's
+            write keeps its client address, source port and time (ADR 0093 § 10) — set on an unlocked response whose role
+            lets its guest write (READ_WRITE, WRITE_ONLY), so the page tells the guest before its first write, with the N
+            current then. Null while the switch is off, for a READ link (nothing is recorded) and in a locked response.
+          example: 7
         nodeId:
           x-veyq-visibility: id
           type: [string, "null"]

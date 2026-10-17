@@ -323,6 +323,13 @@ interface VeyqConfig {
         /** Reports (ADR 0093 § 5, uc.moderation.report): the bounds a reporter meets. */
         fun report(): Report
 
+        /** The guest-write record (ADR 0093 § 10): how often rows past their retention go. It also runs at startup. */
+        fun guestWriteRecord(): GuestWriteRecord
+
+        interface GuestWriteRecord {
+            fun purge(): Interval
+        }
+
         interface Report {
             /** How many of a member's reports may be open at once (owner decision Q8: a generous cost bound). */
             @WithDefault("100")

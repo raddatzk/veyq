@@ -2,6 +2,9 @@ package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.http.ClientSeen
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
+import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
@@ -40,16 +43,18 @@ sealed interface IdentityFolderOutcome {
  * answers as its replay — the folder the winner made.
  */
 @ApplicationScoped
-class IdentityFolders(private val nodes: NodesStore) {
+class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecords: GuestWriteRecords) {
 
     /**
      * The identity folder of [gated]'s identity in its link's root — created from the request when it has none.
      * [gated] must be a `WRITE_ONLY` admission whose root kind the caller's application takes identity folders under.
-     * Lock order as every guest write: the scope row, then the share row ([ShareWriteGate.Admitted.admitted]).
+     * Lock order as every guest write: the scope row, then the share row ([ShareWriteGate.Admitted.admitted]). The call
+     * that creates the folder records [seen] (ADR 0093 § 10: the guest named it), in its transaction; one that finds it
+     * wrote nothing and records nothing.
      */
     fun ensure(
         gated: ShareWriteGate.Admitted, nodeId: String, encryptedName: String, slugToken: String, epoch: Int,
-        wrappedContentKey: String,
+        wrappedContentKey: String, seen: ClientSeen?,
     ): IdentityFolderOutcome {
         require(gated.role == ShareEntity.WRITE_ONLY) { "an identity folder is a WRITE_ONLY guest's" }
         val scopeId = gated.scopeId
@@ -69,6 +74,7 @@ class IdentityFolders(private val nodes: NodesStore) {
                 editor = PrincipalKey.Share(gated.identityId),
             )
             NodeEntity.flush() // the unique index decides here, inside the retry's reach, not at commit
+            guestWriteRecords.record(seen, gated.identityId, scopeId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
             IdentityFolderOutcome.Folder(nodeId, epoch, 0, wrappedContentKey, created = true)
         }
     }

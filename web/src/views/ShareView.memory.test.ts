@@ -104,13 +104,13 @@ function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Ar
   return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A link rooted at the Memory "Rom 2026" (its chapter "Tag 1" below), or — `chapterRoot` — at the chapter itself. */
-function head(role: ShareRole, o: { chapterRoot?: boolean } = {}): PublicShareHead {
+function head(role: ShareRole, o: { chapterRoot?: boolean; recordDays?: number } = {}): PublicShareHead {
   const rootKind = o.chapterRoot ? CHAPTER_KIND : MEMORY_KIND
   const name = o.chapterRoot ? 'Tag 1' : 'Rom 2026'
   const base = { shareId: SHARE, kShare: K_SHARE, scopeId: SCOPE, name, noteByLocale: { en: 'Curator **note**' }, role, rootKind }
   if (role === ShareRole.WriteOnly) {
     const sealedDropPublicKey = b64std(v1.seal({ purpose: 'drop-public-key' }, K_SHARE, v1.serializeHybridPublic(v1.dropKeyPublic(v1.generateDropKey()))))
-    return { ...base, share: { role, scopeId: SCOPE, rootKind, nodeId: MEMORY, sealedDropPublicKey, nodes: [] } as unknown as PublicShare }
+    return { ...base, share: { role, scopeId: SCOPE, rootKind, nodeId: MEMORY, sealedDropPublicKey, nodes: [], guestWriteRecordDays: o.recordDays ?? null } as unknown as PublicShare }
   }
   const nodes = o.chapterRoot
     ? [{ id: CHAPTER, parentId: null, kind: CHAPTER_KIND, epoch: 0 }]
@@ -292,6 +292,15 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     w.unmount()
   })
 
+  it('WRITE_ONLY: the drop page tells the guest before its first photo what is kept, for the N served (uc.sharing.share-uploader A3)', async () => {
+    const w = await mountPage(head(ShareRole.WriteOnly, { recordDays: 14 }))
+    const notice = w.find('.share-name-card [data-testid="guest-write-record-notice"]')
+    expect(notice.find('.guest-write-record-kept').text()).toBe(t('share.guest.recordKept', { days: 14 }, 14))
+    expect(notice.find('.guest-write-record-objection').text()).toBe(t('share.guest.recordObjection'))
+    expect(authenticatedCalls).toEqual([])
+    w.unmount()
+  })
+
   it('WRITE_ONLY: the drop page — no tree, no gallery, no member detail', async () => {
     const w = await mountPage(head(ShareRole.WriteOnly))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
@@ -299,6 +308,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     expect(w.find('.memory-detail').exists()).toBe(false)
     expect(w.find('[data-testid="memory-participants"]').exists(), 'no participants on a drop page').toBe(false)
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
+    expect(w.find('[data-testid="guest-write-record-notice"]').exists(), 'no N served: nothing said').toBe(false)
     expect(publicShareMediaApi().listShareMedia, 'an uploader is served no media').not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
     expect(touched).toEqual([])

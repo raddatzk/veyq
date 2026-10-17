@@ -125,6 +125,9 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_moderation_block.lifted_at" to "served: ModerationMeasure.liftedAt — the record that a measure was lifted (active_key says whether)",
             "veyq_moderation_proposal.proposed_at" to "served: ModerationProposal.proposedAt, OpenModerationProposal.proposedAt; orders both lists",
             "veyq_moderation_proposal.settled_at" to "served: ModerationProposal.settledAt",
+            // --- the guest-write record (ADR 0093 § 10, en.moderation.guest-write-record)
+            "veyq_guest_write_record.observed_at" to "GuestWriteRecordPurge deletes a row older than N as it stands now (GuestWriteRecords.purge)",
+            "veyq_guest_write_record.expires_at" to "GuestWriteRecordPurge deletes a row past it, at startup and on its interval",
             // --- tasks
             "veyq_job.created_at" to "TasksStore claims the oldest job first and picks the newest covering rotation",
             "veyq_job.lease_expires_at" to "TasksStore re-offers a job whose lease ran out",

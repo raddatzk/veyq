@@ -30,6 +30,7 @@ import type { FileUploadResult } from '../uploadFile'
 import { clearUploads } from '../../../core/blob/queue'
 import { GuestTreeError, type GuestTreeContext } from '../../../core/sharing/guestTree'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { ShareRole, type PublicShare } from '../../../api/generated/sharing'
 import { realI18n } from '../../../test/i18n'
 import { formatBytes } from '../../../shared/formatBytes'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
@@ -37,7 +38,9 @@ import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 
 const { t } = realI18n().global
 const SHARE = 'Dr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0p-_1'
-const HEAD = { shareId: SHARE, scopeId: 'scope', name: 'Steuer 2026' } as PublicShareHead
+// The resolve's answer as the page reads it: an unlocked WRITE_ONLY link, recorded for N = 7 days (ADR 0093 § 10).
+const SHARE_ANSWER = { role: ShareRole.WriteOnly, passwordRequired: false, nodes: [], guestWriteRecordDays: 7 } as PublicShare
+const HEAD = { shareId: SHARE, scopeId: 'scope', name: 'Steuer 2026', share: SHARE_ANSWER } as PublicShareHead
 const SESSION: DropGuestSession = { identityId: 'id-1', contributorToken: 'tok-1', identityKey: 'a2V5' }
 const FOLDER = { nodeId: 'folder-1', key: v1.randomBytes(32), epoch: 0, placementRevision: 0, created: true }
 
@@ -75,9 +78,9 @@ beforeEach(() => {
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => fakeJob(file))
 })
 
-function mountPage(reload: () => Promise<void> = async () => {}) {
+function mountPage(reload: () => Promise<void> = async () => {}, head: PublicShareHead = HEAD) {
   return mount(DropBoxShareBody, {
-    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head: HEAD, reload, access: guestAccessFor(HEAD) },
+    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head, reload, access: guestAccessFor(head) },
     global: { plugins: [realI18n(), PrimeVue] },
   })
 }
@@ -334,5 +337,34 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
     expect(saveDropGuest).not.toHaveBeenCalled()
     expect(ensureDropFolder).not.toHaveBeenCalled()
     expect(notYou(w).text()).toBe(t('depot.dropBox.guestStartOver'))
+  })
+})
+
+describe('DropBoxShareBody: the guest-write record (uc.depot.drop-box A4b)', () => {
+  const notice = (w: Page) => w.find('[data-testid="guest-write-record-notice"]')
+
+  it('tells a guest before its first file, with the N the resolve served, and the objection on its own', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(null)
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('.guest-naming-input').exists(), 'the name form, before any file').toBe(true)
+    expect(notice(w).find('.guest-write-record-kept').text()).toBe(t('share.guest.recordKept', { days: 7 }, 7))
+    expect(notice(w).find('.guest-write-record-objection').text()).toBe(t('share.guest.recordObjection'))
+  })
+
+  it('keeps telling a named guest beside its session line', async () => {
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('.guest-naming-identity').exists()).toBe(true)
+    expect(notice(w).exists()).toBe(true)
+  })
+
+  it('says nothing while the switch is off (no N served) — control: the same page served one', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(null)
+    const off = { ...HEAD, share: { ...SHARE_ANSWER, guestWriteRecordDays: null } } as PublicShareHead
+    const w = mountPage(async () => {}, off)
+    await flushPromises()
+    expect(w.find('.guest-naming-input').exists()).toBe(true)
+    expect(notice(w).exists()).toBe(false)
   })
 })

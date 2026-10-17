@@ -1,5 +1,8 @@
 package me.raddatz.veyq.core.admin.setup
 
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_GUEST_WRITE_RECORD
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.identity.ModeratorEntity
@@ -137,7 +140,11 @@ class SetupServerSliceTest {
             assertEquals(true, ModeratorEntity.findById(userId)?.accepted)
             // The mode the Server Owner chose is stored with the owner, in the same transaction (ADR 0093 § 14).
             assertEquals("PRIVATE", OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode)
+            // …and its preset set with it (ADR 0088 decision 14): the guest-write record is off in private (ADR 0093 § 14).
+            assertEquals(listOf(PUBLIC_SHARES_GUEST_WRITE_RECORD), CapabilitySwitchEntity.listAll().map { it.id })
         }
+        // The switch row is shared H2 state: every later class starts with every entry on (CapabilitySwitchFixtures).
+        CapabilitySwitchFixtures.clear()
     }
 
     @Test

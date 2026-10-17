@@ -2049,6 +2049,10 @@ const en = {
       // the shell's naming dialog behind `GuestAccess.requestGuest`: a guest's first write, whichever view asks
       nameTitle: 'What is your name?',
       nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
+      // the guest-write record's first-layer notice (core/sharing/GuestWriteRecordNotice.vue, ADR 0093 § 10): N as the
+      // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own. Wording awaits counsel.
+      recordKept: 'When you add something here, your IP address, your source port and the time are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port and the time are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
+      recordObjection: 'You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.',
     },
     // ADR 0030 point 8: no share link is served a guest's name — only the Memory's members read it
     nameVisibility: 'Only the people this belongs to see your name.',
@@ -4010,6 +4014,8 @@ const de: typeof en = {
       notYouAccept: 'Neu beginnen',
       nameTitle: 'Wie heißt du?',
       nameHint: 'Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen das hier gehört.',
+      recordKept: 'Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport und die Uhrzeit einen Tag aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast. | Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport und die Uhrzeit {days} Tage aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast.',
+      recordObjection: 'Du kannst dem jederzeit aus Gründen widersprechen, die sich aus deiner besonderen Situation ergeben; wenn du das nicht möchtest, kannst du weiterhin ansehen, ohne etwas hinzuzufügen.',
     },
     nameVisibility: 'Deinen Namen sehen nur die Personen, denen das hier gehört.',
     yourName: 'Dein Name',
