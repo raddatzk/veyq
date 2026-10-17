@@ -41,6 +41,14 @@ vi.mock('../features/instance/capabilities', async (importOriginal) => ({
 vi.mock('../features/instance/externalServices', () => ({
   listExternalServices: vi.fn(), setExternalService: vi.fn(), clearExternalService: vi.fn(),
 }))
+// The re-exported enums stay real: `moderation rotate` is asserted on the reason it maps `--reason` to.
+vi.mock('../features/instance/moderation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/instance/moderation')>()),
+  getModeration: vi.fn(),
+  appointModerator: vi.fn(),
+  removeModerator: vi.fn(),
+  rotateModerationKey: vi.fn(),
+}))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
@@ -55,6 +63,8 @@ import {
   clearInstanceCapabilityRequirement, listInstanceCapabilities, setInstanceCapability, setInstanceCapabilityRequirement,
 } from '../features/instance/capabilities'
 import type { InstanceCapability } from '../features/instance/capabilities'
+import { appointModerator, getModeration, removeModerator, rotateModerationKey } from '../features/instance/moderation'
+import type { InstanceModeration } from '../features/instance/moderation'
 import { httpError } from '../test/httpError'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
 
@@ -462,11 +472,102 @@ describe('veyq-admin — the capability switches (uc.admin.switch-capabilities)'
   })
 })
 
+describe('veyq-admin — moderators and the moderation key (uc.moderation.appoint-moderators)', () => {
+  const roster = (over: Partial<InstanceModeration> = {}): InstanceModeration => ({
+    enabled: true,
+    currentEpoch: 2,
+    rotationDueSince: null,
+    serverOwner: { accountId: 'owner', identityPublicKey: 'AAAA' },
+    moderators: [
+      {
+        accountId: 'owner', address: 'owner@example.com', state: 'ACCEPTED', appointedAt: EXPIRES, acceptedAt: EXPIRES,
+        identityPublicKey: 'AAAA', holdsCurrentEpoch: true, addressConfirmed: true,
+      },
+      {
+        accountId: 'deputy-id', address: 'Deputy@Example.com', state: 'PENDING', appointedAt: EXPIRES, acceptedAt: null,
+        identityPublicKey: null, holdsCurrentEpoch: false, addressConfirmed: false,
+      },
+    ],
+    ...over,
+  })
+
+  it('moderator list prints the roster compactly — address, state, holds key — and no identity key', async () => {
+    vi.mocked(getModeration).mockResolvedValueOnce(roster())
+    const r = await invoke(['moderator', 'list'])
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({
+      enabled: true,
+      currentEpoch: 2,
+      rotationDueSince: null,
+      moderators: [
+        { address: 'owner@example.com', state: 'ACCEPTED', holdsKey: true },
+        { address: 'Deputy@Example.com', state: 'PENDING', holdsKey: false },
+      ],
+    })
+    expect(r.out).not.toContain('AAAA')
+  })
+
+  it('moderator appoint passes the address to the facade, and a refusal exits 1 with its code', async () => {
+    vi.mocked(appointModerator).mockResolvedValueOnce(roster())
+    expect((await invoke(['moderator', 'appoint', '--address', 'deputy@example.com'])).code).toBe(0)
+    expect(appointModerator).toHaveBeenCalledWith('deputy@example.com')
+    vi.mocked(appointModerator).mockRejectedValueOnce(httpError(404, 'account_not_found'))
+    const r = await invoke(['moderator', 'appoint', '--address', 'nobody@example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 404 account_not_found')
+  })
+
+  it('moderator remove resolves the account from the roster by address, case-insensitively, and removes it', async () => {
+    vi.mocked(getModeration).mockResolvedValueOnce(roster())
+    vi.mocked(removeModerator).mockResolvedValueOnce(roster({ moderators: roster().moderators.slice(0, 1) }))
+    const r = await invoke(['moderator', 'remove', '--address', 'deputy@example.COM'])
+    expect(r.code).toBe(0)
+    expect(removeModerator).toHaveBeenCalledWith('deputy-id')
+  })
+
+  it('moderator remove refuses an address not on the roster, and removes nothing', async () => {
+    vi.mocked(getModeration).mockResolvedValueOnce(roster())
+    const r = await invoke(['moderator', 'remove', '--address', 'stranger@example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('stranger@example.com is not on the moderator roster')
+    expect(removeModerator).not.toHaveBeenCalled()
+  })
+
+  it('a removal whose rotation the server refuses exits 1 with that refusal', async () => {
+    vi.mocked(getModeration).mockResolvedValueOnce(roster())
+    vi.mocked(removeModerator).mockRejectedValueOnce(httpError(409, 'moderation_grants_incomplete'))
+    const r = await invoke(['moderator', 'remove', '--address', 'owner@example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 409 moderation_grants_incomplete')
+  })
+
+  it('moderation rotate maps --reason to the logged category', async () => {
+    for (const [typed, sent] of [['by-hand', 'BY_HAND'], ['compromise', 'COMPROMISE'], ['identity-rotation', 'IDENTITY_ROTATION'], ['removal', 'REMOVAL']]) {
+      vi.mocked(rotateModerationKey).mockResolvedValueOnce(roster({ currentEpoch: 3 }))
+      const r = await invoke(['moderation', 'rotate', '--reason', typed])
+      expect(r.code).toBe(0)
+      expect(rotateModerationKey).toHaveBeenLastCalledWith(sent)
+      expect(JSON.parse(r.out).currentEpoch).toBe(3)
+    }
+  })
+
+  it('moderation rotate refuses an unknown or missing reason before signing in, and mints nothing', async () => {
+    const unknown = await invoke(['moderation', 'rotate', '--reason', 'whim'])
+    expect(unknown.code).toBe(1)
+    expect(unknown.err).toContain('--reason must be one of by-hand, compromise, identity-rotation, removal')
+    const missing = await invoke(['moderation', 'rotate'])
+    expect(missing.code).toBe(1)
+    expect(missing.err).toContain('--reason is required')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(rotateModerationKey).not.toHaveBeenCalled()
+  })
+})
+
 describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

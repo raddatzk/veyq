@@ -28,6 +28,7 @@ import CapabilitiesPanel from '../features/instance/CapabilitiesPanel.vue'
 import ExternalServicesPanel from '../features/instance/ExternalServicesPanel.vue'
 import ReleaseNoticesPanel from '../features/instance/ReleaseNoticesPanel.vue'
 import InstanceMailPanel from '../features/instance/InstanceMailPanel.vue'
+import ModerationPanel from '../features/instance/ModerationPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
@@ -49,7 +50,7 @@ const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
-const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | null>(null)
+const serverPanel = ref<'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | 'moderation' | null>(null)
 const loading = ref(true)
 // The object store as last read or changed (ADR 0089 decision 6): a tenant waits for a store that passed its check.
 // Null until read, and when the read failed — then nothing is blocked here and the server decides.
@@ -194,6 +195,11 @@ async function signOut() {
               <span class="pi pi-envelope" aria-hidden="true" /> {{ t('instanceMail.navTitle') }}
             </button>
           </li>
+          <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'moderation' }" @click="serverPanel = 'moderation'">
+              <span class="pi pi-shield" aria-hidden="true" /> {{ t('moderation.navTitle') }}
+            </button>
+          </li>
         </ul>
       </nav>
 
@@ -208,6 +214,7 @@ async function signOut() {
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
         <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
+        <ModerationPanel v-else-if="serverPanel === 'moderation'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />
       </section>
     </div>

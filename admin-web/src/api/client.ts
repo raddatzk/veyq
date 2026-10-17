@@ -10,7 +10,7 @@
 import { Configuration, SetupApi } from './generated'
 import { Configuration as AuthConfiguration, LoginApi, SessionApi } from './generated/auth'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
-import { Configuration as InstanceConfiguration, InstanceApi } from './generated/instance'
+import { Configuration as InstanceConfiguration, InstanceApi, InstanceModerationApi } from './generated/instance'
 import { session } from '../app/session'
 import { refreshOnUnauthorized } from '../app/sessionRefresh'
 
@@ -45,4 +45,10 @@ export function tenantsApi(): TenantsApi {
 // convention: the release version is deliberately absent from the pre-auth surface.
 export function instanceApi(): InstanceApi {
   return new InstanceApi(new InstanceConfiguration(bearerParams()))
+}
+
+// The moderation roster and the instance moderation key's epochs (ADR 0099) — the `instance-moderation` tag of the same
+// instance spec, so admin-web still has four specs: a fifth client CLASS, not a fifth contract.
+export function instanceModerationApi(): InstanceModerationApi {
+  return new InstanceModerationApi(new InstanceConfiguration(bearerParams()))
 }
