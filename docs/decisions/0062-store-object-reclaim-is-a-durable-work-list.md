@@ -37,8 +37,8 @@ Three forces make this worth deciding now rather than measuring first:
 `veyq_store_reclaim` table takes one row per storage key prefix (`storage_key`, `chunk_count`, `created_at`,
 `attempts`, `next_attempt_at`). The transaction is the whole guarantee: the knowledge of which bytes to delete
 can no longer die with the row that held it. This needs no listing of the bucket, which matters because
-`BlobStore` has no `list` operation and `storage_key` is a flat UUID with no scope prefix — a listing would be
-an unpartitionable full-bucket scan.
+`storage_key` is a flat UUID with no scope prefix — a listing is an unpartitionable full-bucket scan, which only the
+reconcile in § Consequences pays, a few pages per tick.
 
 **A recorded key is not due until no PUT signed for it can still land.** `record` stamps `next_attempt_at` at
 `veyq.blob.upload.retention` after the recording — the bound the upload-session purge already derives as
@@ -113,8 +113,9 @@ messaging pattern this codebase does not have.
   delete and the sweep tick that drains it legitimately holds objects whose rows are gone — so the asymmetry
   stands, but because reclaim is *pending*, not because deletion is *unreliable*.
 - **A bucket-versus-database reconcile counts the objects no row claims, and reclaims them only after a grace, on a
-  bucket the Server Owner confirmed is this instance's alone** (owner 2026-10-17, inbox #134; decided, not yet built —
-  cr-bucket-reconcile). Until this ADR an orphaned object was the documented steady state, so a report of them asserted
+  bucket the Server Owner confirmed is this instance's alone** (owner 2026-10-17, inbox #134; built by
+  cr-bucket-reconcile: `StoreReconcileSweep`, read and switched under the console's **Server → Object store** and by
+  `veyq-admin store reconcile`). Until this ADR an orphaned object was the documented steady state, so a report of them asserted
   nothing; once reclaim is guaranteed, "objects no row claims and no reclaim row explains" is an anomaly with a meaning.
   What made it worth building is that veyq itself now produces them: an in-place rollback
   ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §7) empties the database and restores the

@@ -157,8 +157,9 @@ file is written.
 state, and since ADR 0062 for a better reason: the row delete and the reclaim entry share one transaction, and a
 single sweep drains that list, so a capture taken between the two legitimately holds objects whose rows are gone
 — a reclaim *pending*, not a deletion that failed unnoticed. Orphans are therefore still counted and tolerated,
-but a stuck one is now visible on the instance itself
-(`SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL`). (Abandoned upload sessions
+and the instance itself counts the rest: **Server → Object store** shows the objects waiting on the deletion list,
+the ones it gave up on, and every object no record claims at all
+([Operations](/veyq/run/operations/#objects-no-record-claims)). (Abandoned upload sessions
 themselves are reclaimed, by `UploadSessionPurge`.) A **row with no object** is fatal (A4): it
 restores as a Memory whose picture yields a valid presigned URL and a `404`, with no server-side error anywhere
 — so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
@@ -187,6 +188,12 @@ Two forms:
 *Required* is what the dump's blob rows name; the index's other keys — orphans waiting to be reclaimed, the chunks of
 an unfinished upload — are reported and tolerated. `--accept-missing-objects` restores knowingly without the named
 ones, each a Memory whose picture yields a `404`.
+
+**Every restore restarts the store's grace periods.** After the dump is loaded the tool empties the record the instance
+keeps of objects no record claims, so every such object's 30-day grace starts again, and your confirmation that the
+bucket is this server's alone is gone with it: nothing is deleted until you confirm again under **Server → Object
+store** — after a restore of the wrong backup, those objects are exactly what the right one needs
+([Operations](/veyq/run/operations/#objects-no-record-claims)).
 
 **It compares the backup's schema with the target's before it writes anything** ([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §7),
 in Flyway's version order. A backup **newer** than the target is refused, and the message names the release it

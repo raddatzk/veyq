@@ -38,8 +38,10 @@ but the reason changed with [ADR 0062](0062-store-object-reclaim-is-a-durable-wo
 `veyq_store_reclaim` in the same transaction as the row delete and one sweep drains it, so what a reader meets
 between those two moments is a reclaim **pending**, not a delete that failed unrecorded. Orphans therefore no
 longer accumulate silently — a refused delete keeps its row and its `attempts`, and a permanently refused one
-is `abandoned_at`, which is countable in SQL. (Abandoned upload *sessions* themselves are reclaimed, by
-`UploadSessionPurge`; `UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
+is `abandoned_at`, which is countable in SQL — and an object no row names at all, reclaim row included, is counted
+by the bucket reconcile, and reclaimed after its grace where the Server Owner allows it
+([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) § Consequences). (Abandoned upload *sessions*
+themselves are reclaimed, by `UploadSessionPurge`; `UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
 handled nowhere: a media read presigns a GET without asking the store whether the object exists, so a row whose
 object is missing becomes a valid URL that 404s, with no server-side signal and a broken picture as the only
 symptom.
@@ -214,7 +216,10 @@ rollback is **in place** (owner 2026-10-17): the capture holds no object and an 
 rollback` empties the database, starts the capture's release once, and restores with the check only — the objects
 never leave the store ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), the cluster's
 rollback in [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9 in Compose's
-form).
+form). The uploads of the failed release stay in the store with no row; the bucket reconcile counts them, and every
+restore — a rollback's included — empties its state, so their grace starts at the rollback and nothing is deleted
+before the Server Owner confirms the bucket again ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)
+§ Consequences).
 
 **Rejected — refusing every backup that is not exactly the target's version.** It is safe, but it makes the
 operator carry the downgrade-restore-upgrade sequence by hand. Each step in it is one more place to install the

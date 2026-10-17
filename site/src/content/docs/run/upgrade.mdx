@@ -249,7 +249,10 @@ against the live store (every object its rows require is there, as indexed), and
 database (`--yes` where there is no terminal). Then it stops the application, empties the database, switches `.env`'s
 image lines and `state.json` back to the release you left, starts that release once so it migrates the empty schema,
 stops it, restores the capture with the check only, places the key and starts. The store is never written; objects
-uploaded under the failed release stay in it as orphans. `.env`'s `VEYQ_RELEASE` is left as it was, so pin it to the
+uploaded under the failed release stay in it with no record that claims them. **Server → Object store** counts them
+under *Objects no record claims*, and deletes them after a 30-day grace once you confirm the bucket is this server's
+alone — the rollback, like every restore, restarts that grace and withdraws an earlier confirmation
+([Operations](/veyq/run/operations/#objects-no-record-claims)). `.env`'s `VEYQ_RELEASE` is left as it was, so pin it to the
 release you went back to if the next `upgrade` should not try again. Then verify as
 [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) says.
 

@@ -3,6 +3,7 @@ title: Operations
 description: The health probe, what the logs hold and leave out, that there are no metrics, the background jobs an instance runs, and its daily look for new releases.
 sources:
   - docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md
+  - docs/features/admin/use-cases/uc.admin.configure-object-store.md
   - docs/crosscutting/cc.security.wire-assertion.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
@@ -68,14 +69,52 @@ The application runs its own cleanup on a schedule; there is nothing to set up.
 | Recovery and address-confirmation links | valid 1 and 24 hours, removed 7 days after | hourly |
 | Device-linking codes | valid 10 minutes, removed after a day | every 5 minutes |
 | Deleting store objects | retried 5 times with growing pauses, then given up | hourly |
+| Comparing the store with the database ([below](#objects-no-record-claims)) | each object no record claims, 30 days before it is deleted — once you allow it | a full listing every 6 hours, a few pages a minute |
 | Looking for new releases ([below](#new-releases)) | what it found, until you run a release as new | daily, and once after each start |
 
-Deleting a file's stored object is the job of one sweep only. An object it gave up on is logged once and stays in the
-store; count them in the database:
+Deleting a file's stored object is the job of one sweep only, which works through a deletion list. An object it gave
+up on is logged once and stays in the store. **Server → Object store** shows how many objects wait on that list and how
+many it gave up on, and `veyq-admin store reconcile` prints the same; in the database they are:
 
 ```sql
-SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL;
+SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NULL;      -- waiting
+SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL;  -- given up on
 ```
+
+### Objects no record claims
+
+In the background the application lists the object store and compares every object with its database
+([ADR 0062](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)).
+An object shaped like veyq's that no record claims, older than an hour on the store's own clock, is counted: under
+**Server → Object store**, *Objects no record claims* shows the last full listing — how many objects the store holds,
+how many no record claims and their size, how many are not this server's — and `veyq-admin store reconcile` prints it.
+The store check's probe object and anything not named like veyq's objects (another tool's, an object pool kept in the
+same bucket) are never counted as unclaimed and never deleted.
+
+**Where they come from.** After an [in-place rollback](/veyq/run/upgrade/#rollback), the uploads made under the
+failed release: their records went with the emptied database, so nobody can read them again. Otherwise, a writer other
+than this instance in the same bucket, or a defect — report that one.
+
+**When they are deleted — only under three conditions:**
+
+1. **You confirmed the bucket is this server's alone.** Until you press *Confirm exclusive bucket* (or run
+   `veyq-admin store reconcile --confirm-exclusive-bucket`), the application only counts. Confirm only when no other
+   server and no other tool writes to this bucket: their objects would look unclaimed here. The confirmation is for the
+   store in use; another store setting withdraws it, and so does every [restore](/veyq/run/backup-and-restore/).
+2. **The object stayed unclaimed for the grace period** — 30 days from when it was first seen, in every listing since
+   ([`veyq.store-reconcile.grace`](/veyq/run/configuration/#backend-keys-for-tuning)). A record that comes back (a
+   restore of the right backup) takes it out again. A restore or a rollback restarts every grace period, and so does a
+   gap of more than a day between two listings: the grace counts only time the application actually watched.
+3. **You did not pause it.** *Pause deleting* (`--pause`) stops the deleting and keeps the counting; *Resume deleting*
+   (`--resume`) lets the next full listing hand over what is due.
+
+The page shows the candidates — how many uploads, their objects and size, when the first and the last were first seen
+— and, while deleting is on, the date the first will be deleted. A due object goes onto the deletion list above, whose
+sweep deletes it about an hour later; a pause does not reach what is already on that list. The application itself
+never deletes an object here.
+
+The listing needs the store's key to be allowed to **list** the bucket. Where it is not, the page says *the store
+refused it* and nothing is counted ([Storage and email](/veyq/run/storage-and-email/)).
 
 ## New releases
 

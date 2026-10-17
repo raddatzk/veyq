@@ -89,3 +89,5 @@ never arrives — and the store only ever holds encrypted data.
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md).
 - Run area of the docs site: [First-run setup and the admin console](../../../../site/src/content/docs/run/first-run.mdx)
 - Run area of the docs site: [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)
+- Run area of the docs site: [Operations](../../../../site/src/content/docs/run/operations.md) (A7: objects no record
+  claims, the confirmation, the grace and the pause)
