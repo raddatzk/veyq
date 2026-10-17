@@ -1,7 +1,7 @@
 ---
 id: cr-guest-write-record
 title: A guest's write keeps its client address, port and time for N days, as evidence a hold can copy
-status: planned
+status: in-progress
 satisfies: []            # phase 0 writes the enabler and the alternate flows; see § Use-cases
 adrs: ["0093", "0094", "0092", "0088", "0089", "0056", "0035"]
 invariants:
@@ -114,7 +114,7 @@ wants a built use-case).
 
 ## Phases
 
-- [ ] **0 docs** — the enabler, the alternate flows, planned coverage; ADR 0094's status line (`built except the
+- [x] **0 docs** — the enabler, the alternate flows, planned coverage; ADR 0094's status line (`built except the
   guest-write record`) stays until phase 4. · Done when: feature-format, coverage, doc-link, doc-citation, change guards
   green.
 - [ ] **1 contracts** — the switch in `contracts/platform/capabilities.json` (EN+DE title, purpose, whenOff;
