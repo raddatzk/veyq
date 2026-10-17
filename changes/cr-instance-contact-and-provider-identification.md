@@ -208,7 +208,7 @@ planned). After phase 0 the front matter's `satisfies:` names both.
   Docker is the implementer's, not this refine's) or the CR states it did not run; a browser pass of the setup step
   and the mode panel in EN and DE. **Bites:** invert the public-links condition → the warning test is red; drop the
   mode condition from the warnings → the private test is red.
-- [ ] **4 web** — the identification on the login page and the share page (a footer link opening the values, EN+DE
+- [x] **4 web** — the identification on the login page and the share page (a footer link opening the values, EN+DE
   via `web/src/i18n/index.ts`), fail-open on a failed read like the share's terms fetch (`ShareView.vue` `loadTerms`).
   · Done when: `npm run check` in `web/` green; a guest-mode mount proves the read is the public client
   (`src/test/guestMode.ts` `guardedClients`); a browser pass on a dev instance with and without values set.

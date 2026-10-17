@@ -50,6 +50,7 @@ import { renderMarkdown } from '../shared/markdown'
 import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
+import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -386,6 +387,7 @@ onMounted(() => {
 
     <footer class="share-view-footer">
       <a :href="securityDocUrl" target="_blank" rel="noopener noreferrer">{{ t('share.securityFooter') }}</a>
+      <OperatorIdentification />
     </footer>
   </div>
 </template>
@@ -464,6 +466,11 @@ onMounted(() => {
   color: var(--app-accent);
 }
 .share-view-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
   margin-top: 1.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--app-line);

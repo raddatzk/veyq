@@ -28,6 +28,7 @@ import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWOR
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { parsePairingPayload } from '../features/account/pairing/pairing'
 import JoinDeviceCard from '../features/account/pairing/JoinDeviceCard.vue'
 import SignInWithCodeCard from '../features/account/pairing/SignInWithCodeCard.vue'
@@ -575,6 +576,12 @@ onMounted(async () => {
         <span class="pi pi-spin pi-spinner" />
       </div>
     </template>
+    <!-- Who runs this instance (ADR 0035 decision 7): shown where the Server Owner published it, absent otherwise. -->
+    <template #footer>
+      <div class="login-operator">
+        <OperatorIdentification />
+      </div>
+    </template>
   </Card>
 </template>
 
@@ -584,6 +591,9 @@ onMounted(async () => {
   display: grid;
   place-items: center;
   padding: 1.5rem 0;
+}
+.login-operator {
+  text-align: center;
 }
 .login-redirecting .pi-spinner {
   font-size: 1.5rem;
