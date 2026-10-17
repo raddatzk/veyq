@@ -338,6 +338,12 @@ def test_manifest() -> None:
     check("manifest: the fields veyqctl reads",
           (m.release, m.app, m.admin, m.unscheduled, sorted(m.assets)) ==
           ("1.12", SIGNED_APP, SIGNED_ADMIN, False, sorted(vc.REQUIRED_ASSETS)))
+    # A release names a third image, `images.tools` (ADR 0098: a cluster's backup gate runs it, Compose never does);
+    # veyqctl reads the two it runs and still parses the manifest whole.
+    tools = "ghcr.io/raddatzk/veyq-tools:1.12@sha256:" + "c" * 64
+    m = vc.parse_manifest(manifest_bytes(images={"app": SIGNED_APP, "admin": SIGNED_ADMIN, "tools": tools}), "v1.12")
+    check("manifest: one naming the tools image as well parses, and veyqctl runs the app and admin images",
+          (m.app, m.admin) == (SIGNED_APP, SIGNED_ADMIN))
     cases = {
         "another release's manifest": (manifest_bytes(release="1.11"), "names release"),
         "an image missing": (manifest_bytes(images={"app": SIGNED_APP}), "both images"),

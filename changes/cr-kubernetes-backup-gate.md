@@ -270,7 +270,7 @@ below as the record of what was weighed.
       apply). The Compose rehearsal (`web-e2e`'s `restore.*`/`legthree.*` groups) stays green.
     - Every `scripts/validate_*.py` green (`validate_guard_gaps.py` skipping unless a guard changed).
 
-- [ ] **2 the `veyq-tools` image — built, signed, published, named.**
+- [x] **2 the `veyq-tools` image — built, signed, published, named.**
   - **Build:** a Dockerfile (path decided at build; recommended `tools/Dockerfile`, context the repo root) whose last
     stage is `runtime-tools`: the MariaDB client from the pinned `mariadb:11.4` (the server's own version, the pin
     `validate_image_pins.py` already holds — `grep -n "mariadb:11.4" scripts/instance_backup.py infra/docker-compose.prod.yml charts/veyq/values.yaml`),

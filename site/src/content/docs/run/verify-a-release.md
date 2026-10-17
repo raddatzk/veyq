@@ -89,6 +89,17 @@ digest: `docker buildx imagetools inspect "ghcr.io/raddatzk/veyq:${release}" --f
 **If `cosign verify-blob` or either `cosign verify` fails, stop.** Nothing has run yet, and nothing should. Read
 the manifest only after its `verify-blob` passed: until then, every digest and sha256 in it is the source's word.
 
+Under Helm, a third image of the same release runs too: `veyq-tools`, the backup gate's (see
+[Upgrade](/veyq/run/upgrade/)). Compose never runs it. The verified manifest names it as `images.tools`; verify it the
+same way, and pin its digest as `backup.image.digest`:
+
+```sh
+tools_digest="$(python3 -c 'import json; print(json.load(open("manifest.json"))["images"]["tools"].split("@")[1])')"
+cosign verify "ghcr.io/raddatzk/veyq-tools@${tools_digest}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+```
+
 ## The release's files
 
 `veyqctl` fetches every asset the manifest lists into `releases/<release>/` and checks each against its sha256 before

@@ -425,13 +425,14 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # Two images, two architectures, one step. The admin surface ships as part of the SAME release as the app
-    # (ADR 0065) — same version, same signature, one `v<major>.<minor>` ref — so it is a dimension of this
-    # matrix rather than a second job pair that could drift out of step with it.
+    # Three images, two architectures. The admin surface ships as part of the SAME release as the app (ADR 0065) —
+    # same version, same signature, one `v<major>.<minor>` ref — and so does the tools image a cluster's backup gate
+    # runs (ADR 0098), so each is a dimension of this matrix rather than a second job pair that could drift out of
+    # step with it.
     strategy:
       fail-fast: false
       matrix:
-        image: [veyq, veyq-admin]
+        image: [veyq, veyq-admin, veyq-tools]
         arch: [amd64, arm64]
         include:
           - arch: amd64
@@ -446,9 +447,33 @@ jobs:
           - image: veyq-admin
             dockerfile: admin-web/Dockerfile
             target: runtime-nginx
+          - image: veyq-tools
+            dockerfile: tools/Dockerfile
+            target: runtime-tools
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The tools image bakes the release a new major is entered from, which is read from the release tags
+          # (`release_assets.py --major-entry`): that leg needs the history and the tags; the other two do not.
+          fetch-depth: ${{ matrix.image == 'veyq-tools' && '0' || '1' }}
+
+      # The tools image's gate refuses to enter a new major from any release but the one this release's own upgrade
+      # proof and chart check ran from (ADR 0098) — the ONE derivation of that predecessor, read here and baked in as
+      # VEYQ_MAJOR_ENTRY; empty when it lies in no previous major. Planned to be replaced by the L2 lane's attestation
+      # (ADR 0091 decision 5, not built).
+      - name: Find the release a new major is entered from (tools)
+        id: major-entry
+        if: matrix.image == 'veyq-tools'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/entry-venv"
+          "${RUNNER_TEMP}/entry-venv/bin/pip" install --quiet pyyaml
+          entry="$("${RUNNER_TEMP}/entry-venv/bin/python" scripts/release_assets.py --major-entry "$VERSION")"
+          echo "release ${VERSION} enters its major from: ${entry:-no release}"
+          echo "value=${entry}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -472,6 +497,7 @@ jobs:
 
       - name: Build image
         id: image
+        if: matrix.image != 'veyq-tools'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -489,7 +515,32 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
-      # Never runs on GitHub. scripts/run_pipeline.py cannot run the action above, so on its host (`runner.environment`
+      # The tools image, built as the step above builds the other two plus the one stamp only it declares, the major
+      # entry — a step of its own because validate_release_identity.py holds each build step's stamps to every target
+      # stage it builds. Also loaded into this runner's Docker, because the artifact must RUN before it counts (below).
+      - name: Build image (tools)
+        id: image-tools
+        if: matrix.image == 'veyq-tools'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name == 'workflow_dispatch' }}
+          load: true
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:build-${{ github.sha }}-${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+            VEYQ_MAJOR_ENTRY=${{ steps.major-entry.outputs.value }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      # Never runs on GitHub. scripts/run_pipeline.py cannot run the actions above, so on its host (`runner.environment`
       # `local`) this builds the same Dockerfile, target, platform and build arguments with the host's own Docker: no
       # registry, no GitHub cache, no provenance or SBOM. The tag names this leg and is overwritten by the next run.
       - name: Build image (the host's Docker)
@@ -501,10 +552,30 @@ jobs:
           IMAGE: ${{ matrix.image }}
           ARCH: ${{ matrix.arch }}
           VEYQ_VERSION: ${{ needs.version.outputs.version }}
+          VEYQ_MAJOR_ENTRY: ${{ steps.major-entry.outputs.value }}
         run: |
+          set -euo pipefail
+          entry=()
+          if [[ "$IMAGE" == "veyq-tools" ]]; then
+            entry=(--build-arg "VEYQ_MAJOR_ENTRY=${VEYQ_MAJOR_ENTRY}")
+          fi
           docker build --file "$DOCKERFILE" --target "$TARGET" --platform "$PLATFORM" \
-            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" ${entry[@]+"${entry[@]}"} \
             --tag "veyq-pipeline/${IMAGE}:${ARCH}" .
+
+      # The tools image is an executable artifact, so the build is not done until it RUNS (changes/README.md): its own
+      # self-test inside itself, as uid 10001, and the two binaries the in-pod mode puts on PATH. On GitHub the image
+      # the step above loaded, on the host the one the host's Docker built.
+      - name: Run the tools image's self-test inside it
+        if: matrix.image == 'veyq-tools'
+        env:
+          IMAGE_REF: ${{ runner.environment == 'github-hosted' && format('ghcr.io/{0}/veyq-tools:build-{1}-{2}', github.repository_owner, github.sha, matrix.arch) || format('veyq-pipeline/veyq-tools:{0}', matrix.arch) }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python3 "$IMAGE_REF" /opt/veyq/instance_backup_selftest.py
+          docker run --rm --entrypoint mariadb-dump "$IMAGE_REF" --version
+          docker run --rm --entrypoint rclone "$IMAGE_REF" version
+          docker run --rm --entrypoint cat "$IMAGE_REF" /opt/veyq/release.json
 
       # The digest this leg pushed, handed to the stack lane of its architecture, which pulls the image by it — never by
       # the staging tag, which a later build of the same commit could move (ADR 0090 decision 2: the lane tests the
@@ -512,7 +583,7 @@ jobs:
       - name: Hand the pushed digest to the stack lane
         if: github.event_name == 'workflow_dispatch'
         env:
-          DIGEST: ${{ steps.image.outputs.digest }}
+          DIGEST: ${{ steps.image.outputs.digest || steps.image-tools.outputs.digest }}
           IMAGE: ${{ matrix.image }}
         run: |
           set -euo pipefail
@@ -602,7 +673,8 @@ jobs:
 
       # A push or a pull request: the candidate is built here, as `build` built it (same Dockerfile, target, platform
       # and arguments), from the cache `build` wrote for this image and architecture, loaded into this runner's Docker
-      # and never pushed.
+      # and never pushed. The app and admin images only: the lane installs through Compose, which never runs the third
+      # image, `veyq-tools` (a cluster's backup gate does, ADR 0098; `build` runs its self-test inside it).
       - name: Build the candidate app image
         if: github.event_name != 'workflow_dispatch'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -768,7 +840,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish the release (both images, the chart and the GitHub Release)
+    name: Publish the release (the images, the chart and the GitHub Release)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Every other job of this file is a stage, and a publish waits for each to be green (ADR 0091 decision 2) — it is
@@ -851,10 +923,11 @@ jobs:
         id: assert-release-unpublished
         if: needs.version.outputs.kind == 'release'
         env:
-          # All three artifacts of the release. ANY of them already being published means this release has
+          # All four artifacts of the release. ANY of them already being published means this release has
           # shipped — a partial republish is worse than a whole one, because the set would then disagree about
-          # which version the instance runs (ADR 0065: one release, two images; ADR 0064: the chart beside them).
-          ARTIFACTS: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/charts/veyq
+          # which version the instance runs (ADR 0065: one release, its images — app, admin and, ADR 0098, the tools
+          # image; ADR 0064: the chart beside them).
+          ARTIFACTS: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/veyq-tools ghcr.io/${{ github.repository_owner }}/charts/veyq
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
@@ -898,11 +971,11 @@ jobs:
             unscheduled="--unscheduled"
           fi
           "${RUNNER_TEMP}/producer-venv/bin/python" scripts/release_assets.py "${RUNNER_TEMP}/release-check" \
-            --app veyq:check --admin veyq-admin:check ${unscheduled:+"$unscheduled"}
+            --app veyq:check --admin veyq-admin:check --tools veyq-tools:check ${unscheduled:+"$unscheduled"}
           rm -rf "${RUNNER_TEMP}/release-check"
 
-      # One metadata step per image: the two carry the SAME tag set (the publish names both), and metadata-action
-      # takes one image list but emits fully-qualified tags, so deriving the second image's tags by string-editing
+      # One metadata step per image: the three carry the SAME tag set (the publish names each), and metadata-action
+      # takes one image list but emits fully-qualified tags, so deriving another image's tags by string-editing
       # the first's would put a substitution between the release and its own names. A snapshot's version already
       # ends in -SNAPSHOT and gets neither `<major>` nor `latest`; `sha-<sha>` names the LAST publish of that
       # commit, never a rollback target.
@@ -922,6 +995,17 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/veyq-admin
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }}
+            type=raw,value=${{ needs.version.outputs.major }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ needs.version.outputs.publish_latest == 'true' }}
+
+      - name: Extract image metadata (tools)
+        id: meta-tools
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/veyq-tools
           tags: |
             type=raw,value=${{ needs.version.outputs.version }}
             type=raw,value=${{ needs.version.outputs.major }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
@@ -978,15 +1062,41 @@ jobs:
 
           docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
+      - name: Create multi-arch manifest (tools)
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq-tools
+          NAME: veyq-tools
+          TAGS: ${{ steps.meta-tools.outputs.tags }}
+        run: |
+          set -euo pipefail
+          mapfile -t tags <<< "$TAGS"
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=("-t" "$tag")
+          done
+
+          sources=()
+          for arch in amd64 arm64; do
+            digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/digest-${NAME}-${arch}/${NAME}")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "no digest for ${NAME} (${arch}) from build: '${digest}'" >&2
+              exit 1
+            fi
+            sources+=("${IMAGE}@${digest}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
 
       - name: Sign the published images (keyless)
         id: sign-images
         env:
-          # Both images of the release. An unsigned admin image would be the weaker half of a pair an operator
-          # is told to pin together — and it is the higher-privilege half (ADR 0065).
-          IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin
+          # Every image of the release. An unsigned admin image would be the weaker half of a pair an operator
+          # is told to pin together — and it is the higher-privilege half (ADR 0065); an unsigned tools image would be
+          # an unverified program reading the database and the store's admin token in a cluster (ADR 0098).
+          IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/veyq-tools
         run: |
           set -euo pipefail
           # Resolve each manifest-list digest (the sha- tag is always produced) and sign THAT, so every channel
@@ -1053,7 +1163,7 @@ jobs:
           git push origin "refs/tags/v${VERSION}"
 
       # The release as files (ADR 0096 decision 3): scripts/release_assets.py writes the recipe set, `veyqctl`, the
-      # backup tool and the manifest naming both images by the digests signed above. Two files are signed keylessly,
+      # backup tool and the manifest naming the three images by the digests signed above. Two files are signed keylessly,
       # under the images' identity, each bundle an asset beside it and not in the manifest: `manifest.json`, whose
       # bundle `veyqctl` verifies before it trusts any sha256 or digest the manifest names — from GitHub, a mirror or a
       # directory alike (inbox #469: unsigned, the recipe was exactly as trustworthy as its source) — so nothing may
@@ -1074,6 +1184,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           APP: ghcr.io/${{ github.repository_owner }}/veyq:${{ needs.version.outputs.version }}@${{ steps.sign-images.outputs.veyq }}
           ADMIN: ghcr.io/${{ github.repository_owner }}/veyq-admin:${{ needs.version.outputs.version }}@${{ steps.sign-images.outputs.veyq-admin }}
+          TOOLS: ghcr.io/${{ github.repository_owner }}/veyq-tools:${{ needs.version.outputs.version }}@${{ steps.sign-images.outputs.veyq-tools }}
           UNSCHEDULED_MAJOR: ${{ inputs.unscheduled_major }}
           PUBLISH_LATEST: ${{ needs.version.outputs.publish_latest }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1085,7 +1196,7 @@ jobs:
             unscheduled="--unscheduled"
           fi
           "${RUNNER_TEMP}/producer-venv/bin/python" scripts/release_assets.py "$out" \
-            --app "$APP" --admin "$ADMIN" ${unscheduled:+"$unscheduled"}
+            --app "$APP" --admin "$ADMIN" --tools "$TOOLS" ${unscheduled:+"$unscheduled"}
           if [[ ! -f "${out}/v${VERSION}/manifest.json" ]]; then
             echo "the producer wrote no v${VERSION}: it counts another release than the version step" >&2
             exit 1
@@ -1096,5 +1207,5 @@ jobs:
 
           gh release create "v${VERSION}" --verify-tag --repo "$GITHUB_REPOSITORY" \
             --title "veyq ${VERSION}" --latest="$PUBLISH_LATEST" \
-            --notes "veyq ${VERSION}. manifest.json names both images by digest and every other asset by its sha256, and manifest.json.bundle is its cosign signature; veyqctl installs and upgrades from this release, and veyqctl.bundle is its cosign signature." \
+            --notes "veyq ${VERSION}. manifest.json names the app, admin and tools images by digest and every other asset by its sha256, and manifest.json.bundle is its cosign signature; veyqctl installs and upgrades from this release, and veyqctl.bundle is its cosign signature." \
             "${out}/v${VERSION}"/*
