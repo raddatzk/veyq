@@ -25,8 +25,12 @@ info:
 
     The release check and the instance mail are ADR 0097's: the instance reads the published releases once a day
     with an anonymous request that names no release, and mails what it found to the Server Owner only, from SMTP
-    settings of its own that never send a tenant's mail. The only personal value here is the Server Owner's own
-    account address, shown back to its holder.
+    settings of its own that never send a tenant's mail.
+
+    The operator values are the host's own published data (ADR 0093 § 11, ADR 0035 decision 7): who runs the
+    instance and how to reach them, typed by the Server Owner to be published, plus a private notification address
+    that never leaves this channel. Beyond those, the only personal value here is the Server Owner's own account
+    address, shown back to its holder.
 
     Authorization is enforced by code annotations, not this spec (ADR 0008).
 tags:
@@ -48,6 +52,14 @@ tags:
       The bucket reconcile (ADR 0062 § Consequences, uc.admin.configure-object-store A7): what its passes found and the
       Server Owner's two switches over its deletions — the exclusive-bucket confirmation and the pause. A tag of its own,
       so its resource owns the `/api/instance/store/reconcile` subtree.
+
+  - name: instance-operator
+    description: >
+      The operating mode (ADR 0093 § 14, ADR 0088 decision 14) and the values a host publishes about itself — the
+      instance contact, the provider identification, the supervisory authority (ADR 0093 § 11, ADR 0035 decisions
+      6–7) — with the contact's private notification address and its code confirmation (ADR 0097 decision 5). A tag
+      of its own, so its resource owns the `/api/instance/operator` subtree. The public read of the published values
+      is `operator.openapi.yaml`.
 
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
 # request that came through the admin container; the public port 404s it. Reachability, not a role: the role
@@ -1423,6 +1435,19 @@ paths:
         since they were first seen. A candidate is put on the reclaim list once it has been one for the grace period —
         only while `verdict` is `ARMED`, i.e. the Server Owner confirmed the bucket holds only this instance's objects and
         did not pause. Counts and instants only: no key, no scope. Server-Owner only.
+  /api/instance/operator:
+    get:
+      tags: [instance-operator]
+      operationId: getInstanceOperator
+      x-veyq-channel: admin
+      summary: Read the instance contact, the provider identification and the supervisory authority, with the notification address.
+      description: >
+        The values a host publishes about itself (ADR 0093 § 11, ADR 0035 decisions 6–7,
+        uc.admin.operator-details): the instance contact with its languages, the address statements and disclosures
+        name, the provider identification and the competent supervisory authority — all public through
+        `GET /api/operator` — and the notification address, which is not public and leaves the server only here, with
+        where its confirmation stands (ADR 0097 decision 5). Also the operating mode in effect, which decides whether
+        admin-web warns about an empty value (ADR 0093 § 14). Every value may be empty. Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -1488,6 +1513,109 @@ paths:
                     clocksRestartedAt: null
                     clocksRestartReason: null
                     reclaim: { pending: 0, abandoned: 0 }
+          description: The values as they stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperator" }
+              example:
+                operatingMode: ORGANISATION
+                contactEmail: contact@example.org
+                contactLanguages: [de, en]
+                statementEmail: moderation@example.org
+                notificationEmail: alerts@example.org
+                notificationConfirmation: CONFIRMED
+                notificationConfirmedAt: 2026-10-17T12:00:00Z
+                instanceMailReady: true
+                providerName: Example e. V.
+                providerAddress: "Musterstraße 1\n12345 Musterstadt"
+                providerEmail: info@example.org
+                providerRepresentative: Erika Mustermann (Vorstand)
+                supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    put:
+      tags: [instance-operator]
+      operationId: setInstanceOperator
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the form shows every value it sends, and the write is a full replace.
+      x-veyq-channel: admin
+      summary: Set the instance contact, the provider identification and the supervisory authority.
+      description: >
+        A full replace: a value omitted or null is cleared. Nothing is required, in either operating mode — required
+        means warned in admin-web, never refused (ADR 0093 § 14). A notification address that is set and not confirmed
+        gets a one-time code through instance mail, but only while the Server Owner's own instance mail is confirmed
+        (`instanceMailReady`); typed into `POST /api/instance/operator/notification/confirmation`, it confirms the
+        address. A changed address is unconfirmed by that change alone; setting the confirmed address again keeps it
+        confirmed. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceOperatorUpdate" }
+            example:
+              contactEmail: contact@example.org
+              contactLanguages: [de, en]
+              statementEmail: moderation@example.org
+              notificationEmail: alerts@example.org
+              providerName: Example e. V.
+              providerAddress: "Musterstraße 1\n12345 Musterstadt"
+              providerEmail: info@example.org
+              providerRepresentative: Erika Mustermann (Vorstand)
+              supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
+      responses:
+        "200":
+          description: Stored; the values as they now stand, with the confirmation's state after any code sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperator" }
+        "400":
+          description: A value is malformed or out of its bounds. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    delete:
+      tags: [instance-operator]
+      operationId: clearInstanceOperator
+      x-veyq-channel: admin
+      summary: Clear every value, the notification address and its confirmation included.
+      description: >
+        Clears the contact, the identification, the supervisory authority and the notification address with any code
+        and confirmation. The operating mode is not a value here and stays. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Cleared; the (empty) values.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperator" }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1525,6 +1653,37 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StoreReconcile" }
+  /api/instance/operator/notification/confirmation:
+    post:
+      tags: [instance-operator]
+      operationId: confirmOperatorNotification
+      x-veyq-channel: admin
+      summary: Confirm the notification address with the code mailed to it.
+      description: >
+        Takes the one-time code the last save mailed to the notification address (ADR 0097 decision 5, owner
+        2026-10-17). It confirms only while it is live — unexpired, not spent by wrong entries — and only for the
+        address it was sent to, which must still be the notification address; a wrong entry spends an attempt. The
+        endpoint is rate-limited per caller. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceOperatorConfirmation" }
+            example: { code: "48213075" }
+      responses:
+        "200":
+          description: The notification address is confirmed; the values as they now stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperator" }
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1551,6 +1710,32 @@ paths:
       description: >
         Nothing more is put on the reclaim list until the bucket is confirmed again; candidates keep their grace periods.
         Keys already on the reclaim list are that list's (ADR 0062). Idempotent. Server-Owner only.
+          description: >
+            `operator_code_invalid` = no code is outstanding, it expired, it was entered wrong too often, the
+            notification address changed since it was sent, or this is not it. Save again for a new one. Nothing is
+            confirmed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: operator_code_invalid }
+        "429":
+          description: Too many requests from this caller; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/instance/operator/mode:
+    get:
+      tags: [instance-operator]
+      operationId: getInstanceOperatingMode
+      x-veyq-channel: admin
+      summary: Read the operating mode and the switches its preset names.
+      description: >
+        The operating mode in effect (ADR 0093 § 14) — `ORGANISATION` where none was ever chosen (`chosen: false`) —
+        and every capability entry the catalog gives a value per mode, with its own instance switch now, so admin-web
+        and the CLI can list which switches choosing the other mode would change before it is set (ADR 0088 decision
+        14). Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -1559,6 +1744,14 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StoreReconcile" }
+          description: The mode and the preset.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperatingMode" }
+              example:
+                mode: ORGANISATION
+                chosen: true
+                preset: []
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1621,6 +1814,41 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StoreReconcile" }
+    put:
+      tags: [instance-operator]
+      operationId: setInstanceOperatingMode
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; a mode is one value, and setting it again sets its preset again by design.
+      x-veyq-channel: admin
+      summary: Set the operating mode, and with it the preset's instance switches.
+      description: >
+        Stores the mode and, in the same transaction, sets the instance-level switch of every capability entry whose
+        catalog `modes` gives a value for it — and nothing more: a tenant's switches and every entry without a preset
+        are untouched, and each preset switch stays an ordinary switch afterwards (ADR 0088 decision 14). Setting the
+        mode it already has sets its preset again. The notice and, for `PRIVATE`, the operator's tick are admin-web's
+        and the CLI's: the server does not record them (ADR 0093 § 14). Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceOperatingModeUpdate" }
+            example: { mode: PRIVATE }
+      responses:
+        "200":
+          description: Set; the mode and the preset as they now stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperatingMode" }
+        "400":
+          description: The request was malformed (no mode, or one that is neither PRIVATE nor ORGANISATION).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -2887,6 +3115,302 @@ components:
           format: int64
           description: Storage keys the sweep gave up on after its retries — bytes that are counted, not deleted.
           example: 0
+    InstanceOperator:
+      type: object
+      description: >
+        The instance contact, the provider identification and the supervisory authority (all public through
+        `GET /api/operator`), the notification address (admin channel only) with its confirmation, and the operating
+        mode in effect. Every value may be null.
+      required:
+        - operatingMode
+        - contactEmail
+        - contactLanguages
+        - statementEmail
+        - notificationEmail
+        - notificationConfirmation
+        - notificationConfirmedAt
+        - instanceMailReady
+        - providerName
+        - providerAddress
+        - providerEmail
+        - providerRepresentative
+        - supervisoryAuthority
+      properties:
+        operatingMode:
+          $ref: "#/components/schemas/OperatingMode"
+        contactEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The instance contact (DSA Art. 11–12, TCO Art. 15) is published by law and served before sign-in; the
+            operator typed it for that purpose (ADR 0093 § 11).
+          type: [string, "null"]
+          format: email
+          description: The single point of contact for users and authorities, and the TCO contact point.
+          maxLength: 254
+          example: contact@example.org
+        contactLanguages:
+          x-veyq-visibility: public
+          type: array
+          description: The languages the contact answers in, as language tags; empty when none is named.
+          maxItems: 12
+          items:
+            type: string
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'
+            maxLength: 35
+          example: [de, en]
+        statementEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The address statements of reasons and disclosures name (ADR 0093 § 11), published by law and served before
+            sign-in; the operator typed it for that purpose.
+          type: [string, "null"]
+          format: email
+          description: The address a statement of reasons and a disclosure name; may equal the contact.
+          maxLength: 254
+          example: moderation@example.org
+        notificationEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Where moderation notices go (ADR 0097 decision 3); the server must hold it in the clear to mail it, and
+            serves it on the admin channel only, back to the Server Owner who typed it.
+          type: [string, "null"]
+          format: email
+          description: The private address moderation notices are mailed to, once confirmed. Never public.
+          maxLength: 254
+          example: alerts@example.org
+        notificationConfirmation:
+          x-veyq-visibility: enum
+          type: string
+          enum: [NOT_SET, CODE_SENT, SEND_FAILED, UNCONFIRMED, CONFIRMED]
+          description: >
+            Where the notification address's confirmation stands: `NOT_SET` = no address; `CODE_SENT` = a code went
+            out and may be entered; `SEND_FAILED` = the last code could not be delivered; `UNCONFIRMED` = no live code
+            (none sent while instance mail was not ready, expired, or spent); `CONFIRMED` = a code confirmed this very
+            address.
+          example: CONFIRMED
+        notificationConfirmedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the current notification address was confirmed; null unless `CONFIRMED`.
+          example: 2026-10-17T12:00:00Z
+        instanceMailReady:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether instance mail is configured and the Server Owner's own address confirmed — the condition for a
+            code to be mailed at all. False: admin-web says so, and saving again once it is ready sends one.
+          example: true
+        providerName:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The provider identification (ADR 0035 decision 7; § 5 DDG, § 18 MStV) names the operator and is published
+            on the login and share pages; the operator typed it for that purpose.
+          type: [string, "null"]
+          description: The provider's name — a person, or a legal person such as a club.
+          maxLength: 200
+          example: Example e. V.
+        providerAddress:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The address for service of the provider identification (ADR 0035 decision 7), published by law; the
+            operator typed it for that purpose.
+          type: [string, "null"]
+          description: The address for service; may span lines.
+          maxLength: 500
+          example: "Musterstraße 1\n12345 Musterstadt"
+        providerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The provider identification's email address (ADR 0035 decision 7), published by law; the operator typed
+            it for that purpose.
+          type: [string, "null"]
+          format: email
+          description: The provider's email address.
+          maxLength: 254
+          example: info@example.org
+        providerRepresentative:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Who represents a legal person (ADR 0035 decision 7), published by law; the operator typed it for that
+            purpose.
+          type: [string, "null"]
+          description: For a legal person, who represents it (a club's board).
+          maxLength: 200
+          example: Erika Mustermann (Vorstand)
+        supervisoryAuthority:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The competent data-protection supervisory authority, as the operator names it (ADR 0035 decision 6).
+          maxLength: 500
+          example: "Landesbeauftragte für Datenschutz, Musterstadt"
+
+    InstanceOperatorUpdate:
+      type: object
+      description: >
+        The values to store — a full replace: an omitted or null value is cleared. Nothing is required (ADR 0093 § 14:
+        required means warned, never refused).
+      properties:
+        contactEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The instance contact (DSA Art. 11–12, TCO Art. 15), typed by the operator to be published.
+          type: [string, "null"]
+          format: email
+          description: The instance contact; null = none.
+          maxLength: 254
+          example: contact@example.org
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        contactLanguages:
+          x-veyq-visibility: public
+          type: [array, "null"]
+          description: The languages the contact answers in, as language tags (`de`, `en`, `pt-BR`); null = none named.
+          maxItems: 12
+          items:
+            type: string
+            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'
+            maxLength: 35
+          example: [de, en]
+          # The generator types the list `List<String>` and cannot annotate its type argument, so the elements' bounds
+          # ride on the list as `EachElement` (inbox #354; `validate_request_bounds.py` holds them).
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 12) @field:me.raddatz.veyq.core.http.EachElement(maxLength = 35, pattern = "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")'
+        statementEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The address statements and disclosures name (ADR 0093 § 11), typed by the operator to be published.
+          type: [string, "null"]
+          format: email
+          description: The address statements and disclosures name; null = none.
+          maxLength: 254
+          example: moderation@example.org
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        notificationEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Where moderation notices go (ADR 0097 decision 3); the server must hold it in the clear to mail it.
+          type: [string, "null"]
+          format: email
+          description: The private address moderation notices go to once confirmed; null = none.
+          maxLength: 254
+          example: alerts@example.org
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        providerName:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The provider identification (ADR 0035 decision 7), typed by the operator to be published.
+          type: [string, "null"]
+          description: The provider's name; null = none.
+          maxLength: 200
+          example: Example e. V.
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
+        providerAddress:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The address for service of the provider identification (ADR 0035 decision 7), typed to be published.
+          type: [string, "null"]
+          description: The address for service; may span lines; null = none.
+          maxLength: 500
+          example: "Musterstraße 1\n12345 Musterstadt"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 500)'
+        providerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The provider identification's email address (ADR 0035 decision 7), typed to be published.
+          type: [string, "null"]
+          format: email
+          description: The provider's email address; null = none.
+          maxLength: 254
+          example: info@example.org
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        providerRepresentative:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Who represents a legal person (ADR 0035 decision 7), typed by the operator to be published.
+          type: [string, "null"]
+          description: For a legal person, who represents it; null = none.
+          maxLength: 200
+          example: Erika Mustermann (Vorstand)
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
+        supervisoryAuthority:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The competent data-protection supervisory authority; null = none.
+          maxLength: 500
+          example: "Landesbeauftragte für Datenschutz, Musterstadt"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 500)'
+
+    InstanceOperatorConfirmation:
+      type: object
+      description: The code the last save mailed to the notification address.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: token
+          type: string
+          description: The one-time code, as typed.
+          minLength: 1
+          maxLength: 16
+          example: "48213075"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 16)'
+
+    InstanceOperatingMode:
+      type: object
+      description: The operating mode in effect, whether one was ever chosen, and the preset it sets.
+      required: [mode, chosen, preset]
+      properties:
+        mode:
+          $ref: "#/components/schemas/OperatingMode"
+        chosen:
+          x-veyq-visibility: flag
+          type: boolean
+          description: False on an instance where no mode was ever chosen; it then runs as ORGANISATION.
+          example: true
+        preset:
+          type: array
+          description: Every capability entry the catalog gives a value per mode, in catalog order; empty when none does.
+          items: { $ref: "#/components/schemas/InstanceOperatingModePresetEntry" }
+
+    InstanceOperatingModePresetEntry:
+      type: object
+      description: One entry of the preset (ADR 0088 decision 14) — its value in each mode, and its own instance switch now.
+      # "off" quoted, here as on the property: bare, YAML 1.1 reads it as the boolean false, and the client generator
+      # then refuses the whole spec ("required is not of type `string`").
+      required: [id, title, onInPrivate, onInOrganisation, "off"]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: The capability id, as `listInstanceCapabilities` serves it.
+          maxLength: 64
+          example: core.public-shares.guest-write-record
+        title:
+          $ref: "#/components/schemas/InstanceCapabilityText"
+        onInPrivate:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the PRIVATE mode switches the entry on (true) or off (false).
+          example: false
+        onInOrganisation:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the ORGANISATION mode switches the entry on (true) or off (false).
+          example: true
+        "off":
+          x-veyq-visibility: flag
+          type: boolean
+          description: The entry's own instance switch now — true while the Server Owner has it switched off.
+          example: false
+
+    InstanceOperatingModeUpdate:
+      type: object
+      description: The mode to set.
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/OperatingMode"
+
+    OperatingMode:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

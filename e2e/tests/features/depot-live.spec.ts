@@ -9,10 +9,10 @@
 //  2. A drop box: two guests in two contexts send a file each under the same display name. The owner's open folder
 //     counts them live on the drop box's row (1 person, then 2 people), the drop box lists one folder per guest, the
 //     second numbered `(2)`, and each folder holds that guest's file only — read-only for the owner.
+//  3. The drop box's own page is live too (owner decision 2026-10-17, `KindDescriptor.liveDetail`): with it open, a
+//     third guest's first file brings its folder onto the page and its second file counts there, without a reload.
 //
-// What it cannot show: a real phone or Safari/Firefox backgrounding a tab (Playwright keeps every page visible), and
-// the drop box's own page refreshing itself — it does not poll (it is a node's detail, not a folder level), so the
-// count is watched on the level that holds it.
+// What it cannot show: a real phone or Safari/Firefox backgrounding a tab (Playwright keeps every page visible).
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Labels are web/'s own.
 import { test, expect, type Page } from '@playwright/test'
@@ -32,6 +32,8 @@ const memberFile = `Nebenkostenabrechnung ${stamp}.bin`
 const dropBox = `Briefkasten für Fotos vom Fest ${stamp}`
 const dropperName = `Cousine Mathilda ${stamp}`
 const dropped = [`Erstes Foto vom Fest ${stamp}.bin`, `Zweites Foto vom Fest ${stamp}.bin`]
+const lateName = `Nachbar Konstantin ${stamp}`
+const lateFiles = [`Nachgereichtes Foto ${stamp}.bin`, `Noch ein Foto ${stamp}.bin`]
 // The level poll ticks every 4–6 s (useLevelLive.ts LIVE_POLL); three ticks and the read are well inside this.
 const LIVE = 30_000
 
@@ -162,5 +164,36 @@ test(
       await page.goBack()
       await expect(page.getByRole('heading', { name: dropBox })).toBeVisible()
     }
+  },
+)
+
+test(
+  'the owner\'s open drop box page shows a new guest\'s folder and its next file, without a reload',
+  { tag: ['@uc.memory.browse:level-live-refresh', '@uc.depot.drop-box:members-open-every-guest-folder'] },
+  async ({ browser }) => {
+    // Left on the drop box's own page by the test before: its two guests' folders, nothing of the third yet.
+    const { page } = member
+    await expect(page.getByRole('heading', { name: dropBox })).toBeVisible()
+    await expect(page.getByRole('button', { name: `Open ${dropperName} (2)`, exact: true })).toBeVisible()
+    const late = page.getByRole('button', { name: `Open ${lateName}`, exact: true })
+    await expect(late).toHaveCount(0)
+    await markDocument(page)
+
+    const latecomer = await newDevice(browser)
+    droppers.push(latecomer)
+    const tab = latecomer.page
+    await tab.goto(dropLink)
+    await expect(tab.getByRole('heading', { name: 'Send files' })).toBeVisible({ timeout: 60_000 })
+    await tab.getByLabel('Your name').fill(recordTyped(lateName))
+    await tab.getByRole('button', { name: 'Continue', exact: true }).click()
+    for (const [i, name] of lateFiles.entries()) {
+      const chooser = tab.waitForEvent('filechooser')
+      await tab.getByRole('button', { name: 'Choose files', exact: true }).click()
+      await (await chooser).setFiles({ name: recordTyped(name), mimeType: 'application/octet-stream', buffer: Buffer.from(bytes(50_000 + i)) })
+      await expect(tab.getByText(/^Sent · /)).toHaveCount(i + 1, { timeout: 60_000 })
+      // Its first file brings the guest's folder onto the open page, its second counts there.
+      await expect(late).toContainText(i === 0 ? '1 file' : '2 files', { timeout: LIVE })
+    }
+    expect(await sameDocument(page), 'the owner\'s page was not reloaded').toBe(true)
   },
 )

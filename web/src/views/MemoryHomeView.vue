@@ -192,8 +192,15 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 // The level's live refresh (inbox #408): while a folder level is on screen, pick up what others changed (a share guest's
 // upload, a peer's new Memory) without a reload. One read of the scope's tree per tick, applied only when it changed and
 // dropped if a write of this tab re-read the tree meanwhile (`treeStore.pollTree`); skipped while any dialog is open.
+// An opened node's page polls too when its kind's page is drawn from the tree (`KindDescriptor.liveDetail`: Depot's drop
+// box, owner decision 2026-10-17); every other one does not.
+const liveDetail = computed(() => {
+  if (!kindDetail.value || !currentNode.value) return false
+  const info = registry.kind(currentNode.value.kind)
+  return info.supported && !!info.liveDetail
+})
 const { ticks: liveTick } = useLevelLive({
-  active: () => activeSpace.status === 'ready' && !treeStore.error && !kindDetail.value && !isOpenable.value && !place.value.person,
+  active: () => activeSpace.status === 'ready' && !treeStore.error && (!isOpenable.value || liveDetail.value) && !place.value.person,
   paused: () =>
     !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),
@@ -320,11 +327,10 @@ function stayOn(shown: string | null) {
 async function onMutationDone() {
   await loadTree()
 }
-/** Core's name dialog wrote: a create lands below the position (it cannot change its path), a rename may change it. */
-async function onNameDone() {
-  const shown = nameDialog.value?.mode === 'rename' ? nameDialog.value.shown : null
-  await loadTree()
-  stayOn(shown)
+/** Core's name dialog wrote and re-read the tree (it closes only then): a create lands below the position (it cannot
+ *  change its path), a rename may change it — followed here, before the dialog is gone (inbox #475). */
+function onNameDone() {
+  stayOn(nameDialog.value?.mode === 'rename' ? nameDialog.value.shown : null)
 }
 /** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
  *  splice. The position stays where it is: the restored node reappears wherever it belonged — and when it is an older

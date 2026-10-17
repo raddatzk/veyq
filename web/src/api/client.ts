@@ -34,6 +34,7 @@ import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks
 import { ModerationApi, Configuration as ModerationConfiguration } from './generated/moderation'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
 import { FavoritesApi, Configuration as FavoritesConfiguration } from './generated/favorites'
+import { OperatorApi, Configuration as OperatorConfiguration } from './generated/operator'
 import { session } from '../app/session'
 
 export function setupApi(): SetupApi {
@@ -167,4 +168,10 @@ export function sharesApi(): SharingApi {
 
 export function publicSharesApi(): SharingApi {
   return new SharingApi(new SharingConfiguration(publicParams()))
+}
+
+// Who runs this instance (ADR 0093 § 11, ADR 0035 decision 7): the operator's published values, read before sign-in on
+// the login and share pages. Token-less like the guest reads: nobody needs a session to learn who runs a server.
+export function publicOperatorApi(): OperatorApi {
+  return new OperatorApi(new OperatorConfiguration(publicParams()))
 }

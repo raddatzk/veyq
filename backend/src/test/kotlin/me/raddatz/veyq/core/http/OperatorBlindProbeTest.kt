@@ -278,6 +278,8 @@ class OperatorBlindProbeTest {
             "getInstanceModeration", "appointModerator", "removeModerator", "mintModerationEpoch",
             "getStoreReconcile", "confirmStoreExclusiveBucket", "withdrawStoreExclusiveBucket", "pauseStoreReconcile",
             "resumeStoreReconcile",
+            "getInstanceOperator", "setInstanceOperator", "clearInstanceOperator", "confirmOperatorNotification",
+            "getInstanceOperatingMode", "setInstanceOperatingMode",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +
@@ -325,6 +327,11 @@ class OperatorBlindProbeTest {
             "public: the current epoch's public bundle, which every reporter — mostly a guest — seals to (ADR 0099 § 2); " +
                 "it names no space and no account.",
             "getModerationKey",
+        )
+        reason(
+            "public: the values the Server Owner published about who runs the instance (ADR 0093 § 11, ADR 0035 " +
+                "decision 7) — instance-wide, the same on every host; it names no space and no account.",
+            "getOperatorDetails",
         )
     }
 

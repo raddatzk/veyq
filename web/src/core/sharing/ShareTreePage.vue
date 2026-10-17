@@ -178,8 +178,15 @@ const downloading = ref<TreeNode | null>(null)
 
 // --- the live refresh (inbox #408): a folder level on screen picks up what others changed, without a reload --------------
 // Paused while a dialog of this page is open; the shell's `poll` swaps `head` (and with it the tree) only on a change.
+// A node's detail polls too when its kind's page is drawn from the tree (`KindDescriptor.liveDetail`: Depot's drop box,
+// owner decision 2026-10-17), as the member's host does — every other detail does not.
+const liveDetail = computed(() => {
+  if (!detail.value || !current.value) return false
+  const info = registry.kind(current.value.kind)
+  return info.supported && !!info.liveDetail
+})
 const { ticks: liveTick } = useLevelLive({
-  active: () => atFolder.value && !!props.access.poll,
+  active: () => (atFolder.value || liveDetail.value) && !!props.access.poll,
   paused: () => !!creating.value || !!moving.value || !!movingMany.value || !!downloading.value,
   read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(false),
 })

@@ -8,7 +8,11 @@
 // + the tenant storage quota + release info with the release check's notices and its switch + the config-secret state +
 // the object-store setting and its check + the bucket reconcile and its two switches + the capability switches with
 // their requirements + the external services +
-// the moderator roster and the rotation of the instance moderation key (ADR 0099).
+// the moderator roster and the rotation of the instance moderation key (ADR 0099) + the operating mode and the
+// operator's published values (ADR 0093 §§ 11 and 14). The operating mode's notice is printed from admin-web's own
+// i18n (`i18n/operatingModeNotice.ts`), the words the console shows, and *private* needs `--accept-notice` — the
+// facade's rule (`operatingModeRequest`), not one of this file's. The notification address's code is typed into the
+// console only, as instance mail's is.
 // Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
 // they are not Server-Owner commands. The instance's OWN mail settings are the Server Owner's, but stay console-only
@@ -78,6 +82,21 @@ import {
   RotationReason,
   type InstanceModeration,
 } from '../features/instance/moderation'
+import {
+  clearOperator,
+  getOperatingMode,
+  getOperator,
+  needsAcceptance,
+  OperatingMode,
+  operatorUpdateOf,
+  parseLanguages,
+  presetChanges,
+  setOperatingMode,
+  setOperator,
+  type InstanceOperatingMode,
+  type InstanceOperatorUpdate,
+} from '../features/instance/operator'
+import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
 export type Flag = {
@@ -187,6 +206,40 @@ async function moderatorByAddress(address: string): Promise<string> {
   const found = (await getModeration()).moderators.find((m) => m.address.toLowerCase() === wanted)
   if (!found) throw new CliError(`${address} is not on the moderator roster (see \`moderator list\`)`)
   return found.accountId
+}
+
+/** `mode set <word>` → the mode. */
+const MODES: Record<string, OperatingMode> = { private: OperatingMode.Private, organisation: OperatingMode.Organisation }
+const MODE_WORD: Record<OperatingMode, string> = { PRIVATE: 'private', ORGANISATION: 'organisation' }
+
+/** The mode, the notice, and which preset switches the other mode would change — what `mode show` prints, and what
+ *  `mode set` prints after setting (the notice "either way", ADR 0093 § 14). */
+function renderMode(m: InstanceOperatingMode, locale: CapabilityLocale): string {
+  const other = m.mode === OperatingMode.Private ? OperatingMode.Organisation : OperatingMode.Private
+  const changes = presetChanges(m.preset, other)
+  const lines = [
+    `mode ${MODE_WORD[m.mode]}${m.chosen ? '' : ' (none chosen; runs as organisation)'}`,
+    '',
+    noticeText(locale),
+    '',
+    changes.length
+      ? `mode set ${MODE_WORD[other]} would switch:\n${changes.map((c) => `  ${c.entry.id}  ${c.on ? 'on' : 'off'}  ${inLocale(c.entry.title, locale)}`).join('\n')}`
+      : `mode set ${MODE_WORD[other]} would switch nothing`,
+  ]
+  return lines.join('\n')
+}
+
+/** The operator flags `operator set` takes, each to its field. `none` clears one; a flag left out keeps its value. */
+const OPERATOR_FLAGS: Record<string, keyof InstanceOperatorUpdate> = {
+  'contact-email': 'contactEmail',
+  'contact-languages': 'contactLanguages',
+  'statement-email': 'statementEmail',
+  'notification-email': 'notificationEmail',
+  'provider-name': 'providerName',
+  'provider-address': 'providerAddress',
+  'provider-email': 'providerEmail',
+  'provider-representative': 'providerRepresentative',
+  'supervisory-authority': 'supervisoryAuthority',
 }
 
 /**
@@ -464,6 +517,62 @@ export const COMMANDS: Record<string, Command> = {
     flags: { address: { describe: 'the moderator’s address, as `moderator list` prints it', required: true } },
     run: async (f) => removeModerator(await moderatorByAddress(f.address)),
     render: (r) => renderRoster(r as InstanceModeration),
+  },
+  'mode show': {
+    usage: 'mode show [--lang en|de]',
+    summary: 'Print the operating mode, its notice, and which switches the other mode would set.',
+    flags: { lang },
+    run: () => getOperatingMode(),
+    render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
+  },
+  'mode set': {
+    usage: 'mode set <private|organisation> [--accept-notice] [--lang en|de]',
+    summary: 'Set the operating mode and the switches its preset names. Your own assessment, not veyq’s: private needs --accept-notice. Turns neither reporting nor the moderators off.',
+    flags: {
+      'accept-notice': { describe: 'you have read the notice and choose private on your own responsibility', required: false, switch: true },
+      lang,
+    },
+    operand: { name: 'mode', describe: 'private or organisation' },
+    run: async (f, env) => {
+      const mode = MODES[f.mode]
+      if (!mode) throw new CliError(`mode set takes private or organisation (got '${f.mode}')`)
+      const locale = cliLocale(f, env)
+      if (needsAcceptance(mode) && f['accept-notice'] !== 'true') {
+        throw new CliError(`${noticeText(locale)}\n\n${OPERATING_MODE_NOTICE[locale].accept}\nPass --accept-notice to choose private; nothing was set.`)
+      }
+      return setOperatingMode(mode, f['accept-notice'] === 'true')
+    },
+    render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
+  },
+  'operator show': {
+    usage: 'operator show',
+    summary: 'Print the instance contact, the provider identification, the supervisory authority and the notification address with its confirmation.',
+    flags: {},
+    run: () => getOperator(),
+  },
+  'operator set': {
+    usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>]',
+    summary: 'Change the given values (none clears one) and keep the rest. A new notification address gets a code by instance mail, typed into the console’s Server → Operator.',
+    flags: Object.fromEntries(
+      Object.keys(OPERATOR_FLAGS).map((k) => [k, { describe: `${k.replace(/-/g, ' ')}, or none to clear it`, required: false }]),
+    ),
+    run: async (f) => {
+      const given = Object.keys(OPERATOR_FLAGS).filter((k) => f[k] !== undefined)
+      if (!given.length) throw new CliError('operator set needs at least one value (see --help); operator clear clears them all')
+      const update: InstanceOperatorUpdate = operatorUpdateOf(await getOperator())
+      for (const k of given) {
+        const value = f[k] === 'none' ? null : f[k]
+        if (k === 'contact-languages') update.contactLanguages = value === null ? null : parseLanguages(value)
+        else (update as Record<string, string | null>)[OPERATOR_FLAGS[k]] = value
+      }
+      return setOperator(update)
+    },
+  },
+  'operator clear': {
+    usage: 'operator clear',
+    summary: 'Clear every operator value, the notification address and its confirmation included. The operating mode stays.',
+    flags: {},
+    run: () => clearOperator(),
   },
   'moderation rotate': {
     usage: 'moderation rotate --reason by-hand|compromise|identity-rotation|removal',

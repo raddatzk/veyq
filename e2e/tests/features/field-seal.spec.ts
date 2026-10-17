@@ -26,6 +26,8 @@ const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures
 const stamp = randomBytes(3).toString('hex')
 const folderBefore = `Ordner Alpha vom Dachboden ${stamp}`
 const folderAfter = `Ordner Gamma aus dem Keller ${stamp}`
+// Its fragment path in the tenant space (token-less, web/src/shared/naming.ts `slugify`): the stamp is lowercase hex.
+const folderAfterPath = `ordner-gamma-aus-dem-keller-${stamp}/`
 const destination = `Zielordner Beta im Flur ${stamp}`
 const memoryName = `Sommerfrische an der Mosel ${stamp}`
 // Typed as the en screen writes a day; sealed in the Memory's meta as the ISO day — both are canaries.
@@ -113,6 +115,9 @@ test(
     await rename.getByLabel('Name').fill(recordTyped(folderAfter))
     await rename.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(rename).toBeHidden()
+    // The reload re-opens what the URL names: the folder's NEW slug path (ADR 0015, a folder with its trailing slash).
+    // Reloaded on the old one, the path resolves to nothing and the page stands on the space root (inbox #475).
+    await expect(page).toHaveURL(new RegExp(`#${folderAfterPath}$`))
     await page.reload()
     await expect(page.getByRole('heading', { name: folderAfter })).toBeVisible({ timeout: 60_000 })
 

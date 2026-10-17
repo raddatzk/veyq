@@ -26,6 +26,8 @@
 4. The guest sees the files it sent in this session — nothing of the drop box or of other guests.
 5. A member opens the drop box: one folder per guest (a repeated guest name numbered at display time), each opened
    through the drop box's key → its drop key → the guest's identity key; inside, the files are read-only (download).
+   The open page stays current like a folder level: a new guest's folder or a new file appears without a reload
+   (owner decision 2026-10-17; [uc.memory.browse § live refresh](../../memory/use-cases/uc.memory.browse.md#live-refresh)).
 6. A member deletes a guest's folder (to the trash) or moves it out of the drop box; moving out ends its link to the
    guest identity.
 

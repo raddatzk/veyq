@@ -86,6 +86,11 @@ handling of reported shares.
 - ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **built**
   ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
   console notices, and instance mail for the Server Owner only)
+- ★ [Choose the operating mode and publish who runs the instance](use-cases/uc.admin.operator-details.md) —
+  **planned** ([ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  §§ 11 and 14, [ADR 0035](../../decisions/0035-server-terms-of-service.md) decisions 6–7; the mode a preset over
+  the register's switches, the contact and the provider identification published, admin-web warning only in the
+  *club, organisation or company* mode)
 - Act on a reported public share — planned, under [Moderation](../moderation/_index.md): who moderates and the key a
   report is sealed to are [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md)
   (the Server Owner's side, on admin-web)

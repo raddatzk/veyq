@@ -180,6 +180,8 @@ The backup gate captures the database and an index of the store before a release
 |---|---|---|
 | The object store | **Server → Object store**, or `veyq-admin store set` | The bundled store, an S3-compatible store of your own, or a Garage of your own, with its endpoint, bucket, region and keys. It applies at once and is checked before a tenant can be created ([First-run setup](/veyq/run/first-run/#connect-the-object-store)) |
 | A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
+| The operating mode | first-run setup, then **Server → Operating mode**, or `veyq-admin mode set` | Private, or club, organisation or company: your own assessment, a preset over the switches it names, and whether the console warns about an empty contact or identification ([Moderation](/veyq/run/moderation/#the-operating-mode)) |
+| Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public — and the private notification address, confirmed by a code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)) |
 
 A tenant's mail server, terms and per-link upload limit are its owner's, set in the app, not here.
 

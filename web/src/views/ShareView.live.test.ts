@@ -46,6 +46,7 @@ import { realI18n } from '../test/i18n'
 import { viewModeStorageKey, setViewMode } from '../shared/state/useViewMode'
 import { levelTabStorageKey } from '../shared/state/useLevelTab'
 import { setAccountUserId } from '../app/account'
+import { dropKeysForShare, mintIdentityKey, openDropKey } from '../core/sharing/dropKey'
 
 const SCOPE = '77777777-7777-4777-8777-777777777777'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_s'
@@ -87,9 +88,9 @@ const settle = async (ms: number) => {
 // One poll interval and the jitter's widest draw, so the tests follow the cadence instead of a copied number.
 const OVER_ONE_INTERVAL = Math.ceil(LIVE_POLL.intervalMs * (1 + LIVE_POLL.jitter)) + 500
 
-async function mountPage() {
+async function mountPage(query = '') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })
-  await router.push(`/s/${SHARE}${HASH}`)
+  await router.push(`/s/${SHARE}${query}${HASH}`)
   await router.isReady()
   const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } }, attachTo: document.body })
   await settle(0)
@@ -222,5 +223,52 @@ describe("a share guest's folder page, live", () => {
     expect(localStorage.getItem('veyq:view-mode:u:user-1')).toBe('list')
     w.unmount()
     expect(viewModeStorageKey()).toBe('veyq:view-mode:u:user-1')
+  })
+})
+
+// A guest of a READ link above a drop box sees the member's drop-box page (inbox #401), and it stays current as the
+// member's does (owner decision 2026-10-17, `KindDescriptor.liveDetail`): a new guest's folder or file appears after one
+// poll interval without a reload. Real crypto: the identity folders open through the drop box's drop key.
+describe("a share guest's drop-box page, live", () => {
+  const DROP = '6e5a0000-0000-4000-8000-000000000903'
+  const DROP_KEY = v1.randomBytes(32)
+  const { sealedDropPrivateKey } = dropKeysForShare(SCOPE, DROP, DROP_KEY, v1.randomBytes(32), null)
+  const dropPublic = v1.dropKeyPublic(openDropKey(SCOPE, DROP, DROP_KEY, sealedDropPrivateKey!))
+  const child = (id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string, extra: Partial<ShareNode> = {}): ShareNode => {
+    const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+    return { id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra }
+  }
+  const dropBox = child(DROP, ROOT, ROOT_KEY, DROP_KEY, 'Postfach', 'DEPOT_DROPBOX', { sealedDropPrivateKey })
+  /** A guest's identity folder in the drop box and one file in it, as the link serves them. */
+  function guestWithFile(folderId: string, identityId: string, fileId: string, name: string): ShareNode[] {
+    const { identityKey, wrappedIdentityKey } = mintIdentityKey(SCOPE, DROP, identityId, dropPublic)
+    const folderKey = v1.randomBytes(32)
+    return [
+      child(folderId, DROP, identityKey, folderKey, name, FOLDER_KIND, { shareIdentityId: identityId, wrappedIdentityKey }),
+      child(fileId, folderId, folderKey, v1.randomBytes(32), `${name}.pdf`, FILE_KIND),
+    ]
+  }
+  /** A READ link rooted at the folder "Fotos" holding the drop box and `below` it. */
+  function readHead(below: ShareNode[]): PublicShareHead {
+    const nodes = [{ id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 }, dropBox, ...below]
+    const share = { role: ShareRole.Read, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, ROOT_KEY)), nodes } as PublicShare
+    return { shareId: SHARE, kShare: K_SHARE, scopeId: SCOPE, name: 'Fotos', noteByLocale: {}, role: ShareRole.Read, rootKind: FOLDER_KIND, share }
+  }
+  const folderRows = (w: Awaited<ReturnType<typeof mountPage>>) =>
+    w.findAll('.dropbox-row-open').map((b) => `${b.find('.veyq-row-title').text()} · ${b.find('.veyq-row-subtitle').text()}`)
+
+  it("shows a new guest's folder after one poll interval, with no reload", async () => {
+    const anna = guestWithFile('6e5a0000-0000-4000-8000-0000000009b1', '6e5a0000-0000-4000-8000-0000000009c1', '6e5a0000-0000-4000-8000-0000000009d1', 'Anna')
+    serve(readHead(anna))
+    const w = await mountPage(`?node=${DROP}`)
+    expect(w.find('.dropbox-detail').exists(), "the drop box's page is on screen").toBe(true)
+    expect(folderRows(w)).toEqual(['Anna · 1 file'])
+    vi.mocked(pollPublicShare).mockClear()
+    serve(readHead([...anna, ...guestWithFile('6e5a0000-0000-4000-8000-0000000009b2', '6e5a0000-0000-4000-8000-0000000009c2', '6e5a0000-0000-4000-8000-0000000009d2', 'Bert')]))
+    await settle(OVER_ONE_INTERVAL)
+    expect(pollPublicShare).toHaveBeenCalled()
+    expect(folderRows(w)).toEqual(['Anna · 1 file', 'Bert · 1 file'])
+    expect(authenticatedCalls).toEqual([])
+    w.unmount()
   })
 })
