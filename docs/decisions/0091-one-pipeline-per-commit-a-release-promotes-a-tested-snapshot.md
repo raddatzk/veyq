@@ -49,7 +49,7 @@ Three structural costs sit on top of those numbers:
    | **Surface checks** (`./gradlew check`, `npm run check` of crypto, web, admin-web; the chart check) | each surface's unit and integration tests | 15 min |
    | **Races on MariaDB** | ADR 0078 | 10 min |
    | **API end-to-end** (`run_web_e2e.py`) | real crypto against a live backend, fresh per file; backup and restore groups; the wire sweeps | 15 min |
-   | **Image build** | both images, both architectures, once per commit | 15 min |
+   | **Image build** | every image of the release (app, admin, tools), both architectures, once per commit | 15 min |
    | **Stack lanes** (ADR 0090's harness, on the built image) | see 3 | 15 min each, in parallel |
    | **Mutation** (ADR 0045) | assertion strength of the scoped files | 30 min per gate, path-gated |
 
@@ -202,7 +202,7 @@ Three structural costs sit on top of those numbers:
   under the pipeline, a commit earlier, was red in its backup self-test: a migration's seeded table made every restore
   onto a fresh install refuse, which no backend check sees. The amd64 legs have not run. Local wall times say little
   about a CI runner's; the estimate above, and whether 15 minutes is enough, stay until the first CI run replaces them.
-- **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image pair per
+- **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image set per
   commit.
 
 ### Rejected

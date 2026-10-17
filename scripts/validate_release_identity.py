@@ -28,7 +28,9 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      both keyed on the *tree-derived* version rather than on anything else. The `build` job stamps the same value
      into the image as `VEYQ_VERSION`, which is what the running instance later reports — and every build-arg it
      stamps is declared by the target stage each matrix entry publishes, and by **no other stage** of that entry's
-     Dockerfile (nor before its first `FROM`). The stage that compiles the web client is served to anyone before any
+     Dockerfile (nor before its first `FROM`) — per entry: a build step gated `if: matrix.image == '<x>'` (or `!=`)
+     stamps only the entries it builds, so the tools image's major entry (ADR 0098) is held to the tools image alone,
+     and every entry must receive `VEYQ_VERSION` from some step. The stage that compiles the web client is served to anyone before any
      login, so a stamp it could read is a release on the pre-auth surface (ADR 0057 §4); a stamp the target does not
      declare is one Docker drops without a word. Both found by stage, from the build matrix, never listed.
   9. **The publish waits on every stage** (ADR 0091 decision 2). The workflow is the one pipeline per commit, and
@@ -63,7 +65,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      version and pushes to `oci://ghcr.io/<owner>/charts`; a `cosign sign` step names `charts/<name>`; and the
      chart's default image repositories are exactly the upstream images the Run area's verification page
      (`site/src/content/docs/run/verify-a-release.md`) verifies by digest — `image.repository` the chart's own
-     name, `admin.image.repository` its `-admin` sibling. And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
+     name, `admin.image.repository` its `-admin` sibling, `backup.image.repository` its `-tools` one (ADR 0098). And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
      tokens as it collects the images', and holds them to a digest the same way).
   4. **The release carries every file its recipe reads** (ADR 0096). `scripts/release_assets.py` derives the
      recipe set — the production compose file, `.env.example`, and every file the compose file reads relative to
@@ -638,6 +640,25 @@ def stage_args(body: str) -> list[tuple[str | None, set[str]]]:
     return stages
 
 
+STEP_FOR_IMAGE = re.compile(r"^\s*matrix\.image\s*(==|!=)\s*'([^']+)'\s*$")
+
+
+def stamps_for(image: str) -> set[str]:
+    """The build-args the build steps stamp into one matrix entry: a step whose `if:` is `matrix.image == '<x>'` builds
+    that image alone, one whose `if:` is `matrix.image != '<x>'` every other, and any other step every image — so a
+    stamp only one image declares (the tools image's major entry) is held to that image's target, and to no other."""
+    found: set[str] = set()
+    for step in job_steps(workflow_doc, BUILD_JOB):
+        args = str((step.get("with") or {}).get("build-args") or "")
+        if not args:
+            continue
+        gate = STEP_FOR_IMAGE.match(str(step.get("if") or ""))
+        if gate and (gate.group(1) == "==") != (gate.group(2) == image):
+            continue
+        found |= {line.split("=", 1)[0].strip() for line in args.splitlines() if "=" in line}
+    return found
+
+
 stamped = {line.split("=", 1)[0].strip() for line in build_args.splitlines() if "=" in line}
 stamped_targets = 0
 if workflow_doc:
@@ -662,7 +683,11 @@ if workflow_doc:
             fail(f"`{where}` has {len(targets)} stages named `{target}`, the target the `{BUILD_JOB}` matrix publishes")
             continue
         stamped_targets += 1
-        for name in sorted(stamped - targets[0]):
+        mine = stamps_for(str(entry.get("image") or ""))
+        if "VEYQ_VERSION" not in mine:
+            fail(f"no build step of the `{BUILD_JOB}` job stamps `VEYQ_VERSION` into `{entry.get('image')}` — that "
+                 f"image would report no release")
+        for name in sorted(mine - targets[0]):
             fail(
                 f"`{where}`'s `{target}` stage does not declare `ARG {name}`, which the `{BUILD_JOB}` job passes — "
                 f"Docker drops an undeclared build-arg without failing, so the published image carries no {name}"
@@ -670,7 +695,7 @@ if workflow_doc:
         for name, args in stages:
             if name == target:
                 continue
-            for leaked in sorted(stamped & args):
+            for leaked in sorted(mine & args):
                 fail(
                     f"`{where}` declares `ARG {leaked}` in "
                     + (f"its `{name}` stage" if name else "a stage with no name or before its first FROM")
@@ -1561,7 +1586,8 @@ else:
     values_file = CHART_DIR / "values.yaml"
     values = (yaml.safe_load(values_file.read_text()) or {}) if values_file.is_file() else {}
     chart_name = str((yaml.safe_load(CHART.read_text()) or {}).get("name") or "")
-    for key, image in (("image", chart_name), ("admin.image", f"{chart_name}-admin")):
+    for key, image in (("image", chart_name), ("admin.image", f"{chart_name}-admin"),
+                       ("backup.image", f"{chart_name}-tools")):
         node = values
         for part in key.split("."):
             node = (node or {}).get(part) if isinstance(node, dict) else None

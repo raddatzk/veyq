@@ -49,6 +49,42 @@ seccompProfile:
 {{- end }}
 
 {{/*
+The backup gate's image (ADR 0098). Its tag follows the APP image's, not the chart's appVersion alone: the gate runs
+only in its own release's tools image and refuses an app release that is not that image's, so a pinned image.tag
+moves both.
+*/}}
+{{- define "veyq.toolsImage" -}}
+{{ required "backup.image.repository is required (e.g. ghcr.io/raddatzk/veyq-tools)" .Values.backup.image.repository }}:{{ .Values.backup.image.tag | default (include "veyq.appRelease" .) }}{{ with .Values.backup.image.digest }}@{{ . }}{{ end }}
+{{- end }}
+
+{{/* The release the app container starts: the app image's tag. The gate's target is this, verbatim. */}}
+{{- define "veyq.appRelease" -}}
+{{ .Values.image.tag | default .Chart.AppVersion }}
+{{- end }}
+
+{{/*
+The database the app reaches, and as whom — ONE definition read by the app's QUARKUS_DATASOURCE_* and by the backup
+gate's VEYQ_BACKUP_DB_*, so the two can never name different databases. The gate must NOT carry QUARKUS_DATASOURCE_*:
+scripts/chart_meta_check.py recognises the app container by that variable and would then demand the KEK's claim.
+*/}}
+{{- define "veyq.jdbcUrl" -}}
+{{- if .Values.mariadb.enabled -}}
+jdbc:mariadb://veyq-mariadb:3306/veyq
+{{- else -}}
+{{ required "externalDatabase.jdbcUrl is required when mariadb.enabled=false" .Values.externalDatabase.jdbcUrl }}
+{{- end -}}
+{{- end }}
+
+{{- define "veyq.dbUser" -}}
+{{ if .Values.mariadb.enabled }}veyq{{ else }}{{ .Values.externalDatabase.username }}{{ end }}
+{{- end }}
+
+{{/* The bundled store's S3 endpoint inside the cluster — the app's hint and what the gate lists, one definition. */}}
+{{- define "veyq.bundledStoreEndpoint" -}}
+http://veyq-garage:3900
+{{- end }}
+
+{{/*
 Where a chart-owned HTTPRoute attaches — the same rule the backend applies to the routes it projects
 (KubernetesGatewaySink.parentFor), so the operator decides once and the bootstrap domain, the store host and the
 tenant domains all follow one TLS mode: `none` the Gateway's plain-HTTP listener `http`, `shared` its one

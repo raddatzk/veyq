@@ -17,7 +17,7 @@ separate question, answered by the [Security](/veyq/security/start-here/) area.
 ## Run only what was signed
 
 Deploy a release by digest, after checking its signatures: [Verify a release](/veyq/run/verify-a-release/). A tag can
-move between the check and the pull; a digest cannot. Pin both images, and on Kubernetes the chart, to the digests
+move between the check and the pull; a digest cannot. Pin both images, and on Kubernetes the tools image and the chart, to the digests
 that check resolved.
 
 ## Containers run unprivileged

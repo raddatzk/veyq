@@ -5,6 +5,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
   - docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
+  - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
 ---
 
 The use-case owns the goal and the failure modes
@@ -217,12 +218,161 @@ read them. Then have a person sign in and **open a Memory that contains media**.
 touches all three legs at once: the row, the object and the key are three different failures with the same symptom
 of *"it looked fine"*.
 
+### Under Kubernetes
+
+On a cluster the chart's **backup gate** captures before every release change, in the app pod before the container
+that migrates ([Upgrade](/veyq/run/upgrade/),
+[ADR 0098](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)).
+Your part:
+
+- **The claim.** `backup.existingClaim` names a PersistentVolumeClaim you create in the release's namespace
+  (`ReadWriteOnce` is enough). The chart creates none, so `helm uninstall` leaves the captures behind, and its size,
+  class and encryption at rest are yours. The gate writes `captures/<UTC>/` there, beside its record `state.json`;
+  a capture interrupted midway stays as `captures/<UTC>.partial/` until the next complete one removes it.
+  `backup.keep` (3) complete captures are kept, the newest never pruned. A full claim fails the gate and keeps the
+  app down; it is never pruned to make room.
+- **A capture without a release change** is a commit: change `backup.request` to any new value. That is a new
+  revision of the pod, so the old pod stops first and the capture is cold. The gate never captures because one is
+  "due".
+- **What a capture holds**: the database dump and the store's **index** — every object's key, size and MD5 — never
+  the objects and never the key. Two things are therefore yours:
+  - **The store keeps its objects.** Turn on its versioning, replication or snapshots (for the bundled Garage, of its
+    data claim). A restore checks that every object the database needs is still in the store and refuses otherwise,
+    but it cannot bring back one the store lost.
+  - **The key, exported once**, after the first start, onto a medium of its own. It does not change between
+    upgrades, and the gate never reads it:
+
+    ```sh
+    (umask 077; kubectl -n veyq cp -c app "$(kubectl -n veyq get pod \
+      -l app.kubernetes.io/name=veyq,app.kubernetes.io/component=app -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key \
+      ./veyq-config-secret.key)
+    # move it to its medium, then delete ./veyq-config-secret.key
+    ```
+- **A store of your own.** The gate cannot open its secret key (that would need the key above), so name a Secret
+  with `endpoint`, `bucket`, `accessKey` and `secretKey` (optionally `region`) in `backup.store.existingSecret`; a key
+  pair that can list the bucket is enough. The gate refuses when the instance uses its own store and none is named,
+  or when the Secret's endpoint or bucket is not the store in use.
+- **The downtime.** Every release change is longer by the capture: one dump and one listing of the bucket,
+  whatever the store holds.
+
+With `backup.enabled: false` none of this runs, and the capture before an upgrade is yours, by hand
+([Upgrade](/veyq/run/upgrade/), Kubernetes).
+
 ### Restore under Helm
 
-The mirror of the capture above: the tool reaches MariaDB and Garage through port-forwards and cannot reach the
-app's claim, so it writes leg (c) to a local file of your own, and `kubectl cp` puts it in the pod. `kubectl cp`
-unpacks as the container's user, uid 10001, so the key is born the app's — the property the Compose restore gets
-from its one-off container of the `app` service. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
+Never automatic and never a hook: a one-off **Job**, run with the tools image of the release that **wrote** the
+capture — its `manifest.json` names it as `capture.tool`; the gate writes a capture when the new release starts, so
+that is the one image certain to read it. A capture of the gate leaves the objects in the store, so the Job writes
+nothing there: before it loads anything it checks that every object the database needs is in the store with the
+size it had, and refuses naming the ones that are missing. Bring those back from the store's versioning and run it
+again — or add `--accept-missing-objects` to restore knowingly without them, each a Memory whose picture no longer
+loads.
+
+The Job's pod carries the app pod's labels, because the NetworkPolicy set admits the app alone to the database and
+the store; the app is scaled to zero meanwhile. It runs as the app's uid and writes the key as that uid
+(`--key-as-runtime-user`: a claim's directory is root-owned, `fsGroup` only gives it a group). The key reaches it
+from your medium through a Secret that exists for the Job's lifetime only — it is in the cluster's store while it
+exists, so create it just before and delete it just after. To roll back to `<release>` from the capture `<capture>`
+the gate took when that release was left:
+
+```sh
+# 0. Argo CD: pause the automated sync first (spec.syncPolicy.automated.enabled: false) — with self-heal on it
+#    puts the app back while you work. Flux: suspend the HelmRelease.
+kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application
+kubectl -n veyq exec veyq-mariadb-0 -- sh -c \
+  'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -e "DROP DATABASE veyq; CREATE DATABASE veyq; GRANT ALL PRIVILEGES ON veyq.* TO '"'"'veyq'"'"'@'"'"'%'"'"';"'
+#    2. the database emptied (your own database: empty it your way) — a restore is defined onto no data
+helm upgrade veyq "oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}" -n veyq -f my-values.yaml \
+  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}" \
+  --set backup.image.digest="${tools_digest}" --wait --timeout 15m
+#    3. <release> started once, by its own chart and digests: the gate finds no data and records it, the app
+#       migrates the empty schema and provisions the store
+kubectl -n veyq scale deploy/veyq-app --replicas=0      # 4. stopped again
+kubectl -n veyq create secret generic veyq-restore-key \
+  --from-file=config-secret.key=/media/usb-stick/veyq-<stamp>.key   # 5. the key, for the Job's lifetime
+kubectl -n veyq apply -f veyq-restore.yaml              # 6. the Job below
+kubectl -n veyq wait --for=condition=complete job/veyq-restore --timeout=15m
+kubectl -n veyq logs job/veyq-restore
+kubectl -n veyq delete job veyq-restore; kubectl -n veyq delete secret veyq-restore-key   # 7. both gone
+kubectl -n veyq scale deploy/veyq-app --replicas=1      # 8. the gate finds <release> in its record and passes
+# 9. resume the sync; verify as Restore says: veyq-admin config-secret reads OK, the store check passes, and a
+#    person opens a Memory with media
+```
+
+`veyq-restore.yaml` — the release name `veyq`, the chart's Secret `veyq` (or yours, `secrets.existingSecret`), the
+bundled store and database; for a store of your own, the four `VEYQ_BACKUP_STORE_*` variables from your Secret
+instead of the token:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: veyq-restore
+  namespace: veyq
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:            # the app pod's, for the NetworkPolicy set; the Job owns the pod
+        app.kubernetes.io/name: veyq
+        app.kubernetes.io/instance: veyq
+        app.kubernetes.io/component: app
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: restore
+          image: ghcr.io/raddatzk/veyq-tools:<capture.tool>@<its verified digest>
+          args: ["restore", "/backup/captures/<capture>", "--domain", "<your domain>",
+                 "--key-from", "/restore-key/config-secret.key",
+                 "--config-secret-file", "/var/lib/veyq/config-secret.key", "--key-as-runtime-user",
+                 "--record", "/backup"]
+          env:
+            - {name: VEYQ_BACKUP_DB_URL, value: "jdbc:mariadb://veyq-mariadb:3306/veyq"}
+            - {name: VEYQ_BACKUP_DB_USER, value: veyq}
+            - name: VEYQ_BACKUP_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: veyq, key: mariadbPassword}}
+            - {name: VEYQ_BUNDLED_STORE_ENDPOINT, value: "http://veyq-garage:3900"}
+            - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
+              valueFrom: {secretKeyRef: {name: veyq, key: garageAdminToken}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: backup, mountPath: /backup}
+            - {name: config-secret, mountPath: /var/lib/veyq}
+            - {name: restore-key, mountPath: /restore-key, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: backup
+          persistentVolumeClaim: {claimName: <backup.existingClaim>}
+        - name: config-secret
+          persistentVolumeClaim: {claimName: veyq-config-secret}
+        - name: restore-key
+          secret: {secretName: veyq-restore-key, defaultMode: 0440}
+        - name: tmp
+          emptyDir: {}
+```
+
+`--record /backup` is the Job's last step: it writes the backup's release into the gate's record, so the next start
+of that release passes instead of capturing the restored database again or refusing it as a downgrade. The config
+secret is read last, as on Compose. **Run once on a kind cluster** (2026-10-17): this Job, this order and these
+commands, with the images loaded by tag rather than pulled by digest; the database and the store were the chart's
+own.
+
+#### A capture taken by hand
+
+A capture taken by hand with `backup.enabled: false` holds the objects themselves, and restores through
+port-forwards. The tool reaches MariaDB and Garage through port-forwards and cannot reach the app's claim, so it
+writes leg (c) to a local file of your own, and `kubectl cp` puts it in the pod. `kubectl cp` unpacks as the
+container's user, uid 10001, so the key is born the app's — the property the Compose restore gets from its one-off
+container of the `app` service. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
 
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application

@@ -1246,6 +1246,26 @@ controls the bundle beside it, so "cosign 3" would have left the exact hole the 
 implement time. So a refine that names a minimum version of a tool that does the checking reads that tool's
 advisories for the code path it guards, and states the floor as the newer of the two answers.
 
+### A library's default is read at the layer that configures it
+
+**The framework between the app and the library may not pass the library's default on.** `cr-kubernetes-backup-gate`
+carried, as remembered, that Flyway ignores applied migrations newer than the code — true of Flyway 12.0.0, whose own
+default is `*:future`, and false of this app: Quarkus' `FlywayCreator` hands Flyway an empty pattern list unless its own
+`ignore-future-migrations` (default `false`) is set, so an older release refuses a newer schema. One `grep` in the
+library's sources would have read the wrong layer; the Quarkus extension's sources and one start of an older image
+answered it. So a claim about a library's default names the layer the app reaches it through and is measured there —
+the extension's config mapping, or a run.
+
+### Every pod a CR adds is asked again what it reaches and what it writes
+
+**A property argued for one component does not carry to its neighbour.** `cr-kubernetes-backup-gate` settled that the
+backup gate needs no NetworkPolicy change because it runs in the app pod, and that the restored key takes its
+directory's owner. Its restore Job inherited both conclusions unexamined; the kind run found the Job, a pod of its own,
+cut off from the database by the default-deny set, and a claim's directory root-owned (`fsGroup` gives a group, never an
+owner), so the owner rule refused the key. Both were stated in ADR 0098's own Context ("a component that dials the
+database … needs a policy change"). So a refine lists, for each pod, Job or container it adds, the peers it dials
+against the policy set and the owner of every directory it writes, rather than once for the design.
+
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
 **Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a

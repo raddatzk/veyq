@@ -86,7 +86,12 @@
   Restore onto the same domain, or treat it as a new instance.
 - **A4 — Objects are missing relative to the rows that reference them.** Detectable before the restore, because
   the capture is logical: the object keys can be compared against the blob rows that name them. This is the one
-  check a volume copy cannot offer, and it is the reason the store leg is captured this way.
+  check a volume copy cannot offer, and it is the reason the store leg is captured this way. For an index capture
+  (A11) it is asked twice: at capture, of the index; and before a restore writes anything, of the **live store** —
+  every object the dump's rows require must be there with its indexed size (and MD5 where both sides have one).
+  A missing or changed object refuses the restore, naming it; an object the index does not hold is tolerated (an
+  upload after the capture). The operator brings missing objects back from the store's own versioning, or restores
+  knowingly without them (`--accept-missing-objects`), each a Memory whose picture yields a `404`.
 - **A5 — The target already holds data.** The restore is defined onto an empty instance and nothing reconciles
   two populated ones. A load over live rows, or a mirror into a bucket that already holds objects, produces a
   state no test covers and no decision describes. Start from a fresh instance instead.
@@ -124,6 +129,16 @@
 - **A10 — The backup is newer than the target.** Refused before anything is written, naming the release the
   backup came from. The older image would refuse to start on a migration history it does not know, so loading
   and failing at boot would leave the operator with neither instance.
+- **A11 — On Kubernetes, the capture is the chart's backup gate, and its store leg is an index**
+  ([ADR 0098](../../../decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)). The gate runs in
+  the app pod before the container that migrates, with the old pod already terminated, so steps 1 and 5 are
+  Kubernetes' (`Recreate`). Step 3 lists the bucket instead of mirroring it — every object's key, size and MD5 —
+  and leaves the objects in the store, whose versioning, replication or snapshots are the operator's to keep. Step 4
+  is not the gate's: it never mounts the key, and records leg (c) as kept separately; the operator exports the key
+  once, by hand. The restore is a one-off Job, run with the tools image of the release that wrote the capture, onto
+  an emptied database the backup's release has started once: no step 8 (the objects are where they were, checked
+  against the index, A4), the key from the operator's medium, and as its last step the gate's record set to the
+  backup's release, so that release's next start passes. A Compose capture is unchanged by any of this.
 - **A8 — Only the users' half is lost.** Nothing here helps. A perfectly restored server whose people lost their
   passwords and Emergency Kits is unreadable ciphertext, and that is the design, not a defect
   ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) A7).

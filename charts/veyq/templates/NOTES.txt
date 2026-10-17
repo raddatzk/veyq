@@ -74,6 +74,23 @@ Server → Object store, choose "Use the bundled store" or a store of your own, 
 Tenants can be created only after a passed check. For the bundled Garage the same page shows how its background
 provisioning went — the public origin answers no Server-Owner operation, so this is the place to read it;
 `veyq-admin store check` provisions it again and prints every step.
+{{- if .Values.backup.enabled }}
+
+Backups: the init container `backup-gate` captures the database and an index of the store onto the claim
+{{ .Values.backup.existingClaim }} whenever the pod starts a different release (or a new backup.request), BEFORE the
+app migrates, and keeps the newest {{ .Values.backup.keep }}. The app is down while it runs, and a failed or refused
+gate keeps it down with its data untouched. So upgrade with a timeout above the capture time, and watch the pod:
+    helm upgrade --wait --timeout 15m …            (without --wait, helm reports success before the gate ran)
+    under Flux: spec.timeout above the capture time; under Argo CD the Deployment reports ProgressDeadlineExceeded
+    kubectl -n {{ .Release.Namespace }} logs deploy/veyq-app -c backup-gate
+The gate never reads the config-secret key: export it once, now, and keep it apart from the claim — see
+https://raddatzk.github.io/veyq/run/backup-and-restore/ (and keep the store's own versioning on: the gate indexes
+the objects, it does not copy them).
+{{- else }}
+
+Backups: backup.enabled is false. Nothing captures the database before a release change migrates it: taking that
+backup before every upgrade is yours, by the hand procedure on https://raddatzk.github.io/veyq/run/upgrade/.
+{{- end }}
 {{- if not .Values.networkPolicy.enabled }}
 
 networkPolicy.enabled is false: nothing confines who reaches the app's port. Any pod in the cluster can then write

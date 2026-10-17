@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
+  - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
 ---
 
 The install itself — `helm install` by the digests you verified, and the Server Owner created over a
@@ -178,3 +179,16 @@ named volume — inherits nothing from the image. `scripts/chart_meta_check.py` 
 (and the rest of the chart's structure), outside the buildless guard glob because it renders the chart with
 `helm`. It checks the rendered manifests only: no `Gateway`, `ListenerSet` or certificate order of this chart has
 run in a cluster yet.
+
+**Backups are a choice the install makes, and a claim you create** ([ADR
+0098](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)).
+With `backup.enabled` (the default) the app pod runs an init container, `backup-gate`, from the third image of the
+release, `veyq-tools`, before the container that migrates: when the pod starts a different release than the
+database holds, it captures the database and an index of the store onto `backup.existingClaim`. The chart creates
+no claim and refuses an install that names none and does not say `backup.enabled: false`, naming `backup`. The gate
+reaches the database and the store as the app does — it is the app pod, so the NetworkPolicy set gains no path —
+and never mounts the config-secret claim, so no capture holds the key; export the key once yourself. What it
+captures, refuses and keeps, and the restore Job: [Upgrade](/veyq/run/upgrade/) and [Backup and
+restore](/veyq/run/backup-and-restore/#under-kubernetes). The values are on [Configuration](/veyq/run/configuration/).
+The gate ran once on a kind cluster in a `restricted` namespace (2026-10-17), with its claim on kind's local-path
+provisioner, which ignores `fsGroup`; on a storage class that applies it, the claim's directory is the pod's group's.

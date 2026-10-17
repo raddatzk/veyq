@@ -28,10 +28,26 @@ acceptanceCriteria:
     text: >-
       An upgrade takes a three-leg backup, the key to a separate medium, before the new release's app starts and
       migrates the schema.
+  - id: a-cluster-start-that-would-migrate-backs-up-first
+    # A6, ADR 0098. The gate is `scripts/instance_backup.py gate` in the `veyq-tools` image, and neither a Python
+    # operator tool nor a chart render is a coverage surface (ADR 0040), so this file stays `planned` for it too. What
+    # proves it: `scripts/instance_backup_selftest.py` (ci.yml's `web-e2e` job, and inside the image in the `build`
+    # job's tools leg) pins the decision table, every refusal writing nothing with a control one field away, the order
+    # (an emptied database passes before the downgrade refusal), retention, and that the key is never read (G1-G4,
+    # G8); `scripts/chart_meta_check.py` (the `chart` job) pins (xxiv) the init container on the tools image with the
+    # named claim, never the config-secret claim, and the app's release as its target, (xxv) nothing of it when off,
+    # and (xxvi) the schema refusing an install that makes no choice. It ran once on a kind cluster
+    # (cr-kubernetes-backup-gate, ADR 0098 M13); a cluster lane is inbox #430's.
+    text: >-
+      On Kubernetes, before the app container of a new release starts and migrates the schema, an init container
+      captures the database and an index of the store onto a claim the operator names, and records the release; a
+      restart of the same release captures nothing; a downgrade, more than one major, or a major entered from an
+      untested release is refused with nothing written and the app kept down; and the chart refuses an install that
+      neither names the claim nor switches the gate off.
   - id: the-previous-release-stays-on-disk
     text: >-
       After an upgrade, successful or not, the previous release's recipe is still in `releases/`, so the way back is
       a restore onto it rather than a download.
 gaps:
-  backend: "Not a backend use-case: the instance is managed from the host by `veyqctl`, a Python operator tool, which is not a coverage surface (ADR 0040)."
+  backend: "Not a backend use-case: the instance is managed from the host by `veyqctl`, a Python operator tool, and on Kubernetes backed up by the chart's gate (`scripts/instance_backup.py gate`, held by `scripts/instance_backup_selftest.py` and `scripts/chart_meta_check.py`) — neither a coverage surface (ADR 0040)."
   web: "No client surface: the operator works at the shell with `veyqctl`; the Server Owner's console is unchanged by this use-case."

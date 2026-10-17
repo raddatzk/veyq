@@ -20,11 +20,14 @@ captured is structurally impossible, and there is no ordering to get right. This
 app is stopped** (it would have to know what "the app" is on this host) and does not pretend to; it is the one
 precondition the operator owns.
 
-Three subcommands, one file, because they share the layout, the manifest and the credential plumbing:
+Four subcommands, one file, because they share the layout, the manifest and the credential plumbing:
 
-    python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump)
-    python3 scripts/instance_backup.py verify   DIR [--key-from FILE]
+    python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump | --key-kept-apart)
+                                                [--store-leg mirror|index] [--app-version R]
+    python3 scripts/instance_backup.py verify   DIR [--key-from FILE] [--against-store]
     python3 scripts/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
+                                                [--accept-missing-objects] [--record DIR]
+    python3 scripts/instance_backup.py gate     (in the app pod; every input from its environment)
 
 A backup is a directory, defaulting to `infra/backups/<UTC-ISO8601>/`:
 
@@ -32,6 +35,28 @@ A backup is a directory, defaulting to `infra/backups/<UTC-ISO8601>/`:
                        # and where leg (c) went: `configSecret.placement` = separate | beside | absent
     database.sql       # mariadb-dump WITH DDL and the flyway history
     objects/           # the rclone mirror of the bucket, one file per object key
+
+**Two formats, by the store leg.** What Compose and `veyqctl` write is the one above, `backupFormat` 2, unchanged.
+An **index capture** (`--store-leg index`, `backupFormat` 3, ADR 0098 decision 4) has no `objects/`: its manifest's
+`store.index` lists every object as `[key, size, md5 | null]` — one listing, the objects left in the store, whose own
+versioning, replication or snapshots keep them. Its `verify` answers A4 from that index (and, `--against-store`, from
+the live store); its `restore` never writes to the store: in place of A5's empty-store gate it checks A4 against the
+live store before anything is written, and refuses a missing or changed object by name unless
+`--accept-missing-objects` knowingly restores without it. An older tool refuses format 3 by its number.
+
+**The cluster's gate** (`gate`, ADR 0098) runs in the app pod's init container `backup-gate`, in the `veyq-tools`
+image, before the container that migrates — under `Recreate`, so the old app has stopped and the capture is cold by
+construction. The **in-pod mode** it uses: the database by the app's own JDBC URL (`--db-url`, `VEYQ_BACKUP_DB_URL`,
+`jdbc:mariadb://host[:port]/database` and no other form) and user, the client binaries and `rclone` on `PATH`, no
+Docker and no fallback; the release named by the caller, never asked of Docker. It keeps one record on the backup
+volume, `state.json` — the release whose data the database holds and the last request it served — and in this order:
+a database holding no data records the target and passes (the first install, and the documented rollback, which
+empties the database); the target and request the record's pass; then the refusals, which write nothing — a
+downgrade, more than one major, a major entered from any release but the one this image bakes as tested (`majorEntry`
+in `/opt/veyq/release.json`), a target that is no release or not this image's own, an unreadable record; otherwise an
+index capture into `captures/<UTC>.partial/`, verified and renamed, the record moved, and the complete captures beyond
+`--keep` pruned with every `.partial`. **It never reads the key**: leg (c) is recorded as `separate`, unread, so a
+capture on the volume cannot hold the KEK. A capture `capture` writes for Compose is untouched by all of this.
 
 **Leg (c) is captured, but never beside legs (a) and (b)** (ADR 0056 §1). ADR 0050's key file defends a leaked
 database backup only while the key is somewhere else: the dump plus the key opens every tenant's SMTP password.
@@ -105,7 +130,11 @@ the app which store it runs: the operator tells it, for this run. Two ways, the 
                         admin console, which the console never shows again and this tool therefore cannot read.
 
 Environment:
-    VEYQ_BACKUP_DB_PASSWORD         Database password. Required by `capture` and `restore`.
+    VEYQ_BACKUP_DB_PASSWORD         Database password. Required by `capture`, `restore` and `gate`.
+    VEYQ_BACKUP_DB_URL              The in-pod mode's database, the app's JDBC URL, and its user (default root).
+    VEYQ_BACKUP_DB_USER
+    VEYQ_BACKUP_DIR, VEYQ_BACKUP_TARGET_RELEASE, VEYQ_BACKUP_REQUEST, VEYQ_BACKUP_KEEP
+                                    The gate's volume, target, request and retention — the chart renders them.
     VEYQ_BUNDLED_STORE_ENDPOINT     The bundled store's S3 endpoint the *rclone container* must reach — an internal
     VEYQ_BUNDLED_STORE_ADMIN_TOKEN  name such as `http://garage:3900`, not a host-published port — and its admin
                                     token (environment only, never a flag).
@@ -122,6 +151,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -161,6 +191,14 @@ PLACEMENTS = (SEPARATE, BESIDE, ABSENT)
 # unknown one rather than guessing, because guessing is how a restore half-works. 2: `configSecret.present`
 # became `configSecret.placement`.
 BACKUP_FORMAT = 2
+# An INDEX capture (ADR 0098 decision 4): no `objects/`, `store.leg = "index"` and `store.index` instead. A capture
+# of the store's objects (Compose, `veyqctl`) stays format 2, byte for byte. Not every capture is bumped to 3, because
+# `veyqctl` restores with the RUNNING release's tool, which after a Compose rollback is the older release's: it must
+# keep reading what Compose writes. An index capture is the one shape an older tool must refuse, and this number is
+# what makes it refuse instead of failing at a missing `objects/`.
+INDEX_FORMAT = 3
+FORMATS = (BACKUP_FORMAT, INDEX_FORMAT)
+MIRROR, INDEX = "mirror", "index"
 
 # Owner-only, for everything this process creates. Set once in [main], so no write in any subcommand can be born
 # group- or world-readable — including the key, which a copy-then-chmod would leave readable for a moment.
@@ -205,8 +243,40 @@ NOT_DATA = (
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
 
 
+class DbUrl(NamedTuple):
+    host: str
+    port: int
+    name: str
+
+
+class StoreRow(NamedTuple):
+    """The plaintext of `veyq_store_setting`'s active row — what a tool without the KEK can know of the store."""
+    bundled: bool
+    endpoint: str | None
+    bucket: str | None
+    region: str | None
+
+
+# `jdbc:mariadb://host[:port]/database[?…]` — the one shape the chart renders for the app (one helper for the app's
+# QUARKUS_DATASOURCE_JDBC_URL and the gate's VEYQ_BACKUP_DB_URL) and the one an operator's `externalDatabase.jdbcUrl`
+# is documented in. A multi-host list (`h1,h2`), a failover scheme (`jdbc:mariadb:replication:`) or another driver's
+# URL is refused, naming the form: guessing which host to dump is how a backup reads a replica that lags.
+JDBC_URL = re.compile(r"jdbc:mariadb://([A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\])(?::(\d{1,5}))?/([A-Za-z0-9_$-]+)(?:\?.*)?")
+
+
+def parse_jdbc_url(url: str) -> DbUrl:
+    """The database the app reaches, read from its JDBC URL. The query string is never echoed: it may carry a password."""
+    match = JDBC_URL.fullmatch(url.strip())
+    if not match:
+        shown = url.split("?", 1)[0] + ("?…" if "?" in url else "")
+        raise BackupError(f"the database URL {shown!r} is not of the form jdbc:mariadb://host[:port]/database[?…], the "
+                          f"one this tool parses — a multi-host URL or another driver's is refused rather than guessed at")
+    host, port, name = match.groups()
+    return DbUrl(host.strip("[]"), int(port) if port else 3306, name)
+
+
 class Database:
-    """The database leg's two connection modes — the runbook has exactly two audiences and no more.
+    """The database leg's three connection modes — the runbook has exactly three audiences and no more.
 
     **compose** (default) — `docker compose -f <file> exec -T <service> …`, the bundled stack, the form
     `scripts/run_web_e2e.py` already proves works against `mariadb:11.4`.
@@ -214,6 +284,10 @@ class Database:
     **direct** (`--db-host`) — an operator's own database. The client binary is preferred from the host `PATH`
     and otherwise run inside the pinned [DB_IMAGE], because neither `mariadb-dump` nor `mysqldump` is present
     on a typical dev host — so a host install cannot be a prerequisite of the procedure.
+
+    **pod** (`--db-url`, ADR 0098) — inside the cluster, the database the app's own JDBC URL names, with the client
+    binaries of the `veyq-tools` image on `PATH`. There is no Docker in a pod, so a missing binary is a refusal naming
+    it, never a fallback.
     """
 
     def __init__(self, args: argparse.Namespace, password: str) -> None:
@@ -227,6 +301,10 @@ class Database:
         self.image = args.db_image
         self.network = args.docker_network
         self.mode = "direct" if args.db_host else "compose"
+        url = getattr(args, "db_url", None)
+        if url:
+            self.host, self.port, self.name = parse_jdbc_url(url)
+            self.mode = "pod"
 
     def _wrap(self, binary: str) -> list[str]:
         """The invocation prefix that puts `binary` in front of a database, with MYSQL_PWD in its environment.
@@ -238,6 +316,11 @@ class Database:
         if self.mode == "compose":
             return ["docker", "compose", "-f", str(self.compose_file), "exec", "-T",
                     "-e", "MYSQL_PWD", self.service, binary]
+        if self.mode == "pod":
+            if not shutil.which(binary):
+                raise BackupError(f"{binary} is not on PATH. The in-pod mode (--db-url) runs the client binaries of the "
+                                  f"veyq-tools image and has no Docker to fall back to — run it in that image.")
+            return [binary]
         if shutil.which(binary):
             return [binary]
         if not self.network:
@@ -250,7 +333,7 @@ class Database:
 
     def _conn(self) -> list[str]:
         args = [f"-u{self.user}"]
-        if self.mode == "direct":
+        if self.mode in ("direct", "pod"):
             args += ["-h", self.host, "-P", str(self.port)]
         return args
 
@@ -414,8 +497,20 @@ class Database:
     def open_upload_sessions(self) -> int:
         return int(self.query("SELECT COUNT(*) FROM veyq_upload_session;")[0][0])
 
+    def store_setting(self) -> StoreRow | None:
+        """The store in use, as far as its PLAINTEXT says (ADR 0089): the active row (`id = 1`) or None when no store was
+        chosen. A bundled row names nothing but `bundled` — its endpoint and bucket are the bundled-store hint of the
+        environment (measured, `StoreHandler.build`: `StoreSettingRow(true, null, …)`); a store of the operator's own
+        names its endpoint, bucket and region here, while its secret key is sealed under the config-secret key."""
+        rows = self.query("SELECT bundled, endpoint, bucket, region FROM veyq_store_setting WHERE id = 1;")
+        if not rows:
+            return None
+        bundled, endpoint, bucket, region = (rows[0] + ["NULL"] * 4)[:4]
+        plain = [None if value == "NULL" else value for value in (endpoint, bucket, region)]
+        return StoreRow(bundled in ("1", "TRUE", "true"), *plain)
+
     def describe(self) -> str:
-        where = f"{self.host}:{self.port}" if self.mode == "direct" else f"compose service {self.service}"
+        where = f"{self.host}:{self.port}" if self.mode in ("direct", "pod") else f"compose service {self.service}"
         return f"database {self.name} ({where})"
 
 
@@ -510,6 +605,25 @@ class Store:
             raise BackupError(f"rclone could not read {self.describe()}: {proc.stderr.strip()[-500:]}")
         payload = json.loads(proc.stdout)
         return int(payload["count"]), int(payload["bytes"])
+
+    def index(self) -> list[list]:
+        """`[[key, size, md5 | None], …]`, sorted by key — the store leg of an index capture (ADR 0098 decision 4).
+
+        One listing, never a download: `lsjson -R --hash` reads keys, sizes and the S3 MD5, which rclone takes from a
+        single-part object's ETag (measured against the pinned Garage: the raw `<ETag>` of the ListObjectsV2 body and
+        rclone's `md5` were the body's MD5 — and rclone reports no raw ETag). Every object veyq writes is one presigned
+        PUT, so the two coincide. Where a listing gives no hash (a multipart object a hand copy left), the entry
+        records None and A4 compares it by key and size only, saying so.
+        """
+        proc = self._run(["lsjson", "-R", "--hash", "--files-only", f"{REMOTE}:{self.bucket}"])
+        if proc.returncode != 0:
+            raise BackupError(f"rclone could not list {self.describe()}: {proc.stderr.strip()[-500:]}")
+        try:
+            entries = json.loads(proc.stdout or "[]")
+        except json.JSONDecodeError as e:
+            raise BackupError(f"rclone's listing of {self.describe()} is not JSON: {e}") from e
+        return sorted([entry["Path"], int(entry["Size"]), (entry.get("Hashes") or {}).get("md5") or None]
+                      for entry in entries)
 
     def mirror_out(self, dest: Path) -> None:
         """`sync` — the destination becomes exactly the bucket, so a re-run is a capture and not a union."""
@@ -615,6 +729,44 @@ def expected_keys(blobs: list[list]) -> list[str]:
     return [f"{key}/{i}" for key, chunks in blobs for i in range(chunks)]
 
 
+class Comparison(NamedTuple):
+    """A4 of an index capture against a listing: what the rows require that the listing lacks or holds differently."""
+    missing: list[str]
+    changed: list[str]
+    by_size_only: int
+
+
+def compare_index(required: list[str], indexed: list[list], listing: list[list]) -> Comparison:
+    """Every key the blob rows require, held against a listing of the store: missing, or present with another size
+    (or another MD5, where both sides have one). An object the listing holds and the rows do not is tolerated —
+    an upload after the capture, the same asymmetry `verify` has (module docstring)."""
+    want = {key: (size, digest) for key, size, digest in indexed}
+    have = {key: (size, digest) for key, size, digest in listing}
+    missing, changed, by_size_only = [], [], 0
+    for key in required:
+        if key not in have:
+            missing.append(key)
+            continue
+        size, digest = want.get(key, (None, None))
+        live_size, live_digest = have[key]
+        if size is not None and live_size != size:
+            changed.append(f"{key} (size {live_size}, the capture indexed {size})")
+        elif digest and live_digest:
+            if digest != live_digest:
+                changed.append(f"{key} (md5 {live_digest}, the capture indexed {digest})")
+        else:
+            by_size_only += 1
+    return Comparison(missing, changed, by_size_only)
+
+
+def listed(problems: list[str], keys: list[str], label: str) -> None:
+    """Every key, not a count, up to fifty: the resolution is per object, and a count cannot be acted on."""
+    for key in keys[:50]:
+        problems.append(f"    {label}  {key}")
+    if len(keys) > 50:
+        problems.append(f"    … and {len(keys) - 50} more")
+
+
 def present_keys(objects: Path) -> set[str]:
     return {p.relative_to(objects).as_posix() for p in objects.rglob("*") if p.is_file()}
 
@@ -688,8 +840,12 @@ def key_owner_plan(euid: int, parent_uid: int, parent_gid: int, existing_uid: in
     return KeyOwnerPlan(AS_IS)
 
 
-def key_gate(target: Path) -> KeyOwnerPlan:
-    """The key's placement, decided and checked before the restore writes anything (A5 would refuse a retry)."""
+def key_gate(target: Path, as_runtime_user: bool = False) -> KeyOwnerPlan:
+    """The key's placement, decided and checked before the restore writes anything (A5 would refuse a retry).
+
+    `as_runtime_user` is the cluster's case: a restore Job runs as the application's own uid (its `runAsUser`), and
+    a claim's directory is root-owned — `fsGroup` gives it a group, never an owner — so the directory names nobody
+    to hand the key to, and the key born to this process IS born to the application's uid."""
     parent = target.parent
     if not parent.is_dir():
         raise BackupError(f"--config-secret-file {target}: its directory {parent} does not exist. On the production "
@@ -698,6 +854,16 @@ def key_gate(target: Path) -> KeyOwnerPlan:
     st = parent.stat()
     existing_uid = target.stat().st_uid if target.exists() else None
     euid = effective_uid()
+    if as_runtime_user:
+        if euid == 0:
+            raise BackupError(f"--key-as-runtime-user: this tool runs as root, so the key would be born root's — run it "
+                              f"as the application's uid (a Kubernetes Job's runAsUser, 10001 for the veyq image)")
+        if existing_uid not in (None, euid):
+            raise BackupError(f"--config-secret-file {target}: a key already there belongs to uid {existing_uid}, not to "
+                              f"this tool's uid {euid}, the application's — overwriting it would keep that owner")
+        if not os.access(parent, os.W_OK | os.X_OK):
+            raise BackupError(f"--config-secret-file {target}: its directory is not writable by uid {euid}")
+        return KeyOwnerPlan(AS_IS)
     plan = key_owner_plan(euid, st.st_uid, st.st_gid, existing_uid)
     if plan.action == REFUSE:
         raise BackupError(f"--config-secret-file {target}: {plan.reason}")
@@ -706,10 +872,10 @@ def key_gate(target: Path) -> KeyOwnerPlan:
     return plan
 
 
-def place_key(source: Path, target: Path) -> KeyOwnerPlan:
+def place_key(source: Path, target: Path, as_runtime_user: bool = False) -> KeyOwnerPlan:
     """Write leg (c) at `target`, `0600`, owned per `key_gate` — owner and mode set BEFORE the bytes land, so the
     restored key is never readable by a user it was not meant for, not even for a moment."""
-    plan = key_gate(target)
+    plan = key_gate(target, as_runtime_user)
     fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         if plan.action == CHOWN:
@@ -797,11 +963,15 @@ def read_manifest(backup: Path) -> dict:
     except json.JSONDecodeError as e:
         raise BackupError(f"{path} is not readable JSON: {e}") from e
     fmt = manifest.get("backupFormat")
-    if fmt != BACKUP_FORMAT:
+    if fmt not in FORMATS:
         raise BackupError(
-            f"{path} declares backupFormat {fmt!r}; this tool writes and reads {BACKUP_FORMAT}. Refusing to "
-            f"guess at a layout it does not know."
+            f"{path} declares backupFormat {fmt!r}; this tool writes and reads {BACKUP_FORMAT} (a capture of the "
+            f"store's objects) and {INDEX_FORMAT} (an index capture). Refusing to guess at a layout it does not know."
         )
+    store = manifest.get("store") or {}
+    if fmt == INDEX_FORMAT and (store.get("leg") != INDEX or not isinstance(store.get("index"), list)):
+        raise BackupError(f"{path} declares backupFormat {INDEX_FORMAT} but records no store.index — not an index "
+                          f"capture this tool wrote")
     placement = (manifest.get("configSecret") or {}).get("placement")
     if placement not in PLACEMENTS:
         raise BackupError(f"{path} records configSecret.placement {placement!r}, which is none of {PLACEMENTS}")
@@ -841,8 +1011,10 @@ def cmd_capture(args: argparse.Namespace) -> int:
         raise BackupError(f"{backup} already exists and is not empty — refusing to write a second capture into it")
 
     # Leg (c)'s destination, decided BEFORE anything is written: a refusal here leaves no half-capture behind.
+    # `--key-kept-apart` reads no key at all: the caller keeps it elsewhere (the cluster gate, ADR 0098 decision 4c).
     key_source = Path(args.config_secret_file)
-    key_present = key_readable(key_source)
+    kept_apart = getattr(args, "key_kept_apart", False)
+    key_present = False if kept_apart else key_readable(key_source)
     if args.key_beside_dump:
         key_dest: Path | None = backup / KEY_NAME
     elif args.key_into:
@@ -866,13 +1038,31 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 f"leg (c) needs a destination of its own, and none was given. Pass --key-into FILE, outside the "
                 f"capture directory and ideally on a different medium: the dump plus the key opens every "
                 f"tenant's SMTP password (ADR 0056 §1). --key-beside-dump puts it in the capture directory, "
-                f"knowingly."
+                f"knowingly. --key-kept-apart records it as kept elsewhere without reading it."
             )
 
+    def release_of() -> tuple[str | None, str]:
+        if getattr(args, "app_version", None):
+            return args.app_version, "caller"
+        return app_release(Path(args.compose_file), args.app_service)
+
+    take_capture(backup, db, store, leg=getattr(args, "store_leg", MIRROR), release_of=release_of,
+                 kept_apart=kept_apart, key_source=key_source, key_present=key_present, key_dest=key_dest,
+                 key_beside_dump=args.key_beside_dump)
+    return 0
+
+
+def take_capture(backup: Path, db: Database, store: Store | None, *, leg: str, release_of,
+                 kept_apart: bool = False, key_source: Path | None = None,
+                 key_present: bool = False, key_dest: Path | None = None, key_beside_dump: bool = False,
+                 tool: str | None = None, allow_no_tenant: bool = False) -> dict:
+    """Write one capture into `backup`: the dump, the store leg (`mirror`: the objects; `index`: their listing), leg
+    (c) per the caller's decision, and the manifest — last, so a directory without one is no capture. `store` is None
+    only for an index capture of an instance that never chose a store (nothing can have been uploaded)."""
     started = utc_now()
     log(f"capturing into {backup}")
     log("NOTE: the application must be STOPPED. With it running, a client can complete an upload between the "
-        "dump and the mirror, producing a row whose object was never captured (ADR 0056 §2, A1).")
+        "dump and the store leg, producing a row whose object was never captured (ADR 0056 §2, A1).")
     backup.mkdir(parents=True, exist_ok=True)
     # Even when it pre-existed empty: its mode is what keeps other local users out of `objects/`, whose files
     # the rclone container writes with its own owner and modes (module docstring).
@@ -883,22 +1073,35 @@ def cmd_capture(args: argparse.Namespace) -> int:
     schema = db.schema_version()
     blobs = db.blob_index()
     sessions = db.open_upload_sessions()
-    if not domains:
+    if not domains and not allow_no_tenant:
         raise BackupError(
             f"{db.describe()} holds no tenant, so this instance has no domain to restore onto. Either the "
             f"database name is wrong or the instance was never set up."
         )
+    if not domains:
+        log("WARNING: the instance holds no tenant yet, so this capture names no domain; a restore of it accepts any.")
 
     log(f"dumping {db.describe()} (DDL + data + flyway history)")
     db.dump(backup / DUMP_NAME)
 
-    log(f"mirroring {store.describe()}")
-    objects = backup / OBJECTS_DIR
-    objects.mkdir(exist_ok=True)
-    store.mirror_out(objects)
-    count, byte_total = store.size()
+    if leg == INDEX:
+        if store is None:
+            log("no store was ever chosen, so the instance holds no object: the index is empty")
+            index: list[list] = []
+            bucket = None
+        else:
+            log(f"listing {store.describe()} (keys, sizes and MD5s — the objects stay where they are)")
+            index = store.index()
+            bucket = store.bucket
+        count, byte_total = len(index), sum(size for _, size, _ in index)
+    else:
+        log(f"mirroring {store.describe()}")
+        objects = backup / OBJECTS_DIR
+        objects.mkdir(exist_ok=True)
+        store.mirror_out(objects)
+        count, byte_total = store.size()
 
-    release, release_source = app_release(Path(args.compose_file), args.app_service)
+    release, release_source = release_of()
     if release:
         log(f"the instance being captured runs release {release} — the image a restore should be started under")
     else:
@@ -907,8 +1110,11 @@ def cmd_capture(args: argparse.Namespace) -> int:
         log(f"WARNING: this capture cannot name the release it came from ({release_source}). The backup is "
             f"still valid; what it cannot tell you is which image to restore it under.")
 
-    if key_present and key_dest is not None:
-        placement = BESIDE if args.key_beside_dump else SEPARATE
+    if kept_apart:
+        placement = SEPARATE
+        log("leg (c) is kept apart by the caller and was not read: a restore asks for it (--key-from)")
+    elif key_present and key_dest is not None:
+        placement = BESIDE if key_beside_dump else SEPARATE
         where = "BESIDE THE DUMP, as asked" if placement == BESIDE else "apart from the capture"
         log(f"copying the config-secret key from {key_source} to {key_dest} ({where})")
         write_key(key_source, key_dest)
@@ -922,32 +1128,36 @@ def cmd_capture(args: argparse.Namespace) -> int:
             f"media stay unreachable until its credentials are entered again (ADR 0089 decision 4). Point "
             f"--config-secret-file at the real path and capture again.")
 
+    if leg == INDEX:
+        store_leg = {"leg": INDEX, "bucket": bucket, "objects": count, "bytes": byte_total, "blobs": blobs,
+                     "openUploadSessions": sessions, "index": index}
+    else:
+        store_leg = {"bucket": store.bucket, "objects": count, "bytes": byte_total, "blobs": blobs,
+                     "openUploadSessions": sessions}
+    capture = {"startedAt": started, "finishedAt": utc_now()}
+    if tool:
+        capture["tool"] = tool
     manifest = {
-        "backupFormat": BACKUP_FORMAT,
+        "backupFormat": INDEX_FORMAT if leg == INDEX else BACKUP_FORMAT,
         "domains": domains,
         "app": {"version": release, "versionSource": release_source},
         "database": {"name": db.name, "schemaVersion": schema, "bytes": (backup / DUMP_NAME).stat().st_size},
-        "store": {
-            "bucket": store.bucket,
-            "objects": count,
-            "bytes": byte_total,
-            "blobs": blobs,
-            "openUploadSessions": sessions,
-        },
+        "store": store_leg,
         "configSecret": {"placement": placement},
-        "capture": {"startedAt": started, "finishedAt": utc_now()},
+        "capture": capture,
     }
     (backup / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
 
-    log(f"captured: {len(domains)} domain(s) {domains}, schema V{schema}, {count} object(s) / {byte_total} B, "
-        f"{len(blobs)} blob row(s), leg (c) {'MISSING' if placement == ABSENT else placement}")
-    if placement == SEPARATE:
+    log(f"captured: {len(domains)} domain(s) {domains}, schema V{schema}, {count} object(s) / {byte_total} B "
+        f"{'indexed' if leg == INDEX else 'mirrored'}, {len(blobs)} blob row(s), leg (c) "
+        f"{'MISSING' if placement == ABSENT else placement}")
+    if placement == SEPARATE and key_dest is not None:
         log(f"the key is at {key_dest}. Keep it apart from this capture: a copy of both together is a copy of "
             f"every tenant's SMTP password. Encrypt the capture before it leaves this host.")
         log(f"now check both:  python3 scripts/instance_backup.py verify {backup} --key-from {key_dest}")
-    else:
+    elif not kept_apart:
         log(f"now check it:  python3 scripts/instance_backup.py verify {backup}")
-    return 0
+    return manifest
 
 
 # --------------------------------------------------------------------------------------------------------
@@ -977,36 +1187,59 @@ def cmd_verify(args: argparse.Namespace) -> int:
                             f"every migration against an empty database instead of arriving at the captured "
                             f"schema version")
 
-    objects = backup / OBJECTS_DIR
-    if not objects.is_dir():
-        problems.append(f"{OBJECTS_DIR}/ is missing — leg (b) is not in this backup")
-        present: set[str] = set()
-    else:
-        present = present_keys(objects)
-
     blobs = manifest["store"]["blobs"]
     required = expected_keys(blobs)
+    indexed = manifest["backupFormat"] == INDEX_FORMAT
+    live_note = ""
+    if indexed:
+        # An index capture holds no object: A4 is answered from the listing the capture took — every key the rows
+        # require must be in it — and, with --against-store, from a listing of the live store (ADR 0098 decision 4).
+        present = {entry[0] for entry in manifest["store"]["index"]}
+        where = "the capture's index"
+    else:
+        objects = backup / OBJECTS_DIR
+        if not objects.is_dir():
+            problems.append(f"{OBJECTS_DIR}/ is missing — leg (b) is not in this backup")
+            present = set()
+        else:
+            present = present_keys(objects)
+        where = f"{OBJECTS_DIR}/"
+
     missing = [key for key in required if key not in present]
     if missing:
         # Every missing key, not a count: the resolution is per-object, and a count cannot be acted on. This is
         # A4 — a row whose object is absent restores as a valid presigned URL that 404s, with no server-side
         # error anywhere. It is the failure a volume copy could not have shown at all.
         problems.append(
-            f"{len(missing)} object(s) required by a blob row are missing from {OBJECTS_DIR}/ "
+            f"{len(missing)} object(s) required by a blob row are missing from {where} "
             f"(A4 — each restores as a Memory whose picture yields a valid URL and a 404):"
         )
-        for key in missing[:50]:
-            problems.append(f"    missing object  {key}")
-        if len(missing) > 50:
-            problems.append(f"    … and {len(missing) - 50} more")
+        listed(problems, missing, "missing object")
 
     orphans = len(present) - (len(required) - len(missing))
     recorded = manifest["store"]["objects"]
     if len(present) != recorded:
         problems.append(
             f"{OBJECTS_DIR}/ holds {len(present)} file(s) but the manifest recorded {recorded} object(s) — "
-            f"the mirror is not the one this manifest describes"
+            f"the mirror is not the one this manifest describes" if not indexed else
+            f"the capture's index holds {len(present)} entr(ies) but the manifest recorded {recorded} object(s) — "
+            f"the index is not the one this manifest describes"
         )
+
+    if indexed and getattr(args, "against_store", False):
+        store = Store(args)
+        found = compare_index(required, manifest["store"]["index"], store.index())
+        if found.missing:
+            problems.append(f"{len(found.missing)} object(s) the rows require are missing from the live store, "
+                            f"{store.describe()} (A4):")
+            listed(problems, found.missing, "missing object")
+        if found.changed:
+            problems.append(f"{len(found.changed)} object(s) the rows require differ in the live store from what "
+                            f"the capture indexed (A4):")
+            listed(problems, found.changed, "changed object")
+        live_note = (f"all {len(required)} required present in {store.describe()}"
+                     + (f", {found.by_size_only} compared by key and size only (no MD5 on one side)"
+                        if found.by_size_only else ""))
 
     # Owner-only: the root, and every file the tool itself wrote. Not what is inside `objects/` — the rclone
     # container writes that with its own owner and modes, which is why the root's 0700 is the check that counts.
@@ -1063,7 +1296,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
     else:
         log(f"  release            unknown ({app.get('versionSource') or 'not recorded'}) — still a valid "
             f"backup, but it cannot tell you which image to start it under (A3)")
-    log(f"  objects            {len(present)} present, {len(required)} required by {len(blobs)} blob row(s)")
+    log(f"  objects            {len(present)} {'indexed' if indexed else 'present'}, {len(required)} required by "
+        f"{len(blobs)} blob row(s)")
+    if indexed:
+        log(f"  live store         {live_note or 'NOT checked here; pass --against-store to check it'}")
     # Tolerated and named, never silent: an object with no row is the running system's steady state (a capture
     # taken between a row delete and the next reclaim sweep holds exactly these — ADR 0062). Reporting it is
     # what keeps "0 orphans" from being the only shape a reader recognises as healthy.
@@ -1088,7 +1324,11 @@ def cmd_restore(args: argparse.Namespace) -> int:
     # invitation and recovery link the instance mails, so a silent host change produces an instance nobody can
     # reach holding links nobody can follow.
     domains = manifest["domains"]
-    if args.domain not in domains:
+    if not domains:
+        # Only a gate capture of an instance that had no tenant yet names none (`take_capture`): no link was mailed
+        # for any domain, so there is no domain to keep.
+        log(f"the backup names no domain (the instance had no tenant when it was captured); restoring for {args.domain}")
+    elif args.domain not in domains:
         raise BackupError(
             f"this backup holds {domains}; you asked to restore onto {args.domain!r}. A restore targets the "
             f"SAME domain (ADR 0056 §4) — the tenant's domain is unique and is written into every invitation "
@@ -1128,7 +1368,18 @@ def cmd_restore(args: argparse.Namespace) -> int:
     # objects are in, so a refusal there would leave a half-restored instance the A5 gate then refuses to retry.
     target_key = Path(args.config_secret_file)
     if key_source is not None:
-        key_gate(target_key)
+        key_gate(target_key, getattr(args, "key_as_runtime_user", False))
+
+    indexed = manifest["backupFormat"] == INDEX_FORMAT
+    accept_missing = getattr(args, "accept_missing_objects", False)
+    if accept_missing and not indexed:
+        raise BackupError("--accept-missing-objects is for an index capture, whose objects stay in the live store; "
+                          "this capture holds its objects itself")
+    record_dir = Path(args.record) if getattr(args, "record", None) else None
+    if record_dir is not None and not record_dir.is_dir():
+        raise BackupError(f"--record {record_dir} is not a directory — on a cluster it is the backup claim's mount")
+    # Read now, so an unreadable record refuses before the first write rather than after the load.
+    previous = read_record(record_dir) if record_dir is not None else None
 
     db = Database(args, require_db_password())
     store = Store(args)
@@ -1146,12 +1397,33 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"is not. Drop and recreate the database, start the app once so it migrates and provisions the "
             f"store, then restore."
         )
-    count, _ = store.size()
-    if count:
-        raise BackupError(
-            f"{store.describe()} already holds {count} object(s). A restore is defined onto an empty store "
-            f"(A5) — this tool copies INTO a bucket and never deletes from one. Empty it first, then restore."
-        )
+    broken: list[str] = []
+    if indexed:
+        # An index capture restores onto the store it indexed and writes nothing to it (ADR 0098 decision 4): in place
+        # of A5's empty-store gate, A4 against the live store — every object the dump's rows require is there, with
+        # the indexed size (and MD5 where both sides have one), before anything is written. An object the store
+        # holds and the index does not is tolerated: an upload after the capture.
+        found = compare_index(expected_keys(manifest["store"]["blobs"]), manifest["store"]["index"], store.index())
+        broken = found.missing + found.changed
+        if broken and not accept_missing:
+            problems = [f"{len(found.missing)} missing and {len(found.changed)} changed object(s) the backup's rows "
+                        f"require, in {store.describe()}:"]
+            listed(problems, found.missing, "missing object")
+            listed(problems, found.changed, "changed object")
+            raise BackupError(
+                "\n".join(problems) + "\n[backup] Restored as they are, each would be a Memory whose picture yields a "
+                "valid URL and a 404 (A4). Bring them back from the store's own versioning, replication or snapshot "
+                "and restore again — or pass --accept-missing-objects to restore without them, knowingly. Nothing "
+                "was written.")
+        if found.by_size_only:
+            log(f"{found.by_size_only} object(s) compared by key and size only (no MD5 on one side)")
+    else:
+        count, _ = store.size()
+        if count:
+            raise BackupError(
+                f"{store.describe()} already holds {count} object(s). A restore is defined onto an empty store "
+                f"(A5) — this tool copies INTO a bucket and never deletes from one. Empty it first, then restore."
+            )
 
     # ADR 0056 §7 — the backup's schema against the target's, in Flyway's order, before the first write. A newer
     # backup raises here; the same or an older one is loaded over a target emptied of every table, because the
@@ -1164,9 +1436,12 @@ def cmd_restore(args: argparse.Namespace) -> int:
     log(f"loading {DUMP_NAME} into {db.describe()}")
     db.load(backup / DUMP_NAME)
 
-    log(f"pushing objects into {store.describe()}")
     try:
-        store.mirror_in(backup / OBJECTS_DIR)
+        if indexed:
+            log(f"the objects stay where they are: {store.describe()} holds every one the rows require (A4)")
+        else:
+            log(f"pushing objects into {store.describe()}")
+            store.mirror_in(backup / OBJECTS_DIR)
     except BackupError as e:
         # The database leg is already in. Say so, because the emptiness gates above will now refuse the retry
         # for a reason that reads like a different problem ("already holds N tables") if nobody said why.
@@ -1183,7 +1458,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
         # Over the key a fresh install generated, which is expected (or onto none: the seal generates its key
         # lazily, so a fresh install's one start usually leaves the file absent).
         try:
-            plan = place_key(key_source, target_key)
+            plan = place_key(key_source, target_key, getattr(args, "key_as_runtime_user", False))
         except (BackupError, OSError) as e:
             # The gate above passed, so the target changed under the run. Legs (a) and (b) are in; say so.
             raise BackupError(f"{e}\n[backup] Legs (a) and (b) ARE already loaded; only the key failed. Place it "
@@ -1199,14 +1474,263 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"(ADR 0055, A2); a store of your own stays unreadable, and media with it, until the key is restored "
             f"or its credentials are entered again in Server → Object store (ADR 0089 decision 4).")
 
-    restored, restored_bytes = store.size()
-    log(f"restored: schema V{manifest['database']['schemaVersion']}, {restored} object(s) / {restored_bytes} B")
+    if indexed:
+        log(f"restored: schema V{manifest['database']['schemaVersion']}, against {manifest['store']['objects']} "
+            f"indexed object(s) left in place")
+    else:
+        restored, restored_bytes = store.size()
+        log(f"restored: schema V{manifest['database']['schemaVersion']}, {restored} object(s) / {restored_bytes} B")
+    if broken:
+        log(f"WARNING: restored WITHOUT {len(broken)} object(s) the rows require (--accept-missing-objects): each is "
+            f"a Memory whose picture yields a valid URL and a 404 (A4):")
+        for entry in broken:
+            log(f"    broken object  {entry}")
     if standing == OLDER:
         log(older_backup_notice(manifest, target_version))
+    if record_dir is not None:
+        # The last step (ADR 0098 decision 9): the next start of the backup's release finds its own release in the
+        # record and passes the gate instead of capturing the restored database again or refusing it as a downgrade.
+        release = (manifest.get("app") or {}).get("version")
+        write_record(record_dir, release, (previous or {}).get("request", ""), backup.name)
+        log(f"the record {record_dir / STATE_NAME} now names release {release or 'unknown (the manifest records none)'}"
+            f" — start that release")
     log("Now start the application, then read its config-secret state as the Server Owner — that is the step "
         "that separates a restore from a hope (ADR 0056 §5): `veyq-admin config-secret` (or the admin console's "
         "Server → Config-secret key) must report OK; `veyq-admin store check` (Server → Object store) must pass; "
         "and a person must be able to sign in and open a Memory that has media.")
+    return 0
+
+
+# --------------------------------------------------------------------------------------------------------
+# gate — the cluster's backup before a release change (ADR 0098)
+# --------------------------------------------------------------------------------------------------------
+
+STATE_NAME = "state.json"
+CAPTURES_DIR = "captures"
+PARTIAL = ".partial"
+# What the `veyq-tools` image bakes at build (ADR 0098, cr-kubernetes-backup-gate O3): its own release and the
+# release a new major is entered from — the predecessor the release's own upgrade proof and chart check ran from
+# (`release_assets.py --major-entry`), or null.
+RELEASE_FILE = Path("/opt/veyq/release.json")
+# ADR 0057's release grammar, `<major>.<minor>` with an optional `-SNAPSHOT` (charts/veyq/Chart.yaml says the same).
+RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-SNAPSHOT)?")
+
+
+def release_order(release: str | None) -> tuple[int, int, int] | None:
+    """`(major, minor, 1)` for a release, `(major, minor, 0)` for its snapshot — so a snapshot sorts below the release
+    it becomes — or None for anything that is not ADR 0057's grammar (a checkout's `0.0-dev`, a `candidate-*` tag)."""
+    match = RELEASE.fullmatch(release or "")
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2)), 0 if match.group(3) else 1
+
+
+def read_record(root: Path) -> dict | None:
+    """The gate's record, `state.json` on the backup volume — or None when there is none. A record that is not
+    readable JSON FAILS, naming the file: "absent" means *capture and move on*, which would silently skip the
+    downgrade refusal (cr-kubernetes-backup-gate decision 7)."""
+    path = root / STATE_NAME
+    if not path.exists():
+        return None
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        raise BackupError(f"{path} is not a readable record ({e}). It is the gate's memory of which release this "
+                          f"database holds; read it, repair or remove it by hand — the gate never guesses past it.") from e
+    if not isinstance(record, dict) or not isinstance(record.get("release"), (str, type(None))) \
+            or not isinstance(record.get("request", ""), str):
+        raise BackupError(f"{path} is not a record the gate wrote (want an object with a string or null `release` and "
+                          f"a string `request`) — read it, repair or remove it by hand.")
+    return record
+
+
+def write_record(root: Path, release: str | None, request: str, capture: str | None) -> None:
+    """Written to a temporary name and renamed, so an interrupted write leaves the previous record."""
+    body = json.dumps({"release": release, "request": request, "capture": capture, "writtenAt": utc_now()},
+                      indent=2) + "\n"
+    tmp = root / (STATE_NAME + ".tmp")
+    tmp.write_text(body)
+    os.replace(tmp, root / STATE_NAME)
+
+
+def read_image_release(path: Path) -> tuple[str, str | None]:
+    """`(release, majorEntry)` the tools image was built for."""
+    try:
+        baked = json.loads(path.read_text())
+        return str(baked["release"]), baked.get("majorEntry")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise BackupError(f"{path} names no release ({e}) — the gate runs in the veyq-tools image, which bakes it") from e
+
+
+def complete_captures(root: Path) -> list[Path]:
+    """The complete captures, oldest first: their names are UTC stamps, so the name order is the time order."""
+    folder = root / CAPTURES_DIR
+    if not folder.is_dir():
+        return []
+    return sorted(p for p in folder.iterdir() if p.is_dir() and not p.name.endswith(PARTIAL))
+
+
+def prune(root: Path, keep: int) -> list[str]:
+    """After a complete capture: every `.partial` (an interrupted run's) and the complete ones beyond `keep`, never the
+    newest. Runs only after a capture succeeded — a full volume fails the gate, it is never pruned to make room."""
+    folder = root / CAPTURES_DIR
+    gone = [p for p in folder.iterdir() if p.is_dir() and p.name.endswith(PARTIAL)] if folder.is_dir() else []
+    complete = complete_captures(root)
+    gone += complete[:-max(keep, 1)]
+    for path in gone:
+        shutil.rmtree(path)
+    return sorted(p.name for p in gone)
+
+
+def gate_refusal(record: dict | None, target: str, major_entry: str | None, root: Path) -> str | None:
+    """ADR 0098 decision 3 — the upgrades no tested path covers. None when the move is one the release was proven on.
+    No record, or a record whose release does not parse, orders nothing: the running release is unknown."""
+    held = (record or {}).get("release")
+    ours, theirs = release_order(target), release_order(held)
+    if theirs is None:
+        return None
+    if ours < theirs:
+        # The way back to `target` is a capture of ITS data — one a gate took when `target` was left — restored under
+        # `target` (ADR 0098 decision 9). Named by its manifest, newest first; not guessed when there is none here.
+        taken = [p.name for p in reversed(complete_captures(root))
+                 if ((json.loads((p / MANIFEST_NAME).read_text()) if (p / MANIFEST_NAME).is_file() else {})
+                     .get("app") or {}).get("version") == target]
+        restore = (f"empty the database, start release {target} once, then restore the capture {taken[0]}, taken "
+                   f"from release {target}" if taken else
+                   f"no capture on this volume was taken from release {target}; restore one you keep elsewhere")
+        return (f"release {target} is OLDER than release {held}, whose data this database holds — a downgrade. "
+                f"Release {target} refuses to start on a schema history holding a migration it does not know (ADR 0056 "
+                f"§7), and nothing here can tell which this one holds; a way back is the backup's release plus a "
+                f"restore: {restore} "
+                f"(https://raddatzk.github.io/veyq/run/backup-and-restore/), or set the image back to {held}. "
+                f"Nothing was written.")
+    if ours[0] > theirs[0] + 1:
+        return (f"release {target} is more than one major ahead of release {held}: no run crosses more than one major "
+                f"(ADR 0096 decision 5). Upgrade to the newest release of major {theirs[0] + 1} first. Nothing was "
+                f"written.")
+    if ours[0] == theirs[0] + 1 and held != major_entry:
+        entry = (f"release {major_entry}" if major_entry else "no release (this image names none)")
+        return (f"release {target} enters major {ours[0]}, and its upgrade was proven from {entry}, not from release "
+                f"{held}. Upgrade to {major_entry} first, then to {target}. Nothing was written."
+                if major_entry else
+                f"release {target} enters major {ours[0]}, and this image names no release its upgrade was proven "
+                f"from, so no entry is a tested path. Nothing was written.")
+    return None
+
+
+def gate_store(args: argparse.Namespace, db: Database, env: dict[str, str]) -> Store | None:
+    """The store the gate lists, from what the app itself reads (cr-kubernetes-backup-gate decision 5, O2): the bundled
+    store's hint, or — for a store of the operator's own, whose secret key is sealed under the KEK the gate never
+    reads — the Secret `backup.store.existingSecret` names, held against the plaintext of the setting in use."""
+    if not args.rclone_binary:
+        raise BackupError("rclone is not on PATH. The gate lists the store with the veyq-tools image's rclone and has "
+                          "no Docker to fall back to — run it in that image.")
+    row = db.store_setting()
+    if row is None:
+        if db.blob_index():
+            raise BackupError("the database holds blob rows but no object-store setting in use, so the gate cannot "
+                              "tell which store to list")
+        return None
+    if row.bundled:
+        endpoint, token = env.get("VEYQ_BUNDLED_STORE_ENDPOINT", ""), env.get("VEYQ_BUNDLED_STORE_ADMIN_TOKEN", "")
+        if not endpoint or not token.strip():
+            raise BackupError("the instance uses the bundled store, and VEYQ_BUNDLED_STORE_ENDPOINT / "
+                              "VEYQ_BUNDLED_STORE_ADMIN_TOKEN are not both set — the chart passes the app's own")
+        args.store_endpoint = endpoint
+        args.store_access_key, args.store_secret_key = derive_bundled_credentials(token)
+        args.store_bucket = env.get("VEYQ_BUNDLED_STORE_BUCKET") or "blobs"
+        args.store_region = env.get("VEYQ_BUNDLED_STORE_REGION") or "us-east-1"
+    else:
+        wanted = {name: env.get(f"VEYQ_BACKUP_STORE_{name.upper()}", "")
+                  for name in ("endpoint", "bucket", "access_key", "secret_key")}
+        absent = [f"VEYQ_BACKUP_STORE_{name.upper()}" for name, value in wanted.items() if not value]
+        if absent:
+            raise BackupError(f"the instance uses a store of its own ({row.endpoint}, bucket {row.bucket}), whose key "
+                              f"the gate cannot open (it never reads the KEK), and {', '.join(absent)} "
+                              f"{'is' if len(absent) == 1 else 'are'} unset. Name a Secret with endpoint, bucket and a "
+                              f"key pair that can list the bucket in backup.store.existingSecret.")
+        for name, actual in (("endpoint", row.endpoint), ("bucket", row.bucket)):
+            if wanted[name] != actual:
+                raise BackupError(f"backup.store.existingSecret names {name} {wanted[name]!r}, and the store in use "
+                                  f"is at {name} {actual!r} (veyq_store_setting) — a listing of another store "
+                                  f"would be an index of the wrong objects.")
+        args.store_endpoint, args.store_bucket = wanted["endpoint"], wanted["bucket"]
+        args.store_access_key, args.store_secret_key = wanted["access_key"], wanted["secret_key"]
+        args.store_region = env.get("VEYQ_BACKUP_STORE_REGION") or row.region or "us-east-1"
+    return Store(args)
+
+
+def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int:
+    """ADR 0098 decisions 2, 3, 5 and 7, in the order cr-kubernetes-backup-gate decision 8 fixes (and the self-test
+    pins): the inputs; (1) the record; (2) a database holding no data — record the target, pass; (3) the target and
+    the request the record's — pass; (4) the refusals, writing nothing; (5) capture into `captures/<UTC>.partial/`,
+    verify it, rename; (6) move the record; (7) prune."""
+    env = os.environ if env is None else env
+    if args.keep < 1:
+        raise BackupError(f"backup.keep {args.keep} keeps no capture; the newest is the way back, so at least 1")
+    image_release, major_entry = read_image_release(Path(args.release_file))
+    target = args.target_release or ""
+    if release_order(target) is None:
+        raise BackupError(f"the target release {target!r} is not a release (<major>.<minor>, optionally -SNAPSHOT, "
+                          f"ADR 0057), so no upgrade path can be checked. A checkout's dev tag or a candidate runs "
+                          f"with backup.enabled: false.")
+    if target != image_release:
+        raise BackupError(f"the app image is release {target} and this veyq-tools image is release {image_release}: "
+                          f"the entry rule and the capture format are the app's release's, so the gate runs only in "
+                          f"its own release's tools image. Leave backup.image.tag unset, or set it to {target}.")
+    root = Path(args.dir)
+    if not root.is_dir():
+        raise BackupError(f"{root} is not a directory — the backup claim (backup.existingClaim) is not mounted there")
+    if not getattr(args, "db_url", None):
+        raise BackupError("VEYQ_BACKUP_DB_URL is unset: the gate reaches the database by the app's own JDBC URL only")
+    request = args.request or ""
+
+    record = read_record(root)                                                          # (1)
+    db = Database(args, require_db_password())
+    if not db.populated_tables():                                                       # (2)
+        write_record(root, target, request, None)
+        log(f"the database holds no data: nothing to capture. The record names release {target}.")
+        return 0
+    if record is not None and record.get("release") == target and record.get("request", "") == request:  # (3)
+        log(f"release {target} already holds this database and no new request is pending: nothing to capture")
+        return 0
+    refusal = gate_refusal(record, target, major_entry, root)                          # (4)
+    if refusal:
+        raise BackupError(refusal)
+
+    held = (record or {}).get("release")
+    if record is None:
+        release, source = None, "no-record"
+        log("no record on the backup volume and the database holds data: the running release is unknown")
+    elif held is None:
+        release, source = None, "record-names-none"
+        log("the record names no release (a restore of a capture that named none): the running release is unknown")
+    elif release_order(held) is None:
+        release, source = None, f"record-unparsable: {held!r}"
+        log(f"the record names {held!r}, which is not a release: the running release is unknown")
+    else:
+        release, source = held, "record"
+    why = ("no record" if record is None else "the record names no release" if held is None else
+           f"release {held} → {target}" if held != target else f"a new request, {request!r}")
+    log(f"capturing before the start that would migrate ({why})")
+    store = gate_store(args, db, env)                                                   # (5)
+    stamp = utc_stamp()
+    partial = root / CAPTURES_DIR / f"{stamp}{PARTIAL}"
+    final = root / CAPTURES_DIR / stamp
+    if final.exists():
+        raise BackupError(f"{final} already exists — a capture of this second; start again")
+    (root / CAPTURES_DIR).mkdir(exist_ok=True)
+    if partial.exists():
+        shutil.rmtree(partial)  # an interrupted run of this same second; ours, and never a complete capture
+    take_capture(partial, db, store, leg=INDEX, release_of=lambda: (release, source), kept_apart=True,
+                 tool=image_release, allow_no_tenant=True)
+    if cmd_verify(argparse.Namespace(backup=str(partial), key_from=None, against_store=False)) != 0:
+        raise BackupError(f"the capture {partial} failed its own verify; it stays as it is, the record is unmoved")
+    os.replace(partial, final)
+    write_record(root, target, request, stamp)                                          # (6)
+    gone = prune(root, args.keep)                                                       # (7)
+    log(f"captured {final}; the record names release {target}"
+        + (f"; pruned {', '.join(gone)}" if gone else ""))
     return 0
 
 
@@ -1236,12 +1760,28 @@ def add_common(parser: argparse.ArgumentParser) -> None:
                         help="switch to direct mode: connect to this database host instead of the compose service")
     parser.add_argument("--db-port", type=int, default=3306)
     parser.add_argument("--db-name", default="veyq")
-    parser.add_argument("--db-user", default="root")
     parser.add_argument("--db-image", default=DB_IMAGE,
                         help="pinned client image used in direct mode when no host client is installed")
     parser.add_argument("--docker-network", default=None,
                         help="docker network the rclone (and direct-mode database) container joins — it must "
                              "reach the store's endpoint. e.g. infra_default for the bundled stack.")
+    add_pod_db(parser)
+    add_store(parser)
+    parser.add_argument("--config-secret-file", default="config-secret.key",
+                        help="leg (c): where the key file lives on the app's filesystem "
+                             "(veyq.security.config-secret-file / VEYQ_SECURITY_CONFIG_SECRET_FILE)")
+
+
+def add_pod_db(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--db-url", default=os.environ.get("VEYQ_BACKUP_DB_URL") or None,
+                        help="the in-pod mode: the database the app's own JDBC URL names, "
+                             "jdbc:mariadb://host[:port]/database (env VEYQ_BACKUP_DB_URL); the client binaries "
+                             "must be on PATH")
+    parser.add_argument("--db-user", default=os.environ.get("VEYQ_BACKUP_DB_USER") or "root",
+                        help="database user (env VEYQ_BACKUP_DB_USER; default root)")
+
+
+def add_store(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--store-endpoint",
                         default=os.environ.get("VEYQ_BACKUP_STORE_ENDPOINT") or os.environ.get("VEYQ_BUNDLED_STORE_ENDPOINT"),
                         help="S3 endpoint AS THE CONTAINER SEES IT (e.g. http://garage:3900), not a published port")
@@ -1253,9 +1793,6 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--rclone-image", default=RCLONE_IMAGE)
     parser.add_argument("--rclone-binary", default=None,
                         help="use a host rclone install instead of the pinned container")
-    parser.add_argument("--config-secret-file", default="config-secret.key",
-                        help="leg (c): where the key file lives on the app's filesystem "
-                             "(veyq.security.config-secret-file / VEYQ_SECURITY_CONFIG_SECRET_FILE)")
 
 
 def check_store_args(args: argparse.Namespace, env: dict[str, str] | None = None) -> None:
@@ -1299,6 +1836,14 @@ def main(argv: list[str]) -> int:
     key_to.add_argument("--key-beside-dump", action="store_true",
                         help="put leg (c) in the capture directory, beside the dump — which together open every "
                              "tenant's SMTP password. Only knowingly")
+    key_to.add_argument("--key-kept-apart", action="store_true",
+                        help="record leg (c) as kept elsewhere (placement separate) WITHOUT reading any key — the "
+                             "cluster gate's form (ADR 0098 decision 4c); a restore then asks for --key-from")
+    capture.add_argument("--store-leg", choices=(MIRROR, INDEX), default=MIRROR,
+                         help="mirror: the store's objects into objects/ (backupFormat 2, the default); index: their "
+                              "keys, sizes and MD5s only, the objects left in the store (backupFormat 3, ADR 0098)")
+    capture.add_argument("--app-version", default=None,
+                         help="the release the instance runs, as the caller knows it — instead of asking Docker")
     add_common(capture)
     capture.set_defaults(func=cmd_capture, needs_store=True)
 
@@ -1306,6 +1851,11 @@ def main(argv: list[str]) -> int:
     verify.add_argument("backup")
     verify.add_argument("--key-from", default=None, metavar="FILE",
                         help="the separately kept key of this capture, to check it too")
+    verify.add_argument("--against-store", action="store_true",
+                        help="an index capture: also list the live store and check every object the rows require "
+                             "is there, as indexed (A4)")
+    add_store(verify)
+    verify.add_argument("--docker-network", default=None, help="docker network the rclone container joins")
     verify.set_defaults(func=cmd_verify, needs_store=False)
 
     restore = sub.add_parser("restore", help="restore a backup onto an EMPTY instance")
@@ -1318,13 +1868,49 @@ def main(argv: list[str]) -> int:
     key_from.add_argument("--without-key", action="store_true",
                           help="restore without leg (c), knowingly: the instance reports MISMATCH and refuses "
                                "invites and resets until the key or each SMTP password is back (A2)")
+    restore.add_argument("--accept-missing-objects", action="store_true",
+                         help="an index capture: restore although objects the rows require are missing from (or "
+                              "changed in) the live store — each is a broken picture (A4), named at the end. Only "
+                              "knowingly, when the store's versioning cannot bring them back")
+    restore.add_argument("--key-as-runtime-user", action="store_true",
+                         help="this restore runs as the application's own uid (a Kubernetes Job's runAsUser): the "
+                              "key is born to it, whoever owns the claim's directory (fsGroup gives it a group, "
+                              "never an owner)")
+    restore.add_argument("--record", default=None, metavar="DIR",
+                         help="the cluster's backup volume: as the last step, write its state.json naming the "
+                              "backup's release, so that release's next start passes the gate (ADR 0098 decision 9)")
     add_common(restore)
     restore.set_defaults(func=cmd_restore, needs_store=True)
+
+    gate = sub.add_parser("gate", help="in the app pod, before the container that migrates: capture when the pod "
+                                       "starts a different release or a new request (ADR 0098)")
+    gate.add_argument("--dir", default=os.environ.get("VEYQ_BACKUP_DIR") or "/backup",
+                      help="the backup volume (env VEYQ_BACKUP_DIR; default /backup)")
+    gate.add_argument("--target-release", default=os.environ.get("VEYQ_BACKUP_TARGET_RELEASE"),
+                      help="the release the app container is about to start (env VEYQ_BACKUP_TARGET_RELEASE)")
+    gate.add_argument("--request", default=os.environ.get("VEYQ_BACKUP_REQUEST", ""),
+                      help="the capture request, an opaque value; a new one captures (env VEYQ_BACKUP_REQUEST)")
+    gate.add_argument("--keep", type=int, default=os.environ.get("VEYQ_BACKUP_KEEP") or "3",
+                      help="complete captures kept, the newest always (env VEYQ_BACKUP_KEEP; default 3)")
+    gate.add_argument("--release-file", default=str(RELEASE_FILE),
+                      help=f"what the tools image bakes (default {RELEASE_FILE})")
+    add_pod_db(gate)
+    gate.add_argument("--rclone-binary", default=shutil.which("rclone"), help=argparse.SUPPRESS)
+    gate.set_defaults(func=cmd_gate, needs_store=False, db_name="veyq", db_host=None, db_port=3306,
+                      compose_file=str(DEFAULT_COMPOSE), db_service="mariadb", db_image=DB_IMAGE, docker_network=None,
+                      rclone_image=RCLONE_IMAGE, store_endpoint=None, store_access_key=None, store_secret_key=None,
+                      store_bucket="blobs", store_region="us-east-1")
 
     args = parser.parse_args(argv)
     os.umask(OWNER_ONLY_UMASK)
     try:
-        if args.needs_store:
+        if getattr(args, "db_url", None) and not getattr(args, "rclone_binary", None) and args.command != "gate":
+            # The in-pod mode is one mode: the database by URL AND the store by the image's own rclone, both on PATH.
+            args.rclone_binary = shutil.which("rclone")
+            if args.needs_store and not args.rclone_binary:
+                raise BackupError("rclone is not on PATH. The in-pod mode (--db-url) runs the veyq-tools image's "
+                                  "binaries and has no Docker to fall back to — run it in that image.")
+        if args.needs_store or getattr(args, "against_store", False):
             check_store_args(args)
         return args.func(args)
     except BackupError as e:

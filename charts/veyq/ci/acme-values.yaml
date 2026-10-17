@@ -35,3 +35,7 @@ gateway:
     acme:
       enabled: true
       email: ops@example.org
+# The other half of the backup choice (ADR 0098): the gate switched off, so a render with no init container and no
+# backup volume is one a file here selects.
+backup:
+  enabled: false

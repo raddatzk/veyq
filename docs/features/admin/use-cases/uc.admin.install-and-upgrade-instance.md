@@ -17,8 +17,9 @@
 
 A release is an immutable GitHub Release (or the operator's mirror of one): its assets are the recipe
 (`docker-compose.prod.yml`, the `.env` template as `env.example`, `garage.toml`), `veyqctl` itself with its
-signature bundle, and a manifest naming both images by
-`tag@digest` and every other asset by its sha256, with its own signature bundle (`manifest.json.bundle`) under the
+signature bundle, and a manifest naming the images by
+`tag@digest` (the app's and the admin surface's, which `veyqctl` runs, and the tools image a cluster's backup gate
+runs) and every other asset by its sha256, with its own signature bundle (`manifest.json.bundle`) under the
 identity that signs the images. Nothing in it can change once published (ADR 0096 decision 3), so "the recipe of
 release 1.4" is one set of bytes — and the manifest's signature is what makes those bytes veyq's, wherever they were
 fetched from. Snapshots have no release and are never installed.
@@ -56,7 +57,19 @@ of the one before, so an upgrade from an older release first goes to that one �
 - **A5 — A mirror.** With a source override the same flow runs against the operator's mirror, verified exactly as
   GitHub is; a mirror decides which releases it offers — it can withhold a newer one — but cannot change what one
   contains.
-- **A6 — Kubernetes.** Not this use-case: a cluster upgrades with `helm upgrade` by digest (ADR 0096 decision 8).
+- **A6 — Kubernetes.** A cluster upgrades with `helm upgrade` by digest, not with `veyqctl` (ADR 0096 decision 8), and
+  its backup before the migration is the chart's **backup gate**
+  ([ADR 0098](../../../decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)): an init container
+  in the app pod, before the container that migrates, from the release's `veyq-tools` image. When the pod is about to
+  start a different release than its record on the backup claim names (or a new `backup.request`), it captures the
+  database and an index of the store onto the operator's claim, moves the record, and keeps the newest
+  `backup.keep`; a restart, a rescheduled pod or a sync that changed nothing captures nothing, and a database holding
+  no data (a first install) only records the release. It refuses — writing nothing, and keeping the app down with its
+  data untouched — a downgrade, more than one major, a new major entered from any release but the one this release
+  was tested from, and a target release that is not its own image's. It never mounts the config-secret key. Because
+  it belongs to the Deployment, `helm upgrade`, Argo CD, Flux and a plain `kubectl apply` all run it. The chart
+  refuses an install that neither names `backup.existingClaim` nor says `backup.enabled: false`; with the gate off,
+  the backup before an upgrade is the operator's, by hand.
 
 ## User impact
 

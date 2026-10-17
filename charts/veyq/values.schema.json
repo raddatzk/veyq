@@ -3,7 +3,7 @@
   "title": "veyq chart values",
   "description": "The shapes the operator's values must have. Helm applies this to install, upgrade, lint AND template, naming the path and the pattern of a violation — which is why nothing here has a generated fallback: a value the chart cannot assert is a value the chart does not supply.",
   "type": "object",
-  "required": ["domain", "storeDomain", "image", "admin", "gateway", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage"],
+  "required": ["domain", "storeDomain", "image", "admin", "gateway", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage", "backup"],
   "$defs": {
     "hostname": {
       "type": "string",
@@ -70,6 +70,27 @@
           ]
         }
       }
+    },
+    "backup": {
+      "type": "object",
+      "required": ["enabled"],
+      "$comment": "An explicit choice (ADR 0098, owner 2b): the gate on a claim the operator names, or the gate off. Neither is refused naming backup — the chart never guesses a size or a class for the only way back (ADR 0056 §6).",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingClaim": { "type": "string", "maxLength": 253 },
+        "keep": { "type": "integer", "minimum": 1 },
+        "request": { "type": "string" },
+        "image": { "$ref": "#/$defs/imageRef" },
+        "store": {
+          "type": "object",
+          "properties": { "existingSecret": { "type": "string", "maxLength": 253 } }
+        },
+        "resources": { "type": "object" }
+      },
+      "anyOf": [
+        { "properties": { "enabled": { "const": false } } },
+        { "required": ["existingClaim"], "properties": { "existingClaim": { "minLength": 1 } } }
+      ]
     },
     "gateway": {
       "type": "object",

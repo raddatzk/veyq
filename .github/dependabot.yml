@@ -40,11 +40,12 @@ updates:
     open-pull-requests-limit: 1
 
   # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): the app image's at
-  # the root and the admin image's in admin-web/.
+  # the root, the admin image's in admin-web/ and the tools image's in tools/.
   - package-ecosystem: "docker"
     directories:
       - "/"
       - "/admin-web"
+      - "/tools"
     patterns:
       - "*"
     multi-ecosystem-group: "images"

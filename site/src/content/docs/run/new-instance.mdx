@@ -99,10 +99,12 @@ tenant domains as `HTTPRoute`s (and `ListenerSet`s) into its own namespace and l
 would reconcile each other's routing away.
 
 ```sh
-# Verify a release first: it leaves ${release}, ${app_digest}, ${admin_digest} and ${chart_digest}
+# Verify a release first: it leaves ${release}, ${app_digest}, ${admin_digest}, ${tools_digest} and ${chart_digest}
 chart="oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}"
 helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain, every key under secrets,
-                                                  # gateway.className, the gateway.tls block, and
+                                                  # gateway.className, the gateway.tls block,
+                                                  # backup.existingClaim — a PersistentVolumeClaim you created
+                                                  # for the backup gate (or backup.enabled: false), and
                                                   # networkPolicy.ingressFrom — your gateway's data-plane
                                                   # pods; for Traefik in the `traefik` namespace, e.g.:
 #   gateway:
@@ -112,11 +114,12 @@ helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain
 #       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
 #         podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
 helm install veyq "$chart" -n veyq --create-namespace -f my-values.yaml \
-  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"
+  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}" \
+  --set backup.image.digest="${tools_digest}"
 ```
 
-The published chart already names the release: its `appVersion` is the image tag both images default to, and
-the image repositories default to the upstream's. Pin the two digests the verification resolved, so the pods run
+The published chart already names the release: its `appVersion` is the image tag the images default to, and
+the image repositories default to the upstream's. Pin the three digests the verification resolved, so the pods run
 exactly what you verified. Helm finds a veyq chart **only by its digest or its exact version** (`--version 1.4`):
 the version has two parts, and Helm's tag listing skips every tag that is not three-part SemVer, so `helm install`
 without a version, or with a range, finds nothing (measured with Helm 4.0.1, ADR 0064).

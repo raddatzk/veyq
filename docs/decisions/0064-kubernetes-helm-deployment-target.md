@@ -211,7 +211,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   and the tools that resolve charts by them, and costs the one name the release and its chart share. The image repositories
   default to the upstream's own (`ghcr.io/raddatzk/veyq`, `ghcr.io/raddatzk/veyq-admin`), written out for the
   same reason the verify identity is: a fork that deploys its own images overrides them, knowingly. A release
-  refuses to republish the chart as it does the images; a release with two images and no chart is a partial
+  refuses to republish the chart as it does the images; a release with its images and no chart is a partial
   release. **Built, publish unobserved:** `ci.yml`'s publish packages, pushes and signs the chart, and
   `scripts/validate_release_identity.py` holds it there — but its only proof is a workflow run, and no CI run has
   ever executed in this repository (no remote). The first proof is the staged run [infra/README](../../infra/README.md)
@@ -247,10 +247,9 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   ([Upgrade](../../site/src/content/docs/run/upgrade.mdx), Kubernetes). The predecessor is the upgrade proof's
   (`default_predecessor`); the check runs in `ci.yml`'s `chart` job and is **information until the first
   release and red from it** (the same switch as the upgrade proof), so from then on it gates `publish`.
-- **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
-  gap statement is accurate and stays accurate; a Kubernetes-native backup story (a `CronJob` running
-  `scripts/instance_backup.py`, or a StatefulSet snapshot strategy) is deferred to its own future decision,
-  not folded into this one — drafted as [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) (proposed).
+- **Backup/restore is not this ADR's decision.** [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)
+  decides it and is built: an init container, `backup-gate`, in the app pod captures the database and an index of the
+  store before the start that would migrate, onto a claim the operator names; a restore is a documented one-off Job.
 
 ## Consequences
 
@@ -269,7 +268,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   (the database keeps the old one). A cluster leg (kind) that would see those is a later step of its own
   (inbox #430). The mutable set is the API server's refusal message as remembered, not measured on a cluster; a field
   it wrongly leaves out is a false red, never a false green.
-- **Deferred, explicitly**: Kubernetes-native backup/restore; a `mariadb`-operator integration beyond the
+- **Deferred, explicitly**: a `mariadb`-operator integration beyond the
   bundled StatefulSet; multi-cluster/multi-region topologies. None of these are self-hosting concerns — out
   of scope on the same grounds `docs/inbox.md` already uses for SaaS-era items.
 

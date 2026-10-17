@@ -31,3 +31,6 @@ app:
     source: proxyProtocol
   livenessProbe:
     enabled: true
+# Every file here makes the backup choice the schema requires (ADR 0098); this one names a claim.
+backup:
+  existingClaim: veyq-backup

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Produce one veyq release as files, in the mirror layout `veyqctl` reads (ADR 0096).
 
-    python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--unscheduled]
+    python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--tools <ref>] [--unscheduled]
+    python3 scripts/release_assets.py --major-entry <release>   # what the tools image bakes as its major entry
 
 writes, for the release the tree names (`v<major>.<minor>`, counted the way `ci.yml`'s version step counts it):
 
     <out>/releases.json           every release in <out>: tag, date, prerelease flag, manifest — merged, never replaced
-    <out>/<tag>/manifest.json     release, date, both images, unscheduled, and every asset with its sha256
+    <out>/<tag>/manifest.json     release, date, the images, unscheduled, and every asset with its sha256
     <out>/<tag>/<asset>           the recipe set, and the tools that operate it
 
 The same three questions — which releases exist, what does one's manifest say, give me one asset — are answered
@@ -291,13 +292,32 @@ def earlier_releases_of_major(out: pathlib.Path, major: int, minor: int) -> list
     return sorted(earlier)
 
 
-def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, *, release: str | None = None) -> pathlib.Path:
+def major_entry(release: str) -> str | None:
+    """The release a new major is entered from, which the `veyq-tools` image bakes (ADR 0098, its gate's entry rule):
+    the predecessor this release's own upgrade proof and chart check run from — `run_web_e2e.default_predecessor_ref()`,
+    ONE derivation, so the gate never admits an entry the pipeline did not prove — when it is a release tag of the
+    previous major; None otherwise (a release that stays in its major, or no release tag at all while the pin file
+    says `release: none`). Planned to be replaced by the L2 lane's attestation (ADR 0091 decision 5, not built)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import run_web_e2e  # noqa: E402 — the upgrade proof's own derivation, imported only for this question
+
+    ref, _ = run_web_e2e.default_predecessor_ref()
+    found, ours = TAG.match(ref), re.match(r"^([0-9]+)\.", release)
+    if found and ours and int(found.group(1)) == int(ours.group(1)) - 1:
+        return f"{found.group(1)}.{found.group(2)}"
+    return None
+
+
+def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: str | None = None, *,
+            release: str | None = None) -> pathlib.Path:
     """Produce one release into `out`: the tree's, or — `release` — another one by name, which only the stack lane's
     stub mirror asks for (`scripts/run_stack_e2e.py`: a release newer than the one its instance is stamped with, in the
     layout the instance's release check reads, ADR 0090 decision 1). The command line has no way to pass it, so the
     publish only ever produces the release its tree names."""
     check_image("app", app)
     check_image("admin", admin)
+    if tools is not None:
+        check_image("tools", tools)
     if release is None:
         release = tree_release()
     elif not TAG.match(f"v{release}"):
@@ -320,7 +340,10 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, *, relea
         # The asset list is what `veyqctl` downloads — from any source alike, and an HTTP mirror cannot be listed —
         # and each sha256 is what it checks a downloaded file against before it lands in `releases/<release>/`.
         assets = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in written}
-        manifest = {"release": release, "date": date, "images": {"app": app, "admin": admin}, "unscheduled": unscheduled,
+        # `tools` is the image a cluster's backup gate and restore Job run (ADR 0098); `veyqctl` reads `app` and `admin`
+        # only, since Compose never runs it. The manifest is signed as one file, so the key is bound like the others.
+        images = {"app": app, "admin": admin, **({"tools": tools} if tools is not None else {})}
+        manifest = {"release": release, "date": date, "images": images, "unscheduled": unscheduled,
                     "assets": assets}
         (dest / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
     except BaseException:
@@ -337,13 +360,24 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, *, relea
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Produce one veyq release as files, in the mirror layout.")
-    parser.add_argument("out", type=pathlib.Path, help="the mirror directory; the release lands in <out>/<tag>/")
-    parser.add_argument("--app", required=True, help="the app image, by digest (or a local build's name:tag)")
-    parser.add_argument("--admin", required=True, help="the admin image, by digest (or a local build's name:tag)")
+    parser.add_argument("out", type=pathlib.Path, nargs="?",
+                        help="the mirror directory; the release lands in <out>/<tag>/")
+    parser.add_argument("--app", help="the app image, by digest (or a local build's name:tag)")
+    parser.add_argument("--admin", help="the admin image, by digest (or a local build's name:tag)")
+    parser.add_argument("--tools", default=None,
+                        help="the tools image (ADR 0098), by digest (or a local build's name:tag); manifest images.tools")
     parser.add_argument("--unscheduled", action="store_true", help="mark an unscheduled major release")
+    parser.add_argument("--major-entry", metavar="RELEASE", default=None,
+                        help="print the release the tools image of RELEASE bakes as its major entry (empty: none), "
+                             "and write nothing")
     args = parser.parse_args()
+    if args.major_entry is not None:
+        print(major_entry(args.major_entry) or "")
+        return 0
+    if args.out is None or not args.app or not args.admin:
+        parser.error("<out>, --app and --admin are required to produce a release")
     try:
-        dest = produce(args.out, args.app, args.admin, args.unscheduled)
+        dest = produce(args.out, args.app, args.admin, args.unscheduled, args.tools)
     except ReleaseError as e:
         print(f"release_assets: {e}", file=sys.stderr)
         return 1

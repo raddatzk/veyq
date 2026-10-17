@@ -22,6 +22,11 @@ spec:
       annotations:
         # A changed ConfigMap restarts the pod: Quarkus reads the properties file once, at boot.
         checksum/config: {{ include (print .Template.BasePath "/app-configmap.yaml") . | sha256sum }}
+        {{- if .Values.backup.enabled }}
+        # The capture request (ADR 0098 decision 7), visible on the pod: a changed value is a new revision, so the old
+        # pod stops first and the gate captures a cold database.
+        veyq/backup-request: {{ .Values.backup.request | quote }}
+        {{- end }}
     spec:
       serviceAccountName: veyq-app
       # The token IS the cluster identity: the backend reads its namespace and reaches the API server through it.
@@ -36,6 +41,65 @@ spec:
         runAsGroup: 10001
         fsGroup: 10001
         fsGroupChangePolicy: OnRootMismatch
+      {{- if .Values.backup.enabled }}
+      # The backup gate (ADR 0098), before the container that migrates. Under Recreate the old pod has terminated
+      # before this one is created, so the capture is cold by construction. It reads what the app reads — the database
+      # by the app's own URL and user, the bundled store's hint — and LESS: no config-secret mount, so no capture on
+      # the claim can hold the KEK (scripts/chart_meta_check.py (xxiv)). Same pod, so the NetworkPolicy set gains no
+      # peer. What it decides and refuses: scripts/instance_backup.py `gate`.
+      initContainers:
+        - name: backup-gate
+          image: {{ include "veyq.toolsImage" . | quote }}
+          imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+          args: ["gate"]
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: VEYQ_BACKUP_TARGET_RELEASE
+              value: {{ include "veyq.appRelease" . | quote }}
+            - name: VEYQ_BACKUP_REQUEST
+              value: {{ .Values.backup.request | quote }}
+            - name: VEYQ_BACKUP_KEEP
+              value: {{ .Values.backup.keep | quote }}
+            - name: VEYQ_BACKUP_DIR
+              value: /backup
+            - name: VEYQ_BACKUP_DB_URL
+              value: {{ include "veyq.jdbcUrl" . | quote }}
+            - name: VEYQ_BACKUP_DB_USER
+              value: {{ include "veyq.dbUser" . | quote }}
+            - name: VEYQ_BACKUP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: mariadbPassword
+            - name: VEYQ_BUNDLED_STORE_ENDPOINT
+              value: {{ include "veyq.bundledStoreEndpoint" . | quote }}
+            - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: garageAdminToken
+            {{- with .Values.backup.store.existingSecret }}
+            # A store of the operator's own: what the gate cannot read from the database without the KEK.
+            - name: VEYQ_BACKUP_STORE_ENDPOINT
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: endpoint}}
+            - name: VEYQ_BACKUP_STORE_BUCKET
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: bucket}}
+            - name: VEYQ_BACKUP_STORE_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: accessKey}}
+            - name: VEYQ_BACKUP_STORE_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: secretKey}}
+            - name: VEYQ_BACKUP_STORE_REGION
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: region, optional: true}}
+            {{- end }}
+          volumeMounts:
+            - name: backup
+              mountPath: /backup
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.backup.resources | nindent 12 }}
+      {{- end }}
       containers:
         - name: app
           image: {{ include "veyq.appImage" . | quote }}
@@ -54,13 +118,9 @@ spec:
             # Mirrors infra/docker-compose.prod.yml's app service, name for name, so the two recipes can be read
             # against each other. What differs is said where it differs.
             - name: QUARKUS_DATASOURCE_JDBC_URL
-              {{- if .Values.mariadb.enabled }}
-              value: jdbc:mariadb://veyq-mariadb:3306/veyq
-              {{- else }}
-              value: {{ required "externalDatabase.jdbcUrl is required when mariadb.enabled=false" .Values.externalDatabase.jdbcUrl | quote }}
-              {{- end }}
+              value: {{ include "veyq.jdbcUrl" . | quote }}
             - name: QUARKUS_DATASOURCE_USERNAME
-              value: {{ if .Values.mariadb.enabled }}veyq{{ else }}{{ .Values.externalDatabase.username | quote }}{{ end }}
+              value: {{ include "veyq.dbUser" . | quote }}
             - name: QUARKUS_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -98,7 +158,7 @@ spec:
             # for the store's OWN public host, verbatim — the departure from compose's same-origin path route
             # (ADR 0064, ADR 0067 Decision 5).
             - name: VEYQ_BUNDLED_STORE_ENDPOINT
-              value: http://veyq-garage:3900
+              value: {{ include "veyq.bundledStoreEndpoint" . | quote }}
             - name: VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT
               value: https://{{ required "storeDomain is required" .Values.storeDomain }}
             - name: VEYQ_BUNDLED_STORE_SIGNING_MODE
@@ -162,3 +222,9 @@ spec:
             name: veyq-app
         - name: tmp
           emptyDir: {}
+        {{- if .Values.backup.enabled }}
+        # The operator's claim (backup.existingClaim): the chart creates none, so `helm uninstall` keeps the backups.
+        - name: backup
+          persistentVolumeClaim:
+            claimName: {{ .Values.backup.existingClaim | quote }}
+        {{- end }}
