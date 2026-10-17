@@ -715,6 +715,12 @@ const en = {
     stepDownFailed: 'Stepping down did not work. Try again.',
     lastHolder: 'You are the only moderator who holds the key. Another moderator must hold it before you can step down.',
   },
+  // who runs this instance (core/operator/OperatorIdentification.vue; ADR 0035 decision 7), on the login and share pages
+  operatorDetails: {
+    link: 'Legal notice',
+    title: 'Who runs this instance',
+    representative: 'Represented by {name}',
+  },
   login: {
     title: 'Sign in',
     submit: 'Sign in',
@@ -2578,6 +2584,12 @@ const de: typeof en = {
     steppedDown: 'Du moderierst nicht mehr.',
     stepDownFailed: 'Das Niederlegen hat nicht geklappt. Versuch es noch einmal.',
     lastHolder: 'Nur du hältst den Schlüssel. Eine andere moderierende Person muss ihn halten, bevor du niederlegen kannst.',
+  },
+  // who runs this instance (core/operator/OperatorIdentification.vue; ADR 0035 decision 7), on the login and share pages
+  operatorDetails: {
+    link: 'Impressum',
+    title: 'Wer diese Instanz betreibt',
+    representative: 'Vertreten durch {name}',
   },
   login: {
     title: 'Anmelden',

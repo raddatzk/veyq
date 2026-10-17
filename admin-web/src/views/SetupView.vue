@@ -3,7 +3,7 @@
 // DNS exists (ADR 0065). It performs a real cold account birth (identity keypair, Master Key wraps, Emergency
 // Kit) through @veyq/crypto, the one module shared with `web/`: this is the most privileged single action an
 // instance ever takes, so it must not run against a second copy of that code.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -11,8 +11,9 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
-import { createServerOwner, prepareServerOwner } from '../features/setup/setupServer'
-import type { CreateServerOwnerRequest } from '../api/generated'
+import { createServerOwner, prepareServerOwner, type PreparedServerOwner } from '../features/setup/setupServer'
+import OperatingModeChoice from '../features/instance/OperatingModeChoice.vue'
+import { needsAcceptance, type OperatingMode } from '../features/instance/operator'
 import { decodeHttpError } from '../shared/httpError'
 import EmergencyKitSave from '../features/setup/EmergencyKitSave.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
@@ -32,8 +33,14 @@ const error = ref('')
 const secretKey = ref<string | null>(null)
 const kitReady = ref(false)
 let kitEmail = ''
-// The account as minted on this device, not yet sent: it is posted only once the kit is confirmed (E1).
-let prepared: CreateServerOwnerRequest | null = null
+// The account as minted on this device, not yet sent: it is posted only once the kit is confirmed (E1) and the
+// operating mode chosen (step 4, ADR 0093 § 14).
+let prepared: PreparedServerOwner | null = null
+// Step 4: the mode, after the kit and before the post. No preselection: the notice is read before a mode is picked.
+const choosingMode = ref(false)
+const mode = ref<OperatingMode | null>(null)
+const accepted = ref(false)
+const modeReady = computed(() => mode.value !== null && (!needsAcceptance(mode.value) || accepted.value))
 
 const { run: runSubmit, pending: busy } = useAsyncAction(
   async () => {
@@ -43,6 +50,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
     kitEmail = email.value
     secretKey.value = emergencyKit.secretKey
     kitReady.value = false
+    choosingMode.value = false
   },
   { onError: () => { error.value = t('setup.failed') } },
 )
@@ -57,7 +65,7 @@ async function submit() {
 // screen leaves setup open, not an owner nobody can unlock. A failed post keeps the kit: it is still this account's.
 const { run: runCreate, pending: creating } = useAsyncAction(
   async () => {
-    await createServerOwner(prepared!)
+    await createServerOwner(prepared!, mode.value!, accepted.value)
     setSetupCompleted(true)
     finish()
   },
@@ -69,8 +77,14 @@ const { run: runCreate, pending: creating } = useAsyncAction(
   },
 )
 
-async function proceed() {
+function toMode() {
   if (!kitReady.value || !prepared) return
+  error.value = ''
+  choosingMode.value = true
+}
+
+async function proceed() {
+  if (!kitReady.value || !prepared || !modeReady.value) return
   error.value = ''
   await runCreate()
 }
@@ -89,7 +103,7 @@ function finish() {
 
 <template>
   <Card class="login-card">
-    <template #title>{{ secretKey ? t('setup.kitTitle') : t('setup.title') }}</template>
+    <template #title>{{ choosingMode ? t('setup.modeTitle') : secretKey ? t('setup.kitTitle') : t('setup.title') }}</template>
     <template #content>
       <template v-if="!secretKey">
         <p class="veyq-form-copy">{{ t('setup.sub') }}</p>
@@ -123,16 +137,29 @@ function finish() {
         </form>
       </template>
 
-      <template v-else>
+      <template v-else-if="!choosingMode">
         <EmergencyKitSave :email="kitEmail" :secret-key="secretKey!" v-model="kitReady">
           <p class="veyq-form-copy">{{ t('setup.kitSub') }}</p>
         </EmergencyKitSave>
         <Button
           type="button"
+          class="setup-kit-continue"
+          :label="t('setup.submit')"
+          icon="pi pi-arrow-right"
+          :disabled="!kitReady"
+          @click="toMode"
+        />
+      </template>
+
+      <template v-else>
+        <OperatingModeChoice v-model:mode="mode" v-model:accepted="accepted" :disabled="creating" />
+        <Button
+          type="button"
+          class="setup-create"
           :label="creating ? t('setup.creating') : t('setup.kitProceed')"
           icon="pi pi-arrow-right"
           :loading="creating"
-          :disabled="!kitReady || creating"
+          :disabled="!modeReady || creating"
           @click="proceed"
         />
       </template>

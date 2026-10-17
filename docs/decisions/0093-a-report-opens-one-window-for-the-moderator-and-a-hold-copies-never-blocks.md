@@ -5,7 +5,10 @@
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
-  in §§ 1–3, 6–7 and 11–13. § 14's operating mode (owner 2026-10-17) is not built. It is on the V1 line (owner
+  in §§ 1–3, 6–7 and 11–13. § 14's operating mode (owner 2026-10-17) is built — the choice at first-run setup and
+  later, its notice, the preset mechanism and the warnings per mode — and so is § 11's instance contact with its
+  notification address's code confirmation ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
+  no catalog entry carries a preset yet (§ 10's guest-write record is the first). It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 

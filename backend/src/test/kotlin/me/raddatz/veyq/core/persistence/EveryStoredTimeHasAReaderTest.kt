@@ -88,6 +88,9 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_release_notice.mailed_at" to "served: InstanceReleaseNotice.mailedAt; a notice with one is never mailed again",
             "veyq_instance_mail_settings.code_expires_at" to "InstanceMailConfirmation refuses an expired code",
             "veyq_instance_mail_settings.confirmed_at" to "served: InstanceMailSettings.confirmedAt; its presence is the confirmation",
+            // --- the operator details (ADR 0093 § 11): the notification address's code confirmation, ADR 0097 decision 5
+            "veyq_operator_details.code_expires_at" to "CodeConfirmation.codeLive refuses an expired code",
+            "veyq_operator_details.confirmed_at" to "served: InstanceOperator.notificationConfirmedAt; its presence is the confirmation",
             // --- moderation (ADR 0099, ADR 0093 § 11)
             "veyq_moderator.appointed_at" to "served: InstanceModerator.appointedAt, ModeratorAppointment.appointedAt; orders the roster",
             "veyq_moderator.accepted_at" to "its presence is the MODERATOR role (ModeratorEntity.accepted); served: acceptedAt",

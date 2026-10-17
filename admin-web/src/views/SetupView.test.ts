@@ -21,7 +21,7 @@ import { serverState } from '../shared/state/serverState'
 
 import SetupView from './SetupView.vue'
 import { createServerOwner, prepareServerOwner } from '../features/setup/setupServer'
-import type { CreateServerOwnerRequest } from '../api/generated'
+import type { PreparedServerOwner } from '../features/setup/setupServer'
 import { httpError } from '../test/httpError'
 import { pwnedCount } from '../shared/pwned'
 
@@ -38,7 +38,14 @@ const stubs = {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
+  // The mode step's choice: one button per option, as PrimeVue's SelectButton offers them.
+  SelectButton: {
+    props: ['modelValue', 'options'],
+    emits: ['update:modelValue'],
+    template: '<div><button v-for="o in options" :key="o.value" type="button" :class="\'opt-\' + o.value" @click="$emit(\'update:modelValue\', o.value)">{{ o.label }}</button></div>',
+  },
+  // The breach warning's "Use it anyway" and the mode step's tick: a native checkbox, so a test ticks it with
+  // `setValue(true)`.
   Checkbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
@@ -62,7 +69,7 @@ const i18n = createI18n({
   },
 })
 
-const PREPARED = { email: 'owner@example.com' } as unknown as CreateServerOwnerRequest
+const PREPARED = { email: 'owner@example.com' } as unknown as PreparedServerOwner
 
 beforeEach(() => {
   serverState.breachRangeUrl = 'https://api.pwnedpasswords.com/range/' // a new instance's manifest
@@ -144,7 +151,7 @@ describe('SetupView — the breached-password check', () => {
   })
 })
 
-describe('SetupView — the owner is created only after the kit is confirmed (uc.admin.setup-server E1)', () => {
+describe('SetupView — the owner is created only after the kit is confirmed and the mode chosen (uc.admin.setup-server E1, step 4)', () => {
   const toKitScreen = async () => {
     const w = mount(SetupView, { global: { plugins: [i18n], stubs } })
     await flushPromises()
@@ -154,7 +161,17 @@ describe('SetupView — the owner is created only after the kit is confirmed (uc
     await flushPromises()
     return w
   }
-  const proceedButton = (w: Awaited<ReturnType<typeof toKitScreen>>) => w.findAll('button.btn').find((b) => b.text() === 'Proceed')!
+  type Wrapper = Awaited<ReturnType<typeof toKitScreen>>
+  const kitContinue = (w: Wrapper) => w.find('button.setup-kit-continue')
+  const proceedButton = (w: Wrapper) => w.find('button.setup-create')
+  const toModeStep = async (mode: 'PRIVATE' | 'ORGANISATION' = 'ORGANISATION') => {
+    const w = await toKitScreen()
+    await w.find('.stub-kit-saved').trigger('click')
+    await kitContinue(w).trigger('click')
+    await flushPromises()
+    await w.find(`.opt-${mode}`).trigger('click')
+    return w
+  }
 
   it('mints the account and shows the kit, but creates no owner yet — closing the tab here leaves setup open', async () => {
     const w = await toKitScreen()
@@ -162,22 +179,45 @@ describe('SetupView — the owner is created only after the kit is confirmed (uc
     expect(w.find('.stub-kit-saved').exists()).toBe(true)
     // The bite: the old screen posted the owner on submit, so this was already called here.
     expect(createServerOwner).not.toHaveBeenCalled()
-    expect(proceedButton(w).attributes('disabled')).toBeDefined()
+    expect(kitContinue(w).attributes('disabled')).toBeDefined()
   })
 
-  it('creates the owner from the minted request once the kit is confirmed, then goes to sign-in', async () => {
+  it('asks the operating mode after the kit, with its notice, before anything is posted', async () => {
     const w = await toKitScreen()
     await w.find('.stub-kit-saved').trigger('click')
+    await kitContinue(w).trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test="mode-notice"]').text()).toContain('not legal advice')
+    // No mode is preselected: the notice is read before one is picked.
+    expect(proceedButton(w).attributes('disabled')).toBeDefined()
+    expect(createServerOwner).not.toHaveBeenCalled()
+  })
+
+  it('creates the owner with the chosen mode once the kit is confirmed, then goes to sign-in', async () => {
+    const w = await toModeStep('ORGANISATION')
+    expect(w.find('input[type="checkbox"]').exists()).toBe(false) // organisation asks no tick
     await proceedButton(w).trigger('click')
     await flushPromises()
-    expect(createServerOwner).toHaveBeenCalledWith(PREPARED)
+    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, 'ORGANISATION', false)
     expect(push).toHaveBeenCalledWith({ name: 'login' })
+  })
+
+  it('cannot post private without the tick, and posts it with the tick', async () => {
+    const w = await toModeStep('PRIVATE')
+    expect(proceedButton(w).attributes('disabled')).toBeDefined()
+    await proceedButton(w).trigger('click')
+    await flushPromises()
+    expect(createServerOwner).not.toHaveBeenCalled()
+
+    await w.find('input[type="checkbox"]').setValue(true)
+    await proceedButton(w).trigger('click')
+    await flushPromises()
+    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, 'PRIVATE', true)
   })
 
   it('keeps the kit and says so when someone else finished setup first', async () => {
     vi.mocked(createServerOwner).mockRejectedValue(httpError(409, 'setup_already_complete'))
-    const w = await toKitScreen()
-    await w.find('.stub-kit-saved').trigger('click')
+    const w = await toModeStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('already complete')
@@ -186,8 +226,7 @@ describe('SetupView — the owner is created only after the kit is confirmed (uc
 
   it('lets a failed create be tried again with the same kit', async () => {
     vi.mocked(createServerOwner).mockRejectedValueOnce(httpError(500))
-    const w = await toKitScreen()
-    await w.find('.stub-kit-saved').trigger('click')
+    const w = await toModeStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('create failed')

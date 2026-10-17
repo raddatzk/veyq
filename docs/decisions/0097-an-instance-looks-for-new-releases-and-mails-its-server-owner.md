@@ -4,7 +4,8 @@
   `core/mail/`, admin-web's Server → Release and Server → Mail). The GitHub source reads each candidate major's
   `manifest.json` release asset, which exists once `veyqctl`'s publish uploads it; until then a new major on GitHub
   is a failed check, a mirror is not. Not built: moderation notices to the moderators, which decisions 3, 5 and 6
-  carry for [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7.
+  carry for [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7; the
+  code confirmations they wait on — a moderator's and the instance contact's notification address — are built.
 - Date: 2026-10-16
 
 ## Context
@@ -73,7 +74,10 @@ the admin console is reachable on localhost only ([ADR 0065](0065-admin-ui-cli-s
 has no address of its own: a link opened on another device would reach nothing. **A moderator's address is confirmed
 the same way, where they can reach it:** accepting the appointment sends the code to their account address, and they
 type it into web/'s moderation surface (ADR 0099 § 7); moderation notices reach that address only once it is
-confirmed, and a changed address asks again.
+confirmed, and a changed address asks again. **The instance contact's notification address too** (ADR 0093 § 11):
+saving it sends the code through instance mail — only once the Server Owner's own address is confirmed, which admin-web
+says until then — and the Server Owner types it into admin-web's Server → Operator; moderation notices reach it only
+once confirmed, and a changed address asks again (owner 2026-10-17).
 
 **6. The channel is built for instance notices, and carries release notices and moderation notices.** Nothing in
 decisions 3–5 is specific to releases, so another kind of notice (a certificate about to expire, a failed backup) is

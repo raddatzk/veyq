@@ -65,7 +65,10 @@ green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `N
 `NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
-a client red names the typed line it expects to fail — and runs `npm run check` once to see it.
+a client red names the typed line it expects to fail — and runs `npm run check` once to see it. **It finds those lines
+by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
+`cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
+dev seeder, web's e2e harness and two backend tests also build that request, and `moderationEpoch` named all of them.
 
 **The qualifier is load-bearing: an operation on a NEW tag compiles.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase
