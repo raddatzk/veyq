@@ -231,7 +231,7 @@ Baseline before the first edit: `for f in scripts/validate_*.py; do [ "$f" = scr
 continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done` and `(cd backend && ./gradlew check)` exit code on
 `main`, recorded in the retrospective — a red afterwards is this CR's only against that list.
 
-- [ ] **0 refine completion** (after O1) — ADR 0062's reconcile bullet amended to what O1 and decisions 2–4 and
+- [x] **0 refine completion** (after O1) — ADR 0062's reconcile bullet amended to what O1 and decisions 2–4 and
   11–17 settle (decided, not yet built: the grace on an exclusive bucket, the enqueue through the reclaim list, the
   `stat` in place of the read-before, the age on the store's clock, the restore's reset), its rejected *"scheduled
   sweep that deletes"* arm kept with the re-read reasons (i)–(iii) as what the three conditions answer;
@@ -239,7 +239,7 @@ continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done` and `(cd backend 
   `orphans-are-reclaimed-only-after-the-grace-on-an-exclusive-bucket` lands with phase 2's refs: the file is built,
   and a built file's criterion without a ref is red (`docs/coverage/README.md` § Rules). · Done when: `python3
   scripts/validate_changes.py` and `validate_coverage.py` green.
-- [ ] **1 contracts** — the five operations of decision 9 in `contracts/api/instance.openapi.yaml` under the new tag
+- [x] **1 contracts** — the five operations of decision 9 in `contracts/api/instance.openapi.yaml` under the new tag
   with their schema, examples for *never ran*, *in progress*, *completed with candidates, armed*, *failed:
   LIST_DENIED*. · Done when: the contract validators green (`python3 scripts/validate_*.py`); a new tag compiles, so the
   backend is red only where a new operation is seen on day one (`OperatorBlindProbeTest`, the admin-channel posture
