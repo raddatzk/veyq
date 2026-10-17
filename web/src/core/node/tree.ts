@@ -54,6 +54,9 @@ export type TreeNode = {
    *  node's entry (name / slug / key wrap) is sealed under `E_epoch`; every seal of the node binds it (ADR 0072). */
   epoch: number
   name: string
+  /** The name as the wire serves it (the `node-name` field envelope): what a report hands over its `K_field` for
+   *  (uc.moderation.report). Absent where a source does not carry it. */
+  encryptedName?: string
   wrappedContentKey: string
   /** Curated metadata (date now, place later) sealed under this node's `K_node` (cr-0067); null when unset. */
   wrappedMeta: string | null
@@ -214,6 +217,7 @@ export function openTree(scopeId: string, epochs: EpochKeys, rows: NodeSummary[]
     orderIndex: r.orderIndex,
     epoch: r.epoch,
     name: names.get(r.id)!,
+    encryptedName: r.encryptedName,
     wrappedContentKey: r.wrappedContentKey,
     wrappedMeta: r.wrappedMeta ?? null,
     metaRevision: r.metaRevision,

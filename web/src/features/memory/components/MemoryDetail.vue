@@ -82,6 +82,8 @@ const props = defineProps<{
   coreActions?: readonly CoreHeaderAction[]
   /** Core's cover dialog is open over this page (the host mounts it): the lightbox then leaves the keyboard to it. */
   coverEditing?: boolean
+  /** The lightbox offers "Report" (uc.moderation.report): the host's answer, core's rule (`canReport`). */
+  canReport?: boolean
 }>()
 const emit = defineEmits<{
   rename: []
@@ -96,6 +98,8 @@ const emit = defineEmits<{
   editCover: []
   /** The lightbox's "Set as cover": open it on this photo (`src`: its decrypted thumbnail, null while it has none). */
   coverFromPhoto: [{ mediaId: string; src: string | null }]
+  /** The lightbox's "Report": the host opens core's report dialog for this medium. */
+  reportMedium: [item: MediaItem]
 }>()
 
 const { t } = useI18n()
@@ -757,10 +761,12 @@ watch(
       :meta-resolver="metaResolver"
       :blob-meta-resolver="blobMetaResolver"
       :exif-loader="exifLoader"
+      :can-report="canReport"
       @close="lightboxIndex = null"
       @updated="onCapturedAtUpdated"
       @set-cover="onSetCoverFromPhoto"
       @delete="onLightboxDelete"
+      @report="emit('reportMedium', $event)"
     />
 
     <MemoryDateEditor

@@ -107,13 +107,16 @@ Drei ehrliche Grenzen:
 ## Illegale Inhalte & Missbrauch
 
 Weil private Inhalte für uns unsichtbar sind, **können** wir deine privaten Erinnerungen nicht scannen
-— das ist der Sinn der Sache. Bei einer **öffentlichen Freigabe** ist das anders: Wer sie meldet, gibt
-den Link weiter und damit auch den Schlüssel — sie lässt sich also öffnen und beurteilen. Einen
-Melde-Knopf gibt es in veyq nicht; melden heißt, der Person zu schreiben, die deine Instanz betreibt.
+— das ist der Sinn der Sache. Was jemand **meldet**, ist etwas anderes: Wer etwas sieht — ein Mitglied des
+Bereichs oder ein Gast eines Links —, kann **Melden** wählen, und sein Gerät übergibt der Moderation des Servers die
+Schlüssel zu genau dem Gemeldeten, so versiegelt, dass nur diese Moderation sie öffnen kann. Sonst öffnet sich damit
+nichts vom Bereich, außer der Moderation erfährt niemand von der Meldung, und gesperrt wird dadurch nichts: Ein Mensch
+entscheidet. Was gemeldet wurde, bleibt für die Moderation bis zu 90 Tage erhalten, auch wenn es inzwischen gelöscht
+wird. [Etwas melden](/veyq/de/help/report-something/)
 
-Reagieren kann dann nur diese Person. Eine zentrale Moderationsstelle gibt es nicht, weil es keinen
-zentralen Dienst gibt. **Eine einzelne Freigabe
-abschalten kann der Betrieb nicht**; das kann nur, wer sie erstellt hat. Was der Betrieb kann: einen
+Reagieren können dann die Leute, die deinen Server betreiben, und die Moderation, die sie bestimmen. Eine zentrale
+Moderationsstelle gibt es nicht, weil es keinen zentralen Dienst gibt. **Eine einzelne Freigabe oder ein einzelnes
+Element abschalten kann der Betrieb noch nicht**; das kann nur, wer sie erstellt hat. Was der Betrieb kann: einen
 **ganzen Bereich** auf seinem Server offline nehmen — für dessen Mitglieder und mit jeder Freigabe darin.
 Private Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
 

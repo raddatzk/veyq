@@ -45,6 +45,22 @@ export {
   type BlobMeta,
   type OpenedBlobMeta,
 } from './blobMeta'
+export {
+  REPORT,
+  newReportKey,
+  encodeReportKeys,
+  decodeReportKeys,
+  encodeReportBody,
+  decodeReportBody,
+  sealReport,
+  openReport,
+  sealReportShare,
+  openReportShare,
+  ReportInvalid,
+  type ReportKey,
+  type ReportBody,
+  type ReportItemAddress,
+} from './report'
 
 export type ArgonParams = { t: number; m: number; p: number; dkLen: number }
 /** auth-path default: m in KiB = 32 MiB. Model B has no server-side verifier (ADR 0003). The one profile this

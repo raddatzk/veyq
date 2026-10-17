@@ -28,6 +28,7 @@ import {
   readBlobMeta,
   reserveAndPump,
   throwIfAborted,
+  unwrapBlobKey,
 } from '../../core/blob/transport'
 import type { BlobDeclare, BlobRef, BlobSource, ReservedUpload, WindowFn } from '../../core/blob/types'
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
@@ -869,6 +870,50 @@ export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey:
   } catch {
     return null
   }
+}
+
+/**
+ * What a report of this medium hands over (uc.moderation.report, en.moderation.hold § What a report hands over): the
+ * `K_blob` of every
+ * blob it has — the original and each derivative, tagged with its blob id — and the `K_field`s of its two metadata tiers,
+ * `media-meta` and (only where this session reads it, a member) `media-exif`, each under the key the medium seals under
+ * ([mediaKey]: `K_node`, or a WRITE_ONLY guest's `K_up`). The drop key never leaves; a key that does not open what it is
+ * reported for is left out (`v1.fieldKeyOf` opens before it hands over). Null when no blob key opens: nothing to report.
+ */
+export async function mediumReportKeys(
+  scopeId: string, memoryKey: Uint8Array, item: MediaItem, withExif: boolean,
+): Promise<v1.ReportKey[] | null> {
+  let key: Uint8Array
+  try {
+    key = mediaKey(scopeId, memoryKey, item)
+  } catch {
+    return null
+  }
+  const keys: v1.ReportKey[] = []
+  for (const ref of [item.original, ...item.derivatives.map((d) => d.ref)]) {
+    try {
+      keys.push({ role: 'BLOB', ref: ref.blobId, key: unwrapBlobKey(scopeId, key, ref) })
+    } catch {
+      // a ref whose wrap does not open is not this medium's to hand over
+    }
+  }
+  if (!keys.length) return null
+  const field = (context: v1.FieldContext, envelope: string | null | undefined): Uint8Array | null => {
+    if (!envelope) return null
+    try {
+      return v1.fieldKeyOf(context, key, fromB64std(envelope))
+    } catch {
+      return null
+    }
+  }
+  const meta = field(mediaMetaContext(scopeId, item.mediaId), item.wrappedMeta)
+  if (meta) keys.push({ role: 'MEDIA_META', ref: null, key: meta })
+  if (withExif) {
+    const exif = await withRefresh(() => mediaApi().getMediaExif({ scopeId, mediaId: item.mediaId })).catch(() => null)
+    const exifKey = field(mediaExifContext(scopeId, item.mediaId), exif?.wrappedExif)
+    if (exifKey) keys.push({ role: 'MEDIA_EXIF', ref: null, key: exifKey })
+  }
+  return keys
 }
 
 /** A media a meta write targets: its id + origin (which key seals it) and the tier + revision it was listed at. */

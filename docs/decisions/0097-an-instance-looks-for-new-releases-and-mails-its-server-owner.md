@@ -55,7 +55,10 @@ sealed under the config-secret key exactly as a tenant's is ([ADR 0050](0050-ope
 It sends **only** instance notices, and **only** to the Server Owner's account address and — for moderation notices
 alone — to the account address of each accepted moderator and the instance contact's notification address
 ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7,
-[ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 2 and 11). It is
+[ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 2 and 11) — and,
+for a reporter, the receipt of their report (ADR 0093 § 2, DSA Art. 16(4); owner decision Q6 of cr-report-and-hold,
+2026-10-17): the reporter's client sends the address once in the clear beside the sealed copy, the server mails the
+receipt from memory and stores only the sealed copy, bounded per address. It is
 never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own identity —
 still holds.
 

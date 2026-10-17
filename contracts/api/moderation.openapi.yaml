@@ -26,8 +26,73 @@ tags:
       A moderator's own appointment, their grants of the instance moderation key and their delivery to a newcomer,
       the key proof's challenge, and the published key a reporter seals to. One tag = one resource interface owning
       the `/api/moderation` subtree.
+  - name: reports
+    description: >
+      A member's report of what their space holds (ADR 0093 §§ 1-2, uc.moderation.report) — the reporter's side, not
+      the moderator's: no role and no key proof, only membership of the space. A guest reports through the link
+      (`sharing.openapi.yaml`, `reportInShare`). Its own tag so its resource owns the `/api/scopes/{scopeId}/reports`
+      subtree and nothing wider.
 
 paths:
+  /api/scopes/{scopeId}/reports:
+    post:
+      tags: [reports]
+      operationId: reportInScope
+      summary: Report nodes and media of a space the caller belongs to → a reference and the time.
+      description: >
+        A member's report (ADR 0093 §§ 1-2). Every item must be a live node of the space (`NODE`) or an application's
+        item on one (`ITEM`, a Memories medium); a member reports no `LINK`. One item outside the space refuses the
+        whole report (`404 report_item_not_found`), as a space the caller is not a member of does (`404
+        scope_not_found`). Then, in one transaction, the report is stored, each item's open case is found or opened,
+        and a hold is taken where the case holds none alive
+        ([en.moderation.hold](../../docs/features/moderation/enablers/en.moderation.hold.md)); after it the
+        moderators are mailed (category and "new case" only) and the receipt goes to `receiptAddress` if one was
+        given. Nothing is blocked. Bounded per account, and by a cap on the caller's open reports (`429
+        too_many_open_reports`, owner decision Q8).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportSubmission" }
+            example:
+              category: ILLEGAL_CONTENT
+              epoch: 1
+              sealedReport: AXJlcG9ydA==
+              items: [{ kind: NODE, id: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b, sealedShare: AnJlcG9ydC1zaGFyZQ== }]
+      responses:
+        "201":
+          description: Received.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportReceipt" }
+        "400":
+          description: Malformed request — an item named twice, a NODE or ITEM without its id, a LINK (`invalid_request`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No such space, or the caller is not an accepted member of it (`scope_not_found`, indistinguishable); or an
+            item that is no live node or item of it (`report_item_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_not_found } }
+        "409":
+          description: "`epoch` is not the moderation key's current epoch (`moderation_epoch_changed`): read the key again and seal anew."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+        "429":
+          description: Too many reports from this account (`rate_limited`), or too many of its reports still open (`too_many_open_reports`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: too_many_open_reports } }
+
   /api/moderation/key:
     get:
       tags: [moderation]
@@ -35,8 +100,8 @@ paths:
       summary: Read the current epoch's public bundle — what a report is sealed to.
       description: >
         The instance moderation key's current epoch and its public bundle (ADR 0099 § 2): anyone may read it, because a
-        reporter is mostly a guest with nothing pinned and seals once to this one key. `404 moderation_off` while the
-        Server Owner has not turned moderation on — then there is nothing to report to, and the report action is off.
+        reporter is mostly a guest with nothing pinned and seals once to this one key. `404 moderation_off` while no
+        epoch exists (first-run setup mints epoch 1) — then there is nothing to report to, and the report action is off.
         Unauthenticated; rate-limited per client address.
       security: []
       responses:
@@ -446,6 +511,12 @@ paths:
 
 components:
   parameters:
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      description: Opaque id of the space whose nodes and items are reported.
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
     ModeratorAccountId:
       name: accountId
       in: path
@@ -693,6 +764,16 @@ components:
           maxLength: 2048
           example: c2VhbGVkLWdyYW50
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
+    ReportSubmission:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportSubmission'
+    ReportItemSubmission:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportItemSubmission'
+    ReportCategory:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportCategory'
+    ReportReceipt:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportReceipt'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

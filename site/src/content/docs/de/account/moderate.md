@@ -6,7 +6,10 @@ sources:
 ---
 
 Die Person, die einen veyq-Server betreibt, kann dich bitten, ihn zu **moderieren**: dir anzusehen, was gemeldet wird,
-in jedem Bereich auf diesem Server, und zu entscheiden, was damit geschieht. Das Melden selbst ist noch nicht gebaut.
+in jedem Bereich auf diesem Server, und zu entscheiden, was damit geschieht. Melden können Leute schon
+([Etwas melden](/veyq/de/help/report-something/)): Meldungen kommen versiegelt für den Schlüssel an, den du halten
+wirst, was sie nennen, bleibt für dich erhalten, und du bekommst eine Mail, wenn ein neuer Fall eingeht. Die Seite, die
+sie auflistet und öffnet, ist noch nicht gebaut.
 Heute kannst du die Aufgabe übernehmen, damit du den Schlüssel hältst, für den Meldungen versiegelt werden.
 
 ## Annehmen
@@ -36,7 +39,8 @@ er nicht mehr, wähle **Neuen Code senden**. Änderst du die Adresse deines Kont
    der Schlüssel dieser Person der ist, den du schon kennst. Hat sich ihr Kontoschlüssel geändert, geht er nicht
    weiter, und die Seite sagt das: Vergleiche zuerst ihre Sicherheitsnummer
    ([Eine Person verifizieren](/veyq/de/account/verify-a-person/)).
-5. Danach zeigt die Seite **Meldungen**. Solange das Melden nicht gebaut ist, steht dort, dass nichts gemeldet wurde.
+5. Danach zeigt die Seite **Meldungen**. Solange die Liste der Meldungen nicht gebaut ist, steht dort, dass nichts
+   gemeldet wurde, auch wenn Meldungen eingegangen sind; die Mail über einen neuen Fall sagt dir, dass einer kam.
 
 Sagt die Seite, sie habe **abgebrochen**, weil der Schlüssel, den der Server veröffentlicht, nicht der ist, den du
 hältst, mach nicht weiter und sag der Person Bescheid, die den Server betreibt.

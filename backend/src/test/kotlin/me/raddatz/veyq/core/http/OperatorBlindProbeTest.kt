@@ -100,6 +100,13 @@ class OperatorBlindProbeTest {
         "listTrashedNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/trash/nodes") },
         "getFavorites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/favorites") },
         "putFavorites" to Probe(Address.SCOPE) { s -> Call("PUT", "/api/scopes/${s.scopeId}/favorites", """{"ciphertext":"$B64"}""") },
+        // --- reports (uc.moderation.report): a member reports what their space holds ---
+        "reportInScope" to Probe(Address.SCOPE) { s ->
+            Call(
+                "POST", "/api/scopes/${s.scopeId}/reports",
+                """{"category":"TERMS_BREACH","epoch":1,"sealedReport":"$B64","items":[{"kind":"NODE","id":"${s.nodeId}","sealedShare":"$B64"}]}""",
+            )
+        },
         "getItemFavorites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites") },
         "putItemFavorites" to Probe(Address.SCOPE) { s ->
             Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites", """{"ciphertext":"$B64"}""")
@@ -259,6 +266,7 @@ class OperatorBlindProbeTest {
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
+            "reportInShare",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite",
         )
         reason(
@@ -337,9 +345,11 @@ class OperatorBlindProbeTest {
 
     /**
      * A POST that reads, and a PUT that takes the READ gate on purpose: a pin (`putFavorites`) is the member's own sealed
-     * preference, not a change to the scope, so a group waiting for its deletion still stores it (ADR 0068 §10).
+     * preference, not a change to the scope, so a group waiting for its deletion still stores it (ADR 0068 §10). A report
+     * (`reportInScope`) changes nothing in the space either — whoever can see an item can report it (ADR 0093 § 1), a
+     * viewer included, and a group waiting for its deletion still shows what it holds.
      */
-    private val readsByException = setOf("resolveGroupMember", "presignBlobDownloads", "putFavorites")
+    private val readsByException = setOf("resolveGroupMember", "presignBlobDownloads", "putFavorites", "reportInScope")
     private val deletingIsThePrecondition = setOf("restoreGroup")
 
     // --- the classification guard --------------------------------------------------------------------------

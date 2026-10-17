@@ -1,0 +1,108 @@
+useCase: uc.moderation.report
+feature: moderation
+title: Report what you see
+# Built by cr-report-and-hold: core/moderation/report (ReportHandler, CaseNotices, ReportReceived) and core/moderation/hold
+# (Holds, the snapshot seam, StoreReclaimStore.due's skip) on the backend, Memories' MediaReportableItems and
+# MediaHoldSnapshot; core/report (the dialog, the bundle, the actions) on web, Memories' lightbox and mediumReportKeys;
+# packages/crypto's report.ts. Lane L1's browser pass is e2e/tests/features/report.spec.ts, tagged per criterion; `stack`
+# waits under gaps until a run admits it.
+acceptanceCriteria:
+  - id: a-member-reports-what-their-space-holds
+    text: >-
+      A member reports nodes and media of a space they belong to; an item of a space they do not belong to is refused
+      and nothing is stored.
+    coverage:
+      backend:
+        integration: [ReportCoreSliceTest.aMemberReportsANodeOfTheirSpaceAndTheServerKeepsOnlyTheClearFields, ReportCoreSliceTest.aNodeOfAnotherSpaceRefusesTheWholeReportAndAStrangersSpaceIsTheUnknownScope, ReportCoreSliceTest.aTrashedNodeIsNotWhatTheReporterSees, ReportMemoriesSliceTest.aMemberReportsALiveMediumOfTheirSpaceAndNotATrashedOne, OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate]
+      web:
+        unit: [src/core/report/report.wire.test.ts, src/core/report/reportKeys.test.ts, src/features/memory/mediumReportKeys.test.ts]
+  - id: a-guest-reports-only-inside-the-link
+    text: >-
+      A guest of a READ or READ_WRITE link reports a node or a medium inside the link's subtree; one outside it is
+      refused. A guest of an upload link reports the link and nothing else.
+    coverage:
+      backend:
+        integration: [ReportCoreSliceTest.aGuestReportsInsideTheLinkAndIsRefusedOutsideIt, ReportCoreSliceTest.aGuestWithoutTheWholeLinkIsTheUnknownLinkAndAViewingGuestReportsNoLink, ReportMemoriesSliceTest.aReadGuestReportsAMediumOfTheLinkAndIsRefusedAMediumOfAnotherMemory, ReportMemoriesSliceTest.anUploadLinksGuestReportsTheLinkAndNothingElse]
+      web:
+        unit: [src/views/ShareView.report.test.ts]
+  - id: one-case-per-item
+    text: >-
+      Each reported item has one open case; a further report of it attaches to that case, raises its category to the
+      more urgent one, and takes no second hold.
+    coverage:
+      backend:
+        integration: [ReportCoreSliceTest.theSameItemTwiceIsOneCaseWithTwoReportsAndTheMoreUrgentCategory, ReportRaceSliceTest.twoReportsOfOneItemAtOnceAreOneCaseWithTwoReports, HoldMemoriesSliceTest.aHoldThatEndedLetsTheSweepReclaimAndThePurgeDropsTheSnapshot]
+  - id: the-report-arrives-sealed
+    text: >-
+      The server stores the category, the epoch, the time, the items' kinds and ids and the reporter's account or link
+      in the clear; the reason, the address and K_report only sealed to the current epoch's key, and the report shares
+      only under K_report. A report sealed to an older epoch is refused.
+    coverage:
+      backend:
+        integration: [ReportCoreSliceTest.aMemberReportsANodeOfTheirSpaceAndTheServerKeepsOnlyTheClearFields, ReportCoreSliceTest.aReportSealedToAnotherEpochIsRefused]
+      web:
+        unit: [src/core/report/report.wire.test.ts]
+  - id: a-hold-keeps-what-was-reported
+    text: >-
+      A report takes a hold: a snapshot of the item's rows and a pin on its store objects. A held medium deleted by its
+      uploader is gone from every member's and guest's read, and its store objects outlive the sweep with its reclaim
+      row's attempts unchanged.
+    coverage:
+      backend:
+        integration: [HoldMemoriesSliceTest.aHeldMediumItsUploaderDeletesIsGoneFromEveryReadButItsObjectsOutliveTheSweep, StoreReconcileSliceTest.anObjectOnlyAHoldPinNamesIsNoOrphan]
+  - id: a-hold-ends-at-ninety-days
+    text: >-
+      A case-open hold ends 90 days after the report; the purge drops its snapshot and pins, and the sweep then removes
+      the objects.
+    coverage:
+      backend:
+        integration: [HoldMemoriesSliceTest.aHoldThatEndedLetsTheSweepReclaimAndThePurgeDropsTheSnapshot]
+  - id: a-hold-outlives-the-space
+    text: >-
+      Erasing the reported space, node or link leaves the report, the case and the hold's snapshot and pins standing.
+    coverage:
+      backend:
+        integration: [HoldMemoriesSliceTest.erasingTheReportedSpaceLeavesTheReportTheCaseAndTheSnapshot]
+  - id: moderators-are-mailed-the-category-only
+    text: >-
+      Every accepted moderator with a confirmed address, and the instance contact's confirmed notification address, are
+      mailed the category and "new case" with no id and no link — at once for the three urgent categories, otherwise
+      in at most one bundle a day.
+    coverage:
+      backend:
+        integration: [ReportMailSliceTest.anUrgentReportMailsEveryConfirmedModeratorAtOnceWithTheCategoryAndNoIdOrLink, ReportMailSliceTest.aNonUrgentReportWaitsForTheDaysBundleAndABundleGoesAtMostOnceADay, ReportMailSliceTest.theInstanceContactsConfirmedNotificationAddressIsMailedTooAndAnUnconfirmedOneIsNot]
+  - id: the-reporter-gets-a-receipt
+    text: >-
+      The reporter sees a reference and the time; an address they gave is mailed a receipt once and stored only in the
+      sealed part.
+    coverage:
+      backend:
+        integration: [ReportMailSliceTest.theReporterGetsAReceiptOncePerReportBoundedPerAddressAndTheAddressIsStoredNowhere]
+      web:
+        unit: [src/core/report/ReportDialog.test.ts, src/core/report/report.wire.test.ts]
+  - id: the-dialog-asks-what-the-dsa-names
+    text: >-
+      The dialog requires a category, a reason and the good-faith confirmation, takes an optional address, says a report
+      of child sexual abuse material needs no name, offers the enclosing node above 100 items, and is not shown while no
+      epoch exists; the request carries no plaintext of the reason, the address or the context.
+    coverage:
+      web:
+        unit: [src/core/report/ReportDialog.test.ts, src/core/report/report.wire.test.ts, src/views/ShareView.report.test.ts]
+  - id: reports-are-bounded
+    text: >-
+      A member's report is bounded per account and by a cap on their open reports; a guest's per address and per link.
+    coverage:
+      backend:
+        integration: [ReportCoreSliceTest.aMemberWithTooManyOpenReportsIsRefusedUntilCasesClose, ReportCoreSliceTest.aMalformedReportIsRefusedBeforeAnythingIsStored]
+    gaps:
+      - surface: backend
+        reason: >-
+          The per-address (IP) and per-account (USER) bounds are the boundary filters' and held by RateLimitPostureSweepTest
+          for every endpoint; the per-link report budget (ReportRateLimiter.allowShare) has no test of its own exhausting it.
+gaps:
+  crypto: >-
+    The report bundle's layouts and seals are pinned by packages/crypto's src/report.test.ts and src/v1.conformance.test.ts
+    (the-report-arrives-sealed: an older epoch's key opens nothing), but crypto's CI job has never executed (ADR 0040).
+  stack: >-
+    e2e/tests/features/report.spec.ts tags a member's and a guest's report with the dialog, the new-case mail and the
+    receipt; stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

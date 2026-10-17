@@ -26,8 +26,9 @@ const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string;
   ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
 
 /** Unwrap a ref's `K_blob` under `key`, bound to the ref's (scope, owner, blob, role): `OpenRefused` for a ref the
- *  server moved to another owner or slot. */
-const unwrapBlobKey = (scopeId: string, key: Uint8Array, ref: BlobRef): Uint8Array =>
+ *  server moved to another owner or slot. Exported for a report, which hands a medium's `K_blob`s over
+ *  (uc.moderation.report). */
+export const unwrapBlobKey = (scopeId: string, key: Uint8Array, ref: BlobRef): Uint8Array =>
   v1.open(blobKeyContext(scopeId, ref), key, fromB64std(ref.wrappedBlobKey))
 
 /**

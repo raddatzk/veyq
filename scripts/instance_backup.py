@@ -567,15 +567,20 @@ class Database:
         """`[[storage_key, chunk_count], …]` — the row side of A4, compact enough to live in the manifest.
 
         The object keys are `<storage_key>/<i>` for `i` in `0 … chunk_count-1` (measured: a blob with
-        `chunk_count = 70` owns exactly the keys `0 … 69`). Only `veyq_blob` and `veyq_upload_session` carry a
-        `storage_key` in the whole migration set, and an open upload session's chunks are by definition
-        incomplete — so only completed blobs are the *required* set. Sessions are counted, not required.
+        `chunk_count = 70` owns exactly the keys `0 … 69`). `veyq_blob`, `veyq_upload_session` and `veyq_hold_pin` carry
+        a `storage_key` in the migration set (and `veyq_store_reclaim`, whose objects are on their way out), and an open
+        upload session's chunks are by definition incomplete — so completed blobs and held objects are the *required*
+        set. Sessions are counted, not required.
 
         This query is the one place that says which rows require an object: a later table that keeps an object
-        alive without a `veyq_blob` row (a hold's pin) adds its keys here, as `[storage_key, chunk_count]` rows.
+        alive without a `veyq_blob` row adds its keys here, as `[storage_key, chunk_count]` rows. `veyq_hold_pin` is
+        that table (ADR 0093 § 4, en.moderation.hold): once a held medium's uploader deleted it, its `veyq_blob` row is
+        gone and only the pin names its objects, while the database leg carries the hold that needs them — so a store
+        leg read from `veyq_blob` alone would leave them out. A key both name is listed once (`UNION`).
         """
         return [[row[0], int(row[1])] for row in
-                self.query("SELECT storage_key, chunk_count FROM veyq_blob ORDER BY storage_key;")]
+                self.query("SELECT storage_key, chunk_count FROM veyq_blob UNION "
+                           "SELECT storage_key, chunk_count FROM veyq_hold_pin ORDER BY storage_key;")]
 
     def open_upload_sessions(self) -> int:
         return int(self.query("SELECT COUNT(*) FROM veyq_upload_session;")[0][0])

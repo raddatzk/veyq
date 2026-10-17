@@ -110,6 +110,11 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_moderation_epoch.rotation_due_at" to "served: InstanceModeration.rotationDueSince; RotationDueNotice mails it",
             "veyq_moderation_epoch.rotation_due_mailed_at" to "RotationDueNotice's claim: mailed once, released on a failed send",
             "veyq_moderation_challenge.expires_at" to "ModerationProofGate refuses an expired challenge; ModerationPurge deletes it",
+        // --- reports and holds (ADR 0093 §§ 1-2, 4; uc.moderation.report, en.moderation.hold)
+        "veyq_moderation_report.received_at" to "ReportHandler ends the case-open hold a report takes 90 days after it",
+        "veyq_hold.expires_at" to "Holds.aliveFor decides whether a report takes a new hold; ModerationPurge deletes a hold past it",
+        "veyq_hold_pin.expires_at" to "StoreReclaimStore.due leaves a reclaim row of a pinned key out until then",
+        "veyq_moderation_case.noticed_at" to "CaseNotices.mailBundle counts a day from the last bundle's",
             "veyq_moderation_event.occurred_at" to "ModerationLog.closeFor dates an event from the later of it and the removal",
             "veyq_moderation_event.expires_at" to "ModerationPurge deletes the event past it (ModerationLog.purgeExpired)",
             // --- tasks

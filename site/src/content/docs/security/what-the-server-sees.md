@@ -4,6 +4,8 @@ description: The metadata a veyq server can read by design, what stays sealed, a
 sources:
   - docs/features/moderation/enablers/en.moderation.moderation-key.md
   - docs/features/moderation/enablers/en.moderation.log.md
+  - docs/features/moderation/use-cases/uc.moderation.report.md
+  - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0047-inline-video-playback-range-streaming.md
@@ -154,6 +156,15 @@ time the server observes live is not kept for them. What it does hold, each with
   identity replaced, new key), its time, the moderator it concerns, who acted, the epoch and a reason category. Free
   text would be sealed to the moderation key. Kept to 31 December of the third year after the moderator's removal.
 - A key proof's challenge, for five minutes.
+- **A report's clear fields** ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
+  its category, the epoch it is sealed to, when it arrived, each reported item's kind and id, and who sent it — the
+  reporting member's account, or the link a guest came through. The reporter's text, address and context, and the keys
+  to what they reported, are sealed to the moderation key. The address also crosses once in the clear, for the receipt
+  the server mails, and is not stored that way. A case per item (its category and state), a log event per report, and
+  whether the "new case" mail went out.
+- **A hold** ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)):
+  copies of the reported rows as stored (ciphertext and metadata) and the storage keys it pins, until its end — so the
+  server keeps what a member deleted after a report, for up to 90 days, readable to no one but the moderators.
 
 ### Account email
 

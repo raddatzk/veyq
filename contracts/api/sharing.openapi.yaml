@@ -987,6 +987,65 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
+  /api/shares/{shareId}/reports:
+    post:
+      tags: [sharing]
+      operationId: reportInShare
+      summary: Report what this link shows (unauthenticated) → a reference and the time.
+      description: >
+        **No auth** — a guest's report (ADR 0093 §§ 1-2, uc.moderation.report). The request proves it holds the whole
+        link (`X-Share-Write`, ADR 0076) and, for a password-protected link, its password token. A guest of a `READ` or
+        `READ_WRITE` link reports nodes and media inside the link's live subtree; a guest of a `WRITE_ONLY` link
+        reports the link itself (one `LINK` item) and nothing else. Every item is checked before anything is stored —
+        one outside that reach refuses the whole report (`404 report_item_not_found`). Then, in one transaction, the
+        report is stored, each item's open case is found or opened, and a hold is taken where the case holds none
+        alive ([en.moderation.hold](../../docs/features/moderation/enablers/en.moderation.hold.md)). Nothing is blocked
+        and nobody but the moderators learns of it. Bounded per address and per link; a guest has no account to count
+        open reports against (owner decision Q8).
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ShareWrite"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportSubmission" }
+            example:
+              category: TERMS_BREACH
+              epoch: 1
+              sealedReport: AXJlcG9ydA==
+              items: [{ kind: LINK, sealedShare: AnJlcG9ydC1saW5r }]
+      responses:
+        "201":
+          description: Received.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportReceipt" }
+        "400":
+          description: Malformed request — an item named twice, a NODE or ITEM without its id, a LINK with one (`invalid_request`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: >
+            No such share (disabled, expired, unknown, its space being deleted or its tenant suspended), no or a wrong
+            `X-Share-Write` proof, or a missing password token (`share_not_found`, non-enumerable); or an item outside
+            what the link shows (`report_item_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_not_found } }
+        "409":
+          description: "`epoch` is not the moderation key's current epoch (`moderation_epoch_changed`): read the key again and seal anew."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+        "429":
+          description: Too many reports from this address or through this link, or too many wrong password attempts (`rate_limited`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2220,6 +2279,16 @@ components:
     # `LocalizedMarkdown` model in this module while the shape is single-sourced with the tenants spec (ADR 0038).
     LocalizedMarkdown:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+
+    # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
+    ReportSubmission:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportSubmission'
+    ReportItemSubmission:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportItemSubmission'
+    ReportCategory:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportCategory'
+    ReportReceipt:
+      $ref: '_common.openapi.yaml#/components/schemas/ReportReceipt'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

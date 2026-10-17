@@ -1,5 +1,8 @@
 package me.raddatz.veyq.core.blobstore
 
+import me.raddatz.veyq.core.moderation.hold.HoldEntity
+import me.raddatz.veyq.core.moderation.hold.HoldPinEntity
+import me.raddatz.veyq.core.moderation.hold.HoldTrigger
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.testing.TestBlob
@@ -102,6 +105,30 @@ class StoreReconcileSliceTest {
         assertEquals(1, pass.completedOrphanObjects, "only the key no row names is an orphan")
         assertEquals(10, pass.completedOrphanBytes)
         assertEquals(setOf(unclaimed), candidates())
+    }
+
+    /**
+     * A held object (ADR 0093 § 4, en.moderation.hold): its pin is the only row that names it once a space's erasure
+     * dropped its blob and its reclaim row was settled elsewhere — still no orphan. Lever: drop `veyq_hold_pin` from
+     * `CLAIM_TABLES` → the held key is a candidate and, once due, reclaim-listed.
+     */
+    @Test
+    fun anObjectOnlyAHoldPinNamesIsNoOrphan() {
+        val held = key()
+        val unclaimed = key()
+        tx {
+            val hold = HoldEntity().apply {
+                id = UUID.randomUUID().toString(); trigger = HoldTrigger.CASE_OPEN.name; expiresAt = Instant.now().plus(Duration.ofDays(90))
+            }.also { it.persist() }
+            HoldPinEntity().apply {
+                id = UUID.randomUUID().toString(); holdId = hold.id; storageKey = held; chunkCount = 1; expiresAt = hold.expiresAt
+            }.persist()
+        }
+        listOf(held, unclaimed).forEach { bucket.put("$it/0", 10, old) }
+
+        completePass()
+
+        assertEquals(setOf(unclaimed), candidates(), "the held key is claimed by its pin")
     }
 
     /** B4, B5. Levers: delete the probe case → not-veyq's = 4; widen the pattern to `[^/]+/\d+` → orphans > 0. */

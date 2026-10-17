@@ -339,12 +339,17 @@ server-blind token makes this work without the server ever seeing a name:
   the Server Owner's. A second moderator reviews an objection where there is one. Against the operator this is
   accountability, not a control: the Server Owner owns the server and the roster, and the surface is
   operator-served, passive-operator-safe only ([ADR 0026](../decisions/0026-client-trust-tiers.md)).
-  **Built today: neither half.** There is
-  no report intake, and the operator has no action on a single share — revoking one is its creator's alone
-  (`SharingHandler.revoke`); the operator's only lever is suspending the whole tenant, every link in it
-  ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)). Built is the key a report
-  of one text or icon field will carry: each field revision seals under a `K_field` of its own, which opens nothing
-  else ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
+  **Built today: the intake half.** A member or a guest reports what they see: their client seals the report share
+  and their text to the current epoch, the server stores the category, time and ids in the clear, opens one case per
+  item and takes a **hold** — a copy of the reported rows and a pin on their store objects that the reclaim sweep
+  skips, so a delete after the report removes the item for everyone but the moderators, for up to 90 days
+  ([uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
+  [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)). Not built: the review and every
+  decision — the moderation surface does not list or open a report yet, and the operator has no action on a single
+  share — revoking one is its creator's alone (`SharingHandler.revoke`); the operator's only lever is suspending the
+  whole tenant, every link in it ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
+  Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
+  the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
   decryptable-on-report — notice-and-takedown works exactly where content is distributed.
 - **A link's id alone opens no write.** The share id is stored raw (members rebuild links from it, seals bind it,

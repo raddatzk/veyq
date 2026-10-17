@@ -48,6 +48,13 @@ A small CR is single-phase. Each phase ends with the repo in a
 working, verifiable state (its own "Done when:"). The natural seam is the dependency order:
 contracts → backend → web. **Genuinely independent work = separate CRs, not phases.**
 
+**A phase commits before the next phase's first edit of a file the two share.** cr-report-and-hold's phase 4 (the
+hold) wired itself into the report handler, the module-composition test, the stored-time readers and the migration pins
+while phase 3 (the report) was still running its full check; committing phase 3 then meant saving phase 4's copies of
+those four files, writing phase-3-only variants by hand, committing, and restoring — a split nothing proves matches
+what was checked. A long check is no reason to start the next phase in the files it reads; start it in files of its
+own, or wait.
+
 **A contracts phase that adds an operation to an EXISTING tag cannot end green everywhere, and that is correct
 rather than a violation of the rule above.** The generated `…Api` interface gains a method the moment the spec
 does, so the `…Resource` implementing it no longer compiles until the backend phase — there is no ordering that

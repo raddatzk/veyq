@@ -316,6 +316,29 @@ def not_data_cases() -> None:
     check("the exclusion list is the nine named tables, no pattern", len(ib.NOT_DATA) == 9, str(ib.NOT_DATA))
 
 
+def blob_index_cases() -> None:
+    """The store leg's required set (`Database.blob_index`) includes every object a hold pins (ADR 0093 § 4): once a held
+    medium's uploader deleted it, its `veyq_blob` row is gone and only `veyq_hold_pin` names its objects, while the
+    database leg carries the hold that needs them. Run against an in-memory SQLite holding the two tables — the query
+    is plain SQL — so the bite is the query itself: read `veyq_blob` alone and the pinned key is missing."""
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(
+        "CREATE TABLE veyq_blob (storage_key TEXT, chunk_count INT);"
+        "CREATE TABLE veyq_hold_pin (storage_key TEXT, chunk_count INT);"
+        "INSERT INTO veyq_blob VALUES ('aa', 3);"
+        "INSERT INTO veyq_hold_pin VALUES ('aa', 3), ('bb', 2);"
+    )
+    db = object.__new__(ib.Database)
+    db.query = lambda sql: [[str(c) for c in row] for row in conn.execute(sql).fetchall()]  # type: ignore[method-assign]
+    index = db.blob_index()
+    check("blob index: a key only a hold pin names is required, a key a blob and a pin both name is listed once",
+          index == [["aa", 3], ["bb", 2]], str(index))
+    check("blob index: the pinned key's every chunk is an expected object",
+          {"bb/0", "bb/1"} <= set(ib.expected_keys(index)), str(ib.expected_keys(index)))
+
+
 # The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
 VECTOR_TOKEN = "veyq-dev-admin-token"
 VECTOR_ACCESS_KEY = "GKd14f469abb39c11f4f86a0e3"
@@ -1231,6 +1254,7 @@ def main() -> int:
         pool_cases(tmp_path)
     version_cases()
     not_data_cases()
+    blob_index_cases()
     store_cases()
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)

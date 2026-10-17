@@ -1,7 +1,12 @@
 # ADR 0093 — A report opens one window for the moderator, and a hold copies, never blocks
 
 - Status: Accepted 2026-10-16; § 8 is built (the last editor per field group, and the take-back it tightens), and
-  so is § 9 (every field purpose seals under its own `K_field`), the rest is not. Who moderates — moderators the
+  so is § 9 (every field purpose seals under its own `K_field`). §§ 1, 2, 4 and 5 are built for the report and the
+  hold (cr-report-and-hold, 2026-10-17; [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
+  [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)): the report share and its sealed part,
+  one case per item, the new-case mail and the reporter's receipt, the snapshot and the pin, and a case-open hold's
+  90-day end; a field reported on its own and "everything by this uploader" are not, and neither are review and
+  every decision (§§ 3, 6, 7) or the other hold ends. The rest is not. Who moderates — moderators the
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here

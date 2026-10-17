@@ -100,12 +100,14 @@ Three honest limits:
 ## Illegal content & abuse
 
 Because private content is invisible to us, we **can't** scan your private memories — that's the
-point. A **public share** is different: whoever reports one hands over the link, and with it the key, so
-it can be opened and judged. There is no report button in veyq — reporting means writing to whoever runs
-your instance.
+point. What someone **reports** is different: anyone who sees something — a member of the space or a guest of a
+link — can choose **Report**, and their device hands the moderators of the server the keys to exactly what was
+reported, sealed so that only those moderators can open them. Nothing else of the space opens with them, nobody but
+the moderators learns of the report, and nothing is blocked by it: a person decides. What was reported is kept for
+them for up to 90 days even if it is deleted in the meantime. [Report something](/veyq/help/report-something/)
 
-Who acts on it is that person. There is no central moderation team, because there is no central service.
-The operator **cannot switch off a single share**: only the
+Who acts on it is the people who run your server and the moderators they appoint. There is no central moderation
+team, because there is no central service. Today they **cannot yet switch off a single share** or item: only the
 person who created it can. What the operator can do is take a **whole space** on their server offline — for
 its members and for every share in it. They still cannot read anything private, which is the whole design.
 
