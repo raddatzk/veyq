@@ -1,7 +1,7 @@
 ---
 id: cr-bucket-reconcile
 title: A bounded, resumable sweep lists the bucket, counts the objects no row claims, and reclaims them after a grace on an exclusive bucket
-status: in-progress
+status: done
 satisfies: [uc.admin.configure-object-store]
 adrs: ["0062", "0056", "0089", "0092", "0093", "0067"]
 invariants:
@@ -244,7 +244,7 @@ continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done` and `(cd backend 
   LIST_DENIED*. · Done when: the contract validators green (`python3 scripts/validate_*.py`); a new tag compiles, so the
   backend is red only where a new operation is seen on day one (`OperatorBlindProbeTest`, the admin-channel posture
   sweep and gate test — `changes/README.md` § Phases only above real size) until phase 2.
-- [ ] **2 backend** — decisions 1–9 and 11–17: the port operation and its three implementations (+ the test-scope
+- [x] **2 backend** — decisions 1–9 and 11–17: the port operation and its three implementations (+ the test-scope
   `RecordingBlobStore` gains a scripted listing), the migration (`V<stamp>__core_store_reconcile.sql`: both tables, and
   an index on `storage_key` in each claim table, which the per-page `IN (…)` reads), the sweep
   (`core/blobstore/StoreReconcile.kt`), config (`veyq.store-reconcile.*` in `VeyqConfig` + `application.properties`),
@@ -301,14 +301,14 @@ continue; python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done` and `(cd backend 
   orphans = those files' chunk count and bytes, and the restore left no clock; unconfirmed → only reported; with a
   short test grace, confirmed → recorded on the reclaim list and reclaimed from the store; a pass on the untouched
   instance → 0.
-- [ ] **3 admin-web** — `features/instance/StoreReconcilePanel.vue` (its own component, shown by `StorePanel.vue`
+- [x] **3 admin-web** — `features/instance/StoreReconcilePanel.vue` (its own component, shown by `StorePanel.vue`
   while a store is in use), a total render map over the failure enum and the verdict (as `StoreProvisioningPanel.vue`
   does for its states), the candidates with their deletion date, the exclusive-bucket confirmation (a confirm dialog
   that says what it arms) and withdraw, pause and resume; EN + DE strings; the `store reconcile` CLI command with
   `--confirm-exclusive-bucket`, `--withdraw-exclusive-bucket`, `--pause`, `--resume`; unit tests per state. · Done
   when: `npm run check` in `admin-web/` green and the panel clicked in a browser against the live proof's instance
   (candidates shown, confirmed, paused, then a failure shown after stopping its Garage).
-- [ ] **4 docs** — ADR 0062 status of the bullet (built), ADR 0056 § Context 2's last sentence about counting;
+- [x] **4 docs** — ADR 0062 status of the bullet (built), ADR 0056 § Context 2's last sentence about counting;
   `site/src/content/docs/run/operations.md` (the Background jobs table row; the console replaces the SQL, which stays
   as the database-side form); `run/upgrade.mdx`'s rollback paragraph and `run/backup-and-restore.md`'s tolerated
   orphans point at the count and say a restore restarts the clocks and disarms the deletion; the confirm, the grace,
@@ -325,4 +325,59 @@ with what was built and O1's answer. Then the harvest: what binds moves to ADR 0
 
 ## Retrospective
 
-(filled at close)
+**Baseline** (measured before the first code edit, on this worktree at `6e3b8dcc` plus step 0's docs): every
+`scripts/validate_*.py` but `validate_guard_gaps.py` green. `./gradlew check` was not run on the untouched tree —
+its first run is the CR's (green, 5 m 28 s); a red there would have been unattributable. Afterwards: `./gradlew check`
+green, `npm run check` green in `admin-web/` (324 tests) and `site/`, the glob green on the committed tree,
+`validate_guard_gaps.py --force` green (80 cases), `instance_backup_selftest.py` green, and
+`run_backend_races_on_mariadb.py --tests '*StoreReconcileSliceTest' --tests '*InstanceStoreReconcileSliceTest' --tests
+'*EntitySchemaValidationTest'` green on the pinned MariaDB 11.4 (17 + 3 + both schema validations: the migration, the
+compare-and-set and the entities on the production engine).
+
+**Bites, each pulled once** (snapshot-and-restore, `--no-watch-fs`, `compileKotlin` re-ran each time; batched only across
+disjoint code paths and tests — run 3's two extra reds were blob-claim tests the blob-branch lever also hits): B1/B2/B3
+(each claim table dropped from `CLAIM_TABLES`), B4 (probe case removed), B5 (pattern widened to `[^/]+/\d+`), B6
+(`chunk_count > index` dropped), B7 (age off `Instant.now()`), B8 (stat skipped), B9 (cursor reset on failure), B10
+(claim failure swallowed), B11 (`S3BlobStore` falling back to this process's clock — `S3BlobStoreListTest`), B13
+(confirmation dropped from `armed`, both halves), B14 (grace zero), B15 (re-check dropped), B16 (gap rule off; the tool's
+reset removed → `instance_backup_selftest.py` red), B17 (pause dropped from `armed`), B18 (a claimed key as candidate —
+red only with B15's re-check held off too, the defence in depth), B19 (compare-and-set ignored), G1 (a scratch migration
+with `CREATE TABLE … storage_key` and `ALTER TABLE … ADD COLUMN storage_key` → both named; a listed table without the
+column → named). admin-web: the deletion date shown while unarmed, and confirming without the dialog — both red.
+
+**Live proof** (throwaway Compose project `veyqrc` — MariaDB + Garage of the dev pins on their own names, ports and
+network, the worktree's fast-jar on `:28080/:28090`, clocks shortened by environment: safe age 2 min, grace 3 min,
+period 20 s, tick 10 s; torn down with `down -v`): a fresh instance read `NO_STORE`, logged once; the restore rehearsal's
+part A (`restore.a-capture.e2e.test.ts`) birthed it and stored one 2-chunk blob → first pass 3 objects (2 chunks + probe),
+0 orphans; bucket confirmed via `veyq-admin store reconcile --confirm-exclusive-bucket`; app stopped, `instance_backup.py
+capture` (the dump carried the confirmation); app started, two files uploaded through the real client (a temporary,
+never-committed suite) → 3-chunk + 1-chunk blobs; past the safe age, armed: 7 objects, 0 orphans, nothing enqueued.
+Rollback in place, as `veyqctl rollback` does it: stop, `empty-database`, one start (it wrote a `NO_STORE` reconcile row
+— the A5 gate accepted it as `NOT_DATA`), stop, `restore` with the check only → *"emptied the bucket reconcile's state"*,
+SQL: 0 reconcile rows, 0 orphan rows, 1 blob row. Started: the first pass counted **4 orphan objects, 921 712 bytes, 2
+candidate keys** — exactly the two uploads — verdict `NOT_CONFIRMED`, clocks from that pass. Past the 3-min grace,
+unconfirmed: still only reported, no reclaim row. Paused by CLI, confirmed **in the browser** (admin-web dev server
+against the instance, the dialog naming the grace and the counts) → `PAUSED`, a pass later still nothing enqueued;
+**Resume** clicked → the next pass logged *"2 put on the reclaim list"* (chunk counts 3 and 1, not-before +2 min); the
+reclaim sweep deleted them at 19:37:38; Garage then held the capture's 2 chunks and the probe only; next pass 7→3
+objects, 0 orphans. Every log line counts only. Then Garage stopped → `STORE_UNREACHABLE` logged once and shown in the
+panel beside the last completed pass. The opt-in `S3BlobStoreListE2ETest` ran green against that Garage. **The defaults**
+(CR decision 6): 100 000 one-byte veyq-shaped objects, each claimed by a reclaim row, listed in one tick: **2.5 s for the
+whole pass** (~25 ms per 1000-key page with its claim query), so 10 pages a tick and a tick a minute keep a tick near a
+quarter second and a 100 000-object pass at ten minutes; the defaults stand. Not measured: a pass over 100 000
+*unclaimed* objects, which stats each one (a rollback that leaves that many is the case; 10 000 HEADs a tick).
+
+**What went wrong, and the fix:**
+- **Planning — the owner's answer reversed the CR, and the brief, not the CR, carried it.** Step 0 rewrote decisions,
+  bites and phases in one edit, which is the rule (§ An owner's answer that reverses a decision…). One choice went past
+  the owner's words on the safe side and needs their nod: a restore **also withdraws the exclusive-bucket confirmation**
+  (the tool empties the state row), where the owner said "confirms once". Reason: a restore is the moment of (ii).
+- **Execution — two defects only the live proof found.** The UI said "0 days" for a three-minute test grace (every unit
+  test used the 30-day default); and Garage v2.0.0 refuses the AWS SDK's default checksummed `putObject` (the opt-in test's
+  setup — veyq itself writes only through presigned PUTs). And a contract property named `keys` compiled to
+  `propertyKeys` in the Kotlin model; found at the phase-2 compile, so phase 2's commit carries the contract rename.
+  Next time: a contracts phase compiles one use of each new model before it commits.
+- **Process — the scratchpad is shared with parallel agents.** A neighbour's `bite.py` overwrote mine mid-session (it
+  was no longer needed). Scratch files take a CR-specific name or directory.
+- **Next time:** a UI that renders a configured duration is unit-tested with the shortest value its live proof's
+  config uses, not only with the default.
