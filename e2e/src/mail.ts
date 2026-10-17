@@ -16,7 +16,7 @@ export interface Mail {
   to: string[]
   subject: string
   text: string
-  attachments: { fileName: string; contentType: string }[]
+  attachments: { partId: string; fileName: string; contentType: string }[]
 }
 
 async function api<T>(path: string): Promise<T> {
@@ -30,16 +30,23 @@ export async function mailsTo(to: string, subject: RegExp): Promise<Mail[]> {
   const { messages } = await api<{ messages: Summary[] }>('/api/v1/messages?limit=200')
   const matching = messages.filter((m) => m.To.some((r) => r.Address === to) && subject.test(m.Subject)).reverse()
   return Promise.all(matching.map(async (m) => {
-    const full = await api<{ Text: string; Attachments: { FileName: string; ContentType: string }[] }>(
+    const full = await api<{ Text: string; Attachments: { PartID: string; FileName: string; ContentType: string }[] }>(
       `/api/v1/message/${m.ID}`)
     return {
       id: m.ID,
       to: m.To.map((r) => r.Address),
       subject: m.Subject,
       text: full.Text,
-      attachments: full.Attachments.map((a) => ({ fileName: a.FileName, contentType: a.ContentType })),
+      attachments: full.Attachments.map((a) => ({ partId: a.PartID, fileName: a.FileName, contentType: a.ContentType })),
     }
   }))
+}
+
+/** One attachment of [mail], decoded, as text — what a mail client hands a calendar. */
+export async function attachmentText(mail: Mail, partId: string): Promise<string> {
+  const response = await fetch(`${stack().mailApi}/api/v1/message/${mail.id}/part/${partId}`)
+  if (!response.ok) throw new Error(`the mail relay answered ${response.status} to part ${partId} of ${mail.id}`)
+  return response.text()
 }
 
 /** Waits until exactly [count] such messages arrived, and returns them. */

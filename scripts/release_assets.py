@@ -291,10 +291,17 @@ def earlier_releases_of_major(out: pathlib.Path, major: int, minor: int) -> list
     return sorted(earlier)
 
 
-def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool) -> pathlib.Path:
+def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, *, release: str | None = None) -> pathlib.Path:
+    """Produce one release into `out`: the tree's, or — `release` — another one by name, which only the stack lane's
+    stub mirror asks for (`scripts/run_stack_e2e.py`: a release newer than the one its instance is stamped with, in the
+    layout the instance's release check reads, ADR 0090 decision 1). The command line has no way to pass it, so the
+    publish only ever produces the release its tree names."""
     check_image("app", app)
     check_image("admin", admin)
-    release = tree_release()
+    if release is None:
+        release = tree_release()
+    elif not TAG.match(f"v{release}"):
+        raise ReleaseError(f"`{release}` is not a release number (`<major>.<minor>`)")
     tag = f"v{release}"
     major, minor = (int(x) for x in release.split("."))
     out.mkdir(parents=True, exist_ok=True)

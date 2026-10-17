@@ -24,6 +24,12 @@ the recipe:
      localPort`; through the control it must show the forged values, or the oracle could not see a forgery. Its
      containers and network carry the run's project label and are removed by the stage itself; Traefik's log is
      `client-port-traefik.log`.
+  1c. **release mirror** — the release check's test double (inbox #464, owner's option (a)): the run's instance is
+     stamped with the release `veyqctl` installs (`VEYQ_VERSION` in the overlay, overriding the image's `-SNAPSHOT`
+     for this container only), and `release_assets.py`'s own `produce` writes four releases into the run's `mirror/`,
+     which the overlay's `release-mirror` serves on `admin`: that release, the next minor, the next major (planned)
+     and the one after (marked unscheduled) — so the console has a release notice, a dated planned-major notice whose
+     mail carries an `.ics`, and an urgent one to show. `stack.json` names them for the suite; nothing else reads them.
   2. **pebble** — Pebble alone first, under the run's own project, `veyq-e2e-<stamp>`, so it cannot address an
      instance on this host. Its root is generated when it starts, and the app must trust it before IT starts, while
      `veyqctl install` starts everything at once: so this stage brings Pebble up from the release's recipe and the
@@ -150,6 +156,9 @@ TRAEFIK_SERVICE = "traefik"
 # The overlay's Mailpit on the run's `admin` network, by the alias a Server Owner types as the SMTP host: its HTTP API,
 # which the suite reads the mail the instance sent from (infra/e2e/docker-compose.e2e.yml says why it is there).
 MAIL_API = "http://mail.relay.test:8025"
+# The overlay's stub release mirror on the run's `admin` network, by the address a Server Owner types as the release
+# check's source (infra/e2e/docker-compose.e2e.yml says why it is there).
+RELEASE_MIRROR_SOURCE = "http://releases.mirror.test:8080"
 CONTAINER_OUT = "/out"
 APP_TRUSTSTORE = "app-truststore.p12"
 # Not a secret: the store holds one public certificate, and Java asks for a password (the overlay names it too).
@@ -326,6 +335,45 @@ def assets(app_image: str, admin_image: str, workdir: Path) -> Release:
     names = sorted(json.loads((tag / "manifest.json").read_text(encoding="utf-8"))["assets"])
     print(f"assets: {tag.name} in {source.relative_to(ROOT)}: {', '.join(names)}", flush=True)
     return Release(source, tag)
+
+
+# ---------------------------------------------------------------- release mirror (ADR 0097, inbox #464)
+
+
+class Mirror(NamedTuple):
+    """The release check's test double: the release the run's instance is stamped with, and the stub mirror's newer
+    ones, each a `<major>.<minor>` as the console and the mail name it."""
+    path: Path
+    running: str
+    newer: str  # the next minor of the running major: a release notice
+    planned: str  # the first release of the next major, not marked: a planned major, dated
+    planned_date: str  # the day its manifest and releases.json carry (UTC), from which the window's end follows
+    unscheduled: str  # the first release of the major after that, marked unscheduled: urgent
+
+
+def release_mirror(release: Release, app_image: str, admin_image: str, workdir: Path) -> Mirror:
+    """Four releases in the mirror layout, written by the publish's producer itself (`release_assets.produce`) so the
+    files the app reads are the files a publish writes: the candidate's own release (the stamp), and three newer."""
+    import release_assets  # the publish's producer; its CLI names only the tree's release, `produce` takes another
+
+    running = release.tag.name[1:]
+    major, minor = (int(part) for part in running.split("."))
+    mirror = Mirror(workdir / "mirror", running, f"{major}.{minor + 1}", f"{major + 1}.0", "", f"{major + 2}.0")
+    try:
+        for name, unscheduled in ((running, False), (mirror.newer, False), (mirror.planned, False),
+                                  (mirror.unscheduled, True)):
+            release_assets.produce(mirror.path, app_image, admin_image, unscheduled, release=name)
+    except release_assets.ReleaseError as error:
+        raise Red(f"release_assets could not produce the stub mirror: {error}")
+    listed = json.loads((mirror.path / "releases.json").read_text(encoding="utf-8"))["releases"]
+    tags = [entry["tag"] for entry in listed]
+    expected = [f"v{name}" for name in (running, mirror.newer, mirror.planned, mirror.unscheduled)]
+    if tags != expected:
+        raise Red(f"the stub mirror lists {tags}, not {expected}")
+    planned_date = next(entry["date"] for entry in listed if entry["tag"] == f"v{mirror.planned}")
+    print(f"release mirror: the instance is stamped {running}; {mirror.path.relative_to(ROOT)} lists "
+          f"{', '.join(tags)} ({mirror.unscheduled} unscheduled), served at {RELEASE_MIRROR_SOURCE}", flush=True)
+    return mirror._replace(planned_date=planned_date)
 
 
 # ---------------------------------------------------------------- client port (ADR 0094 decision 7)
@@ -514,10 +562,12 @@ def client_port(release: Release, project: str, workdir: Path) -> None:
           f"{value}; without the plugin it arrived as {seen!r}", flush=True)
 
 
-def run_values(project: str, workdir: Path) -> dict[str, str]:
+def run_values(project: str, workdir: Path, mirror: Mirror) -> dict[str, str]:
     """What this run gives the instance's `.env` through `veyqctl install --set`: the operator's values the template
     asks for, its commented-out optionals this run sets, the project, and the overlay's own variables."""
     return {
+        "VEYQ_E2E_RELEASE_STAMP": mirror.running,
+        "VEYQ_E2E_RELEASE_MIRROR": str(mirror.path),
         **TEMPLATE_VALUES,
         "COMPOSE_PROJECT_NAME": project,
         "ADMIN_PORT": str(ADMIN_PORT),
@@ -715,7 +765,7 @@ def certificate(workdir: Path) -> None:
 # ---------------------------------------------------------------- browser
 
 
-def browser(compose: list[str], workdir: Path, selection: list[str]) -> None:
+def browser(compose: list[str], workdir: Path, mirror: Mirror, selection: list[str]) -> None:
     (workdir / "stack.json").write_text(json.dumps({
         "domain": DOMAIN,
         "appOrigin": f"https://{DOMAIN}",
@@ -724,6 +774,14 @@ def browser(compose: list[str], workdir: Path, selection: list[str]) -> None:
         "adminOrigin": f"http://localhost:{ADMIN_PORT}",
         "adminUpstream": ADMIN_UPSTREAM,
         "mailApi": MAIL_API,
+        "releases": {
+            "source": RELEASE_MIRROR_SOURCE,
+            "running": mirror.running,
+            "newer": mirror.newer,
+            "planned": mirror.planned,
+            "plannedDate": mirror.planned_date,
+            "unscheduled": mirror.unscheduled,
+        },
         "outDir": CONTAINER_OUT,
     }, indent=2) + "\n", encoding="utf-8")
     # `selection` is handed to `playwright test` as it is (a local run's `-- --grep …`); CI passes none.
@@ -944,12 +1002,13 @@ def main() -> int:
     before = stage("preflight", lambda: (ports_free(), browser_pins(), host_snapshot())[2])
     stage("browser image", browser_image)
     release = stage("assets", assets, args.app, args.admin, workdir)
-    values = run_values(project, workdir)
+    mirror = stage("release mirror", release_mirror, release, args.app, args.admin, workdir) if release else None
+    values = run_values(project, workdir, mirror) if mirror else {}
     started = False
     opened = None
     installed = None
     try:
-        if release:
+        if release and mirror:
             started = not red
             stage("client port", client_port, release, project, workdir)
             pebble_id = stage("pebble", pebble, release, workdir, values, args.app)
@@ -958,7 +1017,7 @@ def main() -> int:
             compose = installed.compose if installed else []
             stack = sweep_stack(compose, project, installed.env) if installed else None
             opened = stage("window", window, stack, stamp, workdir, since)
-            stage("browser", browser, compose, workdir, selection)
+            stage("browser", browser, compose, workdir, mirror, selection)
             stage("sweep", sweep, stack, workdir, opened)
     finally:
         if opened is not None:
