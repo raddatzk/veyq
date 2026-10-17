@@ -83,7 +83,7 @@ handling of reported shares.
   by hand, are the Run area's [Upgrade](../../../site/src/content/docs/run/upgrade.mdx). **Run live only against
   releases produced from the tree with images built on the host**: nothing is published, so no signature, pull or
   migrating upgrade of a published release has run
-- ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **planned**
+- ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **built**
   ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
   console notices, and instance mail for the Server Owner only)
 - ★ [Choose the operating mode and publish who runs the instance](use-cases/uc.admin.operator-details.md) —
