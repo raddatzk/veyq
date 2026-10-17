@@ -34,6 +34,7 @@ import {
 } from './store'
 import type { InstanceStore, InstanceStoreCheck, InstanceStoreUpdate } from './store'
 import StoreProvisioningPanel from './StoreProvisioningPanel.vue'
+import StoreReconcilePanel from './StoreReconcilePanel.vue'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
@@ -355,6 +356,8 @@ const OUTCOME_ICON = {
 
     <!-- What the Garage provisioning run did after the last start (ADR 0067) — only a Garage store has one. -->
     <StoreProvisioningPanel v-if="store && setting && setting.type === InstanceStoreType.Garage" />
+    <!-- What the bucket reconcile found in the store in use, and its switches (uc.admin.configure-object-store A7). -->
+    <StoreReconcilePanel v-if="store && setting && !loading" />
   </section>
 </template>
 

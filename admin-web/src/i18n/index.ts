@@ -262,6 +262,49 @@ const en = {
     "provisioned": "The object store is ready. Its bucket, access key and browser rule are in place, so media can be uploaded and shown.",
     "failed": "The object store could not be set up, and this server has stopped trying. Media will not work until the store is reachable again and its check passes — the check sets it up again — or this server is restarted. The server log names the step that failed."
   },
+  "reconcile": {
+    "title": "Objects no record claims",
+    "sub": "This server lists the store in the background and compares every object with its records. An object no record claims — after a rollback, the uploads made under the failed release — takes space nobody can read. It is deleted only after a grace period, and only once you confirm that this bucket holds this server's objects alone.",
+    "loading": "Reading what the store holds…",
+    "loadFailed": "Couldn’t read what the store holds.",
+    "notOwner": "Only the server owner can see what the store holds.",
+    "verdict": {
+      "ARMED": "Deleting is on: an object no record has claimed for {days} days is handed to the deletion list, which deletes it.",
+      "NOT_CONFIRMED": "Only counting: nothing is deleted until you confirm that this bucket holds this server's objects alone.",
+      "PAUSED": "Deleting is paused: the counting goes on, and nothing is handed to the deletion list until you resume.",
+      "NO_STORE": "No store is in use, so there is nothing to list."
+    },
+    "failure": {
+      "STORE_UNREACHABLE": "The last listing failed {at}: the store did not answer. The next one resumes where it stopped.",
+      "LIST_DENIED": "The last listing failed {at}: the store refused it. The access key needs the right to list the bucket.",
+      "NO_STORE": "The last listing failed {at}: no store was in use.",
+      "NO_STORE_CLOCK": "The last listing failed {at}: the store's answer carried no date, so no object's age could be read on the store's clock.",
+      "DATABASE": "The last listing failed {at}: this server's records could not be read. The next one resumes where it stopped."
+    },
+    "lastPass": "Last full listing {at}: {objects} objects, {orphans} of them claimed by no record ({size}), {notVeyq} not this server's.",
+    "enqueued": "{keys} uploads were handed to the deletion list.",
+    "noPass": "No full listing has finished yet.",
+    "inProgress": "A listing is running since {at}: {objects} objects so far.",
+    "candidates": "{keys} uploads ({objects} objects, {size}) have been claimed by no record since they were first seen, between {oldest} and {newest}.",
+    "firstDue": "The first will be deleted on or after {at}.",
+    "notDeleting": "Their grace period ends from {at}, but nothing is deleted while deleting is off.",
+    "reclaim": "Deletion list: {pending} waiting, {abandoned} given up on.",
+    "restart": {
+      "GAP": "Every grace period restarted {at}: the listings were interrupted for longer than allowed, so earlier time does not count.",
+      "STORE_CHANGED": "Every grace period restarted {at}: another store is in use."
+    },
+    "confirmedAt": "You confirmed this bucket holds this server's objects alone {at}.",
+    "confirm": "Confirm exclusive bucket",
+    "confirmTitle": "Delete unclaimed objects from this bucket?",
+    "confirmBody": "Confirm only if no other server or tool writes to this bucket: their objects would look unclaimed here. From now on, an object no record has claimed for {days} days is deleted — right now {keys} uploads are counted, {due} of them past their grace period. A restore or another store setting withdraws this confirmation.",
+    "withdraw": "Withdraw confirmation",
+    "pause": "Pause deleting",
+    "resume": "Resume deleting",
+    "errors": {
+      "noStore": "No store is in use, so there is no bucket to confirm.",
+      "failed": "Couldn’t change the setting."
+    }
+  },
   "configSecret": {
     "navTitle": "Config-secret key",
     "sub": "Whether the key that seals this server's stored secrets — such as a tenant's SMTP password — is the one they were sealed with. After a restore or an update, this is the reading that says the key came along.",
@@ -626,6 +669,49 @@ const de: typeof en = {
     "inProgress": "Der Objektspeicher wird eingerichtet. Das dauert nach einem Start normalerweise ein paar Sekunden; bis dahin können Uploads fehlschlagen. Lade neu, um den Stand zu sehen.",
     "provisioned": "Der Objektspeicher ist bereit. Bucket, Zugriffsschlüssel und Browser-Regel sind vorhanden, Medien lassen sich hochladen und anzeigen.",
     "failed": "Der Objektspeicher konnte nicht eingerichtet werden, und dieser Server hat es aufgegeben. Medien funktionieren erst wieder, wenn der Speicher erreichbar ist und seine Prüfung besteht — die Prüfung richtet ihn neu ein — oder dieser Server neu gestartet wurde. Das Server-Log nennt den fehlgeschlagenen Schritt."
+  },
+  "reconcile": {
+    "title": "Objekte ohne Eintrag",
+    "sub": "Dieser Server listet den Speicher im Hintergrund und vergleicht jedes Objekt mit seinen Einträgen. Ein Objekt, das kein Eintrag beansprucht — nach einem Rollback die Uploads unter dem fehlgeschlagenen Release —, belegt Platz, den niemand lesen kann. Gelöscht wird es erst nach einer Frist, und erst, wenn du bestätigst, dass dieser Bucket nur die Objekte dieses Servers enthält.",
+    "loading": "Lese, was der Speicher enthält…",
+    "loadFailed": "Konnte nicht lesen, was der Speicher enthält.",
+    "notOwner": "Nur die Besitzperson des Servers kann sehen, was der Speicher enthält.",
+    "verdict": {
+      "ARMED": "Löschen ist an: Ein Objekt, das {days} Tage lang kein Eintrag beansprucht hat, geht an die Löschliste, die es löscht.",
+      "NOT_CONFIRMED": "Nur Zählen: Nichts wird gelöscht, bis du bestätigst, dass dieser Bucket nur die Objekte dieses Servers enthält.",
+      "PAUSED": "Löschen ist pausiert: Gezählt wird weiter, an die Löschliste geht nichts, bis du fortsetzt.",
+      "NO_STORE": "Es ist kein Speicher in Gebrauch, also gibt es nichts zu listen."
+    },
+    "failure": {
+      "STORE_UNREACHABLE": "Das letzte Listen ist {at} fehlgeschlagen: Der Speicher hat nicht geantwortet. Das nächste setzt dort fort, wo es aufgehört hat.",
+      "LIST_DENIED": "Das letzte Listen ist {at} fehlgeschlagen: Der Speicher hat es abgelehnt. Der Zugangsschlüssel braucht das Recht, den Bucket zu listen.",
+      "NO_STORE": "Das letzte Listen ist {at} fehlgeschlagen: Es war kein Speicher in Gebrauch.",
+      "NO_STORE_CLOCK": "Das letzte Listen ist {at} fehlgeschlagen: Die Antwort des Speichers trug kein Datum, also ließ sich das Alter keines Objekts an der Uhr des Speichers ablesen.",
+      "DATABASE": "Das letzte Listen ist {at} fehlgeschlagen: Die Einträge dieses Servers ließen sich nicht lesen. Das nächste setzt dort fort, wo es aufgehört hat."
+    },
+    "lastPass": "Letztes vollständiges Listen {at}: {objects} Objekte, davon {orphans} von keinem Eintrag beansprucht ({size}), {notVeyq} nicht von diesem Server.",
+    "enqueued": "{keys} Uploads gingen an die Löschliste.",
+    "noPass": "Noch kein vollständiges Listen ist abgeschlossen.",
+    "inProgress": "Ein Listen läuft seit {at}: bisher {objects} Objekte.",
+    "candidates": "{keys} Uploads ({objects} Objekte, {size}) beansprucht kein Eintrag, seit sie zuerst gesehen wurden, zwischen {oldest} und {newest}.",
+    "firstDue": "Das erste wird frühestens am {at} gelöscht.",
+    "notDeleting": "Ihre Frist endet ab {at}, aber gelöscht wird nichts, solange Löschen aus ist.",
+    "reclaim": "Löschliste: {pending} wartend, {abandoned} aufgegeben.",
+    "restart": {
+      "GAP": "Jede Frist hat {at} neu begonnen: Das Listen war länger unterbrochen als erlaubt, also zählt die Zeit davor nicht.",
+      "STORE_CHANGED": "Jede Frist hat {at} neu begonnen: Ein anderer Speicher ist in Gebrauch."
+    },
+    "confirmedAt": "Du hast {at} bestätigt, dass dieser Bucket nur die Objekte dieses Servers enthält.",
+    "confirm": "Bucket als exklusiv bestätigen",
+    "confirmTitle": "Objekte ohne Eintrag aus diesem Bucket löschen?",
+    "confirmBody": "Bestätige nur, wenn kein anderer Server und kein anderes Werkzeug in diesen Bucket schreibt: Deren Objekte sähen hier unbeansprucht aus. Ab jetzt wird ein Objekt gelöscht, das {days} Tage lang kein Eintrag beansprucht hat — gerade werden {keys} Uploads gezählt, {due} davon über ihrer Frist. Eine Wiederherstellung oder eine andere Speichereinstellung nimmt diese Bestätigung zurück.",
+    "withdraw": "Bestätigung zurücknehmen",
+    "pause": "Löschen pausieren",
+    "resume": "Löschen fortsetzen",
+    "errors": {
+      "noStore": "Es ist kein Speicher in Gebrauch, also gibt es keinen Bucket zu bestätigen.",
+      "failed": "Die Einstellung ließ sich nicht ändern."
+    }
   },
   "configSecret": {
     "navTitle": "Konfigurationsschlüssel",

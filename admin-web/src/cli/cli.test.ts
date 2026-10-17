@@ -30,6 +30,13 @@ vi.mock('../features/instance/store', async (importOriginal) => ({
   checkInstanceStore: vi.fn(),
   discardPendingInstanceStore: vi.fn(),
 }))
+vi.mock('../features/instance/storeReconcile', () => ({
+  getStoreReconcile: vi.fn(),
+  confirmExclusiveBucket: vi.fn(),
+  withdrawExclusiveBucket: vi.fn(),
+  pauseReconcile: vi.fn(),
+  resumeReconcile: vi.fn(),
+}))
 vi.mock('../features/instance/capabilities', async (importOriginal) => ({
   // the tree and the text choice stay real: what the commands print is what is asserted on
   ...(await importOriginal<typeof import('../features/instance/capabilities')>()),
@@ -58,6 +65,14 @@ import { getInstanceRelease } from '../features/instance/release'
 import { getReleaseNotices, setReleaseCheck, type InstanceReleaseNotices } from '../features/instance/releaseNotices'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
+import {
+  confirmExclusiveBucket,
+  getStoreReconcile,
+  pauseReconcile,
+  resumeReconcile,
+  withdrawExclusiveBucket,
+  type StoreReconcile,
+} from '../features/instance/storeReconcile'
 import type { InstanceStore, InstanceStoreCheck } from '../features/instance/store'
 import {
   clearInstanceCapabilityRequirement, listInstanceCapabilities, setInstanceCapability, setInstanceCapabilityRequirement,
@@ -272,6 +287,38 @@ describe('veyq-admin — the object store (uc.admin.configure-object-store)', ()
     expect(discardPendingInstanceStore).toHaveBeenCalledOnce()
     expect(JSON.parse(r.out)).toEqual(storeRead)
     expect(r.code).toBe(0)
+  })
+
+  it('store reconcile prints the reconcile and changes nothing', async () => {
+    vi.mocked(getStoreReconcile).mockResolvedValue({ verdict: 'NOT_CONFIRMED' } as unknown as StoreReconcile)
+    const r = await invoke(['store', 'reconcile'])
+    expect(JSON.parse(r.out)).toEqual({ verdict: 'NOT_CONFIRMED' })
+    for (const write of [confirmExclusiveBucket, withdrawExclusiveBucket, pauseReconcile, resumeReconcile]) {
+      expect(write).not.toHaveBeenCalled()
+    }
+    expect(r.code).toBe(0)
+  })
+
+  it.each([
+    ['--confirm-exclusive-bucket', confirmExclusiveBucket],
+    ['--withdraw-exclusive-bucket', withdrawExclusiveBucket],
+    ['--pause', pauseReconcile],
+    ['--resume', resumeReconcile],
+  ])('store reconcile %s reaches the facade the console calls and prints its answer', async (flag, facade) => {
+    vi.mocked(facade).mockResolvedValue({ verdict: 'ARMED' } as unknown as StoreReconcile)
+    const r = await invoke(['store', 'reconcile', flag])
+    expect(facade).toHaveBeenCalledOnce()
+    expect(getStoreReconcile).not.toHaveBeenCalled()
+    expect(JSON.parse(r.out)).toEqual({ verdict: 'ARMED' })
+    expect(r.code).toBe(0)
+  })
+
+  it('store reconcile refuses two switches at once and sends nothing', async () => {
+    const r = await invoke(['store', 'reconcile', '--pause', '--confirm-exclusive-bucket'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('one switch at most')
+    expect(pauseReconcile).not.toHaveBeenCalled()
+    expect(confirmExclusiveBucket).not.toHaveBeenCalled()
   })
 
   it('store set --bundled chooses the bundled store and nothing else', async () => {
@@ -567,7 +614,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.
