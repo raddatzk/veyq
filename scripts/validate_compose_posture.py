@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every service of the production compose recipe runs unprivileged, and the internet-facing proxy cannot reach the database.
+"""Every service of the production compose recipe runs unprivileged, the internet-facing proxy cannot reach the database, and the client port's source is true.
 
 **What it asserts** (ADR 0071), over `infra/docker-compose.prod.yml` as YAML with its merge keys resolved, and
 over every service the file declares — the set is the file's, never a list here:
@@ -22,6 +22,12 @@ over every service the file declares — the set is the file's, never a list her
      loopback — shares no network with the database, which is the service the app's `QUARKUS_DATASOURCE_JDBC_URL`
      names. The positive control on the same predicate: the app shares a network with each of them, or the
      separation would also have cut a path the stack uses.
+  5. **The client port's source is what the proxy makes true** (ADR 0094 decision 7). The app's
+     `VEYQ_HTTP_CLIENT_PORT_SOURCE` is `header` **iff** some service declares a Traefik local plugin
+     (`--experimental.localplugins.<n>.modulename=<m>`) and mounts, read-only, a `.go` file and `.traefik.yml` under
+     `/plugins-local/src/<m>/`, and that mounted manifest's `import` is `<m>`. No service declares a remote plugin
+     (`--experimental.plugins.`), and no service sets `QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL` (Traefik sends no PROXY
+     header to an HTTP service).
 
 **Scoped to the production file on purpose.** The dev stack (`infra/docker-compose.yml`) is not internet-facing:
 it runs no app container, publishes its ports for a developer's host, and ships `change-me` passwords. A rule
@@ -33,7 +39,14 @@ the chart runs it as 1000, and every service shared one network, so the internet
 connection to MariaDB (ADR 0071 § Context). Its first run on that tree was red on every service: no posture
 option anywhere, three third-party images as root, and all five on the implicit `default`, Traefik beside MariaDB.
 Assertion 3 exists because the failure it catches is silent: a non-root Traefik whose `/acme` it cannot write
-stays up and never obtains a certificate (ADR 0071, measured on `traefik:v3.6`).
+stays up and never obtains a certificate (ADR 0071, measured on `traefik:v3.6`). Assertion 5 came with
+cr-client-port-sources: no incident — the recipe had no port source — and its first run on that tree was green (no
+source, no plugin: the "iff" holds). Its silent half is the remote plugin, a start-time network dependency nobody
+notices until an instance starts offline; the app reading a header no plugin overwrites is the other, a port any
+client forges. The rest fails loudly at runtime (a Traefik that cannot load the plugin answers 404 on the app's
+routers; a PROXY-only app closes every connection) and is caught here more cheaply. Bitten by snapshot-and-restore:
+the manifest mount dropped, a remote-plugin flag added, the source `none` with the plugin declared, the PROXY variable
+set, the manifest importing another module, and the declaration removed with the source still `header`.
 
 **Its limits — what a green run does NOT prove.** It reads the file; it runs nothing. So a read-only root that
 misses a scratch path, a `tmpfs:` a process cannot write, or a uid the image cannot run as are all green here
@@ -43,7 +56,10 @@ volumes the ownership step mounts: a new third-party service with a volume its i
 mount in the step, is green here and exits at its first write. The proxy is recognised by what it publishes, so
 a proxy reached through some other mechanism (a host network, a second compose file) is out of reach. And it
 says nothing about the chart, which `scripts/chart_meta_check.py` holds to the same posture and whose
-NetworkPolicy set is this file's networks on the other target.
+NetworkPolicy set is this file's networks on the other target. Assertion 5 reads the declaration and the mounts, not
+Traefik: whether the pinned Traefik loads the plugin, whether the plugin overwrites the header, and whether the
+middleware name the app's routing file renders is the one declared here are the stack lane's `client port` stage and
+the lane's own routing (`scripts/run_stack_e2e.py`); it also cannot see an edge in front of Traefik.
 
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """
@@ -72,6 +88,13 @@ OWNERSHIP_MOUNT = re.compile(r"^/chown/(\d+)/[^/]+$")
 LOOPBACK = {"127.0.0.1", "::1", "[::1]", "localhost"}
 JDBC_HOST = re.compile(r"^jdbc:[a-z]+://([^:/]+)")
 INTERPOLATION = re.compile(r"\$\{[^}]*\}")
+# 5: Traefik's local-plugin declaration, where it reads one from (its working directory is `/`), the manifest's name
+# there, its remote-catalog declaration, and the app's port-source variable (VeyqConfig.Http.clientPort).
+LOCAL_PLUGIN_FLAG = re.compile(r"^--experimental\.localplugins\.([A-Za-z0-9_-]+)\.modulename=(\S+)$", re.IGNORECASE)
+REMOTE_PLUGIN_FLAG = re.compile(r"^--experimental\.plugins\.", re.IGNORECASE)
+PLUGIN_ROOT = "/plugins-local/src/"
+MANIFEST = ".traefik.yml"
+PORT_SOURCE_ENV = "VEYQ_HTTP_CLIENT_PORT_SOURCE"
 
 errors: list[str] = []
 
@@ -243,6 +266,60 @@ if database:
     if app and not networks_of(services[database]) & networks_of(services[app]):
         fail(f"control: the database `{database}` shares no network with the app `{app}` — the separation has cut the app off its database")
 
+# --- 5: the client port's source, and what makes it true (ADR 0094 decision 7) ---
+def commands(service: dict) -> list[str]:
+    out: list[str] = []
+    for key in ("command", "entrypoint"):
+        value = service.get(key)
+        out += [str(v) for v in value] if isinstance(value, list) else str(value or "").split()
+    return out
+
+
+plugins: list[str] = []
+for name, service in sorted(services.items()):
+    flags = commands(service)
+    for flag in flags:
+        if REMOTE_PLUGIN_FLAG.match(flag):
+            fail(f"service `{name}` declares a remote plugin ({flag.split('=', 1)[0]}) — it is fetched at every start, so an "
+                 f"instance that starts offline routes nothing; a plugin travels in the recipe as a local one (ADR 0094)")
+    if "QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL" in env_of(service):
+        fail(f"service `{name}` sets QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL — Traefik sends no PROXY header to an HTTP "
+             f"service, so the app would close every connection unanswered; Compose's port source is the header")
+    for match in filter(None, map(LOCAL_PLUGIN_FLAG.match, flags)):
+        module = match.group(2)
+        targets = {target: (source, ro) for source, target, ro in mounts(service)
+                   if target.startswith(f"{PLUGIN_ROOT}{module}/")}
+        code = [t for t, (_, ro) in targets.items() if t.endswith(".go") and ro]
+        manifest = targets.get(f"{PLUGIN_ROOT}{module}/{MANIFEST}")
+        if not code:
+            fail(f"service `{name}` declares the local plugin {match.group(1)} but mounts no .go file read-only under "
+                 f"{PLUGIN_ROOT}{module}/ — Traefik has nothing to load")
+        if manifest is None or not manifest[1]:
+            fail(f"service `{name}` declares the local plugin {match.group(1)} but mounts no {MANIFEST} read-only at "
+                 f"{PLUGIN_ROOT}{module}/{MANIFEST}")
+            continue
+        source = COMPOSE.parent / manifest[0]
+        try:
+            imported = (yaml.safe_load(source.read_text()) or {}).get("import")
+        except (OSError, yaml.YAMLError) as e:
+            fail(f"service `{name}` mounts the plugin manifest {manifest[0]}, which cannot be read: {e}")
+            continue
+        if imported != module:
+            fail(f"the plugin manifest {manifest[0]} imports {imported!r}, but `{name}` declares the module {module!r} — "
+                 f"Traefik loads nothing under that name")
+            continue
+        if code:
+            plugins.append(f"{name}:{match.group(1)}")
+
+source = env_of(services[app]).get(PORT_SOURCE_ENV) if app else None
+if (source == "header") != bool(plugins):
+    if source == "header":
+        fail(f"the app reads its client port from a header ({PORT_SOURCE_ENV}=header) but no service loads a local "
+             f"plugin that overwrites it — a header the edge does not overwrite is one any client writes (ADR 0094)")
+    else:
+        fail(f"{', '.join(plugins)} loads the client-address plugin but the app's {PORT_SOURCE_ENV} is {source!r}, not "
+             f"`header` — the app never reads what the edge writes, so the port is unknown while the recipe says otherwise")
+
 if errors:
     print("COMPOSE POSTURE CHECK FAILED:")
     for e in errors:
@@ -252,5 +329,6 @@ print(
     f"compose posture OK: {len(services)} services in {COMPOSE.relative_to(ROOT)} drop every capability, cannot "
     f"escalate and run read-only; every third-party image runs non-root except the ownership step "
     f"({', '.join(steps) or 'none'}), which chowns to the uid that writes; the proxy ({', '.join(proxies)}) shares no "
-    f"network with the database ({database}), and the app reaches both"
+    f"network with the database ({database}), and the app reaches both; the app's port source is "
+    f"{source or 'unset'} with {', '.join(plugins) or 'no'} local plugin, no remote plugin and no PROXY protocol"
 )

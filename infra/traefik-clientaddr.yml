@@ -1,0 +1,11 @@
+# The manifest of veyq's local Traefik middleware (traefik-clientaddr.go, ADR 0094 decision 7). Compose mounts it as
+# `.traefik.yml` beside the Go file under /plugins-local/src/<import>/, the path Traefik reads a local plugin from;
+# it travels in the release under this name because a release asset cannot start with a period. `import` is the
+# module name the compose file declares with --experimental.localplugins.clientaddr.modulename — a path nothing
+# fetches: Traefik loads it from the mounted files, with no route out.
+displayName: veyq client address
+type: middleware
+import: github.com/raddatzk/veyq/clientaddr
+summary: Overwrites the client-address header the app reads with the address and port of the connection Traefik accepted.
+testData:
+  header: X-Client-Addr-Test

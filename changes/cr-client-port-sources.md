@@ -292,7 +292,7 @@ compose recipe, the risk named. The options stay below as the record.
     `./gradlew :core:pitest` and `python3 scripts/mutation_meta_check_backend.py` green; B6 recorded;
     `python3 scripts/validate_lookup_single_home.py`, `python3 scripts/validate_ratelimit_core.py` green. Neither
     target sets the new keys yet, so both keep working unchanged.
-- [ ] **2 infra + chart — the plugin in the recipe, the values on Helm, and the guards.**
+- [x] **2 infra + chart — the plugin in the recipe, the values on Helm, and the guards.**
   - **Must not land before phase 1** (the app would refuse an unknown `veyq.http.client-port.*`).
   - **Compose (D6):** the two plugin files beside the compose file; Traefik's flag and two `:ro` file mounts; the app's
     `VEYQ_HTTP_CLIENT_PORT_SOURCE: header`, with a comment pointing at ADR 0094 decision 7. No `QUARKUS_HTTP_PROXY_*`.

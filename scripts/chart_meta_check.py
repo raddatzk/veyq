@@ -118,6 +118,15 @@ render, asserts — deriving every anchor from the source rather than listing it
        rule naming `gateway.networking.k8s.io` grants only `httproutes` and `listenersets` (no `gateways`, no `*`),
        and some rule grants both — the positive control, or the sink could not reconcile at all (ADR 0064: the
        backend can neither add nor change a listener on the chart's `Gateway`).
+  xxiii.**The PROXY protocol is on iff the probes poll the admin listener iff `app.clientPort.source` is
+       `proxyProtocol`** (ADR 0094 decision 7). In that render the app container carries
+       `QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL=true` and `VEYQ_HTTP_CLIENT_PORT_SOURCE=proxy-protocol`, and every
+       `httpGet` probe it has resolves (by name or number) to the admin listener's port, the one (xii) reads; in every
+       other render neither variable says PROXY and every probe resolves to another port — the public listener, which
+       the probes then also prove. A probe on the public port under PROXY is a pod that never becomes ready (a kubelet
+       sends no PROXY header, and the app closes such a connection unanswered); PROXY off with the probes on the admin
+       port is a public listener nothing checks. Some file in `ci/` must render `proxyProtocol`, or that branch is
+       checked by nobody; and `helm lint` with a source outside the enum must be refused naming `clientPort`.
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -145,7 +154,10 @@ written — no container had a read-only root, and the one policy admitted the a
 cluster, which could therefore forge the forwarded address the per-IP rate limiter keys on. Run against that chart,
 each of them was red; each was then bitten by a template or schema injection. (xx)–(xxii) came with the move from
 `Ingress` to the Gateway API (cr-helm-gateway-api): the chart rendered three `Ingress` objects and a Role on
-`ingresses` when they were written, and each was bitten by a template injection.
+`ingresses` when they were written, and each was bitten by a template injection. (xxiii) came with the client port's
+sources (cr-client-port-sources, ADR 0094 decision 7): no incident — the chart had no PROXY setting — built because the
+three must move together and a probe that polls a PROXY listener fails only on a cluster; bitten by template
+injections (the env without the probes, the probes without the env) and the `ci/` file's removal.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -164,7 +176,10 @@ requires the read-only root, not that each container has an `emptyDir` for every
 path renders green and fails at runtime, which is why ADR 0071 measures those paths by running the images. (xvi)
 recognises the database by its image repository, so a database image of another name is out of reach. (ii) checks
 the app container's mount and the pod's
-`fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
+`fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere.
+(xxiii) proves what the pod is told, not that the operator's Gateway sends PROXY to the app's routes and to them alone —
+the chart renders no Gateway-implementation object — nor that a kubelet probe passes the NetworkPolicy on the admin
+port (Kubernetes documents traffic from a pod's own node as always allowed; no cluster runs here). (xi)
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
 digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification. And it says nothing about the compose recipe, which
 its sibling guards own (`validate_compose_posture.py` holds that target's half of ADR 0071).
@@ -213,6 +228,10 @@ KT_DEFAULT = re.compile(r'@WithDefault\("([^"]*)"\)\s*\n\s*fun\s+configSecretFil
 # `const val OWNER_LABEL = "…"` / `OWNER_VALUE` / the two listener names — the sink's own constants, read not retyped.
 KT_ADMIN_PORT = re.compile(r'interface\s+AdminChannel\s*\{.*?@WithDefault\("(\d+)"\)\s*\n\s*fun\s+port\s*\(\s*\)', re.DOTALL)
 ADMIN_PORT_ENV = "VEYQ_ADMIN_CHANNEL_PORT"
+# (xxiii) the two variables the PROXY source sets together, and the probes they move.
+PROXY_ENV = "QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL"
+PORT_SOURCE_ENV = "VEYQ_HTTP_CLIENT_PORT_SOURCE"
+PROBES = ("startupProbe", "readinessProbe", "livenessProbe")
 KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE|HTTP_LISTENER|SHARED_HTTPS_LISTENER)\s*=\s*"([^"]+)"')
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
@@ -390,6 +409,41 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
                 )
             if not digest and "@" in image:
                 errors.append(f"(xiv) {tag}: the {which} image renders as `{image}` with a digest the values never set")
+
+
+def check_client_port(tag: str, values: dict, rendered: list[dict]) -> None:
+    """(xxiii) PROXY env iff probes on the admin listener iff app.clientPort.source is proxyProtocol."""
+    source = ((values.get("app") or {}).get("clientPort") or {}).get("source") or "none"
+    if source == "proxyProtocol":
+        proxy_rendered.add(tag)
+    for obj in rendered:
+        spec = pod_spec(obj)
+        for container in (spec or {}).get("containers") or []:
+            if not is_app_container(container) or default_admin_port is None:
+                continue
+            env = {e.get("name"): str(e.get("value")) for e in container.get("env") or []}
+            admin_port = int(env.get(ADMIN_PORT_ENV) or default_admin_port)
+            admin_name = next((p.get("name") for p in container.get("ports") or [] if p.get("containerPort") == admin_port), None)
+            proxy_env = env.get(PROXY_ENV) == "true"
+            source_env = env.get(PORT_SOURCE_ENV)
+            probes = {kind: (container.get(kind) or {}).get("httpGet") for kind in PROBES if container.get(kind)}
+            on_admin = {kind: port_hits((get or {}).get("port"), admin_name, admin_port) for kind, get in probes.items()}
+            want = source == "proxyProtocol"
+            if proxy_env != want or (source_env == "proxy-protocol") != want:
+                errors.append(
+                    f"(xxiii) {tag}: {name_of(obj)}: app.clientPort.source is {source!r} but the container carries "
+                    f"{PROXY_ENV}={env.get(PROXY_ENV)!r} and {PORT_SOURCE_ENV}={source_env!r} — the PROXY protocol and the "
+                    f"port source are set together exactly for proxyProtocol, or the app refuses to start"
+                )
+            if want and not {"startupProbe", "readinessProbe"} <= set(probes):
+                errors.append(f"(xxiii) {tag}: {name_of(obj)}: under proxyProtocol the app has probes {sorted(probes)}, not at least startup and readiness")
+            for kind, admin in on_admin.items():
+                if admin != want:
+                    errors.append(
+                        f"(xxiii) {tag}: {name_of(obj)}: the {kind} polls port {probes[kind].get('port')!r} with "
+                        f"app.clientPort.source {source!r} — under the PROXY protocol a probe must poll the admin listener "
+                        f"(the public port closes a connection with no PROXY header unanswered), and otherwise the public one"
+                    )
 
 
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
@@ -814,6 +868,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
         check_network_policies(tag, rendered)
     check_image_digests(tag, values, rendered)
     check_rbac(tag, rendered)
+    check_client_port(tag, values, rendered)
 
     if not first:
         return rendered
@@ -898,12 +953,16 @@ values_files = sorted(CI_DIR.glob("*.yaml"))
 if not values_files:
     errors.append(f"{CI_DIR.relative_to(ROOT)} holds no values file — nothing would be rendered, and a run over nothing is not a green")
 digests_set: set[str] = set()
+proxy_rendered: set[str] = set()
 renders = {f.name: check(f) for f in values_files}
 
 # (xiv) the digest path is rendered by some file, and the schema refuses a digest that is not one.
 for which in ("app", "admin"):
     if values_files and which not in digests_set:
         errors.append(f"(xiv) no file in {CI_DIR.relative_to(ROOT)} sets the {which} image's digest, so the `repository:tag@digest` render is checked by nobody")
+# (xxiii) the PROXY branch is rendered by some file.
+if values_files and not proxy_rendered:
+    errors.append(f"(xxiii) no file in {CI_DIR.relative_to(ROOT)} sets app.clientPort.source: proxyProtocol, so the PROXY render — its env and its probes on the admin listener — is checked by nobody")
 if values_files:
     base = values_files[0]
     # (xvii) off means off: a render with the switch off carries no NetworkPolicy at all — and, the positive control
@@ -929,6 +988,11 @@ if values_files:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` passed — an enabled policy set with no gateway data plane named must be refused")
             elif "ingressFrom" not in output:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` failed, but its output never names `ingressFrom`:\n{output.strip()}")
+    code, output = lint(base, ["--set", "app.clientPort.source=bogus"])
+    if code == 0:
+        errors.append("(xxiii) `helm lint --set app.clientPort.source=bogus` passed — the schema must refuse a port source outside its enum")
+    elif "clientPort" not in output:
+        errors.append(f"(xxiii) `helm lint --set app.clientPort.source=bogus` failed, but its output never names `clientPort`:\n{output.strip()}")
     for key in ("image.digest", "admin.image.digest"):
         code, output = lint(values_files[0], ["--set", f"{key}=sha256:not-a-digest"])
         if code == 0:
@@ -954,5 +1018,6 @@ print(
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on the Gateway and in the properties file, "
     f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs; no Ingress, every "
     f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
-    f"httproutes/listenersets with nothing on gateways"
+    f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "
+    f"listener, in {', '.join(sorted(proxy_rendered))}, and a port source outside the enum refused"
 )
