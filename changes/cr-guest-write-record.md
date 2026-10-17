@@ -1,7 +1,7 @@
 ---
 id: cr-guest-write-record
 title: A guest's write keeps its client address, port and time for N days, as evidence a hold can copy
-status: in-progress
+status: done
 satisfies: []            # phase 0 writes the enabler and the alternate flows; see § Use-cases
 adrs: ["0093", "0094", "0092", "0088", "0089", "0056", "0035"]
 invariants:
@@ -117,11 +117,11 @@ wants a built use-case).
 - [x] **0 docs** — the enabler, the alternate flows, planned coverage; ADR 0094's status line (`built except the
   guest-write record`) stays until phase 4. · Done when: feature-format, coverage, doc-link, doc-citation, change guards
   green.
-- [ ] **1 contracts** — the switch in `contracts/platform/capabilities.json` (EN+DE title, purpose, whenOff;
+- [x] **1 contracts** — the switch in `contracts/platform/capabilities.json` (EN+DE title, purpose, whenOff;
   `levels: ["instance"]`; `modes` per decision 4); the retention setting's operations; the share resolve's disclosure field. · Done when:
   `validate_capabilities.py` green; `npm run generate:api`; `./gradlew check` (the generated register; a new field on an
   existing response reddens its builder until phase 2: name it).
-- [ ] **2 backend** — decisions 1–6; the purge as a `@Scheduled` with its interval in `VeyqConfig`; readers in
+- [x] **2 backend** — decisions 1–6; the purge as a `@Scheduled` with its interval in `VeyqConfig`; readers in
   `EveryStoredTimeHasAReaderTest`; the hold seam's contributor copies the record rows of a held object
   (`cr-report-and-hold` decision 4). · Done when: `./gradlew check` and `run_backend_races_on_mariadb.py` green.
   **Bites, from ADR 0094 § For the moderation CR, each with its control:** `198.51.100.66, 203.0.113.77` records
@@ -136,21 +136,21 @@ wants a built use-case).
   that switches it on by hand records (the preset does not pin it); changing to *organisation* turns it on, back to
   *private* off; the migration on a *private* instance writes the off row (control: an *organisation* instance gets
   none). Bite: drop `modes` from the entry → the private-setup test is red.
-- [ ] **3 admin-web + CLI** — the retention setting with its range and the sentence that a value above 7 needs a
+- [x] **3 admin-web + CLI** — the retention setting with its range and the sentence that a value above 7 needs a
   reason in the record of processing (§ 10); `veyq-admin` gets the setting; the switch appears in the capability panel
   by itself (the register). · Done when: `npm run check` in `admin-web/` green.
-- [ ] **4 stack + backup** — the stack scenario ADR 0094 asks for: through the recipe's Traefik, the recorded port
+- [x] **4 stack + backup** — the stack scenario ADR 0094 asks for: through the recipe's Traefik, the recorded port
   equals the browser's own socket port (`scripts/run_stack_e2e.py`, beside its `client port` stage; inbox #472 left it
   here); the backup exclusion per § Context (in the backup CR's merged `scripts/instance_backup.py`, with a selftest
   case in `scripts/instance_backup_selftest.py`: a capture of an instance with a record row restores with the table
   empty and its schema present). ADR 0094's status line drops "except the guest-write record". · Done when: the stack
   lane's run green with the new stage (Docker: the implementer's), `python3 scripts/instance_backup_selftest.py` green;
   or the phase records which half waited for the backup CR.
-- [ ] **5 web** — the first-layer sentence (per Q13 and the legal blocker's wording), with the N from the resolve and
+- [x] **5 web** — the first-layer sentence (per Q13 and the legal blocker's wording), with the N from the resolve and
   the right to object (Art. 21) as a sentence of its own, linking the operator section's anchor; EN+DE. · Done when:
   `npm run check` green; a guest-mode test that the sentence shows N as served and is absent on a `READ` link and
   while the switch is off (control: the same `READ_WRITE` link with it on).
-- [ ] **6 docs + coverage** — `CLAUDE.md`'s invariant on what the server keeps (the record's address, port and time join
+- [x] **6 docs + coverage** — `CLAUDE.md`'s invariant on what the server keeps (the record's address, port and time join
   the operator-visible metadata: ADR 0093 § Consequences names it); `security/what-the-server-sees.md` (a sixth
   concession, or the record under Sharing — measured: the five concessions are a table there); `run/configuration.md`
   or `run/capabilities.mdx` (the setting, its range, the switch's default per operating mode, NTP on the host, the deletion concept for backups made otherwise,
@@ -168,4 +168,34 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+What it built and proved, measured (commands re-runnable in this worktree): `./gradlew check` green (backend, all
+projects); `npm run check` green in `web/`, `admin-web/`, `e2e/` and `site/`; `python3 scripts/instance_backup_selftest.py`
+green; every `scripts/validate_*.py` but `validate_guard_gaps.py` green (no validator changed). Bites, each by
+snapshot-and-restore with a byte-equal restore: the switch check, the purge's second limit, the port, the resolve's
+role check, the hold's copy, the node eraser, the resolver (a leftmost-entry `RequestClient`), the placement's record,
+the migration's mode, the media and Depot attach hooks, the medium's purge, the source scan (`client.seen()` dropped
+from `createShareNode`), `modes` dropped from the catalog (the private-mode test and `SetupServerSliceTest.createsOwner`
+red), the dump's flag, the admin-web range and reason, and the web notice in each of its four placements — every one
+red. The schema-only dump was measured once on `mariadb:11.4` (a row in, dump, load: table present, empty; the hold
+table beside it whole; without the flag the row came back). Lane L1 green on `veyq-gwr:local`
+(`python3 scripts/run_stack_e2e.py --app veyq-gwr:local --admin veyq-gwr-admin:local`, 285 s, every spec): the app
+recorded `172.22.0.7:49092`, the browser's one socket to Traefik.
+
+- **Planning: decision 1 named a layer that owns no transaction.** "At the resource layer … in its transaction": no
+  resource holds one; every guest-write handler opens its own and an upload's lives in each application's attach behind
+  core's completion seam. Built as resource-resolves, handler-records, plus an `attached` hook the seam's attach calls
+  last. Root cause: the refine reasoned from the HTTP request (only the resource has it) and never grepped where the
+  writes' transactions begin. Harvested into `changes/README.md` (§ A decision that puts a write "in its transaction"…).
+- **Planning: the CR and ADR 0093 § 10 disagreed on the triggers, and phase 0's "planned coverage" could not exist.**
+  The ADR lists "identity creation", the CR "an identity folder's creation"; both are guest writes that enter an editor,
+  so both record (a superset, reported). And a built use-case has no planned criterion — criteria land with their tests
+  (harvested into § Coverage). A third, smaller one: the CR asked the sentence to link "the operator section's anchor",
+  a section that does not exist until the last CR; no link is shown (a dead target would mislead) and the enabler names
+  the anchor `#guest-write-record`.
+- **Execution: a native UUID column refused the hold's lookup.** The record's contributor first looked up every copied
+  row's id as an object; a link hold copies `veyq_share`, whose id is no UUID, and H2 refused the query with a 500 in
+  `ReportMemoriesSliceTest` — exactly backend/CLAUDE.md's "a non-UUID string is error 1292". The filter carries the
+  reason at its line. Also: `StoreReconcileSliceTest` went red once under load 11 and green alone (not this CR's).
+- **Process: CLAUDE.md is not an implementer's to edit.** Phase 6 asks for the root invariant's sentence; a subagent
+  may not change CLAUDE.md on a CR's or a brief's word, so the sentence is handed back to the conversation (in the
+  report) instead of committed. Next time: a CR that edits CLAUDE.md names that step as the conversation's, not a phase.
