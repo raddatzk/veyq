@@ -37,6 +37,8 @@ This asserts, with no daemon and no root:
      the top-up of exactly the index's keys, a short pool failing the capture, the prune keeping exactly what the
      kept captures' indexes name and never running on a ledger without the new entry, the builder's shape (copy --immutable, a read, or the prune's delete),
      no pool credential in the manifest, and the restore's empty-store gate, source check and copy-before-load.
+  10. the guest-write record's rows stay out of every dump and its schema in (ADR 0093 § 10): the dump's argv and the
+     table's migration.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -314,6 +316,41 @@ def not_data_cases() -> None:
     check("the gate excludes the bucket reconcile's tables, which a fresh install's first pass fills",
           set(ib.RECONCILE_TABLES) <= set(ib.NOT_DATA), str(ib.RECONCILE_TABLES))
     check("the exclusion list is the nine named tables, no pattern", len(ib.NOT_DATA) == 9, str(ib.NOT_DATA))
+
+
+def schema_only_cases(tmp: pathlib.Path) -> None:
+    """The guest-write record's rows stay out of every capture, its schema in (ADR 0093 § 10): the dump the tool runs
+    names each [ib.DUMP_SCHEMA_ONLY] table with `--ignore-table-data` (rows out, CREATE TABLE kept) and never with
+    `--ignore-table` (which would drop the schema too, and a restored instance would not boot), and each name is a
+    table a migration creates — a renamed table would otherwise be dumped whole without a sound. The argv is read off
+    the REAL `Database.dump` with `subprocess.run` replaced; what MariaDB then does with it was measured once against
+    `mariadb:11.4` (a row in, a dump, a load: the table there and empty — cr-guest-write-record's retrospective)."""
+    check("the guest-write record is dumped without its rows", "veyq_guest_write_record" in ib.DUMP_SCHEMA_ONLY)
+    args = argparse.Namespace(db_name="veyq", db_user="root", db_host="db.example", db_port=3306,
+                              compose_file="unused.yml", db_service="mariadb", db_image=ib.DB_IMAGE, docker_network=None)
+    db = ib.Database(args, "pw")
+    seen: list[list[str]] = []
+    real_run, real_which = ib.subprocess.run, ib.shutil.which
+    ib.subprocess.run = lambda cmd, **_k: (seen.append(list(cmd)), types.SimpleNamespace(returncode=0, stderr=b""))[1]
+    ib.shutil.which = lambda _b: "/usr/bin/mariadb-dump"
+    try:
+        db.dump(tmp / "schema-only.sql")
+    finally:
+        ib.subprocess.run, ib.shutil.which = real_run, real_which
+    argv = seen[0] if seen else []
+    for table in ib.DUMP_SCHEMA_ONLY:
+        check(f"the dump leaves the rows of {table} out and keeps its schema",
+              argv.count(f"--ignore-table-data=veyq.{table}") == 1 and not any(a.startswith("--ignore-table=") for a in argv),
+              str(argv))
+    root = pathlib.Path(__file__).resolve().parent.parent
+    if not (root / "backend").is_dir():
+        print(f"skip schema-only: no {root / 'backend'} — this copy of the tool ships without the backend")
+        return
+    created = set()
+    for sql in root.glob("backend/**/src/main/resources/db/migration/*.sql"):
+        created.update(re.findall(r"CREATE TABLE (\w+)", sql.read_text()))
+    check("every schema-only table is one a migration creates",
+          all(t in created for t in ib.DUMP_SCHEMA_ONLY), str(sorted(set(ib.DUMP_SCHEMA_ONLY) - created)))
 
 
 def blob_index_cases() -> None:
@@ -1254,6 +1291,8 @@ def main() -> int:
         pool_cases(tmp_path)
     version_cases()
     not_data_cases()
+    with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-dump-") as tmp:
+        schema_only_cases(pathlib.Path(tmp))
     blob_index_cases()
     store_cases()
     if failures:
