@@ -177,33 +177,43 @@ acceptanceCriteria:
     # Python operator tool, not a coverage surface (ADR 0040). Proven by `scripts/instance_backup_selftest.py` (G5:
     # a format-3 restore against a fake live listing — all present loads and never writes to the store, a missing
     # and a resized object each refuse naming it before the load, an extra object is tolerated,
-    # `--accept-missing-objects` loads and names the broken object, `--record` writes the backup's release; G6: a
-    # Compose capture keeps backupFormat 2 byte for byte), run by ci.yml's `web-e2e` job and inside the tools image
-    # in the `build` job. Run live once in a throwaway compose project and once in a kind cluster's restore Job
-    # (cr-kubernetes-backup-gate), each followed by a sign-in that read the media's bytes back.
-    # Decided 2026-10-17 for every capture (ADR 0056 §3); built for the cluster's gate, and Compose's capture still writes
-    # backupFormat 2 until cr-backup-store-leg-is-an-index lands.
+    # `--accept-missing-objects` loads and names the broken object, `--record` writes the backup's release; G6: every
+    # capture, Compose's default included, is backupFormat 3, the store's listing and no objects/; P9: an empty live
+    # store refuses naming --objects-from and the capture's pool), run by ci.yml's `web-e2e` job and inside the tools
+    # image in the `build` job. Run live in a kind cluster's restore Job (cr-kubernetes-backup-gate) and on throwaway
+    # Compose projects (cr-backup-store-leg-is-an-index: the in-place rollback restores with the check only).
     text: >-
       A capture whose store leg is an index holds every object's key, size and MD5 and no object. Restored without a
       source, it writes nothing to the store: before anything is loaded, every object the dump's rows require is
       checked against the live store, and a missing or changed one refuses the restore naming it, unless the operator
       knowingly restores without it. An older tool refuses such a capture by its format number.
   - id: a-restore-copies-objects-only-into-an-empty-store
-    # ADR 0056 §7, A5. Decided 2026-10-17, not built: cr-backup-store-leg-is-an-index builds `--objects-from` and proves
-    # it in scripts/instance_backup_selftest.py (a Python operator tool, not a coverage surface — ADR 0040) and in the
-    # web-e2e restore groups, which then restore from a pool.
+    # ADR 0056 §7, A5. No coverage on a surface (a Python operator tool, ADR 0040). Proven by
+    # scripts/instance_backup_selftest.py P7 (a store holding one object refused before load, naming the count; one
+    # holding only the store check's probe loads, copying exactly the index's keys the source holds, before the load),
+    # P8 (a source object of another MD5 or a missing required one refused by name; --accept-missing-objects; an absent
+    # orphan tolerated), P9 (a format-2 capture's objects/ the same way); and by the web-e2e restore groups, which
+    # restore from a pool and assert the refusal of a target whose bucket holds one object
+    # (`assert_store_holding_an_object_is_refused`, its positive control the restore after it).
     text: >-
       A restore that writes objects — out of an object pool named with --objects-from, or out of a capture that holds
       its own — refuses, before anything is written, a target whose store holds any object, as it refuses a database
       that holds data. Every object the dump's rows require must be in the source with the indexed size and MD5, or
       the restore refuses naming each; then exactly the index's keys are copied, never with a delete.
-  - id: an-object-pool-only-grows
-    # ADR 0056 §3. Decided 2026-10-17, not built (cr-backup-store-leg-is-an-index).
+  - id: an-object-pool-keeps-what-its-retained-captures-index
+    # ADR 0056 §3 (owner 2026-10-17). No coverage on a surface (a Python operator tool, ADR 0040). Proven by
+    # scripts/instance_backup_selftest.py P1 (the index's keys copied with --immutable, incrementally; the pool made
+    # 0700), P2 (a short pool fails the capture with no manifest, no ledger entry and no delete; a differing copy fails
+    # and is kept), P3 (an object a retained capture's index names stays, a stray one goes; after rotation the object
+    # only the rotated-out capture named goes), P4 (a ledger read lacking the new entry prunes nothing), P5 (every argv
+    # the builder makes is copy --immutable, a read or delete --files-from), P6 (no pool key in the manifest); live on
+    # a throwaway Compose project (2026-10-17, cr-backup-store-leg-is-an-index).
     text: >-
-      An object pool named with --objects-to receives every object the store holds that it lacks, and never loses one:
-      an object the store deleted since an earlier capture stays in the pool for that capture's restore, and a key whose
-      bytes differ from the pool's copy fails the capture rather than replacing it. The capture records the pool's
-      target, never a credential, and its index is what a restore copies out of the pool.
+      An object pool named with --objects-to receives every object of the capture's index it lacks, never replacing a
+      copy it holds — a key whose bytes differ fails the capture. It deletes an object as soon as no retained capture's
+      index names it, the captures rotating by keep, and never one a retained index names; the prune runs only once the
+      new capture's index is complete in the pool. The capture records the pool's target, never a credential, and its
+      index is what a restore copies out of the pool.
   - id: the-cluster-capture-never-holds-the-key
     # A11, ADR 0098 decision 4c. No coverage on a surface: proven by `scripts/instance_backup_selftest.py` G8 (the
     # gate, with a readable key at the default path, records leg (c) separate and no file on the volume holds the

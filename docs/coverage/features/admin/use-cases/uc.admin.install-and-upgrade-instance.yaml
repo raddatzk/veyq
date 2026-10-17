@@ -30,8 +30,9 @@ acceptanceCriteria:
       the new objects into it), and the key to a separate medium — before the new release's app starts and migrates
       the schema.
   - id: status-warns-while-the-bundled-store-has-no-pool
-    # ADR 0056 §3, ADR 0096 decision 1. Decided 2026-10-17, not built: cr-backup-store-leg-is-an-index builds it and
-    # proves it in scripts/veyqctl_selftest.py (a host tool, not a coverage surface — this file's header).
+    # ADR 0056 §3, ADR 0096 decisions 1 and 6. Built 2026-10-17; held by scripts/veyqctl_selftest.py `test_pool` (V1:
+    # bundled, none and an unreadable setting warn with exit 0, unhealthy exits 1 with it; a pool in .env or a store of
+    # the operator's own is silent; `install` ends with it) — a host tool, not a coverage surface (this file's header).
     text: >-
       `veyqctl status` warns while the instance keeps its objects in the bundled store and no object pool is
       configured, says that the bundled store keeps no object versions, and names how to configure one; with a pool
@@ -56,6 +57,15 @@ acceptanceCriteria:
     text: >-
       After an upgrade, successful or not, the previous release's recipe is still in `releases/`, so the way back is
       a restore onto it rather than a download.
+  - id: a-rollback-goes-back-in-place
+    # ADR 0096, ADR 0056 §7 (owner 2026-10-17, O1 (a)). Held by scripts/veyqctl_selftest.py `test_rollback` (the
+    # order, and three refusals that stop nothing) and run live on a throwaway Compose project
+    # (2026-10-17, cr-backup-store-leg-is-an-index) — a host tool, not a coverage surface.
+    text: >-
+      `veyqctl rollback` takes an instance back to the release a capture was taken under on the instance itself:
+      refused, with nothing stopped, unless that release is still in `releases/` and the capture verifies against
+      the live store; then the database is emptied, the release started once, and the capture restored with the
+      check only — the store is never written.
 gaps:
   backend: "Not a backend use-case: the instance is managed from the host by `veyqctl`, a Python operator tool, and on Kubernetes backed up by the chart's gate (`scripts/instance_backup.py gate`, held by `scripts/instance_backup_selftest.py` and `scripts/chart_meta_check.py`) — neither a coverage surface (ADR 0040)."
   web: "No client surface: the operator works at the shell with `veyqctl`; the Server Owner's console is unchanged by this use-case."

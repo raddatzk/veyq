@@ -20,29 +20,63 @@ captured is structurally impossible, and there is no ordering to get right. This
 app is stopped** (it would have to know what "the app" is on this host) and does not pretend to; it is the one
 precondition the operator owns.
 
-Four subcommands, one file, because they share the layout, the manifest and the credential plumbing:
+Seven subcommands, one file, because they share the layout, the manifest and the credential plumbing:
 
     python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump | --key-kept-apart)
-                                                [--store-leg mirror|index] [--app-version R]
+                                                [--objects-to POOL [--pool-keep N]] [--app-version R]
+    python3 scripts/instance_backup.py copy-objects --objects-to POOL   (the hot early copy, app running)
     python3 scripts/instance_backup.py verify   DIR [--key-from FILE] [--against-store]
     python3 scripts/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
-                                                [--accept-missing-objects] [--record DIR]
+                                                [--objects-from POOL] [--accept-missing-objects] [--record DIR]
+    python3 scripts/instance_backup.py store-in-use                      (bundled | own | none, for `veyqctl status`)
+    python3 scripts/instance_backup.py empty-database --yes              (the in-place rollback's first write)
     python3 scripts/instance_backup.py gate     (in the app pod; every input from its environment)
 
 A backup is a directory, defaulting to `infra/backups/<UTC-ISO8601>/`:
 
-    manifest.json      # domains, app+schema version, object count/bytes, the blob index, capture window,
-                       # and where leg (c) went: `configSecret.placement` = separate | beside | absent
+    manifest.json      # domains, app+schema version, the blob index, the store's INDEX, capture window, the
+                       # object pool's target when one was named, and where leg (c) went:
+                       # `configSecret.placement` = separate | beside | absent
     database.sql       # mariadb-dump WITH DDL and the flyway history
-    objects/           # the rclone mirror of the bucket, one file per object key
 
-**Two formats, by the store leg.** What Compose and `veyqctl` write is the one above, `backupFormat` 2, unchanged.
-An **index capture** (`--store-leg index`, `backupFormat` 3, ADR 0098 decision 4) has no `objects/`: its manifest's
-`store.index` lists every object as `[key, size, md5 | null]` — one listing, the objects left in the store, whose own
-versioning, replication or snapshots keep them. Its `verify` answers A4 from that index (and, `--against-store`, from
-the live store); its `restore` never writes to the store: in place of A5's empty-store gate it checks A4 against the
-live store before anything is written, and refuses a missing or changed object by name unless
-`--accept-missing-objects` knowingly restores without it. An older tool refuses format 3 by its number.
+**Every capture is `backupFormat` 3: the database plus the store's index** (ADR 0056 §3). The manifest's `store.index`
+lists every object as `[key, size, md5 | null]` — one listing; the objects stay in the store, whose own versioning,
+replication or snapshots keep them. `verify` answers A4 from that index (and, `--against-store`, from the live store).
+A capture of `backupFormat` 2, which held the objects themselves in `objects/` (what Compose wrote before), is written
+by nothing any more and stays readable: `verify` checks its files, `restore` treats its `objects/` as the source below.
+
+**An object pool keeps the objects only when one is named** (`--objects-to`, ADR 0056 §3): a directory (an absolute
+path, created `0700`) or `s3:<bucket>[/<prefix>]` of any S3-compatible store, whose endpoint and key pair come from
+`VEYQ_BACKUP_POOL_*` in the environment — never an argument, and the manifest's `store.pool.target` names the
+directory or `s3:<endpoint>/<bucket>/<prefix>`, never a key. After the cold index, the capture copies exactly the
+index's keys from the store into the pool with `copy --immutable` — a key the pool holds is not copied again, so each
+run copies only the new objects, and a key whose bytes differ from the pool's copy fails the capture (rclone exits 6)
+instead of replacing it — then lists the pool for those keys (key and size; rclone's transfer already checked each
+copy's MD5) and fails on any that is missing or of another size, writing no manifest. `copy-objects` is the same copy
+of the WHOLE bucket with no database, run while the app is still up so the cold top-up is short: objects are immutable,
+so a key copied early is the key the cold copy would have copied.
+
+**The pool keeps exactly what its retained captures need** (owner 2026-10-17). It holds, under `veyq-pool/captures/`,
+one ledger entry per capture that named it — the keys of that capture's index, written only once every one of them
+is in the pool. After writing the new entry, the capture keeps the newest `--pool-keep` entries (default 3,
+`VEYQ_BACKUP_POOL_KEEP`), and deletes from the pool every object no kept entry names, together with the entries beyond
+`--pool-keep` ([prune_pool]). So a purged object leaves the pool within that many captures, and an object a kept
+capture's index names is never deleted. The prune is the pool's one delete — `delete --files-from` a list computed
+from the ledger; never `sync`, `move` or `purge`, and nothing else deletes from a pool ([Pool], whose builder the
+self-test holds to that). It refuses to run when the ledger it reads lacks the entry just written, because an empty
+or unreadable ledger would otherwise name nothing and the prune would delete everything. A pool serves ONE instance:
+two instances naming one pool would rotate each other's entries out.
+
+**A restore checks the objects before it writes, and writes objects only into an empty store** (ADR 0056 §7). Without
+a source it checks A4 against the live store and writes nothing to it — the way back from an upgrade, whose objects
+never left the store; a live store holding NO object refuses naming `--objects-from` and the pool the capture recorded,
+since that is a restore onto a fresh instance. With `--objects-from POOL` (or a format-2 capture's own `objects/`) the
+store must hold no object but the store check's probe ([PROBE_KEY]); every key the rows require must be in the source
+with the indexed size and MD5; then exactly the index's keys the source holds are copied into the store (`copy
+--immutable`), and the store is checked once more — all before the dump is loaded. *Required* is what the blob rows
+name (`expected_keys`); the index's other keys — orphans pending reclaim, open upload sessions' chunks — are reported
+and tolerated. A missing or changed required object refuses by name unless `--accept-missing-objects` knowingly
+restores without it.
 
 **The cluster's gate** (`gate`, ADR 0098) runs in the app pod's init container `backup-gate`, in the `veyq-tools`
 image, before the container that migrates — under `Recreate`, so the old app has stopped and the capture is cold by
@@ -69,12 +103,10 @@ manifest says it went; a `separate` key that is not supplied is refused at the g
 **Everything this tool writes is owner-only.** The whole run is under `umask 077`, and the capture root is
 chmodded `0700` even when it pre-existed empty — which also means the key is born `0600` rather than copied and
 chmodded after a world-readable moment. `verify` checks the root, the files the tool wrote, and the key per the
-manifest. What it does **not** check is inside `objects/`: that tree is written by the rclone container through a
-bind mount, so its owner and modes are the container's, not this process's. Measured with the pinned image: it
-runs as root (the image declares no `USER`) under the container's own `umask 022`, so on a Linux filesystem the
-mirror is `root:root`, files `0644`, directories `0755` — which this process can neither chmod nor rely on. On
-Docker Desktop for macOS the bind mount maps the owner to the invoking user, with the same modes. Either way the
-capture root's `0700` is what keeps another local user out of `objects/`, and it is checked.
+manifest. A directory pool is created `0700` by this process; its files are written by the rclone container through
+a bind mount, which runs with `--user` this process's uid and gid, so they are the operator's, not root's (the pinned
+image declares no `USER` and would otherwise write `root:root` on a Linux filesystem); their modes are the
+container's `umask 022`, which is why the pool directory's own `0700` is what keeps another local user out.
 
 **Owner-only means the application's owner for the one file `restore` writes outside the capture: the key.** It
 takes the owner of the directory it lands in (`key_owner_plan`) — on the production recipe the volume Docker
@@ -105,9 +137,9 @@ the child environment and the database password through `MYSQL_PWD`, both passed
 variables below), never from the database: the app keeps a store of your own sealed there under the config-secret
 key, and the capture is cold, so nothing could open it.
 
-**`sync` out, `copy` in — never the reverse.** `sync` deletes at the destination, which is right for a capture
-directory (a re-run must not silently become the union of two captures) and catastrophic against a live
-bucket. `restore` refuses a non-empty target outright rather than reconciling it (A5).
+**`copy`, never `sync`.** `sync` deletes at the destination: against a pool it would delete what the store deleted,
+so an earlier capture's objects would vanish from under its index, and against a live bucket whatever the source does
+not hold. `restore` refuses a store holding objects outright rather than reconciling it (A5).
 
 **What this does not do.** It does not collect the instance's garbage: abandoned upload sessions and orphaned
 objects are captured as they are, because they are the running system's steady state and a restore is not
@@ -143,6 +175,11 @@ Environment:
     VEYQ_BACKUP_STORE_SECRET_KEY    token).
     VEYQ_BACKUP_STORE_BUCKET        Default `blobs`, the bundled store's fixed bucket.
     VEYQ_BACKUP_STORE_REGION        Default `us-east-1`, the bundled store's fixed region.
+    VEYQ_BACKUP_POOL_ENDPOINT       An S3 pool (`--objects-to s3:<bucket>[/<prefix>]`): its endpoint as the container
+    VEYQ_BACKUP_POOL_ACCESS_KEY     reaches it, its key pair (both required) and its region (default `us-east-1`).
+    VEYQ_BACKUP_POOL_SECRET_KEY     A directory pool needs none of them.
+    VEYQ_BACKUP_POOL_REGION
+    VEYQ_BACKUP_POOL_KEEP           The captures whose objects a pool keeps (`--pool-keep`, default 3).
 """
 from __future__ import annotations
 
@@ -155,6 +192,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
@@ -189,16 +227,24 @@ PLACEMENTS = (SEPARATE, BESIDE, ABSENT)
 
 # Bumped only when an older directory can no longer be read by this file. `verify` and `restore` refuse an
 # unknown one rather than guessing, because guessing is how a restore half-works. 2: `configSecret.present`
-# became `configSecret.placement`.
-BACKUP_FORMAT = 2
-# An INDEX capture (ADR 0098 decision 4): no `objects/`, `store.leg = "index"` and `store.index` instead. A capture
-# of the store's objects (Compose, `veyqctl`) stays format 2, byte for byte. Not every capture is bumped to 3, because
-# `veyqctl` restores with the RUNNING release's tool, which after a Compose rollback is the older release's: it must
-# keep reading what Compose writes. An index capture is the one shape an older tool must refuse, and this number is
-# what makes it refuse instead of failing at a missing `objects/`.
+# became `configSecret.placement`; the objects themselves in `objects/`. Written by nothing any more, still read.
+MIRROR_FORMAT = 2
+# Every capture (ADR 0056 §3): no `objects/`, `store.leg = "index"` and `store.index` instead, and an optional
+# `store.pool` block an older format-3 reader ignores (`read_manifest` reads named keys only). Compose kept format 2
+# while `veyqctl` restored with the running release's tool, which after a rollback was the older release's; no
+# release was ever published before every capture became format 3, so every tool that will ever run reads it.
 INDEX_FORMAT = 3
-FORMATS = (BACKUP_FORMAT, INDEX_FORMAT)
-MIRROR, INDEX = "mirror", "index"
+FORMATS = (MIRROR_FORMAT, INDEX_FORMAT)
+INDEX = "index"
+# The store check's probe object (`StoreCheck.kt`, `PROBE_KEY`): "overwritten by every check and never deleted", so a
+# store the app ever checked holds it. Not data — the empty-store gate ignores exactly this key, the way `NOT_DATA`
+# spares the database's non-data tables. A fresh install's bucket holds nothing at all (measured 2026-10-17 after a
+# first boot: `size --json` → count 0); the probe appears with the first store check.
+PROBE_KEY = "veyq-check/probe"
+# A pool's ledger: one entry per capture that named the pool, the keys of its index (module docstring). Object keys
+# are UUIDs (`BlobUploadHandler`) and the probe's `veyq-check/`, so this prefix names nothing a store holds.
+LEDGER = "veyq-pool/captures"
+POOL_KEEP_DEFAULT = 3
 
 # Owner-only, for everything this process creates. Set once in [main], so no write in any subcommand can be born
 # group- or world-readable — including the key, which a copy-then-chmod would leave readable for a moment.
@@ -490,6 +536,9 @@ class Database:
         `chunk_count = 70` owns exactly the keys `0 … 69`). Only `veyq_blob` and `veyq_upload_session` carry a
         `storage_key` in the whole migration set, and an open upload session's chunks are by definition
         incomplete — so only completed blobs are the *required* set. Sessions are counted, not required.
+
+        This query is the one place that says which rows require an object: a later table that keeps an object
+        alive without a `veyq_blob` row (a hold's pin) adds its keys here, as `[storage_key, chunk_count]` rows.
         """
         return [[row[0], int(row[1])] for row in
                 self.query("SELECT storage_key, chunk_count FROM veyq_blob ORDER BY storage_key;")]
@@ -576,8 +625,12 @@ class Store:
             f"RCLONE_CONFIG_{REMOTE}_FORCE_PATH_STYLE": "true",
         }
 
-    def _run(self, rclone_args: list[str], mount: Path | None = None) -> subprocess.CompletedProcess:
-        config = self._config()
+    def _run(self, rclone_args: list[str], mounts: dict[str, Path] | None = None,
+             extra_config: dict[str, str] | None = None, as_invoker: bool = False) -> subprocess.CompletedProcess:
+        """One rclone invocation with this store's remote (and `extra_config`'s, a pool's) defined in its environment.
+        `mounts` maps a container path to a host directory; `as_invoker` runs the container as this process's uid and
+        gid, so what it writes into a mounted directory is the operator's (module docstring)."""
+        config = {**self._config(), **(extra_config or {})}
         env = {**os.environ, **config}
         if self.binary:
             cmd = [self.binary, *rclone_args]
@@ -591,11 +644,13 @@ class Store:
             # ABSOLUTE, always: `docker run -v foo/bar:/data` does not read `foo/bar` as a host directory, it
             # creates a NAMED VOLUME — or, when the path holds a `/`, fails with "invalid characters for a
             # local volume name". Measured the hard way, by handing `restore` a repo-relative backup path.
-            mount_args = ["-v", f"{mount.resolve()}:/data"] if mount else []
+            mount_args = [flag for target, host in (mounts or {}).items()
+                          for flag in ("-v", f"{Path(host).resolve()}:{target}")]
+            user_args = ["--user", f"{os.geteuid()}:{os.getegid()}"] if as_invoker else []
             # Bare `-e NAME`: docker takes the VALUE from this process's environment, so no credential is ever
             # an argv element that `ps` could show.
             env_args = [flag for name in config for flag in ("-e", name)]
-            cmd = ["docker", "run", "--rm", "--network", self.network, *env_args, *mount_args,
+            cmd = ["docker", "run", "--rm", "--network", self.network, *user_args, *env_args, *mount_args,
                    self.image, *rclone_args]
         return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
@@ -625,19 +680,17 @@ class Store:
         return sorted([entry["Path"], int(entry["Size"]), (entry.get("Hashes") or {}).get("md5") or None]
                       for entry in entries)
 
+    def data_keys(self) -> list[str]:
+        """Every key the store holds but the store check's probe — what the empty-store gate counts (ADR 0056 §7)."""
+        return [key for key, _, _ in self.index() if key != PROBE_KEY]
+
     def mirror_out(self, dest: Path) -> None:
-        """`sync` — the destination becomes exactly the bucket, so a re-run is a capture and not a union."""
+        """`sync` the bucket into a local directory. No capture uses it any more (a capture is the index); the e2e
+        harness's store sweep does (`e2e_sweeps.sweep_store`), reading the bytes for its canaries."""
         proc = self._run(["sync", f"{REMOTE}:{self.bucket}", "/data" if not self.binary else str(dest),
-                          "--stats-one-line", "--stats", "0"], mount=dest)
+                          "--stats-one-line", "--stats", "0"], mounts={"/data": dest})
         if proc.returncode != 0:
             raise BackupError(f"rclone sync from {self.describe()} failed: {proc.stderr.strip()[-800:]}")
-
-    def mirror_in(self, source: Path) -> None:
-        """`copy` — never `sync`. Against a live bucket, `sync` deletes whatever the backup does not hold."""
-        proc = self._run(["copy", "/data" if not self.binary else str(source), f"{REMOTE}:{self.bucket}",
-                          "--stats-one-line", "--stats", "0"], mount=source)
-        if proc.returncode != 0:
-            raise BackupError(f"rclone copy into {self.describe()} failed: {proc.stderr.strip()[-800:]}")
 
     def purge(self) -> None:
         """Delete the bucket and everything in it. NOT part of capture or restore — it exists for a harness
@@ -648,6 +701,222 @@ class Store:
 
     def describe(self) -> str:
         return f"bucket {self.bucket} at {self.endpoint}"
+
+
+POOL_REMOTE = "POOL"
+POOL_ENV = ("VEYQ_BACKUP_POOL_ENDPOINT", "VEYQ_BACKUP_POOL_ACCESS_KEY", "VEYQ_BACKUP_POOL_SECRET_KEY")
+# The verbs a pool may be handed, and the one flag each must carry (B4 holds every argv the builder makes to this):
+# a copy is `--immutable` (never replaces a key), a delete is `--files-from` a computed list (the prune's), the rest
+# only read. `sync`, `move`, `purge`, `deletefile` and `rmdirs` are none of them.
+POOL_VERBS = {"copy": "--immutable", "delete": "--files-from", "lsjson": None, "cat": None}
+
+
+class Pool:
+    """An object pool (ADR 0056 §3): a directory or `s3:<bucket>[/<prefix>]`, reached through the store's rclone.
+
+    Every rclone argv that names a pool is built by one of the `argv_*` methods below and nowhere else, so the one
+    property that keeps a pool trustworthy — it is copied into with `--immutable` and deleted from only by the
+    prune's computed list — is a property of these few lines, which the self-test enumerates (B4). A capture's
+    format-2 `objects/` is read through this class too, as a directory pool that is only ever a source.
+    """
+
+    def __init__(self, target: str, store: Store, env: dict[str, str] | None = None) -> None:
+        env = os.environ if env is None else env
+        self.store = store
+        self.directory: Path | None = None
+        self.path = ""
+        self.endpoint = ""
+        self._secrets: dict[str, str] = {}
+        if target.startswith("s3:"):
+            self.path = target[3:].strip("/")
+            if not self.path or self.path.startswith("/"):
+                raise BackupError(f"--objects-to/--objects-from {target!r}: an S3 pool is s3:<bucket>[/<prefix>]")
+            missing = [name for name in POOL_ENV if not env.get(name, "").strip()]
+            if missing:
+                raise BackupError(f"the S3 pool {target} needs {', '.join(missing)} in the environment — its endpoint "
+                                  f"as the rclone container reaches it and its key pair; never an argument, so no "
+                                  f"credential is in an argv or the manifest")
+            self.endpoint = env["VEYQ_BACKUP_POOL_ENDPOINT"].strip()
+            self._secrets = {
+                f"RCLONE_CONFIG_{POOL_REMOTE}_TYPE": "s3",
+                f"RCLONE_CONFIG_{POOL_REMOTE}_PROVIDER": "Other",
+                f"RCLONE_CONFIG_{POOL_REMOTE}_ENDPOINT": self.endpoint,
+                f"RCLONE_CONFIG_{POOL_REMOTE}_ACCESS_KEY_ID": env["VEYQ_BACKUP_POOL_ACCESS_KEY"],
+                f"RCLONE_CONFIG_{POOL_REMOTE}_SECRET_ACCESS_KEY": env["VEYQ_BACKUP_POOL_SECRET_KEY"],
+                f"RCLONE_CONFIG_{POOL_REMOTE}_REGION": env.get("VEYQ_BACKUP_POOL_REGION") or "us-east-1",
+                f"RCLONE_CONFIG_{POOL_REMOTE}_FORCE_PATH_STYLE": "true",
+            }
+        else:
+            directory = Path(target)
+            if not directory.is_absolute():
+                raise BackupError(f"--objects-to/--objects-from {target!r}: a directory pool is an absolute path (or "
+                                  f"s3:<bucket>[/<prefix>])")
+            self.directory = directory
+
+    def describe(self) -> str:
+        """What the manifest records as `store.pool.target`: the directory, or `s3:<endpoint>/<path>` — never a key."""
+        return str(self.directory) if self.directory is not None else f"s3:{self.endpoint}/{self.path}"
+
+    # ---- the builder: every argv that names this pool ---------------------------------------------------------
+
+    def root(self) -> str:
+        if self.directory is None:
+            return f"{POOL_REMOTE}:{self.path}"
+        return str(self.directory) if self.store.binary else "/pool"
+
+    def argv_fill(self, files_from: str | None) -> list[str]:
+        """Store → pool: the listed keys, or the whole bucket. A key the pool holds is skipped; one that differs fails."""
+        selected = ["--files-from", files_from] if files_from else []
+        return ["copy", "--immutable", *selected, f"{REMOTE}:{self.store.bucket}", self.root(),
+                "--stats-one-line", "--stats", "0"]
+
+    def argv_listing(self, files_from: str, hashed: bool) -> list[str]:
+        # `--hash-type md5`, never `--hash` alone: on a local directory that computes EVERY hash type (refine measured).
+        hashes = ["--hash", "--hash-type", "md5"] if hashed else []
+        return ["lsjson", "-R", "--files-only", *hashes, "--files-from", files_from, self.root()]
+
+    def argv_list_all(self) -> list[str]:
+        return ["lsjson", "-R", "--files-only", self.root()]
+
+    def argv_empty_into_store(self, files_from: str) -> list[str]:
+        return ["copy", "--immutable", "--files-from", files_from, self.root(), f"{REMOTE}:{self.store.bucket}",
+                "--stats-one-line", "--stats", "0"]
+
+    def argv_record(self, local: str) -> list[str]:
+        return ["copy", "--immutable", local, f"{self.root()}/{LEDGER}"]
+
+    def argv_ledger(self) -> list[str]:
+        return ["cat", f"{self.root()}/{LEDGER}"]
+
+    def argv_delete(self, files_from: str) -> list[str]:
+        return ["delete", "--files-from", files_from, self.root()]
+
+    # ---- running them -------------------------------------------------------------------------------------------
+
+    def _run(self, argv: list[str], scratch: Path | None = None, what: str = "") -> subprocess.CompletedProcess:
+        mounts: dict[str, Path] = {}
+        if self.directory is not None and not self.store.binary:
+            mounts["/pool"] = self.directory
+        if scratch is not None and not self.store.binary:
+            mounts["/scratch"] = scratch
+        proc = self.store._run(argv, mounts=mounts, extra_config=self._secrets, as_invoker=self.directory is not None)
+        if proc.returncode != 0:
+            raise BackupError(f"rclone {what or argv[0]} on the pool {self.describe()} failed (exit {proc.returncode}): "
+                              f"{proc.stderr.strip()[-800:]}")
+        return proc
+
+    def _at(self, scratch: Path, name: str) -> str:
+        return str(scratch / name) if self.store.binary else f"/scratch/{name}"
+
+    def _with_list(self, keys: list[str], build, what: str) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory(prefix="veyq-pool-") as tmp:
+            scratch = Path(tmp)
+            (scratch / "keys.txt").write_text("".join(f"{key}\n" for key in keys))
+            return self._run(build(self._at(scratch, "keys.txt")), scratch, what)
+
+    def prepare(self) -> None:
+        """A directory pool is created `0700` by this process before rclone writes into it."""
+        if self.directory is not None and not self.directory.is_dir():
+            self.directory.mkdir(parents=True, mode=0o700)
+
+    def require_exists(self) -> None:
+        if self.directory is not None and not self.directory.is_dir():
+            raise BackupError(f"--objects-from {self.directory} is not a directory")
+
+    def fill(self, keys: list[str] | None) -> None:
+        if keys is None:
+            self._run(self.argv_fill(None), what="copy of the whole bucket")
+        else:
+            self._with_list(keys, self.argv_fill, "copy of the index's keys")
+
+    @staticmethod
+    def _entries(stdout: str) -> list[list]:
+        try:
+            entries = json.loads(stdout or "[]")
+        except json.JSONDecodeError as e:
+            raise BackupError(f"rclone's listing of a pool is not JSON: {e}") from e
+        return sorted([entry["Path"], int(entry["Size"]), (entry.get("Hashes") or {}).get("md5") or None]
+                      for entry in entries)
+
+    def listing(self, keys: list[str], hashed: bool) -> list[list]:
+        """`[[key, size, md5 | None], …]` of the listed keys the pool holds (an absent one is simply not listed)."""
+        return self._entries(self._with_list(keys, lambda ff: self.argv_listing(ff, hashed), "listing").stdout)
+
+    def all_keys(self) -> list[list]:
+        """Every object the pool holds, its ledger aside."""
+        return [e for e in self._entries(self._run(self.argv_list_all(), what="listing").stdout)
+                if not e[0].startswith(LEDGER + "/")]
+
+    def empty_into_store(self, keys: list[str]) -> None:
+        self._with_list(keys, self.argv_empty_into_store, "copy into the store")
+
+    def record(self, capture: str, keys: list[str]) -> str:
+        """The ledger entry of a capture whose every indexed key is in the pool; its name sorts by when it was written."""
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%fZ")
+        entry = f"{stamp}-{re.sub(r'[^A-Za-z0-9._-]', '_', capture)}.json"
+        with tempfile.TemporaryDirectory(prefix="veyq-pool-") as tmp:
+            scratch = Path(tmp)
+            (scratch / "entry").mkdir()
+            (scratch / "entry" / entry).write_text(json.dumps(
+                {"entry": entry, "capture": capture, "recordedAt": utc_now(), "keys": keys}) + "\n")
+            self._run(self.argv_record(self._at(scratch, "entry")), scratch, "ledger write")
+        return entry
+
+    def ledger(self) -> list[dict]:
+        """Every ledger entry, oldest first. One JSON object per line, each naming itself, so `cat` of the folder reads
+        them all in one call whatever order rclone concatenates them in."""
+        entries = []
+        for line in self._run(self.argv_ledger(), what="ledger read").stdout.splitlines():
+            if line.strip():
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    raise BackupError(f"the pool {self.describe()} holds a ledger entry that is not JSON: {e}") from e
+        return sorted(entries, key=lambda e: e.get("entry", ""))
+
+    def delete(self, paths: list[str]) -> None:
+        self._with_list(paths, self.argv_delete, "prune")
+
+
+class Pruned(NamedTuple):
+    gone: list[str]       # objects deleted: no kept capture's index names them
+    dropped: list[str]    # ledger entries rotated out
+    objects: int          # what the pool holds afterwards
+    bytes: int
+
+
+def prune_pool(pool: Pool, newest: str, keep: int) -> Pruned:
+    """Keep the newest `keep` ledger entries and exactly the objects they name (owner 2026-10-17, ADR 0056 §3).
+
+    Runs only after `newest` — the capture just taken — is in the ledger, and refuses unless the ledger it reads
+    holds it among the kept: a ledger read that came back empty or short would otherwise name nothing, and every
+    object would go. An object a kept entry names is never deleted; that is the whole contract."""
+    if keep < 1:
+        raise BackupError(f"--pool-keep {keep} keeps no capture; the newest is the way back, so at least 1")
+    entries = pool.ledger()
+    kept, dropped = entries[-keep:], entries[:-keep]
+    if newest not in [e.get("entry") for e in kept]:
+        raise BackupError(f"the pool's ledger does not hold this capture's entry {newest} among its newest {keep} — "
+                          f"refusing to prune a pool whose ledger does not match what was just written")
+    named = {key for e in kept for key in e.get("keys", [])}
+    held = pool.all_keys()
+    gone = sorted(key for key, _, _ in held if key not in named)
+    paths = gone + [f"{LEDGER}/{e['entry']}" for e in dropped]
+    if paths:
+        pool.delete(paths)
+    rest = [(key, size) for key, size, _ in held if key in named]
+    return Pruned(gone, [e["entry"] for e in dropped], len(rest), sum(size for _, size in rest))
+
+
+def objects_from_hint(target: str | None) -> str:
+    """How a restore names the pool a manifest recorded: a directory as is; an S3 pool as `s3:<path>` plus its endpoint."""
+    if not target:
+        return "--objects-from <the pool you keep its objects in>"
+    # `s3:<endpoint>/<bucket>/<prefix>`: the endpoint is a URL, so split after its scheme and host.
+    match = re.match(r"s3:(https?://[^/]+)/(.+)", target)
+    if match:
+        return f"--objects-from s3:{match.group(2)} with VEYQ_BACKUP_POOL_ENDPOINT={match.group(1)}"
+    return f"--objects-from {target}"
 
 
 # --------------------------------------------------------------------------------------------------------
@@ -725,7 +994,8 @@ def app_release(compose_file: Path, service: str) -> tuple[str | None, str]:
 
 
 def expected_keys(blobs: list[list]) -> list[str]:
-    """Every object key the rows require, expanded from the compact blob index."""
+    """Every object key the rows require, expanded from the compact blob index (`Database.blob_index`, the one place
+    that decides which rows require an object — a table that pins an object without a `veyq_blob` row joins there)."""
     return [f"{key}/{i}" for key, chunks in blobs for i in range(chunks)]
 
 
@@ -734,6 +1004,7 @@ class Comparison(NamedTuple):
     missing: list[str]
     changed: list[str]
     by_size_only: int
+    changed_keys: list[str] = []
 
 
 def compare_index(required: list[str], indexed: list[list], listing: list[list]) -> Comparison:
@@ -742,7 +1013,7 @@ def compare_index(required: list[str], indexed: list[list], listing: list[list])
     an upload after the capture, the same asymmetry `verify` has (module docstring)."""
     want = {key: (size, digest) for key, size, digest in indexed}
     have = {key: (size, digest) for key, size, digest in listing}
-    missing, changed, by_size_only = [], [], 0
+    missing, changed, changed_keys, by_size_only = [], [], [], 0
     for key in required:
         if key not in have:
             missing.append(key)
@@ -751,12 +1022,21 @@ def compare_index(required: list[str], indexed: list[list], listing: list[list])
         live_size, live_digest = have[key]
         if size is not None and live_size != size:
             changed.append(f"{key} (size {live_size}, the capture indexed {size})")
+            changed_keys.append(key)
         elif digest and live_digest:
             if digest != live_digest:
                 changed.append(f"{key} (md5 {live_digest}, the capture indexed {digest})")
+                changed_keys.append(key)
         else:
             by_size_only += 1
-    return Comparison(missing, changed, by_size_only)
+    return Comparison(missing, changed, by_size_only, changed_keys)
+
+
+def local_listing(objects: Path) -> list[list]:
+    """A format-2 capture's `objects/` as a listing, `[[key, size, None], …]`: it records no per-object size or MD5,
+    so its required keys are checked by key, and copied keys by the size the file has."""
+    return sorted([p.relative_to(objects).as_posix(), p.stat().st_size, None]
+                  for p in objects.rglob("*") if p.is_file())
 
 
 def listed(problems: list[str], keys: list[str], label: str) -> None:
@@ -965,8 +1245,9 @@ def read_manifest(backup: Path) -> dict:
     fmt = manifest.get("backupFormat")
     if fmt not in FORMATS:
         raise BackupError(
-            f"{path} declares backupFormat {fmt!r}; this tool writes and reads {BACKUP_FORMAT} (a capture of the "
-            f"store's objects) and {INDEX_FORMAT} (an index capture). Refusing to guess at a layout it does not know."
+            f"{path} declares backupFormat {fmt!r}; this tool writes {INDEX_FORMAT} (the database and the store's "
+            f"index) and still reads {MIRROR_FORMAT} (a capture holding the objects). Refusing to guess at a layout it "
+            f"does not know."
         )
     store = manifest.get("store") or {}
     if fmt == INDEX_FORMAT and (store.get("leg") != INDEX or not isinstance(store.get("index"), list)):
@@ -1041,31 +1322,77 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 f"knowingly. --key-kept-apart records it as kept elsewhere without reading it."
             )
 
+    # The pool, too, is settled before the first write: a credential it lacks or a path it cannot be refuses here.
+    pool = Pool(args.objects_to, store) if getattr(args, "objects_to", None) else None
+    keep = getattr(args, "pool_keep", POOL_KEEP_DEFAULT)
+    if pool is not None:
+        if keep < 1:
+            raise BackupError(f"--pool-keep {keep} keeps no capture; the newest is the way back, so at least 1")
+        if pool.directory is not None and (is_within(pool.directory, backup) or is_within(backup, pool.directory)):
+            raise BackupError(f"--objects-to {pool.directory} and the capture directory {backup} overlap — a pool is "
+                              f"a place of its own, kept across captures")
+
     def release_of() -> tuple[str | None, str]:
         if getattr(args, "app_version", None):
             return args.app_version, "caller"
         return app_release(Path(args.compose_file), args.app_service)
 
-    take_capture(backup, db, store, leg=getattr(args, "store_leg", MIRROR), release_of=release_of,
+    take_capture(backup, db, store, release_of=release_of, pool=pool, pool_keep=keep,
                  kept_apart=kept_apart, key_source=key_source, key_present=key_present, key_dest=key_dest,
                  key_beside_dump=args.key_beside_dump)
     return 0
 
 
-def take_capture(backup: Path, db: Database, store: Store | None, *, leg: str, release_of,
-                 kept_apart: bool = False, key_source: Path | None = None,
+def cmd_copy_objects(args: argparse.Namespace) -> int:
+    """The hot early copy (ADR 0096 decision 5 step 4): the whole bucket into the pool, no database, the app running.
+    Objects are immutable, so a key copied now is the key the cold capture's top-up would have copied."""
+    store = Store(args)
+    pool = Pool(args.objects_to, store)
+    pool.prepare()
+    log(f"copying {store.describe()} into the pool {pool.describe()} (copy --immutable; the app may run — objects are "
+        f"immutable, and the cold capture copies what arrives after this)")
+    pool.fill(None)
+    log("copied")
+    return 0
+
+
+def cmd_empty_database(args: argparse.Namespace) -> int:
+    """Drop every table of the database — the in-place rollback's first write (`veyqctl rollback`, ADR 0096): the
+    release it goes back to then starts on an empty schema, migrates it, and the capture is restored onto that. Only
+    with `--yes`, which `veyqctl` passes after its own confirmation; the data is gone, the capture is the way back."""
+    if not args.yes:
+        raise BackupError("empty-database drops every table of the database, and its data with it — pass --yes, after "
+                          "checking that the capture you will restore verifies (verify --against-store)")
+    db = Database(args, require_db_password())
+    dropped = db.drop_all_tables()
+    log(f"dropped {dropped} table(s) of {db.describe()}: it holds nothing now. Start the release you restore under "
+        f"once, so it migrates the empty schema, stop it, then restore.")
+    return 0
+
+
+def cmd_store_in_use(args: argparse.Namespace) -> int:
+    """`bundled`, `own` or `none`: the plaintext of the store setting in use (ADR 0089), for `veyqctl status`."""
+    row = Database(args, require_db_password()).store_setting()
+    print("none" if row is None else "bundled" if row.bundled else "own")
+    return 0
+
+
+def take_capture(backup: Path, db: Database, store: Store | None, *, release_of, pool: Pool | None = None,
+                 pool_keep: int = POOL_KEEP_DEFAULT, kept_apart: bool = False, key_source: Path | None = None,
                  key_present: bool = False, key_dest: Path | None = None, key_beside_dump: bool = False,
                  tool: str | None = None, allow_no_tenant: bool = False) -> dict:
-    """Write one capture into `backup`: the dump, the store leg (`mirror`: the objects; `index`: their listing), leg
-    (c) per the caller's decision, and the manifest — last, so a directory without one is no capture. `store` is None
-    only for an index capture of an instance that never chose a store (nothing can have been uploaded)."""
+    """Write one capture into `backup`: the dump, the store's index, the pool's top-up when one is named, leg (c) per
+    the caller's decision, the pool's ledger entry and prune, and the manifest — last, so a directory without one is
+    no capture. `store` is None only for a capture of an instance that never chose a store (nothing can have been
+    uploaded), which the gate takes and which names no pool."""
+    if pool is not None and store is None:
+        raise BackupError("an object pool needs a store to copy from")
     started = utc_now()
     log(f"capturing into {backup}")
     log("NOTE: the application must be STOPPED. With it running, a client can complete an upload between the "
         "dump and the store leg, producing a row whose object was never captured (ADR 0056 §2, A1).")
     backup.mkdir(parents=True, exist_ok=True)
-    # Even when it pre-existed empty: its mode is what keeps other local users out of `objects/`, whose files
-    # the rclone container writes with its own owner and modes (module docstring).
+    # Even when it pre-existed empty: its mode is what keeps other local users out of the dump.
     backup.chmod(0o700)
 
     log(f"reading instance facts from {db.describe()}")
@@ -1084,22 +1411,37 @@ def take_capture(backup: Path, db: Database, store: Store | None, *, leg: str, r
     log(f"dumping {db.describe()} (DDL + data + flyway history)")
     db.dump(backup / DUMP_NAME)
 
-    if leg == INDEX:
-        if store is None:
-            log("no store was ever chosen, so the instance holds no object: the index is empty")
-            index: list[list] = []
-            bucket = None
-        else:
-            log(f"listing {store.describe()} (keys, sizes and MD5s — the objects stay where they are)")
-            index = store.index()
-            bucket = store.bucket
-        count, byte_total = len(index), sum(size for _, size, _ in index)
+    if store is None:
+        log("no store was ever chosen, so the instance holds no object: the index is empty")
+        index: list[list] = []
+        bucket = None
     else:
-        log(f"mirroring {store.describe()}")
-        objects = backup / OBJECTS_DIR
-        objects.mkdir(exist_ok=True)
-        store.mirror_out(objects)
-        count, byte_total = store.size()
+        log(f"listing {store.describe()} (keys, sizes and MD5s — the objects stay where they are)")
+        index = store.index()
+        bucket = store.bucket
+    count, byte_total = len(index), sum(size for _, size, _ in index)
+    keys = [key for key, _, _ in index]
+
+    if pool is not None:
+        # The top-up: exactly the index's keys, so what the pool must hold for this capture is what it was handed.
+        # A key it holds already is skipped by rclone (the increment); one whose bytes differ fails (exit 6).
+        log(f"copying the index's {len(keys)} key(s) into the pool {pool.describe()} (copy --immutable: a key the "
+            f"pool holds is not copied again)")
+        pool.prepare()
+        pool.fill(keys)
+        # Key and size, no hash: hashing a local pool would read every byte at every capture, and rclone's own
+        # transfer already checked the MD5 of what it copied.
+        held = {key: size for key, size, _ in pool.listing(keys, hashed=False)}
+        short = [key for key in keys if key not in held]
+        other = [f"{key} (size {held[key]} in the pool, {size} in the store)" for key, size, _ in index
+                 if key in held and held[key] != size]
+        if short or other:
+            problems = [f"the pool {pool.describe()} does not hold {len(short) + len(other)} object(s) of this "
+                        f"capture's index after the copy:"]
+            listed(problems, short, "missing in pool")
+            listed(problems, other, "other size")
+            raise BackupError("\n".join(problems) + "\n[backup] No manifest was written: this is no capture.")
+        log(f"the pool holds every one of the index's {len(keys)} key(s)")
 
     release, release_source = release_of()
     if release:
@@ -1128,17 +1470,32 @@ def take_capture(backup: Path, db: Database, store: Store | None, *, leg: str, r
             f"media stay unreachable until its credentials are entered again (ADR 0089 decision 4). Point "
             f"--config-secret-file at the real path and capture again.")
 
-    if leg == INDEX:
-        store_leg = {"leg": INDEX, "bucket": bucket, "objects": count, "bytes": byte_total, "blobs": blobs,
-                     "openUploadSessions": sessions, "index": index}
-    else:
-        store_leg = {"bucket": store.bucket, "objects": count, "bytes": byte_total, "blobs": blobs,
-                     "openUploadSessions": sessions}
+    store_leg = {"leg": INDEX, "bucket": bucket, "objects": count, "bytes": byte_total, "blobs": blobs,
+                 "openUploadSessions": sessions, "index": index}
+    if pool is not None:
+        # The index is complete and every key of it is in the pool: only now does the capture enter the ledger, and
+        # only then may the pool be pruned to what the kept entries name (prune_pool refuses otherwise).
+        entry = pool.record(backup.name, keys)
+        pool_objects: int | None = None
+        pool_bytes: int | None = None
+        try:
+            pruned = prune_pool(pool, entry, pool_keep)
+            pool_objects, pool_bytes = pruned.objects, pruned.bytes
+            log(f"the pool keeps the objects of its newest {pool_keep} capture(s): {pruned.objects} object(s) / "
+                f"{pruned.bytes} B; pruned {len(pruned.gone)} object(s) no kept capture's index names"
+                + (f" and the ledger entries {', '.join(pruned.dropped)}" if pruned.dropped else ""))
+        except BackupError as e:
+            # The capture is sound — every key it needs is in the pool — so it stands; what failed is the deletion
+            # of what no kept capture needs, which leaves the pool larger, never short. Loudly, because a purged
+            # object then stays in the pool until a prune succeeds.
+            log(f"WARNING: the pool was NOT pruned ({e}). This capture is complete; objects no kept capture needs "
+                f"stay in the pool until the next capture's prune succeeds.")
+        store_leg["pool"] = {"target": pool.describe(), "objects": pool_objects, "bytes": pool_bytes}
     capture = {"startedAt": started, "finishedAt": utc_now()}
     if tool:
         capture["tool"] = tool
     manifest = {
-        "backupFormat": INDEX_FORMAT if leg == INDEX else BACKUP_FORMAT,
+        "backupFormat": INDEX_FORMAT,
         "domains": domains,
         "app": {"version": release, "versionSource": release_source},
         "database": {"name": db.name, "schemaVersion": schema, "bytes": (backup / DUMP_NAME).stat().st_size},
@@ -1149,8 +1506,8 @@ def take_capture(backup: Path, db: Database, store: Store | None, *, leg: str, r
     (backup / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
 
     log(f"captured: {len(domains)} domain(s) {domains}, schema V{schema}, {count} object(s) / {byte_total} B "
-        f"{'indexed' if leg == INDEX else 'mirrored'}, {len(blobs)} blob row(s), leg (c) "
-        f"{'MISSING' if placement == ABSENT else placement}")
+        f"indexed{' and in the pool' if pool is not None else ' (the objects stay in the store)'}, {len(blobs)} blob "
+        f"row(s), leg (c) {'MISSING' if placement == ABSENT else placement}")
     if placement == SEPARATE and key_dest is not None:
         log(f"the key is at {key_dest}. Keep it apart from this capture: a copy of both together is a copy of "
             f"every tenant's SMTP password. Encrypt the capture before it leaves this host.")
@@ -1300,6 +1657,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
         f"{len(blobs)} blob row(s)")
     if indexed:
         log(f"  live store         {live_note or 'NOT checked here; pass --against-store to check it'}")
+        pool = manifest["store"].get("pool")
+        log("  object pool        " + (f"{pool.get('target')} — a restore onto a fresh instance names it with "
+                                      f"--objects-from" if pool else "none named — the objects are kept by the store "
+                                      "alone (its versioning, replication or snapshots)"))
     # Tolerated and named, never silent: an object with no row is the running system's steady state (a capture
     # taken between a row delete and the next reclaim sweep holds exactly these — ADR 0062). Reporting it is
     # what keeps "0 orphans" from being the only shape a reader recognises as healthy.
@@ -1372,9 +1733,13 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
     indexed = manifest["backupFormat"] == INDEX_FORMAT
     accept_missing = getattr(args, "accept_missing_objects", False)
-    if accept_missing and not indexed:
-        raise BackupError("--accept-missing-objects is for an index capture, whose objects stay in the live store; "
-                          "this capture holds its objects itself")
+    source_target = getattr(args, "objects_from", None)
+    if source_target and not indexed:
+        raise BackupError(f"--objects-from is for a capture of the store's index; this one (backupFormat "
+                          f"{MIRROR_FORMAT}) holds its objects itself, in {OBJECTS_DIR}/, and restores from them")
+    if not indexed and not (backup / OBJECTS_DIR).is_dir():
+        raise BackupError(f"{backup / OBJECTS_DIR} is missing — leg (b) of this backupFormat {MIRROR_FORMAT} capture "
+                          f"is not here")
     record_dir = Path(args.record) if getattr(args, "record", None) else None
     if record_dir is not None and not record_dir.is_dir():
         raise BackupError(f"--record {record_dir} is not a directory — on a cluster it is the backup claim's mount")
@@ -1383,6 +1748,13 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
     db = Database(args, require_db_password())
     store = Store(args)
+    # The source of the objects, if this restore writes any: a pool, or a format-2 capture's own `objects/`.
+    source: Pool | None = None
+    if source_target:
+        source = Pool(source_target, store)
+        source.require_exists()
+    elif not indexed:
+        source = Pool(str((backup / OBJECTS_DIR).resolve()), store)
 
     # A5 — the restore is defined onto an EMPTY instance and nothing reconciles two populated ones. *Empty*
     # means holding no DATA: since ADR 0067 the target's store is provisioned by the app, and the same start
@@ -1397,61 +1769,101 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"is not. Drop and recreate the database, start the app once so it migrates and provisions the "
             f"store, then restore."
         )
-    broken: list[str] = []
-    if indexed:
-        # An index capture restores onto the store it indexed and writes nothing to it (ADR 0098 decision 4): in place
-        # of A5's empty-store gate, A4 against the live store — every object the dump's rows require is there, with
-        # the indexed size (and MD5 where both sides have one), before anything is written. An object the store
-        # holds and the index does not is tolerated: an upload after the capture.
-        found = compare_index(expected_keys(manifest["store"]["blobs"]), manifest["store"]["index"], store.index())
-        broken = found.missing + found.changed
-        if broken and not accept_missing:
-            problems = [f"{len(found.missing)} missing and {len(found.changed)} changed object(s) the backup's rows "
-                        f"require, in {store.describe()}:"]
-            listed(problems, found.missing, "missing object")
-            listed(problems, found.changed, "changed object")
+    # A4 and the store's half of A5 (ADR 0056 §7), both before the first write. *Required* is what the dump's blob
+    # rows name; the index's other keys (orphans pending reclaim, open sessions' chunks) are tolerated.
+    required = expected_keys(manifest["store"]["blobs"])
+    pool_target = (manifest["store"].get("pool") or {}).get("target")
+    copy_keys: list[str] = []
+    indexed_entries: list[list] = []
+    if source is None:
+        # The check only: the objects stay in the live store, which this restore never writes to — the way back from
+        # an upgrade. An object the store holds and the index does not is tolerated: an upload after the capture.
+        listing = store.index()
+        found = compare_index(required, manifest["store"]["index"], listing)
+        where = store.describe()
+        if (found.missing or found.changed) and not accept_missing \
+                and not [key for key, _, _ in listing if key != PROBE_KEY]:
             raise BackupError(
-                "\n".join(problems) + "\n[backup] Restored as they are, each would be a Memory whose picture yields a "
-                "valid URL and a 404 (A4). Bring them back from the store's own versioning, replication or snapshot "
-                "and restore again — or pass --accept-missing-objects to restore without them, knowingly. Nothing "
-                "was written.")
-        if found.by_size_only:
-            log(f"{found.by_size_only} object(s) compared by key and size only (no MD5 on one side)")
+                f"the store is empty — {store.describe()} holds no object, and the backup's rows require "
+                f"{len(required)}. A restore onto a fresh instance names the pool the objects were kept in: "
+                f"{objects_from_hint(pool_target)}"
+                + (f" (this capture recorded the pool {pool_target})" if pool_target else
+                   " (this capture recorded no pool: the objects are wherever the old store's versioning, replication "
+                   "or snapshots kept them)")
+                + ". Nothing was written.")
     else:
-        count, _ = store.size()
-        if count:
+        # Objects are written only into an EMPTY store: copying into a store in use would be reconciling two
+        # populated instances, which nothing describes (A5). The store check's probe is not data.
+        held = store.data_keys()
+        if held:
             raise BackupError(
-                f"{store.describe()} already holds {count} object(s). A restore is defined onto an empty store "
-                f"(A5) — this tool copies INTO a bucket and never deletes from one. Empty it first, then restore."
-            )
+                f"{store.describe()} already holds {len(held)} object(s). A restore that copies objects is defined "
+                f"onto an empty store (A5) — copying into a store in use would mix two instances' objects, and this "
+                f"tool never deletes from a store. Empty the bucket of this fresh instance, then restore. Nothing was "
+                f"written.")
+        if indexed:
+            indexed_entries = manifest["store"]["index"]
+            listing = source.listing([key for key, _, _ in indexed_entries], hashed=True)
+        else:
+            # A format-2 capture records no per-object size or MD5: its files ARE its index.
+            indexed_entries = listing = local_listing(backup / OBJECTS_DIR)
+        found = compare_index(required, indexed_entries, listing)
+        where = f"the source {source.describe()}"
+        bad = set(found.missing) | set(found.changed_keys)
+        have = {key for key, _, _ in listing}
+        copy_keys = [key for key, _, _ in indexed_entries if key in have and key not in bad and key != PROBE_KEY]
+    wanted = set(required)
+    present = {key for key, _, _ in listing}
+    tolerated = [key for key, _, _ in (indexed_entries or manifest["store"].get("index") or [])
+                 if key not in wanted and key not in present and key != PROBE_KEY]
+    broken = found.missing + found.changed
+    if broken and not accept_missing:
+        problems = [f"{len(found.missing)} missing and {len(found.changed)} changed object(s) the backup's rows "
+                    f"require, in {where}:"]
+        listed(problems, found.missing, "missing object")
+        listed(problems, found.changed, "changed object")
+        raise BackupError(
+            "\n".join(problems) + "\n[backup] Restored as they are, each would be a Memory whose picture yields a "
+            "valid URL and a 404 (A4). Bring them back — from the store's own versioning, replication or snapshot, "
+            "or from the object pool with --objects-from — and restore again, or pass --accept-missing-objects to "
+            "restore without them, knowingly. Nothing was written.")
+    if found.by_size_only:
+        log(f"{found.by_size_only} object(s) compared by key and size only (no MD5 on one side)")
 
     # ADR 0056 §7 — the backup's schema against the target's, in Flyway's order, before the first write. A newer
     # backup raises here; the same or an older one is loaded over a target emptied of every table, because the
     # dump drops and recreates only the tables it names.
     target_version = db.schema_version()
     standing = backup_against_target(manifest, target_version)
+
+    if source is None:
+        log(f"the objects stay where they are: {store.describe()} holds every one the rows require (A4)")
+    else:
+        log(f"copying {len(copy_keys)} object(s) from {source.describe()} into {store.describe()} (copy --immutable, "
+            f"exactly the index's keys the source holds)")
+        try:
+            source.empty_into_store(copy_keys)
+            copied = set(copy_keys)
+            after = compare_index([key for key in required if key in copied], indexed_entries, store.index())
+            if after.missing or after.changed:
+                problems = [f"after the copy, {store.describe()} still lacks {len(after.missing)} and holds "
+                            f"{len(after.changed)} other object(s) of those copied:"]
+                listed(problems, after.missing, "missing object")
+                listed(problems, after.changed, "changed object")
+                raise BackupError("\n".join(problems))
+        except BackupError as e:
+            # Objects are in the store now; say so, because the empty-store gate will refuse the retry for a reason
+            # that reads like a different problem if nobody said why.
+            raise BackupError(
+                f"{e}\n[backup] Objects ARE already copied into {store.describe()}, so the store is no longer empty "
+                f"and this tool will refuse to run against it again (A5). Nothing of the database was written. Start "
+                f"over: empty the bucket, then restore again.") from e
+
     dropped = db.drop_all_tables()
     log(f"dropped the {dropped} table(s) of the freshly installed target (it holds no data, A5)")
 
     log(f"loading {DUMP_NAME} into {db.describe()}")
     db.load(backup / DUMP_NAME)
-
-    try:
-        if indexed:
-            log(f"the objects stay where they are: {store.describe()} holds every one the rows require (A4)")
-        else:
-            log(f"pushing objects into {store.describe()}")
-            store.mirror_in(backup / OBJECTS_DIR)
-    except BackupError as e:
-        # The database leg is already in. Say so, because the emptiness gates above will now refuse the retry
-        # for a reason that reads like a different problem ("already holds N tables") if nobody said why.
-        raise BackupError(
-            f"{e}\n[backup] The database leg IS already loaded, so the target is half-restored and this tool "
-            f"will refuse to run against it again (A5) — the rows it just wrote are exactly the data the "
-            f"emptiness gate looks for. Start over from a fresh instance: drop and recreate the target "
-            f"database, empty the bucket, start the app once so it migrates and provisions the store, then "
-            f"restore. A partial restore is not repaired in place."
-        ) from e
 
     if key_source is not None:
         log(f"placing the config-secret key from {key_source} at {target_key}")
@@ -1474,12 +1886,17 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"(ADR 0055, A2); a store of your own stays unreadable, and media with it, until the key is restored "
             f"or its credentials are entered again in Server → Object store (ADR 0089 decision 4).")
 
-    if indexed:
+    if source is None:
         log(f"restored: schema V{manifest['database']['schemaVersion']}, against {manifest['store']['objects']} "
             f"indexed object(s) left in place")
     else:
-        restored, restored_bytes = store.size()
-        log(f"restored: schema V{manifest['database']['schemaVersion']}, {restored} object(s) / {restored_bytes} B")
+        log(f"restored: schema V{manifest['database']['schemaVersion']}, {len(copy_keys)} object(s) copied from "
+            f"{source.describe()}")
+    if tolerated:
+        log(f"{len(tolerated)} indexed object(s) no blob row requires (orphans pending reclaim, open upload chunks) are "
+            f"absent from {where} — tolerated, the instance would reclaim them anyway (ADR 0056 § Context 2):")
+        for key in tolerated[:50]:
+            log(f"    absent, not required  {key}")
     if broken:
         log(f"WARNING: restored WITHOUT {len(broken)} object(s) the rows require (--accept-missing-objects): each is "
             f"a Memory whose picture yields a valid URL and a 404 (A4):")
@@ -1722,7 +2139,7 @@ def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int
     (root / CAPTURES_DIR).mkdir(exist_ok=True)
     if partial.exists():
         shutil.rmtree(partial)  # an interrupted run of this same second; ours, and never a complete capture
-    take_capture(partial, db, store, leg=INDEX, release_of=lambda: (release, source), kept_apart=True,
+    take_capture(partial, db, store, release_of=lambda: (release, source), kept_apart=True,
                  tool=image_release, allow_no_tenant=True)
     if cmd_verify(argparse.Namespace(backup=str(partial), key_from=None, against_store=False)) != 0:
         raise BackupError(f"the capture {partial} failed its own verify; it stays as it is, the record is unmoved")
@@ -1839,13 +2256,35 @@ def main(argv: list[str]) -> int:
     key_to.add_argument("--key-kept-apart", action="store_true",
                         help="record leg (c) as kept elsewhere (placement separate) WITHOUT reading any key — the "
                              "cluster gate's form (ADR 0098 decision 4c); a restore then asks for --key-from")
-    capture.add_argument("--store-leg", choices=(MIRROR, INDEX), default=MIRROR,
-                         help="mirror: the store's objects into objects/ (backupFormat 2, the default); index: their "
-                              "keys, sizes and MD5s only, the objects left in the store (backupFormat 3, ADR 0098)")
+    capture.add_argument("--objects-to", default=None, metavar="POOL",
+                         help="also copy the index's objects into this object pool — an absolute directory, or "
+                              "s3:<bucket>[/<prefix>] with VEYQ_BACKUP_POOL_* in the environment (ADR 0056 §3)")
+    capture.add_argument("--pool-keep", type=int, default=int(os.environ.get("VEYQ_BACKUP_POOL_KEEP") or
+                                                                POOL_KEEP_DEFAULT),
+                         help=f"the pool keeps the objects of its newest N captures and prunes the rest (env "
+                              f"VEYQ_BACKUP_POOL_KEEP; default {POOL_KEEP_DEFAULT})")
     capture.add_argument("--app-version", default=None,
                          help="the release the instance runs, as the caller knows it — instead of asking Docker")
     add_common(capture)
     capture.set_defaults(func=cmd_capture, needs_store=True)
+
+    copy_objects = sub.add_parser("copy-objects", help="copy the whole bucket into an object pool — the hot early "
+                                                       "copy before a capture, the app may run")
+    copy_objects.add_argument("--objects-to", required=True, metavar="POOL",
+                              help="the object pool: an absolute directory, or s3:<bucket>[/<prefix>]")
+    add_store(copy_objects)
+    copy_objects.add_argument("--docker-network", default=None, help="docker network the rclone container joins")
+    copy_objects.set_defaults(func=cmd_copy_objects, needs_store=True)
+
+    in_use = sub.add_parser("store-in-use", help="print the store setting in use: bundled, own or none (ADR 0089)")
+    add_common(in_use)
+    in_use.set_defaults(func=cmd_store_in_use, needs_store=False)
+
+    empty = sub.add_parser("empty-database", help="drop every table of the database — the in-place rollback's first "
+                                                  "write; only with --yes")
+    empty.add_argument("--yes", action="store_true", help="drop them; the capture you restore next is the way back")
+    add_common(empty)
+    empty.set_defaults(func=cmd_empty_database, needs_store=False)
 
     verify = sub.add_parser("verify", help="check a backup directory without touching any instance")
     verify.add_argument("backup")
@@ -1868,10 +2307,12 @@ def main(argv: list[str]) -> int:
     key_from.add_argument("--without-key", action="store_true",
                           help="restore without leg (c), knowingly: the instance reports MISMATCH and refuses "
                                "invites and resets until the key or each SMTP password is back (A2)")
+    restore.add_argument("--objects-from", default=None, metavar="POOL",
+                         help="copy the objects from this pool into the target's EMPTY store, after checking every "
+                              "one the rows require against the index — a restore onto a fresh instance")
     restore.add_argument("--accept-missing-objects", action="store_true",
-                         help="an index capture: restore although objects the rows require are missing from (or "
-                              "changed in) the live store — each is a broken picture (A4), named at the end. Only "
-                              "knowingly, when the store's versioning cannot bring them back")
+                         help="restore although objects the rows require are missing from (or changed in) the live "
+                              "store or the source — each is a broken picture (A4), named at the end. Only knowingly")
     restore.add_argument("--key-as-runtime-user", action="store_true",
                          help="this restore runs as the application's own uid (a Kubernetes Job's runAsUser): the "
                               "key is born to it, whoever owns the claim's directory (fsGroup gives it a group, "

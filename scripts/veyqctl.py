@@ -8,9 +8,10 @@
     logs [-f] [--tail N] [SERVICE …]                 its logs
     verify [--release SEL] [--unsigned-local]        the signatures of the selected release, and nothing else
     check [--release SEL]                            which release `upgrade` would take, and a newer major beyond it
-    upgrade --key-into FILE [--unsigned-local]       toward what VEYQ_RELEASE selects, in ADR 0096 decision 5's order
-    backup --key-into FILE                           the three legs, by the running release's `instance_backup.py`
-    restore DIR --domain D (--key-from F | --without-key)   a capture onto this instance, which holds no data yet
+    upgrade --key-into FILE [--objects-to P] [--unsigned-local]   toward what VEYQ_RELEASE selects (decision 5's order)
+    backup --key-into FILE [--objects-to P]          the three legs, by the running release's `instance_backup.py`
+    restore DIR --domain D (--key-from F | --without-key) [--objects-from P]   onto this instance, which holds no data
+    rollback DIR --key-from F [--yes]                back to the release a capture was taken under, in place
     self-update                                      this file, replaced by the installed release's `veyqctl`
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
@@ -23,7 +24,7 @@ lifecycle on the HOST and holds no Admin API credential — administration stays
     compose.override.yml   optional: the operator's own Compose overlay, laid over the recipe on every command
     state.json             the running release, the Compose project it runs as, the source, how it was verified
     releases/<release>/    that release's assets, each checked against the sha256 its manifest names
-    backups/               the captures an upgrade or `backup` takes
+    backups/               the captures an upgrade or `backup` takes: the database and the store's index each
 
 Every Compose command is `docker compose -p <project> -f releases/<release>/docker-compose.prod.yml
 [-f compose.override.yml] --env-file .env`: the override file is Compose's own extension point, so an operator's
@@ -82,10 +83,12 @@ Written `0600`, in a home created `0700`.
      keeps its value, a secret veyqctl knows how to make is made — and every other key the new template assigns, and
      every `${VAR:?…}` the new recipe or the override leaves unset, is refused, named; the result is staged as
      `.env.next` and Compose itself checks it (`config --quiet`);
-  4. stop the app (the capture is cold, ADR 0056 §2: the database and the store keep running), back up the three legs
-     into `backups/<stamp>-before-<release>/` and check the capture, then switch `.env` and the recipe, `up`, and wait
-     until healthy. A failed backup switches nothing and starts the running release again. `--key-into` is required
-     and refused before anything else runs.
+  4. with an object pool named, copy the store's objects into it while the app still runs (`copy-objects`; a failure
+     stops nothing); stop the app (the capture is cold, ADR 0056 §2: the database and the store keep running), back up
+     the three legs into `backups/<stamp>-before-<release>/` — the database and the store's index, the pool topped up
+     with what arrived since and pruned to its kept captures — and check the capture, then switch `.env` and the
+     recipe, `up`, and wait until healthy. A failed backup switches nothing and starts the running release again.
+     `--key-into` is required and refused before anything else runs.
 The previous release's directory stays, so the diff and the way back are both on disk.
 
 **`backup` and `restore` are the running release's own `instance_backup.py`** — shipped beside `veyqctl` as an asset,
@@ -99,6 +102,26 @@ key comes out of the stopped app container with `docker cp`, into a `0700` direc
 tool needs it, and a restored key goes back in through a one-off container of the `app` service running as the
 image's own user — born the application's, `0600`, without root (the alternative `instance_backup.py`'s own refusal
 names). `--key-into` is required for `backup` and `upgrade`, and refused when it exists or lies inside `backups/`.
+
+**A capture holds the database and the store's index, not the objects** (ADR 0056 §3). The objects stay in the store;
+an **object pool** keeps copies only when one is named — `.env`'s `VEYQ_BACKUP_OBJECTS_TO` (an absolute directory, never
+inside `releases/`, or `s3:<bucket>[/<prefix>]` with `VEYQ_BACKUP_POOL_*` beside it, which reach the tool through its
+environment), or `--objects-to` for one run of `backup` or `upgrade`. With a pool, both run the tool's `copy-objects`
+before the app stops, so the cold top-up is short, and the capture with `--objects-to`. `restore` writes objects only
+when told where from (`--objects-from`, never implied by `.env`): without it the tool checks every object the rows
+require in the live store and writes none — the way back from an upgrade; with it, onto a fresh instance's empty store.
+`status`, and `install` at its end, warn while the store in use (the tool's `store-in-use`) is the bundled one — or none
+yet — and no pool is named: Garage keeps no object versions, so a lost store volume loses every object whatever
+`backups/` holds. The warning never changes an exit code.
+
+**`rollback` is in place** (ADR 0096, the owner's O1 (a) of 2026-10-17): after a failed upgrade, the capture it began
+with holds the database and the index, and its objects are still in this instance's store, which an upgrade never
+rewrites. So `rollback <capture> --key-from F` refuses unless the capture's release is still in `releases/` and the
+capture verifies against the live store, and asks before it empties the database (`--yes` without a terminal); then it
+stops the app, empties the database (the tool's `empty-database`), switches `.env`'s image lines and `state.json` back to
+that release (`upgrade_values` over its template), starts it once so it migrates the empty schema, stops it, restores
+with the check only, places the key and starts. The store is never written; objects uploaded under the failed release
+stay as orphans with no reclaim row.
 
 **`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
 manifest — and, because it replaces the verifier itself, it first verifies that manifest on disk against the
@@ -143,6 +166,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -281,6 +305,12 @@ class Host:
             return None
         shown = f" (e.g. {example})" if example else ""
         return input(f"veyqctl: {key}{shown}: ").strip() or None
+
+    def confirm(self, prompt: str) -> bool | None:
+        """True or False at a terminal; None without one (the caller then needs `--yes`)."""
+        if not sys.stdin.isatty():
+            return None
+        return input(f"veyqctl: {prompt} [y/N]: ").strip().lower() in ("y", "yes")
 
 
 # ---- sources: which releases exist, a manifest, an asset -------------------------------------------------------
@@ -997,6 +1027,7 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     address = admin_address(host, project)
     say(f"release {manifest.release} runs as project {project}."
         + (f" First-run setup: the admin console on {address} (ssh -L to it from your machine)." if address else ""))
+    pool_warning(host, home, read_state(home))
     return 0
 
 
@@ -1015,9 +1046,12 @@ def cmd_stop(args: argparse.Namespace, host: Host) -> int:
 
 
 def cmd_status(args: argparse.Namespace, host: Host) -> int:
-    state = read_state(Path(args.home))
+    home = Path(args.home)
+    state = read_state(home)
     say(f"release {state.release}" + (" (installed --unsigned-local: NOT VERIFIED)" if state.unsigned_local else ""))
-    return 0 if report(host, state.project) else 1
+    healthy = report(host, state.project)
+    pool_warning(host, home, state)
+    return 0 if healthy else 1
 
 
 def cmd_logs(args: argparse.Namespace, host: Host) -> int:
@@ -1181,9 +1215,54 @@ def backup_tool(host: Host, home: Path, state: State) -> BackupTool:
     return BackupTool(verified_asset(home, state.release, BACKUP_ASSET), facts, backup_env(home, state, facts))
 
 
-def capture(host: Host, home: Path, state: State, tool: BackupTool, key_into: Path, name: str) -> Path:
+POOL_TARGET_KEY = "VEYQ_BACKUP_OBJECTS_TO"
+POOL_KEYS = ("VEYQ_BACKUP_POOL_ENDPOINT", "VEYQ_BACKUP_POOL_ACCESS_KEY", "VEYQ_BACKUP_POOL_SECRET_KEY",
+             "VEYQ_BACKUP_POOL_REGION", "VEYQ_BACKUP_POOL_KEEP")
+
+
+class PoolChoice(NamedTuple):
+    target: str | None   # an absolute directory or `s3:<bucket>[/<prefix>]`, or None: no pool
+    env: dict            # the pool's VEYQ_BACKUP_POOL_* from `.env`, for the tool's environment — never an argv
+
+
+def pool_choice(home: Path, given: str | None, flag: str) -> PoolChoice:
+    """The object pool for this run (ADR 0056 §3, ADR 0096 decision 6): `--objects-to`/`--objects-from` when given,
+    else `.env`'s VEYQ_BACKUP_OBJECTS_TO; its credentials from `.env`'s VEYQ_BACKUP_POOL_*. A directory is absolute and
+    never inside `releases/` (a release's directory is replaced by the release it names); inside `backups/` is allowed
+    — the Run page says why another disk is better."""
+    values = env_values((home / ENV_FILE).read_text()) if (home / ENV_FILE).is_file() else {}
+    env = {key: unquoted(values[key]) for key in POOL_KEYS if unquoted(values.get(key, ""))}
+    raw = given if given else unquoted(values.get(POOL_TARGET_KEY, ""))
+    if not raw:
+        return PoolChoice(None, env)
+    if raw.startswith("s3:"):
+        return PoolChoice(raw, env)
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        if not given:
+            raise Refused(f"{POOL_TARGET_KEY}={raw} in {home / ENV_FILE} is not an absolute path (nor s3:<bucket>) — "
+                          f"name the pool's directory in full. Nothing was stopped.")
+        path = path.absolute()
+    releases = (home / RELEASES_DIR).absolute()
+    if path == releases or releases in path.parents:
+        raise Refused(f"{flag} {path} is inside {releases}, whose directories belong to the releases. Nothing was "
+                      f"stopped.")
+    return PoolChoice(str(path), env)
+
+
+def copy_objects_early(host: Host, home: Path, state: State, tool: BackupTool, pool: PoolChoice) -> None:
+    """The hot early copy (ADR 0096 decision 5 step 4): the whole bucket into the pool while the app still runs, so the
+    cold top-up after the stop copies only what arrived since. Objects are immutable; a failure stops nothing."""
+    say(f"copying the store's objects into the pool {pool.target} while the app still runs")
+    host.run([sys.executable, str(tool.path), "copy-objects", "--objects-to", pool.target, "--docker-network",
+              tool.facts.network], env={**tool.env, **pool.env}, stream=True)
+
+
+def capture(host: Host, home: Path, state: State, tool: BackupTool, key_into: Path, name: str,
+            pool: PoolChoice | None = None) -> Path:
     """Legs (a), (b) and (c) of the stopped instance, by the running release's own backup tool, then verified."""
-    facts, env = tool.facts, tool.env
+    facts, env = tool.facts, {**tool.env, **(pool.env if pool else {})}
+    pooled = ["--objects-to", pool.target] if pool and pool.target else []
     target = home / BACKUPS_DIR / name
     # Leg (c) lives on a volume, under Docker's data root — not a path this host can always read (Docker Desktop
     # keeps it in a VM). `docker cp` takes it out of the stopped app container instead, into a 0700 directory in
@@ -1193,11 +1272,38 @@ def capture(host: Host, home: Path, state: State, tool: BackupTool, key_into: Pa
         host.run(["docker", "cp", f"{app_container(host, state.project)}:{facts.key_path}", str(key)])
         host.run([sys.executable, str(tool.path), "capture", "--compose-file", str(release_dir(home, state.release) / COMPOSE_ASSET),
                   "--docker-network", facts.network, "--config-secret-file", str(key), "--key-into", str(key_into),
-                  "--into", str(target)], env=env, stream=True)
+                  "--into", str(target), *pooled], env=env, stream=True)
     host.run([sys.executable, str(tool.path), "verify", str(target), "--key-from", str(key_into)], env=env, stream=True)
-    say(f"backup: {target} (legs a and b), leg (c) at {key_into} — keep them apart, encrypt both before they leave "
-        f"this host")
+    say(f"backup: {target} (the database and the store's index), leg (c) at {key_into} — keep them apart, encrypt "
+        f"both before they leave this host; " + (f"the objects are in the pool {pool.target}" if pooled else
+                                                  "the objects stay in the store, which alone keeps them"))
     return target
+
+
+BUNDLED_WARNING = (
+    "WARNING: this instance stores its photos and files in the bundled store, which keeps no object versions, and "
+    f"no object pool is named ({POOL_TARGET_KEY} in .env). A backup holds the database and the store's INDEX, not "
+    "the objects: a lost store volume loses every photo and file, whatever backups/ holds. Name a pool on another "
+    f"disk — {POOL_TARGET_KEY}=/path/on/another/disk (or s3:<bucket> with VEYQ_BACKUP_POOL_*) — and every backup and "
+    "upgrade copies the new objects into it: https://raddatzk.github.io/veyq/run/backup-and-restore/")
+
+
+def pool_warning(host: Host, home: Path, state: State) -> None:
+    """ADR 0096 decision 6: say it while the bundled store has no pool. Never changes an exit code — `status`'s is the
+    health verdict. `none` (no store chosen yet) warns the same: the first store an instance gets is the bundled one by
+    default. A store of the operator's own is theirs to keep durable, and is silent."""
+    if pool_choice(home, None, POOL_TARGET_KEY).target:
+        return
+    try:
+        tool = backup_tool(host, home, state)
+        in_use = host.run([sys.executable, str(tool.path), "store-in-use", "--compose-file",
+                           str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env).stdout.strip()
+    except Refused as e:
+        say(f"the store setting in use could not be read ({str(e).splitlines()[0][:200]})")
+        in_use = "unreadable"
+    if in_use != "own":
+        say(f"the store in use: {in_use or 'none named'}")
+        say(BUNDLED_WARNING)
 
 
 def place_key(host: Host, home: Path, state: State, key: Path, key_path: str) -> None:
@@ -1300,14 +1406,18 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     say(f"step 3: release {manifest.release}'s template is satisfied by {home / ENV_FILE}")
     try:
         tool = backup_tool(host, home, state)
+        pool = pool_choice(home, args.objects_to, "--objects-to")
+        if pool.target:
+            copy_objects_early(host, home, state, tool, pool)
     except Refused:
         staged.unlink()
         raise
 
     # 4. back up; stop the app; switch to the new release's recipe and image lines; up; wait until healthy
+    stopped = time.monotonic()
     stop_app(host, home, state)
     try:
-        backup = capture(host, home, state, tool, key_into, f"{utc_stamp()}-before-{manifest.release}")
+        backup = capture(host, home, state, tool, key_into, f"{utc_stamp()}-before-{manifest.release}", pool)
     except Refused:
         staged.unlink()
         say(f"the backup failed — nothing was switched; starting release {state.release} again")
@@ -1321,7 +1431,9 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     except Refused as e:
         raise Refused(f"{e}\nRelease {manifest.release} is switched in but not healthy. The way back is on disk: "
                       f"release {state.release}'s recipe in {release_dir(home, state.release)}, and the backup "
-                      f"{backup} with its key at {key_into} — restore it onto release {state.release}.") from None
+                      f"{backup} with its key at {key_into} — `veyqctl rollback {backup} --key-from {key_into}` "
+                      f"restores it in place under release {state.release}.") from None
+    say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping the app to release {manifest.release} healthy")
     say(f"release {manifest.release} runs; release {state.release} stays in {release_dir(home, state.release)}")
     if chosen != selection:
         say(entry_note(selector, selection, chosen, "the next `upgrade`"))
@@ -1335,11 +1447,16 @@ def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     key_into = key_destination(home, args.key_into, "`backup`")
     state = read_state(home)
     tool = backup_tool(host, home, state)
+    pool = pool_choice(home, args.objects_to, "--objects-to")
+    if pool.target:
+        copy_objects_early(host, home, state, tool, pool)
+    stopped = time.monotonic()
     stop_app(host, home, state)
     try:
-        capture(host, home, state, tool, key_into, utc_stamp())
+        capture(host, home, state, tool, key_into, utc_stamp(), pool)
     finally:
         up(host, compose(home, state.release, state.project), state.project)
+        say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping the app to every service healthy again")
     return 0
 
 
@@ -1352,13 +1469,18 @@ def cmd_restore(args: argparse.Namespace, host: Host) -> int:
     tool = backup_tool(host, home, state)
     key_args = ["--without-key"] if args.without_key else (["--key-from", str(Path(args.key_from).absolute())]
                                                            if args.key_from else [])
+    # Only when given: a restore copies objects only into an EMPTY store, so `.env`'s pool is never implied — without
+    # it the restore checks the objects in the live store (the way back from an upgrade) and writes none.
+    pool = pool_choice(home, args.objects_from, "--objects-from") if args.objects_from else PoolChoice(None, {})
+    source = ["--objects-from", pool.target] if pool.target else []
     stop_app(host, home, state)
     with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
         key = Path(tmp) / "config-secret.key"
         try:
             host.run([sys.executable, str(tool.path), "restore", str(backup), "--domain", args.domain, "--compose-file",
                       str(release_dir(home, state.release) / COMPOSE_ASSET), "--docker-network", tool.facts.network,
-                      "--config-secret-file", str(key), *key_args], env=tool.env, stream=True)
+                      "--config-secret-file", str(key), *key_args, *source], env={**tool.env, **pool.env},
+                     stream=True)
         except Refused:
             say("the restore did not finish; the app stays STOPPED — the tool above says whether anything was written "
                 "(a refusal at its gates wrote nothing: `veyqctl start` brings the instance back as it was)")
@@ -1370,6 +1492,96 @@ def cmd_restore(args: argparse.Namespace, host: Host) -> int:
     say("restored. Now read the config-secret state as the Server Owner (admin console → Server → Config-secret key "
         "must say OK), check the store, and open a Memory that has media — that is what separates a restore from a "
         "hope (ADR 0056 §5)")
+    return 0
+
+
+def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
+    """Back to the release a capture was taken under, IN PLACE (ADR 0096, owner 2026-10-17 O1 (a)) — the cluster's
+    rollback (ADR 0098 decision 9) in Compose's form. The capture holds the database and the store's index; its objects
+    are still in this instance's own store, which an upgrade never rewrites, so nothing but the database moves back:
+    every check runs first, then stop, empty the database, switch `.env` and the state to the capture's release, start
+    it once (it migrates the empty schema; the bucket exists), stop, restore with the check only, place the key, start.
+    Objects uploaded under the failed release stay in the store as orphans with no reclaim row."""
+    home = Path(args.home)
+    state = read_state(home)
+    capture_dir = Path(args.capture).absolute()
+    try:
+        manifest = json.loads((capture_dir / "manifest.json").read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"{capture_dir} is not a capture this tool reads ({e}). Nothing was stopped.") from None
+    target = ((manifest.get("app") or {}).get("version") or "")
+    if not target:
+        raise Refused(f"{capture_dir} names no release it was taken under (manifest app.version), so there is no "
+                      f"release to roll back to. Nothing was stopped.")
+    if not (release_dir(home, target) / MANIFEST_ASSET).is_file():
+        raise Refused(f"the capture was taken under release {target}, whose directory {release_dir(home, target)} is no "
+                      f"longer in the home — install it as a new instance and restore onto that ({BACKUPS_DIR}/ keeps "
+                      f"the capture). Nothing was stopped.")
+    key_from = Path(args.key_from).absolute()
+    if not key_from.is_file():
+        raise Refused(f"--key-from {key_from} is not a file. Nothing was stopped.")
+    domains = manifest.get("domains") or []
+    domain = domains[0] if domains else unquoted(env_values((home / ENV_FILE).read_text()).get("VEYQ_DOMAIN", ""))
+
+    # Everything that can refuse, before anything stops: the capture's release's tool, the template it needs, and
+    # the capture against the live store — the in-place rollback writes no object, so every one must be there.
+    running = compose(home, state.release, state.project)
+    facts = stack_facts(host, running)
+    tool = BackupTool(verified_asset(home, target, BACKUP_ASSET), facts, backup_env(home, state, facts))
+    old_manifest = read_release_manifest(home, target)
+    template = (release_dir(home, target) / TEMPLATE_ASSET).read_text()
+    values, missing = upgrade_values(template, old_manifest, env_values((home / ENV_FILE).read_text()))
+    if missing:
+        raise Refused(f"release {target}'s template requires {', '.join(missing)}, which .env lacks. Nothing was stopped.")
+    staged = home / f"{ENV_FILE}.rollback"
+    write_private(staged, render_env(template, values))
+    try:
+        host.run(["docker", "compose", "-p", state.project, *compose_files(home, target), "--env-file", str(staged),
+                  "config", "--quiet"])
+        host.run([sys.executable, str(tool.path), "verify", str(capture_dir), "--key-from", str(key_from),
+                  "--against-store", "--docker-network", facts.network], env=tool.env, stream=True)
+        say(f"the capture verifies against the live store: every object its rows require is there")
+        sure = True if args.yes else host.confirm(
+            f"EMPTY the database of project {state.project} (release {state.release}) and restore {capture_dir.name} "
+            f"under release {target}?")
+        if sure is None:
+            raise Refused("the rollback empties the database; without a terminal to confirm it, pass --yes. Nothing "
+                          "was stopped.")
+        if not sure:
+            raise Refused("not confirmed. Nothing was stopped.")
+    except Refused:
+        staged.unlink()
+        raise
+
+    stop_app(host, home, state)
+    host.run([sys.executable, str(tool.path), "empty-database", "--yes", "--compose-file",
+              str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env, stream=True)
+    os.replace(staged, home / ENV_FILE)
+    back = state._replace(release=target)
+    write_state(home, back)
+    say(f"the database is empty; .env and the state name release {target}. Starting it once, so it migrates the "
+        f"empty schema")
+    base = compose(home, target, state.project)
+    up(host, base, state.project)
+    stop_app(host, home, back)
+    with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
+        key = Path(tmp) / "config-secret.key"
+        try:
+            host.run([sys.executable, str(tool.path), "restore", str(capture_dir), "--domain", domain, "--compose-file",
+                      str(release_dir(home, target) / COMPOSE_ASSET), "--docker-network", facts.network,
+                      "--config-secret-file", str(key), "--key-from", str(key_from)], env=tool.env, stream=True)
+        except Refused:
+            say(f"the restore did not finish; release {target} runs on an EMPTY database, its app STOPPED — the tool "
+                f"above says why. Fix it and run `veyqctl restore {capture_dir} --domain {domain} --key-from "
+                f"{key_from}`")
+            raise
+        if key.is_file():
+            place_key(host, home, back, key, facts.key_path)
+    up(host, base, state.project)
+    say(f"rolled back to release {target} from {capture_dir.name}; release {state.release} stays in "
+        f"{release_dir(home, state.release)}. .env keeps VEYQ_RELEASE as it was, so the next `upgrade` moves forward "
+        f"again — pin it to {target} to stay. Now read the config-secret state as the Server Owner, check the store, "
+        f"and open a Memory that has media (ADR 0056 §5)")
     return 0
 
 
@@ -1456,10 +1668,14 @@ def parser() -> argparse.ArgumentParser:
     upgrade.add_argument("--key-into", metavar="FILE", help="where the backup's leg (c) goes — required, its own medium")
     upgrade.add_argument("--unsigned-local", action="store_true",
                          help="a release produced from a local docker build: no signature is checked")
+    upgrade.add_argument("--objects-to", metavar="POOL", help=f"the object pool for this run's backup, instead of "
+                                                               f".env's {POOL_TARGET_KEY}")
     upgrade.set_defaults(func=cmd_upgrade)
 
     backup = sub.add_parser("backup", help="capture the three legs with the running release's backup tool")
     backup.add_argument("--key-into", metavar="FILE", help="where leg (c) goes — required, its own medium")
+    backup.add_argument("--objects-to", metavar="POOL", help=f"the object pool for this run, instead of .env's "
+                                                              f"{POOL_TARGET_KEY}: an absolute directory or s3:<bucket>")
     backup.set_defaults(func=cmd_backup)
 
     restore = sub.add_parser("restore", help="restore a capture onto this instance, which must hold no data yet")
@@ -1470,7 +1686,17 @@ def parser() -> argparse.ArgumentParser:
     key = restore.add_mutually_exclusive_group()
     key.add_argument("--key-from", metavar="FILE", help="leg (c), from wherever the capture's key was kept")
     key.add_argument("--without-key", action="store_true", help="restore knowingly without leg (c)")
+    restore.add_argument("--objects-from", metavar="POOL",
+                         help="copy the objects from this pool into this instance's EMPTY store — a restore onto a "
+                              "fresh instance; without it the objects are checked in the live store, none written")
     restore.set_defaults(func=cmd_restore)
+
+    rollback = sub.add_parser("rollback", help="back to the release a capture was taken under, in place: empty the "
+                                               "database, start that release once, restore with the check only")
+    rollback.add_argument("capture", help="the capture directory, taken under the release to go back to")
+    rollback.add_argument("--key-from", required=True, metavar="FILE", help="the capture's leg (c)")
+    rollback.add_argument("--yes", action="store_true", help="empty the database without asking (no terminal)")
+    rollback.set_defaults(func=cmd_rollback)
 
     update = sub.add_parser("self-update", help="replace this veyqctl with the installed release's")
     update.set_defaults(func=cmd_self_update)

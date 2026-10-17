@@ -100,7 +100,9 @@ So the things you own are:
 A veyq backup has **two halves**, and the server only holds one of them.
 
 1. **The server's half** — and it is *three* things, not two. The database, the object store's contents, and a
-   small **key file** the server manages for itself. The third is the one that gets forgotten, and its absence
+   small **key file** the server manages for itself. A backup holds the database and an *index* of the stored
+   objects; the objects themselves are kept by the store or by an object pool you name — on the bundled store, which
+   keeps no versions, only the pool does, and `veyqctl status` warns until there is one. The third is the one that gets forgotten, and its absence
    is the one that hides: an instance restored without it starts up, serves every page, and then, in every
    space whose mail relay needs a password, refuses to invite anybody or send a password-reset link. Nothing in
    it lets anyone read your members' memories. But the database plus the key file do unlock the SMTP passwords

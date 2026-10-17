@@ -1,9 +1,10 @@
 # ADR 0056 — An instance's durable state has three legs, and it is captured with the writer stopped
 
-- Status: Accepted. §3's store leg as an **index** with an optional object pool, and §7's object checks (owner
-  2026-10-17): built for the cluster's backup gate ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md));
-  decided and not yet built for Compose and `veyqctl`, whose captures still copy the bucket (cr-backup-store-leg-is-an-index
-  builds it).
+- Status: Accepted. §3's store leg as an **index** with an optional, pruned object pool, and §7's object checks (owner
+  2026-10-17): built for every capture — the cluster's backup gate
+  ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)), Compose and `veyqctl` — and held by
+  `scripts/instance_backup_selftest.py` (groups P and G); proven live on a throwaway Compose project
+  (cr-backup-store-leg-is-an-index).
 - Date: 2026-08-06
 
 ## Context
@@ -122,15 +123,27 @@ Logical, for three reasons, in order of weight:
   than **holding no tables**.
 
 **The object pool is optional and named per run** (`--objects-to <target>`: a directory, or a bucket of another
-S3-compatible store whose credentials come from the environment, never an argument). It is **copy-only**: rclone
-`copy --immutable`, never `sync`, `move` or a delete — a pool only grows, so an object a later capture no longer
-lists is still there for an earlier capture's restore, and a key whose bytes differ from the pool's copy fails the
+S3-compatible store whose credentials come from the environment, never an argument). It is **copied into, never
+synced**: rclone `copy --immutable`, never `sync` or `move` — a key whose bytes differ from the pool's copy fails the
 capture instead of replacing it (objects are immutable, so a differing copy is a fault, never an update; measured
 with the pinned rclone 1.75.0: `copy --immutable` exits 6, *"immutable file modified"*, and leaves the pool's copy).
 It is **incremental by construction**: a key the pool holds is not copied again. The capture records the pool's
 target (never a credential) beside the index, and **the index is what ties the two**: a restore copies exactly the
 index's keys out of the pool, whatever else the pool holds. The pool holds ciphertext only, as the store does, so it
 changes nothing about what the operator can read.
+
+**The pool keeps exactly what its retained captures need** (owner 2026-10-17). An object is deleted from the pool as
+soon as no retained capture's index names it, and captures rotate by `keep` — so a deletion, a member's erasure
+included, reaches the pool within the backup rotation window [security-model](../crosscutting/security-model.md)
+promises, and an object an earlier, still-retained capture needs is never deleted. The retained captures are the
+pool's own: every capture that named the pool writes its index's keys into the pool's ledger (`veyq-pool/captures/`)
+once every one of them is in the pool, and the ledger keeps the newest `keep` (`--pool-keep`, default 3, as the
+gate's `backup.keep`) — not the capture directories, which an operator moves, encrypts or keeps off the host, and
+which nothing deletes. The prune is the pool's one delete (`delete --files-from` the computed list), runs only after
+the new capture's entry is written, and refuses when the ledger it reads lacks that entry, since a ledger read that
+came back empty would otherwise name nothing and delete everything. A capture outside the newest `keep` still
+restores without a source, its objects being in the store; from the pool it refuses by name whatever the pool no
+longer holds. A pool therefore serves one instance.
 
 **The bundled store keeps no history of its own.** Garage, the pinned v2.0.0, has no object versioning (measured
 2026-10-17 against a throwaway node through the pinned rclone: `GetBucketVersioning` answers `Unversioned`,
@@ -141,8 +154,7 @@ copy of the store keeps an object the store loses, and `veyqctl status` says so 
 ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 4).
 
 **Every capture is `backupFormat` 3.** A capture that holds its objects itself (`objects/`, `backupFormat` 2, what
-Compose wrote before this decision, and writes until it is built — see Status) is then written by nothing and stays
-readable: it verifies against its own
+Compose wrote before this decision) is written by nothing and stays readable: it verifies against its own
 `objects/` and restores by copying them, which, like any restore that writes objects, goes only into an empty store
 (§7).
 
@@ -197,7 +209,12 @@ compares the manifest's `database.schemaVersion` with the Flyway version the fre
 This turns "install the backup's release, restore, upgrade" into "restore, start". It also means **the
 target's release decides the outcome**. A rollback after a failed upgrade (§6) therefore still starts by
 installing the release the backup came from. Restoring the pre-upgrade backup onto the new release would only
-run the failed upgrade again. The restore says this when the backup is older than its target.
+run the failed upgrade again. The restore says this when the backup is older than its target. On Compose the
+rollback is **in place** (owner 2026-10-17): the capture holds no object and an upgrade rewrites none, so `veyqctl
+rollback` empties the database, starts the capture's release once, and restores with the check only — the objects
+never leave the store ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), the cluster's
+rollback in [ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md) decision 9 in Compose's
+form).
 
 **Rejected — refusing every backup that is not exactly the target's version.** It is safe, but it makes the
 operator carry the downgrade-restore-upgrade sequence by hand. Each step in it is one more place to install the

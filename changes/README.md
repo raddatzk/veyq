@@ -1676,6 +1676,18 @@ workflow pushed images on a dispatch only, so on a push there was nothing to pul
 does today, per event (`grep -n "push:" .github/workflows/ci.yml`), and says which half of its sentence waits on
 which unbuilt decision.
 
+### An owner's answer that reverses a decision is edited into every phase it reverses
+
+`cr-backup-store-leg-is-an-index` recorded the owner's O3 — the object pool is pruned, not grow-only — under *Decided
+with the owner*, and left decision 3 (*"no `delete*` may name a pool"*), bite B4 (*"`copy --immutable` or a read"*),
+phase 4's step *"the pool never deletes"* and the coverage criterion `an-object-pool-only-grows` saying the opposite.
+The brief carried the correction, so the implementer re-derived the prune's bites and B4's new shape from it — a
+CR whose body and appendix disagree hands the implementer a choice that was the owner's. And the answer's own terms
+had no referent on one target: *"captures rotate by `keep`"* is the cluster gate's rule, while Compose rotated no
+capture at all, so what a "retained capture" is there was decided at implement (the pool's own ledger) and handed
+back as such. So an answer that reverses a settled decision rewrites, in the edit that records it, every decision,
+bite and step it reverses, and names what each new term refers to on every target the CR touches.
+
 
 ### Two CRs that write the same page name each other, and split it by section
 

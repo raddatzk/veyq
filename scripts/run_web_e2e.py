@@ -18,9 +18,10 @@ unchanged, and a **group of one is byte-for-byte the old behaviour** — an ordi
 gets its own boot, keeps the shared `blobs` bucket, and never touches a hook. Only a real group gets its own
 bucket, because only a real group has a hook that destroys one.
 
-The hook is what a group exists for: `restore.*` captures the instance with the app already stopped,
-**destroys the source** (database dropped, bucket purged, key file removed), restores onto a structurally empty
-one, and boots the next member against *that*. Destroying the source is not tidiness — it is the only way "the
+The hook is what a group exists for: `restore.*` captures the instance with the app already stopped — the database,
+the store's index, and the objects into an object pool in the group directory (ADR 0056 §3) — **destroys the source**
+(database dropped, bucket purged, key file removed), restores onto a structurally empty one with `--objects-from` that
+pool, and boots the next member against *that*. Destroying the source is not tidiness — it is the only way "the
 restore worked" and "nothing was restored" can be told apart from outside. Members exchange whatever they need
 through `$VEYQ_GROUP_DIR`, a directory that outlives the boot.
 
@@ -819,6 +820,7 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     """
     backup, kept_key, target, restore = capture_destroy_install(index, source, group_dir, CANDIDATE)
     assert_unsupplied_key_is_refused(restore, target)
+    assert_store_holding_an_object_is_refused(restore, target)
     if with_key:
         assert_newer_backup_is_refused(restore, backup, group_dir, target)
         # The restore of this group is ALSO the older-backup rehearsal (ADR 0056 §7): the target is made to look
@@ -842,12 +844,20 @@ def capture_destroy_install(index: int, source: Instance, group_dir: Path,
     """The first half every hook shares: capture the stopped source (key kept apart), verify it, destroy the source, and
     install the target the restore goes onto — with the jar of `build`, the build of the member that runs next. Returns
     the capture, the kept key, the target and the restore command without its key flag: each hook adds the flag its
-    rehearsal is about."""
+    rehearsal is about.
+
+    **The objects travel through an object pool** (ADR 0056 §3): a capture holds the database and the store's index,
+    never the objects, and `destroy` purges the source bucket — so a restore without a source would find the target's
+    store empty and refuse (ADR 0056 §7; the tool's self-test case P9). The capture names a pool in the group directory
+    and every restore built here names it with `--objects-from`, the restore onto a fresh instance an operator runs."""
     backup = group_dir / "backup"
     kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
+    pool = (group_dir / "pool").resolve()
+    shutil.rmtree(pool, ignore_errors=True)  # a pool is kept across captures; this rehearsal's starts empty
     backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
-                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file))
-    verify_capture(backup, kept_key)
+                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file),
+                "--objects-to", str(pool))
+    verify_capture(backup, kept_key, pool)
 
     destroy(source)
 
@@ -857,7 +867,8 @@ def capture_destroy_install(index: int, source: Instance, group_dir: Path,
     fresh_bucket(target.bucket)
     install(target, group_dir / f"backend-install-{index}.log", build)
     restore = ["restore", str(backup), "--domain", HOST, "--db-name", target.database,
-               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
+               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file),
+               "--objects-from", str(pool)]
     return backup, kept_key, target, restore
 
 
@@ -889,7 +900,7 @@ def upgrade_hook(index: int, source: Instance, group_dir: Path, build: Build) ->
     return target
 
 
-def verify_capture(backup: Path, kept_key: Path) -> None:
+def verify_capture(backup: Path, kept_key: Path, pool: Path | None = None) -> None:
     """Every capture is checked by the tool's own `verify`, and must hold no key file of its own.
 
     Exit 0 is the whole verdict: a structurally broken capture exits 1 and one missing leg (c) exits 2 — and so
@@ -898,6 +909,11 @@ def verify_capture(backup: Path, kept_key: Path) -> None:
     stopped looking could not pass it by itself.
     """
     backup_tool("verify", str(backup), "--key-from", str(kept_key))
+    if pool is not None:
+        recorded = (json.loads((backup / instance_backup.MANIFEST_NAME).read_text())["store"].get("pool") or {})
+        if recorded.get("target") != str(pool) or not pool.is_dir():
+            raise SystemExit(f"[e2e] CAPTURE NAMES ANOTHER POOL: its manifest's store.pool.target is "
+                             f"{recorded.get('target')!r}, the capture was told {shown(pool)} (ADR 0056 §3)")
     beside = backup / instance_backup.KEY_NAME
     if beside.exists():
         raise SystemExit(f"[e2e] CAPTURE LEAKS: {shown(beside)} sits beside the dump — the capture was told to keep "
@@ -948,6 +964,34 @@ def assert_unsupplied_key_is_refused(restore: list[str], target: Instance) -> No
     if target.secret_file.exists():
         raise SystemExit(f"[e2e] KEY GATE WROTE: the refused restore placed {shown(target.secret_file)}")
     log("leg (c) control: refused at the gate, naming the key it needs")
+
+
+def assert_store_holding_an_object_is_refused(restore: list[str], target: Instance) -> None:
+    """The store's half of A5 (ADR 0056 §7): objects are copied only into an EMPTY store.
+
+    One object is put into the freshly installed target's bucket, and the restore — the same command the hook runs
+    next, `--without-key` so the key gate cannot be what refuses — must be refused naming the store; the object is then
+    removed, and the hook's own restore that follows is this negative's positive control on the same target. Asserted
+    on the message, never on a bare non-zero exit. Put and removed with the tool's own rclone plumbing (`Store`).
+    """
+    store = _store_for(target.bucket)
+    decoy = f"{instance_backup.REMOTE}:{target.bucket}/veyq-e2e-decoy/0"
+    log("A5 store control: the restore onto a target whose store holds one object — must be refused, naming it")
+    if store._run(["touch", decoy]).returncode != 0:
+        raise SystemExit(f"[e2e] could not put the decoy object into {target.bucket}")
+    try:
+        result = backup_tool_result(*restore, "--without-key")
+        body = result.stdout + result.stderr
+    finally:
+        removed = store._run(["deletefile", decoy])
+    if removed.returncode != 0:
+        raise SystemExit(f"[e2e] could not remove the decoy object from {target.bucket}: {removed.stderr[-300:]}")
+    if result.returncode == 0:
+        raise SystemExit("[e2e] A5 STORE GATE OPEN: a restore copied objects into a store that held one already")
+    if "already holds 1 object" not in body:
+        raise SystemExit(f"[e2e] A5 STORE GATE REFUSED FOR THE WRONG REASON: the restore failed without naming the "
+                         f"object the store held. Output was: {body.strip()[-500:]}")
+    log("A5 store control: refused, naming the object the store held; removed again for the restore that follows")
 
 
 def assert_populated_target_is_refused(restore: list[str]) -> None:
