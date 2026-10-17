@@ -1053,9 +1053,14 @@ jobs:
           git push origin "refs/tags/v${VERSION}"
 
       # The release as files (ADR 0096 decision 3): scripts/release_assets.py writes the recipe set, `veyqctl`, the
-      # backup tool and the manifest naming both images by the digests signed above; `veyqctl` is signed keylessly, its
-      # bundle an asset beside it and not in the manifest (it vouches for the `veyqctl` an operator fetches by hand,
-      # before any manifest is checked); and ONE `gh release create` uploads the whole directory — because an immutable
+      # backup tool and the manifest naming both images by the digests signed above. Two files are signed keylessly,
+      # under the images' identity, each bundle an asset beside it and not in the manifest: `manifest.json`, whose
+      # bundle `veyqctl` verifies before it trusts any sha256 or digest the manifest names — from GitHub, a mirror or a
+      # directory alike (inbox #469: unsigned, the recipe was exactly as trustworthy as its source) — so nothing may
+      # rewrite the manifest after it is signed; and `veyqctl`, for the copy an operator fetches by hand, before any
+      # manifest is checked. Both in the Sigstore bundle format (`--new-bundle-format`), the one cosign 3 reads by
+      # default and the only one a later cosign keeps: a published bundle can never be re-signed. And ONE
+      # `gh release create` uploads the whole directory — because an immutable
       # release (a repository setting the owner switches on before the first release) takes no asset after it is
       # published — on the ref the step above pushed (`--verify-tag`), never a draft or a prerelease, which `veyqctl`
       # would not install. The manifest is also what an instance's release check reads (ReleaseFeed, ADR 0097). LAST,
@@ -1086,9 +1091,10 @@ jobs:
             exit 1
           fi
 
-          cosign sign-blob --yes --bundle "${out}/v${VERSION}/veyqctl.bundle" "${out}/v${VERSION}/veyqctl"
+          cosign sign-blob --yes --new-bundle-format --bundle "${out}/v${VERSION}/veyqctl.bundle" "${out}/v${VERSION}/veyqctl"
+          cosign sign-blob --yes --new-bundle-format --bundle "${out}/v${VERSION}/manifest.json.bundle" "${out}/v${VERSION}/manifest.json"
 
           gh release create "v${VERSION}" --verify-tag --repo "$GITHUB_REPOSITORY" \
             --title "veyq ${VERSION}" --latest="$PUBLISH_LATEST" \
-            --notes "veyq ${VERSION}. manifest.json names both images by digest; veyqctl installs and upgrades from this release, and veyqctl.bundle is its cosign signature." \
+            --notes "veyq ${VERSION}. manifest.json names both images by digest and every other asset by its sha256, and manifest.json.bundle is its cosign signature; veyqctl installs and upgrades from this release, and veyqctl.bundle is its cosign signature." \
             "${out}/v${VERSION}"/*
