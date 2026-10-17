@@ -70,8 +70,10 @@ through the recipe's Traefik. This lands **before** the moderation CR, which is 
     (`sed -n 16,27p scripts/release_assets.py`). So the plugin cannot travel as a directory or as a file named
     `.traefik.yml` — it travels as two flat files mounted file by file (M11 proves the shape works).
 - **Sibling CRs on the same files** (§ *Two CRs that write the same page*): `cr-kubernetes-backup-gate` edits
-  `charts/veyq/values.schema.json` and `application.properties`; `cr-signed-release-manifest` and
-  `cr-kubernetes-backup-gate` edit `scripts/run_stack_e2e.py` (the install path; this CR adds a stage before it). This
+  `charts/veyq/values.schema.json` and `application.properties`; `cr-kubernetes-backup-gate` edits
+  `scripts/run_stack_e2e.py` (the install path; this CR adds a stage before it). The signed release manifest has
+  landed (the publish step signs `manifest.json`, `release_assets.MANIFEST_BUNDLE`, `validate_release_identity.py`
+  assertion 11 collects every `sign-blob` line) and left the lane's stages as they were. This
   CR touches only the `app.clientPort` subtree of the schema, the `# Per-IP rate limit` block of the properties, and a
   new stage of the lane. The second to land rebases onto the first and re-reads the shared file. The moderation CR
   (not written) consumes the port; § For the moderation CR in ADR 0094 binds it (phase 4).
@@ -322,7 +324,7 @@ compose recipe, the risk named. The options stay below as the record.
     `helm template` with `--set app.clientPort.source=proxyProtocol` over `charts/veyq/ci/lint-values.yaml` renders the
     PROXY env and three probes on `admin`, and `--set app.clientPort.source=bogus` is refused by the schema;
     `docker compose -f infra/docker-compose.prod.yml config --no-interpolate` shows both mounts.
-- [ ] **3 stack — the forged header through the release's Traefik (O1 (a); re-plan if the owner picks otherwise).**
+- [x] **3 stack — the forged header through the release's Traefik (O1 (a); re-plan if the owner picks otherwise).**
   - A stage in `scripts/run_stack_e2e.py` after `assets`, as O1 (a) describes, reading everything from the run's `src/`
     compose file — never a second copy of the flags. Run-private network and containers under the run's project, torn
     down by the run's teardown and checked by its `host` stage.
