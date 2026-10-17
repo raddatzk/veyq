@@ -47,12 +47,6 @@ tags:
       moderation key after the first, which first-run setup mints. A tag of its own, so its resource owns the `/api/instance/moderation`
       subtree. The moderator's half is `moderation.openapi.yaml`, on the public listener.
 
-  - name: instance-store-reconcile
-    description: >
-      The bucket reconcile (ADR 0062 § Consequences, uc.admin.configure-object-store A7): what its passes found and the
-      Server Owner's two switches over its deletions — the exclusive-bucket confirmation and the pause. A tag of its own,
-      so its resource owns the `/api/instance/store/reconcile` subtree.
-
   - name: instance-operator
     description: >
       The operating mode (ADR 0093 § 14, ADR 0088 decision 14) and the values a host publishes about itself — the
@@ -60,6 +54,12 @@ tags:
       6–7) — with the contact's private notification address and its code confirmation (ADR 0097 decision 5). A tag
       of its own, so its resource owns the `/api/instance/operator` subtree. The public read of the published values
       is `operator.openapi.yaml`.
+
+  - name: instance-store-reconcile
+    description: >
+      The bucket reconcile (ADR 0062 § Consequences, uc.admin.configure-object-store A7): what its passes found and the
+      Server Owner's two switches over its deletions — the exclusive-bucket confirmation and the pause. A tag of its own,
+      so its resource owns the `/api/instance/store/reconcile` subtree.
 
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
 # request that came through the admin container; the public port 404s it. Reachability, not a role: the role
@@ -1421,20 +1421,6 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: moderation_grants_incomplete }
 
-  /api/instance/store/reconcile:
-    get:
-      tags: [instance-store-reconcile]
-      operationId: getStoreReconcile
-      x-veyq-channel: admin
-      summary: Read what the bucket reconcile found — the objects no row claims, the candidates for deletion, and why it would or would not delete them.
-      description: >
-        A background sweep lists the object store in use page by page and compares every object with the rows that name
-        a storage key ([ADR 0062](../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md) § Consequences,
-        uc.admin.configure-object-store A7). This returns its last completed pass, the pass in progress, the failure that
-        stopped one, the reclaim list's own counts, and the **candidates**: storage keys that no row claimed in every pass
-        since they were first seen. A candidate is put on the reclaim list once it has been one for the grace period —
-        only while `verdict` is `ARMED`, i.e. the Server Owner confirmed the bucket holds only this instance's objects and
-        did not pause. Counts and instants only: no key, no scope. Server-Owner only.
   /api/instance/operator:
     get:
       tags: [instance-operator]
@@ -1452,67 +1438,6 @@ paths:
         - bearerAuth: []
       responses:
         "200":
-          description: The reconcile as it stands.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/StoreReconcile" }
-              examples:
-                neverRan:
-                  summary: A fresh instance — no pass has run, nothing confirmed
-                  value:
-                    verdict: NOT_CONFIRMED
-                    graceSeconds: 2592000
-                    lastPass: null
-                    passInProgress: null
-                    failure: null
-                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
-                    exclusiveBucketConfirmedAt: null
-                    pausedAt: null
-                    clocksRestartedAt: null
-                    clocksRestartReason: null
-                    reclaim: { pending: 0, abandoned: 0 }
-                inProgress:
-                  summary: A pass is running; the last one found nothing
-                  value:
-                    verdict: NOT_CONFIRMED
-                    graceSeconds: 2592000
-                    lastPass: { startedAt: 2026-10-17T06:00:00Z, completedAt: 2026-10-17T06:04:10Z, objects: 18240, orphanObjects: 0, orphanBytes: 0, notVeyqObjects: 0, enqueuedKeys: 0 }
-                    passInProgress: { startedAt: 2026-10-17T12:00:00Z, objects: 7000 }
-                    failure: null
-                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
-                    exclusiveBucketConfirmedAt: null
-                    pausedAt: null
-                    clocksRestartedAt: null
-                    clocksRestartReason: null
-                    reclaim: { pending: 3, abandoned: 0 }
-                armedWithCandidates:
-                  summary: After a rollback, the failed release's uploads wait out the grace on a confirmed bucket
-                  value:
-                    verdict: ARMED
-                    graceSeconds: 2592000
-                    lastPass: { startedAt: 2026-10-17T12:00:00Z, completedAt: 2026-10-17T12:04:31Z, objects: 18263, orphanObjects: 23, orphanBytes: 61865984, notVeyqObjects: 1, enqueuedKeys: 0 }
-                    passInProgress: null
-                    failure: null
-                    candidates: { storageKeys: 9, objects: 23, bytes: 61865984, dueKeys: 0, oldestFirstSeenAt: 2026-10-17T12:01:02Z, newestFirstSeenAt: 2026-10-17T12:03:40Z, firstDueAt: 2026-11-16T12:01:02Z }
-                    exclusiveBucketConfirmedAt: 2026-10-17T12:10:00Z
-                    pausedAt: null
-                    clocksRestartedAt: null
-                    clocksRestartReason: null
-                    reclaim: { pending: 0, abandoned: 0 }
-                listDenied:
-                  summary: The store's key may not list the bucket — the last completed pass stays what is shown
-                  value:
-                    verdict: NOT_CONFIRMED
-                    graceSeconds: 2592000
-                    lastPass: null
-                    passInProgress: { startedAt: 2026-10-17T12:00:00Z, objects: 0 }
-                    failure: { at: 2026-10-17T12:00:01Z, reason: LIST_DENIED }
-                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
-                    exclusiveBucketConfirmedAt: null
-                    pausedAt: null
-                    clocksRestartedAt: null
-                    clocksRestartReason: null
-                    reclaim: { pending: 0, abandoned: 0 }
           description: The values as they stand.
           content:
             application/json:
@@ -1629,30 +1554,6 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
 
-  /api/instance/store/reconcile/exclusive-bucket:
-    put:
-      tags: [instance-store-reconcile]
-      operationId: confirmStoreExclusiveBucket
-      x-veyq-channel: admin
-      x-veyq-concurrency:
-        mode: last-writer-wins
-        reason: >-
-          One writer: the Server Owner; the write carries no value but the switch itself, set for the store in use, so the
-          later of two writes is the one the owner made last.
-      summary: Confirm that the bucket in use holds only this instance's objects, which arms the deletion of candidates past the grace.
-      description: >
-        The first of the reconcile's three conditions for deleting anything (ADR 0062): a bucket another instance or
-        another tool also writes to would show that writer's objects as orphans here. The confirmation is stored with its
-        time and for the store in use; a different store setting put in use voids it, and so does a restore (which also
-        restarts every grace period). Idempotent. Server-Owner only.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Confirmed; the reconcile as it now stands.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/StoreReconcile" }
   /api/instance/operator/notification/confirmation:
     post:
       tags: [instance-operator]
@@ -1697,19 +1598,6 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
         "409":
-          description: No store is usable (`no_store`), so there is no bucket to confirm. Nothing is stored.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: no_store }
-    delete:
-      tags: [instance-store-reconcile]
-      operationId: withdrawStoreExclusiveBucket
-      x-veyq-channel: admin
-      summary: Withdraw the exclusive-bucket confirmation; the reconcile goes back to only reporting.
-      description: >
-        Nothing more is put on the reclaim list until the bucket is confirmed again; candidates keep their grace periods.
-        Keys already on the reclaim list are that list's (ADR 0062). Idempotent. Server-Owner only.
           description: >
             `operator_code_invalid` = no code is outstanding, it expired, it was entered wrong too often, the
             notification address changed since it was sent, or this is not it. Save again for a new one. Nothing is
@@ -1740,10 +1628,6 @@ paths:
         - bearerAuth: []
       responses:
         "200":
-          description: Withdrawn; the reconcile as it now stands.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/StoreReconcile" }
           description: The mode and the preset.
           content:
             application/json:
@@ -1752,6 +1636,216 @@ paths:
                 mode: ORGANISATION
                 chosen: true
                 preset: []
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    put:
+      tags: [instance-operator]
+      operationId: setInstanceOperatingMode
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; a mode is one value, and setting it again sets its preset again by design.
+      x-veyq-channel: admin
+      summary: Set the operating mode, and with it the preset's instance switches.
+      description: >
+        Stores the mode and, in the same transaction, sets the instance-level switch of every capability entry whose
+        catalog `modes` gives a value for it — and nothing more: a tenant's switches and every entry without a preset
+        are untouched, and each preset switch stays an ordinary switch afterwards (ADR 0088 decision 14). Setting the
+        mode it already has sets its preset again. The notice and, for `PRIVATE`, the operator's tick are admin-web's
+        and the CLI's: the server does not record them (ADR 0093 § 14). Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceOperatingModeUpdate" }
+            example: { mode: PRIVATE }
+      responses:
+        "200":
+          description: Set; the mode and the preset as they now stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceOperatingMode" }
+        "400":
+          description: The request was malformed (no mode, or one that is neither PRIVATE nor ORGANISATION).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/store/reconcile:
+    get:
+      tags: [instance-store-reconcile]
+      operationId: getStoreReconcile
+      x-veyq-channel: admin
+      summary: Read what the bucket reconcile found — the objects no row claims, the candidates for deletion, and why it would or would not delete them.
+      description: >
+        A background sweep lists the object store in use page by page and compares every object with the rows that name
+        a storage key ([ADR 0062](../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md) § Consequences,
+        uc.admin.configure-object-store A7). This returns its last completed pass, the pass in progress, the failure that
+        stopped one, the reclaim list's own counts, and the **candidates**: storage keys that no row claimed in every pass
+        since they were first seen. A candidate is put on the reclaim list once it has been one for the grace period —
+        only while `verdict` is `ARMED`, i.e. the Server Owner confirmed the bucket holds only this instance's objects and
+        did not pause. Counts and instants only: no key, no scope. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The reconcile as it stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreReconcile" }
+              examples:
+                neverRan:
+                  summary: A fresh instance — no pass has run, nothing confirmed
+                  value:
+                    verdict: NOT_CONFIRMED
+                    graceSeconds: 2592000
+                    lastPass: null
+                    passInProgress: null
+                    failure: null
+                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
+                    exclusiveBucketConfirmedAt: null
+                    pausedAt: null
+                    clocksRestartedAt: null
+                    clocksRestartReason: null
+                    reclaim: { pending: 0, abandoned: 0 }
+                inProgress:
+                  summary: A pass is running; the last one found nothing
+                  value:
+                    verdict: NOT_CONFIRMED
+                    graceSeconds: 2592000
+                    lastPass: { startedAt: 2026-10-17T06:00:00Z, completedAt: 2026-10-17T06:04:10Z, objects: 18240, orphanObjects: 0, orphanBytes: 0, notVeyqObjects: 0, enqueuedKeys: 0 }
+                    passInProgress: { startedAt: 2026-10-17T12:00:00Z, objects: 7000 }
+                    failure: null
+                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
+                    exclusiveBucketConfirmedAt: null
+                    pausedAt: null
+                    clocksRestartedAt: null
+                    clocksRestartReason: null
+                    reclaim: { pending: 3, abandoned: 0 }
+                armedWithCandidates:
+                  summary: After a rollback, the failed release's uploads wait out the grace on a confirmed bucket
+                  value:
+                    verdict: ARMED
+                    graceSeconds: 2592000
+                    lastPass: { startedAt: 2026-10-17T12:00:00Z, completedAt: 2026-10-17T12:04:31Z, objects: 18263, orphanObjects: 23, orphanBytes: 61865984, notVeyqObjects: 1, enqueuedKeys: 0 }
+                    passInProgress: null
+                    failure: null
+                    candidates: { storageKeys: 9, objects: 23, bytes: 61865984, dueKeys: 0, oldestFirstSeenAt: 2026-10-17T12:01:02Z, newestFirstSeenAt: 2026-10-17T12:03:40Z, firstDueAt: 2026-11-16T12:01:02Z }
+                    exclusiveBucketConfirmedAt: 2026-10-17T12:10:00Z
+                    pausedAt: null
+                    clocksRestartedAt: null
+                    clocksRestartReason: null
+                    reclaim: { pending: 0, abandoned: 0 }
+                listDenied:
+                  summary: The store's key may not list the bucket — the last completed pass stays what is shown
+                  value:
+                    verdict: NOT_CONFIRMED
+                    graceSeconds: 2592000
+                    lastPass: null
+                    passInProgress: { startedAt: 2026-10-17T12:00:00Z, objects: 0 }
+                    failure: { at: 2026-10-17T12:00:01Z, reason: LIST_DENIED }
+                    candidates: { storageKeys: 0, objects: 0, bytes: 0, dueKeys: 0, oldestFirstSeenAt: null, newestFirstSeenAt: null, firstDueAt: null }
+                    exclusiveBucketConfirmedAt: null
+                    pausedAt: null
+                    clocksRestartedAt: null
+                    clocksRestartReason: null
+                    reclaim: { pending: 0, abandoned: 0 }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/store/reconcile/exclusive-bucket:
+    put:
+      tags: [instance-store-reconcile]
+      operationId: confirmStoreExclusiveBucket
+      x-veyq-channel: admin
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries no value but the switch itself, set for the store in use, so the
+          later of two writes is the one the owner made last.
+      summary: Confirm that the bucket in use holds only this instance's objects, which arms the deletion of candidates past the grace.
+      description: >
+        The first of the reconcile's three conditions for deleting anything (ADR 0062): a bucket another instance or
+        another tool also writes to would show that writer's objects as orphans here. The confirmation is stored with its
+        time and for the store in use; a different store setting put in use voids it, and so does a restore (which also
+        restarts every grace period). Idempotent. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Confirmed; the reconcile as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreReconcile" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "409":
+          description: No store is usable (`no_store`), so there is no bucket to confirm. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: no_store }
+    delete:
+      tags: [instance-store-reconcile]
+      operationId: withdrawStoreExclusiveBucket
+      x-veyq-channel: admin
+      summary: Withdraw the exclusive-bucket confirmation; the reconcile goes back to only reporting.
+      description: >
+        Nothing more is put on the reclaim list until the bucket is confirmed again; candidates keep their grace periods.
+        Keys already on the reclaim list are that list's (ADR 0062). Idempotent. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Withdrawn; the reconcile as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreReconcile" }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1814,41 +1908,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StoreReconcile" }
-    put:
-      tags: [instance-operator]
-      operationId: setInstanceOperatingMode
-      x-veyq-concurrency:
-        mode: last-writer-wins
-        reason: >-
-          One writer: the Server Owner; a mode is one value, and setting it again sets its preset again by design.
-      x-veyq-channel: admin
-      summary: Set the operating mode, and with it the preset's instance switches.
-      description: >
-        Stores the mode and, in the same transaction, sets the instance-level switch of every capability entry whose
-        catalog `modes` gives a value for it — and nothing more: a tenant's switches and every entry without a preset
-        are untouched, and each preset switch stays an ordinary switch afterwards (ADR 0088 decision 14). Setting the
-        mode it already has sets its preset again. The notice and, for `PRIVATE`, the operator's tick are admin-web's
-        and the CLI's: the server does not record them (ADR 0093 § 14). Server-Owner only.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/InstanceOperatingModeUpdate" }
-            example: { mode: PRIVATE }
-      responses:
-        "200":
-          description: Set; the mode and the preset as they now stand.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/InstanceOperatingMode" }
-        "400":
-          description: The request was malformed (no mode, or one that is neither PRIVATE nor ORGANISATION).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invalid_request }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -2881,240 +2940,6 @@ components:
           example: c2VhbGVkLWdyYW50
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    StoreReconcile:
-      type: object
-      description: >
-        The bucket reconcile (ADR 0062 § Consequences): what its passes found, what it would delete and when, and why
-        it would or would not. Counts and instants only — no storage key, no scope.
-      required: [verdict, graceSeconds, lastPass, passInProgress, failure, candidates, exclusiveBucketConfirmedAt, pausedAt, clocksRestartedAt, clocksRestartReason, reclaim]
-      properties:
-        verdict:
-          x-veyq-visibility: enum
-          type: string
-          description: >
-            Whether a candidate past its grace would be put on the reclaim list at the next completed pass. `ARMED` =
-            yes. `NOT_CONFIRMED` = no: the Server Owner has not confirmed that the bucket in use holds only this
-            instance's objects (or confirmed it for another store setting, or a restore withdrew it), so the reconcile
-            only reports. `PAUSED` = no: confirmed, and paused. `NO_STORE` = no store is usable, so nothing is listed.
-          enum: [ARMED, NOT_CONFIRMED, PAUSED, NO_STORE]
-          example: ARMED
-        graceSeconds:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: How long a storage key must have been an orphan in every pass, from when it was first seen, before it is due (`veyq.store-reconcile.grace`).
-          example: 2592000
-        lastPass:
-          oneOf:
-            - $ref: "#/components/schemas/StoreReconcilePass"
-            - type: "null"
-        passInProgress:
-          oneOf:
-            - $ref: "#/components/schemas/StoreReconcileProgress"
-            - type: "null"
-        failure:
-          oneOf:
-            - $ref: "#/components/schemas/StoreReconcileFailure"
-            - type: "null"
-        candidates:
-          $ref: "#/components/schemas/StoreReconcileCandidates"
-        exclusiveBucketConfirmedAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When the Server Owner confirmed that the bucket in use holds only this instance's objects; null when not confirmed for the store in use.
-          example: 2026-10-17T12:10:00Z
-        pausedAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When the Server Owner paused the deletions; null when not paused.
-          example: null
-        clocksRestartedAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: >
-            When every candidate's grace period last restarted, if it did since the last restore (a restore empties the
-            reconcile's state, so after one this is null until a restart happens).
-          example: null
-        clocksRestartReason:
-          x-veyq-visibility: enum
-          type: [string, "null"]
-          description: >
-            Why the grace periods last restarted: `GAP` = two consecutive listed pages lay further apart than
-            `veyq.store-reconcile.max-gap` — the reconcile counts only time it observed, which also catches a database
-            brought back by something other than the restore tool; `STORE_CHANGED` = a different store setting is in
-            use. Null with `clocksRestartedAt`.
-          enum: [GAP, STORE_CHANGED, null]
-          example: null
-        reclaim:
-          $ref: "#/components/schemas/StoreReclaimCounts"
-
-    StoreReconcilePass:
-      type: object
-      description: One completed pass over the whole bucket.
-      required: [startedAt, completedAt, objects, orphanObjects, orphanBytes, notVeyqObjects, enqueuedKeys]
-      properties:
-        startedAt:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          description: When the pass listed its first page.
-          example: 2026-10-17T12:00:00Z
-        completedAt:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          description: When the pass listed its last page.
-          example: 2026-10-17T12:04:31Z
-        objects:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Every object the pass listed.
-          example: 18263
-        orphanObjects:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: >
-            Objects shaped like veyq's that no row claims, older than the safe age (`veyq.blob.upload.retention` on the
-            store's own clock), and still present when asked again.
-          example: 23
-        orphanBytes:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: The listed size of those objects.
-          example: 61865984
-        notVeyqObjects:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: >
-            Objects not shaped like veyq's (`<uuid>/<index>`) — another tool's or another tenant's in a shared bucket, an
-            object pool kept in the same bucket. Never an orphan, never deleted. The store check's probe is not counted.
-          example: 1
-        enqueuedKeys:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Storage keys this pass put on the reclaim list (their grace was over and deleting was armed).
-          example: 0
-
-    StoreReconcileProgress:
-      type: object
-      description: The pass in progress.
-      required: [startedAt, objects]
-      properties:
-        startedAt:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          description: When the pass started.
-          example: 2026-10-17T12:00:00Z
-        objects:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Objects listed so far.
-          example: 7000
-
-    StoreReconcileFailure:
-      type: object
-      description: >
-        Why the last tick stopped. A failure ends the tick, keeps the pass's place, publishes nothing and puts nothing on
-        the reclaim list; the next tick tries again from the same place. Cleared by the next page that succeeds.
-      required: [at, reason]
-      properties:
-        at:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          description: When it failed.
-          example: 2026-10-17T12:00:01Z
-        reason:
-          x-veyq-visibility: enum
-          type: string
-          description: >
-            `STORE_UNREACHABLE` = the store did not answer the listing. `LIST_DENIED` = the store refused it (HTTP 403):
-            the access key may not list the bucket. `NO_STORE` = no store is usable. `NO_STORE_CLOCK` = the store's
-            answer carried no `Date`, so no object's age could be read on the store's own clock. `DATABASE` = the rows
-            could not be read or written.
-          enum: [STORE_UNREACHABLE, LIST_DENIED, NO_STORE, NO_STORE_CLOCK, DATABASE]
-          example: LIST_DENIED
-
-    StoreReconcileCandidates:
-      type: object
-      description: >
-        Storage keys no row claimed in any pass since they were first seen — each one's objects are orphans. A key is
-        due once it has been one for the grace period.
-      required: [storageKeys, objects, bytes, dueKeys, oldestFirstSeenAt, newestFirstSeenAt, firstDueAt]
-      properties:
-        storageKeys:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Candidate storage keys (one per uploaded blob).
-          example: 9
-        objects:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Their objects, as the last pass that saw each key counted them.
-          example: 23
-        bytes:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Those objects' listed size.
-          example: 61865984
-        dueKeys:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Candidate keys whose grace is over — the next completed pass puts them on the reclaim list while the verdict is `ARMED`.
-          example: 0
-        oldestFirstSeenAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When the oldest candidate was first seen; null with no candidate.
-          example: 2026-10-17T12:01:02Z
-        newestFirstSeenAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When the newest candidate was first seen; null with no candidate.
-          example: 2026-10-17T12:03:40Z
-        firstDueAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: >
-            When the oldest candidate's grace is over. While the verdict is `ARMED`, the first completed pass after it
-            puts that key on the reclaim list, whose sweep deletes it once the list's own wait has passed. Null with no
-            candidate.
-          example: 2026-11-16T12:01:02Z
-
-    StoreReclaimCounts:
-      type: object
-      description: The reclaim list (ADR 0062) — every store object deletion goes through it.
-      required: [pending, abandoned]
-      properties:
-        pending:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Storage keys waiting to be deleted (including ones being retried).
-          example: 0
-        abandoned:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: Storage keys the sweep gave up on after its retries — bytes that are counted, not deleted.
-          example: 0
     InstanceOperator:
       type: object
       description: >
@@ -3411,6 +3236,241 @@ components:
 
     OperatingMode:
       $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
+
+    StoreReconcile:
+      type: object
+      description: >
+        The bucket reconcile (ADR 0062 § Consequences): what its passes found, what it would delete and when, and why
+        it would or would not. Counts and instants only — no storage key, no scope.
+      required: [verdict, graceSeconds, lastPass, passInProgress, failure, candidates, exclusiveBucketConfirmedAt, pausedAt, clocksRestartedAt, clocksRestartReason, reclaim]
+      properties:
+        verdict:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Whether a candidate past its grace would be put on the reclaim list at the next completed pass. `ARMED` =
+            yes. `NOT_CONFIRMED` = no: the Server Owner has not confirmed that the bucket in use holds only this
+            instance's objects (or confirmed it for another store setting, or a restore withdrew it), so the reconcile
+            only reports. `PAUSED` = no: confirmed, and paused. `NO_STORE` = no store is usable, so nothing is listed.
+          enum: [ARMED, NOT_CONFIRMED, PAUSED, NO_STORE]
+          example: ARMED
+        graceSeconds:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: How long a storage key must have been an orphan in every pass, from when it was first seen, before it is due (`veyq.store-reconcile.grace`).
+          example: 2592000
+        lastPass:
+          oneOf:
+            - $ref: "#/components/schemas/StoreReconcilePass"
+            - type: "null"
+        passInProgress:
+          oneOf:
+            - $ref: "#/components/schemas/StoreReconcileProgress"
+            - type: "null"
+        failure:
+          oneOf:
+            - $ref: "#/components/schemas/StoreReconcileFailure"
+            - type: "null"
+        candidates:
+          $ref: "#/components/schemas/StoreReconcileCandidates"
+        exclusiveBucketConfirmedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the Server Owner confirmed that the bucket in use holds only this instance's objects; null when not confirmed for the store in use.
+          example: 2026-10-17T12:10:00Z
+        pausedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the Server Owner paused the deletions; null when not paused.
+          example: null
+        clocksRestartedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When every candidate's grace period last restarted, if it did since the last restore (a restore empties the
+            reconcile's state, so after one this is null until a restart happens).
+          example: null
+        clocksRestartReason:
+          x-veyq-visibility: enum
+          type: [string, "null"]
+          description: >
+            Why the grace periods last restarted: `GAP` = two consecutive listed pages lay further apart than
+            `veyq.store-reconcile.max-gap` — the reconcile counts only time it observed, which also catches a database
+            brought back by something other than the restore tool; `STORE_CHANGED` = a different store setting is in
+            use. Null with `clocksRestartedAt`.
+          enum: [GAP, STORE_CHANGED, null]
+          example: null
+        reclaim:
+          $ref: "#/components/schemas/StoreReclaimCounts"
+
+    StoreReconcilePass:
+      type: object
+      description: One completed pass over the whole bucket.
+      required: [startedAt, completedAt, objects, orphanObjects, orphanBytes, notVeyqObjects, enqueuedKeys]
+      properties:
+        startedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the pass listed its first page.
+          example: 2026-10-17T12:00:00Z
+        completedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the pass listed its last page.
+          example: 2026-10-17T12:04:31Z
+        objects:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Every object the pass listed.
+          example: 18263
+        orphanObjects:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: >
+            Objects shaped like veyq's that no row claims, older than the safe age (`veyq.blob.upload.retention` on the
+            store's own clock), and still present when asked again.
+          example: 23
+        orphanBytes:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: The listed size of those objects.
+          example: 61865984
+        notVeyqObjects:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: >
+            Objects not shaped like veyq's (`<uuid>/<index>`) — another tool's or another tenant's in a shared bucket, an
+            object pool kept in the same bucket. Never an orphan, never deleted. The store check's probe is not counted.
+          example: 1
+        enqueuedKeys:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Storage keys this pass put on the reclaim list (their grace was over and deleting was armed).
+          example: 0
+
+    StoreReconcileProgress:
+      type: object
+      description: The pass in progress.
+      required: [startedAt, objects]
+      properties:
+        startedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the pass started.
+          example: 2026-10-17T12:00:00Z
+        objects:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Objects listed so far.
+          example: 7000
+
+    StoreReconcileFailure:
+      type: object
+      description: >
+        Why the last tick stopped. A failure ends the tick, keeps the pass's place, publishes nothing and puts nothing on
+        the reclaim list; the next tick tries again from the same place. Cleared by the next page that succeeds.
+      required: [at, reason]
+      properties:
+        at:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it failed.
+          example: 2026-10-17T12:00:01Z
+        reason:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `STORE_UNREACHABLE` = the store did not answer the listing. `LIST_DENIED` = the store refused it (HTTP 403):
+            the access key may not list the bucket. `NO_STORE` = no store is usable. `NO_STORE_CLOCK` = the store's
+            answer carried no `Date`, so no object's age could be read on the store's own clock. `DATABASE` = the rows
+            could not be read or written.
+          enum: [STORE_UNREACHABLE, LIST_DENIED, NO_STORE, NO_STORE_CLOCK, DATABASE]
+          example: LIST_DENIED
+
+    StoreReconcileCandidates:
+      type: object
+      description: >
+        Storage keys no row claimed in any pass since they were first seen — each one's objects are orphans. A key is
+        due once it has been one for the grace period.
+      required: [storageKeys, objects, bytes, dueKeys, oldestFirstSeenAt, newestFirstSeenAt, firstDueAt]
+      properties:
+        storageKeys:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Candidate storage keys (one per uploaded blob).
+          example: 9
+        objects:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Their objects, as the last pass that saw each key counted them.
+          example: 23
+        bytes:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Those objects' listed size.
+          example: 61865984
+        dueKeys:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Candidate keys whose grace is over — the next completed pass puts them on the reclaim list while the verdict is `ARMED`.
+          example: 0
+        oldestFirstSeenAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the oldest candidate was first seen; null with no candidate.
+          example: 2026-10-17T12:01:02Z
+        newestFirstSeenAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the newest candidate was first seen; null with no candidate.
+          example: 2026-10-17T12:03:40Z
+        firstDueAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When the oldest candidate's grace is over. While the verdict is `ARMED`, the first completed pass after it
+            puts that key on the reclaim list, whose sweep deletes it once the list's own wait has passed. Null with no
+            candidate.
+          example: 2026-11-16T12:01:02Z
+
+    StoreReclaimCounts:
+      type: object
+      description: The reclaim list (ADR 0062) — every store object deletion goes through it.
+      required: [pending, abandoned]
+      properties:
+        pending:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Storage keys waiting to be deleted (including ones being retried).
+          example: 0
+        abandoned:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Storage keys the sweep gave up on after its retries — bytes that are counted, not deleted.
+          example: 0
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
