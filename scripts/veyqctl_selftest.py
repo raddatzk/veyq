@@ -22,13 +22,23 @@ what prove it. Everything here runs against a mirror directory this file writes 
      (`${X:?…}`, `${X?…}`, not `$${X:?…}` or `${X:-…}`);
   5. **the signature gate** — `--unsigned-local` refused for a registry reference and for an image that is not on
      the host; a local build refused without it; cosign missing refused; a failed `cosign verify` refused with no
-     pull after it; and the exact identity and `name@digest` handed to cosign;
+     pull after it; and the exact identity and `name@digest` handed to cosign. And the manifest's own signature
+     (`test_manifest_signature`, cr-signed-release-manifest): the exact `cosign verify-blob <manifest> --bundle
+     <bundle>` argv with the same identity, the blob byte-identical to what the source served; a manifest changed by
+     one byte after it was signed, a missing bundle, and an unsigned manifest that is also malformed each refused
+     before anything else runs — the last by its signature, never by its parse; a cosign below
+     `COSIGN_MIN_VERSION` refused by name (GHSA-fx35-mq7g-6g98); `--unsigned-local` fetching no bundle and still
+     refusing registry references; and `verify` naming the manifest. `FakeHost` answers `verify-blob` with rc 0 only
+     when the bundle file is the stand-in token over exactly that blob's sha256 and the identity is the pinned one;
   6. **the health verdict** `status` and every `up` end on: a finished one-shot (`restart: "no"`, exit 0) is
      healthy, a long-running service that exited 0 — what `stop` leaves — is not;
   7. **install end to end** on the stand-in host: the command order (verify before anything is written or started,
      `config` before `up`), the state it records (the project Compose named, which `start` then addresses by name),
      the manifest kept verbatim beside the release, a shell's `COMPOSE_*` dropped, and every printed line of an
-     `--unsigned-local` run saying that nothing was verified;
+     `--unsigned-local` run saying that nothing was verified; and a signed install with digest references: `verify-blob`
+     before any `cosign verify`, both before any `docker` command or the home, the bundle kept beside the manifest, a
+     directory left by an earlier attempt refused when its manifest is not the verified one; and `upgrade` toward a
+     manifest changed after it was signed refused at step 2, every command before it a read;
   8. **`upgrade`** — `VEYQ_RELEASE` per line of ADR 0096 decision 4 against a running 1.3 (a pin to the running
      release does nothing and runs nothing, a major takes its newest, `latest` and `2` stop on 1.12, the last of major
      1, and say that the next `upgrade` enters major 2, which it then does, skipping a prerelease; `check` says the
@@ -43,7 +53,9 @@ what prove it. Everything here runs against a mirror directory this file writes 
      disk refused before the app stops, the restored key on stdin of a one-off `app` container, the app left stopped
      after a failed restore;
  10. **`self-update`** — replaced by the installed release's `veyqctl` with its mode kept, nothing to do the second
-     time, refused (nothing replaced) when the installed copy no longer matches its manifest.
+     time, refused (nothing replaced) when the installed copy no longer matches its manifest; for a signed release,
+     the manifest on disk verified against its bundle first — refused when it was edited to match a swapped
+     `veyqctl`, and when the bundle is gone.
 
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
@@ -127,8 +139,12 @@ class FakeHost(vc.Host):
     )
 
     def __init__(self, *, local_images=(), signed=(), cosign=True, project="veyq", answers=None, ps=HEALTHY,
-                 fail_tool: str = "") -> None:
+                 fail_tool: str = "", cosign_version: str = "v3.1.3", watch: pathlib.Path | None = None) -> None:
         self.commands: list[list[str]] = []
+        self.blobs: list[bytes] = []        # what `cosign verify-blob` was handed as the blob, at the moment it ran
+        self.watch = watch                  # a path whose existence is recorded per command (the home, say)
+        self.watched: list[bool] = []
+        self.cosign_version = cosign_version
         self.envs: list[dict] = []
         self.stdins: list[bytes] = []
         self.fail_tool = fail_tool
@@ -141,6 +157,7 @@ class FakeHost(vc.Host):
 
     def run(self, cmd, *, check=True, stream=False, env=None, stdin=None):
         self.commands.append(list(cmd))
+        self.watched.append(bool(self.watch and self.watch.exists()))
         self.envs.append(dict(env or {}))
         if stdin is not None:
             self.stdins.append(stdin)
@@ -158,6 +175,17 @@ class FakeHost(vc.Host):
             rc = 0 if cmd[-1] in self.local_images else 1
         elif cmd[0].endswith("cosign") and cmd[1] == "verify":
             rc = 0 if cmd[2] in self.signed else 1
+        elif cmd[0].endswith("cosign") and cmd[1] == "version":
+            out = f"GitVersion:    {self.cosign_version}\nGitCommit:     0\n" if self.cosign_version else "no version\n"
+        elif cmd[0].endswith("cosign") and cmd[1] == "verify-blob":
+            # rc 0 iff the bundle is the stand-in signature over exactly this blob AND veyq's identity was asked for
+            blob = pathlib.Path(cmd[2]).read_bytes()
+            self.blobs.append(blob)
+            bundle = pathlib.Path(cmd[cmd.index("--bundle") + 1]) if "--bundle" in cmd else None
+            identity = (cmd[cmd.index("--certificate-oidc-issuer") + 1] == vc.COSIGN_OIDC_ISSUER
+                        and cmd[cmd.index("--certificate-identity-regexp") + 1] == vc.COSIGN_IDENTITY_REGEXP
+                        ) if {"--certificate-oidc-issuer", "--certificate-identity-regexp"} <= set(cmd) else False
+            rc = 0 if bundle and bundle.is_file() and bundle.read_text() == bundle_token(blob) and identity else 1
         elif "config" in cmd and "--format" in cmd:
             out = json.dumps({
                 "name": self.project,
@@ -196,9 +224,18 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+BUNDLE = "manifest.json.bundle"  # the publish's name for the manifest's signature (release_assets.MANIFEST_BUNDLE)
+
+
+def bundle_token(blob: bytes) -> str:
+    """The stand-in for a Sigstore bundle: valid for exactly one blob, as a real one is."""
+    return f"stand-in sigstore bundle over sha256:{sha(blob)}\n"
+
+
 def write_release(root: pathlib.Path, tag: str, *, prerelease=False, app="veyq:local", admin="veyq-admin:local",
-                  files=None, manifest_edit=None) -> None:
-    """One release in the mirror layout, as `release_assets.py` writes it."""
+                  files=None, manifest_edit=None, signed=False) -> None:
+    """One release in the mirror layout, as `release_assets.py` writes it — and, `signed`, as the publish leaves it:
+    with the manifest's bundle beside it."""
     files = files or {vc.COMPOSE_ASSET: COMPOSE, vc.TEMPLATE_ASSET: TEMPLATE, vc.BACKUP_ASSET: "# backup tool\n",
                       vc.SELF_ASSET: "# veyqctl\n", "garage.toml": "# garage\n"}
     d = root / tag
@@ -209,7 +246,11 @@ def write_release(root: pathlib.Path, tag: str, *, prerelease=False, app="veyq:l
                 "unscheduled": False, "assets": {name: sha(text.encode()) for name, text in files.items()}}
     if manifest_edit:
         manifest_edit(manifest)
-    (d / vc.MANIFEST_ASSET).write_text(json.dumps(manifest))
+    # The producer's own form (indent 2, a final newline): a signature is over these bytes, and a verifier that
+    # re-serialised the parsed manifest would hand cosign other ones.
+    (d / vc.MANIFEST_ASSET).write_text(json.dumps(manifest, indent=2) + "\n")
+    if signed:
+        (d / BUNDLE).write_text(bundle_token((d / vc.MANIFEST_ASSET).read_bytes()))
     index = root / vc.RELEASES_INDEX
     doc = json.loads(index.read_text()) if index.is_file() else {"releases": []}
     doc["releases"].append({"tag": tag, "date": "2026-10-16", "prerelease": prerelease,
@@ -319,7 +360,7 @@ def test_assets_on_disk(tmp: pathlib.Path) -> None:
     write_release(mirror, "v1.3")
     source = vc.DirSource(mirror)
     chosen = vc.select(source.releases(), "1.3", "x")
-    manifest = vc.fetch_manifest(source, chosen)
+    manifest = vc.fetch_manifest(FakeHost(), source, chosen, True)
     home = tmp / "home-assets"
     with contextlib.redirect_stdout(io.StringIO()):
         dest = vc.fetch_release(source, chosen, manifest, home)
@@ -335,7 +376,7 @@ def test_assets_on_disk(tmp: pathlib.Path) -> None:
     source = vc.DirSource(bad)
     chosen = vc.select(source.releases(), "1.4", "x")
     home = tmp / "home-bad"
-    message = refused(vc.fetch_release, source, chosen, vc.fetch_manifest(source, chosen), home)
+    message = refused(vc.fetch_release, source, chosen, vc.fetch_manifest(FakeHost(), source, chosen, True), home)
     check("assets: a file whose sha256 differs from the manifest is refused", "manifest says" in message, message)
     check("assets: …and nothing of that release is left on disk",
           not any((home / vc.RELEASES_DIR).iterdir()), str(list((home / vc.RELEASES_DIR).iterdir())))
@@ -760,6 +801,227 @@ def test_self_update(tmp: pathlib.Path) -> None:
         vc.SELF = saved
 
 
+# ---- the manifest's signature (cr-signed-release-manifest) ---------------------------------------------------------
+
+SIGNED_TARGETS = {f"ghcr.io/raddatzk/veyq@{DIGEST_A}", f"ghcr.io/raddatzk/veyq-admin@{DIGEST_B}"}
+
+
+def signed_mirror(root: pathlib.Path, *tags: str) -> pathlib.Path:
+    """Releases as the publish leaves them: images by digest, the manifest's bundle beside it."""
+    for tag in tags:
+        write_release(root, tag, app=f"ghcr.io/raddatzk/veyq:{tag[1:]}@{DIGEST_A}",
+                      admin=f"ghcr.io/raddatzk/veyq-admin:{tag[1:]}@{DIGEST_B}", signed=True)
+    return root
+
+
+def run_main(argv: list, host: FakeHost) -> tuple:
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = vc.main([str(a) for a in argv], host)
+    return rc, out.getvalue()
+
+
+def tamper_one_byte(manifest: pathlib.Path) -> None:
+    """One byte of the served manifest changed after its bundle was made (the date's last digit)."""
+    raw = manifest.read_bytes()
+    changed = raw.replace(b'"date": "2026-10-16"', b'"date": "2026-10-17"', 1)
+    assert changed != raw and sum(a != b for a, b in zip(raw, changed)) == 1
+    manifest.write_bytes(changed)
+
+
+def is_cosign(cmd: list) -> bool:
+    return cmd[0].endswith("cosign")
+
+
+def image_verifies(host: FakeHost) -> list:
+    return [i for i, c in enumerate(host.commands) if is_cosign(c) and c[1] == "verify"]
+
+
+def install_signed(home: pathlib.Path, mirror: pathlib.Path, host: FakeHost, pin: str = "1.3") -> tuple:
+    return run_main(["--home", home, "--source", mirror, "install", *INSTALL_SETS, "--set", f"VEYQ_RELEASE={pin}"], host)
+
+
+def test_manifest_signature(tmp: pathlib.Path) -> None:
+    check("bundle name: veyqctl fetches the manifest's bundle by the name the publish writes",
+          getattr(vc, "MANIFEST_BUNDLE_ASSET", None) == BUNDLE)
+
+    # the positive: a signed release installs, the manifest verified first, then the images, then anything else
+    mirror = signed_mirror(tmp / "mirror-signed", "v1.3")
+    home = tmp / "home-signed"
+    host = FakeHost(signed=SIGNED_TARGETS, project="veyq-proof", watch=home)
+    rc, out = install_signed(home, mirror, host)
+    check("signed install: exits 0 on the stand-in host", rc == 0, out[-600:])
+    blob_at, verify_at = host.ran("verify-blob"), image_verifies(host)
+    docker_at = [i for i, c in enumerate(host.commands) if c[0] == "docker"]
+    check("signed install: `cosign verify-blob` of the manifest before any `cosign verify` of an image, both before "
+          "any docker command and before the home exists",
+          bool(blob_at and verify_at and docker_at) and max(blob_at) < min(verify_at) and max(verify_at) < min(docker_at)
+          and not any(host.watched[i] for i in blob_at + verify_at), str([c[:2] for c in host.commands][:8]))
+    argv = host.commands[blob_at[0]] if blob_at else []
+    check("signed install: cosign gets exactly `verify-blob <manifest> --bundle <bundle>` and the pinned issuer and "
+          "identity, no format flag",
+          len(argv) == 9 and argv[:2] == ["/usr/bin/cosign", "verify-blob"]
+          and pathlib.Path(argv[2]).name == vc.MANIFEST_ASSET and argv[3] == "--bundle"
+          and pathlib.Path(argv[4]).name == BUNDLE
+          and argv[5:] == ["--certificate-oidc-issuer", vc.COSIGN_OIDC_ISSUER,
+                           "--certificate-identity-regexp", vc.COSIGN_IDENTITY_REGEXP], str(argv))
+    check("signed install: the blob cosign checked is byte-identical to the manifest the source served",
+          host.blobs == [(mirror / "v1.3" / vc.MANIFEST_ASSET).read_bytes()])
+    check("signed install: the bundle is kept verbatim beside the manifest, and the state says verified",
+          (home / "releases/1.3" / BUNDLE).is_file()
+          and (home / "releases/1.3" / BUNDLE).read_bytes() == (mirror / "v1.3" / BUNDLE).read_bytes()
+          and (home / vc.STATE_FILE).is_file() and not vc.read_state(home).unsigned_local)
+
+    # bite (a): one byte of the served manifest changed after the bundle was made
+    bad = signed_mirror(tmp / "mirror-tampered", "v1.3")
+    tamper_one_byte(bad / "v1.3" / vc.MANIFEST_ASSET)
+    home_a = tmp / "home-tampered"
+    host = FakeHost(signed=SIGNED_TARGETS, watch=home_a)
+    rc, out = install_signed(home_a, bad, host)
+    check("bite (a): a manifest changed by one byte after it was signed is refused at `verify-blob`",
+          rc == 1 and bool(host.ran("verify-blob")) and "does not verify" in out
+          and "Nothing was pulled, written or started" in out, out[-500:])
+    check("bite (a): …no docker command, no `cosign verify` of an image, the home not created",
+          not any(c[0] == "docker" for c in host.commands) and not image_verifies(host) and not home_a.exists(),
+          str([c[:3] for c in host.commands]))
+
+    # bite (b): the bundle absent from the mirror
+    nob = signed_mirror(tmp / "mirror-nobundle", "v1.3")
+    (nob / "v1.3" / BUNDLE).unlink()
+    home_b = tmp / "home-nobundle"
+    host = FakeHost(signed=SIGNED_TARGETS, watch=home_b)
+    rc, out = install_signed(home_b, nob, host)
+    check("bite (b): a release whose source serves no bundle is refused, naming `manifest.json.bundle`, the source and "
+          "`--unsigned-local` for a local release — with no cosign call and no home",
+          rc == 1 and BUNDLE in out and str(nob.resolve()) in out and "--unsigned-local" in out
+          and not any(is_cosign(c) for c in host.commands) and not home_b.exists(), out[-500:])
+
+    # bite (c): unsigned AND malformed (names another release): the refusal is the signature's, never the parse's
+    mal = signed_mirror(tmp / "mirror-malformed", "v1.3")
+    m = mal / "v1.3" / vc.MANIFEST_ASSET
+    doc = json.loads(m.read_text())
+    doc["release"] = "1.2"
+    m.write_text(json.dumps(doc))
+    host = FakeHost(signed=SIGNED_TARGETS)
+    rc, out = install_signed(tmp / "home-malformed", mal, host)
+    check("bite (c): an unsigned manifest that also names another release is refused by its signature, not its parse "
+          "— verification comes before trust",
+          rc == 1 and "does not verify" in out and "names release" not in out, out[-400:])
+
+    # cosign's floor: the manifest's bundle is a Sigstore bundle, and below 3.1.3 a legacy one bypasses the identity
+    for version, why in (("v3.1.2", "the last release GHSA-fx35-mq7g-6g98 affects"), ("v2.6.5", "cosign 2"),
+                         ("", "a cosign whose version cannot be read")):
+        host = FakeHost(signed=SIGNED_TARGETS, cosign_version=version)
+        rc, out = install_signed(tmp / f"home-cosign-{version or 'none'}", mirror, host)
+        check(f"cosign floor: {why} is refused, naming the floor, before `verify-blob` runs",
+              rc == 1 and vc.COSIGN_MIN_VERSION in out and "GHSA-fx35-mq7g-6g98" in out and not host.ran("verify-blob"),
+              out[-400:])
+
+    # controls: --unsigned-local with a producer-made mirror (no bundle) installs and asks for no bundle; with
+    # registry references it is refused as today
+    local = tmp / "mirror-local"
+    write_release(local, "v1.3", app="veyq:local", admin="veyq-admin:local")
+    fetched: list = []
+    original = vc.DirSource.fetch
+
+    def spy(self, tag, asset):
+        fetched.append(asset)
+        return original(self, tag, asset)
+
+    vc.DirSource.fetch = spy
+    try:
+        host = FakeHost(local_images={"veyq:local", "veyq-admin:local"})
+        rc, out = run_main(["--home", tmp / "home-local", "--source", local, "install", "--unsigned-local", *INSTALL_SETS,
+                            "--set", "VEYQ_RELEASE=1.3"], host)
+    finally:
+        vc.DirSource.fetch = original
+    check("control: --unsigned-local with a mirror the producer made (no bundle) installs, fetching no bundle and "
+          "running no cosign", rc == 0 and BUNDLE not in fetched and not any(is_cosign(c) for c in host.commands),
+          out[-400:])
+    host = FakeHost(local_images={"veyq:local", "veyq-admin:local"})
+    rc, out = run_main(["--home", tmp / "home-local-signed", "--source", mirror, "install", "--unsigned-local",
+                        *INSTALL_SETS], host)
+    check("control: --unsigned-local with registry references is refused as today",
+          rc == 1 and "no registry host and no digest" in out, out[-300:])
+
+    # `verify` names the manifest too
+    host = FakeHost(signed=SIGNED_TARGETS)
+    rc, out = run_main(["--home", tmp / "home-verify", "--source", mirror, "verify", "--release", "1.3"], host)
+    check("verify: the manifest's signature, then both images, and the closing line names the manifest",
+          rc == 0 and host.ran("verify-blob") and image_verifies(host)
+          and max(host.ran("verify-blob")) < min(image_verifies(host)) and "manifest" in out.splitlines()[-1],
+          out[-300:])
+
+    # bite (e): upgrade toward a release whose manifest was changed after it was signed
+    up_mirror = signed_mirror(tmp / "mirror-up-signed", "v1.3", "v1.4")
+    tamper_one_byte(up_mirror / "v1.4" / vc.MANIFEST_ASSET)
+    home_e = tmp / "home-up-signed"
+    rc, out = install_signed(home_e, up_mirror, FakeHost(signed=SIGNED_TARGETS, project="veyq-proof"))
+    env = home_e / vc.ENV_FILE
+    env.write_text(env.read_text().replace(f"{vc.RELEASE_KEY}=1.3", f"{vc.RELEASE_KEY}=1.4"))
+    before = (env.read_bytes(), (home_e / vc.STATE_FILE).read_bytes())
+    host = FakeHost(signed=SIGNED_TARGETS, project="veyq-proof")
+    rc, out = run_main(["--home", home_e, "upgrade", "--key-into", tmp / "up-signed.key"], host)
+    check("bite (e): `upgrade` to a manifest changed after it was signed is refused at step 2, every command before "
+          "the refusal a read — nothing stopped, fetched or switched",
+          rc == 1 and "does not verify" in out and bool(host.ran("verify-blob"))
+          and all(is_cosign(c) and c[1] in ("version", "verify-blob") for c in host.commands)
+          and not (home_e / "releases/1.4").exists()
+          and (env.read_bytes(), (home_e / vc.STATE_FILE).read_bytes()) == before, out[-500:])
+
+    # an earlier attempt's directory: its manifest must be the one just verified, and a missing bundle is written
+    release = home / "releases/1.3"
+    source = vc.DirSource(mirror)
+    chosen = vc.select(source.releases(), "1.3", "the mirror")
+    with contextlib.redirect_stdout(io.StringIO()):
+        verified = vc.fetch_manifest(FakeHost(), source, chosen, False)
+    (release / BUNDLE).unlink()
+    with contextlib.redirect_stdout(io.StringIO()):
+        vc.fetch_release(source, chosen, verified, home)
+    check("already there: a release directory without the bundle gets the verified one written beside its manifest",
+          (release / BUNDLE).is_file() and (release / BUNDLE).read_bytes() == (mirror / "v1.3" / BUNDLE).read_bytes())
+    kept = (release / vc.MANIFEST_ASSET).read_bytes()
+    tamper_one_byte(release / vc.MANIFEST_ASSET)
+    message = refused(vc.fetch_release, source, chosen, verified, home)
+    check("already there: a manifest on disk that is not the one just verified is refused, never repaired",
+          "just verified" in message and (release / vc.MANIFEST_ASSET).read_bytes() != kept, message)
+    (release / vc.MANIFEST_ASSET).write_bytes(kept)
+
+    # bite (d): self-update trusts the manifest on disk only once it verifies against the bundle beside it
+    bin_dir = tmp / "bin-signed"
+    bin_dir.mkdir()
+    target = bin_dir / "veyqctl"
+    saved = vc.SELF
+    vc.SELF = target
+    try:
+        release = home / "releases/1.3"
+        target.write_text("# an older veyqctl\n")
+        host = FakeHost()
+        rc, out = run_main(["--home", home, "self-update"], host)
+        check("self-update (control): a signed release's veyqctl replaces this one after the manifest verifies",
+              rc == 0 and target.read_bytes() == (release / vc.SELF_ASSET).read_bytes() and bool(host.ran("verify-blob")),
+              out[-300:])
+        target.write_text("# an older veyqctl\n")
+        manifest_path, self_path = release / vc.MANIFEST_ASSET, release / vc.SELF_ASSET
+        kept = (manifest_path.read_bytes(), self_path.read_bytes())
+        self_path.write_text("# a swapped veyqctl\n")
+        doc = json.loads(manifest_path.read_text())
+        doc["assets"][vc.SELF_ASSET] = sha(self_path.read_bytes())
+        manifest_path.write_text(json.dumps(doc))
+        rc, out = run_main(["--home", home, "self-update"], FakeHost())
+        check("bite (d): self-update with the manifest on disk edited to match a swapped veyqctl is refused, nothing "
+              "replaced", rc == 1 and target.read_text() == "# an older veyqctl\n" and "does not verify" in out,
+              out[-400:])
+        manifest_path.write_bytes(kept[0])
+        self_path.write_bytes(kept[1])
+        (release / BUNDLE).unlink(missing_ok=True)
+        rc, out = run_main(["--home", home, "self-update"], FakeHost())
+        check("bite (d): self-update with the bundle gone from disk is refused, nothing replaced",
+              rc == 1 and target.read_text() == "# an older veyqctl\n" and BUNDLE in out, out[-400:])
+    finally:
+        vc.SELF = saved
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
@@ -776,6 +1038,7 @@ def main() -> int:
         test_upgrade_refusals(tmp)
         test_backup_restore(tmp)
         test_self_update(tmp)
+        test_manifest_signature(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")
         return 1

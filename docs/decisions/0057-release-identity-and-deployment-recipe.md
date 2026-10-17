@@ -4,7 +4,9 @@
   its promotion to a release, and §7's stack lanes, are decided ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
   and not built: the publish still runs on `workflow_dispatch` only. It lives in [`ci.yml`](../../.github/workflows/ci.yml)
   since 2026-10-16, the one pipeline per commit of ADR 0091 decision 2 (`container.yml`, where it was built, is folded
-  into it), where it waits on every stage of that pipeline and signs as `ci.yml` (§3).
+  into it), where it waits on every stage of that pipeline and signs as `ci.yml` (§3) — the images, the chart,
+  `veyqctl` and the manifest; `veyqctl` verifies the manifest's signature before it trusts it, and none of it has run
+  against a real publish (there is no remote).
 - Date: 2026-08-10
 
 ## Context
@@ -102,10 +104,12 @@ decision 3). No image carries a recipe. Two things follow:
   release deploys, and an immutable release changes neither after it is published. A release that adds a service or
   a required variable reaches the operator with that release, and `veyqctl upgrade` refuses a required value the
   operator's `.env` lacks before anything stops (ADR 0096 decision 5).
-- **The images' signatures bind the images; the release binds the files.** The recipe carries no signature of its
-  own: `veyqctl` checks each asset against the sha256 its manifest names, and what makes that manifest veyq's is the
-  source — the immutable GitHub Release, or a mirror the operator chose to trust (ADR 0096 decision 7). `veyqctl`
-  itself is signed with `cosign sign-blob` under the images' identity. **A verification is only as narrow as the
+- **The images' signatures bind the images; the manifest's signature binds the files.** The publish signs the
+  manifest with `cosign sign-blob` under the images' identity, its bundle `manifest.json.bundle` an asset beside it,
+  and `veyqctl` verifies that bundle before it trusts any sha256 or digest the manifest names, then checks each asset
+  against its sha256 — so a source (the GitHub Release, a mirror, a directory: ADR 0096 decision 7) decides which
+  releases are offered, never what one contains. `veyqctl` itself is signed the same way, for the copy an operator
+  fetches by hand. **A verification is only as narrow as the
   identity it pins.** The operator's documented
   `cosign verify` pins the certificate identity to `.github/workflows/ci.yml` — the workflow that publishes, and so
   signs — in `raddatzk/veyq`, on `refs/heads/main`
