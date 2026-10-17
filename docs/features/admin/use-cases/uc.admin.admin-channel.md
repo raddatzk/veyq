@@ -19,9 +19,10 @@
 1. The Server Owner opens the admin surface — over the localhost path by default, or at `ADMIN_DOMAIN` — or
    runs the `veyq-admin` CLI inside the admin container.
 2. The admin container sends every `/api/*` call to the backend's admin listener, never to its public port.
-3. The backend classifies the request **by its socket**: it is on the admin channel iff it arrived on the admin
-   listener and its peer address is not globally routable. No header takes part — not `Host`, not `Forwarded`,
-   not `X-Forwarded-*`.
+3. The backend classifies the request **by its real socket, whatever the PROXY protocol states**: it is on the
+   admin channel iff it arrived on the admin listener and its peer address is not globally routable. No header takes
+   part — not `Host`, not `Forwarded`, not `X-Forwarded-*` — and neither does a PROXY header's destination or source
+   ([ADR 0094](../../../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 7).
 4. If the matched operation is marked `x-veyq-channel: admin` in `contracts/` and the request is on the admin
    channel, it proceeds to the gates it always had: the session and the Server-Owner role for tenant
    administration and the instance reads, the single-owner lock for setup
@@ -48,6 +49,9 @@ flowchart LR
 - **A2 — forged forwarding headers on the public origin** (`Forwarded: host=…:<admin port>`,
   `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-For: 10.…`): still 404. The classification reads only the
   socket, and the forwarding layer rewrites exactly the values it does not read.
+- **A2b — a PROXY header naming the admin listener** (the PROXY protocol on, `PROXY TCP4 10.… <public> <port>
+  <admin port>`, a Server-Owner call on the public port): still 404. Vert.x hands a PROXY header's addresses out as
+  the connection's addresses; the classification reads the channel's real ones.
 - **A3 — the admin listener reached from a globally routable peer** (host networking, a published port): the
   request is on the public channel. A NAT that rewrites the peer to a private address defeats this, which is why
   it is a belt behind the precondition, not the guarantee.

@@ -1,7 +1,7 @@
 ---
 id: cr-client-port-sources
 title: The client's source port where no hop writes it into X-Forwarded-For — PROXY protocol, a header the edge overwrites, a local Traefik plugin
-status: in-progress
+status: done
 satisfies: ["cc.security.rate-limit", "uc.admin.admin-channel"]
 adrs: ["0094", "0093", "0071", "0065", "0064", "0057", "0090", "0092"]
 invariants:
@@ -336,7 +336,7 @@ compose recipe, the risk named. The options stay below as the record.
     lines in the log (read the log, not the tick), and the lever's red recorded; the existing stages unchanged. Docker
     needed: name in the hand-off if the implementing session has none, and split the no-daemon half (the compose
     reading) into a unit the session can run (§ Split an expensive live proof).
-- [ ] **4 docs — ADR 0094 decision 7, ADR 0093's open question, the concerns, the Run pages.**
+- [x] **4 docs — ADR 0094 decision 7, ADR 0093's open question, the concerns, the Run pages.**
   - **Measure-first (D9):** at the Envoy version Envoy Gateway v1.9.2 pins, read the formatter for
     `DOWNSTREAM_DIRECT_REMOTE_PORT`; if it is the physical peer's port and EG passes header values unescaped (research
     M), `run/networking.md` may name it as a header source for EG without PROXY; else it is not named.
@@ -381,4 +381,40 @@ Implementation has the owner's go (2026-10-16).
 
 ## Retrospective
 
-(filled at close)
+Measured, phase by phase (substrate: this worktree, merged with `main` at `b23b8272`):
+
+- **Baseline:** `./gradlew check` on the untouched `6859eb3b` → exit 0. **B4 live red first:** on the untouched main
+  code the PROXY line naming the admin port answered `200 {"release":null}` on the public port; fixed → `404`, the
+  admin-listener control `200`. **Bites** (snapshot-and-restore, each red by name): B1 "drop the IP check" →
+  `aSourceWithAnotherIpLeavesThePortUnknown` (and `aSourceNamingTheClientDoesNotMoveTheStopEntry`, same branch); B1
+  "source overrides a stop port" → `theStopEntrysOwnPortWinsOverTheSource`; B3 "read the header regardless" →
+  `aClientSentPortHeaderIsNeverHonoured`; B5 "key on ip:port" → `twoSourcePortsOfOneAddressShareOneBucket`; B7 "render
+  unconditionally" → `underAnyOtherSourceNoRouterCarriesItAndNothingDefinesIt`. Rule D: red on HEAD's
+  `ClientAddress.kt` (missing home) and on the literal added to `RateLimitFilters.kt`. `:core:pitest` 197/197 killed,
+  `ClientAddress` 95/95. **B6:** against a closed database port no boot reached the check (below); against a throwaway
+  MariaDB `proxy-protocol`+PROXY off and PROXY on+`none` each exited 1 naming both keys, the two agreeing boots
+  started, a non-token header name exited 1 naming `veyq.http.client-port.header`, `detect` failed the mapping
+  (`SRCFG00049`). **R6:** with PROXY off a PROXY line is answered `HTTP/1.0 400 Bad Request`. **R5:** the Kubernetes
+  NetworkPolicy page — "traffic to and from the node where a Pod is running is always allowed" — so no admission and
+  no chart_meta_check change. **Posture rule 5:** green on the untouched recipe; red on each of six injections.
+  **(xxiii):** red on the env without the probes, the probes without the env, PROXY without the source, the `ci/` file
+  removed. **Stack lane:** green (139 s, every existing stage unchanged), the `client port` stage replacing a forged
+  two-line header with the sender's `172.21.0.4:58064`; the no-op plugin → `RED at client port`. **D9:** Envoy Gateway
+  v1.9.2 pins Envoy 1.39.1, whose `DOWNSTREAM_DIRECT_REMOTE_*` read the physical peer and whose early header mutation
+  formats values; Envoy Gateway passes header values unescaped. Remembered still: a public bind failure fails the boot.
+
+- **Planning — B6 assumed the check runs before the database.** Its control was to "fail later on the absent
+  database"; Flyway's migrate-at-start and the app shell's route registration (it reads the store setting) both reach
+  the database before any `StartupEvent` observer, so all three boots failed alike. The run moved to a throwaway
+  MariaDB, and the observer now runs first among observers. Root cause: the refine cited the observer precedent
+  without running one boot. Harvested to `changes/README.md` § a bite test must tell….
+- **Execution — two new test profiles took `:core:test` out of heap** (`OutOfMemoryError`, twice, tests green). B3's
+  positive half now reaches the `header` source through the probe's `?source=header` seam, its mapping proven by B6.
+  Harvested to `backend/CLAUDE.md`. And two deviations from D6/D9, both named in ADR 0094: the plugin takes the header
+  name from the routing file the app renders (so the name the app reads is the name Traefik overwrites, and the
+  literal keeps one home); and the Envoy Gateway pointer is `%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%` in a
+  `ClientTrafficPolicy`'s `earlyRequestHeaders` — the header source wants `address:port`, and a route filter would not
+  reach the tenant routes the backend projects.
+- **Process:** the implementing sandbox refused compound shell lines (a heredoc, a `cd … &&` chain naming `git`), so
+  edits ran as small scripts; and the shared scratchpad held other sessions' files under generic names. **Next time:**
+  a refine that hangs a bite on a boot runs that boot once and pastes the first failing line.

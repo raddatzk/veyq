@@ -36,6 +36,16 @@ acceptanceCriteria:
         integration:
           - AdminChannelForgedHeadersSliceTest.forgedForwardingHeadersDoNotOpenThePublicPort
           - AdminChannelForgedHeadersSliceTest.theSameHeadersOnTheAdminListenerChangeNothingThere
+  - id: a-proxy-header-cannot-name-the-admin-listener
+    text: >-
+      With the PROXY protocol on, a connection to the public port whose PROXY header names the admin listener's port
+      as its destination and a private client as its source leaves a Server-Owner call there at the 404, while the
+      same call on the admin listener answers.
+    coverage:
+      backend:
+        integration:
+          - AdminChannelProxyProtocolSliceTest.aProxyHeaderNamingTheAdminListenerDoesNotOpenThePublicPort
+          - AdminChannelProxyProtocolSliceTest.theSameCallOnTheAdminListenerAnswers
   - id: a-globally-routable-peer-is-the-public-channel
     text: >-
       The admin-channel predicate accepts a request on the admin listener from a loopback, RFC 1918, shared

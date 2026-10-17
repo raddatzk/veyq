@@ -4,6 +4,7 @@ description: What is specific to running veyq from its Helm chart.
 sources:
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
+  - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
 ---
 
 The install itself — `helm install` by the digests you verified, and the Server Owner created over a
@@ -50,7 +51,9 @@ the rate limits can key on a forged address; the install notes say so
 ([Networking](/veyq/run/networking/#the-client-address-and-the-rate-limits)). `app.trustedProxies` stays unset
 unless a load balancer sits in front of your gateway: it lists the hops in front of the gateway, never the
 gateway's own data plane. A pod-IP range wide enough to survive a data-plane pod's restart trusts every pod beside
-it.
+it. Whether the application learns a client's source port is `app.clientPort.source`: the PROXY protocol from your
+gateway to the app's routes alone (never the store's), or a header your edge overwrites, configured both on your
+gateway and here ([Networking](/veyq/run/networking/#where-the-source-port-comes-from)).
 
 Generate the bundled store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret` (exactly
 64 hex characters) and a long random value for `garageAdminToken`. The app's S3 key pair is derived from the admin token, so
