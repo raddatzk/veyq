@@ -52,6 +52,19 @@ Gateway's listeners and every tenant ListenerSet reference (each named after its
 a Gateway API implementation that supports ListenerSet; not every released one does yet.
 {{- end }}
 
+{{- if eq (include "veyq.clientPortSource" .) "proxyProtocol" }}
+
+Client port: app.clientPort.source is `proxyProtocol`. The app now closes every connection that does not open with a
+PROXY header, so your Gateway must send PROXY (v1 or v2) to the app's routes — and ONLY to them: never to the object
+store's route, or every upload and download fails. Aim it at the routes by label (app.kubernetes.io/component: app on
+the chart's route, and the backend's owner label on the tenant routes it projects), never at the whole Gateway. The
+probes poll the admin listener meanwhile; they prove the process and the database, not the public listener.
+{{- else if eq (include "veyq.clientPortSource" .) "header" }}
+
+Client port: app.clientPort.source is `header`. veyq believes the port in {{ (.Values.app.clientPort | default dict).header | default "X-Veyq-Client-Addr" }} — make sure your edge
+OVERWRITES it on every request. A header the edge passes through is one any client writes.
+{{- end }}
+
 Every route of this release — the chart's `veyq-*` and the `veyq-tenant-*` ones the backend projects — and whether
 the Gateway accepted it:
     kubectl -n {{ .Release.Namespace }} get httproutes,listenersets

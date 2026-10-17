@@ -1,0 +1,36 @@
+# lint-values.yaml with the client port taken from the PROXY protocol (ADR 0094 decision 7), so
+# scripts/chart_meta_check.py renders that branch: the PROXY env present, and all three probes — the liveness probe
+# switched on for it — on the admin listener. Like lint-values.yaml, NOT a template for an installation.
+domain: veyq.example.org
+storeDomain: store.veyq.example.org
+image:
+  repository: ghcr.io/example/veyq
+  # A digest, so the `repository:tag@digest` render is one a file here selects (acme-values.yaml renders without).
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+admin:
+  image:
+    repository: ghcr.io/example/veyq-admin
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
+secrets:
+  mariadbPassword: ci-only-not-a-password
+  mariadbRootPassword: ci-only-not-a-password
+  garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  garageAdminToken: ci-only-not-a-token
+gateway:
+  className: traefik
+app:
+  clientPort:
+    source: proxyProtocol
+  livenessProbe:
+    enabled: true
+# Every file here makes the backup choice the schema requires (ADR 0098); this one names a claim.
+backup:
+  existingClaim: veyq-backup

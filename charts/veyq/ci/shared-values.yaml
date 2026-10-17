@@ -11,7 +11,7 @@ storeDomain: store.veyq.example.org
 image:
   repository: ghcr.io/example/veyq
   # A pinned release, so a render where the app's tag is not the chart's appVersion is one a file here selects: the
-  # backup gate's target and its tools image's tag must follow it ((xxiii)).
+  # backup gate's target and its tools image's tag must follow it ((xxiv)).
   tag: "1.4"
 admin:
   image:

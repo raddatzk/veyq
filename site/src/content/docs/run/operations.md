@@ -6,6 +6,7 @@ sources:
   - docs/crosscutting/cc.security.wire-assertion.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
+  - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
 ---
 
 ## Health
@@ -19,7 +20,10 @@ when the object store is not usable yet. There is no other health endpoint.
 - **Kubernetes** uses it for the startup probe (every 5 s, up to 36 times) and the readiness probe (every 15 s).
   There is **no liveness probe by default, on purpose**: it would turn a long garbage-collection pause into a
   restart loop, and the JVM already exits on its own when it runs out of memory. `app.livenessProbe.enabled` turns
-  one on.
+  one on. With `app.clientPort.source: proxyProtocol` the probes poll the **admin listener** instead of the public
+  port: the public port then closes every connection that does not start with a PROXY header, and a probe sends
+  none. They still prove the process is up and the database migrated, but no longer the public listener — a public
+  port that fails to bind still stops the application from starting.
 
 ## Logs
 

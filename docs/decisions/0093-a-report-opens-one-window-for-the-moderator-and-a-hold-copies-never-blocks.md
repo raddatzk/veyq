@@ -238,8 +238,10 @@ range and its no-extension rule (§ 2 there).
   strong as an enforced NetworkPolicy (0094 decision 6), and the disclosure and the Run docs say so. The
   slice test is 0094's: a guest write carrying `198.51.100.66, 203.0.113.77` records `203.0.113.77` (the
   control), and `198.51.100.66` is in no record and no log. A stop entry `203.0.113.77:51234` records port `51234`,
-  and `198.51.100.66:4711, 203.0.113.77` records none, with `4711` in no record and no log. Where the port
-  comes from on the edges that write none is still open (§ Legal basis, still open 4).
+  and `198.51.100.66:4711, 203.0.113.77` records none, with `4711` in no record and no log. Where the stop entry
+  carries no port, it comes from the one source the operator configured (0094 decision 7): on Compose the recipe's
+  Traefik plugin, on Helm the PROXY protocol or a header the edge overwrites; behind any other edge the record keeps
+  the address alone.
 - **Its basis is Art. 6(1)(f) GDPR** (L): a host has no duty to keep addresses and is permitted to keep them
   briefly, for a stated purpose, disclosed — the legitimate interest in tracing the misuse of a guest link once it
   is reported. The Server Owner is the controller; the information duty is theirs, not the tenant owner's.
@@ -462,10 +464,11 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
 3. **Whether the German IP-retention bill has passed.** The hearing was on 7 October 2026; no vote was found. It
    reaches access providers only; if it passes, a value of N above seven gains weight, since a guest's address
    would then resolve for three months. Re-check before the CR is written.
-4. **Where the source port comes from.** Behind carrier-grade NAT an IPv4 address without its source port often
-   names no single subscriber, and the BKA's form asks for the port. The record keeps one (§ 10), and
-   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decision 3 takes it from the stop entry
-   of `X-Forwarded-For` where a load balancer writes it there. Traefik and the common gateways write none, so on
-   Compose and behind them the port is unknown until a second source exists: the PROXY protocol from the gateway to
-   the app, or a header the edge overwrites on every request (ADR 0094 § Consequences, inbox #472). That follow-up
-   lands before the CR that builds the guest-write record.
+4. **What the recorded source port is worth.** Behind carrier-grade NAT an IPv4 address without its source port
+   often names no single subscriber, and the BKA's form asks for the port. Where it comes from is decided, not open:
+   [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md) decisions 3 and 7 — the stop entry of
+   `X-Forwarded-For`, else the one configured source (on Compose the recipe's Traefik plugin, on Helm the PROXY
+   protocol or a header the edge overwrites). What stays open is legal, not technical: the port is the one the
+   operator's edge saw, so behind a further NAT of the operator's own it is not the subscriber's, and whether the
+   disclosure must say which edge an instance runs before the record is handed over needs counsel before the
+   moderation CR.

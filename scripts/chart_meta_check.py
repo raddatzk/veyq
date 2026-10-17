@@ -119,15 +119,24 @@ render, asserts — deriving every anchor from the source rather than listing it
        rule naming `gateway.networking.k8s.io` grants only `httproutes` and `listenersets` (no `gateways`, no `*`),
        and some rule grants both — the positive control, or the sink could not reconcile at all (ADR 0064: the
        backend can neither add nor change a listener on the chart's `Gateway`).
-  xxiii.**With `backup.enabled`, the app's Deployment runs exactly one init container, `backup-gate`, on the tools
+  xxiii.**The PROXY protocol is on iff the probes poll the admin listener iff `app.clientPort.source` is
+       `proxyProtocol`** (ADR 0094 decision 7). In that render the app container carries
+       `QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL=true` and `VEYQ_HTTP_CLIENT_PORT_SOURCE=proxy-protocol`, and every
+       `httpGet` probe it has resolves (by name or number) to the admin listener's port, the one (xii) reads; in every
+       other render neither variable says PROXY and every probe resolves to another port — the public listener, which
+       the probes then also prove. A probe on the public port under PROXY is a pod that never becomes ready (a kubelet
+       sends no PROXY header, and the app closes such a connection unanswered); PROXY off with the probes on the admin
+       port is a public listener nothing checks. Some file in `ci/` must render `proxyProtocol`, or that branch is
+       checked by nobody; and `helm lint` with a source outside the enum must be refused naming `clientPort`.
+  xxiv.**With `backup.enabled`, the app's Deployment runs exactly one init container, `backup-gate`, on the tools
        image (`veyq-tools`), mounting the claim `backup.existingClaim` names and NOT the config-secret claim — the
        volume of the app container's mount covering the KEK path, found as (ii) finds it — with
        `VEYQ_BACKUP_TARGET_RELEASE` equal to the app image's tag** (ADR 0098 decisions 1, 2 and 4c: a capture on the
        backup claim can never hold the KEK, and the gate judges the release about to migrate).
-  xxiv.**With `backup.enabled: false`, the Deployment runs no init container and declares no volume its containers
+  xxv.**With `backup.enabled: false`, the Deployment runs no init container and declares no volume its containers
        do not mount** — and, the positive control on the same file, rendering it with the other choice
        (`--set backup.enabled=…`) flips the gate: every file is rendered both ways.
-  xxv. **The schema refuses an install that makes neither backup choice, naming `/backup`** (the gate on with no
+  xxvi. **The schema refuses an install that makes neither backup choice, naming `/backup`** (the gate on with no
        claim), and accepts each of the two (a claim named; `enabled: false`) — ADR 0098's explicit choice (owner 2b).
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
@@ -156,7 +165,10 @@ written — no container had a read-only root, and the one policy admitted the a
 cluster, which could therefore forge the forwarded address the per-IP rate limiter keys on. Run against that chart,
 each of them was red; each was then bitten by a template or schema injection. (xx)–(xxii) came with the move from
 `Ingress` to the Gateway API (cr-helm-gateway-api): the chart rendered three `Ingress` objects and a Role on
-`ingresses` when they were written, and each was bitten by a template injection. (xxiii)–(xxv) came with the backup
+`ingresses` when they were written, and each was bitten by a template injection. (xxiii) came with the client port's
+sources (cr-client-port-sources, ADR 0094 decision 7): no incident — the chart had no PROXY setting — built because the
+three must move together and a probe that polls a PROXY listener fails only on a cluster; bitten by template
+injections (the env without the probes, the probes without the env) and the `ci/` file's removal. (xxiv)–(xxvi) came with the backup
 gate (cr-kubernetes-backup-gate, ADR 0098) — no incident: they pin, on the render, the decision that the gate never
 mounts the KEK's claim and judges the app's own release, and that an install chooses; each was bitten by injection
 (the config-secret mount, a hard-coded target, the schema's `anyOf` removed). The trap they record: give the gate
@@ -180,10 +192,13 @@ requires the read-only root, not that each container has an `emptyDir` for every
 path renders green and fails at runtime, which is why ADR 0071 measures those paths by running the images. (xvi)
 recognises the database by its image repository, so a database image of another name is out of reach. (ii) checks
 the app container's mount and the pod's
-`fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
+`fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere.
+(xxiii) proves what the pod is told, not that the operator's Gateway sends PROXY to the app's routes and to them alone —
+the chart renders no Gateway-implementation object — nor that a kubelet probe passes the NetworkPolicy on the admin
+port (Kubernetes documents traffic from a pod's own node as always allowed; no cluster runs here). (xi)
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
 digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification.
-(xxiii) proves what the init container is handed, not what it does: the gate's decisions are
+(xxiv) proves what the init container is handed, not what it does: the gate's decisions are
 `scripts/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
 pod and that the gate captures cold were measured once, on a kind cluster (cr-kubernetes-backup-gate), not here. And
 it recognises the config-secret claim only through the app container's KEK path; a key the app reads from elsewhere
@@ -234,12 +249,16 @@ KT_DEFAULT = re.compile(r'@WithDefault\("([^"]*)"\)\s*\n\s*fun\s+configSecretFil
 # `const val OWNER_LABEL = "…"` / `OWNER_VALUE` / the two listener names — the sink's own constants, read not retyped.
 KT_ADMIN_PORT = re.compile(r'interface\s+AdminChannel\s*\{.*?@WithDefault\("(\d+)"\)\s*\n\s*fun\s+port\s*\(\s*\)', re.DOTALL)
 ADMIN_PORT_ENV = "VEYQ_ADMIN_CHANNEL_PORT"
+# (xxiii) the two variables the PROXY source sets together, and the probes they move.
+PROXY_ENV = "QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL"
+PORT_SOURCE_ENV = "VEYQ_HTTP_CLIENT_PORT_SOURCE"
+PROBES = ("startupProbe", "readinessProbe", "livenessProbe")
 KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE|HTTP_LISTENER|SHARED_HTTPS_LISTENER)\s*=\s*"([^"]+)"')
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
 TOOLS_IMAGE = re.compile(r"(?:^|/)veyq-tools(?::|$)")
-# (xxiii)–(xxv) the backup gate (ADR 0098): its container name and the variable its target release travels in.
+# (xxiv)–(xxvi) the backup gate (ADR 0098): its container name and the variable its target release travels in.
 GATE_NAME = "backup-gate"
 GATE_TARGET_ENV = "VEYQ_BACKUP_TARGET_RELEASE"
 WORKLOADS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
@@ -415,7 +434,7 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
             if pattern.search(str(c.get("image") or "").split("@", 1)[0])
         ]
         if not images and which == "tools" and not backup_enabled(values):
-            continue  # the gate is off: no container runs the tools image, by (xxiv)
+            continue  # the gate is off: no container runs the tools image, by (xxv)
         if not images:
             errors.append(f"(xiv) {tag}: no container runs the {which} image, so its digest reached nothing this could check")
         for image in images:
@@ -435,8 +454,8 @@ def image_tag(image: str) -> str | None:
 
 
 def check_backup_gate(tag: str, enabled: bool, claim: str | None, rendered: list[dict]) -> bool:
-    """(xxiii) with the gate on, exactly one init container `backup-gate` on the tools image, mounting the named claim
-    and NOT the config-secret claim, its target release the app image's tag; (xxiv) with it off, no init container
+    """(xxiv) with the gate on, exactly one init container `backup-gate` on the tools image, mounting the named claim
+    and NOT the config-secret claim, its target release the app image's tag; (xxv) with it off, no init container
     and no volume no main container mounts. Returns whether the render carries the gate."""
     app = next(((o, s, c) for o in rendered if o.get("kind") == "Deployment" for s in [pod_spec(o)]
                 for c in (s or {}).get("containers") or [] if is_app_container(c)), None)
@@ -452,37 +471,70 @@ def check_backup_gate(tag: str, enabled: bool, claim: str | None, rendered: list
     if not enabled:
         mounted = {m.get("name") for c in spec.get("containers") or [] for m in c.get("volumeMounts") or []}
         if inits:
-            errors.append(f"(xxiv) {tag}: backup.enabled is false and {name_of(obj)} still runs init container(s) {[c.get('name') for c in inits]}")
+            errors.append(f"(xxv) {tag}: backup.enabled is false and {name_of(obj)} still runs init container(s) {[c.get('name') for c in inits]}")
         for leftover in sorted(set(volumes) - mounted):
-            errors.append(f"(xxiv) {tag}: backup.enabled is false and {name_of(obj)} still declares volume `{leftover}`, which no container mounts")
+            errors.append(f"(xxv) {tag}: backup.enabled is false and {name_of(obj)} still declares volume `{leftover}`, which no container mounts")
         return bool(inits)
     gates = [c for c in inits if c.get("name") == GATE_NAME]
     if len(inits) != 1 or len(gates) != 1:
-        errors.append(f"(xxiii) {tag}: {name_of(obj)} runs init containers {[c.get('name') for c in inits]} — with backup.enabled, exactly one, `{GATE_NAME}`")
+        errors.append(f"(xxiv) {tag}: {name_of(obj)} runs init containers {[c.get('name') for c in inits]} — with backup.enabled, exactly one, `{GATE_NAME}`")
         return bool(gates)
     gate = gates[0]
     image = str(gate.get("image") or "")
     if not TOOLS_IMAGE.search(image.split("@", 1)[0]):
-        errors.append(f"(xxiii) {tag}: `{GATE_NAME}` runs `{image}`, not the veyq-tools image — the one capture implementation is released there (ADR 0098)")
+        errors.append(f"(xxiv) {tag}: `{GATE_NAME}` runs `{image}`, not the veyq-tools image — the one capture implementation is released there (ADR 0098)")
     gate_claims = {claim_of(m.get("name")): m.get("name") for m in gate.get("volumeMounts") or []}
     if claim not in gate_claims:
-        errors.append(f"(xxiii) {tag}: `{GATE_NAME}` mounts claims {sorted(c for c in gate_claims if c)}, not backup.existingClaim `{claim}` — the captures would go nowhere the operator named")
+        errors.append(f"(xxiv) {tag}: `{GATE_NAME}` mounts claims {sorted(c for c in gate_claims if c)}, not backup.existingClaim `{claim}` — the captures would go nowhere the operator named")
     # The KEK's claim, found the way (ii) finds it: the app container's mount covering the resolved config-secret path.
     path = resolve_secret_path(container, workdir, default_path)
     kek = next((m.get("name") for m in container.get("volumeMounts") or [] if path and covers(path, str(m.get("mountPath", "")))), None)
     if kek is not None and (kek in gate_claims.values() or (claim_of(kek) and claim_of(kek) in gate_claims)):
         errors.append(
-            f"(xxiii) {tag}: `{GATE_NAME}` mounts `{kek}`, the config-secret claim — a capture on the backup claim could then "
+            f"(xxiv) {tag}: `{GATE_NAME}` mounts `{kek}`, the config-secret claim — a capture on the backup claim could then "
             f"hold the KEK, the leaked backup ADR 0056 §1 exists to prevent; the gate never reads the key (ADR 0098 decision 4c)"
         )
     target = next((e.get("value") for e in gate.get("env") or [] if e.get("name") == GATE_TARGET_ENV), None)
     app_release = image_tag(str(container.get("image") or ""))
     if target is None or target != app_release:
         errors.append(
-            f"(xxiii) {tag}: `{GATE_NAME}`'s {GATE_TARGET_ENV} is {target!r}, but the app container starts release "
+            f"(xxiv) {tag}: `{GATE_NAME}`'s {GATE_TARGET_ENV} is {target!r}, but the app container starts release "
             f"{app_release!r} — the gate would judge a release change that is not the one about to migrate"
         )
     return True
+def check_client_port(tag: str, values: dict, rendered: list[dict]) -> None:
+    """(xxiii) PROXY env iff probes on the admin listener iff app.clientPort.source is proxyProtocol."""
+    source = ((values.get("app") or {}).get("clientPort") or {}).get("source") or "none"
+    if source == "proxyProtocol":
+        proxy_rendered.add(tag)
+    for obj in rendered:
+        spec = pod_spec(obj)
+        for container in (spec or {}).get("containers") or []:
+            if not is_app_container(container) or default_admin_port is None:
+                continue
+            env = {e.get("name"): str(e.get("value")) for e in container.get("env") or []}
+            admin_port = int(env.get(ADMIN_PORT_ENV) or default_admin_port)
+            admin_name = next((p.get("name") for p in container.get("ports") or [] if p.get("containerPort") == admin_port), None)
+            proxy_env = env.get(PROXY_ENV) == "true"
+            source_env = env.get(PORT_SOURCE_ENV)
+            probes = {kind: (container.get(kind) or {}).get("httpGet") for kind in PROBES if container.get(kind)}
+            on_admin = {kind: port_hits((get or {}).get("port"), admin_name, admin_port) for kind, get in probes.items()}
+            want = source == "proxyProtocol"
+            if proxy_env != want or (source_env == "proxy-protocol") != want:
+                errors.append(
+                    f"(xxiii) {tag}: {name_of(obj)}: app.clientPort.source is {source!r} but the container carries "
+                    f"{PROXY_ENV}={env.get(PROXY_ENV)!r} and {PORT_SOURCE_ENV}={source_env!r} — the PROXY protocol and the "
+                    f"port source are set together exactly for proxyProtocol, or the app refuses to start"
+                )
+            if want and not {"startupProbe", "readinessProbe"} <= set(probes):
+                errors.append(f"(xxiii) {tag}: {name_of(obj)}: under proxyProtocol the app has probes {sorted(probes)}, not at least startup and readiness")
+            for kind, admin in on_admin.items():
+                if admin != want:
+                    errors.append(
+                        f"(xxiii) {tag}: {name_of(obj)}: the {kind} polls port {probes[kind].get('port')!r} with "
+                        f"app.clientPort.source {source!r} — under the PROXY protocol a probe must poll the admin listener "
+                        f"(the public port closes a connection with no PROXY header unanswered), and otherwise the public one"
+                    )
 
 
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
@@ -910,15 +962,16 @@ def check(values_file: pathlib.Path) -> list[dict]:
     enabled = backup_enabled(values)
     if first:
         check_backup_gate(tag, enabled, (values.get("backup") or {}).get("existingClaim"), rendered)
-        # (xxiv) and its positive control on the same file: the other choice renders the other shape.
+        # (xxv) and its positive control on the same file: the other choice renders the other shape.
         flip = ["--set", "backup.enabled=false"] if enabled else ["--set", "backup.enabled=true", "--set", "backup.existingClaim=flipped-backup"]
         flipped = render(values_file, flip)
         has_gate = check_backup_gate(f"{tag} {' '.join(flip)}", not enabled, None if enabled else "flipped-backup",
                                      objects(flipped) if flipped else [])
         if not flipped:
-            errors.append(f"(xxiv) {tag}: the render with {' '.join(flip)} failed, so the other backup choice is unchecked")
+            errors.append(f"(xxv) {tag}: the render with {' '.join(flip)} failed, so the other backup choice is unchecked")
         elif has_gate == enabled:
-            errors.append(f"(xxiv) {tag}: flipping backup.enabled did not flip the gate — the switch renders nothing different")
+            errors.append(f"(xxv) {tag}: flipping backup.enabled did not flip the gate — the switch renders nothing different")
+    check_client_port(tag, values, rendered)
 
     if not first:
         return rendered
@@ -1003,12 +1056,16 @@ values_files = sorted(CI_DIR.glob("*.yaml"))
 if not values_files:
     errors.append(f"{CI_DIR.relative_to(ROOT)} holds no values file — nothing would be rendered, and a run over nothing is not a green")
 digests_set: set[str] = set()
+proxy_rendered: set[str] = set()
 renders = {f.name: check(f) for f in values_files}
 
 # (xiv) the digest path is rendered by some file, and the schema refuses a digest that is not one.
 for which in ("app", "admin", "tools"):
     if values_files and which not in digests_set:
         errors.append(f"(xiv) no file in {CI_DIR.relative_to(ROOT)} sets the {which} image's digest, so the `repository:tag@digest` render is checked by nobody")
+# (xxiii) the PROXY branch is rendered by some file.
+if values_files and not proxy_rendered:
+    errors.append(f"(xxiii) no file in {CI_DIR.relative_to(ROOT)} sets app.clientPort.source: proxyProtocol, so the PROXY render — its env and its probes on the admin listener — is checked by nobody")
 if values_files:
     base = values_files[0]
     # (xvii) off means off: a render with the switch off carries no NetworkPolicy at all — and, the positive control
@@ -1034,18 +1091,23 @@ if values_files:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` passed — an enabled policy set with no gateway data plane named must be refused")
             elif "ingressFrom" not in output:
                 errors.append(f"(xviii) `helm lint {' '.join(extra)}` failed, but its output never names `ingressFrom`:\n{output.strip()}")
-    # (xxv) the backup choice is explicit: neither (the gate on, no claim) is refused naming `backup`, and each of the
+    # (xxvi) the backup choice is explicit: neither (the gate on, no claim) is refused naming `backup`, and each of the
     # two choices passes — the file's own and the gate switched off.
     neither = ["--set", "backup.enabled=true", "--set", "backup.existingClaim="]
     for extra, refused in ((neither, True), (["--set", "backup.enabled=false"], False),
                            (["--set", "backup.enabled=true", "--set", "backup.existingClaim=a-claim"], False)):
         code, output = lint(base, extra)
         if refused and code == 0:
-            errors.append(f"(xxv) `helm lint {' '.join(extra)}` passed — an install that neither names backup.existingClaim nor says backup.enabled: false must be refused (ADR 0098, owner 2b)")
+            errors.append(f"(xxvi) `helm lint {' '.join(extra)}` passed — an install that neither names backup.existingClaim nor says backup.enabled: false must be refused (ADR 0098, owner 2b)")
         elif refused and "/backup" not in output:
-            errors.append(f"(xxv) `helm lint {' '.join(extra)}` failed, but its output never names `/backup`:\n{output.strip()}")
+            errors.append(f"(xxvi) `helm lint {' '.join(extra)}` failed, but its output never names `/backup`:\n{output.strip()}")
         elif not refused and code != 0:
-            errors.append(f"(xxv) `helm lint {' '.join(extra)}` failed — that is a choice the schema must accept:\n{output.strip()}")
+            errors.append(f"(xxvi) `helm lint {' '.join(extra)}` failed — that is a choice the schema must accept:\n{output.strip()}")
+    code, output = lint(base, ["--set", "app.clientPort.source=bogus"])
+    if code == 0:
+        errors.append("(xxiii) `helm lint --set app.clientPort.source=bogus` passed — the schema must refuse a port source outside its enum")
+    elif "clientPort" not in output:
+        errors.append(f"(xxiii) `helm lint --set app.clientPort.source=bogus` failed, but its output never names `clientPort`:\n{output.strip()}")
     for key in ("image.digest", "admin.image.digest", "backup.image.digest"):
         code, output = lint(values_files[0], ["--set", f"{key}=sha256:not-a-digest"])
         if code == 0:
@@ -1071,7 +1133,7 @@ print(
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on the Gateway and in the properties file, "
     f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs; no Ingress, every "
     f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
-    f"httproutes/listenersets with nothing on gateways; the backup gate on the tools image where on — the named claim, "
-    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that "
-    f"makes neither choice"
+    f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "
+    f"listener, in {', '.join(sorted(proxy_rendered))}, and a port source outside the enum refused; the backup gate on the tools image where on — the named claim, "
+    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice"
 )

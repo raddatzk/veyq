@@ -30,7 +30,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   project without a match. **Each project with `@QuarkusTest`s holds
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
-  `src/main/resources/application.properties`. Shared test helpers live in **`:core`'s test fixtures**
+  `src/main/resources/application.properties`. **A new `@TestProfile` is one more Quarkus boot in its project's one
+  test JVM (2 GB heap, `veyq.module`), and `:core`'s is near the ceiling:** two new profiles took `:core:test` to
+  `OutOfMemoryError: Java heap space` late in the suite, twice, while the tests themselves were green (2026-10-17,
+  cr-client-port-sources); one fitted. Share a profile class across the classes that need the same keys, and reach a
+  variant through a test-scope seam rather than a profile where the config mapping is proven elsewhere. Shared test helpers live in **`:core`'s test fixtures**
   (`core/src/testFixtures`, `java-test-fixtures`), consumed as `testImplementation(testFixtures(project(":core")))`:
   Quarkus loads them as a workspace module of the application under test, so a seed that persists entities, a
   helper on `Arc.container()` and the CDI fakes all work from there in `:core`'s, `:apps:memories`' and the root's

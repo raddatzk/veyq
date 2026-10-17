@@ -1,9 +1,11 @@
 # The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
 # Encrypt, the DNS name and CA trust the public internet would give the instance, the mail relay its provider would,
-# and the browser that drives it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py installs the candidate with `veyqctl install` and makes
-# this file the instance's operator override (`<home>/compose.override.yml`), so it is laid OVER the release's own
-# recipe (never over this checkout's copy) on every command veyqctl runs, interpolated from the `.env` veyqctl writes
-# (the run's own `${VEYQ_E2E_*}` values go in through `--set`):
+# the release stamp and the stub release mirror that let the release check find something (below, at `app` and
+# `release-mirror`), and the browser that drives it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py
+# installs the candidate with `veyqctl install` and makes this file the instance's operator override
+# (`<home>/compose.override.yml`), so it is laid OVER the release's own recipe (never over this checkout's copy) on
+# every command veyqctl runs, interpolated from the `.env` veyqctl writes (the run's own `${VEYQ_E2E_*}` values go in
+# through `--set`):
 #
 #     docker compose -p veyq-e2e-<stamp> -f <home>/releases/<release>/docker-compose.prod.yml \
 #         -f <home>/compose.override.yml --env-file <home>/.env up -d --wait
@@ -12,9 +14,10 @@
 # and the /acme volume it must be able to write (ADR 0071's silent failure: an unwritable /acme keeps Traefik up and
 # serving its default certificate). VEYQ_ACME_CASERVER already exists in the recipe for staging; nothing in the
 # production file is edited for this. Every other service, network, posture and secret is the operator's: this file
-# adds three services and gives Traefik's ACME client one CA to trust, and must never weaken what the recipe sets. The
-# browser is a CLIENT of the instance — it publishes nothing and changes no operator service — and sits behind a
-# profile, so `up` never starts it.
+# adds four services, gives Traefik's ACME client one CA to trust and the app the release stamp and check interval
+# of the release-check test double (at `app`), and must never weaken what the recipe sets. The browser is a CLIENT of
+# the instance — it publishes nothing and changes no operator service — and sits behind a profile, so `up` never
+# starts it.
 #
 # What the internet gives a real instance and a run has to give itself (found in cr-stack-e2e phase 2): the store
 # check uploads a test object through the PUBLIC origin the backend signs for (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`,
@@ -30,8 +33,8 @@
 # is OUR wiring, not Let's Encrypt's validator; the price is that Traefik's challenge router on :80 is not exercised.
 #
 # The posture is held BY HAND here: scripts/validate_compose_posture.py reads the production file only (cr-stack-e2e
-# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble, Mailpit and the browser get
-# the recipe's x-hardened triple and a non-root uid, measured to run that way.
+# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble, Mailpit, the release mirror and
+# the browser get the recipe's x-hardened triple and a non-root uid, measured to run that way.
 services:
   pebble:
     image: ghcr.io/letsencrypt/pebble:2.10.1@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
@@ -93,6 +96,20 @@ services:
       JAVA_TOOL_OPTIONS: >-
         -Djavax.net.ssl.trustStore=/pebble/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12
         -Djavax.net.ssl.trustStorePassword=veyq-e2e
+      # The release stamp of THIS RUN's instance (the test double of `release-mirror` below): the release `veyqctl`
+      # installed it as, read by `veyq.release.version`. It overrides the image's own `-SNAPSHOT` stamp for this
+      # container only — the image is not rebuilt and carries no release's name.
+      VEYQ_VERSION: ${VEYQ_E2E_RELEASE_STAMP:?set by scripts/run_stack_e2e.py}
+      # `veyq.release-check.every` (24h by default): the check runs when the app starts — before the console can point
+      # it anywhere — and then only a day later, so a run would never see it read the mirror. Every 5 s, the check the
+      # Server Owner points at the mirror reads it within seconds, with no "check now" the product does not have.
+      VEYQ_RELEASE_CHECK_EVERY: 5s
+    # No internet for the release check's default source: until the suite points it at the mirror, the check reads the
+    # GitHub Releases every 5 s. These names resolve to the app's own loopback, so each read fails at once, inside the
+    # container (ADR 0097 § Consequences: an offline run's check fails, and the run does not count it as a defect).
+    extra_hosts:
+      - "api.github.com:127.0.0.1"
+      - "github.com:127.0.0.1"
     volumes:
       - ${VEYQ_E2E_APP_TRUSTSTORE:?set by scripts/run_stack_e2e.py}:/pebble/truststore.p12:ro
 
@@ -112,7 +129,7 @@ services:
   #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
   #     runner, so the run would differ between a laptop and CI.
   browser:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: &playwright mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
     profiles: [browser]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -141,3 +158,27 @@ services:
       - -c
       - python3 /repo/infra/e2e/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/node_modules/@playwright/test/cli.js test "$$@"
       - browser
+
+  # The release mirror an operator may point the release check at (ADR 0097 decision 1, uc.admin.learn-of-new-releases)
+  # — a TEST DOUBLE, like Pebble, decided by the owner for inbox #464 (option (a), 2026-10-17). The check reads releases
+  # only on a release-stamped build, and the lane's candidate is a `-SNAPSHOT` by design (ci.yml's `version` job), so
+  # the run stamps ITS instance (`app` above) and serves releases newer than that stamp. The files are the publish's own
+  # producer's (`scripts/release_assets.py`, which run_stack_e2e.py calls once per release into the run directory's
+  # `mirror/`): `releases.json` and `<tag>/manifest.json`, the two files the app's mirror reader (`ReleaseFeed.Mirror`)
+  # reads — it verifies no signature (a forged list can at worst produce a false notice, ADR 0097 decision 2), so the
+  # unsigned files are what a mirror serves it. Plain HTTP on `admin`, the network the app and the mail relay share:
+  # the source accepts an `http` address (`ReleaseNoticesHandler`), and the mirror's TLS is not what is under test. A
+  # static file server from the Playwright image this file already pins (`python3 -m http.server`), with the recipe's
+  # x-hardened triple and a non-root uid; it writes nothing.
+  release-mirror:
+    image: *playwright
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    user: "65532:65532"
+    entrypoint: ["python3", "-u", "-m", "http.server", "8080", "--bind", "0.0.0.0", "--directory", "/srv/mirror"]
+    volumes:
+      - ${VEYQ_E2E_RELEASE_MIRROR:?set by scripts/run_stack_e2e.py}:/srv/mirror:ro
+    networks:
+      admin:
+        aliases: ["releases.mirror.test"]

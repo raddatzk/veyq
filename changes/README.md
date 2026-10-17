@@ -1316,6 +1316,13 @@ refused boot's first lines were Hibernate's static banner `Database info: … JD
 before any configuration is read, so the predicate as written was false on the run that proved the point. What it
 meant was "before a connection is attempted" — the control's Flyway `openConnection` line. Name that line.
 
+**And a boot bite knows which steps run before the check it bites.** A refusal written as a `StartupEvent` observer
+runs after Flyway's migrate-at-start and after route registration (`AppShellRoutes` reads the store setting), and
+both reach the database. cr-client-port-sources planned three boots against an absent database, the control failing
+"later on the database"; all three failed on the database first and none reached the check. A refusal at configuration
+time (a converter, as `trusted-proxies` has) is seen without a database; an observer's needs a reachable one, a
+throwaway container of the pinned image.
+
 ### When the CR's gate is a bespoke measurement, bite the MEASUREMENT before trusting its green
 
 **§ *bite-proof a guard* applied one level up.** Every rule around it assumes the gate is `check` or a

@@ -158,6 +158,10 @@ services:
       VEYQ_TENANT_INGRESS_UPSTREAM_APP: http://app:8080
       VEYQ_TENANT_INGRESS_UPSTREAM_BLOBS: http://garage:3900
       VEYQ_TENANT_INGRESS_UPSTREAM_ADMIN: http://admin:8080
+      # Where the client's source port comes from (ADR 0094 decision 7): the header Traefik's local plugin below
+      # overwrites on every request. A literal, never a knob: the app's routing file attaches the plugin exactly
+      # when this says `header`, and a header the edge does not overwrite is one a client writes.
+      VEYQ_HTTP_CLIENT_PORT_SOURCE: header
     volumes:
       # THE reason this file exists. Without it every `up -d --force-recreate` regenerates the KEK, the
       # veyq_instance fingerprint reports configSecretState: MISMATCH, and the instance refuses member invites
@@ -239,6 +243,11 @@ services:
       # reload can never read half of it.
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
+      # veyq's client-address middleware (traefik-clientaddr.go, ADR 0094 decision 7), loaded from the two files
+      # mounted below — a LOCAL plugin, interpreted by Traefik's own Yaegi, never fetched (a remote catalog plugin
+      # would make every start depend on the network). Traefik files it under `experimental`, so an upgrade of the
+      # pinned image may change it; a plugin that no longer loads fails the app's routers loudly (404).
+      - "--experimental.localplugins.clientaddr.modulename=github.com/raddatzk/veyq/clientaddr"
       - "--entrypoints.web.address=:80"
       # :80 exists only for the ACME HTTP-01 challenge and to redirect everything else to :443.
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
@@ -261,6 +270,10 @@ services:
       # Read-only: the projector owns this file, and a proxy that could write it would be a second author of the
       # routing whose edits the next full regenerate silently discards.
       - veyq-traefik-dynamic:/etc/traefik/dynamic:ro
+      # The plugin, file by file: a release asset is a flat name and cannot start with a period, so the manifest
+      # travels as traefik-clientaddr.yml and becomes `.traefik.yml` here. Traefik's working directory is `/`.
+      - "./traefik-clientaddr.go:/plugins-local/src/github.com/raddatzk/veyq/clientaddr/clientaddr.go:ro"
+      - "./traefik-clientaddr.yml:/plugins-local/src/github.com/raddatzk/veyq/clientaddr/.traefik.yml:ro"
 
 volumes:
   veyq-mariadb-data:

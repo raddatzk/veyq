@@ -24,8 +24,11 @@ class ClientAddressTest {
 
     private fun trust(vararg ranges: String) = ranges.map { requireNotNull(ClientAddress.range(it)) { it } }
 
-    private fun resolve(vararg lines: String, trusted: List<ClientAddress.Range> = emptyList()) =
-        ClientAddress.resolve(gateway, lines.toList(), trusted)
+    private fun resolve(
+        vararg lines: String,
+        trusted: List<ClientAddress.Range> = emptyList(),
+        source: ClientAddress.Resolved? = null,
+    ) = ClientAddress.resolve(gateway, lines.toList(), trusted, source)
 
     private fun at(ip: String, port: Int? = null) = ClientAddress.Resolved(InetAddress.getByName(ip), port)
 
@@ -66,8 +69,8 @@ class ClientAddressTest {
 
     @Test
     fun withNoHeaderTheClientIsThePeerWithTheSocketsPort() {
-        assertEquals(gateway, ClientAddress.resolve(gateway, emptyList(), emptyList()))
-        assertNull(ClientAddress.resolve(null, emptyList(), emptyList()), "no inet peer and no header: nothing")
+        assertEquals(gateway, ClientAddress.resolve(gateway, emptyList(), emptyList(), null))
+        assertNull(ClientAddress.resolve(null, emptyList(), emptyList(), null), "no inet peer and no header: nothing")
     }
 
     @Test
@@ -235,4 +238,70 @@ class ClientAddressTest {
         assertTrue(refusal.message!!.contains("element 2"), refusal.message)
         assertFalse(refusal.message!!.contains("gateway.local"), refusal.message)
     }
+
+    // ---- B1: the configured port source (ADR 0094 decision 7) ----
+
+    @Test
+    fun aSourceWithTheStopEntrysIpHandsItsPortOver() =
+        assertEquals(at("203.0.113.77", 51234), resolve("203.0.113.77", source = at("203.0.113.77", 51234)))
+
+    @Test
+    fun aSourceWithAnotherIpLeavesThePortUnknown() =
+        assertEquals(at("203.0.113.77"), resolve("203.0.113.77", source = at("198.51.100.66", 51234)))
+
+    @Test
+    fun theStopEntrysOwnPortWinsOverTheSource() =
+        assertEquals(at("203.0.113.77", 443), resolve("203.0.113.77:443", source = at("203.0.113.77", 51234)))
+
+    @Test
+    fun aSourceWithoutAPortLeavesThePortUnknown() =
+        assertEquals(at("203.0.113.77"), resolve("203.0.113.77", source = at("203.0.113.77")))
+
+    @Test
+    fun theSourceSpeaksForTheStopEntryOnlyAfterTheWalk() = assertEquals(
+        at("203.0.113.77", 51234),
+        resolve("198.51.100.66, 203.0.113.77, 10.0.0.5", trusted = trust("10.0.0.5"), source = at("203.0.113.77", 51234)),
+    )
+
+    @Test
+    fun aSourceNamingTheClientDoesNotMoveTheStopEntry() =
+        // The same chain with nothing listed stops at the load balancer; a source naming the client does not move it.
+        assertEquals(at("10.0.0.5"), resolve("203.0.113.77, 10.0.0.5", source = at("203.0.113.77", 51234)))
+
+    @Test
+    fun withNoForwardedForAProxyPeerIsTheClientWithItsPort() {
+        val proxied = at("203.0.113.77", 51234)
+        assertEquals(proxied, ClientAddress.resolve(proxied, emptyList(), emptyList(), proxied))
+    }
+
+    @Test
+    fun aRefusedStopEntryStaysRefusedWhateverTheSourceSays() =
+        assertNull(resolve("198.51.100.66, gateway.local", source = at("203.0.113.77", 51234)))
+
+    @Test
+    fun theHeaderSourceIsOneLineWithOneEntryAndAPort() {
+        assertEquals(at("203.0.113.77", 51234), ClientAddress.headerSource(listOf("203.0.113.77:51234")))
+        assertEquals(at("2001:db8::1", 51234), ClientAddress.headerSource(listOf(" [2001:db8::1]:51234 ")))
+    }
+
+    @Test
+    fun theHeaderSourceSaysNothingForAnythingElse() {
+        listOf(
+            emptyList(),
+            listOf("203.0.113.77:51234", "203.0.113.77:51235"),
+            listOf("203.0.113.77:51234, 203.0.113.77:51235"),
+            listOf("203.0.113.77:51234,"),
+            listOf("203.0.113.77"),
+            listOf("2001:db8::1"),
+            listOf("[2001:db8::1]"),
+            listOf("gateway.local:51234"),
+            listOf("203.0.113.77:0"),
+            listOf(""),
+        ).forEach { assertNull(ClientAddress.headerSource(it), it.toString()) }
+    }
+
+    @Test
+    fun aBareIpv6HeaderValueIsNeverSplitIntoAPort() =
+        // `2001:db8::1:4711` is one IPv6 address, not an address with port 4711.
+        assertNull(ClientAddress.headerSource(listOf("2001:db8::1:4711")))
 }

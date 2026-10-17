@@ -34,9 +34,9 @@ acceptanceCriteria:
     # proves it: `scripts/instance_backup_selftest.py` (ci.yml's `web-e2e` job, and inside the image in the `build`
     # job's tools leg) pins the decision table, every refusal writing nothing with a control one field away, the order
     # (an emptied database passes before the downgrade refusal), retention, and that the key is never read (G1-G4,
-    # G8); `scripts/chart_meta_check.py` (the `chart` job) pins (xxiii) the init container on the tools image with the
-    # named claim, never the config-secret claim, and the app's release as its target, (xxiv) nothing of it when off,
-    # and (xxv) the schema refusing an install that makes no choice. It ran once on a kind cluster
+    # G8); `scripts/chart_meta_check.py` (the `chart` job) pins (xxiv) the init container on the tools image with the
+    # named claim, never the config-secret claim, and the app's release as its target, (xxv) nothing of it when off,
+    # and (xxvi) the schema refusing an install that makes no choice. It ran once on a kind cluster
     # (cr-kubernetes-backup-gate, ADR 0098 M13); a cluster lane is inbox #430's.
     text: >-
       On Kubernetes, before the app container of a new release starts and migrates the schema, an init container

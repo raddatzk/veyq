@@ -189,7 +189,7 @@ acceptanceCriteria:
   - id: the-cluster-capture-never-holds-the-key
     # A11, ADR 0098 decision 4c. No coverage on a surface: proven by `scripts/instance_backup_selftest.py` G8 (the
     # gate, with a readable key at the default path, records leg (c) separate and no file on the volume holds the
-    # key's bytes) and by `scripts/chart_meta_check.py` (xxiii) (the init container never mounts the config-secret
+    # key's bytes) and by `scripts/chart_meta_check.py` (xxiv) (the init container never mounts the config-secret
     # claim; bitten by mounting it).
     text: >-
       A capture the cluster's backup gate writes records the config-secret key as kept separately and never holds it:

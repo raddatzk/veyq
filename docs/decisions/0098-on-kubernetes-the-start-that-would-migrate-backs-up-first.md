@@ -3,7 +3,7 @@
 - Status: Accepted 2026-10-16 (owner: every recommendation of the former § Open for the owner taken, and the store
   leg is its index only); built (cr-kubernetes-backup-gate): `scripts/instance_backup.py gate` and its index capture in
   the third released image `veyq-tools` (`tools/Dockerfile`), the chart's `backup.*` values and init container
-  `backup-gate`, held by `scripts/instance_backup_selftest.py` and `scripts/chart_meta_check.py` (xxiii)–(xxv), and run
+  `backup-gate`, held by `scripts/instance_backup_selftest.py` and `scripts/chart_meta_check.py` (xxiv)–(xxvi), and run
   once on a kind cluster (M13). It is the Kubernetes-native backup decision
   [ADR 0064](0064-kubernetes-helm-deployment-target.md) defers; the owner's starting idea was a Helm `pre-upgrade` hook,
   and this ADR keeps it as the rejected shape with its costs (§ Decided with the owner, 1).
