@@ -40,14 +40,14 @@ class ShareMediaResource(
         when (val o = handler.list(shareId, xSharePassword)) {
             is ShareMediaListOutcome.Listed -> Response.ok(
                 ShareMediaListing(
-                    media = o.media.map(::toShareMedia),
+                    media = o.media.map { toShareMedia(it, it.row.mediaId in o.blocked) },
                     identities = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
                 ),
             ).build()
             is HttpFailure -> httpError(o)
         }
 
-    private fun toShareMedia(s: ShareMediaRow) = ShareMedia(
+    private fun toShareMedia(s: ShareMediaRow, blocked: Boolean) = ShareMedia(
         nodeId = UUID.fromString(s.nodeId),
         mediaId = UUID.fromString(s.row.mediaId),
         blobId = UUID.fromString(s.row.blobId),
@@ -69,6 +69,8 @@ class ShareMediaResource(
         wrappedMeta = s.row.wrappedMeta,
         wrappedBlobMeta = s.row.wrappedBlobMeta,
         identityId = s.identityId?.let(UUID::fromString),
+        // Kept and marked, not left out (uc.moderation.take-a-measure): the guest sees the placeholder a member sees.
+        blockedByOperator = blocked,
     )
 
     @PermitAll

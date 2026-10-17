@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.moderation
 
 import me.raddatz.veyq.core.identity.ModeratorEntity
+import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
 import java.time.LocalDate
@@ -9,11 +10,15 @@ import java.util.UUID
 
 /**
  * The events of the moderation log: the instance events (ADR 0099 § 4), and a case's (ADR 0093 § 11) — [RECEIVED] when a
- * report opens it, [REPORT_ATTACHED] when a further report attaches to it.
+ * report opens it, [REPORT_ATTACHED] when a further report attaches to it, [OPENED] when the review served its report
+ * shares, and every decision (uc.moderation.review-a-case, uc.moderation.take-a-measure). [MEASURE_TAKEN] and
+ * [MEASURE_LIFTED] name the measure's kind in `reason` and its target in `target_id`; a member's sign-in block taken on no
+ * case is the one of them written with no case id.
  */
 enum class ModerationEvent {
     APPOINTED, ACCEPTED, DELIVERED, REMOVED, STEPPED_DOWN, IDENTITY_ROTATED, EPOCH_MINTED,
-    RECEIVED, REPORT_ATTACHED,
+    RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN,
+    PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED,
 }
 
 /**
@@ -38,6 +43,7 @@ class ModerationLog {
         epoch: Int? = null,
         reason: String? = null,
         sealedText: String? = null,
+        targetId: String? = null,
     ) {
         ModerationEventEntity().apply {
             id = UUID.randomUUID().toString()
@@ -48,26 +54,58 @@ class ModerationLog {
             this.epoch = epoch
             this.reason = reason
             this.sealedText = sealedText
+            this.targetId = targetId
             val onRoster = moderatorId?.let { ModeratorEntity.findById(it)?.onRoster } == true
             expiresAt = if (onRoster) null else retentionEnd(at)
         }.persist()
     }
 
     /**
-     * A case's event (ADR 0093 § 11): [actorId] is the reporting member, null for a guest. Its date stays open (NULL)
-     * while the case is: a case's events are kept to 31 December of the third year after it closes, which the review
-     * (cr-moderation-review-and-measures) sets when it closes one.
+     * A case's event (ADR 0093 § 11): [actorId] is the reporting member (null for a guest), [moderatorId] the moderator or
+     * Server Owner who acted; [reason] a measure's or proposal's kind, [targetId] the id it named, [sealedText] the free
+     * text sealed in the browser to [epoch]'s key, [holdUntil] an extension's new end. Its date stays open (NULL) while the
+     * case is; [closeCase] sets it, and an event about a case already closed (a later lift) is dated as it is written.
      */
-    fun appendCase(event: ModerationEvent, at: Instant, caseId: String, actorId: String?) {
+    fun appendCase(
+        event: ModerationEvent,
+        at: Instant,
+        caseId: String,
+        actorId: String? = null,
+        moderatorId: String? = null,
+        reason: String? = null,
+        targetId: String? = null,
+        epoch: Int? = null,
+        sealedText: String? = null,
+        holdUntil: Instant? = null,
+    ) {
+        val closedAt = ModerationCaseEntity.findById(caseId)?.closedAt
         ModerationEventEntity().apply {
             id = UUID.randomUUID().toString()
             this.event = event.name
             occurredAt = at
             this.caseId = caseId
             this.actorId = actorId
-            expiresAt = null
+            this.moderatorId = moderatorId
+            this.reason = reason
+            this.targetId = targetId
+            this.epoch = epoch
+            this.sealedText = sealedText
+            this.holdUntil = holdUntil
+            expiresAt = closedAt?.let { retentionEnd(maxOf(it, at)) }
         }.persist()
     }
+
+    /** The case [caseId] closed at [closedAt]: every event of it is kept to 31 December of the third year after. */
+    fun closeCase(caseId: String, closedAt: Instant) {
+        ModerationEventEntity.list("caseId", caseId).forEach { it.expiresAt = retentionEnd(maxOf(it.occurredAt, closedAt)) }
+    }
+
+    /**
+     * A member's sign-in block or its lift taken on no case (an authority's order names none): an event with no case id,
+     * dated as the Server Owner's other events are — open while they are on the roster.
+     */
+    fun appendSignInBlock(event: ModerationEvent, at: Instant, serverOwnerId: String, accountId: String) =
+        append(event, at, moderatorId = serverOwnerId, actorId = serverOwnerId, reason = "MEMBER_SIGN_IN", targetId = accountId)
 
     /** The moderator [moderatorId] left the roster at [removedAt]: every event about them still open gets its date. */
     fun closeFor(moderatorId: String, removedAt: Instant) {

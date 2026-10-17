@@ -16,6 +16,7 @@ import me.raddatz.veyq.depot.content.FileRow
 import me.raddatz.veyq.depot.content.FilesStore
 import me.raddatz.veyq.depot.content.DepotUploadCompletion
 import me.raddatz.veyq.depot.content.completedOutcome
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface ShareFilesListOutcome {
@@ -53,6 +54,7 @@ class ShareFilesHandler(
     private val completions: UploadCompletions,
     private val guestWrites: DepotShareGuestWrites,
     private val store: FilesStore,
+    private val blocks: ModerationBlocks,
 ) {
 
     /** The live files of the share's live subtree, each with its blob or null. A `WRITE_ONLY` link sees nothing. */
@@ -94,6 +96,7 @@ class ShareFilesHandler(
             ShareWriteTarget.NotContributable -> return ShareFileCompleteOutcome.NotContributable
         }
         if (!guestWrites.supports(target.kind)) return ShareFileCompleteOutcome.NotContributable
+        if (blocks.contentView(gated.scopeId).nodeBlocked(target.nodeId)) return ShareFileCompleteOutcome.Completed(CompleteFileOutcome.Blocked)
         val item = DepotUploadCompletion.item(target.nodeId, uploadId, expectedBlobId)
         val result = completions.complete(
             gated.scopeId, listOf(item), UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),

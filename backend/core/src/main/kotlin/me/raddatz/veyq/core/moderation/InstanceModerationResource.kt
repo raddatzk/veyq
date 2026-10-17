@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.moderation
 
 import me.raddatz.veyq.core.generated.api.InstanceModerationApi
 import me.raddatz.veyq.core.generated.model.AppointModeratorRequest
+import me.raddatz.veyq.core.generated.model.BlockAccountSignInRequest
 import me.raddatz.veyq.core.generated.model.InstanceModeration
 import me.raddatz.veyq.core.generated.model.InstanceModerationOwner
 import me.raddatz.veyq.core.generated.model.InstanceModerator
@@ -9,6 +10,7 @@ import me.raddatz.veyq.core.generated.model.MintModerationEpochRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.RolesAllowed
@@ -23,12 +25,14 @@ import java.util.UUID
  */
 @RolesAllowed(SERVER_OWNER)
 @RateLimitExempt(
-    reason = "Server-Owner-only roster and key writes on the admin channel: one row per appointment, one epoch per mint " +
+    reason = "Server-Owner-only roster, key and moderation-step writes on the admin channel: one row per appointment, " +
+        "one epoch per mint, one per sign-in block or settled proposal " +
         "(bounded by the roster), no mail and no outbound request; the role gate already bounds the caller set to one " +
         "account.",
 )
 class InstanceModerationResource(
     private val moderation: ModerationHandler,
+    private val steps: SignInBlocks,
     private val identity: SecurityIdentity,
 ) : InstanceModerationApi {
 
@@ -44,6 +48,18 @@ class InstanceModerationResource(
         val epochGrants = grants.map { GrantIn(it.accountId.toString(), it.identityPublicKey, 0, it.sealedGrant) }
         answer(moderation.mint(caller(), epoch, kemPublicKey, signPublicKey, reason, epochGrants))
     }
+
+    override fun getModerationSteps(): Response = Response.ok(steps.steps()).build()
+
+    override fun declineModerationProposal(proposalId: UUID): Response = stepped(steps.decline(caller(), proposalId.toString()))
+
+    override fun blockAccountSignIn(blockAccountSignInRequest: BlockAccountSignInRequest): Response =
+        stepped(steps.block(caller(), blockAccountSignInRequest.address, blockAccountSignInRequest.caseId?.toString()))
+
+    override fun unblockAccountSignIn(blockId: UUID): Response = stepped(steps.unblock(caller(), blockId.toString()))
+
+    /** A Server Owner's step: the steps as they now stand, or its refusal. */
+    private fun stepped(refusal: HttpFailure?): Response = refusal?.let { httpError(it) } ?: Response.ok(steps.steps()).build()
 
     private fun caller(): String = identity.principal.name
 

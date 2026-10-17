@@ -30,6 +30,7 @@ import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
@@ -139,6 +140,8 @@ sealed interface ShareBlobOutcome {
     object RateLimited : ShareBlobOutcome, HttpFailure by Failures.rateLimited
     /** The store cannot presign (the in-memory dev store) — a 503. */
     object StoreUnavailable : ShareBlobOutcome, HttpFailure by httpFailure("store_unavailable", SERVICE_UNAVAILABLE)
+    /** A moderator blocked the content this blob belongs to (uc.moderation.take-a-measure) — a 451, as for a member. */
+    object Blocked : ShareBlobOutcome, HttpFailure by Failures.blockedByOperator
 }
 
 sealed interface RevokeShareOutcome {
@@ -190,6 +193,8 @@ sealed interface ReactivateShareOutcome {
     object NotFound : ReactivateShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** A departed member may hold this link ([ReissuePolicy], ADR 0075) — a 409, nothing written; re-issue it. */
     object ReissueRequired : ReactivateShareOutcome, HttpFailure by httpFailure("reissue_required", CONFLICT)
+    /** A moderator blocked the link or a guest uploader who came through it (uc.moderation.take-a-measure) — a 409. */
+    object Blocked : ReactivateShareOutcome, HttpFailure by Failures.shareBlockedByOperator
 }
 
 sealed interface ReissueShareOutcome {
@@ -211,6 +216,9 @@ sealed interface ReissueShareOutcome {
     /** The share is already deleted — re-issued once already (a concurrent re-issue won, or an earlier one ran) or
      *  deleted. A member's answer only (inbox #252): a 409, nothing written; the caller re-reads the list. */
     object ShareDeleted : ReissueShareOutcome, HttpFailure by httpFailure("share_deleted", CONFLICT)
+    /** A moderator blocked the link itself — a new id would serve what was blocked (decision 2 of
+     *  cr-moderation-review-and-measures); a 409, nothing written. */
+    object Blocked : ReissueShareOutcome, HttpFailure by Failures.shareBlockedByOperator
 }
 
 /** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4), whether
@@ -263,6 +271,7 @@ class SharingHandler(
     private val access: ScopeAccess,
     /** Which application measures a link's usage, by the target node's kind (see [UploadAdmission]). */
     private val quota: StorageQuota,
+    private val blocks: ModerationBlocks,
 ) {
 
     fun create(
@@ -491,6 +500,7 @@ class SharingHandler(
         // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead.
         val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
         if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
+        if (blocks.shareBlocked(share.id)) return ReactivateShareOutcome.Blocked
         store.reactivate(userId, shareId)
         return ReactivateShareOutcome.Done
     }
@@ -540,6 +550,7 @@ class SharingHandler(
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActiveInScope(ShareAccessPolicy.capabilityFor(old.role), old.scopeId)) return ReissueShareOutcome.CapabilityDisabled
+        if (blocks.shareBlockedItself(old.id)) return ReissueShareOutcome.Blocked
         // A re-issue makes a new link now, so it meets the requirements as a new one does.
         linkRefusal(old.scopeId, passwordRequired && pwVerifier != null, Instant.now(), expiresAt)?.let {
             return if (it === Failures.linkPasswordRequired) ReissueShareOutcome.LinkPasswordRequired else ReissueShareOutcome.LinkExpiryRequired
@@ -751,6 +762,9 @@ class SharingHandler(
         // in-subtree id. This makes "cannot see" a real server gate, not just id-secrecy (the resolve returns none).
         if (!ShareAccessPolicy.canView(share.role)) return ShareBlobOutcome.NotFound
         val blob = store.authorizedBlob(share.scopeId, share.nodeId, blobId) ?: return ShareBlobOutcome.NotFound
+        // A content block refuses the bytes to everyone (uc.moderation.take-a-measure) — after the link's own gate, so a
+        // guest learns of a block only inside a link it holds.
+        if (blocks.blobBlocked(share.scopeId, blobId)) return ShareBlobOutcome.Blocked
         val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain) ?: return ShareBlobOutcome.StoreUnavailable
         return ShareBlobOutcome.Found(gets)
     }

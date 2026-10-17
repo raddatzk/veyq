@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.http.httpStaleSealedMeta
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -40,6 +41,7 @@ class ContentResource(
     private val handler: NodesHandler,
     private val covers: NodeCoverHandler,
     private val identity: SecurityIdentity,
+    private val blocks: ModerationBlocks,
     config: VeyqConfig,
 ) : ContentApi {
 
@@ -65,7 +67,9 @@ class ContentResource(
     override fun listNodes(scopeId: UUID, ifNoneMatch: String?): Response {
         val sid = scopeId.toString()
         return when (val o = handler.list(identity.principal.name, sid, TreeETag.parse(ifNoneMatch))) {
-            is ListNodesOutcome.Nodes -> Response.ok(o.rows.map { it.toSummary(sid) }).header("ETag", TreeETag.of(o.revision)).build()
+            is ListNodesOutcome.Nodes -> blocks.contentView(sid).let { view ->
+                Response.ok(o.rows.map { it.toSummary(sid, view.nodeBlocked(it.id)) }).header("ETag", TreeETag.of(o.revision)).build()
+            }
             ListNodesOutcome.NotModified -> Response.notModified().build() // 304 — no body, no row read (ADR 0081)
             is HttpFailure -> httpError(o)
         }
@@ -136,12 +140,14 @@ class ContentResource(
     override fun listTrashedNodes(scopeId: UUID): Response {
         val sid = scopeId.toString()
         return when (val o = handler.listTrash(identity.principal.name, sid)) {
-            is ListTrashOutcome.Trash -> Response.ok(o.rows.map { it.toTrashSummary(sid) }).build()
+            is ListTrashOutcome.Trash -> blocks.contentView(sid).let { view ->
+                Response.ok(o.rows.map { it.toTrashSummary(sid, view.nodeBlocked(it.id)) }).build()
+            }
             is HttpFailure -> httpError(o)
         }
     }
 
-    private fun TrashedNodeRow.toTrashSummary(scopeId: String) = TrashedNodeSummary(
+    private fun TrashedNodeRow.toTrashSummary(scopeId: String, blocked: Boolean) = TrashedNodeSummary(
         id = UUID.fromString(id),
         kind = kind,
         encryptedName = encryptedName,
@@ -153,6 +159,7 @@ class ContentResource(
         shareIdentityId = shareIdentityId?.let(UUID::fromString),
         wrappedIdentityKey = wrappedIdentityKey,
         attached = attached,
+        blockedByOperator = blocked,
     )
 
     /**
@@ -160,7 +167,7 @@ class ContentResource(
      * is served as stored — an open token (ADR 0079): a kind no application claims is the client registry's to render
      * as unsupported, never a decode failure here.
      */
-    private fun NodeRow.toSummary(scopeId: String) = NodeSummary(
+    private fun NodeRow.toSummary(scopeId: String, blocked: Boolean) = NodeSummary(
         id = UUID.fromString(id),
         kind = kind,
         encryptedName = encryptedName,
@@ -176,5 +183,7 @@ class ContentResource(
         shareIdentityId = shareIdentityId?.let(UUID::fromString),
         wrappedIdentityKey = wrappedIdentityKey,
         createdAt = OffsetDateTime.ofInstant(createdAt, ZoneOffset.UTC),
+        // Kept and marked, not left out (uc.moderation.take-a-measure): the level shows the placeholder.
+        blockedByOperator = blocked,
     )
 }

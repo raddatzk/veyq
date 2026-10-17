@@ -23,6 +23,8 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.tenant.TenantIngressProjector
+import me.raddatz.veyq.core.moderation.block.ProposalStep
+import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -168,6 +170,7 @@ class TenantHandler(
     private val access: ScopeAccess,
     private val quota: StorageUsage,
     private val storeSettings: StoreSettings,
+    private val moderationSteps: SignInBlocks,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -290,10 +293,13 @@ class TenantHandler(
      * (ADR 0063). That is a **secondary** effect and not the lockout — the gate is, and it is what still refuses a
      * request that reaches this instance by any other route while the file catches up.
      */
-    fun suspend(tenantId: String): SuspendOutcome {
+    fun suspend(tenantId: String, serverOwnerId: String): SuspendOutcome {
         val outcome = QuarkusTransaction.requiringNew().call {
             store.findTenant(tenantId) ?: return@call SuspendOutcome.NotFound
-            if (store.suspend(tenantId)) SuspendOutcome.Done else SuspendOutcome.NotActive
+            if (!store.suspend(tenantId)) return@call SuspendOutcome.NotActive
+            // A moderator's proposal to take this tenant offline is taken by the suspension itself (uc.admin.suspend-tenant A4).
+            moderationSteps.settle(ProposalStep.TENANT_OFFLINE, tenantId, serverOwnerId)
+            SuspendOutcome.Done
         }
         if (outcome is SuspendOutcome.Done) reproject()
         return outcome

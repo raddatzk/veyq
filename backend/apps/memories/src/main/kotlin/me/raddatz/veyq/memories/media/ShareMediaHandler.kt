@@ -13,12 +13,14 @@ import me.raddatz.veyq.core.sharing.ShareGuestGate
 import me.raddatz.veyq.core.sharing.ShareViewGate
 import me.raddatz.veyq.core.sharing.ShareWriteGate
 import me.raddatz.veyq.core.sharing.ShareWriteTarget
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface ShareMediaListOutcome {
     /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity. Every
      *  [media] row's `identityId` is one of its keys or null. */
-    data class Listed(val media: List<ShareMediaRow>, val uploaderKeys: Map<String, String>) : ShareMediaListOutcome
+    /** [blocked] holds the media a moderator blocked (uc.moderation.take-a-measure): kept in [media], marked. */
+    data class Listed(val media: List<ShareMediaRow>, val uploaderKeys: Map<String, String>, val blocked: Set<String> = emptySet()) : ShareMediaListOutcome
     /** Unknown, disabled, expired or deleted share, a space that serves no guests, or password-protected with no token
      *  — the non-enumerable 404 (the password challenge is the resolve's locked shell; this read serves none). */
     object NotFound : ShareMediaListOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
@@ -80,6 +82,7 @@ class ShareMediaHandler(
     private val completions: UploadCompletions,
     private val guestWrites: MediaShareGuestWrites,
     private val store: MediaStore,
+    private val blocks: ModerationBlocks,
 ) {
 
     /**
@@ -99,7 +102,9 @@ class ShareMediaHandler(
         }
         val rows = store.listShareMedia(viewable.scopeId, viewable.liveNodeIds)
         val keys = store.uploaderKeysOf(rows.mapNotNull { it.identityId }.toSet())
-        return ShareMediaListOutcome.Listed(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys)
+        val view = blocks.contentView(viewable.scopeId)
+        val blocked = rows.filter { view.itemBlocked(it.row.mediaId, it.nodeId) }.mapTo(HashSet()) { it.row.mediaId }
+        return ShareMediaListOutcome.Listed(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys, blocked)
     }
 
     /**

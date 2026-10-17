@@ -11,12 +11,14 @@ import io.quarkus.security.identity.SecurityIdentity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.ws.rs.HeaderParam
+import jakarta.ws.rs.Path
 import jakarta.ws.rs.container.ContainerRequestContext
 import jakarta.ws.rs.core.Response
 import org.jboss.resteasy.reactive.server.ServerRequestFilter
 import org.jboss.resteasy.reactive.server.SimpleResourceInfo
 import java.time.Instant
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * **`ModerationProofGate`** — the one gate every moderation operation passes (ADR 0099 § 2, en.moderation.moderation-key).
@@ -43,11 +45,11 @@ class ModerationProofGate(private val identity: SecurityIdentity) {
 
     @ServerRequestFilter
     fun gate(resource: SimpleResourceInfo, context: ContainerRequestContext): Response? {
-        if (!ModerationApi::class.java.isAssignableFrom(resource.resourceClass)) return null
+        val api = moderationApiOf(resource.resourceClass) ?: return null
         val operation = resource.methodName
-        val exempt = WITHOUT_PROOF[operation]
+        val exempt = if (api == ModerationApi::class.java) WITHOUT_PROOF[operation] else null
         if (exempt != null && !exempt.needsRole) return null
-        if (exempt == null && operation !in PROOF_OPERATIONS) return httpError(notModerator)
+        if (exempt == null && operation !in proofOperationsOf(api)) return httpError(notModerator)
         if (identity.isAnonymous || !identity.hasRole(ModeratorEntity.MODERATOR)) return httpError(notModerator)
         if (exempt != null) return null
         val proved = verify(
@@ -97,11 +99,30 @@ class ModerationProofGate(private val identity: SecurityIdentity) {
             "createModerationChallenge" to Exemption(true, "the proof's own input"),
         )
 
+        /**
+         * Where the moderation surface's routes live: every generated interface rooted at it is gated — the moderation
+         * spec's `ModerationApi`, and the review reads other specs serve under it (core's `case-review`, an
+         * application's `case-media` / `case-files`), which core cannot name (ADR 0079) and so finds by their path.
+         */
+        const val ROOT = "/api/moderation"
+
+        /** The generated interface rooted under [ROOT] that [resourceClass] implements, or null for any other resource. */
+        fun moderationApiOf(resourceClass: Class<*>): Class<*>? = resourceClass.interfaces.firstOrNull { api ->
+            api.getAnnotation(Path::class.java)?.value?.let { it == ROOT || it.startsWith("$ROOT/") } == true
+        }
+
+        private val proofOperations = ConcurrentHashMap<Class<*>, Set<String>>()
+
+        /** The operations of [api] that declare the proof header — derived from the generated interface, never listed. */
+        fun proofOperationsOf(api: Class<*>): Set<String> = proofOperations.computeIfAbsent(api) {
+            it.methods
+                .filter { m -> m.parameterAnnotations.flatMap { a -> a.toList() }.any { a -> a is HeaderParam && a.value == SIGNATURE_HEADER } }
+                .map { m -> m.name }
+                .toSet()
+        }
+
         /** The operations of `ModerationApi` that declare the proof header — derived from the generated interface. */
-        val PROOF_OPERATIONS: Set<String> = ModerationApi::class.java.methods
-            .filter { m -> m.parameterAnnotations.flatMap { it.toList() }.any { it is HeaderParam && it.value == SIGNATURE_HEADER } }
-            .map { it.name }
-            .toSet()
+        val PROOF_OPERATIONS: Set<String> = proofOperationsOf(ModerationApi::class.java)
 
         private fun decode(b64: String): ByteArray? = runCatching { Base64.getDecoder().decode(b64) }.getOrNull()
     }

@@ -125,7 +125,7 @@ class TenantsResource(
     // deliberate reading of the use-case's E1 — Server-Owner status is global, it is not a per-tenant exemption.
     // The Server Owner reactivates from the server-admin surface (ADR 0065), which is not that domain.
     override fun suspendTenant(tenantId: UUID): Response =
-        when (val o = handler.suspend(tenantId.toString())) {
+        when (val o = handler.suspend(tenantId.toString(), identity.principal.name)) {
             SuspendOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }

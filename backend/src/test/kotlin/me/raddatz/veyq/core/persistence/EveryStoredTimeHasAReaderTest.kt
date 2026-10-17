@@ -117,6 +117,14 @@ class EveryStoredTimeHasAReaderTest {
         "veyq_moderation_case.noticed_at" to "CaseNotices.mailBundle counts a day from the last bundle's",
             "veyq_moderation_event.occurred_at" to "ModerationLog.closeFor dates an event from the later of it and the removal",
             "veyq_moderation_event.expires_at" to "ModerationPurge deletes the event past it (ModerationLog.purgeExpired)",
+            // --- review and measures (ADR 0093 §§ 4-6, 11; uc.moderation.review-a-case, uc.moderation.take-a-measure)
+            "veyq_moderation_event.hold_until" to "served: ModerationCaseEvent.until, an extension's new end",
+            "veyq_moderation_case.decided_at" to "served: ModerationCase.decidedAt; the statement of reasons will count from it",
+            "veyq_moderation_case.closed_at" to "ModerationLog.appendCase dates a closed case's later events from it; served: closedAt",
+            "veyq_moderation_block.taken_at" to "served: ModerationMeasure.takenAt, AccountSignInBlock.blockedAt; orders a case's measures",
+            "veyq_moderation_block.lifted_at" to "served: ModerationMeasure.liftedAt — the record that a measure was lifted (active_key says whether)",
+            "veyq_moderation_proposal.proposed_at" to "served: ModerationProposal.proposedAt, OpenModerationProposal.proposedAt; orders both lists",
+            "veyq_moderation_proposal.settled_at" to "served: ModerationProposal.settledAt",
             // --- tasks
             "veyq_job.created_at" to "TasksStore claims the oldest job first and picks the newest covering rotation",
             "veyq_job.lease_expires_at" to "TasksStore re-offers a job whose lease ran out",

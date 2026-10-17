@@ -27,6 +27,7 @@ enum class FailureStatus(val httpStatus: Int) {
     GONE(410),
     UNPROCESSABLE(422),
     RATE_LIMITED(429),
+    UNAVAILABLE_FOR_LEGAL_REASONS(451),
     SERVER_ERROR(500),
     SERVICE_UNAVAILABLE(503),
 }

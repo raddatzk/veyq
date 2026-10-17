@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.moderation.ModerationEpochEntity
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.moderation.hold.HoldTarget
 import me.raddatz.veyq.core.moderation.hold.HoldTrigger
 import me.raddatz.veyq.core.moderation.hold.Holds
@@ -22,6 +23,7 @@ import me.raddatz.veyq.core.sharing.SharingStore
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import java.time.Instant
 import java.util.UUID
 
@@ -60,6 +62,7 @@ object ReportFailures {
     val rateLimited = httpFailure("rate_limited", FailureStatus.RATE_LIMITED)
     val shareNotFound = httpFailure("share_not_found", FailureStatus.NOT_FOUND)
     val sharePasswordIncorrect = httpFailure("share_password_incorrect", FailureStatus.FORBIDDEN)
+    val reporterBarred = httpFailure("reporter_barred", FailureStatus.FORBIDDEN)
 }
 
 /**
@@ -87,6 +90,7 @@ class ReportHandler(
     private val limiter: ReportRateLimiter,
     private val log: ModerationLog,
     private val holds: Holds,
+    private val blocks: ModerationBlocks,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All reportable: MutableList<ReportableItems>,
     config: VeyqConfig,
@@ -106,6 +110,8 @@ class ReportHandler(
     private fun member(m: Reporter.Member, r: ReportIn, now: Instant): ReportOutcome {
         access.check(m.userId, m.scopeId, AccessMode.READ).refusal(Failures.scopeNotFound, Failures.tenantSuspended)
             ?.let { return refused(it) }
+        // ADR 0093 § 5: a barred member reports nothing — after the space's gate, so the bar is no oracle for a stranger.
+        if (blocks.reporterBarred(m.userId, null)) return refused(ReportFailures.reporterBarred)
         if (!wellFormed(r, guestLink = false)) return refused(ReportFailures.invalid)
         if (!currentEpoch(r.epoch)) return refused(ReportFailures.epochChanged)
         nodes.lockScope(m.scopeId)
@@ -135,6 +141,8 @@ class ReportHandler(
         if (verifier == null || g.writeToken.isNullOrBlank() || !gate.matchesVerifier(g.writeToken, verifier)) {
             return refused(ReportFailures.shareNotFound)
         }
+        // ADR 0093 § 5: reports through a barred link are refused — after the whole link was proved, so no oracle.
+        if (blocks.reporterBarred(null, share.id)) return refused(ReportFailures.reporterBarred)
         val writeOnly = !ShareAccessPolicy.canView(share.role)
         if (!wellFormed(r, guestLink = writeOnly)) return refused(ReportFailures.invalid)
         if (!limiter.allowShare(share.id)) return refused(ReportFailures.rateLimited)
@@ -233,7 +241,9 @@ class ReportHandler(
     /** The item's open case, its category raised to the more urgent one — or a new one. Under the space lock. */
     private fun caseFor(kind: ReportItemKind, itemId: String, scopeId: String, category: ReportCategory): Pair<ModerationCaseEntity, Boolean> {
         val key = ModerationCaseEntity.openKeyOf(kind, itemId)
-        ModerationCaseEntity.find("openKey", key).firstResult()?.let { open ->
+        // Locked: a decision locks the case row first (`CaseDecisions`), so a dismissal committing meanwhile is seen here
+        // — the key no longer matches and a new case opens — and one that comes after waits for this report.
+        ModerationCaseEntity.find("openKey", key).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()?.let { open ->
             open.category = ReportCategory.valueOf(open.category).mostUrgent(category).name
             // A report that makes an unmailed case urgent mails it at once rather than in the day's bundle.
             if (open.noticeDue == ModerationCaseEntity.NOTICE_BUNDLE && ReportCategory.valueOf(open.category).urgent) {

@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.platform.capabilities.SwitchLevel
 import jakarta.enterprise.context.ApplicationScoped
@@ -12,7 +13,7 @@ import java.util.Base64
 /** One reason a guest is not served a link ([ShareGuestGate.guestStops]): [capabilityId] for a switch, [maxDays] for a
  *  lifetime, null otherwise. The wire's `ShareGuestStop`. */
 data class GuestStop(val reason: Reason, val capabilityId: String? = null, val maxDays: Int? = null) {
-    enum class Reason { REVOKED, EXPIRED, SPACE_UNAVAILABLE, INSTANCE_SWITCH, TENANT_SWITCH, LINK_PASSWORD, LINK_MAX_DAYS }
+    enum class Reason { REVOKED, EXPIRED, SPACE_UNAVAILABLE, INSTANCE_SWITCH, TENANT_SWITCH, LINK_PASSWORD, LINK_MAX_DAYS, OPERATOR_BLOCKED }
 }
 
 /** What [ShareGuestGate.writeGate] answers. Each refusal is the outcome the guest write calls answered before the
@@ -119,6 +120,7 @@ class ShareGuestGate(
     private val access: ScopeAccess,
     private val nodes: NodesStore,
     private val capabilities: CapabilityRegistry,
+    private val blocks: ModerationBlocks,
 ) {
 
     /**
@@ -142,6 +144,10 @@ class ShareGuestGate(
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareWriteGate.NotContributable
         if (onlyRole != null && share.role != onlyRole) return ShareWriteGate.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareWriteGate.NotContributable
+        // A guest uploader a moderator blocked: its token is refused as an unknown one (decision 4 of
+        // cr-moderation-review-and-measures). Its link is blocked with it, so [activeShare] refuses first in practice;
+        // this holds the identity on its own (`ModerationBlocksSliceTest`).
+        if (blocks.identityBlocked(identity.id)) return ShareWriteGate.NotContributable
         if (spendUploadBudget && !rateLimiter.allowUpload(shareId)) return ShareWriteGate.RateLimited
         // The root's kind picks the application that writes; a root that is gone has none (not contributable).
         val rootKind = store.findNode(share.nodeId)?.kind ?: return ShareWriteGate.NotContributable
@@ -260,6 +266,9 @@ class ShareGuestGate(
     fun guestStops(share: ShareEntity): List<GuestStop> {
         val stops = mutableListOf<GuestStop>()
         if (!share.enabled) stops += GuestStop(GuestStop.Reason.REVOKED)
+        // A moderator's block of the link, or of a guest uploader who came through it (uc.moderation.take-a-measure):
+        // every guest path answers as an unknown link until a moderator lifts it; nothing is written onto the share.
+        if (blocks.shareBlocked(share.id)) stops += GuestStop(GuestStop.Reason.OPERATOR_BLOCKED)
         val expiry = share.expiresAt
         if (expiry != null && !expiry.isAfter(Instant.now())) stops += GuestStop(GuestStop.Reason.EXPIRED)
         if (!access.isLive(share.scopeId)) stops += GuestStop(GuestStop.Reason.SPACE_UNAVAILABLE)
