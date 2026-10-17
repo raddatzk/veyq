@@ -3,8 +3,8 @@
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the terms' change counter is a
   **revision** (`terms_revision`, `accepted_terms_revision`, `termsRevision`, was `…version`); the pre-E2EE
   product's `Tenant.termsVersion` below keeps its own name. Decisions 6 (the fixed operator section) and 7 (the
-  provider identification), added 2026-10-16 from the legal research behind ADR 0093, are **not built**; they belong
-  to the moderation work (inbox #462).
+  provider identification), added 2026-10-16 from the legal research behind ADR 0093 and made mode-dependent on
+  2026-10-17 (ADR 0093 § 14), are **not built**; they belong to the moderation work (inbox #462).
 - Date: 2026-07-10
 
 ## Context
@@ -133,11 +133,32 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the drafts of the
    2026-10-16 research; the template's clause 9 then points to this section instead of regulating review itself.
 
+   **The section has two variants, chosen by the instance's operating mode** (ADR 0093 § 14, owner 2026-10-17). The
+   **full** section above is the *club, organisation or company* mode's. The **reduced** section is the *private*
+   mode's, for an operator who assessed that the GDPR, the DSA and the TCO Regulation do not reach their instance; it
+   keeps what tells a member or a guest how to report and what happens then, and drops what only those laws ask for
+   (ADR 0093 § Legal basis, items 1, 2 and 6):
+   - **stays:** the notice path, whole; what is kept (the hold and its ends, backups); the measures in steps and
+     reversible; that the affected are told what was blocked and why, and may object in the app once;
+   - **drops:** the authorities bullet — Art. 18 reports, orders, the terrorist-content policy (TCO Art. 7(1)) and the
+     contact point for users and authorities with its languages (DSA Art. 11–12, TCO Art. 15); the statement's
+     deferral on an authority's request (TCO Art. 11(3)); and the statement's further content, reduced as ADR 0093
+     § 7 says;
+   - **follows its value, not the mode:** the guest-write record's information is in the section exactly while
+     `core.public-shares.guest-write-record` is on, in either variant, since its first-layer sentence and Art. 13
+     come with the recording; a contact or a provider identification the operator set is shown, and one left empty is
+     simply absent — the full section shows that gap as "not stated by this operator".
+
+   Both variants carry one revision, moved with the text of either, and the gate compares the variant with it:
+   switching the mode **reopens the gate**, since what members accepted changed. Switching the record does not: its
+   information reaches a guest at the write itself (ADR 0093 § 10), like a changed value.
+
 7. **A provider identification, set in admin-web.** Name, an address for service, an email address, and for a
    legal person who represents it (a club's board). Required by § 5 DDG of a commercial operator and by § 18 MStV
-   of every operator not serving exclusively personal or family purposes; optional for a household, and admin-web
-   warns while it is empty. It appears in the operator section and on the login and share pages. It is public
-   operational data, like the terms.
+   of every operator not serving exclusively personal or family purposes. **Required in the *club, organisation or
+   company* mode**: admin-web warns while it is empty, and never refuses (ADR 0093 § 14). **Optional in the
+   *private* mode**, with no warning. Where it is set it appears, in either mode, in the operator section and on the
+   login and share pages. It is public operational data, like the terms.
 
 ## Consequences
 
@@ -160,8 +181,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   model § Sharing).
 - **The operator section and the provider identification are new public surface** (6, 7): instance settings in
   admin-web and the CLI ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
-  rendered into the terms endpoints. A family Server Owner who leaves the identification empty sees a warning, not
-  a refusal. None of it is built.
+  rendered into the terms endpoints. A Server Owner in the *club, organisation or company* mode who leaves the
+  identification empty sees a warning, not a refusal; one in the *private* mode sees nothing and gets the reduced
+  section (decision 6). None of it is built.
 
 ## Alternatives considered
 
