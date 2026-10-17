@@ -51,6 +51,17 @@
   in-memory store is never used outside tests.
 - **A6 — The caller is not the Server Owner.** No surface reads or writes the store setting for anyone else, and
   none returns its secrets to anyone, the Server Owner included.
+- **A7 — Objects no row claims.** A background sweep lists the store in use page by page and compares every object
+  with the rows that name a storage key ([ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)).
+  The **Object store** page (and `veyq-admin store reconcile`) shows its last full pass — the objects the store holds,
+  how many no row claims and their size, how many are not veyq's (the probe, anything not shaped like a veyq object) —
+  beside the reclaim list's pending and abandoned counts and the failure that stopped a pass. After an in-place
+  rollback, the unclaimed objects are the failed release's uploads. **Nothing is deleted until the Server Owner
+  confirms that the bucket holds only this instance's objects**; once confirmed, an object that stayed unclaimed in
+  every pass for the grace period (30 days by default, from when it was first seen) goes onto the reclaim list, whose
+  sweep deletes it. The page shows those candidates, their age and the date the first will go; **pause** stops the
+  deletion and keeps the counting, **resume** lets it go on. A restore or a rollback restarts every grace period and
+  withdraws the confirmation, and so does a changed store setting. The sweep itself never deletes an object.
 
 ## Quality notes
 
@@ -78,3 +89,5 @@ never arrives — and the store only ever holds encrypted data.
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md).
 - Run area of the docs site: [First-run setup and the admin console](../../../../site/src/content/docs/run/first-run.mdx)
 - Run area of the docs site: [Troubleshooting](../../../../site/src/content/docs/run/troubleshooting.md)
+- Run area of the docs site: [Operations](../../../../site/src/content/docs/run/operations.md) (A7: objects no record
+  claims, the confirmation, the grace and the pause)

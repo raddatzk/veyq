@@ -82,6 +82,16 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_store_reclaim.created_at" to "StoreReclaimSweep takes the oldest due rows first",
             "veyq_store_reclaim.next_attempt_at" to "StoreReclaimSweep's not-before",
             "veyq_store_reclaim.abandoned_at" to "StoreReclaimSweep skips an abandoned row",
+            // --- the bucket reconcile (ADR 0062 § Consequences) — operator state, no member's activity
+            "veyq_store_reconcile.pass_started_at" to "its presence is the pass in progress; served: passInProgress.startedAt",
+            "veyq_store_reconcile.last_listed_at" to "StoreReconcileStore.writePage's gap rule (the store's clock)",
+            "veyq_store_reconcile.completed_started_at" to "StoreReconcileStore.open: the next pass waits a period after it; served",
+            "veyq_store_reconcile.completed_at" to "served: StoreReconcilePass.completedAt",
+            "veyq_store_reconcile.failed_at" to "served: StoreReconcileFailure.at",
+            "veyq_store_reconcile.exclusive_confirmed_at" to "its presence arms the deletion (StoreReconcileEntity.armed); served",
+            "veyq_store_reconcile.paused_at" to "its presence disarms the deletion (StoreReconcileEntity.armed); served",
+            "veyq_store_reconcile.clocks_restarted_at" to "served: StoreReconcile.clocksRestartedAt",
+            "veyq_store_orphan.first_seen_at" to "StoreReconcileStore.complete: a key is due once the grace has passed since it",
             // --- instance: the release check and instance mail (ADR 0097) — operator state, no member's activity
             "veyq_release_check.last_success_at" to "served: InstanceReleaseNotices.lastSuccessAt (uc.admin.learn-of-new-releases A2)",
             "veyq_release_notice.found_at" to "served: InstanceReleaseNotice.foundAt",

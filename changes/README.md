@@ -65,6 +65,11 @@ green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `N
 `NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
+a client red names the typed line it expects to fail — and runs `npm run check` once to see it.
+**And a new model's property names are the generator's to keep or change**: cr-bucket-reconcile's `keys` became
+`propertyKeys` in the Kotlin model (a name the generator reserves), found only when phase 2 wrote the first constructor
+call, so the contract was renamed after its phase had committed. A contracts phase that adds a schema writes one use of
+it in each generated language before it commits.
 a client red names the typed line it expects to fail — and runs `npm run check` once to see it. **It finds those lines
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
@@ -1533,6 +1538,10 @@ share one refresh cookie and the second "device" opens on the first one's sessio
 `VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
 its own. And the instance takes its own ports (`QUARKUS_HTTP_PORT`, `VEYQ_ADMIN_CHANNEL_PORT`) when a neighbour holds
 8080/8090, with admin-web's Vite pointed at that admin port (`VEYQ_API_TARGET`, `VITE_ADMIN_PORT`).
+A live proof that shortens a duration to fit in minutes (a grace, a retention) shows the screen a value no unit test
+rendered: cr-bucket-reconcile's three-minute grace read "0 days" in the verdict and the confirm dialog, every unit test
+having used the 30-day default. So a UI that renders a configured duration is unit-tested with the shortest value its
+live proof will use, too.
 
 ### A UI phase's done-when names its browser pass
 

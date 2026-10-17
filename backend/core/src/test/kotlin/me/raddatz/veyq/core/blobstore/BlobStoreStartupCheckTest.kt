@@ -53,4 +53,14 @@ class BlobStoreStartupCheckTest {
             assertTrue(refusal.contains("veyq.blob-store.presign-ttl-seconds=600"), refusal)
         }
     }
+
+    @Test
+    fun aReconcileGapBoundThatCannotOutlastAHealthyQuietIsRefused() {
+        val period = Duration.ofHours(6)
+        val every = Duration.ofMinutes(1)
+        assertNull(BlobStoreStartupCheck.reconcileGapRefusal(Duration.ofDays(1), period, every), "the defaults")
+        assertNull(BlobStoreStartupCheck.reconcileGapRefusal(period.plus(every).plusSeconds(1), period, every))
+        val refusal = BlobStoreStartupCheck.reconcileGapRefusal(period.plus(every), period, every)
+        assertTrue(refusal!!.contains("veyq.store-reconcile.max-gap"), refusal)
+    }
 }

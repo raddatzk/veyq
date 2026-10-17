@@ -35,7 +35,11 @@ it has a host of its own (`storeDomain`), and the application writes a CORS rule
   Give it a **Public endpoint** when browsers reach the store at another address than the server does. The bucket's
   CORS rule must allow `PUT` and `GET` from the instance's origin with the `Content-Type` header, and expose `ETag`.
   The check tests the instance's own domain only; a tenant on a domain of its own is a further origin the rule must
-  allow, which the check does not see.
+  allow, which the check does not see. The access key must also be allowed to **list** the bucket: the application
+  compares the store with its database in the background, and without the list right the console reports that the
+  store refused it and counts nothing ([Operations](/veyq/run/operations/#objects-no-record-claims)). Give veyq a
+  bucket of its own — another server or tool writing into the same bucket is why the reconcile deletes nothing until
+  you confirm the bucket is this server's alone.
 - **Garage:** veyq sets it up — layout, bucket, access key, grant and CORS rule — from the admin endpoint and token
   you enter
   ([ADR 0067](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0067-store-provisioning-from-a-declared-type.md)).

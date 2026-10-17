@@ -276,6 +276,8 @@ class OperatorBlindProbeTest {
             "getInstanceReleaseNotices", "setInstanceReleaseCheck",
             "getInstanceMailSettings", "updateInstanceMailSettings", "confirmInstanceMail",
             "getInstanceModeration", "appointModerator", "removeModerator", "mintModerationEpoch",
+            "getStoreReconcile", "confirmStoreExclusiveBucket", "withdrawStoreExclusiveBucket", "pauseStoreReconcile",
+            "resumeStoreReconcile",
             "getInstanceOperator", "setInstanceOperator", "clearInstanceOperator", "confirmOperatorNotification",
             "getInstanceOperatingMode", "setInstanceOperatingMode",
         )

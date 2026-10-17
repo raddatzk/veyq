@@ -69,4 +69,8 @@ class FakePresigningBlobStore : BlobStore {
 
     /** Unused on the budget path (`StoreReclaimSweep` is the only real deleter, ADR 0062 Decision 3). */
     override fun delete(keys: List<String>): List<String> = emptyList()
+
+    /** Nothing to list: the reconcile's scripted bucket is [RecordingBlobStore]'s. */
+    override fun list(startAfter: String?, maxKeys: Int): StoreListing? = null
+    override val bucketDigest: String? = null
 }
