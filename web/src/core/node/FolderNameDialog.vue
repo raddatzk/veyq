@@ -15,7 +15,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { createFolder, renameNode, type NodeParent, type TreeNode } from './tree'
-import { treeStore } from './treeStore'
+import { treeStore, loadTree } from './treeStore'
 import { FOLDER_KIND } from './kind'
 import { collidingSibling, nameTakenMessage } from './siblingCollision'
 import { registry } from '../applications/registry'
@@ -64,6 +64,11 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
       await renameNode(props.scopeId, props.epochs, treeStore.nodes, props.node.id, trimmed)
       await resealAfterRename(props.node.id, trimmed)
     }
+    // The tree is re-read BEFORE the dialog closes, as the move's is (`move.ts` `memberMover`): `done` means the write
+    // stands AND the loaded tree carries it, so the host follows the node on screen to its new path in the same step
+    // (`MemoryHomeView` `stayOn`). Closed first, the dialog was gone for one tree read while the URL still held the old
+    // path — a reload in that window resolved nothing and stood on the scope root (inbox #475). `loadTree` never throws.
+    await loadTree()
     emit('done')
     emit('close')
   },
