@@ -77,7 +77,12 @@ paths:
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403":
+          description: >
+            The space's tenant is suspended (`tenant_suspended`, ADR 0066; only an accepted member is told so); or a
+            moderator barred this account from reporting (`reporter_barred`, ADR 0093 § 5).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reporter_barred } }
         "404":
           description: >
             No such space, or the caller is not an accepted member of it (`scope_not_found`, indistinguishable); or an
@@ -509,8 +514,352 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: identity_changed }
 
+  /api/moderation/cases:
+    get:
+      tags: [moderation]
+      operationId: listModerationCases
+      summary: The queue — every case of the instance in clear fields, urgent first.
+      description: >
+        The instance-wide queue (ADR 0093 § 3, uc.moderation.review-a-case): every case of every tenant, in the clear
+        fields the server holds — the category, the item's kind, when it was first and last reported, how many reports,
+        the tenant and its domain, the state and the hold's end. Nothing sealed. `OPEN` and `DECIDED` cases by default;
+        `state` narrows to one state (`CLOSED` lists the closed ones, whose measures may still stand). Ordered by
+        category (the urgent first), then the first report. Key-proved, with no case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          description: Only cases in this state; absent = `OPEN` and `DECIDED`.
+          schema: { $ref: "#/components/schemas/ModerationCaseState" }
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationQueue" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+
+  /api/moderation/cases/{caseId}:
+    get:
+      tags: [moderation]
+      operationId: getModerationCase
+      summary: A case — its reports (sealed), measures, proposals, hold, targets and log.
+      description: >
+        Everything the surface shows of one case (uc.moderation.review-a-case step 2): each report's clear fields and its
+        sealed part (the browser opens it with the epoch's key), the measures and proposals, the hold, the targets a
+        decision may name — the links that reach the item or that its reports came through, the uploaders the held rows
+        name — and the case's log. No report share: those are the review's (`getCaseReview`), which logs the opening.
+        Key-proved over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+
+  /api/moderation/cases/{caseId}/dismissal:
+    post:
+      tags: [moderation]
+      operationId: dismissModerationCase
+      summary: Dismiss an open case — it closes, and its hold ends at once.
+      description: >
+        ADR 0093 §§ 4–5: the case closes, its hold ends at once (the snapshot and the pins go, so the reclaim sweep
+        catches up on whatever was deleted meanwhile), and the case's events are dated to 31 December of the third year
+        after the close. An optional note, sealed in the browser to the moderation key (`moderation-note` [epoch,
+        caseId]). Only an `OPEN` case (`409 case_not_open`): a decided one is closed by lifting its measures. Key-proved
+        over this case; logged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationDecisionNote" }
+            example: { note: { epoch: 2, sealedNote: c2VhbGVkLW5vdGU= } }
+      responses:
+        "200":
+          description: Dismissed; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+        "409":
+          description: "`case_not_open` = the case is decided or closed; `moderation_epoch_changed` = the note is not sealed to the current epoch."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: case_not_open } }
+
+  /api/moderation/cases/{caseId}/measures:
+    post:
+      tags: [moderation]
+      operationId: takeModerationMeasure
+      summary: Take a moderator's step on a target the case knows — block the share, the content or a guest uploader.
+      description: >
+        ADR 0093 § 6, ADR 0099 § 6 (uc.moderation.take-a-measure). A measure is a row naming its kind, its target id,
+        this case, who took it and when; it deletes nothing. `SHARE` blocks a link (every guest path answers as an unknown
+        link; neither a reactivation nor a re-issue passes while it stands); `CONTENT` blocks the reported node or medium
+        (every byte read answers `451 blocked_by_operator`, every listing marks it); `GUEST_IDENTITY` blocks a guest
+        uploader's identity and the link it came through. The target must be one the case knows (`getModerationCase`'s
+        `targets`, the reported item for `CONTENT`) — else `404 moderation_target_unknown`. The case is then `DECIDED`
+        and its hold ends six months after this decision. A step already in force on the target is refused
+        (`409 moderation_measure_exists`). Key-proved over this case; logged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationMeasureRequest" }
+            example: { kind: CONTENT, targetId: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b }
+      responses:
+        "201":
+          description: Taken; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `moderation_target_unknown` = the target is none the case knows, or the step does not fit the item."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_target_unknown } }
+        "409":
+          description: >
+            `moderation_measure_exists` = this step is already in force on the target; `case_closed` = the case is
+            closed; `moderation_epoch_changed` = the note is not sealed to the current epoch.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
+
+  /api/moderation/cases/{caseId}/measures/{measureId}/lift:
+    post:
+      tags: [moderation]
+      operationId: liftModerationMeasure
+      summary: Lift a measure of this case — the target serves again unchanged.
+      description: >
+        Records when the measure was lifted and by whom; the target serves again as it was (a block deleted nothing).
+        Lifting the case's last measure in force ends its hold at once. A reporter's bar is lifted here too. A measure
+        already lifted changes nothing. Key-proved over this case; logged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/MeasureId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationDecisionNote" }
+            example: {}
+      responses:
+        "200":
+          description: Lifted; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `measure_not_found` = no measure of this case has that id."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: measure_not_found } }
+        "409":
+          description: "`moderation_epoch_changed` = the note is not sealed to the current epoch."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+
+  /api/moderation/cases/{caseId}/proposals:
+    post:
+      tags: [moderation]
+      operationId: proposeModerationStep
+      summary: Propose a Server Owner's step — block a member uploader's sign-in, or take the tenant offline.
+      description: >
+        ADR 0099 § 6 and decided with the owner 2: the two steps that reach beyond what was reported stay the Server
+        Owner's. The case records the proposal; the Server Owner sees it on the admin channel (`getModerationSteps`) and
+        takes or declines it. `MEMBER_SIGN_IN` names a member uploader the case knows (`targets.uploaders`);
+        `TENANT_OFFLINE` names no target (it is the case's tenant). An open proposal of the same step and target is not
+        made twice (`409 moderation_proposal_exists`). Key-proved over this case; logged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationProposalRequest" }
+            example: { step: TENANT_OFFLINE }
+      responses:
+        "201":
+          description: Proposed; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `moderation_target_unknown` = the account is no member uploader the case knows, or the case's space has no tenant left."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_target_unknown } }
+        "409":
+          description: "`moderation_proposal_exists` = the same step on the same target is open; `case_closed`; `moderation_epoch_changed`."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proposal_exists } }
+
+  /api/moderation/cases/{caseId}/hold/extension:
+    post:
+      tags: [moderation]
+      operationId: extendModerationHold
+      summary: Extend the case's hold, with a concrete reason sealed to the moderation key.
+      description: >
+        ADR 0093 § 4: an extension needs a reason (an authority's request, an objection, a lawyer's letter, a lawsuit, an
+        Art. 18 report in progress), sealed in the browser (`moderation-note` [epoch, caseId]) and logged with its own
+        end. `until` must lie after the hold's current end and at most six months (183 days) from now
+        (`400 extension_out_of_bounds`); without a new reason the hold ends then. Only while the case holds a hold alive
+        (`409 nothing_held`). Key-proved over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationHoldExtension" }
+            example: { until: 2027-04-01T00:00:00Z, reason: { epoch: 2, sealedNote: c2VhbGVkLXJlYXNvbg== } }
+      responses:
+        "200":
+          description: Extended; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400":
+          description: "`invalid_request`, or `extension_out_of_bounds` = `until` is not after the current end, or more than six months from now."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: extension_out_of_bounds } }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+        "409":
+          description: "`nothing_held` = the case holds no hold alive; `moderation_epoch_changed` = the reason is not sealed to the current epoch."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+
+  /api/moderation/cases/{caseId}/reports/{reportId}/bar:
+    post:
+      tags: [moderation]
+      operationId: barModerationReporter
+      summary: Bar the reporter of one of this case's reports from reporting again.
+      description: >
+        ADR 0093 § 5: the reporter is the reporting member's account, or the link a guest reported through. Every
+        further report from that account, or through that link, is refused (`403 reporter_barred`) until the bar — a
+        measure of kind `REPORTER` on this case — is lifted (`liftModerationMeasure`). The reports already made stay.
+        A reporter already barred is not barred twice (`409 moderation_measure_exists`). Key-proved over this case;
+        logged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ReportId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationDecisionNote" }
+            example: {}
+      responses:
+        "201":
+          description: Barred; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `report_not_found` = no report of this case has that id."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_not_found } }
+        "409":
+          description: "`moderation_measure_exists` = the reporter is barred already; `moderation_epoch_changed`."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
+
 components:
+  responses:
+    AuthenticationFailed:
+      description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+    ProofInvalid:
+      description: >
+        `moderation_proof_invalid` = the key proof is missing, its challenge is unknown, spent or expired, or the
+        signature does not verify under the current epoch's key for this operation and case; `not_moderator` = the
+        caller holds no `MODERATOR` role.
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+    CaseNotFound:
+      description: No case has this id (`case_not_found`).
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: case_not_found } }
+    InvalidRequest:
+      description: The request was malformed (`invalid_request`).
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+
   parameters:
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case's id — bound into every key proof made for it.
+      schema: { type: string, format: uuid, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+    MeasureId:
+      name: measureId
+      in: path
+      required: true
+      description: A measure's id.
+      schema: { type: string, format: uuid, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      description: A report's id.
+      schema: { type: string, format: uuid, example: 4e5f9a8b-1c2d-4e4f-8a6b-4f2c9a1e7b3d }
     ScopeId:
       name: scopeId
       in: path
@@ -764,6 +1113,493 @@ components:
           maxLength: 2048
           example: c2VhbGVkLWdyYW50
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ModerationCaseState:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        `OPEN` = reported, not decided; `DECIDED` = a measure was taken (in force or lifted); `CLOSED` = dismissed, or
+        decided and its hold ended.
+      enum: [OPEN, DECIDED, CLOSED]
+      example: OPEN
+
+    ModerationItemKind:
+      x-veyq-visibility: enum
+      type: string
+      description: What was reported — a node, an application's item on a node (a Memories medium), or an upload link.
+      enum: [NODE, ITEM, LINK]
+      example: NODE
+
+    ModerationQueue:
+      type: object
+      description: The queue, urgent first.
+      required: [cases]
+      properties:
+        cases:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ModerationCaseSummary" }
+
+    ModerationCaseSummary:
+      type: object
+      description: One case of the queue, in clear fields only.
+      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+        itemKind: { $ref: "#/components/schemas/ModerationItemKind" }
+        category: { $ref: "#/components/schemas/ReportCategory" }
+        state: { $ref: "#/components/schemas/ModerationCaseState" }
+        firstReportedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the first report of this case was received.
+          example: 2026-10-17T09:00:00Z
+        lastReportedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the latest report of this case was received.
+          example: 2026-10-17T11:00:00Z
+        reportCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: How many reports this case holds.
+          example: 2
+        tenantDomain:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            The domain of the tenant the item lies in — the host the review opens on (ADR 0099, decided with the owner
+            3); the Server Owner's configuration, never user data. Null once the tenant is gone, and while it is suspended: its host then serves nothing (ADR 0066), so the review opens where the moderator is.
+          maxLength: 253
+          example: club.example.org
+        holdEndsAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the case's hold ends; null when it holds none alive.
+          example: 2027-01-15T09:00:00Z
+
+    ModerationCase:
+      type: object
+      description: One case as the moderation surface shows it (uc.moderation.review-a-case step 2).
+      required: [id, itemKind, itemId, scopeId, tenantId, tenantDomain, category, state, decidedAt, closedAt, hold, reports, measures, proposals, targets, events]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+        itemKind: { $ref: "#/components/schemas/ModerationItemKind" }
+        itemId:
+          x-veyq-visibility: id
+          type: string
+          description: The reported item's id — a node's, an item's, or (for a LINK) the share id.
+          maxLength: 64
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        scopeId: { type: string, format: uuid, x-veyq-visibility: id, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+        tenantId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The tenant the item's space belongs to; null once it is gone.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        tenantDomain:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The tenant's domain, where the review opens; the Server Owner's configuration. Null once it is gone, and while it is suspended (its host serves nothing then; the review opens where the moderator is).
+          maxLength: 253
+          example: club.example.org
+        category: { $ref: "#/components/schemas/ReportCategory" }
+        state: { $ref: "#/components/schemas/ModerationCaseState" }
+        decidedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the first measure was taken; null while open or when dismissed.
+          example: null
+        closedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the case closed; null while it is not.
+          example: null
+        hold:
+          oneOf:
+            - $ref: "#/components/schemas/ModerationHold"
+            - type: "null"
+        reports:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ModerationReport" }
+        measures:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationMeasure" }
+        proposals:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationProposal" }
+        targets: { $ref: "#/components/schemas/ModerationTargets" }
+        events:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ModerationCaseEvent" }
+
+    ModerationHold:
+      type: object
+      description: The case's hold that is alive.
+      required: [endsAt, trigger]
+      properties:
+        endsAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the hold ends — its snapshot is dropped and its pins released then.
+          example: 2027-01-15T09:00:00Z
+        trigger:
+          x-veyq-visibility: enum
+          type: string
+          description: "`CASE_OPEN` = taken by the report (90 days); `MEASURE` = a measure moved it to six months after the decision; `EXTENDED` = a logged extension set it."
+          enum: [CASE_OPEN, MEASURE, EXTENDED]
+          example: CASE_OPEN
+
+    ModerationReport:
+      type: object
+      description: One report of the case — its clear fields and its sealed part.
+      required: [id, epoch, receivedAt, category, sealedReport, reporter, barred]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 4e5f9a8b-1c2d-4e4f-8a6b-4f2c9a1e7b3d }
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The epoch its sealed part is sealed to.
+          example: 2
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was received.
+          example: 2026-10-17T09:00:00Z
+        category: { $ref: "#/components/schemas/ReportCategory" }
+        sealedReport:
+          type: string
+          description: "`K_report`, the reason, the contact and the context, sealed to the epoch's key (`moderation-report` [epoch])."
+          contentEncoding: base64
+          maxLength: 24000
+          example: AXJlcG9ydA==
+        reporter:
+          x-veyq-visibility: enum
+          type: string
+          description: "`ACCOUNT` = a member of the space reported it, with their account; `LINK` = a guest reported it through a link."
+          enum: [ACCOUNT, LINK]
+          example: LINK
+        barred:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether this report's reporter is barred now.
+          example: false
+
+    ModerationMeasureKind:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        `SHARE` = a link blocked; `CONTENT` = a node or medium blocked; `GUEST_IDENTITY` = a guest uploader blocked with
+        the link it came through; `REPORTER` = a reporter barred (ADR 0093 § 5).
+      enum: [SHARE, CONTENT, GUEST_IDENTITY, REPORTER]
+      example: CONTENT
+
+    ModerationMeasure:
+      type: object
+      description: A measure of the case — a row that deletes nothing and holds until it is lifted.
+      required: [id, kind, targetId, takenBy, takenAt, liftedAt, liftedBy]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
+        kind: { $ref: "#/components/schemas/ModerationMeasureKind" }
+        targetId:
+          x-veyq-visibility: id
+          type: string
+          description: The blocked id — a share id, a node's or item's id, a guest identity's id, or the barred account or link.
+          maxLength: 64
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        takenBy:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The moderator account that took it.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        takenAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was taken.
+          example: 2026-10-17T12:00:00Z
+        liftedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When it was lifted; null while it is in force.
+          example: null
+        liftedBy:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The moderator account that lifted it; null while it is in force.
+          example: null
+
+    ModerationProposalStep:
+      x-veyq-visibility: enum
+      type: string
+      description: "`MEMBER_SIGN_IN` = block a member uploader's sign-in; `TENANT_OFFLINE` = take the case's tenant offline (ADR 0066)."
+      enum: [MEMBER_SIGN_IN, TENANT_OFFLINE]
+      example: TENANT_OFFLINE
+
+    ModerationProposal:
+      type: object
+      description: A step proposed to the Server Owner, and what became of it.
+      required: [id, step, targetId, proposedBy, proposedAt, outcome, settledAt]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 2c1f2d3e-4a5b-4c7c-8f0e-2a9b1d4a6e8b }
+        step: { $ref: "#/components/schemas/ModerationProposalStep" }
+        targetId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member's account, or the tenant.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        proposedBy: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a }
+        proposedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was proposed.
+          example: 2026-10-17T12:00:00Z
+        outcome:
+          x-veyq-visibility: enum
+          type: string
+          description: "`OPEN` = the Server Owner has not acted; `TAKEN` = they took the step; `DECLINED` = they declined it."
+          enum: [OPEN, TAKEN, DECLINED]
+          example: OPEN
+        settledAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the Server Owner took or declined it; null while open.
+          example: null
+
+    ModerationTargets:
+      type: object
+      description: >
+        What a decision may name: the links that reach the item or that its reports came through, and the uploaders the
+        held rows name. Clear metadata the server holds; no name.
+      required: [links, uploaders]
+      properties:
+        links:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationTargetLink" }
+        uploaders:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ModerationTargetUploader" }
+
+    ModerationTargetLink:
+      type: object
+      required: [shareId, role, relation, blocked]
+      properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The link's id.
+          maxLength: 64
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        role:
+          x-veyq-visibility: enum
+          type: string
+          description: The link's role.
+          enum: [READ, READ_WRITE, WRITE_ONLY]
+          example: READ
+        relation:
+          x-veyq-visibility: enum
+          type: string
+          description: "`REPORTED` = the link is the reported item; `REPORTED_THROUGH` = a guest reported through it; `REACHES` = it is rooted at or above the item."
+          enum: [REPORTED, REPORTED_THROUGH, REACHES]
+          example: REACHES
+        blocked:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether a measure in force blocks it.
+          example: false
+
+    ModerationTargetUploader:
+      type: object
+      required: [kind, id, shareId, blocked]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: "`ACCOUNT` = a member account uploaded it (its sign-in block is the Server Owner's step); `GUEST_IDENTITY` = a guest identity of a link (a moderator blocks it)."
+          enum: [ACCOUNT, GUEST_IDENTITY]
+          example: GUEST_IDENTITY
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member's account id, or the guest identity's id.
+          example: 6e8b2c1f-2d3e-4a5b-8c7c-3f0e2a9b1d4a
+        shareId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: A guest identity's link; null for a member.
+          maxLength: 64
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        blocked:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether a measure in force blocks this guest identity (always false for a member — their block is the Server Owner's).
+          example: false
+
+    ModerationCaseEvent:
+      type: object
+      description: One event of the case's log (ADR 0093 § 11) — structured fields in the clear, free text sealed.
+      required: [event, at, moderatorId, sealedText, until]
+      properties:
+        event:
+          x-veyq-visibility: enum
+          type: string
+          description: The event.
+          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED]
+          example: OPENED
+        at:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it happened.
+          example: 2026-10-17T12:00:00Z
+        moderatorId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The moderator (or Server Owner) who acted; null for a report.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        detail:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The step or measure kind and its target id, where the event has one (`CONTENT 4f2c…`); the server's own words.
+          maxLength: 128
+          example: CONTENT 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int32
+          description: The epoch `sealedText` is sealed to.
+          example: 2
+        sealedText:
+          type: [string, "null"]
+          description: The event's free text (a note, an extension's reason), sealed to the moderation key (`moderation-note` [epoch, caseId]); null when none.
+          contentEncoding: base64
+          maxLength: 12000
+          example: null
+        until:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: An extension's new end; null for every other event.
+          example: null
+
+    SealedModerationNote:
+      type: object
+      description: A free text sealed in the browser to the moderation key's current epoch, bound to the case (`moderation-note` [epoch, caseId]).
+      required: [epoch, sealedNote]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch it is sealed to — the current one.
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedNote:
+          type: string
+          description: The sealed text.
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLW5vdGU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ModerationDecisionNote:
+      type: object
+      description: A decision's optional note.
+      properties:
+        note:
+          oneOf:
+            - $ref: "#/components/schemas/SealedModerationNote"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ModerationMeasureRequest:
+      type: object
+      description: A moderator's step on one target.
+      required: [kind]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: "`SHARE`, `CONTENT` or `GUEST_IDENTITY`; a reporter is barred by `barModerationReporter`."
+          enum: [SHARE, CONTENT, GUEST_IDENTITY]
+          example: CONTENT
+        shareId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: For `SHARE`, the link to block; null otherwise (`invalid_request` when the two disagree with the kind).
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "^[A-Za-z0-9_-]{43}$")'
+        targetId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: For `CONTENT`, the reported node's or item's id; for `GUEST_IDENTITY`, the guest identity's; null for `SHARE`.
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        note:
+          oneOf:
+            - $ref: "#/components/schemas/SealedModerationNote"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ModerationProposalRequest:
+      type: object
+      description: A proposal to the Server Owner.
+      required: [step]
+      properties:
+        step: { $ref: "#/components/schemas/ModerationProposalStep" }
+        targetId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The member uploader's account for `MEMBER_SIGN_IN`; null for `TENANT_OFFLINE`.
+          example: null
+        note:
+          oneOf:
+            - $ref: "#/components/schemas/SealedModerationNote"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ModerationHoldExtension:
+      type: object
+      description: An extension of the case's hold.
+      required: [until, reason]
+      properties:
+        until:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: The new end — after the current one, at most six months from now.
+          example: 2027-04-01T00:00:00Z
+        reason:
+          $ref: "#/components/schemas/SealedModerationNote"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:

@@ -30,6 +30,11 @@ tags:
       medium on the shared Memory or chapter, delete one's own (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/media` subtree:
       longer than core's `sharing` root `/api/shares`, so these routes reach this resource and every other
       `/api/shares` route stays core's.
+  - name: case-media
+    description: >
+      A moderator's review of a case's media (uc.moderation.review-a-case), behind core's moderation gate. Its own tag so
+      its resource owns `/api/moderation/cases/{caseId}/media`: longer than core's moderation root `/api/moderation`, so
+      this route reaches it and every other moderation route stays core's.
 
 paths:
   /api/shares/{shareId}/media:
@@ -156,8 +161,69 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_media_not_found } }
 
+  /api/moderation/cases/{caseId}/media:
+    get:
+      tags: [case-media]
+      operationId: listCaseMedia
+      summary: A moderator's review of a case's media — the held rows in the guest listing's shape.
+      description: >
+        The share viewer's moderation mode reads this instead of `listShareMedia` (uc.moderation.review-a-case): the
+        Memories rows the case's hold copied — every medium of a reported node's subtree, or the one reported medium — with
+        their derivatives and blob refs, and the held WRITE_ONLY identities that open a guest's upload. Read from the
+        snapshot only, so it answers after the media, the node or the space were deleted; nothing is marked blocked.
+        `404 nothing_held` once the hold ended. Behind the `MODERATOR` role and a key proof over this case — core's
+        moderation gate, never a guest's.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The held media and the identities that open them.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareMediaListing" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`, `not_moderator`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+        "404":
+          description: "`case_not_found`, or `nothing_held` = the case's hold has ended."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+
 components:
   parameters:
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case's id — bound into every key proof made for it.
+      schema: { type: string, format: uuid, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+    ModerationChallenge:
+      name: X-Veyq-Moderation-Challenge
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The challenge `createModerationChallenge` issued, as it returned it. Declared optional so a call without the
+        proof reaches the gate and gets its `403 moderation_proof_invalid`; the gate is what requires it.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ModerationSignature:
+      name: X-Veyq-Moderation-Signature
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        Ed25519 signature with the current epoch's moderation signing key over `moderation-proof` (the challenge, this
+        operation's `operationId`, the case id in the path or none), standard base64.
+      schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
     ShareId:
       name: shareId
       in: path
@@ -223,8 +289,16 @@ components:
       description: >
         One medium under the shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning
         `nodeId` so the viewer picks the right content key.
-      required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey]
+      required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, blockedByOperator]
       properties:
+        blockedByOperator:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            A moderator blocked this medium, or its node or a node above it (uc.moderation.take-a-measure): the guest
+            sees the placeholder *Blocked by the operator*, as a member does, and its blobs answer `451`. Always false in
+            a moderator's review.
+          example: false
         nodeId:
           x-veyq-visibility: id
           type: string

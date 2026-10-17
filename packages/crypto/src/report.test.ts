@@ -224,3 +224,48 @@ describe('report shares', () => {
     expect(hex(a)).not.toBe(hex(v1.newReportKey()))
   })
 })
+
+describe('moderation notes', () => {
+  const vec = vectors.seal.asym['moderation-note']
+  const sk = unhex(vectors.xwing.vectors[0].sk)
+  const text = 'Held for the court: Az. 12 O 345/26 (Landgericht).'
+
+  it('decodes the vector plaintext, and the encoder writes exactly it', () => {
+    expect(v1.decodeModerationNote(unhex(vec.plaintext))).toBe(text)
+    expect(hex(v1.encodeModerationNote(text))).toBe(vec.plaintext)
+    expect(v1.openModerationNote(vec.context.epoch, vec.context.caseId, sk, unhex(vec.blob))).toBe(text)
+  })
+
+  it('pads to the bucket: one byte more than a bucket holds takes the next', () => {
+    expect(v1.encodeModerationNote('a'.repeat(REPORT.bucketBytes - 4))).toHaveLength(REPORT.bucketBytes)
+    expect(v1.encodeModerationNote('a'.repeat(REPORT.bucketBytes - 3))).toHaveLength(2 * REPORT.bucketBytes)
+  })
+
+  it('refuses a blank note and one above its bound, and takes one at it', () => {
+    expect(() => v1.encodeModerationNote('  ')).toThrow(new ReportInvalid('note'))
+    expect(() => v1.encodeModerationNote('a'.repeat(REPORT.noteBytes + 1))).toThrow(new ReportInvalid('note'))
+    expect(v1.decodeModerationNote(v1.encodeModerationNote('a'.repeat(REPORT.noteBytes)))).toHaveLength(REPORT.noteBytes)
+  })
+
+  it('refuses padding that is not zeros, a length off the bucket, and a field past the end', () => {
+    const p = unhex(vec.plaintext)
+    p[p.length - 1] = 1
+    expect(() => v1.decodeModerationNote(p)).toThrow(new ReportInvalid('padding'))
+    expect(() => v1.decodeModerationNote(unhex(vec.plaintext).slice(1))).toThrow(new ReportInvalid('padding'))
+    const long = new Uint8Array(REPORT.bucketBytes)
+    long.set(u32(REPORT.bucketBytes))
+    expect(() => v1.decodeModerationNote(long)).toThrow(new ReportInvalid('truncated'))
+  })
+
+  it('a note sealed for one case and epoch opens for no other', () => {
+    const m = key(7)
+    const kem = v1.moderationBundle(m).kem
+    const sealed = v1.sealModerationNote(4, ID, kem, text)
+    expect(v1.openModerationNote(4, ID, v1.moderationKemSecret(m), sealed)).toBe(text)
+    expect(() => v1.openModerationNote(4, ID.replace(/1$/, '2'), v1.moderationKemSecret(m), sealed)).toThrow(
+      new v1.OpenRefused('moderation-note'),
+    )
+    expect(() => v1.openModerationNote(5, ID, v1.moderationKemSecret(m), sealed)).toThrow(new v1.OpenRefused('moderation-note'))
+    expect(() => v1.openReport(4, v1.moderationKemSecret(m), sealed)).toThrow(new v1.OpenRefused('moderation-report'))
+  })
+})

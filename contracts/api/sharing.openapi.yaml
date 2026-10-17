@@ -32,6 +32,12 @@ tags:
       Public share links — the curator's create/list/revoke/delete (authenticated) plus the anonymous guest
       resolve, identity, blob transport and gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
       `/api/shares` subtree.
+  - name: case-review
+    description: >
+      A moderator's review of a case in the share viewer's moderation mode (uc.moderation.review-a-case): the held
+      snapshot in the guest viewer's own shapes, behind the `MODERATOR` role and a key proof — never a guest's gate. Its
+      own tag so its resource owns the `/api/moderation/cases/{caseId}/review` subtree: longer than the moderation
+      spec's root `/api/moderation`, so these routes reach it and every other moderation route stays that spec's.
 
 paths:
   /api/shares:
@@ -217,8 +223,10 @@ paths:
           description: >
             A departed member may hold this link (`reissue_required`, nothing written — a bulk switch-off turned it
             off, its owner is no longer a member of the scope, or its recovery copy predates the scope's current
-            epoch or its last member removal; re-issue it, ADR 0075), or the space is being deleted and read-only
-            (`scope_deleting`, uc.spaces.delete-group A4).
+            epoch or its last member removal; re-issue it, ADR 0075), the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4), or a moderator blocked the link or a guest uploader who came
+            through it (`share_blocked_by_operator`, uc.moderation.take-a-measure — it stays off until a moderator lifts
+            the block).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reissue_required } }
         "422":
@@ -298,8 +306,10 @@ paths:
             The share is already deleted — re-issued once already, by a concurrent re-issue or an earlier one, or
             deleted (`share_deleted`; re-read the manage list, ADR 0075 point 1) — the new `shareId` is already taken
             (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current epoch (`stale_epoch` — re-open the
-            scope key and re-seal, ADR 0024 Decision 6), or the space is being deleted and read-only
-            (`scope_deleting`). Nothing is written in any case.
+            scope key and re-seal, ADR 0024 Decision 6), the space is being deleted and read-only
+            (`scope_deleting`), or a moderator blocked the link itself (`share_blocked_by_operator` — a re-issue would
+            serve the blocked content under a new id; a link blocked only with a guest uploader may be re-issued,
+            uc.moderation.take-a-measure). Nothing is written in any case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "422":
@@ -578,6 +588,103 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), the blob is not under the shared subtree, or a required password token is absent.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "451":
+          description: >
+            A moderator blocked this blob's content — its node, a node above it, or its application item
+            (`blocked_by_operator`, RFC 7725; uc.moderation.take-a-measure). A member asking for it gets the same answer;
+            the viewer draws the placeholder *Blocked by the operator*, not "missing".
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
+        "503":
+          description: The configured object store cannot presign (e.g. the in-memory dev store).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+  /api/moderation/cases/{caseId}/review:
+    get:
+      tags: [case-review]
+      operationId: getCaseReview
+      summary: A moderator's review of a case — its report shares and the held snapshot's core rows, in the guest viewer's shapes.
+      description: >
+        The share viewer's moderation mode reads this instead of `resolveShare` (ADR 0093 § 3, decision 6 of
+        cr-moderation-review-and-measures, uc.moderation.review-a-case): every report of the case with its sealed part and
+        its report share, and the held snapshot as a `PublicShare` — the held nodes of a reported node's subtree as
+        `nodes` (the root carries its own held `encryptedName`, which the report's `NODE_NAME` field key opens), a
+        reported link's held name and note, the held links rooted in the subtree in `heldLinks` (a guest's report hands
+        over the link's `LINK_NAME` field key, which opens one of their names). `role` is `READ` and `wrap` null: the
+        moderator holds the node key from the report share. Read from the snapshot only, so it answers after the share,
+        the node or the space were deleted, and for content a measure blocks. Each fetch is logged as the case's
+        *opened* event (ADR 0093 § 11). `404 nothing_held` once the case's hold has ended. Behind the `MODERATOR` role
+        and a key proof over this case — never a guest's gate, budget or password.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The review.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseReview" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`, `not_moderator`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+        "404":
+          description: "`case_not_found`, or `nothing_held` = the case's hold has ended (or it never took one)."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+
+  /api/moderation/cases/{caseId}/review/blobs:
+    post:
+      tags: [case-review]
+      operationId: presignCaseBlobs
+      summary: Presigned GETs for held blobs of a case — the review's byte reads, batched.
+      description: >
+        The moderation mode's `resolveShareBlob`: for each requested blob the case's hold holds, one short-TTL presigned
+        GET per chunk of the **pinned** object, in the order asked; a blob the hold does not hold is left out (the viewer
+        shows it as missing). A content block does not hide evidence from the moderator. Batched (at most 500) because
+        every call spends a key proof. Behind the `MODERATOR` role and a key proof over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CaseBlobsRequest" }
+            example: { blobIds: [9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a] }
+      responses:
+        "200":
+          description: The held blobs asked for, each with its presigned GETs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseBlobDownloads" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`, `not_moderator`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+        "404":
+          description: "`case_not_found`, or `nothing_held` = the case's hold has ended."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
         "503":
           description: The configured object store cannot presign (e.g. the in-memory dev store).
           content:
@@ -1027,7 +1134,10 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
-          description: The share is password-protected and the presented `X-Share-Password` token is wrong (`share_password_incorrect`).
+          description: >
+            The share is password-protected and the presented `X-Share-Password` token is wrong
+            (`share_password_incorrect`); or a moderator barred reports through this link (`reporter_barred`, ADR 0093
+            § 5).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
         "404":
@@ -1102,6 +1212,30 @@ components:
       required: true
       description: Opaque id of a node inside the shared subtree.
       schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case's id — bound into every key proof made for it.
+      schema: { type: string, format: uuid, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+    ModerationChallenge:
+      name: X-Veyq-Moderation-Challenge
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The challenge `createModerationChallenge` issued, as it returned it. Declared optional so a call without the
+        proof reaches the gate and gets its `403 moderation_proof_invalid`; the gate is what requires it.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ModerationSignature:
+      name: X-Veyq-Moderation-Signature
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        Ed25519 signature with the current epoch's moderation signing key over `moderation-proof` (the challenge, this
+        operation's `operationId`, the case id in the path or none), standard base64.
+      schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
 
   schemas:
     ShareRole:
@@ -1651,7 +1785,7 @@ components:
         reason:
           x-veyq-visibility: enum
           type: string
-          enum: [revoked, expired, spaceUnavailable, instanceSwitch, tenantSwitch, linkPassword, linkMaxDays]
+          enum: [revoked, expired, spaceUnavailable, instanceSwitch, tenantSwitch, linkPassword, linkMaxDays, operatorBlocked]
           description: >
             `revoked` — the link is off (`enabled` false). `expired` — its end date has passed. `spaceUnavailable` —
             its space is being deleted or its tenant is suspended. `instanceSwitch` / `tenantSwitch` — the register
@@ -1659,6 +1793,8 @@ components:
             decision 2); one stop per entry and level that is off. `linkPassword` — every link must have a password and
             this one has none. `linkMaxDays` — every link must end at most `maxDays` days after it was made, and this
             one has no end date or a later one (ADR 0088 decision 8; only a renewed link starts a new count).
+            `operatorBlocked` — a moderator blocked the link, or a guest uploader who came through it
+            (uc.moderation.take-a-measure); only a moderator's lift ends it.
           example: tenantSwitch
         capabilityId:
           x-veyq-visibility: public
@@ -1769,7 +1905,7 @@ components:
         Decision 2), so whoever holds the root's key opens every name below it. Nothing of the root's own
         placement is served: no parent id, no `encryptedName` (both belong to the parent's key, which the guest
         does not hold, ADR 0080 Decision 9) — the root's name comes from the share's `sealedName`.
-      required: [id, kind, epoch]
+      required: [id, kind, epoch, blockedByOperator]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         parentId:
@@ -1858,6 +1994,135 @@ components:
           contentEncoding: base64
           maxLength: 2048
           example: null
+        blockedByOperator:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            A moderator blocked this node's content, or a node above it (uc.moderation.take-a-measure): the viewer shows
+            the placeholder *Blocked by the operator* and reads none of its bytes (each answers `451`). Kept in the
+            subtree, not left out, so a guest sees what a member sees (inbox #401). Always false in a moderator's review.
+          example: false
+
+    CaseReview:
+      type: object
+      description: >
+        A case as the share viewer's moderation mode reads it: the reports with their report shares, and the held
+        snapshot in the guest viewer's own shapes.
+      required: [caseId, itemKind, itemId, reports, share, heldLinks]
+      properties:
+        caseId: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+        itemKind:
+          x-veyq-visibility: enum
+          type: string
+          description: What was reported — a node, an application's item (a Memories medium) or an upload link.
+          enum: [NODE, ITEM, LINK]
+          example: NODE
+        itemId:
+          x-veyq-visibility: id
+          type: string
+          description: The reported item's id; for a `LINK` its share id. A report share is sealed addressed by it.
+          maxLength: 64
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        reports:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/CaseReviewReport" }
+        share:
+          $ref: "#/components/schemas/PublicShare"
+        heldLinks:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/CaseHeldLink" }
+
+    CaseReviewReport:
+      type: object
+      description: One report of the case — its sealed part and its report share for this case's item.
+      required: [reportId, epoch, receivedAt, sealedReport, sealedShare]
+      properties:
+        reportId: { type: string, format: uuid, x-veyq-visibility: id, example: 4e5f9a8b-1c2d-4e4f-8a6b-4f2c9a1e7b3d }
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The epoch the sealed part is sealed to.
+          example: 2
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was received.
+          example: 2026-10-17T09:00:00Z
+        sealedReport:
+          type: string
+          description: "`K_report`, the reason, the contact and the context, sealed to the epoch's key (`moderation-report` [epoch])."
+          contentEncoding: base64
+          maxLength: 24000
+          example: AXJlcG9ydA==
+        sealedShare:
+          type: string
+          description: The report share — the item's keys sealed under `K_report` (`report-share` [itemKind, itemId] or `report-link` [shareId]).
+          contentEncoding: base64
+          maxLength: 8192
+          example: AnJlcG9ydC1zaGFyZQ==
+
+    CaseHeldLink:
+      type: object
+      description: A link the hold copied — the reported one, or one rooted in the reported subtree.
+      required: [shareId, role, nodeId, sealedName, sealedNote]
+      properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The link's id.
+          maxLength: 64
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        role:
+          $ref: "#/components/schemas/ShareRole"
+        nodeId: { type: string, format: uuid, x-veyq-visibility: id, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+        sealedName:
+          type: [string, "null"]
+          description: The link's name as held (`share-memory-name`, a field key under `K_share`).
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWU=
+        sealedNote:
+          type: [string, "null"]
+          description: The link's note as held (`share-note`), or null.
+          contentEncoding: base64
+          maxLength: 16384
+          example: null
+
+    CaseBlobsRequest:
+      type: object
+      required: [blobIds]
+      properties:
+        blobIds:
+          x-veyq-visibility: id
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: The held blobs to presign.
+          items: { type: string, format: uuid }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(min = 1, max = 500)'
+
+    CaseBlobDownloads:
+      type: object
+      required: [blobs]
+      properties:
+        blobs:
+          type: array
+          maxItems: 500
+          items: { $ref: "#/components/schemas/CaseBlobDownload" }
+
+    CaseBlobDownload:
+      type: object
+      required: [blobId, presignedGets]
+      properties:
+        blobId: { type: string, format: uuid, x-veyq-visibility: id, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a }
+        presignedGets:
+          type: array
+          description: One presigned GET URL per chunk of the pinned object, in chunk order.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
 
     CreateShareNodeRequest:
       type: object

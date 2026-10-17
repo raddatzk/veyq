@@ -25,6 +25,7 @@ export const REPORT = {
   contextBytes: 8000,
   bucketBytes: 512,
   maxKeysPerShare: 32,
+  noteBytes: 8000,
 } as const
 
 /** A key a report share hands over: its role (`^[A-Z][A-Z0-9_]{0,15}$`), the object it belongs to where the role
@@ -176,3 +177,33 @@ export function openReportShare(reportKey: Uint8Array, item: ReportItemAddress, 
       : open({ purpose: 'report-share', itemKind: item.kind, itemId: item.id }, reportKey, blob)
   return decodeReportKeys(plaintext)
 }
+
+/**
+ * A moderator's free text (ADR 0093 § 11): `lp(utf8(text))` zero-padded to the next multiple of `bucketBytes`, so its
+ * length tells the server a bucket, not how long the note is. NFC; not blank; refused above `noteBytes` rather than cut.
+ */
+export function encodeModerationNote(note: string): Uint8Array {
+  const bytes = utf8(note)
+  if (note.trim() === '' || bytes.length > REPORT.noteBytes) throw new ReportInvalid('note')
+  const fields = lp(bytes)
+  const out = new Uint8Array(Math.ceil(fields.length / REPORT.bucketBytes) * REPORT.bucketBytes)
+  out.set(fields)
+  return out
+}
+
+/** Read a note back; the padding after it must be zeros. */
+export function decodeModerationNote(plaintext: Uint8Array): string {
+  if (plaintext.length % REPORT.bucketBytes !== 0) throw new ReportInvalid('padding')
+  const r = new Reader(plaintext)
+  const note = text(r.field(), 'note')
+  if (r.rest().some((b) => b !== 0)) throw new ReportInvalid('padding')
+  return note
+}
+
+/** Seal a moderator's note to the epoch's public half, bound to its case (`moderation-note` [epoch, caseId]). */
+export const sealModerationNote = (epoch: number, caseId: string, kem: HybridPublic, note: string): Uint8Array =>
+  sealTo({ purpose: 'moderation-note', epoch, caseId }, kem, encodeModerationNote(note))
+
+/** Open a note with the epoch's decapsulation key, at the case and epoch the server stored it with. */
+export const openModerationNote = (epoch: number, caseId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
+  decodeModerationNote(openAs({ purpose: 'moderation-note', epoch, caseId }, kemSecret, blob))
