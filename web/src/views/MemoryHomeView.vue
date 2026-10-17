@@ -320,11 +320,10 @@ function stayOn(shown: string | null) {
 async function onMutationDone() {
   await loadTree()
 }
-/** Core's name dialog wrote: a create lands below the position (it cannot change its path), a rename may change it. */
-async function onNameDone() {
-  const shown = nameDialog.value?.mode === 'rename' ? nameDialog.value.shown : null
-  await loadTree()
-  stayOn(shown)
+/** Core's name dialog wrote and re-read the tree (it closes only then): a create lands below the position (it cannot
+ *  change its path), a rename may change it — followed here, before the dialog is gone (inbox #475). */
+function onNameDone() {
+  stayOn(nameDialog.value?.mode === 'rename' ? nameDialog.value.shown : null)
 }
 /** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
  *  splice. The position stays where it is: the restored node reappears wherever it belonged — and when it is an older
