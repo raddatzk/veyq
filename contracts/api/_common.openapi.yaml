@@ -223,6 +223,115 @@ components:
           maxLength: 256
           example: © OpenStreetMap contributors
 
+    ReportCategory:
+      # Shared by the moderation spec (a member's report) and the sharing spec (a guest's) — one report, one shape
+      # (ADR 0093 §§ 1-2, uc.moderation.report).
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        What a report says the content is (ADR 0093 § 1, DSA Art. 16(2)): child sexual abuse material, terrorist
+        content, a threat to life or safety, other illegal content, a breach of the terms. In the clear, so the
+        moderators' mail can say it and the first three can be mailed at once; a case carries the most urgent
+        category of its reports, in this order.
+      enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
+      example: ILLEGAL_CONTENT
+
+    ReportItemKind:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        What a reported item is: a NODE (any kind — a folder, a Memory, a chapter, a file), an application's ITEM on a
+        node (a Memories medium), or the LINK itself (a guest of an upload link reports nothing else, ADR 0093 § 1).
+      enum: [NODE, ITEM, LINK]
+      example: NODE
+
+    ReportItemSubmission:
+      type: object
+      description: One reported item, and the keys that open it sealed under the report's `K_report`.
+      required: [kind, sealedShare]
+      properties:
+        kind: { $ref: "#/components/schemas/ReportItemKind" }
+        id:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The node's or the item's id; absent for a LINK, which is the link the request is made through. The hold
+            and the reach check need it in the clear.
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        sealedShare:
+          type: string
+          description: >
+            The report share: the item's keys, role-tagged, sealed under `K_report` (`seal` purpose `report-share`
+            [itemKind, itemId], or `report-link` [shareId]; `@veyq/crypto`'s report.ts). At most 32 keys.
+          contentEncoding: base64
+          maxLength: 4140
+          example: AnJlcG9ydC1zaGFyZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4140) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ReportSubmission:
+      type: object
+      description: >
+        A report (ADR 0093 §§ 1-2). In the clear: the category, the epoch, the items' kinds and ids, and — only when
+        given — the receipt address. Everything the reporter wrote is in `sealedReport`.
+      required: [category, epoch, sealedReport, items]
+      properties:
+        category: { $ref: "#/components/schemas/ReportCategory" }
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The moderation key's epoch `sealedReport` is sealed to — the current one, or `409 moderation_epoch_changed`.
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedReport:
+          type: string
+          description: >
+            `K_report`, the reason, the contact and the context, padded to 512-byte buckets and sealed to the epoch's
+            public half (`sealTo` purpose `moderation-report` [epoch]).
+          contentEncoding: base64
+          maxLength: 23380
+          example: AXJlcG9ydA==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 23380) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The reported items, each at most once; above 100 the client offers the enclosing node instead.
+          items: { $ref: "#/components/schemas/ReportItemSubmission" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 100)'
+        receiptAddress:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >
+            The reporter's own address for the receipt DSA Art. 16(4) asks for (owner decision Q6 of
+            cr-report-and-hold, ADR 0097 decision 3): the server mails it once from memory and stores only the copy
+            sealed inside `sealedReport`; a mail cannot be sent to an address the sender does not see.
+          type: [string, "null"]
+          format: email
+          description: Where the receipt goes, if the reporter left an address. Not stored.
+          maxLength: 254
+          example: reporter@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    ReportReceipt:
+      type: object
+      description: What the reporter keeps (the dialog's on-screen receipt).
+      required: [reportId, receivedAt]
+      properties:
+        reportId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The report's reference.
+          example: 0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the server received it.
+          example: 2026-10-17T12:00:00Z
+
     ErrorResponse:
       type: object
       required: [code]
