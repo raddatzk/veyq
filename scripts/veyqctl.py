@@ -11,6 +11,7 @@
     upgrade --key-into FILE [--objects-to P] [--unsigned-local]   toward what VEYQ_RELEASE selects (decision 5's order)
     backup --key-into FILE [--objects-to P]          the three legs, by the running release's `instance_backup.py`
     restore DIR --domain D (--key-from F | --without-key) [--objects-from P]   onto this instance, which holds no data
+    rollback DIR --key-from F [--yes]                back to the release a capture was taken under, in place
     self-update                                      this file, replaced by the installed release's `veyqctl`
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
@@ -112,6 +113,15 @@ require in the live store and writes none — the way back from an upgrade; with
 `status`, and `install` at its end, warn while the store in use (the tool's `store-in-use`) is the bundled one — or none
 yet — and no pool is named: Garage keeps no object versions, so a lost store volume loses every object whatever
 `backups/` holds. The warning never changes an exit code.
+
+**`rollback` is in place** (ADR 0096, the owner's O1 (a) of 2026-10-17): after a failed upgrade, the capture it began
+with holds the database and the index, and its objects are still in this instance's store, which an upgrade never
+rewrites. So `rollback <capture> --key-from F` refuses unless the capture's release is still in `releases/` and the
+capture verifies against the live store, and asks before it empties the database (`--yes` without a terminal); then it
+stops the app, empties the database (the tool's `empty-database`), switches `.env`'s image lines and `state.json` back to
+that release (`upgrade_values` over its template), starts it once so it migrates the empty schema, stops it, restores
+with the check only, places the key and starts. The store is never written; objects uploaded under the failed release
+stay as orphans with no reclaim row.
 
 **`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
 manifest — and, because it replaces the verifier itself, it first verifies that manifest on disk against the
@@ -294,6 +304,12 @@ class Host:
             return None
         shown = f" (e.g. {example})" if example else ""
         return input(f"veyqctl: {key}{shown}: ").strip() or None
+
+    def confirm(self, prompt: str) -> bool | None:
+        """True or False at a terminal; None without one (the caller then needs `--yes`)."""
+        if not sys.stdin.isatty():
+            return None
+        return input(f"veyqctl: {prompt} [y/N]: ").strip().lower() in ("y", "yes")
 
 
 # ---- sources: which releases exist, a manifest, an asset -------------------------------------------------------
@@ -1472,6 +1488,96 @@ def cmd_restore(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
+def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
+    """Back to the release a capture was taken under, IN PLACE (ADR 0096, owner 2026-10-17 O1 (a)) — the cluster's
+    rollback (ADR 0098 decision 9) in Compose's form. The capture holds the database and the store's index; its objects
+    are still in this instance's own store, which an upgrade never rewrites, so nothing but the database moves back:
+    every check runs first, then stop, empty the database, switch `.env` and the state to the capture's release, start
+    it once (it migrates the empty schema; the bucket exists), stop, restore with the check only, place the key, start.
+    Objects uploaded under the failed release stay in the store as orphans with no reclaim row."""
+    home = Path(args.home)
+    state = read_state(home)
+    capture_dir = Path(args.capture).absolute()
+    try:
+        manifest = json.loads((capture_dir / "manifest.json").read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"{capture_dir} is not a capture this tool reads ({e}). Nothing was stopped.") from None
+    target = ((manifest.get("app") or {}).get("version") or "")
+    if not target:
+        raise Refused(f"{capture_dir} names no release it was taken under (manifest app.version), so there is no "
+                      f"release to roll back to. Nothing was stopped.")
+    if not (release_dir(home, target) / MANIFEST_ASSET).is_file():
+        raise Refused(f"the capture was taken under release {target}, whose directory {release_dir(home, target)} is no "
+                      f"longer in the home — install it as a new instance and restore onto that ({BACKUPS_DIR}/ keeps "
+                      f"the capture). Nothing was stopped.")
+    key_from = Path(args.key_from).absolute()
+    if not key_from.is_file():
+        raise Refused(f"--key-from {key_from} is not a file. Nothing was stopped.")
+    domains = manifest.get("domains") or []
+    domain = domains[0] if domains else unquoted(env_values((home / ENV_FILE).read_text()).get("VEYQ_DOMAIN", ""))
+
+    # Everything that can refuse, before anything stops: the capture's release's tool, the template it needs, and
+    # the capture against the live store — the in-place rollback writes no object, so every one must be there.
+    running = compose(home, state.release, state.project)
+    facts = stack_facts(host, running)
+    tool = BackupTool(verified_asset(home, target, BACKUP_ASSET), facts, backup_env(home, state, facts))
+    old_manifest = read_release_manifest(home, target)
+    template = (release_dir(home, target) / TEMPLATE_ASSET).read_text()
+    values, missing = upgrade_values(template, old_manifest, env_values((home / ENV_FILE).read_text()))
+    if missing:
+        raise Refused(f"release {target}'s template requires {', '.join(missing)}, which .env lacks. Nothing was stopped.")
+    staged = home / f"{ENV_FILE}.rollback"
+    write_private(staged, render_env(template, values))
+    try:
+        host.run(["docker", "compose", "-p", state.project, *compose_files(home, target), "--env-file", str(staged),
+                  "config", "--quiet"])
+        host.run([sys.executable, str(tool.path), "verify", str(capture_dir), "--key-from", str(key_from),
+                  "--against-store", "--docker-network", facts.network], env=tool.env, stream=True)
+        say(f"the capture verifies against the live store: every object its rows require is there")
+        sure = True if args.yes else host.confirm(
+            f"EMPTY the database of project {state.project} (release {state.release}) and restore {capture_dir.name} "
+            f"under release {target}?")
+        if sure is None:
+            raise Refused("the rollback empties the database; without a terminal to confirm it, pass --yes. Nothing "
+                          "was stopped.")
+        if not sure:
+            raise Refused("not confirmed. Nothing was stopped.")
+    except Refused:
+        staged.unlink()
+        raise
+
+    stop_app(host, home, state)
+    host.run([sys.executable, str(tool.path), "empty-database", "--yes", "--compose-file",
+              str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env, stream=True)
+    os.replace(staged, home / ENV_FILE)
+    back = state._replace(release=target)
+    write_state(home, back)
+    say(f"the database is empty; .env and the state name release {target}. Starting it once, so it migrates the "
+        f"empty schema")
+    base = compose(home, target, state.project)
+    up(host, base, state.project)
+    stop_app(host, home, back)
+    with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
+        key = Path(tmp) / "config-secret.key"
+        try:
+            host.run([sys.executable, str(tool.path), "restore", str(capture_dir), "--domain", domain, "--compose-file",
+                      str(release_dir(home, target) / COMPOSE_ASSET), "--docker-network", facts.network,
+                      "--config-secret-file", str(key), "--key-from", str(key_from)], env=tool.env, stream=True)
+        except Refused:
+            say(f"the restore did not finish; release {target} runs on an EMPTY database, its app STOPPED — the tool "
+                f"above says why. Fix it and run `veyqctl restore {capture_dir} --domain {domain} --key-from "
+                f"{key_from}`")
+            raise
+        if key.is_file():
+            place_key(host, home, back, key, facts.key_path)
+    up(host, base, state.project)
+    say(f"rolled back to release {target} from {capture_dir.name}; release {state.release} stays in "
+        f"{release_dir(home, state.release)}. .env keeps VEYQ_RELEASE as it was, so the next `upgrade` moves forward "
+        f"again — pin it to {target} to stay. Now read the config-secret state as the Server Owner, check the store, "
+        f"and open a Memory that has media (ADR 0056 §5)")
+    return 0
+
+
 SELF = Path(__file__)
 
 
@@ -1577,6 +1683,13 @@ def parser() -> argparse.ArgumentParser:
                          help="copy the objects from this pool into this instance's EMPTY store — a restore onto a "
                               "fresh instance; without it the objects are checked in the live store, none written")
     restore.set_defaults(func=cmd_restore)
+
+    rollback = sub.add_parser("rollback", help="back to the release a capture was taken under, in place: empty the "
+                                               "database, start that release once, restore with the check only")
+    rollback.add_argument("capture", help="the capture directory, taken under the release to go back to")
+    rollback.add_argument("--key-from", required=True, metavar="FILE", help="the capture's leg (c)")
+    rollback.add_argument("--yes", action="store_true", help="empty the database without asking (no terminal)")
+    rollback.set_defaults(func=cmd_rollback)
 
     update = sub.add_parser("self-update", help="replace this veyqctl with the installed release's")
     update.set_defaults(func=cmd_self_update)

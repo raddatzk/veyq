@@ -1181,7 +1181,19 @@ def p9_format2_and_the_empty_store(tmp: pathlib.Path) -> None:
           "--objects-from s3:pbucket/pre with VEYQ_BACKUP_POOL_ENDPOINT=http://pool.example:9000" in outcome, outcome)
 
 
+@guarded
+def p10_empty_database(tmp: pathlib.Path) -> None:
+    """The in-place rollback's first write drops every table — only with --yes."""
+    world = World()
+    outcome, _ = run_tool(world, Rclone(), ["empty-database"])
+    check("P10 empty-database without --yes is refused, nothing dropped",
+          outcome.startswith("refused:") and "--yes" in outcome and "drop" not in world.calls, outcome)
+    outcome, _ = run_tool(world, Rclone(), ["empty-database", "--yes"])
+    check("P10 empty-database --yes drops every table", outcome == "ok 0" and world.calls == ["drop"], outcome)
+
+
 def pool_cases(tmp: pathlib.Path) -> None:
+    p10_empty_database(tmp)
     p1_capture_into_a_pool(tmp)
     p2_pool_short_fails(tmp)
     p3_prune(tmp)

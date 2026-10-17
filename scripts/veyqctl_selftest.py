@@ -56,6 +56,9 @@ what prove it. Everything here runs against a mirror directory this file writes 
      `upgrade` running `copy-objects` before the app stops and the capture with `--objects-to` after it, the command
      line winning over `.env`, none without a pool, a failed early copy stopping nothing, a pool inside `releases/`
      refused; `restore --objects-from` absolute and never implied; an S3 pool's key only in the tool's environment;
+     and `rollback` (`test_rollback`, O1 (a)): verify against the live store, stop, empty the database, the capture's
+     release started once, stop, restore with the check only, key, start — and refused, nothing stopped, for a release
+     gone from `releases/`, a capture that does not verify, and no terminal without `--yes`;
  10. **`self-update`** — replaced by the installed release's `veyqctl` with its mode kept, nothing to do the second
      time, refused (nothing replaced) when the installed copy no longer matches its manifest; for a signed release,
      the manifest on disk verified against its bundle first — refused when it was edited to match a swapped
@@ -74,6 +77,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import stat
 import subprocess
 import sys
@@ -922,6 +926,61 @@ def test_pool(tmp: pathlib.Path) -> None:
           rc == 0 and "--objects-from" not in ran, str(ran))
 
 
+def test_rollback(tmp: pathlib.Path) -> None:
+    """O1 (a): `rollback` in place — every check before anything stops, then ADR 0098 decision 9's order in Compose."""
+    mirror = upgrade_mirror(tmp / "mirror-rb")
+
+    def upgraded(name: str) -> tuple:
+        home = installed(tmp, name, mirror, "1.3", "1.12")
+        rc, _ = upgrade(home, FakeHost(local_images=all_images(), project="veyq-proof"), "--unsigned-local",
+                        "--key-into", str(tmp / f"{name}.key"))
+        assert rc == 0 and vc.read_state(home).release == "1.12"
+        capture = home / vc.BACKUPS_DIR / "20261017T000000Z-before-1.12"
+        capture.mkdir(parents=True)
+        (capture / "manifest.json").write_text(json.dumps({"app": {"version": "1.3"}, "domains": ["family.veyq.test"]}))
+        if not (tmp / f"{name}.key").exists():  # the stand-in capture wrote no key; the operator kept one
+            (tmp / f"{name}.key").write_bytes(b"k")
+        return home, capture, tmp / f"{name}.key"
+
+    home, capture, key = upgraded("home-rb")
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(home), "rollback", str(capture), "--key-from", str(key), "--yes"], host)
+    first = first_of(host)
+    old_tool = str(home / "releases/1.3" / vc.BACKUP_ASSET)
+    order = [first("verify", "--against-store"), first("stop", "app"), first("empty-database", "--yes"),
+             first("up", str(home / "releases/1.3" / vc.COMPOSE_ASSET))]
+    restore_at = first("restore")
+    order += [max(i for i in host.ran("stop", "app") if i < restore_at) if host.ran("stop", "app") else 10 ** 6,
+              restore_at, first("run", "--rm", "app"), host.ran("up")[-1] if host.ran("up") else 10 ** 6]
+    restore = host.commands[restore_at] if host.ran("restore") else []
+    check("rollback: verify against the live store, stop, empty the database, start the capture's release once, "
+          "stop, restore with the check only, place the key, start — in that order",
+          rc == 0 and order == sorted(order) and len(set(order)) == len(order) and order[-1] < 10 ** 6
+          and "--objects-from" not in restore and restore[1] == old_tool
+          and restore[restore.index("--domain") + 1] == "family.veyq.test", f"{order} {out[-400:]}")
+    values = vc.env_values((home / vc.ENV_FILE).read_text())
+    check("rollback: .env's image lines and the state name the capture's release again; the newer release stays",
+          vc.read_state(home).release == "1.3" and values.get("VEYQ_IMAGE") == "veyq:1.3"
+          and (home / "releases/1.12").is_dir() and not (home / ".env.rollback").exists(), str(values))
+
+    for label, argv_extra, host_kw, prep, said in (
+            ("the capture's release no longer in releases/", ["--yes"], {}, "drop-release", "no longer in the home"),
+            ("a capture that does not verify against the live store", ["--yes"], {"fail_tool": "verify"}, None,
+             "verify"),
+            ("no terminal to confirm and no --yes", [], {}, None, "pass --yes"),
+    ):
+        home, capture, key = upgraded(f"home-rb-{label[:12].replace(' ', '-')}")
+        if prep == "drop-release":
+            shutil.rmtree(home / "releases/1.3")
+        before = ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes())
+        host = FakeHost(local_images=all_images(), project="veyq-proof", **host_kw)
+        rc, out = run_quiet(["--home", str(home), "rollback", str(capture), "--key-from", str(key), *argv_extra], host)
+        check(f"rollback: refused for {label} — nothing stopped, nothing emptied, .env and state untouched",
+              rc == 1 and said in out and not host.ran("stop") and not host.ran("empty-database")
+              and ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes()) == before
+              and not (home / ".env.rollback").exists(), out[-300:])
+
+
 def test_self_update(tmp: pathlib.Path) -> None:
     mirror = upgrade_mirror(tmp / "mirror-su")
     home = installed(tmp, "home-su", mirror, "1.3", "1.3")
@@ -1190,6 +1249,7 @@ def main() -> int:
         test_upgrade_refusals(tmp)
         test_backup_restore(tmp)
         test_pool(tmp)
+        test_rollback(tmp)
         test_self_update(tmp)
         test_manifest_signature(tmp)
     if failures:

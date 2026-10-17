@@ -20,7 +20,7 @@ captured is structurally impossible, and there is no ordering to get right. This
 app is stopped** (it would have to know what "the app" is on this host) and does not pretend to; it is the one
 precondition the operator owns.
 
-Six subcommands, one file, because they share the layout, the manifest and the credential plumbing:
+Seven subcommands, one file, because they share the layout, the manifest and the credential plumbing:
 
     python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump | --key-kept-apart)
                                                 [--objects-to POOL [--pool-keep N]] [--app-version R]
@@ -29,6 +29,7 @@ Six subcommands, one file, because they share the layout, the manifest and the c
     python3 scripts/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
                                                 [--objects-from POOL] [--accept-missing-objects] [--record DIR]
     python3 scripts/instance_backup.py store-in-use                      (bundled | own | none, for `veyqctl status`)
+    python3 scripts/instance_backup.py empty-database --yes              (the in-place rollback's first write)
     python3 scripts/instance_backup.py gate     (in the app pod; every input from its environment)
 
 A backup is a directory, defaulting to `infra/backups/<UTC-ISO8601>/`:
@@ -1354,6 +1355,20 @@ def cmd_copy_objects(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_empty_database(args: argparse.Namespace) -> int:
+    """Drop every table of the database — the in-place rollback's first write (`veyqctl rollback`, ADR 0096): the
+    release it goes back to then starts on an empty schema, migrates it, and the capture is restored onto that. Only
+    with `--yes`, which `veyqctl` passes after its own confirmation; the data is gone, the capture is the way back."""
+    if not args.yes:
+        raise BackupError("empty-database drops every table of the database, and its data with it — pass --yes, after "
+                          "checking that the capture you will restore verifies (verify --against-store)")
+    db = Database(args, require_db_password())
+    dropped = db.drop_all_tables()
+    log(f"dropped {dropped} table(s) of {db.describe()}: it holds nothing now. Start the release you restore under "
+        f"once, so it migrates the empty schema, stop it, then restore.")
+    return 0
+
+
 def cmd_store_in_use(args: argparse.Namespace) -> int:
     """`bundled`, `own` or `none`: the plaintext of the store setting in use (ADR 0089), for `veyqctl status`."""
     row = Database(args, require_db_password()).store_setting()
@@ -2263,6 +2278,12 @@ def main(argv: list[str]) -> int:
     in_use = sub.add_parser("store-in-use", help="print the store setting in use: bundled, own or none (ADR 0089)")
     add_common(in_use)
     in_use.set_defaults(func=cmd_store_in_use, needs_store=False)
+
+    empty = sub.add_parser("empty-database", help="drop every table of the database — the in-place rollback's first "
+                                                  "write; only with --yes")
+    empty.add_argument("--yes", action="store_true", help="drop them; the capture you restore next is the way back")
+    add_common(empty)
+    empty.set_defaults(func=cmd_empty_database, needs_store=False)
 
     verify = sub.add_parser("verify", help="check a backup directory without touching any instance")
     verify.add_argument("backup")
