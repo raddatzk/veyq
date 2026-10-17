@@ -13,6 +13,7 @@ import { Configuration as TenantsConfiguration, TenantsApi } from './generated/t
 import {
   Configuration as InstanceConfiguration,
   InstanceApi,
+  InstanceGuestWriteRecordApi,
   InstanceModerationApi,
   InstanceOperatorApi,
   InstanceStoreReconcileApi,
@@ -69,4 +70,10 @@ export function instanceStoreReconcileApi(): InstanceStoreReconcileApi {
 // same instance spec: one more client CLASS, still four contracts.
 export function instanceOperatorApi(): InstanceOperatorApi {
   return new InstanceOperatorApi(new InstanceConfiguration(bearerParams()))
+}
+
+// How long the guest-write record keeps a row (ADR 0093 § 10) — the `instance-guest-write-record` tag of the same
+// instance spec: one more client CLASS, still four contracts.
+export function instanceGuestWriteRecordApi(): InstanceGuestWriteRecordApi {
+  return new InstanceGuestWriteRecordApi(new InstanceConfiguration(bearerParams()))
 }
