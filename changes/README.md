@@ -1236,6 +1236,16 @@ object be constructed from exactly the values listed?** Where the answer is no, 
 mandatory, and mandatory values are where the defaults have to be argued (here: the chart's own Service names,
 so that an operator who renames it has somewhere to say so).
 
+### A tool's version floor is read against the advisories on the path it guards
+
+**A floor chosen for a format is not yet a floor for the check.** `cr-signed-release-manifest` settled with the owner
+that `veyqctl` needs cosign 3, because cosign 3 reads the Sigstore bundle the publish writes. The advisory the Run page
+already cited (GHSA-fx35-mq7g-6g98) names cosign 3.0.0–3.1.2 as accepting a forged *legacy*-format bundle without
+checking its identity, and cosign 3 still reads that format when it is handed one. A mirror that controls the manifest
+controls the bundle beside it, so "cosign 3" would have left the exact hole the CR closed. The floor became 3.1.3, at
+implement time. So a refine that names a minimum version of a tool that does the checking reads that tool's
+advisories for the code path it guards, and states the floor as the newer of the two answers.
+
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
 **Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a
