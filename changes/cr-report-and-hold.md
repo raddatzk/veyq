@@ -171,8 +171,8 @@ worth adding (it is not, if the skip lives in the one `due` query every deletion
 already holds that every store object goes through the reclaim list).
 
 **Coordination:** the hold table's storage keys meet `scripts/instance_backup.py`'s `blob_index` assumption (only
-`veyq_blob` and `veyq_upload_session` carry one). That file is being reshaped by the parallel backup-model refine
-(ADR 0056/0096/0098): phase 4 names the assumption to that CR's owner and does not edit the script. It matters: once
+`veyq_blob` and `veyq_upload_session` carry one). That file is being reshaped by `cr-backup-store-leg-is-an-index` (planned; its decision 4
+keeps the index "listed cold as today", i.e. from `veyq_blob`): phase 4 names the assumption to that CR's owner and does not edit the script. It matters: once
 a held medium's live `veyq_blob` row is deleted, its pinned objects are named only by `veyq_hold_pin`, so an index read
 from `veyq_blob` alone leaves them out of a backup's store leg while the database leg still carries the hold that needs
 them. Whichever CR lands second makes the index read the pins too (`changes/README.md` § Two CRs that write the same page).

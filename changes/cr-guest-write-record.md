@@ -37,8 +37,9 @@ work; nothing of § 3–§ 7 there is built here.
   operator-only); [ADR 0089](../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
   (the retention setting); [ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) (the
   database leg changes: ADR 0093 § Consequences says so).
-- **Parallel CR, named, not edited:** the backup-model refine (ADR 0056/0096/0098, `site/src/content/docs/run/backup-and-restore.md`,
-  `run/upgrade.mdx`, its own `changes/cr-*.md`) reshapes `scripts/instance_backup.py`. This CR's backup phase **starts
+- **Sibling CR, named, not edited:** `cr-backup-store-leg-is-an-index` (planned; ADR 0056/0096/0098,
+  `site/src/content/docs/run/backup-and-restore.md`, `run/upgrade.mdx`) reshapes `scripts/instance_backup.py` and leaves
+  what the dump holds as it is (`grep -n -i dump changes/cr-backup-store-leg-is-an-index.md`). This CR's backup phase **starts
   from that CR's merged commit** and adds the exclusion there; if that CR is still open when this one reaches the phase,
   the phase waits or hands the one-line requirement over ("the dump leaves out `veyq_guest_write_record`'s rows, keeps
   its schema") — `changes/README.md` § Two CRs that write the same page name each other.
