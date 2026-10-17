@@ -493,8 +493,9 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
    asks for an imprint from a commercial, usually paid service; § 18(1) MStV from every service not exclusively
    personal or familial. Publishing on the internet for an indefinite number of people is outside the household
    exemption (CJEU C-101/01 *Lindqvist*, C-345/17 *Buivids*), so one link posted publicly can end it. Whether the
-   DSA reaches an unpaid private service is uncertain; the owner cites the Bundestag's research service,
-   *WD 7 - 3000 - 026/26* (2026-10-17; not re-read here, a web search did not find it). Hence the operating mode of
+   DSA reaches an unpaid private service is uncertain; the Bundestag's research service calls it so in
+   [*WD 7 - 3000 - 026/26*, "Haftung von Serverbetreibern und Bestimmung der Nutzerzahlen dezentraler Netzwerke"](https://www.bundestag.de/resource/blob/1182736/WD-7-026-26.pdf)
+   (2026; the document's existence and title measured 2026-10-17, its conclusion taken from the research report, not re-read). Hence the operating mode of
    § 14 as the operator's own assessment.
    [DSA](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2065) ·
    [CJEU C-25/17](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:62017CJ0025) ·
