@@ -199,6 +199,13 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        The opaque access token issued by login / refresh. Only the moderation reads carry it (`listCaseMedia`, a
+        moderator's review of a case); every guest operation of this spec is anonymous.
   parameters:
     CaseId:
       name: caseId

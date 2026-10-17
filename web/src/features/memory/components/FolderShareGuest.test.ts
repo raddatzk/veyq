@@ -135,4 +135,20 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
     expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Rom 2026'])
     expect(authenticatedCalls).toEqual([])
   })
+
+  it('a file a moderator blocked opens as the placeholder, with no reason, for a guest as for a member (uc.moderation.take-a-measure)', async () => {
+    vi.mocked(publicShareFilesApi).mockClear()
+    const h = head(ShareRole.Read)
+    h.share.nodes = h.share.nodes.map((n) => (n.id === FILE ? { ...n, blockedByOperator: true } : n))
+    await router.push(`/s/${SHARE_ID}?node=${FILE}${HASH}`)
+    const w = mount(ShareTreePage, {
+      props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
+      global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    })
+    await flushPromises()
+    expect(w.find('.node-blocked').text()).toBe(t('node.blockedByOperator'))
+    expect(w.find('.file-detail-uploader').exists(), 'the file page does not open').toBe(false)
+    expect(publicShareFilesApi, 'nothing of the file is read').not.toHaveBeenCalled()
+    expect(authenticatedCalls).toEqual([])
+  })
 })
