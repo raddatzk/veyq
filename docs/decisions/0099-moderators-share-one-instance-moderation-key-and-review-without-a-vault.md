@@ -94,6 +94,10 @@ What exists to build on (measured in this worktree):
   check it (a guest has no pins), and need not beyond what [ADR 0026](0026-client-trust-tiers.md) already says: the
   reporter's client is operator-served, and the operator is the moderation authority, so a substituted key gains an
   active operator only what the served code already could.
+- **A moderation grant is unsigned** (owner 2026-10-17), unlike a scope grant ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
+  decision 6): admin-web mints without a vault and so has no identity signing key. A server that substitutes a grant
+  must also substitute the published bundle to read anything, which this section already grants an active operator,
+  the moderation authority itself; the published-key comparison above is the check that matters.
 - **Passkeys, once they exist,** add a wrap of `M` per moderator passkey, so the moderation surface opens the key
   without the identity at all. The identity grant stays as the delivery path.
 

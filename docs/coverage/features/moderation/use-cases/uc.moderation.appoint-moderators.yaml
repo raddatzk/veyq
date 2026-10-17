@@ -1,0 +1,35 @@
+useCase: uc.moderation.appoint-moderators
+feature: moderation
+title: Appoint moderators and keep the moderation key
+status: planned
+acceptanceCriteria:
+  - id: turning-on-mints-epoch-one-to-the-server-owner
+    text: >-
+      Turning moderation on mints epoch 1 in admin-web, sealed to the Server Owner's identity alone; the server stores
+      the public bundle and the sealed grant, records the Server Owner as an accepted moderator, and refuses a second
+      turn-on. Until then the panel says reporting is off.
+  - id: appoint-an-existing-account-by-address
+    text: >-
+      The Server Owner appoints an existing account by its address; an unknown address is refused and records nothing,
+      and appointing someone already on the roster changes nothing.
+  - id: removal-deletes-every-grant-and-rotates
+    text: >-
+      Removing a moderator deletes their grants for every epoch and their role at once, and admin-web then mints the
+      next epoch for the remaining accepted moderators; removing the last holder of the key is refused.
+  - id: a-mint-covers-exactly-the-accepted-moderators
+    text: >-
+      The server refuses a mint whose grants do not cover exactly the accepted moderators, and admin-web shows that
+      refusal rather than swallowing it.
+  - id: admin-web-never-opens-a-grant
+    text: >-
+      admin-web and the CLI mint and forget: no module of theirs imports a function that opens a seal.
+  - id: rotation-due-after-a-step-down
+    text: >-
+      After a moderator steps down or rotates their identity, the panel says rotation due and one instance mail tells
+      the Server Owner, until the next mint clears it.
+  - id: roster-operations-are-server-owner-only-on-the-admin-channel
+    text: >-
+      Every roster and key operation is a Server-Owner operation answered on the admin channel only.
+gaps:
+  backend: "Not built: cr-moderators-and-the-moderation-key builds the roster, the epochs and the mint."
+  web: "No part here: the Server Owner's side lives on admin-web; web/ carries the moderator's side (uc.moderation.serve-as-moderator)."

@@ -1,8 +1,8 @@
 ---
 id: cr-moderators-and-the-moderation-key
 title: Moderators the Server Owner appoints, one instance moderation key in epochs, and the moderation surface's shell
-status: planned
-satisfies: []            # phase 0 writes the use-cases and enablers; see § Use-cases
+status: in-progress
+satisfies: [uc.moderation.appoint-moderators, uc.moderation.serve-as-moderator, en.moderation.moderation-key, en.moderation.log]
 adrs: ["0099", "0093", "0097", "0065", "0020", "0024", "0026", "0028", "0060", "0072", "0051"]
 invariants:
   - operator-blind E2EE (the server stores the bundle's public half and sealed grants, never M_n or a private key)
@@ -141,7 +141,7 @@ the model enablers `en.moderation.moderation-key` (epochs, grants, bundle, proof
 
 ## Phases
 
-- [ ] **0 docs** — the feature `_index.md`, the two use-cases, the two enablers, planned coverage; ADR 0099 § 3 gains
+- [x] **0 docs** — the feature `_index.md`, the two use-cases, the two enablers, planned coverage; ADR 0099 § 3 gains
   Q4's sentence, ADR 0097 decision 6 Q3's line if (a). · Done when: `validate_feature_format.py`, `validate_coverage.py`,
   `validate_doc_links.py`, `validate_doc_citations.py`, `validate_changes.py` green.
 - [ ] **1 crypto** — `packages/crypto`: the bundle from `M_n` (decision 4), `sealTo` `moderation-grant`, the statement

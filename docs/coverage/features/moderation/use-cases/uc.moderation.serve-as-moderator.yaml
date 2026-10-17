@@ -1,0 +1,41 @@
+useCase: uc.moderation.serve-as-moderator
+feature: moderation
+title: Serve as a moderator
+status: planned
+acceptanceCriteria:
+  - id: accepting-grants-the-role-and-mails-a-code
+    text: >-
+      A pending appointee accepts after a text naming child sexual abuse material and that every opening is logged;
+      the account then carries the MODERATOR role, and a code goes to its address through the instance mail.
+  - id: the-address-is-confirmed-by-the-code
+    text: >-
+      Typing the code confirms the moderator's address for moderation notices; a wrong, expired or spent code confirms
+      nothing, and the instance mail can reach a confirmed moderator only.
+  - id: a-holder-delivers-after-the-pin-check
+    text: >-
+      A holder's surface delivers every live epoch to an accepted moderator missing one, after the pin check; a changed
+      identity is declined, a delivery by someone not holding the epoch or to someone not accepted is refused, and a
+      repeated delivery changes nothing.
+  - id: unlock-compares-the-published-key-and-drops-the-vault
+    text: >-
+      The surface unlocks with the password and the Secret Key, opens the moderation grants, refuses on a published
+      bundle that differs from the one it derives, and zeroes the Master Key and the identity private key before the
+      queue renders; it fetches no scope grant.
+  - id: every-key-proved-operation-needs-role-and-proof
+    text: >-
+      Every moderation operation but those a newcomer needs before holding the key is refused without a fresh,
+      single-use key proof for that operation by the current epoch's key, and without the MODERATOR role.
+  - id: step-down-removes-role-and-grants
+    text: >-
+      A moderator steps down with a key proof: the role and every grant go at once; refused while it would leave no
+      holder of the key.
+  - id: identity-rotation-exposes-the-grants
+    text: >-
+      A moderator's identity rotation deletes their grants and makes their delivery pending again.
+  - id: every-instance-event-is-logged-and-kept-to-its-date
+    text: >-
+      Every appointment, acceptance, delivery, removal, step-down and mint writes its instance event in the same
+      transaction, never in a log line, kept to 31 December of the third year after the moderator's removal.
+gaps:
+  backend: "Not built: cr-moderators-and-the-moderation-key builds the role, the proof gate and the log."
+  web: "Not built: cr-moderators-and-the-moderation-key builds the moderation surface's shell."
