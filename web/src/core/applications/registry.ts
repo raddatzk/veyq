@@ -453,6 +453,19 @@ export interface ShareBodyEmits {
  *  takes `SidebarPinsProps`. */
 export type ListSlotName = 'topbarTray' | 'sidebarPins'
 
+/**
+ * What a moderator's review of a reported ITEM hands the application that owns it (uc.moderation.review-a-case A5): an
+ * item is an application's record (a Memories medium), so core cannot draw it. `keys` are what the report shares handed
+ * over (key material: each blob's `K_blob` by its id, the item's field keys); the component reads the held rows through
+ * the review's own data source (`core/sharing/review.ts`) and draws nothing for an item that is not its own.
+ */
+export interface ItemReviewProps {
+  caseId: string
+  itemId: string
+  scopeId: string
+  keys: readonly { role: string; ref: string | null; key: Uint8Array }[]
+}
+
 /** One entry of a list slot, as the shell renders it (`id` is the item's key). */
 export interface SlotItem {
   id: string
@@ -489,6 +502,11 @@ export interface Registry {
   claimPersonSection(component: Component): void
   /** The sections claimed for a person's profile page, in registration order. */
   personSections(): readonly Component[]
+  /** Claim the review of a reported item (props `ItemReviewProps`): what a moderator sees of an application's record.
+   *  The same component twice throws. */
+  claimItemReview(component: Component): void
+  /** The item reviews claimed, in registration order — each draws only the items that are its application's. */
+  itemReviews(): readonly Component[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -572,6 +590,7 @@ export function createRegistry(): Registry {
   const tabEntries: LevelTabSpec[] = []
   const shareBodies = new Map<NodeKind, Component>()
   const personSections: Component[] = []
+  const itemReviews: Component[] = []
   // kind → its application's route slug, or null for the application with no segment.
   const routes = new Map<NodeKind, string | null>()
   const slugs = new Set<string>()
@@ -606,6 +625,11 @@ export function createRegistry(): Registry {
       personSections.push(component)
     },
     personSections: () => [...personSections],
+    claimItemReview(component) {
+      if (itemReviews.includes(component)) throw new Error('this item review is already claimed')
+      itemReviews.push(component)
+    },
+    itemReviews: () => [...itemReviews],
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {

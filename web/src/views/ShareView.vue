@@ -22,6 +22,12 @@
 // (core's `GuestNaming`, under the share ROOT's key, `nameShareGuest`) whichever view first writes, and the shell shows
 // whose session this device holds with its "Not you?" (`forgetGuestSession`, asked first). A WRITE_ONLY drop page names
 // its guest on the page itself (its own identity key, the application's), so the shell's line is a READ_WRITE link's.
+//
+// **Moderation mode** (`/s/<caseId>#moderation`, uc.moderation.review-a-case, ADR 0093 § 3, ADR 0099 § 6). The fragment
+// `#moderation` turns this page into a moderator's review of a case: the route's id is then a CASE id, no link is
+// resolved — none of the shell's public reads (`resolvePublicShare`, the terms, the poll) runs — and the review renders
+// behind the moderation gate (`features/moderation/review/ShareReview.vue`), the held snapshot drawn by the same guest
+// views over the review's own key-proved data source. The fragment carries no key.
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -53,11 +59,14 @@ import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
+import ShareReview from '../features/moderation/review/ShareReview.vue'
 
 const route = useRoute()
 const { t, locale } = useI18n()
 
 const shareId = String(route.params.shareId ?? '')
+/** The moderation mode: read once — a review never becomes a link's page, nor a link's page a review. */
+const moderation = route.hash === '#moderation'
 // The fragment key rides `#k=<base64url>` (ADR 0015) — read on device, never sent. Router history strips it from
 // route.hash into `#k=...`; parse it here (empty if absent → an inert link, handled as unavailable).
 const fragmentKey = computed(() => {
@@ -302,12 +311,13 @@ async function submitPassword() {
   }
 }
 onMounted(() => {
-  void load()
+  if (!moderation) void load()
 })
 </script>
 
 <template>
-  <div class="share-view">
+  <ShareReview v-if="moderation" :case-id="shareId" />
+  <div v-else class="share-view">
     <div v-if="status === 'loading'" class="share-view-state">
       <span class="pi pi-spin pi-spinner" />
       <span>{{ t('share.loading') }}</span>

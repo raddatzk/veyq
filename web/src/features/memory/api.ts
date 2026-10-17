@@ -9,7 +9,7 @@ import {
   ItemFavoritesApi,
   OwnItemFavoritesApi,
 } from '../../api/generated/item-favorites'
-import { Configuration as ShareMediaConfiguration, ShareMediaApi } from '../../api/generated/share-media'
+import { CaseMediaApi, Configuration as ShareMediaConfiguration, ShareMediaApi } from '../../api/generated/share-media'
 import { bearerParams, publicParams } from '../../api/client'
 
 // ── Bearer: a member's calls, authenticated by the session's access token ──────────────────────────────────
@@ -46,4 +46,10 @@ export function ownItemFavoritesApi(): OwnItemFavoritesApi {
  */
 export function publicShareMediaApi(): ShareMediaApi {
   return new ShareMediaApi(new ShareMediaConfiguration(publicParams()))
+}
+
+/** A moderator's read of a case's held media (`listCaseMedia`, uc.moderation.review-a-case) — the review's stand-in for
+ *  [publicShareMediaApi]'s listing, bearer-authed and key-proved (`core/sharing/review.ts`). */
+export function caseMediaApi(): CaseMediaApi {
+  return new CaseMediaApi(new ShareMediaConfiguration(bearerParams()))
 }

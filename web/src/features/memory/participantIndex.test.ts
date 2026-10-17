@@ -29,7 +29,7 @@ const BEN = 'bbbbbbbb-0000-4000-8000-000000000002'
 function scopeRows(scopeId: string, epochKey: Uint8Array, memories: { id: string; name: string; users?: string[]; date?: unknown; place?: string; at?: { lat: number; lng: number } }[]) {
   const addr = (nodeId: string) => ({ scopeId, nodeId, epoch: 0, placementRevision: 1 })
   const folderKey = v1.randomBytes(32)
-  const base = { createdAt: new Date(0), placementRevision: 1, epoch: 0, slugToken: 's', orderIndex: 0, metaRevision: 0 }
+  const base = { createdAt: new Date(0), placementRevision: 1, epoch: 0, slugToken: 's', orderIndex: 0, metaRevision: 0, blockedByOperator: false }
   const rows: NodeSummary[] = [{
     ...base, id: FOLDER, parentId: null, kind: FOLDER_KIND,
     encryptedName: sealName(epochKey, addr(FOLDER), 'Trips'), wrappedContentKey: wrapContentKey(epochKey, addr(FOLDER), folderKey),

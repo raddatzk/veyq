@@ -57,7 +57,7 @@ const HASH = `#k=${b64url(K_SHARE)}`
 
 function file(id: string, name: string): ShareNode {
   const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { id, parentId: ROOT, kind: FILE_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(ROOT_KEY, address, name), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) }
+  return { blockedByOperator: false, id, parentId: ROOT, kind: FILE_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(ROOT_KEY, address, name), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) }
 }
 // Stable ciphertext per file, as the server serves it: the same rows twice must fingerprint equal.
 const fileCache = new Map<string, ShareNode>()
@@ -236,7 +236,7 @@ describe("a share guest's drop-box page, live", () => {
   const dropPublic = v1.dropKeyPublic(openDropKey(SCOPE, DROP, DROP_KEY, sealedDropPrivateKey!))
   const child = (id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string, extra: Partial<ShareNode> = {}): ShareNode => {
     const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-    return { id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra }
+    return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra }
   }
   const dropBox = child(DROP, ROOT, ROOT_KEY, DROP_KEY, 'Postfach', 'DEPOT_DROPBOX', { sealedDropPrivateKey })
   /** A guest's identity folder in the drop box and one file in it, as the link serves them. */

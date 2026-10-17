@@ -184,7 +184,7 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     // the curator: a media page carries the node's drop key and the guest's wrapped key beside the row
     fakeApi(mediaApi, {
       listNodeMedia: async (): Promise<MediaListPage> => ({
-        media: [{ ...row, updatedAt: new Date(), ownerKey: `share:${identityId}` }],
+        media: [{ blockedByOperator: false, ...row, updatedAt: new Date(), ownerKey: `share:${identityId}` }],
         mediaRevision: 1, deleteRevision: 0,
         sealedDropPrivateKey, uploaderKeys: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
       }),
@@ -228,10 +228,10 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
       wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kNode)),
       sealedName: b64std(v1.sealField({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
-      nodes: [{ id: NODE_ID, kind: MEMORY_KIND, epoch: 0, sealedDropPrivateKey }],
+      nodes: [{ blockedByOperator: false, id: NODE_ID, kind: MEMORY_KIND, epoch: 0, sealedDropPrivateKey }],
     } satisfies PublicShare
     const viewerMedia = {
-      media: [{ ...row, nodeId: NODE_ID, identityId }],
+      media: [{ blockedByOperator: false, ...row, nodeId: NODE_ID, identityId }],
       identities: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
     } satisfies ShareMediaListing
     stubApi(publicSharesApi, { resolveShare: viewerResolve, resolveShareBlob: { presignedGets } })

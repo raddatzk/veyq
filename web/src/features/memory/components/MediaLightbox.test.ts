@@ -162,6 +162,21 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toBeTruthy()
   })
 
+  it('a medium a moderator blocked is the placeholder: no preview read, no download (uc.moderation.take-a-measure)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedTwo(memoryKey)
+    store.blob.presignBlobDownloads.mockClear()
+
+    const wrapper = mountLightbox(memoryKey, [{ ...items[0], blocked: true }, items[1]])
+    await flushPromises()
+
+    expect(wrapper.find('.media-lightbox-blocked').text()).toBe(t('node.blockedByOperator'))
+    expect(wrapper.find('.media-lightbox-stage img').exists()).toBe(false)
+    expect(wrapper.find(`button[aria-label="${t('media.download')}"]`).exists()).toBe(false)
+    const presigned = store.blob.presignBlobDownloads.mock.calls.flatMap((c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId))
+    expect(presigned, 'not one byte of the blocked medium is asked for').not.toContain(store.blobIdOfUpload('up-2'))
+  })
+
   it('“Set as cover” emits setCover for the current item (cr-0073 gallery source)', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)

@@ -382,6 +382,8 @@ async function onDeleteDone() {
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </Message>
       <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
+      <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason. -->
+      <p v-else-if="currentNode?.blockedByOperator" class="home-state-unsupported node-blocked">{{ t('node.blockedByOperator') }}</p>
       <component
         :is="kindDetail"
         v-else-if="kindDetail && currentNode && activeSpace.scopeId"

@@ -35,6 +35,7 @@ function world({ folderNameKey }: { folderNameKey?: Uint8Array } = {}) {
   const folderKey = v1.randomBytes(32)
   const fileKey = v1.randomBytes(32)
   const row = (id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<NodeSummary> = {}): NodeSummary => ({
+    blockedByOperator: false,
     id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
     encryptedName: sealName(entryKey, at(id), name), slugToken: 'c2x1Zw==', wrappedContentKey: wrapContentKey(entryKey, at(id), key), ...extra,
   })
@@ -91,6 +92,7 @@ describe('a guest identity folder in the member tree', () => {
   it('the trash opens a trashed identity folder through the same chain', async () => {
     const w = world()
     serve([w.rows[0]], [{
+      blockedByOperator: false,
       id: FOLDER, parentId: BOX, kind: 'FOLDER', encryptedName: w.rows[1].encryptedName, epoch: 0, placementRevision: 0,
       deletedAt: new Date(), purgeAfter: new Date(), attached: false, shareIdentityId: IDENTITY, wrappedIdentityKey: w.wrappedIdentityKey,
     }])

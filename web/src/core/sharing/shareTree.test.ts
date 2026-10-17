@@ -32,9 +32,9 @@ describe('walkSubtree', () => {
     const childKey = v1.randomBytes(32)
     const grandKey = v1.randomBytes(32)
     const nodes: ShareNode[] = [
-      { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-      { id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(rootKey, CHILD, 'Taxes', childKey) },
-      { id: GRANDCHILD, parentId: CHILD, kind: 'EXPENSE', epoch: 0, ...entry(childKey, GRANDCHILD, '2026', grandKey) },
+      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(rootKey, CHILD, 'Taxes', childKey) },
+      { blockedByOperator: false, id: GRANDCHILD, parentId: CHILD, kind: 'EXPENSE', epoch: 0, ...entry(childKey, GRANDCHILD, '2026', grandKey) },
     ]
 
     const walk = walkSubtree(SCOPE_ID, nodes, rootKey)
@@ -51,11 +51,11 @@ describe('walkSubtree', () => {
     const rootKey = v1.randomBytes(32)
     const childKey = v1.randomBytes(32)
     const nodes: ShareNode[] = [
-      { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
       // sealed under a key the guest does not hold (e.g. the scope key): neither it nor its child opens
-      { id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(v1.randomBytes(32), CHILD, 'Hidden', childKey) },
-      { id: GRANDCHILD, parentId: CHILD, kind: FOLDER_KIND, epoch: 0, ...entry(childKey, GRANDCHILD, 'Below', v1.randomBytes(32)) },
-      { id: SIBLING, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(rootKey, SIBLING, 'Open', v1.randomBytes(32)) },
+      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(v1.randomBytes(32), CHILD, 'Hidden', childKey) },
+      { blockedByOperator: false, id: GRANDCHILD, parentId: CHILD, kind: FOLDER_KIND, epoch: 0, ...entry(childKey, GRANDCHILD, 'Below', v1.randomBytes(32)) },
+      { blockedByOperator: false, id: SIBLING, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(rootKey, SIBLING, 'Open', v1.randomBytes(32)) },
     ]
 
     const walk = walkSubtree(SCOPE_ID, nodes, rootKey)
@@ -69,8 +69,8 @@ describe('walkSubtree', () => {
     const rootKey = v1.randomBytes(32)
     const sealed = entry(rootKey, CHILD, 'Renamed', v1.randomBytes(32), 2)
     const nodes: ShareNode[] = [
-      { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-      { id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...sealed, placementRevision: 1 },
+      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...sealed, placementRevision: 1 },
     ]
     expect(walkSubtree(SCOPE_ID, nodes, rootKey).names.size).toBe(0)
   })

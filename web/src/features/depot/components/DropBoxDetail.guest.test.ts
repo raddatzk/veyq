@@ -57,7 +57,7 @@ const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
 }
 
 // The drop box as the server serves it to a guest of a link above: its drop private key under its own key, and a

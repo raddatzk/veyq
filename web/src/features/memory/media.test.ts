@@ -171,6 +171,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
       return {
         media: [
           {
+            blockedByOperator: false,
             mediaId: item.mediaId, // the client-minted id the upload was completed for
             ...blobOf(item.originalUploadId),
             derivatives: (item.derivatives ?? []).map((d) => ({ kind: d.kind, ...blobOf(d.uploadId) })),
@@ -1254,6 +1255,7 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
         listNodeMedia: {
           media: [
             {
+              blockedByOperator: false,
               mediaId: 'm1', blobId: 'b1', chunkCount: 1, byteSize: 0, wrappedBlobKey: 'aw==',
               derivatives: [], wrappedMeta: null, updatedAt: new Date('2026-07-09T12:00:00.000Z'),
             },

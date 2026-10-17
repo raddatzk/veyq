@@ -11,11 +11,13 @@ import type { TreeNode } from '../node/tree'
 import { ShareRole } from '../../api/generated/sharing'
 import { nodeReportKeys } from './reportKeys'
 import { openReport, type ReportTarget } from './report'
+import { activeReview } from '../sharing/review'
 
 type Translate = (key: string) => string
 
 /** Whether `access` may report what it sees: a member whose keys are open, or a guest who views. */
 export function canReport(access: Access): boolean {
+  if (access.mode === 'guest' && activeReview()) return false // a moderator reviewing a case reports nothing
   return access.mode === 'member' ? access.epochs !== null : access.role === ShareRole.Read || access.role === ShareRole.ReadWrite
 }
 

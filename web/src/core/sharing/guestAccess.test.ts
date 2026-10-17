@@ -38,6 +38,7 @@ const HASH = `#k=${b64url(K_SHARE)}`
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string, extra: Partial<ShareNode> = {}): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
   return {
+    blockedByOperator: false,
     id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0,
     encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra,
   }

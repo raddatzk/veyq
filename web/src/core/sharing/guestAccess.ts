@@ -54,6 +54,7 @@ function asTreeNode(n: ShareNode, rootId: string, name: string): TreeNode {
     sealedDropPrivateKey: n.sealedDropPrivateKey ?? null,
     shareIdentityId: n.shareIdentityId ?? null,
     wrappedIdentityKey: n.wrappedIdentityKey ?? null,
+    blockedByOperator: n.blockedByOperator,
   }
 }
 

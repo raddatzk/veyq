@@ -75,6 +75,9 @@ export type TreeNode = {
    *  `K_up` wrapped to the parent's drop public key ({@link childEntryKey}). */
   shareIdentityId?: string | null
   wrappedIdentityKey?: string | null
+  /** A moderator blocked this node's content, or a node above it (uc.moderation.take-a-measure): the level shows the
+   *  placeholder "Blocked by the operator" and the node does not open. Absent: not blocked. */
+  blockedByOperator?: boolean
 }
 
 /** What {@link childEntryKey} reads of a parent and of a child. */
@@ -226,6 +229,7 @@ export function openTree(scopeId: string, epochs: EpochKeys, rows: NodeSummary[]
     sealedDropPrivateKey: r.sealedDropPrivateKey ?? null,
     shareIdentityId: r.shareIdentityId ?? null,
     wrappedIdentityKey: r.wrappedIdentityKey ?? null,
+    blockedByOperator: r.blockedByOperator,
   }))
 }
 
@@ -522,6 +526,7 @@ export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNo
       deletedAt: r.deletedAt,
       purgeAfter: r.purgeAfter,
       attached: r.attached,
+      blockedByOperator: r.blockedByOperator,
     }]
   })
 }

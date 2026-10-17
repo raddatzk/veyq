@@ -31,10 +31,12 @@ export type SharedSubtree = {
  * carries no wrap (a server that served a share without the wrap its role needs — or a WRITE_ONLY link, which never
  * holds one), `bad_fragment_key` when the wrap does not open under the fragment key.
  */
-export function openShareRoot(head: Pick<PublicShareHead, 'kShare' | 'name'> & { share: Pick<PublicShare, 'wrap'> }): {
+export function openShareRoot(head: Pick<PublicShareHead, 'kShare' | 'name' | 'rootKey'> & { share: Pick<PublicShare, 'wrap'> }): {
   key: Uint8Array
   name: string
 } {
+  // A moderator's review holds the root's key from its report share (core/sharing/review.ts): no wrap to open.
+  if (head.rootKey) return { key: head.rootKey, name: head.name }
   if (!head.share.wrap) throw new ShareUnavailableError('not_found')
   try {
     return { key: v1.open(SHARE_KEY, head.kShare, fromB64std(head.share.wrap)), name: head.name }

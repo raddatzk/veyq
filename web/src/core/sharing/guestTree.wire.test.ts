@@ -48,13 +48,13 @@ const kItem = v1.randomBytes(32)
 /** A served child row: its name and key wrap sealed under its parent's key, at its epoch and placement revision. */
 function row(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, epoch: number, placementRevision: number, kind = FOLDER_KIND): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch, placementRevision }
-  return { id, parentId, kind, epoch, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind, epoch, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 
 // The root at epoch 5, its two subfolders at epochs 3 and 1, an item in the left one (served at revision 2).
 function servedNodes(itemRevision = 2): ShareNode[] {
   return [
-    { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, placementRevision: 0 },
+    { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, placementRevision: 0 },
     row(LEFT, ROOT, kRoot, kLeft, 'Briefe', 3, 1),
     row(RIGHT, ROOT, kRoot, kRight, 'Fotos', 1, 0),
     row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', 4, itemRevision, ITEM_KIND),

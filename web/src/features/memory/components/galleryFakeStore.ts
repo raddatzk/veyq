@@ -88,7 +88,7 @@ export function galleryFakeStore() {
         mediaId: m.mediaId,
         ...blobOf(m.originalUploadId),
         derivatives: m.derivatives.map((d): MediaDerivativeSummary => ({ kind: d.kind, ...blobOf(d.uploadId) })),
-        wrappedMeta: m.wrappedMeta, // the listed-metadata tier is listed, for grid layout + date sorting (cr-0068)
+        wrappedMeta: m.wrappedMeta, blockedByOperator: false, // the listed-metadata tier is listed, for grid layout + date sorting (cr-0068)
         updatedAt: new Date(1_700_000_000_000 + i * 1000), // distinct per media → a valid keyset cursor (cr-0107)
         // wrappedExif is deliberately NOT listed — it is lazy via getMediaExif (cr-0064)
       })),

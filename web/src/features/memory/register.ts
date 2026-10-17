@@ -22,6 +22,7 @@ import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
 import PersonMemories from './components/PersonMemories.vue'
+import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
@@ -86,5 +87,7 @@ export function registerMemories(registry: Registry): void {
   registry.claimShareBody(CHAPTER_KIND, MemoryShareBody)
   // A person's profile (`#people/<userId>`, ADR 0083) lists the Memories they took part in: Memories' section of core's page.
   registry.claimPersonSection(PersonMemories)
+  // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
+  registry.claimItemReview(MediumReview)
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

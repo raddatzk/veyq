@@ -8,12 +8,13 @@ import { originalBlobMeta, type MediaItem } from './media'
  *  (`memory.buckets.deleteRefusedReason.*`): `deleteMedia`'s and `restoreMedia`'s refusals — `404 media_not_found`
  *  (purged, or the caller holds no grant any more) and `409 scope_deleting` — and `failed` for anything else (a
  *  network failure, an unexpected code). */
-export type MediaRefusal = 'gone' | 'scope_deleting' | 'failed'
+export type MediaRefusal = 'gone' | 'scope_deleting' | 'blocked_by_operator' | 'failed'
 
 export async function mediaRefusalOf(e: unknown): Promise<MediaRefusal> {
   const { code } = await decodeHttpError(e)
   if (code === 'media_not_found') return 'gone'
   if (code === 'scope_deleting') return 'scope_deleting'
+  if (code === 'blocked_by_operator') return 'blocked_by_operator' // a restore of a blocked medium (451)
   return 'failed'
 }
 

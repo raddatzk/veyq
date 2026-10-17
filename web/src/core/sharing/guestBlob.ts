@@ -9,6 +9,7 @@
 import { publicSharesApi } from '../../api/client'
 import { windowPuts } from '../blob/transport'
 import type { BlobDeclare, ReservedUpload, WindowFn } from '../blob/types'
+import { activeReview } from './review'
 
 /** Who uploads where: the link, the guest's token, the password token when the link has one, and the node below the
  *  root the uploads are for (named on every start and window, as the server checks it on each). `nodeId` absent: the
@@ -46,6 +47,9 @@ export function guestWindow(t: GuestUploadTarget): WindowFn {
 /** The presigned GET of every chunk of `blobId` under the link (`resolveShareBlob`), in chunk order. A blob outside the
  *  live shared subtree — a file in the trash included — is the server's `404`. */
 export async function shareChunkUrls(shareId: string, blobId: string, pwToken?: string): Promise<string[]> {
+  // A moderator's review reads the held, pinned object instead — never the link's own read (`./review.ts`).
+  const review = activeReview()
+  if (review) return review.chunkUrls(blobId)
   const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId, xSharePassword: pwToken })
   return [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
 }
