@@ -90,6 +90,8 @@ affected rows plus a pin on their storage keys that `StoreReclaimSweep` skips �
 
 ## Open questions (owner)
 
+**Decided (Q6–Q8).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 - **Q6 — The reporter's receipt.** ADR 0093 § 2: "A reporter who left a contact gets a receipt" (DSA Art. 16(4)), but
   the same section seals the contact to the moderation key, so the server cannot address the receipt; and ADR 0097
   decision 3 lets instance mail reach only the Server Owner, moderators and the instance contact.
@@ -177,7 +179,7 @@ a held medium's live `veyq_blob` row is deleted, its pinned objects are named on
 from `veyq_blob` alone leaves them out of a backup's store leg while the database leg still carries the hold that needs
 them. Whichever CR lands second makes the index read the pins too (`changes/README.md` § Two CRs that write the same page).
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 

@@ -101,6 +101,8 @@ moderator holding the key can open.
 
 ## Open questions (owner)
 
+**Decided (Q2–Q5).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 - **Q2 — May an existing device wrap on the tenant host unlock the moderation surface?** ADR 0099 § 6 says the surface
   never *offers* a trusted device there, and that a script flaw on a tenant origin reaches what that origin stores.
   - (a) No: the surface asks for the password and the Secret Key on every unlock, whatever the device holds, until
@@ -201,7 +203,7 @@ structural invariant — "every moderation operation passes `ModerationProofGate
 test beside `RateLimitPostureSweepTest`: every resource method of the moderation spec's generated interfaces is
 gated by the role and the proof (bite: un-gate one → red).
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 

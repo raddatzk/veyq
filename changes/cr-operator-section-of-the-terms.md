@@ -61,6 +61,8 @@ what the other CRs build: written earlier, it would promise a report path that d
 
 ## Open questions (owner) and legal items
 
+**Decided (Q14–Q15).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 - **Q14 — Ship the section complete, last, or growing with each CR?** **Recommendation: last and complete** (this CR's
   order): a section that grows with each CR changes the gate's revision up to five times before the first release for
   no reader, since nothing is released (`grep -n '^release:' scripts/applied_migrations.sha256` → `none`).
@@ -94,7 +96,7 @@ what the other CRs build: written earlier, it would promise a report path that d
 Every phase's Done-when; coverage for the three use-cases with `backend` and `web` refs for the new criteria; every
 `scripts/validate_*.py` except `validate_guard_gaps.py` green.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 

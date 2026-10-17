@@ -56,6 +56,8 @@ measure then ends six months after its statement is sent. The deferral of a stat
 
 ## Open questions (owner)
 
+**Decided (Q11–Q12).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 - **Q11 — Through which channel do statements and reporters' decisions go?** ADR 0093 § 7 sends the statement to the
   creator, the uploader and the scope owner, and § 2 the decision to a reporter; ADR 0097 decision 3 lets instance mail
   reach only the Server Owner, moderators and the contact; tenant mail would speak in the tenant's name for the host's
@@ -104,7 +106,7 @@ answer), with planned coverage, and adds the statement's flow to `uc.moderation.
 Every phase's Done-when; coverage with `backend` and `web` refs; every `scripts/validate_*.py` except
 `validate_guard_gaps.py` green.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 

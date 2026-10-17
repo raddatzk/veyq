@@ -70,6 +70,8 @@ mail's second recipient, `cr-report-and-hold`) and it depends on nothing of them
 
 ## Open question (owner)
 
+**Decided (Q1).** Owner 2026-10-17 ("Ja so übernehmen"): every recommendation in this section is taken, and implementation has the owner's go in the order of inbox #462. The legal blockers named here stay open; they are not owner decisions.
+
 **Q1 — How is the contact's notification address confirmed?** ADR 0097 decision 5 covers the Server Owner's address
 (code typed into admin-web) and a moderator's (code typed into the moderation surface); the instance contact's
 notification address has no rule, yet ADR 0097 decision 3 mails moderation notices to it.
@@ -130,7 +132,7 @@ Every phase's Done-when; `docs/coverage/` for `uc.admin.operator-details` with r
 `for f in scripts/validate_*.py; do python3 "$f"; done` on `61aa7756`). The site pages that speak for the settings
 updated. No structural invariant is introduced, so no new guard.
 
-Implementation waits for the owner's go.
+Implementation has the owner's go (2026-10-17), in the order of inbox #462; a legal blocker named above still blocks the part it names.
 
 ## Retrospective
 
