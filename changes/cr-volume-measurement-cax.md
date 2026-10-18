@@ -101,7 +101,11 @@ while a phone uploads — the CAX run should watch the app there first.
 
 **For this CR's run.**
 - *Phase 2's member axis* cannot reach 1,000 while #491 stands; its top stage is what the product reaches (445 on a
-  fresh tenant). A fix of #491 first would let the axis run as planned — the owner's call.
+  fresh tenant). `cr-identity-pins-per-entry` (planned) lifts that ceiling; landed first, it lets the axis run as
+  planned — the owner's call.
+- *The gallery's browser leg changes shape* once `cr-gallery-virtualization` (planned) lands: its harness metric is
+  *viewport complete* and *end complete*, not "last thumbnail of all", and its targets replace the 15 s clause for a
+  windowed grid. Until then the rule above reads as written.
 - *The five-at-once scenario* ran five Chromiums in one container on this Mac, which drove the Mac's load to 30: its
   client numbers say nothing, its server numbers stand. On the CAX the five browsers run here and the server runs
   there, so the clients no longer compete with each other's host — but they still share this Mac; the scenario's
@@ -175,7 +179,8 @@ owner's to give with the server.
 - [ ] **4 record**: decision 4's three places; the verdict compared with the local pre-check in one sentence in the
   retrospective (how far the local run was off is worth knowing for the next one). · Done when: the site check and
   the trust-chain guards green.
-- [ ] **5 remove**: delete the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
+- [ ] **5 remove** (not before `cr-gallery-list-paging` and `cr-gallery-virtualization` have run their measurement
+  phases — both measure with this harness): delete the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
   `scripts/measure_volume.py`, `e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
   the owner deletes the server and the DNS record. · Done when: `git ls-files` shows none of the harness files;
   `npm run check` in `web/` green; the owner confirms the server is gone.

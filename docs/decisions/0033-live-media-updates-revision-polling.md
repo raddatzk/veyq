@@ -1,6 +1,6 @@
 # ADR 0033 — Live item lists: a per-node revision counter + conditional GET + keyset delta, short-polled
 
-- Status: Accepted
+- Status: Accepted; decision 6 (the first load in pages) Proposed 2026-10-19 with `cr-gallery-list-paging`
 - Date: 2026-07-09
 
 ## Context
@@ -79,6 +79,19 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    its fetch and its reducer. Stops when the
    Memory closes; a poll still in flight then writes nothing, and a tick never overlaps the previous one. With the delta, even an active upload is cheap per poll. A few seconds of latency is fine for a photo
    grid; **long-poll / a push channel** (sub-second, shared later with #6 live journal) is a deferred upgrade.
+
+6. **The first load is the same keyset, in pages** (proposed 2026-10-19 by `cr-gallery-list-paging`, not built; today
+   the first load is one unbounded answer). A list read without `since` is not special: it is a delta from the
+   beginning. Every read takes a `limit` (the server caps it, and the response's `media` carries that cap as its
+   `maxItems`) and answers `more` when rows remain past the page; the client asks again with the last row's cursor
+   until `more` is false. **The revisions a client keeps are the first page's.** The server reads them before the rows
+   (as ADR 0081 decision 3 orders it), so a change committed while the client pages moves the revision past the one it
+   kept, and its next poll pulls that change as a delta; an edit to a row already paged moves the row to the end, where
+   it is delivered again and upserted; a delete moves `delete_revision` past the kept one, so the next poll carries the id
+   set. Paging bounds one answer's size and the server's memory for it. It does not give the client its first screen:
+   the gallery's order is the sealed capture time, which only the device reads, so the page order (`updated_at`, `id`)
+   is not the display order and the client needs every page before the order is final. The share listing
+   (`listShareMedia`) is paged by the same rule.
 
 How the server computes one `listNodeMedia` poll response (core's `NodeItemsRevisions.read` decides it) — the **O(1) revision compare short-circuits the idle
 case** (no media query at all), and only a genuine change runs the two queries (keyset delta + current id-set):
