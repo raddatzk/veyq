@@ -132,6 +132,14 @@ describe('ModerationQueue', () => {
     expect(w.find('.case-detail-stub').text()).toContain('case-2')
   })
 
+  it('marks a case a restore brought back as a stub, and no other (ADR 0056 decision 8)', async () => {
+    vi.mocked(listCases).mockResolvedValue([summary({ origin: 'RESTORED', reportCount: 0 }), summary({ id: 'case-2' })])
+    const w = await mountQueue()
+    const rows = w.findAll('.moderation-case-row')
+    expect(rows[0].find('.moderation-restored-badge').text()).toBe(t('moderation.caseRow.restored'))
+    expect(rows[1].find('.moderation-restored-badge').exists()).toBe(false)
+  })
+
   it('marks an order’s case and reminds of a deferred statement, more urgently as its end nears', async () => {
     const soon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
     const later = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)

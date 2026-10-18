@@ -87,6 +87,7 @@ vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   instanceOperatorApi: vi.fn(),
   instanceGuestWriteRecordApi: vi.fn(),
+  instanceBackupRetentionApi: vi.fn(),
 }))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
@@ -121,7 +122,7 @@ import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 import { enterOrder, OrderInvalid, type AuthorityOrder } from '../features/instance/orders'
 import { stepStatement } from '../features/instance/stepStatement'
 import { ORDER_FORMS } from '../features/instance/orderForms'
-import { instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
+import { instanceBackupRetentionApi, instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
 import { eraseAccount, listAccountErasures, stopAccountErasure, type PendingAccountErasure } from '../features/instance/accounts'
 import { stubApi } from '../test/apiMock'
 import { httpError } from '../test/httpError'
@@ -1067,6 +1068,32 @@ describe('veyq-admin — usage and refusals', () => {
     const r = await invoke(['tenant', 'suspend', '--tenant-id', 't1'])
     expect(r.code).toBe(1)
     expect(r.err).toBe('veyq-admin: request failed: HTTP 409 tenant_not_active')
+  })
+})
+
+describe('veyq-admin backup-retention (uc.admin.back-up-and-restore-instance A12)', () => {
+  it('show prints the days and whether they are the default', async () => {
+    stubApi(instanceBackupRetentionApi, { getInstanceBackupRetention: { retentionDays: 30, chosen: false } })
+    const r = await invoke(['backup-retention', 'show'])
+    expect(r.code).toBe(0)
+    expect(r.out).toBe('backup-retention 30 days (the default)')
+  })
+
+  it('set sends whole days and says a reason is owed above thirty', async () => {
+    const api = stubApi(instanceBackupRetentionApi, { setInstanceBackupRetention: { retentionDays: 90, chosen: true } })
+    const r = await invoke(['backup-retention', 'set', '90'])
+    expect(r.code).toBe(0)
+    expect(api.setInstanceBackupRetention).toHaveBeenCalledWith({ instanceBackupRetentionUpdate: { retentionDays: 90 } })
+    expect(r.out).toContain('backup-retention 90 days')
+    expect(r.out).toContain('record of processing')
+  })
+
+  it.each(['6', '366', '30.5', 'month'])('set refuses %j and sends nothing', async (days) => {
+    const api = stubApi(instanceBackupRetentionApi, { setInstanceBackupRetention: { retentionDays: 30, chosen: true } })
+    const r = await invoke(['backup-retention', 'set', days])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('from 7 to 365')
+    expect(api.setInstanceBackupRetention).not.toHaveBeenCalled()
   })
 })
 

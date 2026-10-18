@@ -535,4 +535,13 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     expect(reported.find('.moderation-case-review').exists()).toBe(true)
     expect(reported.find('.authority-section-stub').exists()).toBe(true)
   })
+
+  it('a case a restore brought back as a stub says so and has no review to open (ADR 0056 decision 8)', async () => {
+    const stub = await mountCase(caseOf({ origin: 'RESTORED', reports: [] }))
+    expect(stub.find('.moderation-case-restored-badge').text()).toBe(t('moderation.caseRow.restored'))
+    expect(stub.find('.moderation-case-review').exists()).toBe(false)
+    expect(stub.find('.moderation-case-order-badge').exists()).toBe(false)
+    const reported = await mountCase(caseOf())
+    expect(reported.find('.moderation-case-restored-badge').exists()).toBe(false)
+  })
 })
