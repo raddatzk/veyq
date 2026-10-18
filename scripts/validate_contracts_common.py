@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard the still-duplicated shared OpenAPI components against cross-spec drift (audit #76 / P3f, ADR 0038) —
-and every example against its own schema's required set (assertion 4, inbox #307).
+every example against its own schema's required set (assertion 4, inbox #307), and every named security
+requirement against its spec's declared schemes (assertion 5).
 
 `ErrorResponse` was extracted to `contracts/api/_common.openapi.yaml` and is now `$ref`'d by all 9 specs — a
 single source that cannot drift, so it is no longer guarded here. What stays copied across the per-domain specs
@@ -37,6 +38,16 @@ What it asserts:
      presence only — never a value's type, enum, pattern or bound; never the `examples:` map, a parameter's or a
      property's own `example`; and not through `allOf`/`oneOf`/`anyOf` (no example in the specs needs it today).
      A required field whose example is `null` passes, which is right for a nullable one and wrong for no other.
+  5. **Every security scheme a requirement names is declared in that spec's `components.securitySchemes`** — the
+     spec-root `security` and every operation's. Each spec is generated on its own, and a generator meets an
+     undeclared name with no error: it simply attaches no credential. Bought by cr-moderation-review-and-measures:
+     `memories/share-media.openapi.yaml` named `bearerAuth` on its moderation reads without declaring it, so the
+     generated web client sent no bearer and the server answered 401 — `./gradlew check` and `npm run check` were
+     green; only the L1 browser suite caught it, and finding why cost a day. **Its limit:** the name only — never that the
+     declared scheme is the right kind (rule 1 holds `bearerAuth`'s copies alike, nothing holds a scheme of
+     another name), never a requirement's scopes, and never the converse defect: an operation the server guards
+     that names no requirement at all is green here and sends no bearer just the same. Whether an operation needs
+     a credential is the server's, read by the API fuzzing and the slice tests, not by this file.
 
 Deliberately NOT asserted: collection-wrapping style (bare array vs `{results}`/`{items}` vs a domain key) — that
 mixes intentional batch-vs-list conventions, so it is a design call, not a drift bug (see the inbox #76 note).
@@ -202,6 +213,34 @@ def check_examples_carry_required(specs: dict[str, dict]) -> int:
     return checked
 
 
+HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+
+
+def check_security_declared(specs: dict[str, dict]) -> int:
+    """Assertion 5: every scheme name a security requirement carries — at the spec root or on an operation — is a key
+    of that same spec's `components.securitySchemes`. Returns the number of named requirements checked, so the summary
+    can say the walk reached something."""
+    every = dict(specs)
+    every[contract_specs.key(contract_specs.COMMON)] = yaml.safe_load(contract_specs.COMMON.read_text()) or {}
+    checked = 0
+    for fname, spec in every.items():
+        declared = set((spec.get("components") or {}).get("securitySchemes") or {})
+        requirements = [(f"{fname} (root)", req) for req in spec.get("security") or []]
+        for path, item in (spec.get("paths") or {}).items():
+            for method, op in (item or {}).items():
+                if method in HTTP_METHODS and isinstance(op, dict):
+                    where = f"{fname} {op.get('operationId', method + ' ' + path)}"
+                    requirements += [(where, req) for req in op.get("security") or []]
+        for where, req in requirements:
+            for name in req or {}:
+                checked += 1
+                if name not in declared:
+                    errors.append(
+                        f"security: {where} names '{name}', which {fname} does not declare in "
+                        f"components.securitySchemes — its generated client would send no credential")
+    return checked
+
+
 def main() -> int:
     specs = load_specs()
     if not specs:
@@ -215,6 +254,9 @@ def main() -> int:
     examples = check_examples_carry_required(specs)
     if not examples:
         errors.append("example: no object example with a required set was reached — the walk is broken")
+    requirements = check_security_declared(specs)
+    if not requirements:
+        errors.append("security: no named security requirement was reached — the walk is broken")
 
     if errors:
         print("CONTRACTS COMMON-COMPONENT VALIDATION FAILED:")
@@ -225,7 +267,8 @@ def main() -> int:
         f"contracts common components OK: {len(specs)} specs — bearerAuth and the {len(params)} path-params "
         f"several specs define ({', '.join(params)}) consistent, "
         f"{len(CANONICAL_ENUMS)} shared enum families aligned (ErrorResponse is single-sourced in _common), "
-        f"{examples} object examples carry their required properties")
+        f"{examples} object examples carry their required properties, "
+        f"{requirements} named security requirements declared in their spec")
     return 0
 
 

@@ -267,7 +267,7 @@ class OperatorBlindProbeTest {
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
-            "reportInShare",
+            "reportInShare", "getShareOrderNotice",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )
         reason(

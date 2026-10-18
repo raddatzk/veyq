@@ -1346,6 +1346,12 @@ both reach the database. cr-client-port-sources planned three boots against an a
 time (a converter, as `trusted-proxies` has) is seen without a database; an observer's needs a reachable one, a
 throwaway container of the pinned image.
 
+**And a harness that reads a test's verdict from its result file deletes that file before each injected run.** A run
+whose injection broke the build writes no JUnit XML, and the previous run's file — the clean one, green — is still in
+`build/test-results`, so a harness reading "the named case's status" scores the last run's verdict as this run's.
+cr-statement-legal-gaps' harness deleted the class's `TEST-*.xml` before every run and scored a missing one as
+`not-run`, never as a verdict.
+
 ### When the CR's gate is a bespoke measurement, bite the MEASUREMENT before trusting its green
 
 **§ *bite-proof a guard* applied one level up.** Every rule around it assumes the gate is `check` or a
@@ -1783,6 +1789,15 @@ write require an accepted **tenant** membership; every slice test's seed already
 the real byte path was dead for a wave without anyone knowing. So a CR that tightens a gate greps the opt-in
 suites (`grep -rln 'EnabledIfEnvironmentVariable' backend/src/test`) for fixtures that seed through it, and runs
 the ones it can.
+
+### Giving a body-less operation an optional body changes what every caller must send
+
+The generated resource then `@Consumes` JSON, and RESTEasy answers a request with no `Content-Type` `415` — before any
+handler, however optional the body is. cr-statement-legal-gaps gave `suspendTenant` an optional statement: admin-web's
+generated client sends the header on every call and kept working, while nine slice tests and two projector tests that
+posted the suspension bare went red at once. So a CR that adds an optional body to an existing operation greps its
+route across the test trees, `e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
+contract that the request is JSON either way.
 
 ### A locator for an endpoint's callers greps its route, not only its operation name
 

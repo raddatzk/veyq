@@ -57,6 +57,12 @@ class ReportMailSliceTest {
     lateinit var notices: CaseNotices
 
     @Inject
+    lateinit var reminders: CaseReminders
+
+    @Inject
+    lateinit var views: me.raddatz.veyq.core.moderation.cases.CaseViews
+
+    @Inject
     lateinit var operator: OperatorDetailsStore
 
     private lateinit var mailbox: GreenMail
@@ -112,6 +118,38 @@ class ReportMailSliceTest {
         assertFalse(Regex("https?://|www\\.").containsMatchIn(text), "the mail carries a link:\n$text")
         assertEquals(listOf(deputyAddress), mailbox.receivedMessages.flatMap { m2 -> m2.allRecipients.map { it.toString() } }, "the confirmed moderator alone")
         assertEquals(null, openCase("NODE", folder)!!.noticeDue, "mailed once")
+    }
+
+    @Test
+    fun anUndecidedCaseIsRemindedAtThirtySeventyFiveAndNinetyDaysAndNeverClosesItself() {
+        // Cases other classes left open are past their reminders here: this class reads every mail.
+        QuarkusTransaction.requiringNew().run { ModerationCaseEntity.update("remindersSent = 3") }
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val open = seedNode(m.scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
+        val decided = seedNode(m.scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", open), item("NODE", decided)), category = "TERMS_BREACH")).then().statusCode(201)
+        val case = openCase("NODE", open)!!
+        // Control: a decided case owes no decision, so it is never reminded.
+        QuarkusTransaction.requiringNew().run { ModerationCaseEntity.update("state = 'DECIDED', openKey = null where id = ?1", openCase("NODE", decided)!!.id) }
+        val reported = QuarkusTransaction.requiringNew().call { CaseReminders.firstReportOf(case.id)!! }
+
+        assertEquals(0, reminders.remind(reported.plus(Duration.ofDays(29))), "not before 30 days")
+        assertEquals(1, reminders.remind(reported.plus(Duration.ofDays(31))))
+        val mail = mailsTo(deputyAddress).single { it.subject == CaseReminders.SUBJECT }
+        val text = textOf(mail)
+        assertTrue(text.contains("a breach of the terms, reported 31 days ago"), text)
+        for (secret in listOf(case.id, open, decided, m.scopeId, m.userId)) assertFalse(text.contains(secret), "the mail names an id: $secret")
+        assertFalse(Regex("https?://|www\\.").containsMatchIn(text), "the mail carries a link:\n$text")
+        assertEquals(0, reminders.remind(reported.plus(Duration.ofDays(40))), "each reminder once")
+        assertEquals(1, reminders.remind(reported.plus(Duration.ofDays(76))))
+        // The queue marks it overdue only past 90 days; the reminder at 90 is the last.
+        assertFalse(views.queue(null, reported.plus(Duration.ofDays(89))).single { it.id.toString() == case.id }.overdue)
+        assertEquals(1, reminders.remind(reported.plus(Duration.ofDays(91))))
+        assertTrue(views.queue(null, reported.plus(Duration.ofDays(91))).single { it.id.toString() == case.id }.overdue)
+        assertEquals(0, reminders.remind(reported.plus(Duration.ofDays(400))))
+        assertEquals("OPEN", openCase("NODE", open)!!.state, "a case never closes itself")
+        mailbox.waitForIncomingEmail(2_000, 3)
+        assertEquals(3, mailbox.receivedMessages.count { it.subject == CaseReminders.SUBJECT && it.allRecipients.any { r -> r.toString() == deputyAddress } })
     }
 
     @Test

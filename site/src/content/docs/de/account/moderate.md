@@ -85,13 +85,22 @@ ihn bestätigst.
   Diese Schritte nimmt nur die Person vor, die den Server betreibt; der Fall zeigt deinen Vorschlag und was aus ihm
   wurde.
 - **Sicherung verlängern**, solange etwas gesichert ist: Wähle ein **Neues Ende**, nach dem jetzigen und höchstens
-  sechs Monate ab heute, und gib eine **Begründung** an, etwa die Anfrage einer Behörde oder eine Klage. Die Begründung
-  ist Pflicht und wird versiegelt wie eine Notiz.
+  sechs Monate ab heute, die **Art des Grunds** — Ersuchen oder Anordnung einer Behörde, eine laufende Meldung an eine
+  Behörde, ein Widerspruch, ein Anwaltsschreiben oder eine Klage — und gib eine **Begründung** an. Die Begründung ist
+  Pflicht und wird versiegelt wie eine Notiz; ihre Art nicht.
 
-Eine Sperre geht mit einer **Begründung** an die Betroffenen. Wähle den **Grund** und schreib, **Was du festgestellt
-hast**: Auf den meisten Servern ist das Pflicht, auf einem privaten freiwillig. Es erreicht jede betroffene Person
+Ein Fall, den niemand entscheidet, schließt sich nie von selbst: 30, 75 und 90 Tage nach seiner ersten Meldung bekommt
+jede Person aus der Moderation eine Erinnerung per E-Mail, die nur seine Kategorie und sein Alter nennt, und nach 90
+Tagen markiert ihn die Liste der Fälle mit **Seit über 90 Tagen unentschieden**.
+
+Eine Sperre geht mit einer **Begründung** an die Betroffenen. Wähle den **Grund**, nenne **Gesetz oder Klausel, auf
+die sie sich stützt** — einen kurzen Verweis wie „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“, so angezeigt,
+wie du ihn schreibst — und schreib, **Was du festgestellt hast**, also warum der Inhalt darunter fällt: Auf den meisten
+Servern ist beides Pflicht, auf einem privaten freiwillig. Was du festgestellt hast, erreicht jede betroffene Person
 versiegelt, sodass nur sie es lesen kann — und das Moderationsprotokoll, versiegelt wie eine Notiz —, nie eine E-Mail.
-Die Begründung nennt den Server, nie dich. Wer beim Melden eine Adresse hinterlassen hat, erfährt die Entscheidung.
+Die Begründung nennt den Server, nie dich, und sagt, dass die Sperre überall gilt, wo der Server erreichbar ist, bis sie
+aufgehoben wird. Wer beim Melden eine Adresse hinterlassen hat, erfährt die Entscheidung und die nächsten
+Möglichkeiten.
 
 Eine Sperre entscheidet den Fall, und was für ihn gesichert ist, bleibt dann sechs Monate gesichert. **Aufheben** bei
 einer Maßnahme — deiner oder der einer anderen moderierenden Person — liefert das Gesperrte wieder unverändert aus. Wird
@@ -133,7 +142,8 @@ Missbrauchs von Kindern beendet das auch, was vom Fall aufbewahrt wird.
 nie tun sollst und was zuerst zu tun ist. **Zurück zur Liste** lässt ihn geschlossen; **Verstanden – Fall öffnen** öffnet
 ihn, mit **Inhalt sperren** als erstem Schritt. Solche Inhalte werden nur aufbewahrt, bis du festhältst, dass an eine
 Behörde gemeldet wurde, und nie länger als 90 Tage nach der Meldung – das Sperren verlängert das nicht. Verlängere nur,
-solange deine Meldung an die Behörde noch läuft oder weil die Behörde darum bittet.
+solange deine Meldung an die Behörde noch läuft oder weil die Behörde darum bittet: Nur diese beiden Arten von Grund
+werden angeboten, und der Server lehnt jede andere ab.
 
 ## Was festgehalten wird, und wie lange
 

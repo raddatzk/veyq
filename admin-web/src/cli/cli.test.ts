@@ -26,6 +26,10 @@ vi.mock('../features/instance/accounts', () => ({
   eraseAccount: vi.fn(), stopAccountErasure: vi.fn(), listAccountErasures: vi.fn(),
 }))
 vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
+vi.mock('../features/instance/stepStatement', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/instance/stepStatement')>()),
+  stepStatement: vi.fn(),
+}))
 vi.mock('../features/instance/releaseNotices', () => ({ getReleaseNotices: vi.fn(), setReleaseCheck: vi.fn() }))
 vi.mock('../features/instance/configSecret', () => ({ getInstanceConfigSecret: vi.fn() }))
 vi.mock('../features/instance/store', async (importOriginal) => ({
@@ -115,6 +119,7 @@ import { clearOperator, getOperatingMode, getOperator, setOperator } from '../fe
 import type { InstanceOperatingMode, InstanceOperator } from '../features/instance/operator'
 import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 import { enterOrder, OrderInvalid, type AuthorityOrder } from '../features/instance/orders'
+import { stepStatement } from '../features/instance/stepStatement'
 import { ORDER_FORMS } from '../features/instance/orderForms'
 import { instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
 import { eraseAccount, listAccountErasures, stopAccountErasure, type PendingAccountErasure } from '../features/instance/accounts'
@@ -258,7 +263,7 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     await invoke(['tenant', 'suspend', '--tenant-id', 't2'])
     await invoke(['tenant', 'reactivate', '--tenant-id', 't2'])
     expect(tenants.revokeTenant).toHaveBeenCalledWith('t1')
-    expect(tenants.suspendTenant).toHaveBeenCalledWith('t2')
+    expect(tenants.suspendTenant).toHaveBeenCalledWith('t2', null)
     expect(tenants.reactivateTenant).toHaveBeenCalledWith('t2')
   })
 
@@ -736,9 +741,40 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   it('account block passes the address and the case, or no case when none is given', async () => {
     vi.mocked(blockSignIn).mockResolvedValue(steps())
     expect((await invoke(['account', 'block', '--address', 'member@example.com', '--case', 'case-1'])).code).toBe(0)
-    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', 'case-1')
+    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', 'case-1', null, false)
     expect((await invoke(['account', 'block', '--address', 'member@example.com'])).code).toBe(0)
-    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', null)
+    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', null, null, false)
+  })
+
+  it('account block over content carries its statement of reasons from the flags, sealed by the facade', async () => {
+    vi.mocked(blockSignIn).mockResolvedValue(steps())
+    const statement = { statementId: 's-1', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValueOnce(statement)
+    const r = await invoke([
+      'account', 'block', '--address', 'member@example.com', '--over-content', '--ground', 'TERMS_BREACH',
+      '--provision', 'Space terms, clause 4', '--facts', 'what was found',
+    ])
+    expect(r.code).toBe(0)
+    expect(stepStatement).toHaveBeenCalledWith({ ground: 'TERMS_BREACH', provision: 'Space terms, clause 4', facts: 'what was found' })
+    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', null, statement, true)
+  })
+
+  it('account block over content without a ground is refused before signing in, and blocks nothing', async () => {
+    for (const args of [['--over-content'], ['--facts', 'what was found']]) {
+      const r = await invoke(['account', 'block', '--address', 'member@example.com', ...args])
+      expect(r.code).toBe(1)
+      expect(r.err).toContain('--ground')
+    }
+    expect(blockSignIn).not.toHaveBeenCalled()
+  })
+
+  it('tenant suspend over content carries its statement to the tenant’s owners', async () => {
+    const statement = { statementId: 's-1', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValueOnce(statement)
+    const r = await invoke(['tenant', 'suspend', '--tenant-id', 't3', '--over-content', '--ground', 'ILLEGAL_CONTENT', '--facts', 'what was found'])
+    expect(r.code).toBe(0)
+    expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: '', facts: 'what was found' })
+    expect(tenants.suspendTenant).toHaveBeenLastCalledWith('t3', statement)
   })
 
   it('account block exits 1 with each refusal’s code', async () => {

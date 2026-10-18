@@ -70,6 +70,8 @@ export {
   openObjection,
   sealOrderReference,
   openOrderReference,
+  sealStepFacts,
+  openStepFacts,
   ReportInvalid,
   type ReportKey,
   type ReportBody,

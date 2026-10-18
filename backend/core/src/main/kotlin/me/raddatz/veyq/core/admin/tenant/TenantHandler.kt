@@ -26,6 +26,7 @@ import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.tenant.TenantIngressProjector
 import me.raddatz.veyq.core.moderation.block.ProposalStep
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
+import me.raddatz.veyq.core.moderation.statement.StepStatementInput
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -75,6 +76,9 @@ sealed interface SuspendOutcome {
     data object Done : SuspendOutcome
     data object NotFound : SuspendOutcome, HttpFailure by Failures.tenantNotFound
     data object NotActive : SuspendOutcome, HttpFailure by httpFailure("tenant_not_active", FailureStatus.CONFLICT)
+
+    /** The statement a suspension over content carries was refused (ADR 0093 § 7) — nothing was written. */
+    data class Refused(val failure: HttpFailure) : SuspendOutcome, HttpFailure by failure
 }
 
 /** Result of reactivating a SUSPENDED tenant (ADR 0066) — the exact inverse of [SuspendOutcome]. */
@@ -329,25 +333,37 @@ class TenantHandler(
      * (ADR 0063). That is a **secondary** effect and not the lockout — the gate is, and it is what still refuses a
      * request that reaches this instance by any other route while the file catches up.
      */
-    fun suspend(tenantId: String, serverOwnerId: String): SuspendOutcome {
+    fun suspend(
+        tenantId: String, serverOwnerId: String, overContent: Boolean = false, statement: StepStatementInput? = null,
+        now: Instant = Instant.now(),
+    ): SuspendOutcome {
         val outcome = QuarkusTransaction.requiringNew().call {
             store.findTenant(tenantId) ?: return@call SuspendOutcome.NotFound
+            // Over content, the suspension carries its statement of reasons (ADR 0093 § 7): refused before anything flips.
+            moderationSteps.offlineRefusal(tenantId, overContent, statement)?.let { return@call SuspendOutcome.Refused(it) }
             if (!store.suspend(tenantId)) return@call SuspendOutcome.NotActive
-            // A moderator's proposal to take this tenant offline is taken by the suspension itself (uc.admin.suspend-tenant A4).
-            moderationSteps.settle(ProposalStep.TENANT_OFFLINE, tenantId, serverOwnerId)
+            // A moderator's proposal to take this tenant offline is taken by the suspension itself (uc.admin.suspend-tenant A4);
+            // one over content is recorded as a measure with its statement.
+            moderationSteps.takenOffline(tenantId, serverOwnerId, statement, now)
             SuspendOutcome.Done
         }
-        if (outcome is SuspendOutcome.Done) reproject()
+        if (outcome is SuspendOutcome.Done) {
+            reproject()
+            statement?.let { moderationSteps.mailStatement(it) }
+        }
         return outcome
     }
 
     /** Bring a SUSPENDED tenant back (ADR 0066): no key, grant or content row was torn down, so none is rebuilt —
      *  the gate simply stops firing. The routing projection is the exception, and only because suspension dropped
      *  the tenant from it: [reproject] puts its routers back. Same 404-vs-409 shape as [suspend]. */
-    fun reactivate(tenantId: String): ReactivateOutcome {
+    fun reactivate(tenantId: String, serverOwnerId: String, now: Instant = Instant.now()): ReactivateOutcome {
         val outcome = QuarkusTransaction.requiringNew().call {
             store.findTenant(tenantId) ?: return@call ReactivateOutcome.NotFound
-            if (store.reactivate(tenantId)) ReactivateOutcome.Done else ReactivateOutcome.NotSuspended
+            if (!store.reactivate(tenantId)) return@call ReactivateOutcome.NotSuspended
+            // A suspension over content was recorded as a measure (ADR 0093 § 7): reactivating lifts it.
+            moderationSteps.backOnline(tenantId, serverOwnerId, now)
+            ReactivateOutcome.Done
         }
         if (outcome is ReactivateOutcome.Done) reproject()
         return outcome

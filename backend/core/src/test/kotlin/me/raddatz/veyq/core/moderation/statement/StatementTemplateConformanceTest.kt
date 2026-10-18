@@ -33,10 +33,10 @@ class StatementTemplateConformanceTest {
             file.path(key).fields().forEach { (k, v) -> assertEquals(texts(v), pinned.getValue(k), "$key.$k") }
         }
         assertEquals(texts(file.path("rolesJoiner")), StatementTemplate.ROLES_JOINER)
-        assertEquals(
-            file.path("passages").map { Passage(it.path("id").asText(), it.path("full").asBoolean(), it.path("when").takeIf { w -> !w.isMissingNode }?.asText(), texts(it)) },
-            StatementTemplate.PASSAGES,
-        )
+        fun passages(n: JsonNode) =
+            n.map { Passage(it.path("id").asText(), it.path("full").asBoolean(), it.path("when").takeIf { w -> !w.isMissingNode }?.asText(), texts(it)) }
+        assertEquals(passages(file.path("passages")), StatementTemplate.PASSAGES)
+        assertEquals(passages(file.path("reporterDecision").path("passages")), StatementTemplate.REPORTER_DECISION)
         assertEquals(texts(file.path("mail").path("subject")), StatementTemplate.MAIL_SUBJECT)
         assertEquals(texts(file.path("mail").path("factsInVeyq")), StatementTemplate.MAIL_FACTS_IN_VEYQ)
         // Every enum value the wire carries has its text.
@@ -51,7 +51,7 @@ class StatementTemplateConformanceTest {
             measureKind = "CONTENT", roles = listOf(StatementRole.UPLOADER, StatementRole.SCOPE_OWNER), basis = StatementBasis.REPORT,
             ground = StatementGround.TERMS_BREACH, date = "2026-10-18 09:00 UTC", contact = "abuse@example.org", hasFacts = true,
         )
-        val full = StatementTemplate.renderMail(StatementLang.EN, StatementForm.FULL, fields, "club.example.org")
+        val full = StatementTemplate.renderMail(StatementLang.EN, StatementForm.FULL, fields.copy(provision = "§ 86a StGB"), "club.example.org")
         val reduced = StatementTemplate.renderMail(StatementLang.EN, StatementForm.REDUCED, fields.copy(hasFacts = false, contact = null), "club.example.org")
         val onlyFull = StatementTemplate.PASSAGES.filter { it.full }.map { it.text.en.substringBefore("{") }
         assertTrue(onlyFull.isNotEmpty())
@@ -63,8 +63,43 @@ class StatementTemplateConformanceTest {
         assertFalse(reduced.contains("What they found"), reduced)
         assertFalse(reduced.contains("Questions go to"), reduced)
         assertTrue(reduced.contains("The ground: it breaches the terms of use that apply here."), reduced)
+        // The provision follows the ground where it was named, the territorial sentence only in the full form.
+        assertTrue(full.contains("The ground: it breaches the terms of use that apply here. It relies on § 86a StGB."), full)
+        assertFalse(reduced.contains("It relies on"), reduced)
+        assertTrue(full.contains("It applies wherever this veyq instance is reached, and lasts until it is lifted."), full)
+        assertTrue(full.contains("you can object once, in veyq"), full)
         assertFalse(full.contains("{"), "a placeholder left: $full")
         val de = StatementTemplate.renderMail(StatementLang.DE, StatementForm.FULL, fields, "club.example.org")
         assertTrue(de.contains("Person, die es hochgeladen hat und Person, der der Bereich gehört"), de)
+    }
+
+    @Test
+    fun aServerOwnersStepCarriesItsFactsAndSendsTheObjectionToTheContact() {
+        val fields = StatementFields(
+            measureKind = "TENANT_OFFLINE", roles = listOf(StatementRole.TENANT_OWNER), basis = StatementBasis.OWN_FINDING,
+            ground = StatementGround.ILLEGAL_CONTENT, date = "2026-10-18 09:00 UTC", contact = "abuse@example.org", hasFacts = true,
+            provision = "§ 130 StGB", channel = ObjectionChannel.BY_CONTACT, mailFacts = "The space hosts it publicly.",
+        )
+        val mail = StatementTemplate.renderMail(StatementLang.EN, StatementForm.FULL, fields, "club.example.org")
+        assertTrue(mail.contains("a space you own, club.example.org, was taken offline"), mail)
+        assertTrue(mail.contains("What they found: The space hosts it publicly."), mail)
+        assertTrue(mail.contains("after their own finding"), mail)
+        assertTrue(mail.contains("If you disagree, write to abuse@example.org"), mail)
+        assertFalse(mail.contains("in veyq, where you see this statement"), mail)
+        assertFalse(mail.contains("{"), "a placeholder left: $mail")
+        // Without a contact, the objection passage has no address to name and is left out.
+        assertFalse(StatementTemplate.renderMail(StatementLang.EN, StatementForm.FULL, fields.copy(contact = null), "x").contains("write to"))
+    }
+
+    @Test
+    fun aReportersRedressFollowsTheForm() {
+        val full = StatementTemplate.renderRedress(StatementLang.EN, StatementForm.FULL, "abuse@example.org")
+        val reduced = StatementTemplate.renderRedress(StatementLang.EN, StatementForm.REDUCED, null)
+        assertEquals(
+            "If you have more information, you can report it again. Questions go to abuse@example.org. You can also go to court. " +
+                "You can also complain to the Digital Services Coordinator of the Member State where you live or are established.",
+            full,
+        )
+        assertEquals("If you have more information, you can report it again.", reduced)
     }
 }

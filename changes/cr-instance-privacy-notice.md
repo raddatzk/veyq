@@ -43,10 +43,12 @@ says what veyq builds and the question stays a named blocker.
   decides it ships describing only what is built, as Q14 decided against for the operator section.
 - **Two CRs that write the same page name each other and split it by section** (`changes/README.md`): the operator
   section keeps the notice path, the measures and the authorities; this notice takes every Art. 13 passage (Q27).
-- **Neighbour, not this CR's:** what the server's logs keep (ADR 0092, proposed, nothing built; the audit's A8 found an
-  address in three log lines and no log rotation on Compose). The notice's log passage states what runs when it ships;
-  the recommendation is that the audit's minimal log fix lands first, so the passage can say "rotated, and naming no
-  address".
+- **Neighbour, not this CR's:** what the server's logs keep is ADR 0092's, and `cr-logging` builds the rest of it (the
+  audit's minimal fix — no address in the mail, invite and recovery lines, every log rotated by size — is built, inbox
+  #481, #482). The notice's log passage states what runs when it ships: with `cr-logging` landed, "ids only, rotated by
+  size"; before it, also the two paths that ADR 0092's status names (an unexpected error's URI and text, a database
+  error's message), as Run → Operations § Logs states them. This CR writes no log code; `cr-logging` writes no notice
+  text.
 
 ### Measured substrate (worktree at `a1898747`, clean)
 

@@ -40,7 +40,9 @@ import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
-import { isUnauthorized } from '../../shared/httpError'
+import { decodeHttpError, isUnauthorized } from '../../shared/httpError'
+import StepStatementFields from '../instance/StepStatementFields.vue'
+import { stepStatement, StepStatementInvalid, type StepStatementDraft } from '../instance/stepStatement'
 
 // Addressed by id (cr-0087) — the settings rail renders one panel per tenant; the tenantId watch re-loads on switch.
 const props = defineProps<{ tenantId: string }>()
@@ -137,6 +139,18 @@ function reassign() {
   return mint(() => reassignInvite(props.tenantId, email.value.trim()), 'tenant.reassigned')
 }
 
+// A suspension over content carries a statement of reasons to the tenant's owners, by mail (ADR 0093 § 7): the Server
+// Owner ticks it — the server insists when a moderator's proposal is open (`statement_required`) — and writes it.
+const overContent = ref(false)
+const draft = ref<StepStatementDraft>({ ground: 'TERMS_BREACH', provision: '', facts: '' })
+const SUSPEND_REFUSALS: Record<string, string> = {
+  statement_required: 'moderation.steps.errors.statementRequired',
+  statement_facts_required: 'moderation.steps.errors.factsRequired',
+  statement_provision_required: 'moderation.steps.errors.provisionRequired',
+  moderation_epoch_changed: 'moderation.steps.errors.epochChanged',
+  moderation_off: 'moderation.steps.errors.moderationOff',
+}
+
 // Suspend / reactivate (uc.admin.suspend-tenant). Unlike `revoke` this never leaves the panel — the tenant is
 // still there, and the Server Owner is expected to bring it back — so it reloads in place rather than routing away.
 // Suspend is confirm-gated (it locks every member out at once); reactivate is not (it only ever restores access).
@@ -152,12 +166,22 @@ async function setSuspended(suspend: boolean) {
   }
   actionError.value = ''
   try {
-    await (suspend ? suspendTenant(props.tenantId) : reactivateTenant(props.tenantId))
+    if (suspend) await suspendTenant(props.tenantId, overContent.value ? await stepStatement(draft.value) : null)
+    else await reactivateTenant(props.tenantId)
     toast.success(t(suspend ? 'tenant.suspended' : 'tenant.reactivated'))
+    overContent.value = false
+    draft.value = { ground: 'TERMS_BREACH', provision: '', facts: '' }
     await reload()
   } catch (e) {
+    if (e instanceof StepStatementInvalid) {
+      actionError.value = t('moderation.steps.errors.moderationOff')
+      return
+    }
     on401(e)
-    if (!isUnauthorized(e)) actionError.value = t('tenant.actionFailed')
+    if (isUnauthorized(e)) return
+    const { code } = await decodeHttpError(e)
+    if (code === 'statement_required') overContent.value = true
+    actionError.value = t(code && SUSPEND_REFUSALS[code] ? SUSPEND_REFUSALS[code] : 'tenant.actionFailed')
   }
 }
 
@@ -340,6 +364,14 @@ async function copyInviteLink() {
 
       <!-- The availability lever (ADR 0066), offered only on a settled tenant: a PENDING one has nothing to take
            offline — it is withdrawn with revoke instead, which is why these two states share no controls. -->
+      <template v-if="isActive">
+        <label class="tenant-over-content">
+          <input v-model="overContent" type="checkbox" class="tenant-over-content__toggle" />
+          {{ t('tenant.suspendOverContent') }}
+        </label>
+        <small class="settings-muted">{{ t('tenant.suspendOverContentHint') }}</small>
+        <StepStatementFields v-if="overContent" v-model="draft" id-prefix="tenant-statement" />
+      </template>
       <div v-if="isActive || isSuspended" class="veyq-dialog-action-row">
         <Button
           v-if="isSuspended"
@@ -351,10 +383,11 @@ async function copyInviteLink() {
         <Button
           v-else
           type="button"
-          :label="t('tenant.suspend')"
+          :label="overContent ? t('tenant.suspendSend') : t('tenant.suspend')"
           icon="pi pi-pause"
           severity="danger"
           outlined
+          class="tenant-suspend"
           @click="setSuspended(true)"
         />
       </div>

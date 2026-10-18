@@ -181,6 +181,33 @@ class StatementsSliceTest {
     }
 
     @Test
+    fun aFullFormMeasureNamesTheProvisionItReliesOnAndAReducedOneMayLeaveItOut() {
+        val mod = CaseTestKit.moderator()
+        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
+        try {
+            // Organisation: the full form requires the provision or clause (DSA Art. 17(3)(d), (e)); blank counts as none,
+            // and nothing is written.
+            mode(null)
+            val org = reported()
+            mod.take(org.caseId, "CONTENT", targetId = org.folder, provision = null).then().statusCode(400)
+                .body("code", equalTo("statement_provision_required"))
+            mod.take(org.caseId, "CONTENT", targetId = org.folder, provision = "  ").then().statusCode(400)
+                .body("code", equalTo("statement_provision_required"))
+            mod.case(org.caseId).then().body("measures.size()", equalTo(0))
+            mod.take(org.caseId, "CONTENT", targetId = org.folder, provision = "§ 86a StGB").then().statusCode(201)
+            statementsOf(org.userId).then().body("statements.find { it.caseId == '${org.caseId}' }.provision", equalTo("§ 86a StGB"))
+            assertEquals("§ 86a StGB", statementRow(org.caseId).provision)
+            // Control — private: the reduced form takes the measure without one.
+            mode("PRIVATE")
+            val priv = reported()
+            mod.take(priv.caseId, "CONTENT", targetId = priv.folder, facts = false, provision = null).then().statusCode(201)
+            statementsOf(priv.userId).then().body("statements.find { it.caseId == '${priv.caseId}' }.provision", nullValue())
+        } finally {
+            mode(before)
+        }
+    }
+
+    @Test
     fun anAffectedMemberObjectsOnceWhileTheMeasureStandsAndTheObjectionReopensTheCase() {
         val mod = CaseTestKit.moderator()
         val r = reported()

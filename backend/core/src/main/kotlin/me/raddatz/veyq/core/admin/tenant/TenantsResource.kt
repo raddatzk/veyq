@@ -35,6 +35,8 @@ import me.raddatz.veyq.core.generated.model.TenantActivatedWithUser
 import me.raddatz.veyq.core.generated.model.TenantCreated
 import me.raddatz.veyq.core.generated.model.TenantInviteState
 import me.raddatz.veyq.core.generated.model.TenantStatus
+import me.raddatz.veyq.core.generated.model.SuspendTenantRequest
+import me.raddatz.veyq.core.moderation.statement.toStepInput
 import me.raddatz.veyq.core.generated.model.TenantStorage
 import me.raddatz.veyq.core.generated.model.TenantStorageFit
 import me.raddatz.veyq.core.generated.model.TenantStorageFitRequest
@@ -154,14 +156,19 @@ class TenantsResource(
     // which guards the tenant's own domain: reaching them **there** is refused like any other request, which is the
     // deliberate reading of the use-case's E1 — Server-Owner status is global, it is not a per-tenant exemption.
     // The Server Owner reactivates from the server-admin surface (ADR 0065), which is not that domain.
-    override fun suspendTenant(tenantId: UUID): Response =
-        when (val o = handler.suspend(tenantId.toString(), identity.principal.name)) {
+    override fun suspendTenant(tenantId: UUID, suspendTenantRequest: SuspendTenantRequest?): Response =
+        when (
+            val o = handler.suspend(
+                tenantId.toString(), identity.principal.name, suspendTenantRequest?.overContent ?: false,
+                suspendTenantRequest?.statement?.toStepInput(),
+            )
+        ) {
             SuspendOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 
     override fun reactivateTenant(tenantId: UUID): Response =
-        when (val o = handler.reactivate(tenantId.toString())) {
+        when (val o = handler.reactivate(tenantId.toString(), identity.principal.name)) {
             ReactivateOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }

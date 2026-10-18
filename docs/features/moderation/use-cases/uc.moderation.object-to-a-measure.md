@@ -19,7 +19,8 @@
 ## Main flow
 
 1. **The statement is sent with the measure.** The decision panel asks for the ground — one of the report categories,
-   the law or the terms — and the facts. The moderator's browser seals the facts twice: to the moderation key, for the
+   the law or the terms —, the provision of the law or the clause of the terms it relies on (a short reference in the
+   clear, "§ 86a StGB", "Space terms, clause 4"), and the facts, which explain why the content falls under it. The moderator's browser seals the facts twice: to the moderation key, for the
    log, and to each affected member's identity key, which the server lists for that measure before it is taken. The
    server records the statement with the measure, in one transaction, and refuses the measure when the sealed copies do
    not name exactly the members it would tell (`statement_recipients_changed`).
@@ -28,12 +29,14 @@
    in veyq and has no address: a guest uploader counts as *nobody can be told*.
 3. **What it says** — one template in `contracts/moderation/statement-of-reasons.json`, rendered by the server for the
    mail and by web/ on the placeholder: the measure and its reach, why the reader gets it, the facts, whether a report
-   or an order led to it, that no automated means decided, the ground, the objection, the contact address and the
-   courts. It names the host, never the moderator.
+   or an order led to it, that no automated means decided, the ground and the provision or clause it relies on, that
+   the measure applies wherever the instance is reached and lasts until it is lifted (DSA Art. 17(3)(a)), the
+   objection, the contact address and the courts. It names the host, never the moderator.
 4. **Its form follows the operating mode**, read when it is rendered (ADR 0093 § 14): *club, organisation or company*
-   — the full form, and the facts are required (`statement_facts_required`); *private* — the reduced form: the measure
-   and its reach, the ground and the objection, the facts only where the moderator wrote them, and neither the report
-   or order, the automation line nor the courts.
+   — the full form, and the facts and the provision are required (`statement_facts_required`,
+   `statement_provision_required`); *private* — the reduced form: the measure and its reach, the ground and the
+   objection, the facts and the provision only where the moderator wrote them, and neither the report or order, the
+   automation line, the territorial sentence nor the courts.
 5. **In veyq and by mail.** The member sees the statement on the placeholder of the blocked item or node and on the
    blocked link in their share list, the facts opened with their own identity key. Instance mail (ADR 0097 decision 3)
    tells each one's account address that a statement is there: the template's clear parts, never the facts; a send that
@@ -42,7 +45,10 @@
    after the decision (ADR 0093 § 4).
 7. **The reporter.** The deciding moderator's browser opens each report's sealed contact and sends the address once,
    beside the dismissal or the measure; the server mails the decision — dismissed, or a measure taken — from memory, at
-   most once per report, and logs that it did. The sealed contact goes six months after that — or, where no decision
+   most once per report, and logs that it did. The decision carries the reporter's **redress** (DSA Art. 16(5)), one
+   fixed passage of the template: that they may report again with more information, the instance contact, and — in the
+   full form only — that they may go to court and complain to the Digital Services Coordinator of the Member State
+   where they live or are established (DSA Art. 53). The sealed contact goes six months after that — or, where no decision
    could be told, six months after the case's decision; the "decision sent" event stays (ADR 0093 § 11).
 8. **The objection.** An affected member objects once per measure, in free text, on the statement: sealed in their
    browser to the moderation key's current epoch (`moderation-objection` [epoch, statementId]). It reopens the case — a
@@ -64,13 +70,23 @@
   (`objection_decided`).
 - **A5 — No instance mail.** The statement is in veyq all the same; admin-web already warns that mail is missing.
 - **A6 — No contact address** (*private* may leave it empty): the statement names none.
-- **A7 — The Server Owner's steps** (a member's sign-in, a tenant offline) carry no statement here: they are taken on
-  the admin channel without the moderation key, and a blocked member cannot sign in to read one.
+- **A7 — The Server Owner's steps over content** (a member's sign-in block, a tenant taken offline) carry a statement
+  in the same template and form (DSA Art. 17(1)(c), (d)), entered with the step in admin-web or `veyq-admin`: always
+  for a step from a case's proposal, and for a step without a case when the Server Owner says it is over content
+  (a suspension for any other reason carries none). A blocked member cannot sign in and a tenant offline cannot be
+  entered, so it goes **by mail only** — to the blocked member's account address, or to each owner of the tenant —
+  **with the facts**, the Server Owner's own words, which the server sees as it sends them and keeps only sealed to
+  the moderation key for the log (owner Q24–Q25). The objection goes to the instance contact the statement names;
+  the Server Owner lifts with the existing unblock or reactivate. The mail goes once, after the step committed: a send
+  that fails is not retried, because the server keeps no clear copy of the facts.
 
 ## Quality notes
 
-- **Operator-blind**: the facts reach the affected sealed to their identity keys, the objection reaches the moderators
-  sealed to the moderation key; the server holds both as ciphertext and mails neither (ADR 0049).
+- **Operator-blind**: the facts of a moderator's measure reach the affected sealed to their identity keys, the
+  objection reaches the moderators sealed to the moderation key; the server holds both as ciphertext and mails neither
+  (ADR 0049). The one exception is the Server Owner's own step (A7): its facts are the Server Owner's own words, which
+  the server reads as it mails them — a consented disclosure by their author (ADR 0049 decision 2) — and stores only
+  sealed.
 - **Separation of duties binds a team, not the host** (ADR 0099 § 5): the Server Owner owns the roster.
 - **A case closes** only when its last hold ended and no objection is open (ADR 0093 § 11).
 

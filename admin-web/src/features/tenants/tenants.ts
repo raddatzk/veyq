@@ -7,6 +7,7 @@
 import { tenantsApi } from '../../api/client'
 import { decodeHttpError } from '../../shared/httpError'
 import type { TenantCreated, TenantDeletion, TenantInviteState, TenantSummary } from '../../api/generated/tenants'
+import type { ServerOwnerStatementInput } from '../instance/stepStatement'
 
 export type { TenantSummary, TenantInviteState, TenantCreated, TenantDeletion } from '../../api/generated/tenants'
 
@@ -48,8 +49,13 @@ export function revokeTenant(tenantId: string): Promise<void> {
  *  content row or session is touched. While suspended its members are refused on every operation acting on it,
  *  from any domain, and its own domain refuses every API call (uc.spaces.scope-access).
  *  409 `tenant_not_active` if it isn't ACTIVE. */
-export function suspendTenant(tenantId: string): Promise<void> {
-  return tenantsApi().suspendTenant({ tenantId })
+/**
+ * Take a tenant offline (ADR 0066). Over content it carries its `statement` (ADR 0093 § 7, `stepStatement.ts`), mailed
+ * with the facts to the tenant's owners; a suspension for any other reason sends none. A moderator's open proposal makes
+ * it over content: the server then refuses it without one (`400 statement_required`).
+ */
+export function suspendTenant(tenantId: string, statement?: ServerOwnerStatementInput | null): Promise<void> {
+  return tenantsApi().suspendTenant({ tenantId, suspendTenantRequest: statement ? { overContent: true, statement } : undefined })
 }
 
 /** Bring a SUSPENDED tenant back to ACTIVE. 409 `tenant_not_suspended` if it isn't suspended. */

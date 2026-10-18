@@ -41,7 +41,10 @@ at most, never a secret), the config-secret key being generated or unreadable, b
 that could not be sent. **What it does not log:** content, names, email addresses, client addresses, keys, tokens and
 the links that carry them. A mail that could not be sent is logged by its kind and the mail server's reply code, not
 by its recipient; a new tenant's invitation that falls back to the copy link is logged by the tenant's id. An
-operator who needs to know whose mail it was looks the account or the tenant up by that id.
+operator who needs to know whose mail it was looks the account or the tenant up by that id. Two paths can still name a
+person until a later release closes them: an unexpected server error is logged with the request's path, its query and
+the error's full text, and a database write that fails is logged with the database's message, which for a sign-up
+colliding with an existing account names that email address.
 
 What each source holds:
 
