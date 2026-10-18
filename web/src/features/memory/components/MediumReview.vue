@@ -40,7 +40,7 @@ async function open(blobId: string): Promise<Uint8Array | null> {
   const review = activeReview()
   const key = keyOf(blobId)
   if (!review || !key) return null
-  return openBlobWithKey(key, await review.chunkUrls(blobId))
+  return openBlobWithKey(key, () => review.chunkUrls(blobId))
 }
 
 onMounted(async () => {

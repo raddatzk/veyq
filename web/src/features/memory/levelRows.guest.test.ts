@@ -16,7 +16,7 @@ vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('./api', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store/c0']) }))
-vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobFromUrls: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
+vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobVia: vi.fn(async (_s: unknown, _k: unknown, _r: unknown, presign: (o: object) => Promise<string[]>) => (await presign({}), new Uint8Array([1, 2, 3]))) }))
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), openShareGrid: vi.fn() }))
 
 import { memoryRows } from './levelRows'
@@ -26,7 +26,7 @@ import { sealName, wrapContentKey, type TreeNode } from '../../core/node/tree'
 import { guestTreeSource } from '../../core/sharing/guestAccess'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
-import { openBlobFromUrls } from '../../core/blob/transport'
+import { openBlobVia } from '../../core/blob/transport'
 import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated/sharing'
 import { MEMORY_KIND } from './kinds'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
@@ -113,7 +113,7 @@ afterEach(() => {
 beforeEach(() => {
   authenticatedCalls.length = 0
   vi.mocked(shareChunkUrls).mockClear()
-  vi.mocked(openBlobFromUrls).mockClear()
+  vi.mocked(openBlobVia).mockClear()
   vi.mocked(openShareGrid).mockReset().mockResolvedValue(new Uint8Array([4, 5, 6]))
   stubApi(publicShareMediaApi, {
     listShareMedia: {

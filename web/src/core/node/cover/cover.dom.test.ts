@@ -23,7 +23,7 @@ vi.mock('../../../api/client', async (orig) => (await import('../../../test/gues
 vi.mock('../../favorites/favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn(), resealFavoritesUnderNewMasterKey: vi.fn() }))
 vi.mock('../../../app/vault', () => ({ masterKey: vi.fn() }))
 vi.mock('../../../features/depot/api', () => ({ filesApi: vi.fn() }))
-vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(), openBlobFromUrls: vi.fn() }))
+vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(), openBlobVia: vi.fn() }))
 vi.mock('../../sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/c0']) }))
 vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 
@@ -32,7 +32,7 @@ import { childrenOf } from '../browse'
 import { FOLDER_KIND } from '../kind'
 import type { TreeNode } from '../tree'
 import { clearUploads } from '../../blob/queue'
-import { openBlob, openBlobFromUrls } from '../../blob/transport'
+import { openBlob, openBlobVia } from '../../blob/transport'
 import { shareChunkUrls } from '../../sharing/guestBlob'
 import { uploadCoverImage, writeNodeCover } from './coverWrite'
 import { uploadedCover } from './coverModel'
@@ -116,7 +116,8 @@ beforeEach(() => {
   TREE = [TRIPS, ROME, PLAN, BOX, SUB]
   Object.assign(URL, { createObjectURL: vi.fn(() => `blob:cover-${++n}`), revokeObjectURL: vi.fn() })
   vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
-  vi.mocked(openBlobFromUrls).mockResolvedValue(new Uint8Array([4, 5, 6]))
+  // like the real one, it asks its presign (the link's gated read) before it reads
+  vi.mocked(openBlobVia).mockImplementation(async (_s, _k, _r, presign) => (await presign({}), new Uint8Array([4, 5, 6])))
   vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id } })
   vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 5, replaced: null })
   stubApi(filesApi, { listFiles: { items: [] } satisfies FileListPage })

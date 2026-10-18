@@ -22,6 +22,7 @@ import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
+import { GETS_IN_FLIGHT, PRESIGN_BATCH_MAX } from '../../../core/blob/readScheduler'
 import { sealMemoryDate, unsealMemoryDate, type MemoryDate } from '../memoryDate'
 import { unsealMemoryLocation, type MemoryLocation } from '../memoryLocation'
 import { sealNodeMeta } from '../../../core/node/nodeMeta'
@@ -354,6 +355,51 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     expect(wrapper.find('.media-lightbox').exists()).toBe(true)
   })
+})
+
+// inbox #488: a Chapter of many photos used to send one presign POST per tile and every GET at once, which Chromium
+// refused past ~1,000 (`ERR_INSUFFICIENT_RESOURCES`) — and a refused tile shimmered forever. Through the real
+// transport and its read scheduler: batched presigns, a bounded number of GETs, and a tile that cannot be read shown as
+// such.
+describe('MemoryDetail (a Chapter of many photos, inbox #488)', () => {
+  it('asks its presigns in contract-sized batches, never has more GETs in flight than the cap, and shows a tile it could not read', async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const count = PRESIGN_BATCH_MAX + 44
+    for (let i = 0; i < count; i++) {
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([i & 0xff, i >> 8])]), mediaType: 'image/png' }, stubDeriver())
+    }
+    const thumbnailUrls = new Set(store.media.map((m) => `mem://${m.derivatives.find((d) => d.kind === 'THUMBNAIL')!.uploadId}/0`))
+    const broken = [...thumbnailUrls][0]
+    store.objects.delete(broken) // the store answers 404 for this one tile: final, no retry
+    const inFlight = { now: 0, max: 0 }
+    const gets: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      gets.push(url)
+      inFlight.max = Math.max(inFlight.max, ++inFlight.now)
+      try {
+        await new Promise((r) => setTimeout(r, 1))
+        return await store.fetchStub(url, init)
+      } finally {
+        inFlight.now--
+      }
+    })
+    store.blob.presignBlobDownloads.mockClear()
+
+    const wrapper = mountDetail(memoryKey)
+    await vi.waitFor(() => expect(wrapper.findAll('.media-tile img').length + wrapper.findAll('.media-tile-failed').length).toBe(count), { timeout: 20_000 })
+
+    const batches = store.blob.presignBlobDownloads.mock.calls.map(([r]) => r.blobDownloadsBatchRequest.items.length)
+    expect(batches).toEqual([PRESIGN_BATCH_MAX, 44]) // was one POST per tile
+    expect(inFlight.max).toBeLessThanOrEqual(GETS_IN_FLIGHT)
+    expect(inFlight.max).toBeGreaterThan(1)
+    expect(gets.filter((u) => thumbnailUrls.has(u)).length).toBe(count) // every thumbnail once; the 404 not retried
+    expect(wrapper.findAll('.media-tile-failed')).toHaveLength(1)
+    expect(wrapper.find('.media-tile-failed').text()).toBe(t('media.thumbnailFailed'))
+  }, 30_000)
 })
 
 describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () => {

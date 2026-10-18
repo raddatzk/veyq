@@ -37,13 +37,14 @@ import {
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
 import { createGuestIdentity, identityNameContext, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import { guestReserve, guestWindow, shareChunkUrls, type GuestUploadTarget } from '../../core/sharing/guestBlob'
+import type { ReadOpts } from '../../core/blob/readScheduler'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { EpochKeys } from '../spaces/epochs'
 import {
   gridRef,
   lightboxRef,
   downloadRef,
-  openBlobFromUrls,
+  openBlobVia,
   makeChunkProvider,
   uploadMediaVia,
   createBrowserDeriver,
@@ -412,10 +413,10 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
 }
 
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_node`.
- *  A password-protected share needs the same guest token (cr-0118) as the resolve. */
-async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): Promise<Uint8Array> {
-  const getUrls = await shareChunkUrls(shareId, ref.blobId, pwToken) // a moderator's review: the held object (core/sharing/review.ts)
-  return openBlobFromUrls(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, getUrls)
+ *  A password-protected share needs the same guest token (cr-0118) as the resolve. A moderator's review presigns the
+ *  held object instead (`core/sharing/review.ts`). */
+async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string, opts: ReadOpts = {}): Promise<Uint8Array> {
+  return openBlobVia(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, (o) => shareChunkUrls(shareId, ref.blobId, pwToken, o), opts)
 }
 
 /**
@@ -427,8 +428,10 @@ export function shareChunkProvider(shareId: string, si: ShareItem, ref: BlobRef,
   return makeChunkProvider(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, () => shareChunkUrls(shareId, ref.blobId, pwToken))
 }
 
-/** Open a shared media's grid (thumbnail) tier. */
-export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, gridRef(si.item), pwToken)
+/** Open a shared media's grid (thumbnail) tier — a grid's bulk read (`readScheduler.ts`), dropped while it waits once
+ *  `signal` aborts. */
+export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string, signal?: AbortSignal) =>
+  openShareBlob(shareId, si, gridRef(si.item), pwToken, { lane: 'bulk', signal })
 /** Open a shared media's lightbox (preview) tier. */
 export const openShareLightbox = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, lightboxRef(si.item), pwToken)
 /** Open a shared media's pristine original (download). */

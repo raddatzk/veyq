@@ -11,8 +11,10 @@ import {
   authedWindow,
   windowPuts,
   openBlob,
+  openBlobVia,
   makeChunkProvider,
 } from './transport'
+import { PresignExpired, readScheduler } from './readScheduler'
 import { blobApi } from '../../api/client'
 import type { BlobApi, BlobUploadRequestItem, PresignedUrl } from '../../api/generated/blob'
 import { PLAINTEXT_CHUNK_SIZE } from '../../sw/range'
@@ -63,13 +65,16 @@ function fakeBlobStore(window = Number.POSITIVE_INFINITY) {
         return { presignedPuts: putsOf(uploadId, fromChunk!, sessions.get(uploadId)!.chunkCount), error: null }
       }),
     })),
-    presignBlobDownloads: vi.fn<BlobApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }) => {
-      const uploadId = uploadOfBlob.get(blobDownloadsBatchRequest.items[0].blobId)!
-      const { chunkCount } = sessions.get(uploadId)!
-      // served last-first: the read side orders by the declared index, not by arrival
-      const gets = Array.from({ length: chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` })).reverse()
-      return { results: [{ presignedGets: gets, error: null }] }
-    }),
+    presignBlobDownloads: vi.fn<BlobApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }) => ({
+      // one result per asked blob, in order (the reads are batched, inbox #488)
+      results: blobDownloadsBatchRequest.items.map(({ blobId }) => {
+        const uploadId = uploadOfBlob.get(blobId)!
+        const { chunkCount } = sessions.get(uploadId)!
+        // served last-first: the read side orders by the declared index, not by arrival
+        const gets = Array.from({ length: chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` })).reverse()
+        return { presignedGets: gets, error: null }
+      }),
+    })),
   })
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') {
@@ -245,6 +250,68 @@ describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR
     const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAdvancing)
     expect(Array.from(await p.getPlaintextChunk(1))).toEqual(Array.from([2, 2]))
     expect(presignAdvancing).toHaveBeenCalledTimes(2) // initial presign (403) → re-presign → retry succeeds
+  })
+
+  // --- the whole-blob read through the scheduler (inbox #488) ---
+
+  /** A store where `deny(slot, index)` decides which presign generation's URL for which chunk answers 403 / 404. */
+  function sealedStore(frames: Uint8Array[], deny: (slot: number, index: number) => number | null) {
+    const fetched: string[] = []
+    const fetchStub = vi.fn(async (url: string) => {
+      fetched.push(url)
+      const m = /^slot\/(\d+)\/(\d+)$/.exec(url)!
+      const status = deny(Number(m[1]), Number(m[2]))
+      if (status) return { ok: false, status } as Response
+      return { ok: true, status: 200, arrayBuffer: async () => frames[Number(m[2])].buffer } as unknown as Response
+    })
+    let slot = 0
+    const presign = vi.fn(async () => {
+      const urls = frames.map((_, i) => `slot/${slot}/${i}`)
+      slot++
+      return urls
+    })
+    return { fetchStub, presign, fetched }
+  }
+
+  it('openBlobVia re-presigns after a store 403 and fetches only the chunks still missing', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { frames, ref } = buildBlob(memoryKey, [new Uint8Array([1]), new Uint8Array([2]), new Uint8Array([3])])
+    const { fetchStub, presign, fetched } = sealedStore(frames, (slot, i) => (slot === 0 && i === 1 ? 403 : null))
+    vi.stubGlobal('fetch', fetchStub)
+    expect(Array.from(await openBlobVia(SCOPE_ID, memoryKey, ref, presign))).toEqual([1, 2, 3])
+    expect(presign).toHaveBeenCalledTimes(2)
+    expect([...fetched].sort()).toEqual(['slot/0/0', 'slot/0/1', 'slot/0/2', 'slot/1/1'])
+  })
+
+  it('openBlobVia re-presigns a URL that aged past its TTL in the queue, without sending it', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { frames, ref } = buildBlob(memoryKey, [new Uint8Array([4]), new Uint8Array([5])])
+    const { fetchStub, presign, fetched } = sealedStore(frames, () => null)
+    vi.stubGlobal('fetch', fetchStub)
+    const real = readScheduler.getChunk
+    const spy = vi.spyOn(readScheduler, 'getChunk').mockImplementation((url, opts) =>
+      url === 'slot/0/0' ? Promise.reject(new PresignExpired()) : real(url, opts))
+    try {
+      expect(Array.from(await openBlobVia(SCOPE_ID, memoryKey, ref, presign))).toEqual([4, 5])
+    } finally {
+      spy.mockRestore()
+    }
+    expect(presign).toHaveBeenCalledTimes(2)
+    expect([...fetched].sort()).toEqual(['slot/0/1', 'slot/1/0'])
+  })
+
+  it('openBlobVia gives up after two re-presigns of a URL the store keeps refusing, and never re-presigns a 404', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { frames, ref } = buildBlob(memoryKey, [new Uint8Array([6])])
+    const always403 = sealedStore(frames, () => 403)
+    vi.stubGlobal('fetch', always403.fetchStub)
+    await expect(openBlobVia(SCOPE_ID, memoryKey, ref, always403.presign)).rejects.toThrow('chunk_get_failed:403')
+    expect(always403.presign).toHaveBeenCalledTimes(3) // the first presign + two renewals
+
+    const gone = sealedStore(frames, () => 404)
+    vi.stubGlobal('fetch', gone.fetchStub)
+    await expect(openBlobVia(SCOPE_ID, memoryKey, ref, gone.presign)).rejects.toThrow('chunk_get_failed:404')
+    expect(gone.presign).toHaveBeenCalledTimes(1)
   })
 
   it('rejects an out-of-range chunk index without touching the store', async () => {

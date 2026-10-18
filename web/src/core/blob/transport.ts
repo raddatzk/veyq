@@ -16,6 +16,7 @@ import type { PresignedUrl } from '../../api/generated/blob'
 import type { ChunkProvider } from '../../sw/protocol'
 import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, BlobSource, ChunkPut, ReservedUpload, WindowFn } from './types'
 import { openBlobMetaOf, type BlobMeta, type OpenedBlobMeta } from './meta'
+import { PRESIGN_BATCH_MAX, PRESIGN_REFRESH_MS, PresignExpired, readScheduler, type Presigned, type ReadOpts } from './readScheduler'
 
 /**
  * Every `K_blob` wrap is bound to the object it is stored as (ADR 0072): (scope, owner, blob, role). A server that
@@ -209,48 +210,100 @@ export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: s
 }
 
 // --- read-back -------------------------------------------------------------
+//
+// Every read goes through the page's read scheduler (`readScheduler.ts`, inbox #488): presigns batched and bounded,
+// chunk GETs bounded and retried, a URL that expired before its GET re-presigned. Who presigns differs — the member's
+// scope READ gate, a guest's link, a moderator's hold — and is the `PresignUrls` a reader hands in.
+
+/** A blob's presigned per-chunk GET URLs, in chunk order, scheduled as `opts` says. */
+export type PresignUrls = (opts: ReadOpts) => Promise<string[]>
+
+/** How often one read re-presigns its blob after an expired URL (a store `403`, or one that aged in the queue) before
+ *  it fails: twice covers a queue that outlived one TTL and a clock skew on top. */
+const MAX_RENEWS = 2
+
+/** Whether a chunk GET failed because its URL expired: the store's `403`, or [PresignExpired] before it was sent. */
+function isExpiredPresign(e: unknown): boolean {
+  return e instanceof PresignExpired || chunkGetStatus(e) === HttpStatus.forbidden
+}
 
 /**
- * Open a blob from a set of **already-presigned** per-chunk GET URLs: unwrap its `K_blob` under `key`, fetch the
- * ciphertext frames direct-from-store, and `openFrame` them back to plaintext (the AAD position check still
- * applies). Shared by the authed [openBlob] and an anonymous share viewer (presign via the gated share endpoint,
- * cr-0100) — the decrypt is identical; only who presigns differs.
+ * Fetch every ciphertext frame of a blob: presign, GET each chunk through the scheduler, and on an expired URL
+ * re-presign and fetch only the chunks still missing, at most [MAX_RENEWS] times. Any other failure is final (a
+ * transient one was already retried by the scheduler).
  */
+async function readFrames(presign: PresignUrls, opts: ReadOpts): Promise<Uint8Array[]> {
+  let urls = await presign(opts)
+  let issuedAt = readScheduler.now()
+  const frames: (Uint8Array | undefined)[] = new Array<Uint8Array | undefined>(urls.length)
+  for (let renews = 0; ; renews++) {
+    const settled = await Promise.allSettled(
+      urls.map((url, i) => frames[i] ?? readScheduler.getChunk(url, { ...opts, issuedAt }).then((frame) => (frames[i] = frame))),
+    )
+    const failures = settled.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []))
+    if (failures.length === 0) return frames as Uint8Array[]
+    const final = failures.find((e) => !isExpiredPresign(e))
+    if (final !== undefined) throw final
+    if (renews >= MAX_RENEWS) throw failures[0]
+    urls = await presign(opts)
+    issuedAt = readScheduler.now()
+    if (urls.length !== frames.length) throw new Error('store_unavailable')
+  }
+}
+
 /**
  * Open a blob whose `K_blob` the caller already holds — a moderator's review of a reported medium, whose report share
  * hands over each blob's key itself rather than the key it is wrapped under (uc.moderation.review-a-case).
  */
-export async function openBlobWithKey(blobKey: Uint8Array, getUrls: string[]): Promise<Uint8Array> {
-  const frames = await Promise.all(getUrls.map((url) => getChunk(url)))
+export async function openBlobWithKey(blobKey: Uint8Array, presign: PresignUrls, opts: ReadOpts = {}): Promise<Uint8Array> {
+  const frames = await readFrames(presign, opts)
   return v1.concat(...frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame)))
 }
 
-export async function openBlobFromUrls(scopeId: string, key: Uint8Array, ref: BlobRef, getUrls: string[]): Promise<Uint8Array> {
+/**
+ * Open a blob through any presign: unwrap its `K_blob` under `key` (synchronously — a ref that is not this owner's
+ * throws `OpenRefused` before anything is fetched), fetch the ciphertext frames direct-from-store, and `openFrame` them
+ * back to plaintext (the AAD position check still applies). Shared by the authed [openBlob] and an anonymous share
+ * viewer (presign via the gated share endpoint, cr-0100) — the decrypt is identical; only who presigns differs.
+ */
+export async function openBlobVia(scopeId: string, key: Uint8Array, ref: BlobRef, presign: PresignUrls, opts: ReadOpts = {}): Promise<Uint8Array> {
   const blobKey = unwrapBlobKey(scopeId, key, ref)
-  const frames = await Promise.all(getUrls.map((url) => getChunk(url)))
-  const chunks = frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame))
-  return v1.concat(...chunks)
+  return openBlobWithKey(blobKey, presign, opts)
+}
+
+/** The member's batched presign per scope: ids asked together travel in one `blob-downloads-batch` call. */
+const memberPresigners = new Map<string, (blobId: string, opts?: ReadOpts) => Promise<Presigned>>()
+function memberPresigner(scopeId: string) {
+  let presigner = memberPresigners.get(scopeId)
+  if (!presigner) {
+    presigner = readScheduler.batcher(async (blobIds) => {
+      const presigned = await withRefresh(() =>
+        blobApi().presignBlobDownloads({ scopeId, blobDownloadsBatchRequest: { items: blobIds.map((blobId) => ({ blobId })) } }),
+      )
+      return presigned.results.map((d) =>
+        !d || d.error || !d.presignedGets ? new Error(d?.error ?? 'store_unavailable') : byIndex(d.presignedGets),
+      )
+    }, PRESIGN_BATCH_MAX)
+    memberPresigners.set(scopeId, presigner)
+  }
+  return presigner
 }
 
 /**
  * Presign GETs for **every** chunk of a blob — the whole-blob presign the authed read paths share (the batch
- * endpoint is whole-blob only; there is no per-chunk presign). Returned as URLs ordered by chunk index.
+ * endpoint is whole-blob only; there is no per-chunk presign). Returned as URLs ordered by chunk index. Batched with
+ * every other blob of the scope asked at the same time (the contract's `maxItems` per call).
  */
-export async function presignAllChunks(scopeId: string, blobId: string): Promise<string[]> {
-  const presigned = await withRefresh(() =>
-    blobApi().presignBlobDownloads({ scopeId, blobDownloadsBatchRequest: { items: [{ blobId }] } }),
-  )
-  const d = presigned.results[0]
-  if (!d || d.error || !d.presignedGets) throw new Error(d?.error ?? 'store_unavailable')
-  return byIndex(d.presignedGets)
+export async function presignAllChunks(scopeId: string, blobId: string, opts: ReadOpts = {}): Promise<string[]> {
+  return (await memberPresigner(scopeId)(blobId, opts)).urls
 }
 
 /**
  * Open a blob: unwrap its `K_blob` under `key`, presign the chunk GETs, fetch the ciphertext frames
  * direct-from-store, and `openFrame` them back to plaintext (the AAD position check still applies).
  */
-export async function openBlob(scopeId: string, key: Uint8Array, ref: BlobRef): Promise<Uint8Array> {
-  return openBlobFromUrls(scopeId, key, ref, await presignAllChunks(scopeId, ref.blobId))
+export async function openBlob(scopeId: string, key: Uint8Array, ref: BlobRef, opts: ReadOpts = {}): Promise<Uint8Array> {
+  return openBlobVia(scopeId, key, ref, (o) => presignAllChunks(scopeId, ref.blobId, o), opts)
 }
 
 // --- range streaming: the page-side chunk provider (ADR 0047) ---------------
@@ -260,10 +313,7 @@ export async function openBlob(scopeId: string, key: Uint8Array, ref: BlobRef): 
 // page-side seam — a per-blob source of plaintext chunks over the same presign→openFrame plumbing the whole-blob read
 // paths use. K_blob and the auth context never leave the page.
 
-/** Re-presign a little before the backend's 600 s TTL (`application.properties`) so a long playback never races expiry. */
-const PRESIGN_REFRESH_MS = 9 * 60 * 1000
-
-/** Parse the HTTP status out of a {@link getChunk} failure (`chunk_get_failed:<status>`), or undefined if not one. */
+/** Parse the HTTP status out of a chunk GET failure (`readScheduler.getChunk`: `chunk_get_failed:<status>`), or undefined if not one. */
 function chunkGetStatus(e: unknown): number | undefined {
   const m = e instanceof Error ? /^chunk_get_failed:(\d+)$/.exec(e.message) : null
   return m ? Number(m[1]) : undefined
@@ -318,11 +368,11 @@ export function makeChunkProvider(
       let all = await freshUrls(false)
       let frame: Uint8Array
       try {
-        frame = await getChunk(all[index])
+        frame = await readScheduler.getChunk(all[index], { issuedAt })
       } catch (e) {
-        if (chunkGetStatus(e) !== HttpStatus.forbidden) throw e
+        if (!isExpiredPresign(e)) throw e
         all = await freshUrls(true) // presign expired → re-presign the WHOLE blob, retry the one chunk once
-        frame = await getChunk(all[index])
+        frame = await readScheduler.getChunk(all[index], { issuedAt })
       }
       // AAD trap (load-bearing): `total` is the WHOLE blob's chunkCount, never the streamed range subset —
       // openFrame binds `index‖total` (v1.ts), so a subset `total` fails every open. See the CR Slice-2 §5b.
@@ -353,8 +403,3 @@ function chunkPutStatus(e: unknown): number | undefined {
   return m ? Number(m[1]) : undefined
 }
 
-async function getChunk(url: string): Promise<Uint8Array> {
-  const res = await fetch(url, { method: 'GET' })
-  if (!res.ok) throw new Error(`chunk_get_failed:${res.status}`)
-  return new Uint8Array(await res.arrayBuffer())
-}

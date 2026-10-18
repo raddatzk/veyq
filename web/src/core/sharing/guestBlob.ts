@@ -8,6 +8,7 @@
 // (`features/memory/uploadWire.characterisation.test.ts`), which held unchanged across the merge.
 import { publicSharesApi } from '../../api/client'
 import { windowPuts } from '../blob/transport'
+import { readScheduler, type Presigned, type ReadOpts } from '../blob/readScheduler'
 import type { BlobDeclare, ReservedUpload, WindowFn } from '../blob/types'
 import { activeReview } from './review'
 
@@ -44,12 +45,27 @@ export function guestWindow(t: GuestUploadTarget): WindowFn {
   }
 }
 
+/** The link's presign per (link, password token). `resolveShareBlob` takes one blob per call, so its batches are of one:
+ *  the scheduler still bounds how many are in flight, retries a transient failure and puts a lightbox before a grid. */
+const sharePresigners = new Map<string, (blobId: string, opts?: ReadOpts) => Promise<Presigned>>()
+function sharePresigner(shareId: string, pwToken: string | undefined) {
+  const key = `${shareId}\u0000${pwToken ?? ''}`
+  let presigner = sharePresigners.get(key)
+  if (!presigner) {
+    presigner = readScheduler.batcher(async ([blobId]) => {
+      const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId, xSharePassword: pwToken })
+      return [[...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)]
+    }, 1)
+    sharePresigners.set(key, presigner)
+  }
+  return presigner
+}
+
 /** The presigned GET of every chunk of `blobId` under the link (`resolveShareBlob`), in chunk order. A blob outside the
  *  live shared subtree — a file in the trash included — is the server's `404`. */
-export async function shareChunkUrls(shareId: string, blobId: string, pwToken?: string): Promise<string[]> {
+export async function shareChunkUrls(shareId: string, blobId: string, pwToken?: string, opts?: ReadOpts): Promise<string[]> {
   // A moderator's review reads the held, pinned object instead — never the link's own read (`./review.ts`).
   const review = activeReview()
   if (review) return review.chunkUrls(blobId)
-  const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId, xSharePassword: pwToken })
-  return [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
+  return (await sharePresigner(shareId, pwToken)(blobId, opts)).urls
 }
