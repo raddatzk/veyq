@@ -14,7 +14,8 @@ import java.util.UUID
  * shares, and every decision (uc.moderation.review-a-case, uc.moderation.take-a-measure). [MEASURE_TAKEN] and
  * [MEASURE_LIFTED] name the measure's kind in `reason` and its target in `target_id`; a member's sign-in block taken on no
  * case is the one of them written with no case id. The statement of reasons and the objection (ADR 0093 § 7,
- * uc.moderation.object-to-a-measure): [STATEMENT_SENT] (the ground, the statement), [DECISION_SENT] (a reporter told —
+ * uc.moderation.object-to-a-measure): [STATEMENT_SENT] (the ground, the statement), [RECEIPT_SENT] (a reporter's receipt
+ * mailed, the report), [DECISION_SENT] (a reporter told —
  * DISMISSED or DECIDED, the report), [OBJECTION_RECEIVED] (the objector, the objection), and [OBJECTION_DECIDED] or —
  * the decider alone — [OBJECTION_SELF_REVIEWED] (the outcome, the objection). An authority (ADR 0093 §§ 12-13,
  * uc.moderation.authority-order, uc.moderation.report-to-an-authority): [ORDER_RECEIVED] (the order's kind and id — with
@@ -24,7 +25,7 @@ import java.util.UUID
 enum class ModerationEvent {
     APPOINTED, ACCEPTED, DELIVERED, REMOVED, STEPPED_DOWN, IDENTITY_ROTATED, EPOCH_MINTED,
     RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN,
-    PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED,
+    PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, RECEIPT_SENT, DECISION_SENT, OBJECTION_RECEIVED,
     OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN,
 }
 
@@ -36,8 +37,10 @@ enum class ModerationEvent {
  *
  * **Retention.** An event is kept to 31 December of the third year after the later of its own time and the removal of
  * the moderator it concerns. While that moderator is on the roster the date is open (`expires_at` NULL); [closeFor]
- * sets it on their removal, and an event about an account that is not on the roster gets it as it is written.
- * [ModerationPurge] deletes what has expired.
+ * sets it on their removal, and an event about an account that is not on the roster gets it as it is written. A case's
+ * event is kept to 31 December of the third year after the later of its own time and the case's close ([closeCase]).
+ * [purgeExpired] deletes the instance events that have expired; **a case's events go with the case**, all its records
+ * at once, by [ModerationRecordsPurge] — one date, one path, and never while a measure of the case is in force.
  */
 @ApplicationScoped
 class ModerationLog {
@@ -51,6 +54,7 @@ class ModerationLog {
         reason: String? = null,
         sealedText: String? = null,
         targetId: String? = null,
+        datedFrom: Instant? = null,
     ) {
         ModerationEventEntity().apply {
             id = UUID.randomUUID().toString()
@@ -62,8 +66,10 @@ class ModerationLog {
             this.reason = reason
             this.sealedText = sealedText
             this.targetId = targetId
-            val onRoster = moderatorId?.let { ModeratorEntity.findById(it)?.onRoster } == true
-            expiresAt = if (onRoster) null else retentionEnd(at)
+            // [datedFrom]: an event that records something of its own rather than a moderator (an order that opened no
+            // case) is dated from it, whoever entered it.
+            val onRoster = datedFrom == null && moderatorId?.let { ModeratorEntity.findById(it)?.onRoster } == true
+            expiresAt = if (onRoster) null else retentionEnd(datedFrom ?: at)
         }.persist()
     }
 
@@ -126,8 +132,8 @@ class ModerationLog {
         }
     }
 
-    /** Delete every event whose date has passed. */
-    fun purgeExpired(now: Instant): Long = ModerationEventEntity.delete("expiresAt < ?1", now)
+    /** Delete every instance event whose date has passed; a case's events go with their case ([ModerationRecordsPurge]). */
+    fun purgeExpired(now: Instant): Long = ModerationEventEntity.delete("caseId is null and expiresAt < ?1", now)
 
     companion object {
         /**

@@ -1,6 +1,10 @@
 package me.raddatz.veyq.core.moderation.report
 
 import me.raddatz.veyq.core.admin.instance.InstanceNoticeMailer
+import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.moderation.ModerationEvent
+import me.raddatz.veyq.core.moderation.ModerationLog
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
 import java.time.Instant
@@ -13,13 +17,15 @@ import java.time.format.DateTimeFormatter
  * address they gave (owner decision Q6, ADR 0097 decision 3, DSA Art. 16(4)) — sent once from memory and stored nowhere
  * (the report keeps it only sealed), bounded per address ([ReportRateLimiter.allowReceipt]) so the route mails no
  * address on request. A mail that fails costs the reporter nothing: the report is stored, and the dialog shows the
- * reference and the time either way. Nothing here logs an address (ADR 0092 § 1).
+ * reference and the time either way. A receipt that went out is a `RECEIPT_SENT` event on each case of the report —
+ * the proof that stays once the sealed contact went (ADR 0093 § 11). Nothing here logs an address (ADR 0092 § 1).
  */
 @ApplicationScoped
 class ReportReceived(
     private val notices: CaseNotices,
     private val mailer: InstanceNoticeMailer,
     private val limiter: ReportRateLimiter,
+    private val moderationLog: ModerationLog,
 ) {
     private val log = Logger.getLogger(ReportReceived::class.java)
 
@@ -28,8 +34,14 @@ class ReportReceived(
             runCatching { notices.mailUrgent() }.onFailure { log.warn("the urgent new-case mail failed; the hourly cleanup retries it") }
         }
         if (receiptAddress != null && limiter.allowReceipt(receiptAddress)) {
-            runCatching { mailer.mailTo(receiptAddress, RECEIPT_SUBJECT, receiptBody(received.reportId, received.receivedAt), "a report's receipt") }
-                .onFailure { log.warn("a report's receipt could not be mailed") }
+            runCatching {
+                val sent = mailer.mailTo(receiptAddress, RECEIPT_SUBJECT, receiptBody(received.reportId, received.receivedAt), "a report's receipt")
+                if (sent == DeliveryResult.SENT) {
+                    QuarkusTransaction.requiringNew().run {
+                        received.cases.forEach { moderationLog.appendCase(ModerationEvent.RECEIPT_SENT, Instant.now(), it.caseId, targetId = received.reportId) }
+                    }
+                }
+            }.onFailure { log.warn("a report's receipt could not be mailed") }
         }
     }
 

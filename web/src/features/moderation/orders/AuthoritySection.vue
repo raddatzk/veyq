@@ -4,7 +4,8 @@
 //   - the orders that opened it, each reference opened here and its Annex II text rendered again from it, to copy;
 //   - the report to an authority: the fields the server holds in the clear, fetched on request and laid out as a text
 //     block to copy — never a file, never content (`art18Export.ts`);
-//   - a handover recorded in the log with its reference sealed; it ends no hold (§ 184b(5) StGB waits on counsel).
+//   - a handover recorded in the log with its reference sealed; on a child-sexual-abuse case it ends the case's hold
+//     (ADR 0093 § 4, § 184b(5) StGB), and the hint and the confirmation say so — on any other it ends nothing.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -23,6 +24,8 @@ const { t, locale } = useI18n()
 const { ask } = useConfirm()
 
 const lang = computed<OrderFormLang>(() => (locale.value === 'de' ? 'de' : 'en'))
+/** Whether recording a handover ends this case's hold: a case of child sexual abuse (ADR 0093 § 4). */
+const endsHold = computed(() => props.current.category === 'CHILD_SEXUAL_ABUSE')
 const exported = ref<ModerationCaseExport | null>(null)
 const reference = ref('')
 const working = ref(false)
@@ -81,7 +84,7 @@ async function copy(key: string, text: string) {
 
 async function handover(kind: ModerationHandoverKindEnum) {
   const label = kind === 'REPORTED' ? t('moderation.authority.handedOver') : t('moderation.authority.informationGiven')
-  if (!(await ask({ header: label, message: t('moderation.authority.handoverConfirm'), acceptLabel: label, acceptIcon: 'pi pi-send' }))) return
+  if (!(await ask({ header: label, message: t(endsHold.value ? 'moderation.authority.handoverConfirmCsam' : 'moderation.authority.handoverConfirm'), acceptLabel: label, acceptIcon: 'pi pi-send' }))) return
   working.value = true
   try {
     emit('updated', await recordHandover(props.current.id, kind, reference.value))
@@ -124,7 +127,7 @@ async function handover(kind: ModerationHandoverKindEnum) {
     </template>
     <label for="moderation-handover-reference">{{ t('moderation.authority.handoverReference') }}</label>
     <input id="moderation-handover-reference" v-model="reference" class="p-inputtext moderation-handover-reference" autocomplete="off" :disabled="busy || working" />
-    <span class="veyq-form-copy">{{ t('moderation.authority.handoverHint') }}</span>
+    <span class="veyq-form-copy">{{ t(endsHold ? 'moderation.authority.handoverHintCsam' : 'moderation.authority.handoverHint') }}</span>
     <div class="veyq-action-group">
       <Button severity="secondary" class="moderation-handover-reported" icon="pi pi-send" :label="t('moderation.authority.handedOver')" :disabled="busy || working" @click="handover('REPORTED')" />
       <Button severity="secondary" class="moderation-handover-information" icon="pi pi-send" :label="t('moderation.authority.informationGiven')" :disabled="busy || working" @click="handover('INFORMATION_GIVEN')" />

@@ -1,0 +1,16 @@
+useCase: uc.admin.privacy-notice
+feature: admin
+title: Read the instance's privacy notice
+status: planned
+# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 13); the work order is cr-instance-privacy-notice.
+acceptanceCriteria:
+  - id: public-without-signing-in
+    text: The rendered notice is served without a session on every tenant host and linked from the login page, the share page, the app's footer, the invite acceptance, the report dialog and a guest's first-write notice.
+  - id: fixed-text-with-instance-values
+    text: The notice is veyq's fixed text in DE and EN, filled with the instance's current values, its passages following the switches that are on.
+  - id: a-missing-value-follows-the-mode
+    text: An unset value shows as not stated and is warned about in the organisation mode, and is absent without a warning in the private mode.
+gaps:
+  backend: "Not built: there is no privacy notice (audit 2026-10-18, A5); cr-instance-privacy-notice builds it."
+  web: "Not built: no page or link exists; cr-instance-privacy-notice builds it."
+  admin-web: "Not built: the recipients and the data-protection officer are not instance values yet; cr-instance-privacy-notice adds them."

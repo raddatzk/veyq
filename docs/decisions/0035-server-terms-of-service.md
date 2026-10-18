@@ -11,7 +11,9 @@
   rendered by the backend into every terms read and at a public page of its own, in both variants, with the gate on
   the triple ([uc.account.accept-terms](../features/account/use-cases/uc.account.accept-terms.md)). Its text is a
   **draft until a qualified legal review** and says so on every rendering; decision 6 names the gaps against the law
-  that remain.
+  that remain. Decision 8 (the instance privacy notice, GDPR
+  Art. 13) is **decided, not built** (2026-10-18, from the legal audit of that day, by the owner rule that a legal
+  duty wins; `cr-instance-privacy-notice`).
 - Date: 2026-07-10
 
 ## Context
@@ -107,7 +109,10 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    never client-supplied, written once per revision (re-accepting a recorded revision keeps its first time; accepting
    a newer revision adds a row and leaves the older ones untouched). No API serves the history, so a space owner
    cannot read it either: the operator and support read it from the database. The rows go with their tenant
-   (`ON DELETE CASCADE`); the user reference has no cascade, like the tenant profile's, so an account erasure, when it exists, must name the table. (Inbox #318
+   (`ON DELETE CASCADE`); the user reference has no cascade, like the tenant profile's, so the account erasure names the
+   table: it deletes a member's rows, and keeps them under the opaque id only while a moderation case names the account,
+   to that case's log retention date ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
+   decision 6; decided, not built). (Inbox #318
    dropped the time as unread on 2026-10-09; the owner restored it the same day as that evidence; #402 on
    2026-10-10 turned the single latest row into the history — a coordinator decision on the owner's behalf, to be
    reviewed.) The anonymous acceptance is client-only. **No
@@ -196,6 +201,32 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    *private* mode**, with no warning. Where it is set it appears, in either mode, in the operator section and on the
    login and share pages. It is public operational data, like the terms.
 
+8. **A fixed instance privacy notice, public, from the Server Owner** (GDPR Art. 13(1), (2)). Like the operator
+   section, veyq ships its text (DE+EN), nobody edits it, and it renders instance values: the controller (the provider
+   identification, 7) and the contact (ADR 0093 § 11), a data-protection officer where one is set, the supervisory
+   authority, the recipients the Server Owner names (who hosts the server, the object store and each mail relay, with
+   their country), N and B. It covers what the server processes about a person, each with its purpose, basis and
+   period: the account and its address; the session cookies and what the browser keeps; the terms acceptance history
+   (4); the moderation data about a person and a reporter's contact (ADR 0093 §§ 4, 11); the mail relays (the instance's,
+   and a space's own, which its owner sets); the object store (which, outside the bundled one, sees a browser's address
+   when it fetches); the breached-password check the browser makes, its recipient and its switch
+   (`core.breached-password`); the backups and B ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)
+   decision 8); the account erasure and what outlives it
+   ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)); the guest-write record,
+   with its right to object set apart; and the rights, with the complaint to the supervisory authority. It states what
+   the operator cannot read — content is end-to-end encrypted — as the security model holds it.
+
+   It is **public at its own address on every tenant host, with no sign-in**, because Art. 13 applies at
+   collection — the invite acceptance that births an account, the report dialog that takes a contact, a guest's
+   first write — and each of those links to it, as do the login page, the share page and the signed-in app
+   (the provider identification's footer, which the app shell gains). It is information, not consent: no gate, no
+   acceptance, and its revision moves only with its text. It is shown in both operating modes (owner question in
+   `cr-instance-privacy-notice`); in the *private* mode an empty value is simply absent and nothing warns, in the
+   other the full notice shows the gap as "not stated by this operator" and admin-web warns, as for the
+   identification. Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
+   run by default are open (ADR 0093 Still open 6 and 7); until answered the notice names the Server Owner as the
+   controller and states the check as it runs.
+
 ## Consequences
 
 - **New operator-visible surface, all public/operational:** the tenant `terms_markdown_by_locale` + `terms_revision`
@@ -221,6 +252,11 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   rendered into the terms endpoints and served publicly. A Server Owner in the *club, organisation or company* mode
   who leaves the identification empty sees a warning, not a refusal; one in the *private* mode sees nothing and gets
   the reduced section (decision 6). Both are built; decision 6 names the gaps against the law that remain.
+- **The privacy notice is a second fixed text** (8), with its own public route and endpoint, the recipients list and
+  an optional data-protection officer as new instance values, and links from every place that collects. The space
+  template's privacy clause stays the space owner's description of their space, never the operator's notice. The
+  guest-write record's Art. 13 passage is in the operator section (6) as that is built; whether it moves into the
+  notice, leaving a pointer, is an owner question of `cr-instance-privacy-notice` (recommended: one home).
 
 ## Alternatives considered
 

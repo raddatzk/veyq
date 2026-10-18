@@ -14,17 +14,25 @@
   [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)): a
   moderator's measure carries its statement in the form the operating mode sets, to its recipients in the app and by
   instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
-  measure's hold counts from the statement (§ 4); a guest is told nothing in the app (it has no account, so a guest
-  uploader counts as nobody to tell), and the Server Owner's own steps carry no statement yet. §§ 12 and 13, § 7's
+  measure's hold counts from the statement (§ 4); a guest is told nothing in the app for a moderator's measure (it
+  has no account, so a guest uploader counts as nobody to tell, DSA Art. 17(2)). Four legal gaps the audit of
+  2026-10-18 found in § 7 and § 12 are **decided, not built** (`cr-statement-legal-gaps`): the reporter's redress
+  information (DSA Art. 16(5)), a statement for the Server Owner's own steps (Art. 17(1)(c), (d)), the clause or
+  provision a ground relies on and the measure's territorial scope (Art. 17(3)(a), (d), (e)), and a guest uploader's
+  notice of a removal on an authority's order (TCO Art. 11(1)). §§ 12 and 13, § 7's
   deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
   [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):
   an order from either door blocks by id and holds to the end it sets, which no extension, lift or decision shortens;
   the authority defers a statement for six weeks, renewed once; the moderation surface exports an Art. 18 report's
-  clear fields as text, records the handover and warns before a child-sexual-abuse case opens. Two parts wait on § Legal
-  basis, Still open 1 and 2 and are not built: a child-sexual-abuse hold ending at the handover (a handover changes no
-  hold), and an authority's link to a snapshot; the order forms and the warning are drafts until a qualified review. The
-  rest is not built. Who moderates — moderators the
+  clear fields as text, records the handover and warns before a child-sexual-abuse case opens. § 4's child-sexual-abuse
+  end and § 11's retention of every moderation record are built (owner 2026-10-18, "legal duties win"; the
+  moderation-retention follow-up of inbox #462): such a case's hold ends at the recorded handover, at the latest 90 days
+  after the report, and no measure or statement moves it further; a closed case's records go with its log, never while a
+  measure of it is in force; the reporter's contact is sealed apart and goes six months after the decision was told.
+  One part waits on § Legal basis, Still open 2 and is not built: an authority's link to a snapshot; nor is a hold that
+  runs until the handover beyond 90 days (Still open 1). The order forms and the warning are drafts until a qualified
+  review. The rest is not built. Who moderates — moderators the
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
@@ -131,7 +139,7 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   On the first, the dialog says that a report without a name is expected (Art. 16(2)(c) exempts it). The exact
   location is the report's own ids.
 - **A report share is invisible and inert to everyone but the moderators.** It appears in no listing, carries no
-  `sealed_share_key`, no member can revoke it, it lives as long as its case, and the server serves it **only
+  `sealed_share_key`, no member can revoke it, it lives as long as its case's records (§ 11), and the server serves it **only
   against proof of the moderation key** (§ 2) **and to a session with the `MODERATOR` role**
   ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 2) — never to the
   client that minted it, or a reporter about to lose access would keep it. It is served regardless of what later happens to the original share (revoked, expired,
@@ -146,8 +154,9 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   to every moderator the Server Owner appoints, the Server Owner among them, and rotated into a new epoch when one leaves. The
   reporter's client seals to the public half the server publishes for that epoch (`sealTo`); a report stays sealed
   to the epoch it was made under.
-- **In the clear:** category, time, the reported ids (the hold needs them). **Sealed:** `K_report`, the reporter's
-  text, the reporter's contact, the context. A database dump opens no report.
+- **In the clear:** category, time, the reported ids (the hold needs them). **Sealed:** `K_report`, the reporter's text,
+  the context — and, apart from them, the reporter's contact (`moderation-report-contact` [epoch]), so it can go alone
+  (§ 11). A database dump opens no report.
 - **Nobody else learns of a report** until it is decided: not the creator, the uploader, the tenant owner or a member.
   Every accepted moderator is notified by mail at their account address, and the instance contact's notification
   address where one is set (§ 11;
@@ -195,7 +204,7 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   | Case open | at the decision, at the latest **90 days** after the report |
   | Case dismissed | **at once** |
   | Measure taken | **six months** after the statement of reasons is sent (§ 7; a deferred one counts from its sending, and where nobody can be told, from the decision); a lifted measure ends it with the lift |
-  | Child sexual abuse material | at the confirmed handover to the authority or on its instruction, at the latest 90 days after the report without authority contact (§ 13) |
+  | Child sexual abuse material | at the recorded handover to an authority (reported to one, or information given to one), at the latest **90 days** after the report that took the hold or made the case one of this category; a measure or a statement never moves it further, an authority's order keeps what it holds (§ 13) |
   | Terrorist-content removal order | **six months** after the block, never shorter; longer on the authority's request while a review runs (TCO Art. 6) |
   | European Preservation Order | **60 days**, 30 more when the authority extends it, and while a confirmed production order needs it (Regulation 2023/1543 Art. 11) |
   | Any other authority order | the duration it names; one that names none, six months |
@@ -203,7 +212,10 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
 - **An extension** needs a concrete reason, sealed in the moderation log (§ 11) as its own event with its own
   `expires_at`: an authority's request or order with its reference, an objection, a lawyer's letter, a lawsuit, an
   Art. 18 report in progress. Each step is at most **six months** and lapses without a new reason. No extension
-  ends a hold before the duration an authority's order sets.
+  ends a hold before the duration an authority's order sets. On a child-sexual-abuse case only an Art. 18 report in
+  progress or an authority's request extends it — keeping that content is exempt only while it serves the report
+  (§ 184b(5) StGB, L) — and the handover still ends it; the server cannot read a sealed reason, so the moderation surface
+  says so where the reason is written.
 - **At the end** the snapshot is dropped, the pins released, and the sweep catches up. The same purge that runs at
   startup (§ 10) ends an expired hold.
 
@@ -237,11 +249,27 @@ a block reaches only the reported copy.
 
 - **After a measure** the statement (DSA Art. 17) goes to the share's creator and the uploader, and to the scope
   owner on a content block. It names the measure and its reach, the facts and whether a report or an order led to
-  it, that no automated means decided, the ground (the law or the clause of the terms), and the objection and the
-  courts (Art. 17(3), L). A dismissed report is told only to the reporter. In the *private* mode (§ 14) the
+  it, that no automated means decided, the ground — its category **and the provision of the law or the clause of
+  the terms relied on**, required in the full form, with the facts explaining why the content falls under it
+  (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
+  (Art. 17(3)(a)), and the objection and the courts (Art. 17(3), L). A dismissed report is told only to the reporter. In the *private* mode (§ 14) the
   statement is **reduced**: it names the measure and its reach, the ground and the objection, and leaves out the
   rest of Art. 17(3)'s list — the facts as a required part (the moderator may still write them), whether a report
-  or an order led to it, that no automated means decided, and the courts. Who receives it does not change.
+  or an order led to it, that no automated means decided, the courts, the territorial sentence, and the provision
+  or clause as a required part (the moderator may still name it). Who receives it does not change.
+- **The Server Owner's own steps carry a statement too** where they are taken over content — a member's sign-in
+  block (Art. 17(1)(d)), a tenant taken offline or deleted (Art. 17(1)(c)) — in the same template and form, entered
+  with the step in admin-web or `veyq-admin` (a step from a case's proposal always; a step without a case, when the
+  Server Owner says it is over content). Its recipients are the blocked member, and the tenant's owners for a tenant;
+  a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
+  address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
+  moderation key for the log — and the objection goes to the instance contact (owner questions in
+  `cr-statement-legal-gaps`).
+- **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
+  report again with more information, the instance contact, that they may go to court, and that they may complain to
+  the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
+  Bundesnetzagentur, the authority § 12(1) DDG names under DSA Art. 49(1)). In the *private* mode the passage keeps
+  the first two only, as the reduced statement drops the courts.
 - **Deferring the statement is an authority's switch, never the moderator's discretion** (L: Art. 17 DSA has no
   exception of its own; TCO Art. 11(3) lets the authority forbid the notice for six weeks, renewable once by six).
   It needs the authority's reference (sealed) and an end date, at most six weeks per request; at that date the
@@ -334,7 +362,8 @@ range and its no-extension rule (§ 2 there).
   operator backs up otherwise (volume snapshots, their own dumps), the Run docs give the deletion concept the
   EDPB's erasure report asks for (L): a backup retention B, at most 30 days recommended for a backup holding the
   table; access to a backup only to restore it; the startup purge after every restore; and **N + B** in the
-  disclosure.
+  disclosure. B is the instance setting every capture veyq writes is pruned by
+  ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8, decided, not built).
 - **Disclosure (GDPR Art. 13, at collection), from the Server Owner, never from a tenant's terms.** Every guest
   write page carries one first-layer sentence with the value current at the write — "your IP address and source
   port and the time are kept for N days, longer only if a report or an authority's order concerns this content" —
@@ -361,8 +390,22 @@ range and its no-extension rule (§ 2 there).
 - **Its retention** (L): a case's events are kept until **31 December of the third year after the case closes** —
   the civil limitation period from year's end, and the one for the DSA's fines — dismissed cases included, since a
   dismissal is what an injured party may later contest. A case closes when its last hold has ended and no objection
-  is open. Longer only while proceedings are pending, as a logged extension. The **reporter's sealed contact** goes
-  **six months after the decision is told to them**; a "receipt sent" and "decision sent" event stays as the proof.
+  is open: a dismissal, the lift of its last measure, a decided case whose hold the cleanup or — on a child-sexual-abuse
+  case — the handover ended. An undecided case stays open, in the queue, while a moderator still owes its decision.
+  Longer only while proceedings are pending, as a logged extension (not built for the records; a hold's is).
+- **Every moderation record goes with its case's log, in one purge** (owner 2026-10-18; GDPR Art. 5(1)(e)): on the
+  case's date the case row, its reports' sealed parts with their reporter fields and its report shares — which wrap
+  `K_report`, the key to what was reported; a report spanning several cases goes with the last — its measures and
+  proposals, its statements with their recipients, its deferrals and objections, the orders that opened it, and its
+  events. **Never while a measure of it is in force**: deleting the row would lift a block nobody lifted (§ 6), and a
+  standing measure needs its statement for as long as it can be contested (DSA Art. 17, GDPR Art. 17(3)(e)); its lift
+  is an event of its own date, which moves the case's. Nor while a proposal of it waits for the Server Owner. An order
+  that opened no case goes with its event at 31 December of the third year after its entry. The hold's snapshot and
+  pins are content and end by § 4's table, long before.
+- The **reporter's contact** goes **six months after the decision is told to them** (DSA Art. 16(5)), or — where it
+  could not be told — six months after the case's decision, and never while a case of the report is open; a "receipt
+  sent" (`RECEIPT_SENT`) and "decision sent" (`DECISION_SENT`) event stays as the proof. The rest of the report stays
+  with its case.
   The purge that computes each case's date at closure is the log's reader for `EveryStoredTimeHasAReaderTest`.
 - **An instance contact**, set in admin-web and the CLI: the single point of contact for users and authorities
   (DSA Art. 11–12) and the TCO contact point for removal orders (TCO Art. 15), with the languages it answers in;
@@ -388,7 +431,14 @@ range and its no-extension rule (§ 2 there).
 - **A preservation order or a request for information** (the e-Evidence Regulation, §§ 100j–100k StPO) opens the
   same hold without a block. Information handed over is an event in the moderation log with the reference sealed.
 - **The notice to the uploader** (TCO Art. 11, DSA Art. 17) follows § 7, including its deferral on the authority's
-  request.
+  request. **A guest uploader is told too, on a removal order** (TCO Art. 11(1) asks the host to make the information
+  available to the content provider, with no condition of a known contact, unlike DSA Art. 17(2)): an identity whose
+  upload a removal order blocked — whose client still holds that identity — is answered, on the link it came through,
+  even while that link is blocked: removed on an authority's order of `<date>`; the reasons or a copy of the order on
+  request from `<instance contact>` (Art. 11(2)). Nothing else is served to it. A running deferral (Art. 11(3))
+  holds this back exactly as it holds the statement. This overrides the earlier owner answer that a guest is told
+  nothing, for an authority's removal order only, by the rule that a legal duty wins; for a moderator's measure the
+  DSA Art. 17(2) reasoning stands.
 
 ### 13. Art. 18 reports, and child sexual abuse material
 
@@ -402,8 +452,9 @@ range and its no-extension rule (§ 2 there).
   the report opens, "do not download, forward or screenshot; review only as far as needed, block the content, inform
   the police or the BKA"; and it **proposes "Block the content" as the first measure**, because once known,
   serving it on is a making-available of the host's own. A human still decides (§ 2). The hold ends at the
-  handover (§ 4), so it serves the reporting duty and nothing else (§ 184b(5) StGB, L). A file or a screenshot never
-  goes by mail or to a hotline.
+  handover, at the latest 90 days after the report (§ 4), so it serves the reporting duty and nothing else (§ 184b(5)
+  StGB, L): recording the handover ends it, and the moderation surface says so before it is recorded. A file or a
+  screenshot never goes by mail or to a hotline.
 
 ### 14. The operating mode: what a private operator may leave off, on their own assessment
 
@@ -455,8 +506,10 @@ responsibility, and switching back to the second mode turns it on again.
   provider identification. The operating mode (§ 14) adds one instance setting, a step in first-run setup, a
   reduced variant of the operator section and of the statement, and a second state every mode-dependent text is
   tested in.
-- **Not required, not built:** a transparency report (DSA Art. 15 exempts micro and small enterprises; TCO Art. 7(2)
-  asks for one only in a year the host acted on terrorist content, by 1 March) and an internal complaint system
+- **Not built:** a transparency report, which only some operators owe — DSA Art. 15(2) exempts micro and small
+  enterprises under Recommendation 2003/361, so a medium or large operator owes one (whether a non-economic club is an
+  enterprise is Still open 8), and TCO Art. 7(2) asks for one in every year the host acted on terrorist content, by
+  1 March; the Run docs say who reports and by when. **Not required, not built:** an internal complaint system
   (Art. 20, online platforms only). The in-app objection of § 7 is voluntary. A TCO report could later be derived
   from the moderation log.
 - A moderator acts from any tenant host they can sign in on; an operator away from admin-web acts over SSH with
@@ -585,9 +638,11 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
 
 ### Still open
 
-1. **§ 184b(5) StGB for a non-commercial operator.** A household operator has no "professional duty" to point to,
-   so whether keeping a hold until the handover is covered is unsettled. Until it is, the Run docs advise
-   contacting the police at once and keeping nothing beyond the hold.
+1. **§ 184b(5) StGB beyond the 90 days, and for a non-commercial operator.** Built is the bound the law supports
+   for a host bound by Art. 18: the hold ends at the handover, at the latest 90 days after the report (§ 4). Whether a
+   hold may run *until* the handover past those 90 days is not decided and not built; and a household operator has no
+   "professional duty" to point to, so whether even the bounded hold is covered for them is unsettled. Until it is, the
+   Run docs advise contacting the police at once and keeping nothing beyond the hold.
 2. **A time-bound authority link to a hold snapshot** (a report share served against a one-time token and logged),
    so the police can secure the evidence themselves without the operator making a file. It is a making-available
    under § 184b(1) no. 2; whether (5) covers it needs the police or a specialist before it is built. Not decided.
@@ -602,3 +657,36 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
    operator's edge saw, so behind a further NAT of the operator's own it is not the subscriber's, and whether the
    disclosure must say which edge an instance runs before the record is handed over needs counsel before the
    moderation CR.
+5. **§ 184b(5) StGB for a club's volunteer moderators.** A moderator a club appoints (ADR 0099 § 1) acts unpaid; whether
+   reviewing and holding a child-sexual-abuse case until the handover is covered by "official or professional duties"
+   (*dienstliche oder berufliche Pflichten*) for a volunteer is unsettled, as Still open 1 is for a household operator
+   (audit 2026-10-18, C3). Until counsel answers, the Run docs give a volunteer the advice item 1 gives a household
+   operator.
+6. **Who is the controller of a member's account data** on an instance with several tenants: the Server Owner alone,
+   or the Server Owner jointly with each tenant owner (GDPR Art. 26). It decides who owes the Art. 13 information of
+   the instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8) and who answers an erasure
+   request ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)); veyq builds
+   both from the Server Owner, and the notice says so, until counsel answers (audit 2026-10-18, C6).
+7. **The breached-password check on by default.** `core.breached-password` sends a 5-hex prefix from the browser
+   without consent, and with it the browser's address and an `Origin` naming the instance
+   ([security model](../crosscutting/security-model.md) § third-party services). Whether that rests on Art. 6(1)(f),
+   whether a transfer to a third country is involved (the API and its CDN), and whether on-by-default meets Art. 25(2)
+   is open (audit 2026-10-18, C7). Until it is answered the privacy notice names the check, its recipient and its
+   switch, and the default stays as decided (owner 2026-10-14).
+8. **Whether a non-economic club is an "enterprise"** under Recommendation 2003/361 for the DSA Art. 15(2)
+   exemption from the transparency report (audit 2026-10-18, C8). A micro or small *enterprise* is exempt; a club
+   that is no enterprise is either outside the DSA (item 1) or not covered by the exemption's wording. The Run docs
+   name the question instead of the answer.
+9. **Whether TCO Art. 3(7) excuses a private operator who cannot be reached** within the hour (audit 2026-10-18, C9;
+   the audit's own reading: rather not). Art. 3(7) names "objectively justifiable technical or operational reasons";
+   whether an unattended household instance is one is open. § 12's advice stands: an operator who cannot keep the
+   hour turns public links off.
+10. **The layered Art. 13 information on a guest page, and Art. 14 for people a report names.** Whether a first-layer
+    sentence plus a link meets Art. 13 on a page a guest reaches without an account (§ 10), and what Art. 14 GDPR
+    (and § 33 BDSG's exceptions) asks of the host towards a third party a reporter names in a report's sealed text,
+    which the host cannot read until a moderator opens it (audit 2026-10-18, C5).
+11. **Reported content inside a backup capture.** A capture holds the ciphertext of everything stored when it was
+    taken, including content later reported, blocked or confirmed as child sexual abuse material. Whether keeping such
+    a capture until it expires at B is possession under § 184b(3) StGB, or covered as it is unreadable to the operator
+    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block or loses a case
+    (`cr-backup-erasure-and-retention` decision 7); this item is only about the capture's own existence.

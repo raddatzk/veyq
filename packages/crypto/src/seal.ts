@@ -141,9 +141,13 @@ export const SEAL_TO_PURPOSES = {
   // The instance moderation key M_n of one epoch, sealed to a moderator's identity (ADR 0099 § 2). There is one key per
   // epoch for the whole instance, so the epoch is the whole address; the recipient is the identity it is sealed to.
   'moderation-grant': [['epoch', 'uint']],
-  // A report's sealed part — K_report, the reason, the contact, the context (ADR 0093 § 2, ./report.ts) — to the epoch's
-  // public half. A report stays sealed to the epoch it was made under (ADR 0099 § 4), which the server stores beside it.
+  // A report's sealed part — K_report, the reason, the context (ADR 0093 § 2, ./report.ts) — to the epoch's public
+  // half. A report stays sealed to the epoch it was made under (ADR 0099 § 4), which the server stores beside it.
   'moderation-report': [['epoch', 'uint']],
+  // The reporter's contact, sealed apart from the report's body to the same epoch, so the server can drop it alone six
+  // months after the decision was told (ADR 0093 § 11). The report id is the server's, minted after the seal, so the
+  // epoch is the whole address — as for the body it travels beside.
+  'moderation-report-contact': [['epoch', 'uint']],
   // A moderator's free text — a decision's note, a hold extension's reason (ADR 0093 § 11, ./report.ts) — to the
   // epoch's public half, bound to its case so a note moved onto another case's event does not open there.
   'moderation-note': [['epoch', 'uint'], ['caseId', 'id']],

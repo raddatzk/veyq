@@ -63,15 +63,31 @@ export function openNote(epoch: number, caseId: string, sealed: string): string 
   }
 }
 
-/** What a reporter wrote, opened: the reason, the contact and the context — and `K_report`, which opens the report shares. */
-export type OpenedReport = v1.ReportBody
+/**
+ * What a reporter wrote, opened: the reason and the context — and `K_report`, which opens the report shares — and the
+ * contact sealed apart: '' where none was left, or where it went six months after the decision was told (ADR 0093 § 11).
+ */
+export type OpenedReport = v1.ReportBody & { contact: string }
 
-/** Open a report's sealed part with its epoch's key; null when not held or it does not open. */
-export function openReportOf(epoch: number, sealedReport: string): OpenedReport | null {
+/**
+ * Open a report's sealed part, and its contact when one is still stored, with its epoch's key; null when the key is
+ * not held or the sealed part does not open. A contact that does not open reads as none.
+ */
+export function openReportOf(epoch: number, sealedReport: string, sealedContact?: string | null): OpenedReport | null {
   const m = moderationKeyOf(epoch)
   if (!m) return null
   try {
-    return v1.openReport(epoch, v1.moderationKemSecret(m), fromB64std(sealedReport))
+    const sk = v1.moderationKemSecret(m)
+    const body = v1.openReport(epoch, sk, fromB64std(sealedReport))
+    let contact = ''
+    if (sealedContact) {
+      try {
+        contact = v1.openReportContact(epoch, sk, fromB64std(sealedContact))
+      } catch {
+        contact = ''
+      }
+    }
+    return { ...body, contact }
   } catch {
     return null
   } finally {
@@ -89,7 +105,7 @@ const MAILABLE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export function reporterNoticesOf(c: ModerationCase): ReporterNotice[] {
   const out: ReporterNotice[] = []
   for (const r of c.reports) {
-    const body = openReportOf(r.epoch, r.sealedReport)
+    const body = openReportOf(r.epoch, r.sealedReport, r.sealedContact)
     if (!body) continue
     body.reportKey.fill(0)
     const address = body.contact.trim()

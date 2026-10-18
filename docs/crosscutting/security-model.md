@@ -348,7 +348,8 @@ server-blind token makes this work without the server ever seeing a name:
   accountability, not a control: the Server Owner owns the server and the roster, and the surface is
   operator-served, passive-operator-safe only ([ADR 0026](../decisions/0026-client-trust-tiers.md)).
   **Built today: the intake, the review and the measures.** A member or a guest reports what they see: their client
-  seals the report share and their text to the current epoch, the server stores the category, time and ids in the
+  seals the report share and their text to the current epoch — their address apart, so it can go alone six months
+  after the decision was told — the server stores the category, time and ids in the
   clear, opens one case per item and takes a **hold** — a copy of the reported rows and a pin on their store objects
   that the reclaim sweep skips, so a delete after the report removes the item for everyone but the moderators
   ([uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
@@ -379,8 +380,13 @@ server-blind token makes this work without the server ever seeing a name:
   them to the end it sets; an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
   guest-write record — never content ([uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
-  Not built, both open legally: a child-sexual-abuse hold ending at the handover, and an authority's link to a held
-  copy. No moderation path has run on a deployed instance. The fixed **operator section** every space's terms carry
+  A child-sexual-abuse case's hold ends at the recorded handover, at the latest 90 days after the report; no measure
+  or statement keeps it longer (§ 184b(5) StGB). **Retention:** a closed case's records — reports with their sealed
+  parts and report shares, measures, statements, objections, orders — go with its log at 31 December of the third year
+  after the close, never while a measure of it is in force ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
+  Not built, open legally: a hold until the handover beyond 90 days, and an authority's link to a held copy. No
+  moderation path has run on a deployed instance.
+  The fixed **operator section** every space's terms carry
   states all this to members and guests — the notice path, what is kept, the measures, the statement and the
   objection, in the club, organisation or company mode the authorities, and while the guest-write record is on its
   GDPR Art. 13 information — veyq's text filled with the operator's published values, public without an account
@@ -636,7 +642,13 @@ re-key — the same posture 1Password takes for shared vaults.
 ## Deletion & erasure
 
 One mechanism serves both data-loss protection and erasure: **soft-delete → trash → retention window →
-scheduled hard-purge**, propagated to backups within a documented rotation window. The two steps carry
+scheduled hard-purge**. In backups the target is a capture kept at most B days and an erasure ledger a restore
+re-applies before it serves ([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md)
+decision 8) — **decided, not built**: today only the cluster's gate and the object pool rotate, by count, Compose's
+captures are kept until the operator deletes them, and a restore brings back what was erased after its capture. An
+account is erased on request and an active tenant can be deleted
+([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), decided, not
+built; today no path deletes an account). The two steps carry
 different authority. **Trashing is reversible** — an item moves to a trash and is restorable for the retention
 window — so it may be done by **any member of the scope** (recovery, not destruction), and it is **audited**:
 the trashed record carries **who** trashed it and **when**, so the action is accountable rather than anonymous.

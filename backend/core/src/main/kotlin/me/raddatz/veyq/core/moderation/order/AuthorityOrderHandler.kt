@@ -180,8 +180,9 @@ class AuthorityOrderHandler(
         val share = ShareEntity.findById(o.shareId)
         if (share == null) {
             row.persist()
-            // No case to hang it on: an instance-shaped event, dated as the one who entered it is.
-            log.append(ModerationEvent.ORDER_RECEIVED, now, enteredBy, enteredBy, reason = o.kind.name, targetId = row.id)
+            // No case to hang it on: an event with no case id, dated from its entry like the order's row
+            // (ModerationRecordsPurge: there is nothing to hold, so it closes as it is recorded).
+            log.append(ModerationEvent.ORDER_RECEIVED, now, enteredBy, enteredBy, reason = o.kind.name, targetId = row.id, datedFrom = now)
             return Written(row, null, emptyList()) to null
         }
         nodes.lockScope(share.scopeId)

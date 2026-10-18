@@ -273,7 +273,8 @@ components:
       type: object
       description: >
         A report (ADR 0093 §§ 1-2). In the clear: the category, the epoch, the items' kinds and ids, and — only when
-        given — the receipt address. Everything the reporter wrote is in `sealedReport`.
+        given — the receipt address. What the reporter wrote is in `sealedReport`, and their contact apart in
+        `sealedContact` (ADR 0093 § 11: it goes alone, six months after the decision was told).
       required: [category, epoch, sealedReport, items]
       properties:
         category: { $ref: "#/components/schemas/ReportCategory" }
@@ -288,12 +289,22 @@ components:
         sealedReport:
           type: string
           description: >
-            `K_report`, the reason, the contact and the context, padded to 512-byte buckets and sealed to the epoch's
-            public half (`sealTo` purpose `moderation-report` [epoch]).
+            `K_report`, the reason and the context, padded to 512-byte buckets and sealed to the epoch's public half
+            (`sealTo` purpose `moderation-report` [epoch]).
           contentEncoding: base64
           maxLength: 23380
           example: AXJlcG9ydA==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 23380) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedContact:
+          type: [string, "null"]
+          description: >
+            The reporter's contact, when they left one: one 512-byte bucket sealed to the same epoch's public half
+            (`sealTo` purpose `moderation-report-contact` [epoch]) — apart from `sealedReport`, so the server can delete
+            it alone six months after the decision was told (ADR 0093 § 11). Absent when none was left.
+          contentEncoding: base64
+          maxLength: 2300
+          example: AWNvbnRhY3Q=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 2300) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         items:
           type: array
           minItems: 1
@@ -306,7 +317,7 @@ components:
           x-veyq-rationale: >
             The reporter's own address for the receipt DSA Art. 16(4) asks for (owner decision Q6 of
             cr-report-and-hold, ADR 0097 decision 3): the server mails it once from memory and stores only the copy
-            sealed inside `sealedReport`; a mail cannot be sent to an address the sender does not see.
+            sealed in `sealedContact`; a mail cannot be sent to an address the sender does not see.
           type: [string, "null"]
           format: email
           description: Where the receipt goes, if the reporter left an address. Not stored.
