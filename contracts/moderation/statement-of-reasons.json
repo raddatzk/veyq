@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. A passage is rendered in order when its 'full' is false, or when the form is FULL (ADR 0093 § 14: the private mode's REDUCED form leaves out every passage marked full: true). A passage with 'when' is rendered only when that value is there: 'facts' when the moderator wrote them (the full form requires them), 'contact' when the instance names an address. The mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground} and {contact}, and in the mail {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field, never user data. It names the host, never the moderator.",
+  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. A passage is rendered in order when its 'full' is false, or when the form is FULL (ADR 0093 § 14: the private mode's REDUCED form leaves out every passage marked full: true). A passage with 'when' is rendered only when that value is there: 'facts' when the moderator wrote them (the full form requires them), 'contact' when the instance names an address. The mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place. Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground} and {contact}, and in the mail {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field, never user data. It names the host, never the moderator.",
   "measures": {
     "SHARE": {
       "en": { "measure": "a link you created was blocked", "reach": "Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands." },
@@ -20,6 +20,7 @@
     "UPLOADER": { "en": "the person who uploaded it", "de": "Person, die es hochgeladen hat" },
     "SCOPE_OWNER": { "en": "an owner of the space it lies in", "de": "Person, der der Bereich gehört, in dem es liegt" }
   },
+  "rolesJoiner": { "en": " and ", "de": " und " },
   "basis": {
     "REPORT": { "en": "a report by someone who could see it", "de": "eine Meldung von jemandem, der es sehen konnte" },
     "ORDER": { "en": "an order of an authority", "de": "eine Anordnung einer Behörde" }

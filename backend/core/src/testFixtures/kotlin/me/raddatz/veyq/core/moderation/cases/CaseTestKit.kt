@@ -11,6 +11,9 @@ import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import me.raddatz.veyq.core.moderation.hold.HoldRowEntity
 import me.raddatz.veyq.core.moderation.report.ReportShareEntity
 import me.raddatz.veyq.core.moderation.report.ModerationReportEntity
+import me.raddatz.veyq.core.moderation.statement.ModerationObjectionEntity
+import me.raddatz.veyq.core.moderation.statement.ModerationStatementEntity
+import me.raddatz.veyq.core.moderation.statement.StatementRecipientEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.http.ContentType
 import io.restassured.response.Response
@@ -34,6 +37,9 @@ object CaseTestKit {
      */
     fun moderator(): Moderator {
         QuarkusTransaction.requiringNew().run {
+            ModerationObjectionEntity.deleteAll()
+            StatementRecipientEntity.deleteAll()
+            ModerationStatementEntity.deleteAll()
             ModerationProposalEntity.deleteAll()
             ModerationBlockEntity.deleteAll()
             HoldPinEntity.deleteAll()
@@ -61,13 +67,55 @@ object CaseTestKit {
 
     fun Moderator.case(caseId: String): Response = call("getModerationCase", caseId, "GET", "/api/moderation/cases/$caseId")
 
-    fun Moderator.dismiss(caseId: String, note: Boolean = false): Response =
-        call("dismissModerationCase", caseId, "POST", "/api/moderation/cases/$caseId/dismissal", noteBody(note))
-
-    fun Moderator.take(caseId: String, kind: String, targetId: String? = null, shareId: String? = null): Response =
+    fun Moderator.dismiss(caseId: String, note: Boolean = false, reporters: List<Pair<String, String>> = emptyList()): Response =
         call(
+            "dismissModerationCase", caseId, "POST", "/api/moderation/cases/$caseId/dismissal",
+            if (reporters.isEmpty()) noteBody(note)
+            else """{"reporterNotices":[""" + reporters.joinToString(",") { (r, a) -> """{"reportId":"$r","address":"$a"}""" } + "]}",
+        )
+
+    /** An opaque stand-in for the facts sealed to one member's identity (the server never opens one). */
+    const val SEALED_FACTS = "c2VhbGVkLWZhY3Rz"
+
+    /** The recipients a step's statement would reach (`getModerationStatementRecipients`). */
+    fun Moderator.recipients(caseId: String, kind: String, targetId: String? = null, shareId: String? = null): Response =
+        call(
+            "getModerationStatementRecipients", caseId, "GET",
+            "/api/moderation/cases/$caseId/statement-recipients?kind=$kind" + (targetId?.let { "&targetId=$it" } ?: "") +
+                (shareId?.let { "&shareId=$it" } ?: ""),
+        )
+
+    /**
+     * Take a step with its statement of reasons: by default with facts — sealed (opaquely) for every member the server
+     * lists as a recipient, as the decision panel does in the organisation mode — or, [facts] false, without any.
+     * [factsFor] overrides the members the facts are sealed for (a stale list); [reporters] are `reportId to address`.
+     */
+    fun Moderator.take(
+        caseId: String, kind: String, targetId: String? = null, shareId: String? = null, facts: Boolean = true,
+        ground: String = "TERMS_BREACH", factsFor: List<String>? = null, reporters: List<Pair<String, String>> = emptyList(),
+    ): Response {
+        val members = when {
+            !facts -> emptyList()
+            factsFor != null -> factsFor
+            // A refused step has no recipients to read: the take then meets the same refusal.
+            else -> recipients(caseId, kind, targetId, shareId).let { if (it.statusCode == 200) it.path<List<String>>("accounts.accountId") else emptyList() }
+        }
+        val statement = if (!facts) """{"ground":"$ground"}""" else
+            """{"ground":"$ground","facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"factsFor":[""" +
+                members.joinToString(",") { """{"accountId":"$it","sealedFacts":"$SEALED_FACTS"}""" } + "]}"
+        val notices = reporters.joinToString(",") { (r, a) -> """{"reportId":"$r","address":"$a"}""" }
+        return call(
             "takeModerationMeasure", caseId, "POST", "/api/moderation/cases/$caseId/measures",
-            """{"kind":"$kind"""" + (targetId?.let { ""","targetId":"$it"""" } ?: "") + (shareId?.let { ""","shareId":"$it"""" } ?: "") + "}",
+            """{"kind":"$kind"""" + (targetId?.let { ""","targetId":"$it"""" } ?: "") + (shareId?.let { ""","shareId":"$it"""" } ?: "") +
+                ""","statement":$statement,"reporterNotices":[$notices]}""",
+        )
+    }
+
+    /** Decide an objection: `UPHOLD` or `LIFT`. */
+    fun Moderator.decideObjection(caseId: String, objectionId: String, outcome: String): Response =
+        call(
+            "decideModerationObjection", caseId, "POST", "/api/moderation/cases/$caseId/objections/$objectionId/decision",
+            """{"outcome":"$outcome"}""",
         )
 
     fun Moderator.lift(caseId: String, measureId: String): Response =

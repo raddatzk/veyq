@@ -119,12 +119,17 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_moderation_event.expires_at" to "ModerationPurge deletes the event past it (ModerationLog.purgeExpired)",
             // --- review and measures (ADR 0093 §§ 4-6, 11; uc.moderation.review-a-case, uc.moderation.take-a-measure)
             "veyq_moderation_event.hold_until" to "served: ModerationCaseEvent.until, an extension's new end",
-            "veyq_moderation_case.decided_at" to "served: ModerationCase.decidedAt; the statement of reasons will count from it",
+            "veyq_moderation_case.decided_at" to "served: ModerationCase.decidedAt; a measure's hold counts from it where nobody can be told",
             "veyq_moderation_case.closed_at" to "ModerationLog.appendCase dates a closed case's later events from it; served: closedAt",
             "veyq_moderation_block.taken_at" to "served: ModerationMeasure.takenAt, AccountSignInBlock.blockedAt; orders a case's measures",
             "veyq_moderation_block.lifted_at" to "served: ModerationMeasure.liftedAt — the record that a measure was lifted (active_key says whether)",
             "veyq_moderation_proposal.proposed_at" to "served: ModerationProposal.proposedAt, OpenModerationProposal.proposedAt; orders both lists",
             "veyq_moderation_proposal.settled_at" to "served: ModerationProposal.settledAt",
+            // --- the statement of reasons and the objection (ADR 0093 §§ 4, 7; uc.moderation.object-to-a-measure)
+            "veyq_moderation_statement.sent_at" to "CaseDecisions.decide ends the measure's hold six months after it; StatementMail.retryDue retries a week after it",
+            "veyq_moderation_statement_recipient.mailed_at" to "StatementMail's claim: a member is mailed once, retried while it is null",
+            "veyq_moderation_objection.received_at" to "served: ModerationObjection.receivedAt, StatementObjection.receivedAt; orders a case's objections",
+            "veyq_moderation_objection.decided_at" to "its presence closes the objection (ModerationObjectionEntity.open); served: decidedAt",
             // --- the guest-write record (ADR 0093 § 10, en.moderation.guest-write-record)
             "veyq_guest_write_record.observed_at" to "GuestWriteRecordPurge deletes a row older than N as it stands now (GuestWriteRecords.purge)",
             "veyq_guest_write_record.expires_at" to "GuestWriteRecordPurge deletes a row past it, at startup and on its interval",

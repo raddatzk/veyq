@@ -327,6 +327,8 @@ class OperatorBlindProbeTest {
             "stepDownAsModerator", "listPendingModerationDeliveries", "putModerationDelivery",
             "listModerationCases", "getModerationCase", "dismissModerationCase", "takeModerationMeasure", "liftModerationMeasure",
             "proposeModerationStep", "extendModerationHold", "barModerationReporter",
+            // the statement's recipients and an objection's decision (cr-statement-of-reasons-and-objection)
+            "getModerationStatementRecipients", "decideModerationObjection",
             // the review reads (cr-moderation-review-and-measures decision 6): a case's held snapshot, read from the hold —
             // the case outlives its space, and a suspended tenant's case is reviewed all the same (ADR 0093 § 1)
             "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles",
@@ -337,6 +339,12 @@ class OperatorBlindProbeTest {
                 "key yet (ModerationProofPostureSweepTest lists each).",
             "getMyModeratorAppointment", "acceptModeratorAppointment", "sendModeratorAddressCode",
             "confirmModeratorAddress", "listMyModerationGrants", "createModerationChallenge",
+        )
+        reason(
+            "the affected member's own statements of reasons and their objection (ADR 0093 § 7): account-wide, keyed by " +
+                "the caller's recipient row — a member the statement does not name reads nothing and objects to nothing " +
+                "(StatementsSliceTest); the measure outlives its space, so no space's gate applies.",
+            "listMyStatements", "objectToStatement",
         )
         reason(
             "public: the current epoch's public bundle, which every reporter — mostly a guest — seals to (ADR 0099 § 2); " +
