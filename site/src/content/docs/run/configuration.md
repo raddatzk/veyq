@@ -165,7 +165,8 @@ The backup gate captures the database and an index of the store before a release
 |---|---|---|
 | `backup.enabled` | `true` | The gate. `false` is a choice the schema accepts: then the backup before an upgrade is yours, by hand |
 | `backup.existingClaim` | — | A PersistentVolumeClaim of your own for the captures; required while the gate is on. The chart creates none |
-| `backup.keep` | `3` | Complete captures kept; the newest is never pruned |
+| `backup.keep` | `3` | Complete captures kept at most — a second bound beside B, the instance's backup retention, at which every capture goes, the newest too |
+| `backup.prune.schedule` | `17 3 * * *` | When the daily CronJob `veyq-backup-prune` deletes the captures older than B |
 | `backup.request` | — | Change it to ask for a capture without a release change |
 | `backup.image.repository` | `ghcr.io/raddatzk/veyq-tools` | The tools image |
 | `backup.image.tag` | `image.tag` | The application's release; the gate refuses any other |
@@ -184,6 +185,7 @@ The backup gate captures the database and an index of the store before a release
 | A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
 | The operating mode | first-run setup, then **Server → Operating mode**, or `veyq-admin mode set` | Private, or club, organisation or company: your own assessment, a preset over the switches it names, and whether the console warns about an empty contact or identification ([Moderation](/veyq/run/moderation/#the-operating-mode)) |
 | How long a guest's write is kept | **Server → Moderation**, or `veyq-admin guest-write-record set <days>` | N, 1 to 30 days, 7 by default: how long a link guest's IP address, source port and time are kept. Whether anything is kept is the switch *Record guests' writes*, whose default follows the operating mode ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)) |
+| How long a backup is kept | **Server → Moderation → Backups**, or `veyq-admin backup-retention set <days>` | B, 7 to 365 days, 30 by default: every capture veyq's tools wrote — `veyqctl`'s and the cluster gate's — is deleted once it is older, the newest too; the erasure ledger drops its lines at the same age ([Backup and restore](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)) |
 | Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public — and the private notification address, confirmed by a code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)) |
 
 A tenant's mail server, terms and per-link upload limit are its owner's, set in the app, not here.

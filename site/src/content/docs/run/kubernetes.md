@@ -187,8 +187,11 @@ release, `veyq-tools`, before the container that migrates: when the pod starts a
 database holds, it captures the database and an index of the store onto `backup.existingClaim`. The chart creates
 no claim and refuses an install that names none and does not say `backup.enabled: false`, naming `backup`. The gate
 reaches the database and the store as the app does — it is the app pod, so the NetworkPolicy set gains no path —
-and never mounts the config-secret claim, so no capture holds the key; export the key once yourself. What it
-captures, refuses and keeps, and the restore Job: [Upgrade](/veyq/run/upgrade/) and [Backup and
+and never mounts the config-secret claim, so no capture holds the key; export the key once yourself. Every capture
+older than B — the instance's backup retention, 30 days until the Server Owner sets it — is deleted at every start and
+by a daily CronJob, `veyq-backup-prune` (`backup.prune.schedule`), on the gate's image and claim: the one pod the
+chart adds for it, which reaches the database to read B (its own NetworkPolicy, and the database's admits it) and
+writes only the claim, on the app pod's node. What it captures, refuses and keeps, and the restore Job: [Upgrade](/veyq/run/upgrade/) and [Backup and
 restore](/veyq/run/backup-and-restore/#under-kubernetes). The values are on [Configuration](/veyq/run/configuration/).
 The gate ran once on a kind cluster in a `restricted` namespace (2026-10-17), with its claim on kind's local-path
 provisioner, which ignores `fsGroup`; on a storage class that applies it, the claim's directory is the pod's group's.

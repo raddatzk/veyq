@@ -91,7 +91,11 @@ runs, so you can do it by hand.
 
 `--key-into` is required, refused before anything else runs when it is missing, already exists or lies inside
 `backups/`: the dump plus the key opens every tenant's SMTP password, so they never sit side by side. Encrypt the
-capture before it leaves the host ([Capture](/veyq/run/backup-and-restore/#capture)).
+capture before it leaves the host ([Capture](/veyq/run/backup-and-restore/#capture)). **The upgrade's capture is kept at
+most B days, like every other** — the instance's backup retention, 30 until you set it: the way back from an upgrade
+exists for that long, so roll back within it, or keep a copy elsewhere and delete it by B
+([How long a backup is kept](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)). The cluster's gate keeps its
+captures the same way.
 
 **What names the release you are leaving.** `releases/<old>/` stays, with the manifest that names its images by
 digest, and the capture's `manifest.json` records `app.version`. A release is `<major>.<minor>` and a publish onto an

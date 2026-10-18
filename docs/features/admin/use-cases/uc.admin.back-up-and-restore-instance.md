@@ -13,7 +13,8 @@
   supply that half ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md)).
 - **What is built** (2026-10-17): every step below, on Compose and `veyqctl` and on Kubernetes (A11) — the store leg as
   an index, the optional pruned object pool, the restore's check against the index and its copy only into an empty
-  store (ADR 0056 §3, §7), and the in-place rollback (A7).
+  store (ADR 0056 §3, §7), the in-place rollback (A7), and every capture kept at most B days with the erasure ledger
+  re-applied at every start (A12, A13; ADR 0056 decision 8).
 - **Postconditions (success):** A restored instance holds the same three legs as the source: the same database,
   the same objects, and the same config-secret key. Its users sign in with the credentials they already had,
   every Memory decrypts, and the instance can admit members and send recovery links again. Nothing about the

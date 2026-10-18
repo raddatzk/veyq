@@ -5,9 +5,11 @@
   ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)), Compose and `veyqctl` — and held by
   `scripts/instance_backup_selftest.py` (groups P and G); proven live on a throwaway Compose project
   (cr-backup-store-leg-is-an-index). §8 — every capture kept at most B days, and the erasure ledger a restore
-  re-applies — is **decided, not built** (2026-10-18, GDPR Art. 5(1)(e) and 17 and the EDPB's erasure report; the
-  owner rule that a legal duty wins over what was decided; `cr-backup-erasure-and-retention`). Until it is, only the
-  cluster's gate and the object pool rotate, by count, and a restore brings back what was erased after its capture.
+  re-applies, moderation included — is **built** on both targets (2026-10-18, GDPR Art. 5(1)(e) and 17 and the EDPB's
+  erasure report; the owner rule that a legal duty wins over what was decided; cr-backup-erasure-and-retention):
+  held by `ErasureLedgerSliceTest`, `MemoriesErasuresSliceTest`, `scripts/instance_backup_selftest.py` (groups R and L),
+  `scripts/veyqctl_selftest.py` and `scripts/chart_meta_check.py` (xvi, xxviii), and run live on a throwaway Compose
+  project.
 - Date: 2026-08-06
 
 ## Context
@@ -263,21 +265,41 @@ halves, on both targets in step:
   `cr-backup-erasure-and-retention`): `veyqctl` prunes at every `backup`, `upgrade` and `start` and offers
   `veyqctl backup prune` for a daily timer, the gate prunes at every start and the chart runs the same prune daily;
   `veyqctl status` warns while no capture younger than B exists (admin-web cannot see the captures). `backup.keep`
-  stays as the bound on space. A copy the operator moved off the host is theirs to delete by B; the Run docs say so, with access only to
+  stays as the bound on space. The chart's daily prune is a CronJob of its own on the gate's image and claim: it reads
+  B from the database and writes only that claim, never the key's (`scripts/chart_meta_check.py` (xxviii)). A copy the operator moved off the host is theirs to delete by B; the Run docs say so, with access only to
   restore it.
 - **The erasure ledger** lives outside the three legs, in the directory leg (c)'s key file lives in — persisted by
   Compose's named volume and by the cluster's kept claim (Consequences, below) — so neither a restore nor a rollback
   touches it. It holds one line per hard erasure that no restored row would trigger again by itself — an erased
-  account or tenant, a purged scope, node or medium, a deleted link, a reclaimed storage key: kind, opaque id, time.
+  account or tenant (a revoked pending one too), a purged scope, node or medium, a deleted link, a reclaimed storage key:
+  kind, opaque id, time. The kinds are a sealed set the re-applier's `when` covers, so a kind without its re-applier does
+  not compile; an application contributes its own (Memories: a medium) through a core interface, as it does an eraser.
   A purge that re-fires on its own restored row (an expired hold, a trash past its retention, a guest-write record)
   needs none. An erasure writes its line in its own transaction to a table, and a sweep appends it to the file after
   the commit — at least once, which is harmless because re-applying is idempotent. **At every start, before the
   instance serves,** the application reads the file and erases, through that kind's own eraser, every listed object
   whose row exists; no restore needs to be detected. A line older than B goes, since no retained capture predates it.
-  The restore's object check (§7) counts a key the ledger lists as erased, never as missing.
+  The restore's object check (§7) counts a key the ledger lists as erased, never as missing — `veyqctl restore` and
+  `rollback` read the file out of the app's volume and hand it over (`--erasures`), the cluster's restore Job reads it
+  from the config-secret claim it already mounts; the gate itself still never mounts that claim (ADR 0098 decision
+  4c). A restored row that still names an erased key with no line of its own (an old version a Depot replace dropped)
+  is counted in the start's log line and served as a missing object is (Context 2).
+- **Moderation survives a restore** (owner 2026-10-18, by the legal-duty rule: a TCO Art. 3 block and a DSA Art. 17
+  measure must not be undone by one). The same outbox carries every block and lift of a measure (its item kind and
+  target, its link, space and case, who took it and its basis — a measure or an authority's order) and every change of
+  a case (its item, space, category, state, when it opened, and its retention date: the latest `expires_at` of its
+  events once every event has one). At start, per item the **last** line wins: an item whose last line is a block and
+  that the restored database does not block is blocked again — a member's sessions end, a tenant goes offline or
+  pending deletion, as the block's status did — and one whose last line is a lift is lifted, never blocked again. A
+  case the database lacks comes back as a stub, `origin = RESTORED`, with no report and nothing sealed: closed on its
+  retention date if it had closed (decided too, its hold having been part of what the capture lacked), open and owed a
+  decision otherwise. The case's sealed parts are lost with a capture older than them. Whether CSAM ciphertext kept in a
+  capture is possession under § 184b StGB stays ADR 0093's open question; captures expire at B either way.
 - **Limit, stated:** a restore onto a new host re-applies only the ledger it is given; the Run docs put the file
-  beside leg (c)'s key on the list of what to carry. Erasures made in the last sweep interval before a crash that
-  also lost the file are not re-applied.
+  beside leg (c)'s key on the list of what to carry. Erasures made in the last sweep interval (a minute) before a crash
+  that also lost the file are not re-applied. The re-application is part of the start: a line that cannot be applied
+  fails it, so the instance does not serve with an erasure undone. A dismissal made after a capture is not a line: the
+  restored case is open again and its hold runs to its own bound (at most 90 days after the report, ADR 0093 § 4).
 
 ## Consequences
 

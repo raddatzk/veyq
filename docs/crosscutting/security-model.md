@@ -651,10 +651,13 @@ re-key — the same posture 1Password takes for shared vaults.
 ## Deletion & erasure
 
 One mechanism serves both data-loss protection and erasure: **soft-delete → trash → retention window →
-scheduled hard-purge**. In backups the target is a capture kept at most B days and an erasure ledger a restore
-re-applies before it serves ([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md)
-decision 8) — **decided, not built**: today only the cluster's gate and the object pool rotate, by count, Compose's
-captures are kept until the operator deletes them, and a restore brings back what was erased after its capture. An
+scheduled hard-purge**. In backups every capture veyq's tooling wrote is kept at most B days — an instance setting,
+30 until the Server Owner sets 7 to 365 — the newest too, on Compose and on the cluster, and an object pool drops
+what only an older capture named; an erasure ledger beside leg (c)'s key, which no restore touches, is re-applied at
+every start before the instance serves, so a restore of an older capture erases again what was erased since and
+keeps a moderation block or case
+([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md) decision 8). A copy the operator moved
+off the host is theirs to delete by B, and a restore onto a new host re-applies only the ledger carried there. An
 account is erased on request and an active tenant can be deleted
 ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)): the account stops
 at the request — sessions, sign-in, its pending invites and pairings, its memberships of shared scopes — and after the

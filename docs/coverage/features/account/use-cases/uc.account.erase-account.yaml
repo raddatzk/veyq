@@ -3,7 +3,7 @@ feature: account
 title: Erase an account
 # Built by cr-account-erasure. The backend's slice drives both doors over HTTP, the purge by its forced entry and the
 # race against a sign-in; the web's refs are the settings' erase panel and its flow. That a restore erases an erased
-# account again is the erasure ledger's (cr-backup-erasure-and-retention), which writes that criterion when it lands.
+# account again is the erasure ledger's (ADR 0056 decision 8), criterion `a-restore-erases-the-account-again`.
 acceptanceCriteria:
   - id: both-doors-start-the-same-erasure
     text: A member with their password, and the Server Owner by address on the admin channel, both start the same pending erasure; the Server Owner's own account is refused.
@@ -60,6 +60,14 @@ acceptanceCriteria:
           - ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate
           - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
           - MemoriesAccountErasureSliceTest.aSharedMemoryKeepsTheErasedMembersMediaAndLosesTheirFavorites
+  - id: a-restore-erases-the-account-again
+    # A7. The restore's shape: the account row written back, live and with no pending row, as a capture before the
+    # request holds it; the control, an account nobody erased, stays.
+    text: An account erased after a backup was taken is erased again at the restored instance's start, before it serves, through the same purge, and nobody is mailed.
+    coverage:
+      backend:
+        integration:
+          - ErasureLedgerSliceTest.anErasedAccountComesBackLiveAndIsErasedAgain
   - id: the-last-owner-is-handled
     text: A last owner with other members chooses at the self-service door, per tenant, to delete it along or to name a new owner from its members, and a request without that choice is refused; a sole-member tenant is deleted with the account; the Server Owner's door leaves the tenant ownerless instead of refusing.
     coverage:
