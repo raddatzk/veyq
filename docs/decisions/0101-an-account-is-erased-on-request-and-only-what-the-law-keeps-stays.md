@@ -95,7 +95,9 @@ moderation log, the reports the person made, the measures, statements, objection
 stay to their case's log retention date, the reporter's sealed contact six months after the decision was told
 (ADR 0093 § 11). A sign-in block on the account stays as the record it is, and the purge ends it — lifted by no one,
 so it does not stand forever on nothing and hold its case's records with it (GDPR Art. 5(1)(e)); a tenant's purge
-ends the records over content on the tenant alike (decision 10). The erase dialog, the mail of decision 2 and
+ends the records over content on the tenant alike (decision 10), and every other eraser of what a measure stands on — the
+link's delete, a node's or a medium's purge, a guest identity's drop, the purge of the scopes the account owned —
+ends the measures on it the same way (ADR 0093 § 6, `MeasureTargets`). The erase dialog, the mail of decision 2 and
 the instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8) say this, and that backups keep
 an erased account at most B days (decision 8).
 
@@ -155,9 +157,7 @@ user id without a foreign key classified in the eraser's code as erased or kept,
   own (`stopTenantDeletion`).
 - **Open:** the erasure ledger (decision 8) waits for `cr-backup-erasure-and-retention`; each purge marks the one
   place its entry is written (`AccountPurge.eraseRows`, `TenantPurge.eraseTenant`). The statement of reasons a
-  deletion over content carries (decision 10) is built on `cr-statement-legal-gaps`' Server Owner path. A content
-  measure (a link, a node, an item, a guest uploader) on what a scope's purge erases still stands on nothing: the purge
-  ends only the account's and the tenant's own measures.
+  deletion over content carries (decision 10) is built on `cr-statement-legal-gaps`' Server Owner path.
 
 ## Rejected alternatives
 
