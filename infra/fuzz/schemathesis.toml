@@ -1,0 +1,49 @@
+# The API fuzzing's configuration (ADR 0091 decision 9) — read by the pinned Schemathesis image that
+# `scripts/run_api_fuzz.py` runs, once per spec file and invocation. The runner adds what differs per invocation on
+# the command line (the listener, the mode, the operations, the seed); the positive invocations' fixed ids are a
+# `[parameters]` table it appends to a copy of this file, because a fixed parameter overrides generation and the
+# negative invocations must generate every path id themselves.
+
+# veyq's own checks: refusal_by_location, refusal_echoes_nothing (the module docstring says what each holds).
+hooks = "infra/fuzz/hooks.py"
+
+[generation]
+# No example database: a run reproduces from its seed alone (the runner's `--seed`, `--generation-deterministic`),
+# never from what an earlier run found on this disk.
+database = "none"
+# The bearer token is no parameter to negate: a request without one answers the generic `401 authentication_failed`
+# (`AuthExceptionMappers`), which `ignored_auth` holds for every operation — a negative case that only drops the token
+# would hold it a second time, against the 400/404 a malformed request owes.
+with-security-parameters = false
+
+# The bearer token the seeder (`web/scripts/fuzz-seed.mts`) signed in for, handed to the container in the
+# environment: never on a command line, never in a file the image reads.
+[auth.openapi.bearerAuth]
+bearer = "${VEYQ_FUZZ_TOKEN}"
+
+# --- the checks of the first slice -------------------------------------------------------------------------------
+# On: not_a_server_error, status_code_conformance, content_type_conformance, response_schema_conformance,
+# response_headers_conformance, negative_data_rejection, missing_required_header, unsupported_method,
+# allow_header_conformance, ignored_auth, and the two above — every check this file does not switch off.
+
+[checks.negative_data_rejection]
+# A refused request answers 400 or 404 — never Schemathesis' default set (401, 403, 405, 406, 409, 415, 422, 428,
+# 429, 5xx). Which of the two a location may answer is refusal_by_location's rule; this is the union.
+expected-statuses = ["400", "404"]
+
+[checks.positive_data_acceptance]
+# No positive writes in this slice, and the positive GETs can only be accepted for the ids the seeder created —
+# a generated id is someone else's, or nobody's, and answers 404 by design.
+enabled = false
+
+[checks.use_after_free]
+# Stateful (a DELETE, then a GET of what it deleted): the stateful phase is not part of this slice.
+enabled = false
+
+[checks.ensure_resource_availability]
+# Stateful (a POST, then a GET of what it created): the stateful phase is not part of this slice.
+enabled = false
+
+[checks.object_level_authorization]
+# Needs a second identity and a decision about which identity owns what: the follow-up slice (cr-api-fuzzing Q3).
+enabled = false

@@ -1,5 +1,5 @@
 // Bootstrap User — create the local dev principal from .run/.env and record its derived key material back into
-// the same file. Reuses the real cold-account-birth crypto (buildAccount) and calls the API through the generated
+// the same file. Births it through the shared cold birth (instanceBirth.mts — the real client crypto) and calls the API through the generated
 // clients (apiTransport.mts), so it is operator-blind — only ciphertext + public keys are POSTed; the password never
 // leaves this process — and a contract change turns it red at `npm run typecheck`, not at its next run.
 //
@@ -22,20 +22,14 @@
 //    .run/.env still held the previous run's. Anything after 4a therefore warns instead of exiting.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import * as v1 from '@veyq/crypto/v1'
-import { fromB64std, b64std } from '@veyq/crypto/base64'
+import { fromB64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
-import { moderationEpochOne } from '../src/test/moderationEpochOne'
-import { sealName } from '../src/features/account/profile/memberName'
 import { admissionVerifies, sealGrant, tagAdmission } from '../src/features/spaces/grant'
 import { MAILPIT, MAILPIT_SMTP_PORT, mailCursor, mailpitReachable, waitForMail } from '../src/test/mailpit'
-import { Configuration as SetupConfiguration, SetupApi } from '../src/api/generated'
-import { Configuration as AuthConfiguration, LoginApi } from '../src/api/generated/auth'
-import { AccountApi, Configuration as AccountConfiguration } from '../src/api/generated/account'
 import { Configuration as TenantsConfiguration, TenantsApi } from '../src/api/generated/tenants'
-import { Configuration as ScopesConfiguration, ScopesApi } from '../src/api/generated/scopes'
 import { Configuration as TasksConfiguration, TasksApi, type ClaimedJob } from '../src/api/generated/tasks'
-import { BASE, adminCall, adminChannel, describeFailure, publicChannel, tenantChannel } from './apiTransport.mts'
+import { describeFailure, publicChannel, tenantChannel } from './apiTransport.mts'
+import { awaitBackend, birthPersonalScope, birthServerOwner, birthTenant, ensureBundledStore, orThrow, signIn } from './instanceBirth.mts'
 
 const ENV_FILE = fileURLToPath(new URL('../../.run/.env', import.meta.url))
 /** Where the backend reaches Mailpit's SMTP. Dotted on purpose: `TenantMailSettingsUpdate.host` is pinned to
@@ -63,24 +57,9 @@ function writeEnv(fields: Record<string, string>): void {
 // --- API calls: the generated clients, over the three channels apiTransport.mts configures ----------------------
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-/** Run one generated call, or end the run with what the backend answered. Only for steps before 4a. */
-async function orFail<T>(what: string, call: Promise<T>): Promise<T> {
-  try { return await call } catch (e) { return fail(`${what} failed: ${await describeFailure(e)}`) }
-}
-/** The same, for the optional steps after 4a: throw, and let the caller downgrade it to a warning. */
-async function orThrow<T>(what: string, call: Promise<T>): Promise<T> {
-  try { return await call } catch (e) { throw new Error(`${what} failed: ${await describeFailure(e)}`) }
-}
-
-async function awaitBackend(timeoutMs = 90_000) {
-  const setupApi = new SetupApi(new SetupConfiguration(publicChannel()))
-  const deadline = Date.now() + timeoutMs
-  let last = ''
-  while (Date.now() < deadline) {
-    try { return await setupApi.getSetupStatus() } catch (e) { last = await describeFailure(e) }
-    await sleep(750)
-  }
-  return fail(`backend did not answer ${BASE}/api/setup within ${timeoutMs}ms (${last})`)
+/** Run one step of the shared birth, or end the run with what it threw. Only for steps before 4a. */
+async function orFail<T>(step: Promise<T>): Promise<T> {
+  try { return await step } catch (e) { return fail((e as Error).message) }
 }
 
 // --- run --------------------------------------------------------------------------------------------------
@@ -123,83 +102,23 @@ function reusableSecretKey(raw: string | undefined, who: string): Uint8Array | u
   return bytes
 }
 
-const setup = await awaitBackend()
+const setup = await orFail(awaitBackend())
 if (!setup.setupRequired) fail('instance already set up — wipe it first (Bootstrap DB + Garage: `docker compose … down -v`), the Secret Key is random per birth')
 
-// 1 — cold-birth the Server Owner
-const built = await buildAccount(email, password, fromB64std(setup.instanceSalt), {
-  secretKey: reusableSecretKey(env.VEYQ_SECRET_KEY, 'owner'),
-})
+// 1–4 — the shared cold birth (instanceBirth.mts): the Server Owner, its sign-in, the bundled store chosen and checked,
+// the configured-domain tenant accepted as that owner (its real name sealed under K_tenant), its PERSONAL scope.
+const built = await orFail(birthServerOwner(email, password, setup, reusableSecretKey(env.VEYQ_SECRET_KEY, 'owner')))
 const m = built.material
-await orFail('setup/owner', new SetupApi(new SetupConfiguration(adminChannel())).createServerOwner({
-  createServerOwnerRequest: {
-    email,
-    suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
-    authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
-    moderationEpoch: moderationEpochOne(m.identityPublicKey),
-    // The dev instance runs as an unchosen one would (ADR 0093 § 14): club, organisation or company.
-    operatingMode: 'ORGANISATION',
-  },
-}))
 console.log(`owner: created ${email}`)
-
-// 2 — log in (account-level token)
-const loginApi = new LoginApi(new AuthConfiguration(publicChannel()))
-const ch = await orFail('login challenge', loginApi.requestLoginChallenge({ loginChallengeRequest: { email } }))
-const auth = v1.deriveAuthKeypair(password, v1.deriveAuthSalt(fromB64std(ch.instanceSalt), email), v1.ARGON)
-const { accessToken: token } = await orFail('login', loginApi.verifyLogin({
-  loginVerifyRequest: { email, nonce: ch.nonce, signature: b64std(v1.authSign(auth.privateKey, fromB64std(ch.nonce))) },
-}))
+const token = await orFail(signIn(email, password))
+if (await orFail(ensureBundledStore(token))) console.log('store: bundled store chosen and checked')
 const onTenant = tenantChannel(domain, token)
-
-// 2b — the object store is a Server-Owner setting with a passed check (ADR 0089): the server refuses a tenant (409
-// `store_not_ready`) until one has passed. A fresh dev instance has none, so choose the deployment's bundled store and check it.
-type StoreState = { bundledAvailable?: boolean; setting?: unknown; lastCheck?: { passed?: boolean } | null }
-const storeNow = await adminCall<StoreState>(token, 'GET', '/api/instance/store')
-if (storeNow.status !== 200) fail(`store: GET /api/instance/store answered ${storeNow.status}`)
-if (!storeNow.json.lastCheck?.passed) {
-  if (!storeNow.json.setting) {
-    if (!storeNow.json.bundledAvailable) fail('store: no store is set and the deployment offers no bundled one — set one in the admin console first')
-    const put = await adminCall<unknown>(token, 'PUT', '/api/instance/store', { bundled: true })
-    if (put.status !== 200) fail(`store: PUT /api/instance/store answered ${put.status} ${JSON.stringify(put.json)}`)
-  }
-  const checked = await adminCall<NonNullable<StoreState['lastCheck']>>(token, 'POST', '/api/instance/store/check')
-  if (checked.status !== 200 || !checked.json.passed) fail(`store: the check did not pass — ${checked.status} ${JSON.stringify(checked.json)}`)
-  console.log('store: bundled store chosen and checked')
-}
 const tenantsApi = new TenantsApi(new TenantsConfiguration(onTenant))
-
-// 3 — the configured-domain tenant, accepted as the existing user (TENANT grant sealed to our own identity)
-// The owner invite's secret comes back to the Server Owner who minted it (`TenantCreated.bootstrapSecret`), so no
-// mailbox or dev-invite file is read for it.
-const { tenantId, bootstrapSecret } = await orFail('createTenant', new TenantsApi(new TenantsConfiguration(adminChannel(token)))
-  .createTenant({ createTenantRequest: { tenantName, domain, ownerEmail: email } }))
-// Keep the freshly-minted TENANT scope key (K_tenant): the grant wraps it, and — holding it here — we can seal
-// the optional real name at accept, exactly as TenantJoinView does at an owner cold-birth (cr-0106).
-const tenantScopeKey = v1.randomBytes(32)
-// Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0; the name to (tenant scope, our id) (ADR 0072).
-// The birth is what TenantJoinView sends: the grant signed by our identity (ADR 0028 Decision 6) and our own
-// admission self-tagged under E_0 (ADR 0020 move 6).
-const { userId: ownerId } = await orFail('key-material', new AccountApi(new AccountConfiguration(onTenant)).getAccountKeyMaterial())
-const ownerPub = b64std(v1.serializeIdentityPublic(built.identity.pub))
-const tenantBirth = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
-const ownerAdmission = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
-const sealedName = firstName || lastName ? sealName(tenantScopeKey, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
-await orFail('accept', tenantsApi.acceptTenantInvite({
-  acceptInviteRequest: {
-    bootstrapSecret, username, grant: tenantBirth.wrappedGrant, grantSignature: tenantBirth.grantSignature, ...ownerAdmission,
-    ...(sealedName ? { sealedName } : {}),
-  },
-}))
+// Keep K_tenant (`tenantScopeKey`): the optional member below is admitted under it.
+const { tenantId, ownerId, tenantScopeKey, sealedName } = await orFail(birthTenant(token, built, { tenantName, domain, email, username, firstName, lastName }))
 console.log(`tenant: ${domain} created + accepted${sealedName ? ' + name sealed' : ''}`)
-
-// 4 — the owner's PERSONAL scope
-const personalScopeId = crypto.randomUUID() // client-minted: the grant is bound to it (ADR 0072)
-const personalGrant = sealGrant(v1.randomBytes(32), { scopeId: personalScopeId, kind: 'PERSONAL', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
-const scope = await orFail('createPersonalScope', new ScopesApi(new ScopesConfiguration(onTenant)).createPersonalScope({
-  createPersonalScopeRequest: { scopeId: personalScopeId, ...personalGrant },
-}))
-console.log(`scope: personal scope ${scope.scopeId} created`)
+const scopeId = await orFail(birthPersonalScope(token, domain, ownerId, built))
+console.log(`scope: personal scope ${scopeId} created`)
 
 // 4a — the owner is complete: record its material NOW. Everything below is optional, and an optional step must
 // never be able to take the owner's Secret Key down with it (it exists nowhere but this process until here).
