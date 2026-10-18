@@ -180,9 +180,6 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    - **The backup period B** (GDPR Art. 13(2)(a), ADR 0093 § 10) is no value veyq holds yet: the record passage says a
      backup made another way can hold the record "until that backup is deleted", a criterion where the law prefers a
      period. `cr-backup-erasure-and-retention` makes B a value; the passage then renders it.
-   - **The Server Owner's own steps carry no statement** (ADR 0093 § 7's status): blocking a member's sign-in and taking
-     a space offline restrict a recipient as much as a moderator's block, and DSA Art. 17 asks a statement for them.
-     The section says that those a measure affects are told, which the law asks; `cr-statement-legal-gaps` builds it.
    - **A member's own GDPR Art. 13 information** (the account, the acceptance history, the moderation log as far as it
      names them) is in no text; the section covers only the guest-write record and a reporter's contact.
      `cr-instance-privacy-notice` writes the privacy notice (decision 8) and moves the record's passage there (its Q27),
