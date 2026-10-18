@@ -29,6 +29,7 @@ import me.raddatz.veyq.core.generated.model.ShareNode
 import me.raddatz.veyq.core.generated.model.ShareRole
 import me.raddatz.veyq.core.generated.model.ShareSummary
 import me.raddatz.veyq.core.generated.model.ShareTerms
+import me.raddatz.veyq.core.terms.toWire
 import me.raddatz.veyq.core.generated.model.UpdateShareRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.RequestClient
@@ -307,6 +308,7 @@ class SharingResource(
                     termsRevision = o.termsRevision,
                     // null when the space owner has published no terms (termsRevision 0) — the client never gates.
                     terms = if (o.de == null && o.en == null) null else LocalizedMarkdown(de = o.de, en = o.en),
+                    operatorSection = o.section.toWire(),
                 ),
             ).build()
             is HttpFailure -> httpError(o)

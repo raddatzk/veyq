@@ -227,7 +227,7 @@ class OperatorBlindProbeTest {
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")
         },
         // The live tenant publishes no terms, so the control's accept answers `409 terms_revision_changed` — past the gate.
-        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"revision":1}""") },
+        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"revision":1,"operatorRevision":1,"variant":"FULL"}""") },
         "getTenantMailSettings" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/mail-settings") },
         "updateTenantMailSettings" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")
@@ -361,6 +361,11 @@ class OperatorBlindProbeTest {
             "public: the values the Server Owner published about who runs the instance (ADR 0093 § 11, ADR 0035 " +
                 "decision 7) — instance-wide, the same on every host; it names no space and no account.",
             "getOperatorDetails",
+        )
+        reason(
+            "public: the operator section of the terms (ADR 0035 decision 6), fixed text rendered with those published " +
+                "values — publicly available as DSA Art. 14(1) asks, instance-wide; it names no space and no account.",
+            "getOperatorTerms",
         )
     }
 

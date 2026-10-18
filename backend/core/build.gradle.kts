@@ -25,6 +25,15 @@ plugins {
 
 veyqOpenApi { generateOwnSpecs() } // `contracts/api/*.openapi.yaml`, by its path `:core`
 
+// The operator section of the terms (ADR 0035 decision 6) ships in the jar from its one source in `contracts/terms/`,
+// read at startup by `core/terms/OperatorSections` (`OperatorSectionText.RESOURCE`). A missing file fails the build here
+// rather than a started server, since `from` alone copies nothing silently; the Dockerfile copies the file too.
+val operatorSection = rootDir.resolve("../contracts/terms/operator-section.json")
+tasks.processResources {
+    inputs.file(operatorSection)
+    from(operatorSection) { into("veyq/terms") }
+}
+
 dependencies {
     // `api`: the root and every application build on these extensions through core.
     api("io.quarkus:quarkus-arc")

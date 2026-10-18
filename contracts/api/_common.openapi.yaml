@@ -558,8 +558,8 @@ components:
       example: FULL
 
     OperatorSection:
-      # Shared by the tenants spec (the member gate) and the sharing spec (the accountless share gate), like
-      # LocalizedMarkdown (ADR 0038).
+      # Shared by the tenants spec (the member gate), the sharing spec (the accountless share gate) and the operator
+      # spec (the public page, DSA Art. 14(1)), like LocalizedMarkdown (ADR 0038).
       type: object
       description: >
         The fixed operator section of the terms (ADR 0035 decision 6), rendered by the server from
