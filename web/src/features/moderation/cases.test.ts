@@ -223,14 +223,20 @@ describe('the sealed texts', () => {
     expect(openNote(EPOCH, CASE, sealed.sealedNote)).toBeNull()
   })
 
-  it('a report opens with its epoch’s key', () => {
-    const body: v1.ReportBody = { reportKey: new Uint8Array(32).fill(7), reason: 'it is a threat', contact: 'r@example.org', context: 'a guest' }
-    const sealed = b64std(v1.sealReport(EPOCH, v1.moderationBundle(key).kem, body))
-    const opened = openReportOf(EPOCH, sealed)!
+  it('a report opens with its epoch’s key, its contact sealed apart beside it', () => {
+    const kem = v1.moderationBundle(key).kem
+    const body: v1.ReportBody = { reportKey: new Uint8Array(32).fill(7), reason: 'it is a threat', context: 'a guest' }
+    const sealed = b64std(v1.sealReport(EPOCH, kem, body))
+    const contact = b64std(v1.sealReportContact(EPOCH, kem, 'r@example.org'))
+    const opened = openReportOf(EPOCH, sealed, contact)!
     expect(opened.reason).toBe('it is a threat')
     expect(opened.contact).toBe('r@example.org')
     expect(opened.context).toBe('a guest')
-    expect(openReportOf(EPOCH + 1, sealed)).toBeNull()
+    expect(openReportOf(EPOCH + 1, sealed, contact)).toBeNull()
+    // Gone after six months (ADR 0093 § 11), or never left: the report still opens, with no contact.
+    expect(openReportOf(EPOCH, sealed, null)!.contact).toBe('')
+    // A contact that does not open (sealed to another epoch) reads as none, the report still opens.
+    expect(openReportOf(EPOCH, sealed, b64std(v1.sealReportContact(EPOCH + 1, kem, 'x@y.z')))!.contact).toBe('')
   })
 })
 
@@ -266,12 +272,18 @@ describe('the statement of reasons', () => {
 
   it('tells only the reporters whose contact is an address, and a report it cannot open tells nobody', () => {
     const kem = v1.moderationBundle(key).kem
-    const sealed = (contact: string) => b64std(v1.sealReport(EPOCH, kem, { reportKey: new Uint8Array(32), reason: 'r', contact, context: '' }))
-    const report = (id: string, sealedReport: string, epoch = EPOCH) =>
-      ({ id, epoch, receivedAt: UNTIL, category: 'TERMS_BREACH', sealedReport, reporter: 'LINK', barred: false }) as const
+    const sealedReport = b64std(v1.sealReport(EPOCH, kem, { reportKey: new Uint8Array(32), reason: 'r', context: '' }))
+    const sealedContact = (contact: string) => b64std(v1.sealReportContact(EPOCH, kem, contact))
+    const report = (id: string, contact: string | null, epoch = EPOCH) =>
+      ({ id, epoch, receivedAt: UNTIL, category: 'TERMS_BREACH', sealedReport, sealedContact: contact, reporter: 'LINK', barred: false }) as const
     const notices = reporterNoticesOf({
       ...aCase,
-      reports: [report(REPORT, sealed(' reporter@example.org ')), report(ITEM, sealed('call me on Tuesdays')), report(MEASURE, sealed('x@y.z'), EPOCH + 1)],
+      reports: [
+        report(REPORT, sealedContact(' reporter@example.org ')),
+        report(ITEM, sealedContact('call me on Tuesdays')),
+        report(MEASURE, sealedContact('x@y.z'), EPOCH + 1),
+        report(ACCOUNT, null),
+      ],
     })
     expect(notices).toEqual([{ reportId: REPORT, address: 'reporter@example.org' }])
   })

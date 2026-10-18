@@ -42,7 +42,7 @@ function report(reportId: string, epoch: number, keys: v1.ReportKey[], itemId = 
   const reportKey = v1.randomBytes(32)
   return {
     reportId, epoch, receivedAt: new Date('2026-10-01T10:00:00Z'),
-    sealedReport: b64std(v1.sealReport(epoch, v1.moderationBundle(moderationKey).kem, { reportKey, reason: `reason ${reportId}`, contact: '', context: '' })),
+    sealedReport: b64std(v1.sealReport(epoch, v1.moderationBundle(moderationKey).kem, { reportKey, reason: `reason ${reportId}`, context: '' })),
     sealedShare: b64std(v1.sealReportShare(reportKey, { kind: 'NODE', id: itemId }, keys)),
   }
 }
