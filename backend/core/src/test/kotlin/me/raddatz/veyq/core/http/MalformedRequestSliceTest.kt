@@ -1,9 +1,14 @@
 package me.raddatz.veyq.core.http
 
+import me.raddatz.veyq.core.generated.model.AuthorityOrderRequest
 import me.raddatz.veyq.core.generated.model.ClaimRequest
+import me.raddatz.veyq.core.generated.model.CreateNodeRequest
 import me.raddatz.veyq.core.generated.model.ErrorResponse
+import me.raddatz.veyq.core.generated.model.TenantMailSettingsUpdate
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -15,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.util.UUID
 
 /**
@@ -37,6 +43,8 @@ import java.util.UUID
 class MalformedRequestSliceTest {
 
     @Inject lateinit var validator: Validator
+
+    @Inject lateinit var mapper: ObjectMapper
 
     private val user = seedUser()
 
@@ -97,6 +105,64 @@ class MalformedRequestSliceTest {
     @Test
     fun aNullElementInAListOfObjectsIsInvalidRequest() {
         assertRefused(post("/api/scopes/${UUID.randomUUID()}/blob-uploads-batch", """{"items":[null]}"""), "items")
+    }
+
+    // --- a JSON value of the wrong type (StrictJsonTypes; the API fuzzing's first run, cr-api-fuzzing Q5) ---------
+
+    /** Jackson coerced a number into a string field: `12345678` became the capability tag `"12345678"`. */
+    @Test
+    fun aNumberForAStringIsInvalidRequest() {
+        assertRefused(claim("""{"capabilityTags":[12345678]}"""), "12345678")
+    }
+
+    /** An integer for an enum used to bind by ordinal. */
+    @Test
+    fun aNumberForAnEnumIsInvalidRequest() {
+        val response = given().header("Authorization", bearer(user)).contentType(ContentType.JSON)
+            .body("""{"role":1}""")
+            .`when`().patch("/api/scopes/${UUID.randomUUID()}/members/${UUID.randomUUID()}")
+        assertRefused(response, "role")
+    }
+
+    /** The remaining coercions, each at the mapper every body is bound by: what [MismatchedInputExceptionMapper]
+     *  answers `400 invalid_request` for is exactly this exception. */
+    @Test
+    fun theOtherScalarCoercionsAreRefusedWhileBinding() {
+        val order = """"id":"${UUID.randomUUID()}","kind":"REMOVAL","shareId":"${"a".repeat(43)}","receivedAt":"2026-10-18T07:12:00Z","reference":{"epoch":2,"sealedReference":"cmVm"}"""
+        val node = """"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"a2V5""""
+        val coerced = mapOf(
+            "an integer for a boolean" to ("""{"tls":1,"enabled":true}""" to TenantMailSettingsUpdate::class.java),
+            "a string for a boolean" to ("""{"tls":"true","enabled":true}""" to TenantMailSettingsUpdate::class.java),
+            "a string for an integer" to ("""{$node,"orderIndex":"0"}""" to CreateNodeRequest::class.java),
+            "a fraction for an integer" to ("""{$node,"orderIndex":1.5}""" to CreateNodeRequest::class.java),
+            "a number for a date-time" to ("""{$order,"deferStatementUntil":0}""" to AuthorityOrderRequest::class.java),
+        )
+        for ((what, case) in coerced) {
+            assertThrows<MismatchedInputException>(what) { mapper.readValue(case.first, case.second) }
+        }
+        // The control: the same documents with the declared types bind.
+        mapper.readValue("""{"tls":true,"enabled":true}""", TenantMailSettingsUpdate::class.java)
+        mapper.readValue("""{$node,"orderIndex":0}""", CreateNodeRequest::class.java)
+        mapper.readValue("""{$order,"deferStatementUntil":"2026-10-20T00:00:00Z"}""", AuthorityOrderRequest::class.java)
+    }
+
+    // --- a query parameter of the wrong type or format (StrictParamConverters) ------------------------------------
+
+    /** A query parameter the framework could not convert answered an empty `404` (JAX-RS' rule for a query
+     *  parameter), and `java.util.UUID.fromString` accepts `1-1-1-1-1`. The contract says `400 invalid_request`. */
+    @Test
+    fun aMalformedQueryParameterIsInvalidRequest() {
+        for (nodeId in listOf("not-a-uuid", "1-1-1-1-1")) {
+            val response = given().header("Authorization", bearer(user)).queryParam("nodeId", nodeId)
+                .`when`().get("/api/shares")
+            assertRefused(response, nodeId)
+        }
+        val revoke = given().header("Authorization", bearer(user)).queryParam("revokeLinks", "5")
+            .`when`().delete("/api/tenants/${UUID.randomUUID()}/members/${UUID.randomUUID()}")
+        assertRefused(revoke, "revokeLinks")
+        // The control: a well-formed one reaches the handler (nothing shared from a node nobody owns: 200, empty).
+        assertEquals(200, given().header("Authorization", bearer(user)).queryParam("nodeId", UUID.randomUUID().toString())
+            .`when`().get("/api/shares").statusCode)
     }
 
     // --- refused by bean validation after binding (inbox #355, #354) -----------------------------------------
