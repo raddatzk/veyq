@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.moderation.cases.CaseTestKit.lift
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.review
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.reviewBlobs
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.take
+import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.hold.HoldPinEntity
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.body
@@ -42,6 +43,8 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -200,6 +203,56 @@ class ModerationMemoriesSliceTest {
         // A held blob reaches the store (which cannot presign in %test); one the hold does not hold is left out.
         mod.reviewBlobs(caseId, listOf(w.medium.originalBlob)).then().statusCode(503)
         mod.reviewBlobs(caseId, listOf(UUID.randomUUID().toString())).then().statusCode(200).body("blobs.size()", equalTo(0))
+    }
+
+    /**
+     * A content block on a medium ends with the medium's purge (ADR 0093 § 6, GDPR Art. 5(1)(e); `MediaStore.purgeMediaRows`,
+     * the one body of the member's purge, the retention purge, a guest's delete and the trash purge's media): lifted by no
+     * one and logged so, its case's records run to their date instead of standing on nothing. Trashed, it still stands —
+     * only the purge erases the medium.
+     */
+    @Test
+    fun aContentBlockOnAMediumEndsWhenTheMediumIsPurged() {
+        val mod = CaseTestKit.moderator()
+        val w = guestUpload()
+        asMember(w.owner, w.scopeId, body(listOf(item("ITEM", w.medium.mediaId)))).then().statusCode(201)
+        val caseId = openCase("ITEM", w.medium.mediaId)!!.id
+        val measure = mod.take(caseId, "CONTENT", targetId = w.medium.mediaId).then().statusCode(201).extract().path<String>("measures[0].id")
+        given().header("Authorization", bearer(w.owner)).`when`().delete("/api/scopes/${w.scopeId}/media/${w.medium.mediaId}")
+            .then().statusCode(204)
+        assertNotNull(measureRow(measure).activeKey, "control: a trashed medium still stands, and so does its block")
+        given().header("Authorization", bearer(w.owner)).`when`().post("/api/scopes/${w.scopeId}/media/${w.medium.mediaId}/purge")
+            .then().statusCode(204)
+        assertEndedByErasure(caseId, measure, w.medium.mediaId)
+    }
+
+    /** The same through a space's purge (`MediaScopeEraser`): the set-based erasure ends the block on every medium it erases. */
+    @Test
+    fun aContentBlockOnAMediumEndsWithItsSpacesPurge() {
+        val mod = CaseTestKit.moderator()
+        val w = guestUpload()
+        asMember(w.owner, w.scopeId, body(listOf(item("ITEM", w.medium.mediaId)))).then().statusCode(201)
+        val caseId = openCase("ITEM", w.medium.mediaId)!!.id
+        val measure = mod.take(caseId, "CONTENT", targetId = w.medium.mediaId).then().statusCode(201).extract().path<String>("measures[0].id")
+        assertNotNull(measureRow(measure).activeKey, "control: in force before the purge")
+        scopePurge.purge(w.scopeId)
+        assertEndedByErasure(caseId, measure, w.medium.mediaId)
+    }
+
+    private fun measureRow(id: String): ModerationBlockEntity = QuarkusTransaction.requiringNew().call { ModerationBlockEntity.findById(id)!! }
+
+    private fun assertEndedByErasure(caseId: String, measure: String, target: String) {
+        val row = measureRow(measure)
+        assertNull(row.activeKey, "the block ended with the medium")
+        assertNotNull(row.liftedAt)
+        assertNull(row.liftedBy, "lifted by no one")
+        assertEquals(
+            1L,
+            QuarkusTransaction.requiringNew().call {
+                ModerationEventEntity.count("caseId = ?1 and event = ?2 and targetId = ?3 and moderatorId is null", caseId, "MEASURE_LIFTED", target)
+            },
+            "the end is logged on its case",
+        )
     }
 
     // --- the world (HoldMemoriesSliceTest's shape) ---------------------------------------------------------------
