@@ -4,6 +4,7 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
 ---
 
 If you see something in a space or through a link that is illegal or against the terms, you can tell the people who
@@ -37,13 +38,14 @@ If **Report** is not there, the server has no moderation key yet, and there is n
 - **The moderators are told** that there is a new case and its category, never what it is or where. Urgent categories
   reach them at once.
 - **Your address** goes to the server once, for the receipt it mails you; it keeps only the copy the moderators alone
-  can read.
+  can read. When the moderators decide, they send it once more, and you are mailed whether they took a measure or
+  none — nothing about what it was.
 
 ## Blocked by the operator
 
 When the moderators decide that something must not be shown any more, they block it. In its place you then see
-**Blocked by the operator**, with its name and without a reason: in the list of a folder, as a tile in a Memory, and in
-the lightbox. A member of the space and a guest of a link see the same.
+**Blocked by the operator**, with its name: in the list of a folder, as a tile in a Memory, and in the lightbox. A
+member of the space and a guest of a link see the same; only the people it affects are also told why (below).
 
 - **It does not open.** Nothing of it is shown or downloaded, and nothing inside a blocked folder or Memory either.
 - **It can still be deleted.** Whoever could delete it before — the person who uploaded it, for example — still can.
@@ -54,5 +56,22 @@ the lightbox. A member of the space and a guest of a link see the same.
   who made it can neither re-activate nor renew it while the block stands. If the moderators blocked a guest who
   uploaded through a link, that link stops working too, and the person who made it may renew it: the renewed link has a
   new address.
+
+## If something of yours was blocked
+
+If you made the link, uploaded what was blocked, or own the space it lies in, the moderators tell you why.
+
+1. Open what was blocked — the photo in its lightbox, the folder or Memory, or the link in **Share**. Under **Blocked by
+   the operator** you find **Why it was blocked**: what was blocked and what that means, why you are told, what the
+   moderators found, the ground, and on most servers that a report led to it, that a person decided and that you can go
+   to court. If the server sends mail, you also get one saying that this is there — never what the moderators found.
+2. If you disagree, write it under **Your objection** and choose **Send the objection**. You can object once. Only the
+   moderators can read it.
+3. Another moderator than the one who blocked it looks at it again, where the server has one; if not, the same one
+   does, and the answer says so. You read the answer in the same place and are mailed that it is there. If the measure
+   stands, you can still go to court.
+
+A guest who uploaded through a link is told nothing in veyq; ask the people who run the server, at the address they
+publish.
 
 How safe the rest of your data stays: [Is my data safe?](/veyq/privacy/is-my-data-safe/)

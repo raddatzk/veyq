@@ -80,7 +80,7 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 |---|---|---|
 | Case open | 90 days after the report that took it | this enabler (cr-report-and-hold) |
 | Case dismissed | at once | cr-moderation-review-and-measures (`CaseDecisions`) |
-| Measure taken | six months after the decision (`Holds.SIX_MONTHS`, 183 days); from the statement's sending once it exists | cr-moderation-review-and-measures; cr-statement-of-reasons-and-objection moves the start |
+| Measure taken | six months (`Holds.SIX_MONTHS`, 183 days) after the measure's statement of reasons was sent; after the decision where nobody could be told (no member among its recipients) | cr-moderation-review-and-measures; cr-statement-of-reasons-and-objection (`CaseDecisions.decide`) |
 | The case's last measure lifted | at once, and the case closes | cr-moderation-review-and-measures |
 | Extended by a moderator | the end the extension names: after the current end, at most six months from now, with a sealed reason | cr-moderation-review-and-measures |
 | Child sexual abuse material, an authority's order | ADR 0093 § 4's table | cr-authority-orders-and-art18-reports |

@@ -29,7 +29,7 @@ this page says so.
 |---|---|---|---|
 | [Key Transparency](#key-transparency) | an identity installed by the operator; TOFU's first-use gap | named as the end-state; no design recorded | ADR 0060 (g), ADR 0028 |
 | [Strict verification mode](#strict-verification-mode) | verification is advisory; nothing enforces it before a first share | decided in principle; shape open | ADR 0028 Decision 4 |
-| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | the affected are not told of a moderation decision and cannot object; an authority's order has no entry | decided | ADR 0093 §§ 7, 12–13 |
+| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | an authority's order has no entry, and cannot defer a statement | decided | ADR 0093 §§ 7, 12–13 |
 | [Passkey unlock](#passkey-unlock) | no passwordless login and unlock | method named in the contract; no client | en.account.key-model |
 | [Hybrid ML-DSA signatures](#hybrid-ml-dsa-signatures) | signatures are classical (Ed25519) | strategy only | ADR 0017 |
 | [A client served by a trusted third party](#a-client-served-by-a-trusted-third-party) | operator-served web is passive-operator only | trust tier defined; needs a central origin | ADR 0026 |
@@ -85,14 +85,16 @@ share is sealed to the instance moderation key, and a hold keeps the reported ro
 Owner appoints review the held snapshot in the share viewer's moderation mode, holding only that key, and decide in
 web's moderation surface: dismiss, extend a hold, bar a reporter, or block a link, content or a guest uploader. Blocking
 a member's sign-in and taking a tenant offline stay the Server Owner's, on the admin channel. Every step is a row by id
-that deletes nothing and is lifted by closing it
+that deletes nothing and is lifted by closing it. A block carries its statement of reasons to the people it affects,
+the facts sealed to each of them; they object once, and another moderator decides where there is one
 ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md),
 [uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md),
-[uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md)).
+[uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md),
+[uc.moderation.object-to-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
 
-**Gap it would close.** The person affected by a decision is not told of it, and cannot object; no second moderator
-reviews an objection. An authority's order — which acts on ids, without a report — has no entry, and the flow for
-child sexual abuse material and Art. 18 reports, with its own hold ends, is not built.
+**Gap it would close.** An authority's order — which acts on ids, without a report — has no entry, and cannot defer a
+statement of reasons; the flow for child sexual abuse material and Art. 18 reports, with its own hold ends, is not
+built. The Server Owner's own steps (a member's sign-in, a tenant offline) carry no statement yet.
 
 **Design state.** Decided: the statement of reasons and the objection in
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)

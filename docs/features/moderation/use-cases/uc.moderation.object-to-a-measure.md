@@ -87,4 +87,5 @@ who blocked it looks at it again.
 - [uc.moderation.take-a-measure](uc.moderation.take-a-measure.md), [uc.moderation.review-a-case](uc.moderation.review-a-case.md),
   [en.moderation.log](../enablers/en.moderation.log.md), [en.moderation.hold](../enablers/en.moderation.hold.md)
 - Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
   [Report something](../../../../site/src/content/docs/help/report-something.mdx)

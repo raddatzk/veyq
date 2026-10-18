@@ -9,8 +9,13 @@
   the review in moderation mode, and every step and its lift, the Server Owner's taken on the admin channel — with § 4's
   other ends of a case and § 5's bar of a reporter (cr-moderation-review-and-measures, 2026-10-18;
   [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
-  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)); the statement of
-  reasons and the objection (§ 7) are not. The rest is not. Who moderates — moderators the
+  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). § 7 is built but
+  for the deferral (cr-statement-of-reasons-and-objection, 2026-10-18;
+  [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)): a
+  moderator's measure carries its statement in the form the operating mode sets, to its recipients in the app and by
+  instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
+  measure's hold counts from the statement (§ 4); a guest is told nothing in the app (it has no account, so a guest
+  uploader counts as nobody to tell), and the Server Owner's own steps carry no statement yet. The rest is not. Who moderates — moderators the
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here

@@ -5,6 +5,7 @@ sources:
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
 ---
 
 Die Person, die einen veyq-Server betreibt, kann dich bitten, ihn zu **moderieren**: dir anzusehen, was gemeldet wird,
@@ -84,9 +85,22 @@ ihn bestätigst.
   sechs Monate ab heute, und gib eine **Begründung** an, etwa die Anfrage einer Behörde oder eine Klage. Die Begründung
   ist Pflicht und wird versiegelt wie eine Notiz.
 
+Eine Sperre geht mit einer **Begründung** an die Betroffenen. Wähle den **Grund** und schreib, **Was du festgestellt
+hast**: Auf den meisten Servern ist das Pflicht, auf einem privaten freiwillig. Es erreicht jede betroffene Person
+versiegelt, sodass nur sie es lesen kann — und das Moderationsprotokoll, versiegelt wie eine Notiz —, nie eine E-Mail.
+Die Begründung nennt den Server, nie dich. Wer beim Melden eine Adresse hinterlassen hat, erfährt die Entscheidung.
+
 Eine Sperre entscheidet den Fall, und was für ihn gesichert ist, bleibt dann sechs Monate gesichert. **Aufheben** bei
 einer Maßnahme — deiner oder der einer anderen moderierenden Person — liefert das Gesperrte wieder unverändert aus. Wird
 die letzte Maßnahme in Kraft aufgehoben, wird das Gesicherte freigegeben und der Fall abgeschlossen.
+
+## Widersprüche
+
+Wer von einer Sperre betroffen ist, kann einmal widersprechen. Der Fall zeigt den Widerspruch dann unter
+**Widersprüche**, für dich geöffnet, und steht wieder in der Liste der Fälle, markiert mit **Widerspruch offen**. Wähle
+**Maßnahme bestätigen** oder **Maßnahme aufheben**. Hast du die Maßnahme selbst ergriffen und hält eine andere Person
+aus der Moderation den Schlüssel, sagt der Fall, dass eine andere Person entscheiden muss; bist du die einzige Person in
+der Moderation, entscheidest du selbst, und die Antwort sagt das.
 
 ## Was festgehalten wird, und wie lange
 
