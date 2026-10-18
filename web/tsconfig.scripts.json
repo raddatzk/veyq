@@ -6,5 +6,5 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true
   },
-  "include": ["scripts/**/*.mts"]
+  "include": ["scripts/**/*.mts", "src/env.d.ts"]
 }

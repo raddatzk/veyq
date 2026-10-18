@@ -15,13 +15,13 @@ invariants:
 
 **The second of two CRs** (owner 2026-10-18). It answers the owner's question on the hardware it is about: **does
 a Hetzner CAX11 (2 Ampere vCPU, 4 GB) carry a veyq instance for a household, and up to what volume?** It runs the
-harness that [`cr-volume-measurement-local`](cr-volume-measurement-local.md) built against a real CAX11, judges
-the result by the rule that CR decided, and writes the recommendation where operators read it:
-`site/src/content/docs/run/plan.md` § Size the host, which today says "No CPU, memory or disk minimum is
+harness the first CR, `cr-volume-measurement-local` (done and deleted 2026-10-18), built against a real CAX11, judges
+the result by the rule that CR decided (§ Local pre-check states it), and writes the recommendation where operators
+read it: `site/src/content/docs/run/plan.md` § Size the host, which today says "No CPU, memory or disk minimum is
 documented". Then it deletes the harness.
 
-**Blocked until** `cr-volume-measurement-local` is done and has filled § Local pre-check below, and the owner has
-set up the server (§ What the owner provides).
+**Blocked until** the owner has set up the server (§ What the owner provides). The local pre-check is done:
+§ Local pre-check below holds its verdict, the procedure and what it changes for this run.
 
 ## Context & constraints
 
@@ -59,8 +59,79 @@ needs `cosign` on the host at all, and how the release assets get there (`script
 
 ### Local pre-check
 
-_Filled by `cr-volume-measurement-local` phase 9: the local verdict per stage, the hotspots it found, the exact
-boot, seeding and measuring commands, and the judging rule as decided in its Q1._
+Filled by `cr-volume-measurement-local` (done 2026-10-18; that CR is deleted, everything it left that binds is here).
+
+**The judging rule (its Q1, owner 2026-10-18).** A host carries a stage when, across that stage and all three
+scenarios: no container is OOM-killed or restarted; peak host memory stays at or below 80 % of its RAM; no request
+fails; on a desktop browser a 3,000-photo Chapter's list arrives within 2 s and its last thumbnail within 15 s. The
+10,000 stage is reported against the same rule but does not decide the recommendation. `measure_volume.py judge
+<dir>` applies it to one readings directory; its docstring says how each clause is read (an OOM is an `oom` event or a
+`die` with any exit but 143; locally "host memory" is the recipe's five containers summed, against 80 % of 4 GiB).
+
+**The local verdict** (2026-10-18, 20:03–23:44, this Mac's Docker VM, the recipe pinned to two vCPUs, every stage
+started at load ≤ 3 with the owner's idle dev stack as the only neighbour). A local reading is a pre-check: an M4 Pro
+core is much faster than an Ampere one, so the server times below are a floor for the CAX, never its answer.
+
+| Stage | Server leg (warm median; SELECTs) | Browser, desktop | Browser, 4× throttle | Rule |
+|---|---|---|---|---|
+| photos 1,000 | 180 ms; 4,011; 2.3 MB, no `Content-Encoding` | list 160–218 ms, last thumbnail 14.9–15.5 s | last thumbnail 70–75 s | carries |
+| photos 3,000 | 814 ms; 12,013; 7.0 MB | list 426 ms; **stopped at 1,370 of 3,000** thumbnails (1,630 presigns refused by Chromium, #488) | stopped at 2,178 | **fails — on the client** |
+| photos 10,000 | 3.0 s (cold 1.9–3.1 s); 40,017; 23.4 MB | list 2.3–2.7 s; stopped at 1,544–1,656 | the page stopped answering | reported: fails on the client |
+| tree 500 / 2,000 / 5,000 | 17 / 30 / 48 ms; 10 | root view 0.13 / 0.32 / 0.84–0.89 s; deep Chapter 0.12 / 0.23 / 0.42 s | root 0.35 / 1.1 / 3.2–3.4 s | carries |
+| wide 2,000 | 30 ms; 10 | root 0.24–0.25 s, deep 0.25–0.26 s | 0.76–0.86 s | carries |
+| members 20 / 200 | 19 / 39 ms; 32 / 213 (one per member, no ETag) | every row named and pictured at 0.50–0.65 s | 0.65–1.6 s | carries |
+| members 1,000 | **unreachable**: the owner's identity-pin store is full at 444 pins (#491) | — | — | measured at 445 instead: 42 ms, 458 SELECTs; page complete at 0.83–0.88 s (×4: 2.3–2.7 s); carries |
+| idle 30 min | — | — | — | carries; the app's memory 412 → 424 MB after its first five minutes (+2.9 %, flat) |
+| five at once, 10,000 | app CPU mean 69 % of 200 %, MariaDB peak 76 %, no server-side failure | every device stopped (#488; the rig, below) | — | the host carried; the clients did not |
+| upload 1,000 × 4 MB | 1.7 min, 593 photos a minute, 47 MB/s of plaintext | — | — | carries; the **app peaked at 0.91 GiB of its 1 GiB `mem_limit`** |
+
+Memory never came near the budget: the recipe's summed peak was 1.46 GiB (the upload), 1.30 GiB with five devices on
+the 10,000 Chapter, at most 1.23 GiB in every stage — 3.2 GiB was allowed. No container was OOM-killed or restarted
+unbidden in any stage. Every request the server answered succeeded; every failure counted was the browser's own
+(`net::ERR_INSUFFICIENT_RESOURCES`) or a page too busy to answer. **So by the rule the local host carries the household
+except where the client gives out first**: the 3,000-photo clause fails because of #488, which no host fixes. Disk
+after the run: Garage data 14.4 GB and meta 170 MB, MariaDB 330 MB, for 10,000 seeded photos (small originals), 1,000
+phone photos, 7,001 nodes and 446 members.
+
+**Hotspots, each an inbox row with the number that justifies it:** #488 the gallery's unbatched, unbounded presigns;
+#489 decryption and rendering on the main thread, the grid not virtualized; #490 the media list's 1 + 4N queries,
+unpaged, and no compressed answer anywhere; #491 the identity-pin store's 1 MiB cap. Seen and not worth a row yet: the
+member list's one query per member and missing ETag (458 SELECTs, 42 ms at 445); the app at 91 % of its memory limit
+while a phone uploads — the CAX run should watch the app there first.
+
+**For this CR's run.**
+- *Phase 2's member axis* cannot reach 1,000 while #491 stands; its top stage is what the product reaches (445 on a
+  fresh tenant). A fix of #491 first would let the axis run as planned — the owner's call.
+- *The five-at-once scenario* ran five Chromiums in one container on this Mac, which drove the Mac's load to 30: its
+  client numbers say nothing, its server numbers stand. On the CAX the five browsers run here and the server runs
+  there, so the clients no longer compete with each other's host — but they still share this Mac; the scenario's
+  client half is only meaningful once #488 is fixed.
+- *A browser wait needs a wall-clock guard too*: under the throttle the 10,000 Chapter kept the page's main thread busy
+  for over 30 minutes, so the page-side stall clock never ran; `e2e/measure/volume.ts` now stops a run whose page does
+  not answer for `stallSecs`.
+- *The L1 overlay moves with main*: on 2026-10-18 it gained `garage=info` (the wire sweep's control), which the
+  measurement overlay removes again. Re-read `infra/e2e/docker-compose.e2e.yml`'s diff before booting.
+
+**The procedure, exactly as it ran** (`I` = an instance directory outside git; the readings go to `.run/measurements/`):
+1. Images from the tree: `docker build -f Dockerfile -t veyq-vol:local .` and `docker build -f admin-web/Dockerfile -t
+   veyq-admin-vol:local .` (after a merge, `npm run generate:api` in `web/` first, or the seeders do not compile).
+2. `python3 scripts/measure_volume.py --instance I fixtures` (ImageMagick), `… boot --app veyq-vol:local --admin
+   veyq-admin-vol:local` (lane L1's own install stages; ports 80/443/18081 free; recipe on vCPUs 2,3, doubles and
+   browsers on 6–13), `… seed birth` (`birthInstance`; the generated owner credentials land in `I/accounts.json`).
+3. Per stage, `… stage <photos|tree|wide|members> <N>`: seed to N, wait for load ≤ 3, then — sampler running — the
+   server leg (five cold calls each after an app restart, a 60 s drift window, five warm, the 304 call, a drift window;
+   refused when a window exceeds the idle baseline + 10) and the browser leg (3 runs × throttle 1 and 4), then the
+   judge. The member stage raises the invite limit through the instance's `compose.override.yml` and `veyqctl start`
+   while seeding and restores the default before measuring.
+4. `… scenario idle --minutes 30`, `… scenario five --items 10000`, `… scenario upload --count 1000`.
+5. `… teardown` (the instance's files move to `I/torn-<project>/`), then remove the two images.
+On the CAX the sampler runs through `--prefix 'ssh <host>'`; `boot` is this Mac's and does not apply there (phase 1
+installs through `veyqctl` on the server), so `instance.json` for the remote instance is written by hand or by phase 1.
+Re-seed time for the full dataset locally: boot 20 s, photos about 3,200 a minute, tree about 3,800 nodes a minute,
+members about 12 a minute end to end (20 joined, 31 profiled; Argon2id dominates).
+The harness files phase 5 deletes are the ones listed there, plus `web/scripts/volumeHarness.mts`,
+`web/scripts/volumePrelude.mts`, the `installPinnedFetch` half of `web/scripts/apiTransport.mts`, `src/env.d.ts` in
+`web/tsconfig.scripts.json`'s `include`, and `measure` in `e2e/tsconfig.json`'s `include`.
 
 ## Decisions this CR takes
 
@@ -96,8 +167,8 @@ owner's to give with the server.
   recipe containers over SSH; the network baseline recorded. **Bite:** the harness's first-run setup on the
   installed instance succeeds once and is refused a second time.
 - [ ] **2 volume stages**: photos, tree and members, every stage, with the server leg, the sampler and the browser
-  leg, exactly as the local procedure. The invite limit is raised only while seeding members (the local CR's
-  decision 9), and the instance is restarted with defaults before measuring. · Done when: every stage judged by the
+  leg, exactly as the local procedure. The invite limit is raised only while seeding members (§ Local pre-check,
+  step 3), and the instance is restarted with defaults before measuring. · Done when: every stage judged by the
   rule, or an axis ended by decision 2.
 - [ ] **3 scenarios**: idle, five at once, bulk upload (owner's go for the upload). · Done when: each judged by the
   rule, the disk readings of decision 3 recorded.

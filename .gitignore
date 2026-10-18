@@ -285,6 +285,10 @@ gradle-app.setting
 # `.env` holds every secret of that instance), Pebble's root and every container's log. Local evidence, never committable.
 .e2e-stack-out/
 
+# The volume harness's readings (`scripts/measure_volume.py`, cr-volume-measurement-local): raw numbers of one machine
+# on one day, never committed — the conclusion goes into the docs, the readings do not.
+.run/measurements/
+
 # A `scripts/run_pipeline.py` run: each job's log and the run's summary.json. Local evidence of one run.
 .pipeline-out/
 

@@ -1563,6 +1563,15 @@ rendered: cr-bucket-reconcile's three-minute grace read "0 days" in the verdict 
 having used the 30-day default. So a UI that renders a configured duration is unit-tested with the shortest value its
 live proof will use, too.
 
+### A CR that grows a count checks each stage against the caps the contract already sets
+
+cr-volume-measurement-local planned a 1,000-member stage, and its seeder stopped at 445 in the middle of the night it
+had for measuring: every member a key-holder admits adds a pin to that key-holder's sealed identity-pin store, which
+`account.openapi.yaml` caps at 1 MiB (about 2.4 KB a pin). The cap was in the contract the refine read. So a CR whose
+stages grow a count (members, photos, nodes, shares) names, per stage, every stored value that grows with it and that
+value's `maxLength` / `maxItems` — the locator is a grep of the contracts for the stores the growing flow writes — and a
+stage past a cap is a finding at refine, not at 22:25.
+
 ### A UI phase's done-when names its browser pass
 
 [`docs/ai`](../docs/ai/README.md) step 3 says a UI slice is not done before it was clicked. `cr-files-application`
