@@ -69,6 +69,7 @@ function on(over: Partial<InstanceModeration> = {}): InstanceModeration {
   return {
     enabled: true,
     currentEpoch: 2,
+    currentKemPublicKey: null,
     rotationDueSince: null,
     serverOwner: { accountId: 'owner', identityPublicKey: 'AAAA' },
     moderators: [

@@ -16,13 +16,16 @@ import java.util.UUID
  * case is the one of them written with no case id. The statement of reasons and the objection (ADR 0093 § 7,
  * uc.moderation.object-to-a-measure): [STATEMENT_SENT] (the ground, the statement), [DECISION_SENT] (a reporter told —
  * DISMISSED or DECIDED, the report), [OBJECTION_RECEIVED] (the objector, the objection), and [OBJECTION_DECIDED] or —
- * the decider alone — [OBJECTION_SELF_REVIEWED] (the outcome, the objection).
+ * the decider alone — [OBJECTION_SELF_REVIEWED] (the outcome, the objection). An authority (ADR 0093 §§ 12-13,
+ * uc.moderation.authority-order, uc.moderation.report-to-an-authority): [ORDER_RECEIVED] (the order's kind and id — with
+ * no case id when its share was not found), [STATEMENT_DEFERRED] (the statement, the deferral's end in `hold_until`, its
+ * reason sealed unless it is the order's reference), [HANDED_OVER] and [INFORMATION_GIVEN] (the reference sealed).
  */
 enum class ModerationEvent {
     APPOINTED, ACCEPTED, DELIVERED, REMOVED, STEPPED_DOWN, IDENTITY_ROTATED, EPOCH_MINTED,
     RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN,
     PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED,
-    OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED,
+    OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN,
 }
 
 /**

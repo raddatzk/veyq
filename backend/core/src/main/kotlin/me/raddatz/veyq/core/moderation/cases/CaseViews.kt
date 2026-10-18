@@ -3,6 +3,10 @@ package me.raddatz.veyq.core.moderation.cases
 import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.generated.model.ModerationCase
 import me.raddatz.veyq.core.generated.model.ModerationCaseEvent
+import me.raddatz.veyq.core.generated.model.ModerationCaseOrigin
+import me.raddatz.veyq.core.moderation.order.AuthorityOrderEntity
+import me.raddatz.veyq.core.moderation.order.AuthorityOrderHandler
+import me.raddatz.veyq.core.moderation.statement.StatementDeferralEntity
 import me.raddatz.veyq.core.generated.model.ModerationCaseState
 import me.raddatz.veyq.core.generated.model.ModerationCaseSummary
 import me.raddatz.veyq.core.generated.model.ModerationHold
@@ -60,17 +64,26 @@ class CaseViews(
     private val blocks: ModerationBlocks,
     private val targets: CaseTargets,
     private val operatingMode: OperatingModeHandler,
+    private val orders: AuthorityOrderHandler,
 ) {
 
-    /** The queue: [state]'s cases, or the open and decided ones; the urgent categories first, then the oldest. */
+    /**
+     * The queue: [state]'s cases, or the open and decided ones; the urgent categories first, then the oldest. A report's
+     * case is dated by its reports, an order's by its orders' entry.
+     */
     fun queue(state: CaseState?, now: Instant = Instant.now()): List<ModerationCaseSummary> = QuarkusTransaction.requiringNew().call {
         val states = state?.let { listOf(it.name) } ?: listOf(CaseState.OPEN.name, CaseState.DECIDED.name)
         val cases = ModerationCaseEntity.list("state in ?1", states)
         if (cases.isEmpty()) return@call emptyList()
-        val shares = ReportShareEntity.list("caseId in ?1", cases.map { it.id }).groupBy { it.caseId }
-        val reports = ModerationReportEntity.list("id in ?1", shares.values.flatten().map { it.reportId }.distinct()).associateBy { it.id }
+        val ids = cases.map { it.id }
+        val shares = ReportShareEntity.list("caseId in ?1", ids).groupBy { it.caseId }
+        val reports = ModerationReportEntity.list("id in ?1", shares.values.flatten().map { it.reportId }.distinct().ifEmpty { listOf("") })
+            .associateBy { it.id }
+        val entered = AuthorityOrderEntity.list("caseId in ?1", ids).groupBy({ it.caseId!! }, { it.enteredAt })
+        val deferred = ModerationStatementEntity.list("caseId in ?1 and sentAt is null and deferredUntil is not null", ids)
+            .groupBy({ it.caseId }, { it.deferredUntil!! })
         cases.mapNotNull { case ->
-            val times = shares[case.id].orEmpty().mapNotNull { reports[it.reportId]?.receivedAt }
+            val times = shares[case.id].orEmpty().mapNotNull { reports[it.reportId]?.receivedAt } + entered[case.id].orEmpty()
             if (times.isEmpty()) return@mapNotNull null
             case to times
         }.sortedWith(compareBy({ ReportCategory.valueOf(it.first.category).ordinal }, { it.second.min() })).map { (case, times) ->
@@ -81,10 +94,12 @@ class CaseViews(
                 state = ModerationCaseState.valueOf(case.state),
                 firstReportedAt = times.min().utc(),
                 lastReportedAt = times.max().utc(),
-                reportCount = times.size,
+                reportCount = shares[case.id].orEmpty().size,
                 tenantDomain = tenantOf(case.scopeId)?.takeIf { it.status == TenantEntity.ACTIVE }?.domain,
                 holdEndsAt = holds.aliveOf(case.id, now)?.expiresAt?.utc(),
                 objectionOpen = ModerationObjectionEntity.openOn(case.id),
+                origin = ModerationCaseOrigin.valueOf(case.origin),
+                statementDeferredUntil = deferred[case.id]?.minOrNull()?.utc(),
             )
         }
     }
@@ -102,7 +117,11 @@ class CaseViews(
         else StatementRecipientEntity.list("statementId in ?1", statements.values.map { it.id }).groupBy { it.statementId }
         val measureRows = ModerationBlockEntity.list("caseId = ?1 order by takenAt", case.id)
         val holders = currentEpochHolders()
+        val renewed = if (statements.isEmpty()) emptySet()
+        else StatementDeferralEntity.list("statementId in ?1 and renewal = true", statements.values.map { it.id }).map { it.statementId }.toSet()
         ModerationCase(
+            origin = ModerationCaseOrigin.valueOf(case.origin),
+            orders = orders.ofCase(case.id),
             statementForm = StatementForm.valueOf(StatementMail.formNow(operatingMode).name),
             objections = ModerationObjectionEntity.list("caseId = ?1 order by receivedAt", case.id).mapNotNull { o ->
                 val statement = statements.values.firstOrNull { it.id == o.statementId } ?: return@mapNotNull null
@@ -131,7 +150,9 @@ class CaseViews(
             state = ModerationCaseState.valueOf(case.state),
             decidedAt = case.decidedAt?.utc(),
             closedAt = case.closedAt?.utc(),
-            hold = hold?.let { ModerationHold(it.expiresAt.utc(), ModerationHold.Trigger.valueOf(it.trigger)) },
+            hold = hold?.let {
+                ModerationHold(endsAt = it.expiresAt.utc(), trigger = ModerationHold.Trigger.valueOf(it.trigger), floorUntil = it.floorUntil?.utc())
+            },
             reports = reports.map { r ->
                 ModerationReport(
                     id = UUID.fromString(r.id),
@@ -165,6 +186,8 @@ class CaseViews(
                             sealedFacts = it.sealedFacts,
                             recipients = told.count { r -> r.recipientKind == RecipientKind.ACCOUNT.name },
                             guests = told.count { r -> r.recipientKind == RecipientKind.GUEST.name },
+                            deferredUntil = it.deferredUntil?.takeIf { _ -> it.sentAt == null }?.utc(),
+                            renewed = it.id in renewed,
                         )
                     },
                 )

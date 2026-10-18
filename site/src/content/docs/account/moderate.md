@@ -6,6 +6,8 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
   - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.authority-order.md
+  - docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md
 ---
 
 The person who runs a veyq server can ask you to **moderate** it: to look at what people report, in every space on
@@ -93,6 +95,29 @@ Someone affected by a block can object once. The case then shows the objection u
 and is back in the list of cases, marked **Objection waiting**. Choose **Uphold the measure** or **Lift the measure**.
 If you took the measure yourself and another moderator holds the key, the case says that another moderator must
 decide; if you are the only moderator, you decide it yourself, and the answer says so.
+
+## An authority
+
+**An authority's order.** Above the list of cases, **Enter an authority's order** opens a form: the **Kind of order**,
+the **Link or link id the order names** — paste it as the order names it; only its id leaves your device — **The
+authority's reference**, sealed so that only moderators can read it, and when it was **Received at the contact point**.
+A removal order blocks the link and everything it gives access to at once, for everyone, after you confirm; you then
+see when, to the second, and the text for the authority's feedback form to **Copy**. If no such link exists here,
+nothing is blocked and you get a draft saying so. Every order is kept with its case; **Orders recorded** lists them.
+
+**Telling the affected later.** Only an authority can ask that the affected not be told yet. Then, under **Decide**,
+tick **An authority asked that the affected not be told yet**, choose **Tell them on** — at most six weeks ahead — and
+enter the authority's request. The statement waits until that day, and the list of cases reminds you of it. **Renew
+the deferral** takes the authority's renewal once.
+
+**Reporting to an authority.** In a case, **Prepare the fields for the report** shows what the server holds about it —
+the case, its category, every time in UTC, the measures, who uploaded it and, for a guest, the address and time kept —
+as text to **Copy** into the authority's form. Never download, forward or take a picture of what was reported.
+**Record that it was reported to an authority** keeps that, with the authority's reference, in the case's log.
+
+**Child sexual abuse material.** Before such a case opens, a full page says what never to do and what to do first.
+**Back to the queue** leaves it closed; **I understand — open the case** opens it, with **Block the content** offered
+as the first step.
 
 ## What is logged, and for how long
 

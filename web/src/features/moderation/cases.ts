@@ -10,9 +10,12 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { moderationApi } from '../../api/client'
 import type {
   ModerationCase,
+  ModerationCaseExport,
   ModerationCaseState,
   ModerationCaseSummary,
   ModerationGround,
+  ModerationHandoverKindEnum,
+  ModerationStatementDeferral,
   ModerationProposalStep,
   ReporterNotice,
   SealedFactsFor,
@@ -103,8 +106,11 @@ export async function dismissCase(caseId: string, note: string, reporterNotices:
 
 export type MeasureKind = 'SHARE' | 'CONTENT' | 'GUEST_IDENTITY'
 
-/** What a step's statement carries: the ground, and the facts the moderator wrote (empty for none). */
-export type StatementDraft = { ground: ModerationGround; facts: string }
+/**
+ * What a step's statement carries: the ground, the facts the moderator wrote (empty for none), and — only when an
+ * authority asked for it (ADR 0093 § 7) — its deferral: the end, and the authority's request, sealed as its reason.
+ */
+export type StatementDraft = { ground: ModerationGround; facts: string; deferral?: { until: Date; reason: string } | null }
 
 /**
  * The facts sealed for every member [kind] on [target] would tell — the server's list, read with a proof over the case.
@@ -136,12 +142,13 @@ export async function takeMeasure(
 ): Promise<ModerationCase> {
   const facts = sealNote(caseId, statement.facts)
   const sealedFor = facts ? await factsFor(caseId, kind, target, statement.facts) : []
+  const deferral = statement.deferral ? deferralOf(caseId, statement.deferral.until, statement.deferral.reason) : null
   const body = {
     kind,
     shareId: target.shareId ?? null,
     targetId: target.targetId ?? null,
     note: sealNote(caseId, note),
-    statement: { ground: statement.ground, facts, factsFor: sealedFor },
+    statement: { ground: statement.ground, facts, factsFor: sealedFor, deferral },
     reporterNotices,
   }
   const proof = await proofFor('takeModerationMeasure', caseId)
@@ -185,6 +192,34 @@ export async function extendHold(caseId: string, until: Date, reason: string): P
   if (!sealed) throw new Error('extension_reason_required')
   const proof = await proofFor('extendModerationHold', caseId)
   return withRefresh(() => moderationApi().extendModerationHold({ caseId, moderationHoldExtension: { until, reason: sealed }, ...proof }))
+}
+
+/** An authority's deferral with its request sealed as the reason; the request is required — deferring is never the moderator's call. */
+function deferralOf(caseId: string, until: Date, reason: string): ModerationStatementDeferral {
+  const sealed = sealNote(caseId, reason)
+  if (!sealed) throw new Error('deferral_reason_required')
+  return { until, reason: sealed }
+}
+
+/** Renew the authority's deferral of [statementId] once (ADR 0093 § 7), its renewed request sealed as the reason. */
+export async function renewDeferral(caseId: string, statementId: string, until: Date, reason: string): Promise<ModerationCase> {
+  const body = deferralOf(caseId, until, reason)
+  const proof = await proofFor('deferModerationStatement', caseId)
+  return withRefresh(() => moderationApi().deferModerationStatement({ caseId, statementId, moderationStatementDeferral: body, ...proof }))
+}
+
+/** Record a handover to an authority (ADR 0093 §§ 11-13): `REPORTED` or `INFORMATION_GIVEN`, the reference sealed. */
+export async function recordHandover(caseId: string, kind: ModerationHandoverKindEnum, reference: string): Promise<ModerationCase> {
+  const note = sealNote(caseId, reference)
+  if (!note) throw new Error('handover_reference_required')
+  const proof = await proofFor('recordModerationHandover', caseId)
+  return withRefresh(() => moderationApi().recordModerationHandover({ caseId, moderationHandover: { kind, note }, ...proof }))
+}
+
+/** The clear fields an Art. 18 report asks for (ADR 0093 § 13) — what the server holds, never content. */
+export async function getExport(caseId: string): Promise<ModerationCaseExport> {
+  const proof = await proofFor('getModerationCaseExport', caseId)
+  return withRefresh(() => moderationApi().getModerationCaseExport({ caseId, ...proof }))
 }
 
 export async function barReporter(caseId: string, reportId: string, note: string): Promise<ModerationCase> {

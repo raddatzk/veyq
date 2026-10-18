@@ -13,6 +13,8 @@ import me.raddatz.veyq.core.moderation.report.ReportShareEntity
 import me.raddatz.veyq.core.moderation.report.ModerationReportEntity
 import me.raddatz.veyq.core.moderation.statement.ModerationObjectionEntity
 import me.raddatz.veyq.core.moderation.statement.ModerationStatementEntity
+import me.raddatz.veyq.core.moderation.statement.StatementDeferralEntity
+import me.raddatz.veyq.core.moderation.order.AuthorityOrderEntity
 import me.raddatz.veyq.core.moderation.statement.StatementRecipientEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.http.ContentType
@@ -37,6 +39,8 @@ object CaseTestKit {
      */
     fun moderator(): Moderator {
         QuarkusTransaction.requiringNew().run {
+            StatementDeferralEntity.deleteAll()
+            AuthorityOrderEntity.deleteAll()
             ModerationObjectionEntity.deleteAll()
             StatementRecipientEntity.deleteAll()
             ModerationStatementEntity.deleteAll()
@@ -93,6 +97,7 @@ object CaseTestKit {
     fun Moderator.take(
         caseId: String, kind: String, targetId: String? = null, shareId: String? = null, facts: Boolean = true,
         ground: String = "TERMS_BREACH", factsFor: List<String>? = null, reporters: List<Pair<String, String>> = emptyList(),
+        deferUntil: String? = null,
     ): Response {
         val members = when {
             !facts -> emptyList()
@@ -100,9 +105,10 @@ object CaseTestKit {
             // A refused step has no recipients to read: the take then meets the same refusal.
             else -> recipients(caseId, kind, targetId, shareId).let { if (it.statusCode == 200) it.path<List<String>>("accounts.accountId") else emptyList() }
         }
-        val statement = if (!facts) """{"ground":"$ground"}""" else
+        val deferral = deferUntil?.let { ""","deferral":{"until":"$it","reason":{"epoch":1,"sealedNote":"$SEALED_NOTE"}}""" } ?: ""
+        val statement = if (!facts) """{"ground":"$ground"$deferral}""" else
             """{"ground":"$ground","facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"factsFor":[""" +
-                members.joinToString(",") { """{"accountId":"$it","sealedFacts":"$SEALED_FACTS"}""" } + "]}"
+                members.joinToString(",") { """{"accountId":"$it","sealedFacts":"$SEALED_FACTS"}""" } + "]$deferral}"
         val notices = reporters.joinToString(",") { (r, a) -> """{"reportId":"$r","address":"$a"}""" }
         return call(
             "takeModerationMeasure", caseId, "POST", "/api/moderation/cases/$caseId/measures",
@@ -143,6 +149,41 @@ object CaseTestKit {
             "presignCaseBlobs", caseId, "POST", "/api/moderation/cases/$caseId/review/blobs",
             """{"blobIds":[${blobIds.joinToString(",") { "\"$it\"" }}]}""",
         )
+
+    /** An opaque stand-in for an authority's reference sealed to the moderation key (the server never opens one). */
+    const val SEALED_REFERENCE = "c2VhbGVkLXJlZmVyZW5jZQ=="
+
+    /**
+     * An authority's order body (uc.moderation.authority-order): [kind] on [shareId], received at [receivedAt], the
+     * reference sealed (opaquely) to [epoch]; [orderId] is the client's, as the entering client mints it.
+     */
+    fun orderBody(
+        shareId: String, kind: String = "REMOVAL", orderId: String = UUID.randomUUID().toString(), receivedAt: String = java.time.Instant.now().toString(),
+        epoch: Int = 1, holdDays: Int? = null, deferUntil: String? = null,
+    ): String =
+        """{"id":"$orderId","kind":"$kind","shareId":"$shareId","receivedAt":"$receivedAt",""" +
+            """"reference":{"epoch":$epoch,"sealedReference":"$SEALED_REFERENCE"}""" +
+            (holdDays?.let { ""","holdDays":$it""" } ?: "") + (deferUntil?.let { ""","deferStatementUntil":"$it"""" } ?: "") + "}"
+
+    /** The moderator's door: `enterModerationOrder`, key-proved with no case. */
+    fun Moderator.order(body: String): Response = call("enterModerationOrder", null, "POST", "/api/moderation/orders", body)
+
+    fun Moderator.orders(): Response = call("listModerationOrders", null, "GET", "/api/moderation/orders")
+
+    /** Renew a statement's deferral to [until]. */
+    fun Moderator.renewDeferral(caseId: String, statementId: String, until: String, epoch: Int = 1): Response =
+        call(
+            "deferModerationStatement", caseId, "POST", "/api/moderation/cases/$caseId/statements/$statementId/deferral",
+            """{"until":"$until","reason":{"epoch":$epoch,"sealedNote":"$SEALED_NOTE"}}""",
+        )
+
+    fun Moderator.handover(caseId: String, kind: String = "REPORTED"): Response =
+        call(
+            "recordModerationHandover", caseId, "POST", "/api/moderation/cases/$caseId/handovers",
+            """{"kind":"$kind","note":{"epoch":1,"sealedNote":"$SEALED_NOTE"}}""",
+        )
+
+    fun Moderator.export(caseId: String): Response = call("getModerationCaseExport", caseId, "GET", "/api/moderation/cases/$caseId/export")
 
     private fun noteBody(note: Boolean) = if (note) """{"note":{"epoch":1,"sealedNote":"$SEALED_NOTE"}}""" else "{}"
 

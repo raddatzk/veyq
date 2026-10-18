@@ -9,13 +9,22 @@
   the review in moderation mode, and every step and its lift, the Server Owner's taken on the admin channel — with § 4's
   other ends of a case and § 5's bar of a reporter (cr-moderation-review-and-measures, 2026-10-18;
   [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
-  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). § 7 is built but
-  for the deferral (cr-statement-of-reasons-and-objection, 2026-10-18;
+  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). § 7 is built
+  (cr-statement-of-reasons-and-objection, 2026-10-18;
   [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)): a
   moderator's measure carries its statement in the form the operating mode sets, to its recipients in the app and by
   instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
   measure's hold counts from the statement (§ 4); a guest is told nothing in the app (it has no account, so a guest
-  uploader counts as nobody to tell), and the Server Owner's own steps carry no statement yet. The rest is not. Who moderates — moderators the
+  uploader counts as nobody to tell), and the Server Owner's own steps carry no statement yet. §§ 12 and 13, § 7's
+  deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
+  [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
+  [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):
+  an order from either door blocks by id and holds to the end it sets, which no extension, lift or decision shortens;
+  the authority defers a statement for six weeks, renewed once; the moderation surface exports an Art. 18 report's
+  clear fields as text, records the handover and warns before a child-sexual-abuse case opens. Two parts wait on § Legal
+  basis, Still open 1 and 2 and are not built: a child-sexual-abuse hold ending at the handover (a handover changes no
+  hold), and an authority's link to a snapshot; the order forms and the warning are drafts until a qualified review. The
+  rest is not built. Who moderates — moderators the
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here

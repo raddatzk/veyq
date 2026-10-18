@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.moderation
 import me.raddatz.veyq.core.moderation.cases.CaseDecisions
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseNotices
+import me.raddatz.veyq.core.moderation.statement.StatementDeferrals
 import me.raddatz.veyq.core.moderation.statement.StatementMail
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
@@ -25,6 +26,7 @@ class ModerationPurge(
     private val caseNotices: CaseNotices,
     private val decisions: CaseDecisions,
     private val statementMail: StatementMail,
+    private val deferrals: StatementDeferrals,
 ) {
 
     @Scheduled(every = "{veyq.moderation.purge.every}")
@@ -40,6 +42,8 @@ class ModerationPurge(
         caseNotices.mailBundle(now)
         // A rotation-due mail that could not go out when it became due is retried here (RotationDueNotice).
         rotationDue.mailIfDue(now)
+        // A statement an authority deferred goes out once its deferral ended (ADR 0093 § 7, StatementDeferrals), and is mailed.
+        deferrals.releaseDue(now).forEach { statementMail.statementSent(it) }
         // A statement of reasons whose mail to a member did not go out, for seven days after it was sent (StatementMail).
         statementMail.retryDue(now)
     }

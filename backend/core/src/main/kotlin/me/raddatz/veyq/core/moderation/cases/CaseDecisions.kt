@@ -32,7 +32,9 @@ import me.raddatz.veyq.core.moderation.statement.ObjectionOutcome
 import me.raddatz.veyq.core.moderation.statement.Recipient
 import me.raddatz.veyq.core.moderation.statement.RecipientKind
 import me.raddatz.veyq.core.moderation.statement.ReporterNotice
+import me.raddatz.veyq.core.moderation.statement.DeferralReason
 import me.raddatz.veyq.core.moderation.statement.StatementBasis
+import me.raddatz.veyq.core.moderation.statement.StatementDeferrals
 import me.raddatz.veyq.core.moderation.statement.StatementGround
 import me.raddatz.veyq.core.moderation.statement.StatementMail
 import me.raddatz.veyq.core.moderation.statement.StatementRecipientEntity
@@ -60,7 +62,18 @@ data class ResolvedStep(val kind: BlockKind, val targetId: String, val shareId: 
  * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the [ground], the [facts] sealed to the
  * moderation key, and [factsFor] — the facts sealed to each affected member's identity, by account id.
  */
-data class StatementInput(val ground: StatementGround, val facts: SealedNote?, val factsFor: Map<String, String>)
+data class StatementInput(
+    val ground: StatementGround,
+    val facts: SealedNote?,
+    val factsFor: Map<String, String>,
+    val deferral: DeferralInput? = null,
+)
+
+/** An authority's deferral as the moderator enters it (ADR 0093 § 7): its end, and the authority's request sealed. */
+data class DeferralInput(val until: Instant, val reason: SealedNote)
+
+/** A handover to an authority (ADR 0093 §§ 11-13): reported to one, or information given to one. */
+enum class HandoverKind(val event: ModerationEvent) { REPORTED(ModerationEvent.HANDED_OVER), INFORMATION_GIVEN(ModerationEvent.INFORMATION_GIVEN) }
 
 /** A decision's refusals (codes per `moderation.openapi.yaml`). */
 object CaseFailures {
@@ -82,6 +95,10 @@ object CaseFailures {
     val objectionNotFound = httpFailure("objection_not_found", FailureStatus.NOT_FOUND)
     val objectionDecided = httpFailure("objection_decided", FailureStatus.CONFLICT)
     val needsAnotherModerator = httpFailure("objection_needs_another_moderator", FailureStatus.CONFLICT)
+    val deferralOutOfBounds = httpFailure("deferral_out_of_bounds", FailureStatus.BAD_REQUEST)
+    val statementNotFound = httpFailure("statement_not_found", FailureStatus.NOT_FOUND)
+    val statementNotDeferred = httpFailure("statement_not_deferred", FailureStatus.CONFLICT)
+    val deferralRenewed = httpFailure("deferral_renewed", FailureStatus.CONFLICT)
 }
 
 /**
@@ -133,6 +150,7 @@ class CaseDecisions(
     private val recipients: StatementRecipients,
     private val operatingMode: OperatingModeHandler,
     private val mail: StatementMail,
+    private val deferrals: StatementDeferrals,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
 ) {
@@ -244,6 +262,10 @@ class CaseDecisions(
             return@createOrConflict refused(CaseFailures.factsRequired)
         }
         noteRefusal(statement.facts)?.let { return@createOrConflict refused(it) }
+        statement.deferral?.let { d ->
+            if (!deferrals.inBounds(d.until, now)) return@createOrConflict refused(CaseFailures.deferralOutOfBounds)
+            noteRefusal(d.reason)?.let { return@createOrConflict refused(it) }
+        }
         val told = recipients.of(case, resolved, known, held)
         val members = told.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }.toSet()
         if (statement.facts == null && statement.factsFor.isNotEmpty()) return@createOrConflict refused(CaseFailures.invalid)
@@ -259,8 +281,8 @@ class CaseDecisions(
             epoch = note?.epoch, sealedText = note?.sealed,
         )
         // Sent when a member can be told; where only guests are named, nobody can be told and the hold counts from the
-        // decision (ADR 0093 § 4).
-        val sentAt = if (members.isNotEmpty()) now else null
+        // decision (ADR 0093 § 4). An authority's deferral holds it back until its end (ADR 0093 § 7).
+        val sentAt = if (members.isNotEmpty() && statement.deferral == null) now else null
         val written = ModerationStatementEntity().apply {
             id = UUID.randomUUID().toString()
             measureId = row.id
@@ -288,6 +310,9 @@ class CaseDecisions(
             )
         }
         decide(case, now, sentAt)
+        statement.deferral?.let { d ->
+            deferrals.defer(written, case.id, d.until, DeferralReason(moderatorId, null, d.reason.epoch, d.reason.sealed), renewal = false, now)
+        }
         changed = row
         statementId = written.id
         DecisionOutcome.Done
@@ -334,7 +359,8 @@ class CaseDecisions(
         val inForce = ModerationBlockEntity.list("caseId = ?1 and activeKey is not null", case.id).count { !it.blockKind.isBar }
         if (!row.blockKind.isBar && inForce == 0 && case.state == CaseState.DECIDED.name) {
             if (holds.endNow(case.id, now)) log.appendCase(ModerationEvent.HOLD_ENDED, now, case.id, moderatorId = moderatorId)
-            if (!ModerationObjectionEntity.openOn(case.id)) close(case, now)
+            // An authority's order keeps its hold to the end it set (ADR 0093 § 4): the case closes when that ends.
+            if (holds.aliveOf(case.id, now) == null && !ModerationObjectionEntity.openOn(case.id)) close(case, now)
         }
     }
 
@@ -443,6 +469,38 @@ class CaseDecisions(
                 ModerationEvent.HOLD_EXTENDED, now, case.id, moderatorId = moderatorId, epoch = reason.epoch,
                 sealedText = reason.sealed, holdUntil = until,
             )
+            DecisionOutcome.Done
+        }
+
+    /**
+     * Renew the authority's deferral of [statementId] (ADR 0093 § 7, TCO Art. 11(3)): once, while the statement is still
+     * held back, to an end after the current one and at most six weeks from now, the renewed request sealed as [reason].
+     */
+    fun renewDeferral(
+        moderatorId: String, caseId: String, statementId: String, until: Instant, reason: SealedNote, now: Instant = Instant.now(),
+    ): DecisionOutcome = createOrConflict(conflict = { refused(CaseFailures.deferralRenewed) }) {
+        val case = lock(caseId) ?: return@createOrConflict refused(CaseFailures.caseNotFound)
+        val statement = ModerationStatementEntity.find("id = ?1 and caseId = ?2", statementId, case.id).firstResult()
+            ?: return@createOrConflict refused(CaseFailures.statementNotFound)
+        val current = statement.deferredUntil
+        if (statement.sentAt != null || current == null) return@createOrConflict refused(CaseFailures.statementNotDeferred)
+        if (deferrals.renewed(statement.id)) return@createOrConflict refused(CaseFailures.deferralRenewed)
+        if (!until.isAfter(current) || !deferrals.inBounds(until, now)) return@createOrConflict refused(CaseFailures.deferralOutOfBounds)
+        noteRefusal(reason)?.let { return@createOrConflict refused(it) }
+        deferrals.defer(statement, case.id, until, DeferralReason(moderatorId, null, reason.epoch, reason.sealed), renewal = true, now)
+        DecisionOutcome.Done
+    }
+
+    /**
+     * Record a handover to an authority (ADR 0093 §§ 11-13): the case was reported to one, or information was given in
+     * answer to an order, with the reference sealed as [note]. It changes no hold — ending a child-sexual-abuse case's hold
+     * at the handover waits on counsel (ADR 0093 § Legal basis, Still open 1: § 184b(5) StGB).
+     */
+    fun handover(moderatorId: String, caseId: String, kind: HandoverKind, note: SealedNote, now: Instant = Instant.now()): DecisionOutcome =
+        QuarkusTransaction.requiringNew().call {
+            val case = lock(caseId) ?: return@call refused(CaseFailures.caseNotFound)
+            noteRefusal(note)?.let { return@call refused(it) }
+            log.appendCase(kind.event, now, case.id, moderatorId = moderatorId, epoch = note.epoch, sealedText = note.sealed)
             DecisionOutcome.Done
         }
 

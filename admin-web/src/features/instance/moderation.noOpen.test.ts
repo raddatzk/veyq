@@ -23,6 +23,7 @@ const FORBIDDEN = [
   'moderationKemSecret',
   'moderationSign',
   'identityPrivate',
+  'openOrderReference',
 ] as const
 
 function filesUnder(dir: string): string[] {
@@ -55,7 +56,12 @@ function cryptoImports(text: string): { names: string[]; namespace: boolean } {
   return { names, namespace }
 }
 
-const scanned = [join(SRC, 'features', 'instance', 'moderation.ts'), ...filesUnder(join(SRC, 'cli'))]
+// orders.ts seals an authority's reference to the same public half (uc.moderation.authority-order) and opens nothing either.
+const scanned = [
+  join(SRC, 'features', 'instance', 'moderation.ts'),
+  join(SRC, 'features', 'instance', 'orders.ts'),
+  ...filesUnder(join(SRC, 'cli')),
+]
 
 describe('admin-web mints the moderation key and cannot open it (ADR 0099 § 3)', () => {
   it('the detector finds what it is looking for (positive control)', () => {

@@ -60,6 +60,11 @@ vi.mock('../features/instance/moderation', async (importOriginal) => ({
   blockSignIn: vi.fn(),
   liftSignInBlock: vi.fn(),
 }))
+// The share parsing and the refusal type stay real; the call that seals and sends is the mock asserted on.
+vi.mock('../features/instance/orders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/instance/orders')>()),
+  enterOrder: vi.fn(),
+}))
 // The rules stay real (the notice's tick, the preset's changes, the merge base): what is asserted is what they send.
 vi.mock('../features/instance/operator', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/operator')>()),
@@ -103,6 +108,8 @@ import type { InstanceModeration, ModerationSteps } from '../features/instance/m
 import { clearOperator, getOperatingMode, getOperator, setOperator } from '../features/instance/operator'
 import type { InstanceOperatingMode, InstanceOperator } from '../features/instance/operator'
 import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
+import { enterOrder, OrderInvalid, type AuthorityOrder } from '../features/instance/orders'
+import { ORDER_FORMS } from '../features/instance/orderForms'
 import { instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
 import { stubApi } from '../test/apiMock'
 import { httpError } from '../test/httpError'
@@ -548,6 +555,7 @@ describe('veyq-admin — moderators and the moderation key (uc.moderation.appoin
   const roster = (over: Partial<InstanceModeration> = {}): InstanceModeration => ({
     enabled: true,
     currentEpoch: 2,
+    currentKemPublicKey: null,
     rotationDueSince: null,
     serverOwner: { accountId: 'owner', identityPublicKey: 'AAAA' },
     moderators: [
@@ -812,11 +820,59 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
   })
 })
 
+describe('veyq-admin — an authority’s order (uc.moderation.authority-order)', () => {
+  const SHARE = '3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i'
+  const recorded = (over: Partial<AuthorityOrder> = {}): AuthorityOrder => ({
+    id: '3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b', kind: 'REMOVAL', shareId: SHARE, receivedAt: new Date('2026-10-18T07:12:00Z'),
+    enteredAt: new Date('2026-10-18T07:20:11Z'), enteredBy: 'owner', found: true, blockedAt: new Date('2026-10-18T07:20:11.734Z'),
+    caseId: 'case', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: null, epoch: 1, sealedReference: 'c2VhbGVk',
+    providerName: null, contactPoint: 'abuse@example.org', ...over,
+  })
+
+  it('order remove passes the link, the reference and the times, and prints the block and the Annex II text', async () => {
+    vi.mocked(enterOrder).mockResolvedValueOnce(recorded())
+    const r = await invoke([
+      'order', 'remove', '--share', `https://club.example.org/s/${SHARE}#k=key`, '--reference', 'BKA ST-2026-0417',
+      '--received-at', '2026-10-18T09:12:00+02:00', '--lang', 'en',
+    ])
+    expect(r.code).toBe(0)
+    expect(enterOrder).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'REMOVAL', share: `https://club.example.org/s/${SHARE}#k=key`, reference: 'BKA ST-2026-0417',
+      receivedAt: new Date('2026-10-18T07:12:00Z'), deferStatementUntil: null,
+    }))
+    expect(r.out).toContain('blocked at 2026-10-18 07:20:11 UTC')
+    expect(r.out).toContain(ORDER_FORMS.en.draftBanner)
+    expect(r.out).toContain('Reference of the removal order: BKA ST-2026-0417')
+  })
+
+  it('order inform passes the days; order preserve prints the Annex III draft when the link is not here', async () => {
+    vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'INFORMATION', blockedAt: null }))
+    expect((await invoke(['order', 'inform', '--share', SHARE, '--reference', 'r', '--hold-days', '30'])).code).toBe(0)
+    expect(enterOrder).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'INFORMATION', holdDays: 30 }))
+    vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'PRESERVATION', found: false, blockedAt: null, caseId: null, holdUntil: null }))
+    const r = await invoke(['order', 'preserve', '--share', SHARE, '--reference', 'r', '--lang', 'en'])
+    expect(r.out).toContain('not found on this instance')
+    expect(r.out).toContain('no shared link with this identifier exists')
+  })
+
+  it('refuses a missing flag, an unreadable time and an unreadable link in words, and a server refusal exits 1', async () => {
+    expect((await invoke(['order', 'remove', '--share', SHARE])).err).toContain('--reference is required')
+    expect((await invoke(['order', 'remove', '--share', SHARE, '--reference', 'r', '--received-at', 'yesterday'])).err)
+      .toContain('--received-at must be an ISO 8601 time')
+    vi.mocked(enterOrder).mockRejectedValueOnce(new OrderInvalid('share'))
+    expect((await invoke(['order', 'remove', '--share', 'nope', '--reference', 'r'])).err).toContain('neither a link of this instance nor a link id')
+    vi.mocked(enterOrder).mockRejectedValueOnce(httpError(409, 'order_exists'))
+    const refused = await invoke(['order', 'remove', '--share', SHARE, '--reference', 'r'])
+    expect(refused.code).toBe(1)
+    expect(refused.err).toBe('veyq-admin: request failed: HTTP 409 order_exists')
+  })
+})
+
 describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'order remove --share', 'order preserve --share', 'order inform --share', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

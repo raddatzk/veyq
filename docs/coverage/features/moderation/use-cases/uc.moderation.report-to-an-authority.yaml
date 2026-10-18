@@ -1,0 +1,41 @@
+useCase: uc.moderation.report-to-an-authority
+feature: moderation
+title: Report to an authority
+# Built by cr-authority-orders-and-art18-reports: core/moderation/cases (CaseExports, CaseDecisions.handover) and the
+# hold's instants (HoldSnapshot) on the backend; features/moderation/orders (AuthoritySection, art18Export) and
+# CsamWarning on web. Lane L1's browser pass is e2e/tests/features/takedown-orders-and-art18.spec.ts; `stack` waits
+# under gaps. Not built, both waiting on counsel (ADR 0093 § Legal basis, Still open 1 and 2): a child-sexual-abuse
+# hold ending at the handover, and an authority's link to a held copy.
+acceptanceCriteria:
+  - id: the-export-carries-clear-fields-only
+    text: >-
+      The export answers, behind the key proof, the case id, the category, the times in UTC, the uploaders the held rows
+      name and the held guest-write records with their address, port and time and the time zone stated — never content
+      — and the surface renders it as a text block to copy.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.theExportCarriesTheClearFieldsAndTheHeldGuestWriteRecordAndAHandoverChangesNoHold]
+      web:
+        unit: [src/features/moderation/orders/art18Export.test.ts, src/features/moderation/orders/AuthoritySection.test.ts]
+  - id: the-handover-is-logged
+    text: >-
+      A report to an authority and information given to one are events of the case with the reference sealed; a
+      handover changes no hold.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.theExportCarriesTheClearFieldsAndTheHeldGuestWriteRecordAndAHandoverChangesNoHold]
+      web:
+        unit: [src/features/moderation/orders/AuthoritySection.test.ts, src/features/moderation/cases.test.ts]
+  - id: child-sexual-abuse-material-warns-first
+    text: >-
+      Before a case of the child-sexual-abuse category opens, a full-page warning is shown, and the decision panel
+      preselects "Block the content".
+    coverage:
+      web:
+        unit: [src/features/moderation/ModerationQueue.test.ts, src/features/moderation/CaseDetail.test.ts]
+# child-sexual-abuse-material-warns-first is the moderation surface's alone: the server serves the category, and a human
+# still decides (ADR 0093 § 13), so it carries no backend ref.
+gaps:
+  stack: >-
+    e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) prepares the export of an order's case and records its
+    handover in a browser; stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

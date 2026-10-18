@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.moderation.hold
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.persistence.EntityManager
 import org.hibernate.Session
+import java.sql.Types
 import java.util.UUID
 
 /** What a hold is taken on (en.moderation.hold § The snapshot): every target names the space it lies in. */
@@ -85,12 +86,22 @@ class HoldSnapshot internal constructor(private val holdId: String, private val 
                     val meta = rs.metaData
                     val out = mutableListOf<Map<String, String?>>()
                     while (rs.next()) {
-                        out += (1..meta.columnCount).associate { i -> meta.getColumnLabel(i).lowercase() to rs.getString(i) }
+                        out += (1..meta.columnCount).associate { i -> meta.getColumnLabel(i).lowercase() to text(rs, meta.getColumnType(i), i) }
                     }
                     out
                 }
             }
         }
+
+    /**
+     * A column's value as the snapshot keeps it: its text as stored, but a time as the ISO-8601 instant it is (UTC, `Z`).
+     * A `TIMESTAMP` column holds the wall clock of the zone the writer ran in, so its text alone names no instant — the
+     * Art. 18 export read a guest's write two hours off on a machine in Berlin until a time was kept as an instant.
+     */
+    private fun text(rs: java.sql.ResultSet, type: Int, i: Int): String? = when (type) {
+        Types.TIMESTAMP, Types.TIMESTAMP_WITH_TIMEZONE -> rs.getTimestamp(i)?.toInstant()?.toString()
+        else -> rs.getString(i)
+    }
 
     private companion object {
         val IDENTIFIER = Regex("^[a-z][a-z0-9_]{0,63}$")

@@ -6,6 +6,8 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
   - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.authority-order.md
+  - docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md
 ---
 
 Die Person, die einen veyq-Server betreibt, kann dich bitten, ihn zu **moderieren**: dir anzusehen, was gemeldet wird,
@@ -101,6 +103,32 @@ Wer von einer Sperre betroffen ist, kann einmal widersprechen. Der Fall zeigt de
 **Maßnahme bestätigen** oder **Maßnahme aufheben**. Hast du die Maßnahme selbst ergriffen und hält eine andere Person
 aus der Moderation den Schlüssel, sagt der Fall, dass eine andere Person entscheiden muss; bist du die einzige Person in
 der Moderation, entscheidest du selbst, und die Antwort sagt das.
+
+## Eine Behörde
+
+**Eine Anordnung einer Behörde.** Über der Liste der Fälle öffnet **Anordnung einer Behörde eintragen** ein Formular:
+die **Art der Anordnung**, der **Link oder Link-Kennung aus der Anordnung** – füge ihn so ein, wie die Anordnung ihn
+nennt; nur seine Kennung verlässt dein Gerät –, das **Aktenzeichen der Behörde**, so versiegelt, dass nur die Moderation
+es lesen kann, und der **Eingang bei der Kontaktstelle**. Eine Entfernungsanordnung sperrt den Link und alles, wozu er
+Zugang gibt, nach deiner Bestätigung sofort für alle; du siehst dann, wann, auf die Sekunde, und den Text für das
+Rückmeldeformular der Behörde zum **Kopieren**. Gibt es hier keinen solchen Link, wird nichts gesperrt, und du bekommst
+einen Entwurf, der das sagt. Jede Anordnung bleibt bei ihrem Fall; **Eingetragene Anordnungen** listet sie auf.
+
+**Die Betroffenen später informieren.** Nur eine Behörde kann verlangen, die Betroffenen noch nicht zu informieren. Dann
+setze unter **Entscheiden** das Häkchen bei **Eine Behörde hat verlangt, die Betroffenen noch nicht zu informieren**,
+wähle **Informieren am** – höchstens sechs Wochen im Voraus – und trag das Verlangen der Behörde ein. Die Begründung
+wartet bis zu diesem Tag, und die Liste der Fälle erinnert dich daran. **Aufschub verlängern** nimmt die Verlängerung
+der Behörde einmal an.
+
+**An eine Behörde melden.** In einem Fall zeigt **Angaben für die Meldung zusammenstellen**, was der Server darüber
+weiß – den Fall, seine Kategorie, jede Zeit in UTC, die Maßnahmen, wer es hochgeladen hat und bei einem Gast die
+festgehaltene Adresse und Zeit – als Text zum **Kopieren** in das Formular der Behörde. Lade das Gemeldete nie herunter,
+leite es nie weiter und mache kein Bild davon. **Festhalten, dass an eine Behörde gemeldet wurde** hält das mit dem
+Aktenzeichen der Behörde im Protokoll des Falls fest.
+
+**Darstellungen sexuellen Missbrauchs von Kindern.** Bevor sich ein solcher Fall öffnet, sagt eine ganze Seite, was du
+nie tun sollst und was zuerst zu tun ist. **Zurück zur Liste** lässt ihn geschlossen; **Verstanden – Fall öffnen** öffnet
+ihn, mit **Inhalt sperren** als erstem Schritt.
 
 ## Was festgehalten wird, und wie lange
 

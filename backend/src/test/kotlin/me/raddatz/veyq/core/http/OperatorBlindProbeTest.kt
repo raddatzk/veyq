@@ -285,6 +285,8 @@ class OperatorBlindProbeTest {
             "getInstanceMailSettings", "updateInstanceMailSettings", "confirmInstanceMail",
             "getInstanceModeration", "appointModerator", "removeModerator", "mintModerationEpoch",
             "getModerationSteps", "declineModerationProposal", "blockAccountSignIn", "unblockAccountSignIn",
+            // an authority's order, the Server Owner's door (ADR 0093 § 12): it acts on ids across the instance
+            "enterInstanceModerationOrder",
             "getStoreReconcile", "confirmStoreExclusiveBucket", "withdrawStoreExclusiveBucket", "pauseStoreReconcile",
             "resumeStoreReconcile",
             "getInstanceOperator", "setInstanceOperator", "clearInstanceOperator", "confirmOperatorNotification",
@@ -329,6 +331,10 @@ class OperatorBlindProbeTest {
             "proposeModerationStep", "extendModerationHold", "barModerationReporter",
             // the statement's recipients and an objection's decision (cr-statement-of-reasons-and-objection)
             "getModerationStatementRecipients", "decideModerationObjection",
+            // an authority's order, the deferral, the handover and the Art. 18 export (cr-authority-orders-and-art18-reports):
+            // an order names a share by id across the instance; the rest act on a case, which outlives its space
+            "enterModerationOrder", "listModerationOrders", "deferModerationStatement", "recordModerationHandover",
+            "getModerationCaseExport",
             // the review reads (cr-moderation-review-and-measures decision 6): a case's held snapshot, read from the hold —
             // the case outlives its space, and a suspended tenant's case is reviewed all the same (ADR 0093 § 1)
             "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles",

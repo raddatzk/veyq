@@ -130,6 +130,16 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_moderation_statement_recipient.mailed_at" to "StatementMail's claim: a member is mailed once, retried while it is null",
             "veyq_moderation_objection.received_at" to "served: ModerationObjection.receivedAt, StatementObjection.receivedAt; orders a case's objections",
             "veyq_moderation_objection.decided_at" to "its presence closes the objection (ModerationObjectionEntity.open); served: decidedAt",
+            // --- an authority's order and the deferral (ADR 0093 §§ 4, 7, 12; uc.moderation.authority-order)
+            "veyq_authority_order.received_at" to "served: AuthorityOrder.receivedAt, the hour's proof; a preservation " +
+                "order's or an information request's hold counts from it (AuthorityOrderHandler)",
+            "veyq_authority_order.entered_at" to "served: AuthorityOrder.enteredAt; orders listModerationOrders; dates an " +
+                "order's case in the queue (CaseViews.queue)",
+            "veyq_authority_order.blocked_at" to "served: AuthorityOrder.blockedAt — the Annex II text's block time",
+            "veyq_authority_order.hold_until" to "served: AuthorityOrder.holdUntil, the end the order sets for its hold",
+            "veyq_hold.floor_until" to "Holds.moveEnd and Holds.endNow never end a hold before it; served: ModerationHold.floorUntil",
+            "veyq_moderation_statement.deferred_until" to "StatementDeferrals.releaseDue sends the statement once it passed; " +
+                "served: ModerationMeasureStatement.deferredUntil, ModerationCaseSummary.statementDeferredUntil",
             // --- the guest-write record (ADR 0093 § 10, en.moderation.guest-write-record)
             "veyq_guest_write_record.observed_at" to "GuestWriteRecordPurge deletes a row older than N as it stands now (GuestWriteRecords.purge)",
             "veyq_guest_write_record.expires_at" to "GuestWriteRecordPurge deletes a row past it, at startup and on its interval",

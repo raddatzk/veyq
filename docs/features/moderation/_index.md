@@ -36,6 +36,11 @@ the log that keeps them accountable. A **core** feature
 - ★ [Object to a measure](use-cases/uc.moderation.object-to-a-measure.md) — **built (backend + web)** (ADR 0093 §§ 4, 7, 14, ADR 0099
   § 5): the statement of reasons reaches the affected in veyq and by mail, an affected member objects once, another
   moderator decides; a reporter is told the decision.
+- ★ [Act on an authority's order](use-cases/uc.moderation.authority-order.md) — **built (backend + web + admin-web)** (ADR 0093 §§ 4, 7, 12,
+  ADR 0099 § 6): a removal order blocks the share and its content by id at once, an order opens a case with a hold and
+  no report, the Annex texts come out to copy, and the authority may defer the statement.
+- ★ [Report to an authority](use-cases/uc.moderation.report-to-an-authority.md) — **built (backend + web)** (ADR 0093 §§ 11, 13): the
+  export of clear fields for an Art. 18 report, the handover as a log event, and the child-sexual-abuse warning.
 
 ## Enablers
 
@@ -43,7 +48,7 @@ the log that keeps them accountable. A **core** feature
   32-byte `M_n`, its public bundle, a grant per moderator, and the key proof every moderation call carries).
 - [en.moderation.hold](enablers/en.moderation.hold.md) — **built** for a case's holds (ADR 0093 § 4: a snapshot of
   the reported rows and a pin on their store objects, which the reclaim sweep skips; the ends of an open, dismissed,
-  decided or extended case); an authority's order's are not.
+  decided or extended case, and an authority's order's, whose end is the hold's floor).
 - [en.moderation.log](enablers/en.moderation.log.md) — **built** (ADR 0093 § 11: an append-only table, structured
   fields in the clear and free text sealed to the moderation key; the instance and case events and their retention).
 - [en.moderation.guest-write-record](enablers/en.moderation.guest-write-record.md) — **built** (ADR 0093 § 10: a

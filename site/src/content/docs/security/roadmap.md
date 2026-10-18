@@ -3,6 +3,8 @@ title: Roadmap
 description: What is designed or decided in principle and not built — the gap each item would close, what exists today instead, and where it is decided.
 sources:
   - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
+  - docs/features/moderation/use-cases/uc.moderation.authority-order.md
+  - docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md
   - docs/decisions/0026-client-trust-tiers.md
@@ -29,7 +31,7 @@ this page says so.
 |---|---|---|---|
 | [Key Transparency](#key-transparency) | an identity installed by the operator; TOFU's first-use gap | named as the end-state; no design recorded | ADR 0060 (g), ADR 0028 |
 | [Strict verification mode](#strict-verification-mode) | verification is advisory; nothing enforces it before a first share | decided in principle; shape open | ADR 0028 Decision 4 |
-| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | an authority's order has no entry, and cannot defer a statement | decided | ADR 0093 §§ 7, 12–13 |
+| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | a child-sexual-abuse hold does not end at the handover; no authority link to a snapshot | built but for two legal questions | ADR 0093 §§ 7, 12–13 |
 | [Passkey unlock](#passkey-unlock) | no passwordless login and unlock | method named in the contract; no client | en.account.key-model |
 | [Hybrid ML-DSA signatures](#hybrid-ml-dsa-signatures) | signatures are classical (Ed25519) | strategy only | ADR 0017 |
 | [A client served by a trusted third party](#a-client-served-by-a-trusted-third-party) | operator-served web is passive-operator only | trust tier defined; needs a central origin | ADR 0026 |
@@ -91,14 +93,21 @@ the facts sealed to each of them; they object once, and another moderator decide
 [uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md),
 [uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md),
 [uc.moderation.object-to-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
+An authority's order is entered by a moderator or by the Server Owner without a key: a removal order blocks by id at
+once, every order holds for the duration it sets, and the authority may defer the statement. The moderation surface
+prepares the clear fields of an Art. 18 report as text and warns before a case of child sexual abuse material opens
+([uc.moderation.authority-order](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.authority-order.md),
+[uc.moderation.report-to-an-authority](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
 
-**Gap it would close.** An authority's order — which acts on ids, without a report — has no entry, and cannot defer a
-statement of reasons; the flow for child sexual abuse material and Art. 18 reports, with its own hold ends, is not
-built. The Server Owner's own steps (a member's sign-in, a tenant offline) carry no statement yet.
+**Gap it would close.** A child-sexual-abuse case's hold does not end at the confirmed handover to an authority: whether
+keeping it until then is covered for a non-commercial operator (§ 184b(5) StGB) is open, so a handover changes no hold.
+A time-bound link for the police to a hold snapshot is not built and will not be without the police's or a specialist's
+answer: it would be a making-available. The Server Owner's own steps (a member's sign-in, a tenant offline) carry no
+statement yet. The texts of the order forms and the warning are drafts until a qualified legal review.
 
 **Design state.** Decided: the statement of reasons and the objection in
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-§ 7, an authority's order and Art. 18 reports in §§ 12–13; both reuse the block-by-id steps that are built.
+§ 7, an authority's order and Art. 18 reports in §§ 12–13; the two items above are its § Legal basis, Still open 1 and 2.
 
 **Decided in:** [security-model § Sharing & share-boundary Trust & Safety](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#sharing--share-boundary-trust--safety),
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md),

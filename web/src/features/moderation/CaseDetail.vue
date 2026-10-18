@@ -7,6 +7,10 @@
 // statement of reasons (uc.moderation.object-to-a-measure): the ground and the facts, required by the instance's full form
 // and optional in the reduced one; a reporter who left an address is told the decision. An objection is shown opened, and
 // decided here by a moderator other than the one who took the measure while there is one (ADR 0099 § 5).
+// An authority (ADR 0093 §§ 7, 12-13): a statement is deferred only on an authority's request, entered with the block
+// or renewed once on the statement, and the case shows until when; a case an order opened shows its orders, and every
+// case offers the report to an authority and its handover (`orders/AuthoritySection.vue`). On a case of child sexual
+// abuse material "Block the content" leads the decision panel as the proposed first step — a human still decides.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -31,12 +35,14 @@ import {
   openObjectionOf,
   openReportOf,
   proposeStep,
+  renewDeferral,
   reporterNoticesOf,
   reviewUrl,
   takeMeasure,
   type MeasureKind,
 } from './cases'
 import { caseFailureKey } from './caseFailure'
+import AuthoritySection from './orders/AuthoritySection.vue'
 
 const props = defineProps<{ caseId: string }>()
 const emit = defineEmits<{ back: [] }>()
@@ -55,6 +61,16 @@ const extendReason = ref('')
 const GROUNDS: ModerationGround[] = ['CHILD_SEXUAL_ABUSE', 'TERRORIST_CONTENT', 'THREAT_TO_LIFE', 'ILLEGAL_CONTENT', 'TERMS_BREACH']
 const ground = ref<ModerationGround | ''>('')
 const facts = ref('')
+// An authority's deferral of the next block's statement (ADR 0093 § 7): only with its request, at most six weeks.
+const deferAsked = ref(false)
+const deferUntil = ref<Date | null>(null)
+const deferReason = ref('')
+// A renewal of a held statement's deferral, per statement.
+const renewUntil = ref<Record<string, Date | null>>({})
+const renewReason = ref<Record<string, string>>({})
+const SIX_WEEKS_DAYS = 42
+const deferMax = computed(() => new Date(Date.now() + SIX_WEEKS_DAYS * 24 * 60 * 60 * 1000))
+const csam = computed(() => current.value?.category === 'CHILD_SEXUAL_ABUSE')
 
 const when = (d: Date) => d.toLocaleString(locale.value)
 const short = (id: string) => id.slice(0, 8)
@@ -164,12 +180,43 @@ function block(label: string, reach: string, kind: MeasureKind, target: { shareI
     error.value = t('moderation.errors.factsRequired')
     return
   }
-  const statement = { ground: (ground.value || current.value!.category) as ModerationGround, facts: facts.value }
+  if (deferAsked.value && (!deferUntil.value || deferReason.value.trim() === '')) {
+    error.value = t('moderation.errors.reasonRequired')
+    return
+  }
+  const deferral = deferAsked.value ? { until: deferUntil.value!, reason: deferReason.value } : null
+  const statement = { ground: (ground.value || current.value!.category) as ModerationGround, facts: facts.value, deferral }
   return decide(label, reach, 'pi pi-ban', async (n) => {
     const answered = await takeMeasure(id(), kind, target, n, statement, reporterNoticesOf(current.value!))
     facts.value = ''
+    deferAsked.value = false
+    deferUntil.value = null
+    deferReason.value = ''
     return answered
   })
+}
+
+/** Renew a held statement's deferral once, with the authority's renewed request (ADR 0093 § 7). */
+async function renew(statementId: string) {
+  error.value = ''
+  notice.value = ''
+  const until = renewUntil.value[statementId]
+  const reason = renewReason.value[statementId] ?? ''
+  if (!until || reason.trim() === '') {
+    error.value = t('moderation.errors.reasonRequired')
+    return
+  }
+  busy.value = true
+  try {
+    current.value = await renewDeferral(id(), statementId, until, reason)
+    renewReason.value[statementId] = ''
+    renewUntil.value[statementId] = null
+    notice.value = t('moderation.deferral.renewedNotice', { time: when(until) })
+  } catch (e) {
+    error.value = t(await caseFailureKey(e))
+  } finally {
+    busy.value = false
+  }
 }
 
 const blockLink = (l: ModerationTargetLink) =>
@@ -233,7 +280,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="veyq-section moderation-case">
+  <div class="veyq-section moderation-case" :data-case-id="caseId">
     <div class="veyq-section-header">
       <Button severity="secondary" class="moderation-case-back" icon="pi pi-arrow-left" :label="t('moderation.case.back')" :disabled="busy" @click="emit('back')" />
     </div>
@@ -245,9 +292,11 @@ onMounted(load)
       <div class="veyq-section-header">
         <h3>{{ t(`report.categories.${current.category}`) }}</h3>
         <span class="veyq-badge" :class="{ warning: open, muted: closed }">{{ t(`moderation.states.${current.state}`) }}</span>
+        <span v-if="current.origin === 'ORDER'" class="veyq-badge moderation-case-order-badge">{{ t('moderation.caseRow.order') }}</span>
       </div>
       <p class="veyq-form-copy">{{ t(`moderation.itemKinds.${current.itemKind}`) }} · {{ current.tenantDomain ?? t('moderation.caseRow.noDomain') }}</p>
-      <div class="veyq-form">
+      <!-- An order's case has no report and so no report share to review: the order acted on ids. -->
+      <div v-if="current.origin !== 'ORDER'" class="veyq-form">
         <Button class="moderation-case-review" icon="pi pi-eye" :label="t('moderation.case.review')" :disabled="busy" @click="review" />
         <p class="veyq-form-copy">{{ t('moderation.case.reviewHint') }}</p>
       </div>
@@ -275,7 +324,8 @@ onMounted(load)
       <h4>{{ t('moderation.case.hold') }}</h4>
       <template v-if="current.hold">
         <p class="veyq-form-copy">
-          {{ t('moderation.case.heldUntil', { time: when(current.hold.endsAt) }) }} {{ t(`moderation.case.holdTriggers.${current.hold.trigger}`) }}
+          {{ t('moderation.case.heldUntil', { time: when(current.hold.endsAt) }) }}
+          {{ t(`moderation.case.holdTriggers.${current.hold.trigger}`, { time: when(current.hold.floorUntil ?? current.hold.endsAt) }) }}
         </p>
         <form class="veyq-form moderation-extend" @submit.prevent="extend">
           <label for="moderation-extend-until">{{ t('moderation.case.extendUntil') }}</label>
@@ -315,8 +365,32 @@ onMounted(load)
               <p class="veyq-form-copy moderation-measure-statement">
                 {{ t('moderation.case.statementGround', { ground: t(`report.categories.${m.statement.ground}`) }) }}
                 <template v-if="m.statement.sentAt">{{ t('moderation.case.statementSent', { time: when(m.statement.sentAt), count: m.statement.recipients }, m.statement.recipients) }}</template>
+                <template v-else-if="m.statement.deferredUntil">{{ t('moderation.deferral.deferredUntil', { time: when(m.statement.deferredUntil) }) }}</template>
                 <template v-else>{{ t('moderation.case.statementNobody') }}</template>
+                <template v-if="m.statement.renewed"> {{ t('moderation.deferral.renewed') }}</template>
               </p>
+              <!-- The authority's renewal, once, while the statement is still held (TCO Art. 11(3)). -->
+              <form
+                v-if="m.statement.deferredUntil && !m.statement.renewed"
+                class="veyq-form moderation-renew"
+                @submit.prevent="renew(m.statement.id)"
+              >
+                <label :for="`moderation-renew-until-${m.statement.id}`">{{ t('moderation.deferral.renewUntil') }}</label>
+                <DatePicker
+                  v-model="renewUntil[m.statement.id]"
+                  :input-id="`moderation-renew-until-${m.statement.id}`"
+                  :min-date="m.statement.deferredUntil"
+                  :max-date="deferMax"
+                  date-format="yy-mm-dd"
+                  show-icon
+                  icon-display="input"
+                  :disabled="busy"
+                  fluid
+                />
+                <label :for="`moderation-renew-reason-${m.statement.id}`">{{ t('moderation.deferral.renewReason') }}</label>
+                <textarea :id="`moderation-renew-reason-${m.statement.id}`" v-model="renewReason[m.statement.id]" class="moderation-renew-reason" rows="2" maxlength="2000" :disabled="busy" />
+                <Button type="submit" severity="secondary" class="moderation-renew-submit" icon="pi pi-clock" :label="t('moderation.deferral.renew')" :loading="busy" />
+              </form>
               <p v-if="openedFacts.get(m.id) !== undefined" class="veyq-form-copy moderation-measure-facts">
                 {{ t('moderation.case.statementFacts') }}: {{ openedFacts.get(m.id) ?? t('moderation.case.noteSealed') }}
               </p>
@@ -385,8 +459,39 @@ onMounted(load)
         <label for="moderation-statement-facts">{{ fullForm ? t('moderation.decide.facts') : t('moderation.decide.factsOptional') }}</label>
         <textarea id="moderation-statement-facts" v-model="facts" class="moderation-statement-facts" rows="4" maxlength="2000" :disabled="busy" />
         <span class="veyq-form-copy">{{ fullForm ? t('moderation.decide.factsHint') : t('moderation.decide.factsHintReduced') }}</span>
+        <label class="moderation-defer-ask">
+          <input v-model="deferAsked" type="checkbox" class="moderation-defer-toggle" :disabled="busy" />
+          {{ t('moderation.deferral.ask') }}
+        </label>
+        <template v-if="deferAsked">
+          <label for="moderation-defer-until">{{ t('moderation.deferral.until') }}</label>
+          <DatePicker
+            v-model="deferUntil"
+            input-id="moderation-defer-until"
+            :min-date="new Date()"
+            :max-date="deferMax"
+            date-format="yy-mm-dd"
+            show-icon
+            icon-display="input"
+            :disabled="busy"
+            fluid
+          />
+          <label for="moderation-defer-reason">{{ t('moderation.deferral.reason') }}</label>
+          <textarea id="moderation-defer-reason" v-model="deferReason" class="moderation-defer-reason" rows="2" maxlength="2000" :disabled="busy" />
+          <span class="veyq-form-copy">{{ t('moderation.deferral.reasonHint') }}</span>
+        </template>
 
         <div class="veyq-list">
+          <!-- Child sexual abuse material: blocking the content is proposed as the first step (ADR 0093 § 13). -->
+          <div v-if="csam && contentBlockable" class="veyq-list-row moderation-proposed-first">
+            <div class="veyq-row-main">
+              <strong class="veyq-row-title">{{ t('moderation.decide.blockContent') }}</strong>
+              <div class="veyq-row-meta"><span class="veyq-badge warning">{{ t('moderation.csam.proposed') }}</span></div>
+              <p class="veyq-form-copy">{{ t('moderation.decide.blockContentReach') }}</p>
+            </div>
+            <Button severity="danger" class="moderation-block-content" icon="pi pi-ban" :label="t('moderation.decide.blockContent')" :disabled="busy" @click="blockContent" />
+          </div>
+
           <div v-if="open" class="veyq-list-row">
             <div class="veyq-row-main">
               <strong class="veyq-row-title">{{ t('moderation.decide.dismiss') }}</strong>
@@ -404,7 +509,7 @@ onMounted(load)
             <Button severity="danger" class="moderation-block-link" icon="pi pi-ban" :label="t('moderation.decide.blockLink', { id: short(l.shareId) })" :disabled="busy" @click="blockLink(l)" />
           </div>
 
-          <div v-if="contentBlockable" class="veyq-list-row">
+          <div v-if="contentBlockable && !csam" class="veyq-list-row">
             <div class="veyq-row-main">
               <strong class="veyq-row-title">{{ t('moderation.decide.blockContent') }}</strong>
               <p class="veyq-form-copy">{{ t('moderation.decide.blockContentReach') }}</p>
@@ -440,6 +545,15 @@ onMounted(load)
           </div>
         </div>
       </div>
+
+      <!-- An authority: the orders that opened the case, the report to an authority and its handover (ADR 0093 §§ 12-13). -->
+      <AuthoritySection
+        :current="current"
+        :busy="busy"
+        @updated="current = $event"
+        @failed="error = $event"
+        @recorded="notice = $event"
+      />
 
       <!-- The log (ADR 0093 § 11): clear fields, the notes opened here. -->
       <h4>{{ t('moderation.case.log') }}</h4>

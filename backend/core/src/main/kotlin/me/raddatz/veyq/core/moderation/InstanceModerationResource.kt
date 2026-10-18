@@ -10,7 +10,11 @@ import me.raddatz.veyq.core.generated.model.MintModerationEpochRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.generated.model.AuthorityOrderRequest
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
+import me.raddatz.veyq.core.moderation.order.AuthorityOrderHandler
+import me.raddatz.veyq.core.moderation.order.ordered
+import me.raddatz.veyq.core.moderation.order.toOrderIn
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.RolesAllowed
@@ -27,12 +31,14 @@ import java.util.UUID
 @RateLimitExempt(
     reason = "Server-Owner-only roster, key and moderation-step writes on the admin channel: one row per appointment, " +
         "one epoch per mint, one per sign-in block or settled proposal " +
-        "(bounded by the roster), no mail and no outbound request; the role gate already bounds the caller set to one " +
-        "account.",
+        "(bounded by the roster), and an authority's order, whose few mails (its statements, the new-case notice) go " +
+        "to accounts and the instance contact, never to an address in the request; no outbound request; the role gate " +
+        "already bounds the caller set to one account.",
 )
 class InstanceModerationResource(
     private val moderation: ModerationHandler,
     private val steps: SignInBlocks,
+    private val orders: AuthorityOrderHandler,
     private val identity: SecurityIdentity,
 ) : InstanceModerationApi {
 
@@ -58,6 +64,10 @@ class InstanceModerationResource(
 
     override fun unblockAccountSignIn(blockId: UUID): Response = stepped(steps.unblock(caller(), blockId.toString()))
 
+    /** The Server Owner's door to an authority's order (ADR 0093 § 12): the moderator's handler, without a key. */
+    override fun enterInstanceModerationOrder(authorityOrderRequest: AuthorityOrderRequest): Response =
+        ordered(orders.enter(caller(), authorityOrderRequest.toOrderIn()))
+
     /** A Server Owner's step: the steps as they now stand, or its refusal. */
     private fun stepped(refusal: HttpFailure?): Response = refusal?.let { httpError(it) } ?: Response.ok(steps.steps()).build()
 
@@ -73,6 +83,8 @@ class InstanceModerationResource(
     private fun RosterView.toWire() = InstanceModeration(
         enabled = currentEpoch != null,
         currentEpoch = currentEpoch,
+        // What the Server Owner's clients seal an authority's reference to (ADR 0093 § 12): the epoch's public half only.
+        currentKemPublicKey = moderation.currentKey()?.takeIf { it.epoch == currentEpoch }?.kemPublicKey,
         rotationDueSince = rotationDueSince?.atOffset(ZoneOffset.UTC),
         serverOwner = InstanceModerationOwner(accountId = UUID.fromString(ownerId), identityPublicKey = ownerIdentityPublicKey),
         moderators = moderators.map {

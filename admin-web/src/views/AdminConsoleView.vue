@@ -30,6 +30,7 @@ import ReleaseNoticesPanel from '../features/instance/ReleaseNoticesPanel.vue'
 import InstanceMailPanel from '../features/instance/InstanceMailPanel.vue'
 import GuestWriteRecordPanel from '../features/instance/GuestWriteRecordPanel.vue'
 import ModerationPanel from '../features/instance/ModerationPanel.vue'
+import OrderPanel from '../features/instance/OrderPanel.vue'
 import OperatingModePanel from '../features/instance/OperatingModePanel.vue'
 import OperatorPanel from '../features/instance/OperatorPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
@@ -229,10 +230,12 @@ async function signOut() {
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
         <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
-        <!-- The roster, the key and the Server Owner's steps, then how long a guest's write keeps its address
+        <!-- The roster, the key and the Server Owner's steps, an authority's order (uc.moderation.authority-order), then how
+             long a guest's write keeps its address
              (en.moderation.guest-write-record). -->
         <div v-else-if="serverPanel === 'moderation'" class="admin-shell__stack">
           <ModerationPanel @open-tenant="selected = $event; serverPanel = null" />
+          <OrderPanel />
           <GuestWriteRecordPanel />
         </div>
         <OperatingModePanel v-else-if="serverPanel === 'mode'" />

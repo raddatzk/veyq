@@ -1,0 +1,68 @@
+useCase: uc.moderation.authority-order
+feature: moderation
+title: Act on an authority's order
+# Built by cr-authority-orders-and-art18-reports: core/moderation/order (AuthorityOrderHandler, the two doors' wire),
+# Holds' floor, StatementDeferrals and CaseDecisions' deferral and renewal on the backend; the moderation-order seal in
+# packages/crypto; features/moderation/orders (the order form, the Annex texts pinned from
+# contracts/moderation/authority-order-forms.json) and CaseDetail's deferral on web; Server → Moderation's order form and
+# `veyq-admin order remove|preserve|inform` in admin-web. Lane L1's browser pass is
+# e2e/tests/features/takedown-orders-and-art18.spec.ts, tagged per criterion; `stack` and `admin-web` wait under gaps.
+acceptanceCriteria:
+  - id: a-removal-order-blocks-by-id-at-once
+    text: >-
+      A removal order entered by a moderator with the key proof, or by the Server Owner on the admin channel without a
+      key, blocks the share and the node it is rooted at by id at once — the guest gets 404, the member 451 — and the
+      Server Owner's operation answers 404 on the public listener.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.aRemovalOrderOnTheAdminChannelBlocksTheShareAndItsContentWithNoKeyWhileThePublicPortAnswersAsUnknown, AuthorityOrdersSliceTest.theModeratorsDoorNeedsTheKeyProofAndRunsTheSameHandler, AuthorityOrderRacesSliceTest.aSecondRemovalOrderInsideTheFirstKeepsItsBlocksAndAnswersItsBlockTime]
+      web:
+        unit: [src/features/moderation/orders/orders.test.ts, src/features/moderation/orders/OrderForm.test.ts]
+  - id: an-order-opens-a-case-with-a-hold-and-no-report
+    text: >-
+      An order opens a decided case with a hold and no report, ending six months after the block for a removal order,
+      60 days after receipt for a preservation order, and after the named days (else six months) for a request for
+      information; no extension, lift or decision ends it sooner.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.anOrdersHoldRunsToTheEndItSetsAndNoLiftOrShorterExtensionEndsItSooner, AuthorityOrdersSliceTest.aPreservationOrderAndARequestForInformationHoldWithoutABlockForTheirDurations]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/ModerationQueue.test.ts]
+  - id: an-unknown-share-is-recorded
+    text: >-
+      An order naming a share the server does not know is recorded with no case and no block, and its Annex III draft
+      says the content was not found.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.anUnknownShareIsRecordedWithNoCaseAndAMalformedOrderIsRefused]
+      web:
+        unit: [src/features/moderation/orders/OrderForm.test.ts, src/features/moderation/orders/orderForms.test.ts]
+  - id: the-forms-come-out-to-copy
+    text: >-
+      A removal order answers the Annex II text with the block time in UTC to the second, from one template every
+      surface renders; a pasted URL's fragment never leaves the client.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.aRemovalOrderOnTheAdminChannelBlocksTheShareAndItsContentWithNoKeyWhileThePublicPortAnswersAsUnknown]
+      web:
+        unit: [src/features/moderation/orders/orderForms.test.ts, src/features/moderation/orders/orders.test.ts, src/features/moderation/orders/AuthoritySection.test.ts]
+  - id: the-authority-defers-the-statement
+    text: >-
+      An authority's deferral holds an order's or a measure's statement back until its end (at most six weeks, one
+      renewal), when the statement goes out; the hold counts from its sending.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.aDeferredStatementDoesNotGoOutBeforeItsEndAndDoesAfterIt, AuthorityOrdersSliceTest.aModeratorsMeasureCarriesAnAuthoritysDeferral]
+      web:
+        unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts, src/features/moderation/ModerationQueue.test.ts]
+gaps:
+  admin-web: >-
+    The order form and `veyq-admin order …` are covered by admin-web/src/features/instance/orders.test.ts (a pasted
+    URL's fragment never leaves), orderForms.test.ts, OrderPanel.test.ts and src/cli/cli.test.ts, but admin-web's job has
+    never executed (ADR 0040).
+  crypto: >-
+    The moderation-order seal is pinned by its vector and packages/crypto/src/report.test.ts, but the crypto job has
+    never executed (ADR 0040).
+  stack: >-
+    e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) times a removal order from each door to the guest's
+    404 and copies the Annex II text; stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

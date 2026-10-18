@@ -53,11 +53,52 @@ class ModerationStatementEntity : PanacheEntityBase {
     @Column(name = "sealed_facts", columnDefinition = "TEXT")
     var sealedFacts: String? = null
 
-    /** When it went out; null where nobody could be told — the hold then counts from the decision. */
+    /** When it went out; null where nobody could be told — the hold then counts from the decision — or while deferred. */
     @Column(name = "sent_at")
     var sentAt: Instant? = null
 
+    /** While an authority's deferral holds it back (sent_at null), when it goes out; null otherwise. */
+    @Column(name = "deferred_until")
+    var deferredUntil: Instant? = null
+
     companion object : PanacheCompanionBase<ModerationStatementEntity, String>
+}
+
+/**
+ * An authority's request to defer a statement (`veyq_moderation_deferral`, TCO Art. 11(3), ADR 0093 § 7): the first and
+ * at most one [renewal]. Its reason is sealed to the moderation key ([epoch], [sealedReason]) or is the reference of the
+ * order it came with ([orderId]).
+ */
+@Entity
+@Table(name = "veyq_moderation_deferral")
+@DynamicUpdate
+class StatementDeferralEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", columnDefinition = "uuid")
+    lateinit var id: String
+
+    @Column(name = "statement_id", nullable = false, columnDefinition = "uuid")
+    lateinit var statementId: String
+
+    @Column(name = "case_id", nullable = false, columnDefinition = "uuid")
+    lateinit var caseId: String
+
+    @Column(name = "order_id", columnDefinition = "uuid")
+    var orderId: String? = null
+
+    @Column(name = "epoch")
+    var epoch: Int? = null
+
+    @Column(name = "sealed_reason", columnDefinition = "TEXT")
+    var sealedReason: String? = null
+
+    @Column(name = "entered_by", nullable = false, columnDefinition = "uuid")
+    lateinit var enteredBy: String
+
+    @Column(name = "renewal", nullable = false)
+    var renewal: Boolean = false
+
+    companion object : PanacheCompanionBase<StatementDeferralEntity, String>
 }
 
 /** One recipient of a statement (`veyq_moderation_statement_recipient`). */
