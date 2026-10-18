@@ -11,8 +11,9 @@
   § 6, decided with the owner 2).
 - **Preconditions:** An open or decided case the moderator reviewed ([uc.moderation.review-a-case](uc.moderation.review-a-case.md)).
 - **Postconditions (success):** A measure is a row naming its kind, its target id, the case, who took it and when; it
-  deletes nothing and holds until it is lifted. The case is decided and its hold ends six months after the decision.
-  Every step and every lift is an event in the moderation log.
+  deletes nothing and holds until it is lifted. A moderator's step carries its statement of reasons to the affected
+  ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md)). The case is decided and its hold ends six
+  months after the statement is sent. Every step and every lift is an event in the moderation log.
 
 ## Main flow
 
@@ -34,8 +35,11 @@
    proposals`) and takes it — a member's sign-in block, which ends every session of the account at once and refuses
    every sign-in until lifted (`veyq-admin account block|unblock`); or the tenant's suspension
    ([uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md)) — or declines it.
-6. Each step takes an optional note sealed to the moderation key; the case is *decided*, and its hold now ends six
-   months after the decision (until the statement of reasons moves the start to its sending).
+6. Each step takes an optional note sealed to the moderation key. A moderator's step (2–4) also takes its **statement
+   of reasons** — the ground, and the facts sealed to the moderation key and to each affected member's identity key —
+   sent with it ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) steps 1–6); a reporter who
+   left a contact is told the decision. The case is *decided*, and its hold now ends six months after the statement is
+   sent (from the decision where nobody can be told).
 7. **Lift.** Any moderator lifts a measure of a case; the Server Owner lifts a sign-in block. A lift records when it was
    lifted and writes its log event, and the target serves again unchanged. Lifting a case's last measure ends its hold.
 

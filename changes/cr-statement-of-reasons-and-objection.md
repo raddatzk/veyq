@@ -1,8 +1,8 @@
 ---
 id: cr-statement-of-reasons-and-objection
 title: The affected are told why, and object in the app; another moderator reviews the objection
-status: planned
-satisfies: []            # phase 0 writes the use-case; see § Use-cases
+status: in-progress
+satisfies: [uc.moderation.object-to-a-measure, uc.moderation.take-a-measure]
 adrs: ["0093", "0099", "0097", "0048", "0049"]
 invariants:
   - operator-blind E2EE (an objection's text is sealed to the moderation key)
@@ -89,7 +89,7 @@ answer), with planned coverage, and adds the statement's flow to `uc.moderation.
 
 ## Phases
 
-- [ ] **0 docs** — the use-case, the flow added, planned coverage; ADR 0097 decision 3 per Q11. · Done when: the
+- [x] **0 docs** — the use-case, the flow added, planned coverage; ADR 0097 decision 3 per Q11. · Done when: the
   feature-format, coverage, doc-link and change guards green.
 - [ ] **1 contracts + crypto** — the statement template; the objection (submit: an affected member with a bearer; a
   guest has no in-app objection, ADR 0093 § 7), its decision on the moderation spec; the facts' seal per Q12 (a new

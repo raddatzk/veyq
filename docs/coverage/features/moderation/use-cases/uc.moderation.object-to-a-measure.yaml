@@ -1,0 +1,37 @@
+useCase: uc.moderation.object-to-a-measure
+feature: moderation
+title: Object to a measure
+status: planned
+# Written by cr-statement-of-reasons-and-objection's phase 0; its later phases turn each gap into refs.
+acceptanceCriteria:
+  - id: the-statement-is-sent-with-the-measure
+    text: >-
+      A moderator's measure carries its statement — the ground, and the facts sealed to the moderation key and to each
+      affected member's identity key — recorded in its transaction; sealed copies that do not name exactly the members
+      it tells are refused.
+  - id: the-form-follows-the-operating-mode
+    text: >-
+      Organisation mode renders the full form and refuses a measure without facts; private renders the reduced form,
+      without the report-or-order line, the automation line and the courts, and takes a measure without facts.
+  - id: the-affected-read-it-in-veyq-and-are-mailed
+    text: >-
+      The affected member reads the statement on the blocked item or link with the facts opened by their identity key,
+      and instance mail tells their account address it is there, carrying no facts.
+  - id: one-objection-per-measure-reopens-the-case
+    text: >-
+      An affected member objects once per measure, sealed to the moderation key; a second objection and one on a lifted
+      measure are refused; the objection reopens the case and the moderators are mailed.
+  - id: another-moderator-decides-the-objection
+    text: >-
+      The account that took the measure is refused the decision while another accepted moderator holds the key; the
+      other decides; a single moderator decides it as their own review, and the answer says so.
+  - id: the-reporter-is-told-the-decision
+    text: >-
+      A reporter who left a contact is mailed the dismissal or the decision once, from an address the deciding
+      moderator's browser sent; the server keeps no copy.
+  - id: the-hold-counts-from-the-statement
+    text: >-
+      A measure's hold ends six months after its statement is sent, and from the decision where nobody can be told.
+gaps:
+  backend: "Not built yet (cr-statement-of-reasons-and-objection phase 2)."
+  web: "Not built yet (cr-statement-of-reasons-and-objection phase 3)."
