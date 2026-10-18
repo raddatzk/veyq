@@ -374,16 +374,25 @@ server-blind token makes this work without the server ever seeing a name:
   took the measure while another holds the key ([uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
   The identity a moderator seals the facts to is the one the server serves, unpinned — the moderation surface holds no
   Master Key to read a pin store — which costs nothing against the operator: the Server Owner holds the moderation key
-  and reads the log's copy of the same facts anyway. An **authority's order** acts on ids without a key: entered by a
+  and reads the log's copy of the same facts anyway. **A Server Owner's own step over content** (a sign-in block, a
+  tenant offline) carries a statement too, and it is the one place facts reach a mail: the blocked member cannot sign in
+  to open a sealed copy, so the Server Owner's own words go by mail to the member or the tenant's owners — a disclosure
+  by their author, the server reading them as it sends them (ADR 0049 decision 2) — and are stored only sealed to the
+  moderation key's public half by admin-web or the CLI (`moderation-step-facts` [epoch, statementId]); the server keeps
+  no clear copy, so a failed send is not retried. The **provision** a ground relies on is clear text beside it, the
+  moderator's or Server Owner's own short reference. An **authority's order** acts on ids without a key: entered by a
   moderator with the key proof or by the Server Owner on the admin channel, its reference sealed by the entering client
   to the moderation key's public half (`moderation-order` [epoch, orderId]), it blocks a link and its content and holds
-  them to the end it sets; an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
+  them to the end it sets, and the guest identity whose upload a removal order blocked is told so on its link through
+  its contributor token, when the order was received and the instance contact — nothing a guest without that token
+  learns (TCO Art. 11); an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
   guest-write record — never content ([uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
   A child-sexual-abuse case's hold ends at the recorded handover, at the latest 90 days after the report; no measure
   or statement keeps it longer (§ 184b(5) StGB). **Retention:** a closed case's records — reports with their sealed
   parts and report shares, measures, statements, objections, orders — go with its log at 31 December of the third year
-  after the close, never while a measure of it is in force ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
+  after the close, never while a measure of it is in force; a Server Owner's step on no case goes with its statement at
+  31 December of the third year after its lift ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
   Not built, open legally: a hold until the handover beyond 90 days, and an authority's link to a held copy. No
   moderation path has run on a deployed instance.
   The fixed **operator section** every space's terms carry

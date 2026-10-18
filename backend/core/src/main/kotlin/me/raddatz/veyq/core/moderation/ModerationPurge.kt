@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.moderation
 import me.raddatz.veyq.core.moderation.cases.CaseDecisions
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseNotices
+import me.raddatz.veyq.core.moderation.report.CaseReminders
 import me.raddatz.veyq.core.moderation.statement.StatementDeferrals
 import me.raddatz.veyq.core.moderation.statement.StatementMail
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -29,6 +30,7 @@ class ModerationPurge(
     private val statementMail: StatementMail,
     private val deferrals: StatementDeferrals,
     private val records: ModerationRecordsPurge,
+    private val reminders: CaseReminders,
 ) {
 
     @Scheduled(every = "{veyq.moderation.purge.every}")
@@ -44,6 +46,8 @@ class ModerationPurge(
         // The new-case mail (ADR 0093 § 2, owner decision Q7): an urgent one that could not go out, and the day's bundle.
         caseNotices.mailUrgent(now)
         caseNotices.mailBundle(now)
+        // An undecided case's reminder at 30, 75 and 90 days after its first report (ADR 0093 § 11): it never closes itself.
+        reminders.remind(now)
         // A rotation-due mail that could not go out when it became due is retried here (RotationDueNotice).
         rotationDue.mailIfDue(now)
         // A statement an authority deferred goes out once its deferral ended (ADR 0093 § 7, StatementDeferrals), and is mailed.

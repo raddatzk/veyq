@@ -32,6 +32,7 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   shareId: null,
   scopeId: '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c',
   ground: 'TERMS_BREACH',
+  provision: '§ 86a StGB',
   basis: 'REPORT',
   form: 'FULL',
   sentAt: new Date('2026-10-18T09:00:00Z'),
@@ -77,15 +78,16 @@ describe('StatementNotice', () => {
   it('renders the full form from the template with the facts opened, and offers the objection', async () => {
     const w = await mountNotice({ targetId: NODE })
     const ids = w.findAll('.statement-passage').map((p) => p.attributes('data-passage'))
-    expect(ids).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'objection', 'contact', 'courts'])
+    expect(ids).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objection', 'contact', 'courts'])
     expect(w.text()).toContain(TEMPLATE.measures.CONTENT.en.reach)
+    expect(w.text()).toContain('It relies on § 86a StGB.')
     expect(w.find('.statement-facts').text()).toBe('the photo shows a threat')
     expect(w.text()).toContain('Questions go to abuse@example.org.')
     expect(w.find('.statement-objection').exists()).toBe(true)
   })
 
   it('the reduced form leaves out what only the full form carries', async () => {
-    state.list = [statement({ form: 'REDUCED', sealedFacts: null, contactAddress: null })]
+    state.list = [statement({ form: 'REDUCED', sealedFacts: null, contactAddress: null, provision: null })]
     const w = await mountNotice({ targetId: NODE })
     expect(w.findAll('.statement-passage').map((p) => p.attributes('data-passage'))).toEqual(['measure', 'roles', 'ground', 'objection'])
     expect(w.find('.statement-facts').exists()).toBe(false)

@@ -93,7 +93,10 @@ with every record of it — the case row, its reports' sealed parts and reporter
 recipients, deferrals, objections and the orders that opened it. **Never while a measure of it is in force** (deleting
 the row would lift a block nobody lifted, and a standing measure needs its statement while it can be contested), nor
 while a proposal of it waits; a lift is an event of its own date, which moves the case's. An order that opened no case
-goes with its `ORDER_RECEIVED` on that event's date. The purge takes the case row first, as every decision does
+goes with its `ORDER_RECEIVED` on that event's date. A **Server Owner's step on no case** — a sign-in block, or a
+tenant taken offline over content, on their own finding — goes with its statement and that statement's recipients at
+31 December of the third year after its lift, never while it stands; its events are instance events, dated and purged
+as the log's own (ADR 0093 § 7). The purge takes the case row first, as every decision does
 (`ModerationRecordsRaceSliceTest`).
 
 **The reporter's contact** is sealed apart from the report (`veyq_moderation_report.sealed_contact`,

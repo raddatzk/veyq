@@ -193,6 +193,10 @@
           "de": "Ein Gast kann an {contactEmail} schreiben."
         },
         {
+          "en": "When the operator blocks a member's sign-in or takes a space offline because of its content, the member, or the space's owners, are told why by mail, with what was found, since they cannot read it in veyq; they object by writing to {contactEmail}.",
+          "de": "Sperrt die Betreiberseite die Anmeldung eines Mitglieds oder nimmt sie einen Bereich wegen seiner Inhalte offline, erfahren das Mitglied oder die Personen, denen der Bereich gehört, per E-Mail und mit dem Festgestellten, warum, da sie es in veyq nicht lesen können; sie widersprechen, indem sie an {contactEmail} schreiben."
+        },
+        {
           "en": "",
           "de": ""
         },
@@ -211,8 +215,8 @@
           "de": ""
         },
         {
-          "en": "The statement also names the facts found, whether a report or an authority's order led to the measure, that a person and no automated means decided, the ground (the law or the clause of the terms), and that the courts are open at any time, without an objection first.",
-          "de": "Die Begründung nennt außerdem die festgestellten Tatsachen, ob eine Meldung oder eine behördliche Anordnung zu der Maßnahme geführt hat, dass ein Mensch und kein automatisiertes Verfahren entschieden hat, den Grund (das Gesetz oder die Klausel der Nutzungsbedingungen) und dass der Weg zu den Gerichten jederzeit offensteht, auch ohne vorherigen Widerspruch."
+          "en": "The statement also names the facts found, whether a report or an authority's order led to the measure, that a person and no automated means decided, the ground with the law or the clause of the terms it relies on, that the measure applies wherever this instance is reached until it is lifted, and that the courts are open at any time, without an objection first.",
+          "de": "Die Begründung nennt außerdem die festgestellten Tatsachen, ob eine Meldung oder eine behördliche Anordnung zu der Maßnahme geführt hat, dass ein Mensch und kein automatisiertes Verfahren entschieden hat, den Grund mit dem Gesetz oder der Klausel der Nutzungsbedingungen, auf die sie sich stützt, dass die Maßnahme überall gilt, wo diese Instanz erreichbar ist, bis sie aufgehoben wird, und dass der Weg zu den Gerichten jederzeit offensteht, auch ohne vorherigen Widerspruch."
         }
       ]
     },

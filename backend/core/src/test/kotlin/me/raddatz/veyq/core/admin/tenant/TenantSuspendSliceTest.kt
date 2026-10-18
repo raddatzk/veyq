@@ -223,8 +223,9 @@ class TenantSuspendSliceTest {
     private fun ownerToken() = sessions.issue(seedUser(serverRole = "SERVER_OWNER")).accessToken
     private fun memberToken() = sessions.issue(seedUser()).accessToken
 
+    // A JSON request with no body: a suspension for a reason other than content carries no statement (ADR 0093 § 7).
     private fun suspend(token: String, tenantId: String) =
-        givenAdminChannel().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/suspend")
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json").`when`().post("/api/tenants/$tenantId/suspend")
 
     private fun reactivate(token: String, tenantId: String) =
         givenAdminChannel().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/reactivate")

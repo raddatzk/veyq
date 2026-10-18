@@ -58,6 +58,7 @@ import { nodeMover } from '../node/move'
 import { useLevelLive } from '../node/useLevelLive'
 import type { TreeNode } from '../node/tree'
 import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
+import OrderNotice from './OrderNotice.vue'
 
 // The props are the shell's, the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the
 // SFC compiler reads them statically.
@@ -217,6 +218,8 @@ function createError(e: unknown): string {
     <template v-if="current?.blockedByOperator">
       <p class="veyq-empty node-blocked">{{ t('node.blockedByOperator') }}</p>
       <StatementNotice :target-id="current.id" />
+      <!-- A guest whose upload an authority's removal order blocked through another link learns it here (TCO Art. 11). -->
+      <OrderNotice :share-id="shareId" />
     </template>
     <LevelView
       v-else-if="atFolder && current"

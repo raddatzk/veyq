@@ -185,6 +185,7 @@ class ModerationResource(
             facts = statement.facts.sealed(),
             factsFor = factsFor.associate { it.accountId.toString() to it.sealedFacts },
             deferral = statement.deferral?.let { DeferralInput(it.until.toInstant(), SealedNote(it.reason.epoch, it.reason.sealedNote)) },
+            provision = statement.provision,
         )
         decided(
             caseId,
@@ -242,7 +243,10 @@ class ModerationResource(
     override fun extendModerationHold(
         caseId: UUID, moderationHoldExtension: ModerationHoldExtension, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
     ): Response = with(moderationHoldExtension) {
-        decided(caseId, decisions.extend(caller(), caseId.toString(), until.toInstant(), SealedNote(reason.epoch, reason.sealedNote)))
+        decided(
+            caseId,
+            decisions.extend(caller(), caseId.toString(), until.toInstant(), SealedNote(reason.epoch, reason.sealedNote), reasonType = reasonType?.name),
+        )
     }
 
     override fun barModerationReporter(
