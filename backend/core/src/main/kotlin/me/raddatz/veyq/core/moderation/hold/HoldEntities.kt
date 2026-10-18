@@ -38,6 +38,13 @@ class HoldEntity : PanacheEntityBase {
     @Column(name = "floor_until")
     var floorUntil: Instant? = null
 
+    /**
+     * The latest end a measure or a statement may move the hold to: a child-sexual-abuse case's 90 days (ADR 0093 § 4,
+     * § 184b(5) StGB); null on every other hold. A logged extension may pass it; [floorUntil] always wins.
+     */
+    @Column(name = "ceiling_until")
+    var ceilingUntil: Instant? = null
+
     companion object : PanacheCompanionBase<HoldEntity, String>
 }
 

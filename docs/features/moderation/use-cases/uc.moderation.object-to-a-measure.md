@@ -42,7 +42,8 @@
    after the decision (ADR 0093 § 4).
 7. **The reporter.** The deciding moderator's browser opens each report's sealed contact and sends the address once,
    beside the dismissal or the measure; the server mails the decision — dismissed, or a measure taken — from memory, at
-   most once per report, and logs that it did.
+   most once per report, and logs that it did. The sealed contact goes six months after that — or, where no decision
+   could be told, six months after the case's decision; the "decision sent" event stays (ADR 0093 § 11).
 8. **The objection.** An affected member objects once per measure, in free text, on the statement: sealed in their
    browser to the moderation key's current epoch (`moderation-objection` [epoch, statementId]). It reopens the case — a
    closed case is decided again and back in the queue, its events undated — and the moderators are mailed that an

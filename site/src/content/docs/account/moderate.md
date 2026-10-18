@@ -52,7 +52,8 @@ the person who runs the server.
    address it was reported on, its state and until when it is kept. The urgent categories come first. **Show closed cases** shows
    the closed ones.
 2. Choose **Open** on a case. You see each report — its reason, the contact the reporter left and the context, opened on
-   your device with the moderation key — and the case's measures, its proposals, its hold and its log.
+   your device with the moderation key — and the case's measures, its proposals, its hold and its log. The contact is
+   deleted six months after the reporter was told the decision.
 3. Choose **Review what was reported**. It opens on the address of the reported space, where you open the moderation
    key again. You then see what was reported as a guest of a link would see it, read-only, with the reports beside it:
    as it was when it was reported, even if it was changed or deleted since, and even if it is blocked now. The log
@@ -103,7 +104,8 @@ the **Link or link id the order names** — paste it as the order names it; only
 authority's reference**, sealed so that only moderators can read it, and when it was **Received at the contact point**.
 A removal order blocks the link and everything it gives access to at once, for everyone, after you confirm; you then
 see when, to the second, and the text for the authority's feedback form to **Copy**. If no such link exists here,
-nothing is blocked and you get a draft saying so. Every order is kept with its case; **Orders recorded** lists them.
+nothing is blocked and you get a draft saying so. Every order is kept with its case, and goes with it (below);
+**Orders recorded** lists them.
 
 **Telling the affected later.** Only an authority can ask that the affected not be told yet. Then, under **Decide**,
 tick **An authority asked that the affected not be told yet**, choose **Tell them on** — at most six weeks ahead — and
@@ -113,19 +115,23 @@ the deferral** takes the authority's renewal once.
 **Reporting to an authority.** In a case, **Prepare the fields for the report** shows what the server holds about it —
 the case, its category, every time in UTC, the measures, who uploaded it and, for a guest, the address and time kept —
 as text to **Copy** into the authority's form. Never download, forward or take a picture of what was reported.
-**Record that it was reported to an authority** keeps that, with the authority's reference, in the case's log.
+**Record that it was reported to an authority** keeps that, with the authority's reference, in the case's log — so
+copy the fields first: for child sexual abuse material it also ends what is kept of the case.
 
 **Child sexual abuse material.** Before such a case opens, a full page says what never to do and what to do first.
 **Back to the queue** leaves it closed; **I understand — open the case** opens it, with **Block the content** offered
-as the first step.
+as the first step. Such content is kept only until you record that it was reported to an authority, and never more than
+90 days after the report — blocking it does not keep it longer. Extend it only while your report to the authority is
+still in progress, or because the authority asks.
 
 ## What is logged, and for how long
 
 The moderation log records when you were appointed and accepted, each time you pass the key on, and when you step
 down: who, when and for whom, never a key and never content. It is kept until 31 December of the third year after you
 stop moderating, then deleted. In a case it records each time you open it for review, and each step and lift with who
-took it and when; your notes and reasons only sealed. A case's log is kept until 31 December of the third year after
-the case closed.
+took it and when; your notes and reasons only sealed. A case — its log, its reports and everything decided in it — is
+kept until 31 December of the third year after the case closed, then deleted, but never while one of its blocks is
+still in force. A reporter's address goes six months after they were told the decision.
 
 ## Step down
 

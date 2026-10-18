@@ -11,7 +11,8 @@
   § 6).
 - **Preconditions:** A case exists (a report, or an authority's order).
 - **Postconditions (success):** The moderator has a text block to copy into the authority's form; the handover is an
-  event in the case's log. No file of the reported content was produced.
+  event in the case's log, and on a child-sexual-abuse case nothing of the content is held any more (but what an
+  authority's order holds). No file of the reported content was produced.
 
 ## Main flow
 
@@ -29,15 +30,22 @@
    full-page warning — do not download, forward or screenshot; review only as far as needed; block the content; inform
    the police or the BKA — and the decision panel preselects "Block the content". A human still decides. The warning
    is a **draft** until a qualified legal review.
+5. **On such a case the handover ends the hold** (ADR 0093 § 4, § 184b(5) StGB: keeping the content is exempt only
+   while it serves the report). Recording either handover ends the case's hold at once (`HOLD_ENDED`), and a decided case
+   with no objection open closes; the hint and the confirmation say so before it is recorded. Without a handover the
+   hold ends at the latest 90 days after the report — a measure or a statement never moves it further; an extension
+   may, for an Art. 18 report still in progress or an authority's request, and the handover still ends it. An
+   authority's order keeps what it holds (its floor).
 
 ## Alternate / exception flows
 
-- **A1 — Nothing held** (the hold ended): the export carries the case's own fields and no held record.
+- **A1 — Nothing held** (the hold ended — after a child-sexual-abuse case's handover, too): the export carries the
+  case's own fields, no uploader and no held record, and says that nothing is held.
 - **A2 — No address recorded** (the guest-write record was off, or the resolver yielded none): the export lists none.
-- **A3 — The hold's end at the handover is not built.** ADR 0093 § 4 ends a child-sexual-abuse case's hold at the
-  confirmed handover; whether keeping it until then is covered for a non-commercial operator (§ 184b(5) StGB) is open
-  (ADR 0093 § Legal basis, Still open 1), so a handover changes no hold. The Run docs advise contacting the police at
-  once and keeping nothing beyond the hold.
+- **A3 — A hold until the handover past 90 days is not built.** Whether keeping it that long is covered — and for a
+  non-commercial operator whether even the bounded hold is (§ 184b(5) StGB) — is open (ADR 0093 § Legal basis, Still
+  open 1). The Run docs advise contacting the police at once and keeping nothing beyond the hold.
+- **A4 — Any other category:** a handover changes no hold.
 
 ## Quality notes
 

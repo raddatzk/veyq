@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.moderation.report
 
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.SEALED_CONTACT
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.SEALED_REPORT
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asGuest
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
@@ -62,6 +63,24 @@ class ReportCoreSliceTest {
         assertEquals("OPEN", case.state)
         assertEquals(listOf(reportId), sharesOf(case.id).map { it.reportId })
         assertEquals(listOf("RECEIVED"), events(case.id))
+    }
+
+    /** ADR 0093 § 11: the address is sealed apart from the report, so it can go alone; none left, none stored. */
+    @Test
+    fun theAddressIsStoredSealedApartOnlyWhenOneWasLeft() {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val left = seedNode(m.scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
+        val none = seedNode(m.scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
+        val withAddress = asMember(m.userId, m.scopeId, body(listOf(item("NODE", left)), sealedContact = SEALED_CONTACT))
+            .then().statusCode(201).extract().path<String>("reportId")
+        val without = asMember(m.userId, m.scopeId, body(listOf(item("NODE", none))))
+            .then().statusCode(201).extract().path<String>("reportId")
+        assertEquals(SEALED_CONTACT, report(withAddress)!!.sealedContact)
+        assertEquals(SEALED_REPORT, report(withAddress)!!.sealedReport)
+        assertNull(report(without)!!.sealedContact)
+        // A sealed contact that is not base64 is refused like any other malformed field.
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", none)), sealedContact = "not base64!"))
+            .then().statusCode(400)
     }
 
     @Test

@@ -6,14 +6,16 @@
 //     link. Its plaintext is the list of keys (`encodeReportKeys`), each tagged with the role it plays (a node's own
 //     key, its name's field key, a blob's key with the blob's id, …), so the server learns how many keys a share holds
 //     at most by its length, never which.
-//   - The **sealed part**: `K_report`, the reporter's reason, their contact and the context they add, sealed to the
-//     current epoch's X-Wing public half — `sealTo` purpose `moderation-report` [epoch]. A report stays sealed to the
-//     epoch it was made under; opening it needs that epoch's `M_n` (`moderationKemSecret`). Its plaintext is padded to a
-//     multiple of `REPORT.bucketBytes`, so its length tells the server which bucket the texts fell into, not how long a
-//     reason is.
+//   - The **sealed part**: `K_report`, the reporter's reason and the context they add, sealed to the current epoch's
+//     X-Wing public half — `sealTo` purpose `moderation-report` [epoch]. A report stays sealed to the epoch it was made
+//     under; opening it needs that epoch's `M_n` (`moderationKemSecret`). Its plaintext is padded to a multiple of
+//     `REPORT.bucketBytes`, so its length tells the server which bucket the texts fell into, not how long a reason is.
+//   - The **contact**, when the reporter left one, sealed apart to the same epoch — `moderation-report-contact` [epoch],
+//     one bucket whatever its length — so the server can drop it alone six months after the decision was told
+//     (ADR 0093 § 11) while the sealed part stays with its case.
 //
 // The server stores both as the opaque base64 they are; in the clear it gets the category, the time and the ids
-// (the hold needs them). Pinned by `contracts/crypto/vectors/v1.json#report_bundle` and the three seal vectors.
+// (the hold needs them). Pinned by `contracts/crypto/vectors/v1.json#report_bundle` and the four seal vectors.
 import { concat, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
 import { open, openAs, seal, sealTo } from './seal'
 
@@ -32,8 +34,8 @@ export const REPORT = {
  *  alone does not say (a blob's id), and the 32-byte key. */
 export type ReportKey = { role: string; ref: string | null; key: Uint8Array }
 
-/** What the reporter wrote, sealed with `K_report` to the moderation key. `contact` and `context` may be ''. */
-export type ReportBody = { reportKey: Uint8Array; reason: string; contact: string; context: string }
+/** What the reporter wrote, sealed with `K_report` to the moderation key. `context` may be ''. The contact is sealed apart. */
+export type ReportBody = { reportKey: Uint8Array; reason: string; context: string }
 
 /** An item a report share is addressed by: a node, an application's item inside one, or an upload link. */
 export type ReportItemAddress = { kind: 'NODE' | 'ITEM'; id: string } | { kind: 'LINK'; shareId: string }
@@ -121,36 +123,54 @@ export function decodeReportKeys(plaintext: Uint8Array): ReportKey[] {
 }
 
 /**
- * `lp(K_report) ‖ lp(utf8(reason)) ‖ lp(utf8(contact)) ‖ lp(utf8(context))`, zero-padded to the next multiple of
- * `bucketBytes`. The texts are NFC; the reason must not be blank; each is refused above its byte bound rather than cut.
+ * `lp(K_report) ‖ lp(utf8(reason)) ‖ lp(utf8(context))`, zero-padded to the next multiple of `bucketBytes`. The texts
+ * are NFC; the reason must not be blank; each is refused above its byte bound rather than cut.
  */
 export function encodeReportBody(body: ReportBody): Uint8Array {
   if (!(body.reportKey instanceof Uint8Array) || body.reportKey.length !== REPORT.keyBytes) {
     throw new ReportInvalid('report key')
   }
   const reason = utf8(body.reason)
-  const contact = utf8(body.contact)
   const context = utf8(body.context)
   if (body.reason.trim() === '' || reason.length > REPORT.reasonBytes) throw new ReportInvalid('reason')
-  if (contact.length > REPORT.contactBytes) throw new ReportInvalid('contact')
   if (context.length > REPORT.contextBytes) throw new ReportInvalid('context')
-  const fields = concat(lp(body.reportKey), lp(reason), lp(contact), lp(context))
+  const fields = concat(lp(body.reportKey), lp(reason), lp(context))
   const out = new Uint8Array(Math.ceil(fields.length / REPORT.bucketBytes) * REPORT.bucketBytes)
   out.set(fields)
   return out
 }
 
-/** Read a body back; the padding after the four fields must be zeros. */
+/** Read a body back; the padding after the three fields must be zeros. */
 export function decodeReportBody(plaintext: Uint8Array): ReportBody {
   if (plaintext.length % REPORT.bucketBytes !== 0) throw new ReportInvalid('padding')
   const r = new Reader(plaintext)
   const reportKey = r.field()
   const reason = text(r.field(), 'reason')
-  const contact = text(r.field(), 'contact')
   const context = text(r.field(), 'context')
   if (reportKey.length !== REPORT.keyBytes) throw new ReportInvalid('report key')
   if (r.rest().some((b) => b !== 0)) throw new ReportInvalid('padding')
-  return { reportKey, reason, contact, context }
+  return { reportKey, reason, context }
+}
+
+/**
+ * The reporter's contact: `lp(utf8(contact))`, zero-padded to `bucketBytes` — one bucket whatever its length, so the
+ * server learns only that a contact was left. NFC; not blank; refused above `contactBytes` rather than cut.
+ */
+export function encodeReportContact(contact: string): Uint8Array {
+  const bytes = utf8(contact)
+  if (contact.trim() === '' || bytes.length > REPORT.contactBytes) throw new ReportInvalid('contact')
+  const out = new Uint8Array(REPORT.bucketBytes)
+  out.set(lp(bytes))
+  return out
+}
+
+/** Read a contact back: one bucket, the padding after it zeros. */
+export function decodeReportContact(plaintext: Uint8Array): string {
+  if (plaintext.length !== REPORT.bucketBytes) throw new ReportInvalid('padding')
+  const r = new Reader(plaintext)
+  const contact = text(r.field(), 'contact')
+  if (r.rest().some((b) => b !== 0)) throw new ReportInvalid('padding')
+  return contact
 }
 
 /** Seal the report's body to the epoch's public half (`moderation-report` [epoch]). */
@@ -160,6 +180,14 @@ export const sealReport = (epoch: number, kem: HybridPublic, body: ReportBody): 
 /** Open a report with the epoch's decapsulation key (`moderationKemSecret(M_n)`); the epoch is the one it is stored at. */
 export const openReport = (epoch: number, kemSecret: HybridSecret, blob: Uint8Array): ReportBody =>
   decodeReportBody(openAs({ purpose: 'moderation-report', epoch }, kemSecret, blob))
+
+/** Seal the reporter's contact apart, to the same epoch's public half (`moderation-report-contact` [epoch]). */
+export const sealReportContact = (epoch: number, kem: HybridPublic, contact: string): Uint8Array =>
+  sealTo({ purpose: 'moderation-report-contact', epoch }, kem, encodeReportContact(contact))
+
+/** Open a reporter's contact with the epoch's decapsulation key, at the epoch its report is stored at. */
+export const openReportContact = (epoch: number, kemSecret: HybridSecret, blob: Uint8Array): string =>
+  decodeReportContact(openAs({ purpose: 'moderation-report-contact', epoch }, kemSecret, blob))
 
 /** Seal one item's keys under `K_report`, addressed by the item. */
 export function sealReportShare(reportKey: Uint8Array, item: ReportItemAddress, keys: readonly ReportKey[]): Uint8Array {
