@@ -227,6 +227,14 @@ queue with progress and cancel, streamed (never the whole file in memory), and t
 the first frame as an image banner. Implementation has the owner's go, after the gallery work (#488–#490) per the
 owner's order.
 
+**Amended the same day (owner): no transcoder in this CR.** A small playback video (for the banner and the gallery,
+#493) comes with the queue of client worker nodes (#23, the operator-blind background jobs of ADR 0021), not as an
+in-browser transcode here. So this CR drops phase 0's spike and the WebCodecs transcoder: a video banner is the copied
+**original** (Q2) played through the service worker's range shim (ADR 0047, as gallery videos play today) with a
+client-made **poster** (decode only, no encode); Q4 (no length limit) needs nothing more, and Q5 applies only to a
+browser that cannot even decode a poster frame. The banner names the playback derivative as a later slot the worker
+fills, so nothing moves when #23 lands. Cost stated: a long video copied as a banner is stored twice until then.
+
 - **Q1 — the word.** The owner said "Header"; *header* already names the Memory's title row (core's `NodeHeader`) and the
   place the cover shows ("detail header", `uc.memory.cover`). **Recommendation: *Banner*** (EN and DE), as written
   throughout. Alternative: *Header* with the title row renamed — a sweep through code and docs for no gain.
