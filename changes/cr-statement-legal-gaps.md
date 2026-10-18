@@ -150,7 +150,7 @@ the statement names — the Server Owner lifts with the existing unblock or reac
   the facts' text → none); the notice answers the uploading identity's token on a link a removal order blocked
   (control: another identity's token on the same link → the link's ordinary unknown answer; the same upload blocked by
   a moderator's measure → nothing); a deferred order → nothing until its end (bite: drop the deferral check → red).
-- [ ] **3 web + admin-web** — CaseDetail's provision input (required in the full form) and the rendered provision and
+- [x] **3 web + admin-web** — CaseDetail's provision input (required in the full form) and the rendered provision and
   territorial line in `StatementNotice`; admin-web's block form and tenant suspension gain the statement fields (shown
   when over content), the CLI their flags; web's share page and drop pages ask the notice when the client holds an
   identity for the link and something answers blocked, and show it. · Done when: `npm run check` green in both; a
@@ -163,6 +163,32 @@ the statement names — the Server Owner lifts with the existing unblock or reac
   `help/report-something.mdx` and its DE twin (what a reporter may do after a decision); `sharing/what-guests-see.mdx`
   and its DE twin (the order notice); coverage refs for the new criteria. · Done when: coverage, wiki-sources and the
   site check green.
+
+- [x] **5 the coordinator's scope addition** (owner decisions 2026-10-18, answers to the retention fix's questions):
+  **an undecided case never closes itself** — reminders at 30, 75 and 90 days after its first report to the accepted
+  moderators and the confirmed notification address (category and age only), and the queue marks a case older than 90
+  days overdue (DSA Art. 16(6)); **a CSAM hold extension names its reason type in the clear** and the server refuses any
+  but `AUTHORITY_REFERENCE` and `ART18_REPORT_IN_PROGRESS` on such a case (`409 extension_reason_not_allowed`); "a
+  measure in force keeps its case" was already ADR 0093 § 11's text with its reason, so nothing changed there. Recorded
+  in ADR 0093 §§ 4, 11. · Done when: `./gradlew check`, races on MariaDB, web and admin-web checks green, each rule
+  bitten.
+
+### What the implementation decided (within the CR's decisions)
+
+- **The provision is its own `when: provision` passage** right after the ground, not a placeholder inside it — the
+  conditional rendering every other optional value uses.
+- **A tenant suspension over content is recorded as a `TENANT_OFFLINE` measure row** (no enforcement: the tenant's
+  status is), so its statement has a measure, the case waits for it, and reactivation lifts it.
+- **A step from a proposal that names no case is recorded on the proposal's case**; a case-less step's statement has
+  `case_id` NULL and goes with its lifted step at the log's date (`ModerationRecordsPurge.purgeCaselessSteps`) — which
+  also purges case-less lifted sign-in blocks, kept forever before.
+- **The step's log copy seals under a new purpose `moderation-step-facts` [epoch, statementId]** with a vector (the step
+  may have no case to bind `moderation-note` to); the client mints the statement id.
+- **The step's mail is not retried** — the server keeps no clear copy of the facts; documented on the Run page.
+- **Basis `OWN_FINDING`** for a step on no case (DSA Art. 17(3)(b)'s own-initiative investigation).
+- **The phase 3 browser pass is lane L1** (`server-owner-statement.spec.ts`, the order notice in
+  `takedown-orders-and-art18.spec.ts`, the provision and the redress in `statement-and-objection.spec.ts`) — the brief
+  forbids the owner's dev stack.
 
 ## Definition of done
 

@@ -70,12 +70,23 @@ acceptanceCriteria:
   - id: an-extension-needs-a-reason-and-a-bound
     text: >-
       A hold is extended only while alive, with a sealed reason and an end after the current one and at most six months
-      from now; the log records both.
+      from now; the log records both and the reason's kind in the clear; on a case of child sexual abuse material only an
+      authority's request or an Art. 18 report in progress extends it, any other kind refused.
     coverage:
       backend:
-        integration: [ModerationCasesSliceTest.anExtensionNeedsAnAliveHoldAReasonAndABound]
+        integration: [ModerationCasesSliceTest.anExtensionNeedsAnAliveHoldAReasonAndABound, ChildAbuseHoldSliceTest.aChildAbuseHoldIsExtendedOnlyForAnAuthorityOrAnArt18ReportNamedInTheClear]
       web:
         unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
+  - id: an-undecided-case-is-reminded-and-marked-overdue
+    text: >-
+      An undecided case never closes itself: at 30, 75 and 90 days after its first report the confirmed moderators are
+      mailed each reminder once, naming the case by its category and age only, a decided case never; the queue marks it
+      overdue past 90 days.
+    coverage:
+      backend:
+        integration: [ReportMailSliceTest.anUndecidedCaseIsRemindedAtThirtySeventyFiveAndNinetyDaysAndNeverClosesItself]
+      web:
+        unit: [src/features/moderation/ModerationQueue.test.ts]
   - id: a-barred-reporter-is-refused
     text: >-
       A barred member's further reports, or a guest's through the barred link, are refused until the bar is lifted.

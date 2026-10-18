@@ -33,6 +33,7 @@ const summary = (over: Partial<ModerationCaseSummary> = {}): ModerationCaseSumma
   holdEndsAt: new Date('2027-01-15T09:00:00Z'),
   origin: 'REPORT',
   statementDeferredUntil: null,
+  overdue: false,
   ...over,
 })
 
@@ -146,6 +147,14 @@ describe('ModerationQueue', () => {
     expect(rows[1].find('.moderation-deferred-badge').text()).not.toContain(t('moderation.caseRow.deferralEndsSoon'))
     expect(rows[2].find('.moderation-deferred-badge').exists()).toBe(false)
     expect(rows[2].find('.moderation-order-badge').exists()).toBe(false)
+  })
+
+  it('marks a case undecided for over 90 days as overdue, and no other (ADR 0093 § 11)', async () => {
+    vi.mocked(listCases).mockResolvedValue([summary({ overdue: true }), summary({ id: 'case-2' })])
+    const w = await mountQueue()
+    const rows = w.findAll('.moderation-case-row')
+    expect(rows[0].find('.moderation-overdue-badge').text()).toBe(t('moderation.caseRow.overdue'))
+    expect(rows[1].find('.moderation-overdue-badge').exists()).toBe(false)
   })
 
   it('an order entered above the queue opens its case', async () => {

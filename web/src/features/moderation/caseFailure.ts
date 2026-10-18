@@ -21,6 +21,8 @@ const byCode: Record<string, string> = {
   report_not_found: 'moderation.errors.reportNotFound',
   invalid_request: 'moderation.errors.invalidRequest',
   statement_facts_required: 'moderation.errors.factsRequired',
+  statement_provision_required: 'moderation.errors.provisionRequired',
+  extension_reason_not_allowed: 'moderation.errors.extendTypeNotAllowed',
   statement_recipients_changed: 'moderation.errors.recipientsChanged',
   objection_not_found: 'moderation.errors.objectionNotFound',
   objection_decided: 'moderation.errors.objectionDecided',

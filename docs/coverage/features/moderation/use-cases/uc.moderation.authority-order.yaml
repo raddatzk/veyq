@@ -62,6 +62,17 @@ acceptanceCriteria:
         integration: [AuthorityOrdersSliceTest.aDeferredStatementDoesNotGoOutBeforeItsEndAndDoesAfterIt, AuthorityOrdersSliceTest.aModeratorsMeasureCarriesAnAuthoritysDeferral]
       web:
         unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts, src/features/moderation/ModerationQueue.test.ts]
+  - id: a-guest-uploader-is-told-of-a-removal-order
+    text: >-
+      A guest identity whose upload an authority's removal order blocked is told so on the link it came through, by the
+      contributor token its client holds, even while the link is blocked: when the order was received and the instance
+      contact for the reasons or a copy (TCO Art. 11). Another identity's token, a moderator's measure, a running
+      deferral and a lifted measure get the link's ordinary unknown answer.
+    coverage:
+      backend:
+        integration: [AuthorityOrdersSliceTest.aGuestUploaderIsToldOfARemovalOrderOnItsBlockedLinkAndNobodyElseIs, AuthorityOrdersSliceTest.aGuestUploaderIsToldNothingOfAModeratorsMeasure, AuthorityOrdersSliceTest.aModeratorsMeasureOnAPreservationOrdersCaseTellsTheGuestNothing, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
+      web:
+        unit: [src/core/sharing/OrderNotice.test.ts]
 gaps:
   admin-web: >-
     The order form and `veyq-admin order …` are covered by admin-web/src/features/instance/orders.test.ts (a pasted

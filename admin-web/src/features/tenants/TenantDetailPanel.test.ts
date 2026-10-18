@@ -37,11 +37,16 @@ vi.mock('../../shared/inviteLink', () => ({
 // confirm-gating cases below by confirming nothing — which is why `no-alert` is not exempted for tests.
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
+vi.mock('../instance/stepStatement', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../instance/stepStatement')>()),
+  stepStatement: vi.fn(),
+}))
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
 import { listTenants, revokeTenant, resendInvite, reassignInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
 import type { TenantInviteState, TenantSummary } from './tenants'
 import { httpError } from '../../test/httpError'
+import { stepStatement } from '../instance/stepStatement'
 import { session, setTokens } from '../../app/session'
 
 const i18n = createI18n({
@@ -147,10 +152,41 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, status: 'SUSPENDED' }])
     await btn(w, 'Take offline').trigger('click')
     await flushPromises()
-    expect(suspendTenant).toHaveBeenCalledWith('t-2')
+    expect(suspendTenant).toHaveBeenCalledWith('t-2', null)
     // Stays on the panel (unlike revoke, which hands back to the console) and re-renders in the new state.
     expect(w.emitted('revoked')).toBeUndefined()
     expect(w.text()).toContain('Suspended')
+  })
+
+  it('take-offline over content carries its statement of reasons to the tenant’s owners (ADR 0093 § 7)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    const statement = { statementId: 's-1', ground: 'ILLEGAL_CONTENT' as const, provision: '§ 130 StGB', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValue(statement)
+    const w = mountPanel('t-2')
+    await flushPromises()
+    // Not over content: no fields, and the suspension carries none (the control).
+    expect(w.find('.step-statement').exists()).toBe(false)
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    expect(w.find('.step-statement').exists()).toBe(true)
+    await w.find('.step-statement__provision').setValue('§ 130 StGB')
+    await w.find('.step-statement__facts').setValue('what was found')
+    confirmAsk.mockResolvedValueOnce(true)
+    await w.find('.tenant-suspend').trigger('click')
+    await flushPromises()
+    expect(stepStatement).toHaveBeenCalledWith(expect.objectContaining({ provision: '§ 130 StGB', facts: 'what was found' }))
+    expect(suspendTenant).toHaveBeenCalledWith('t-2', statement)
+  })
+
+  it('a suspension the server finds over content asks for its statement', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(suspendTenant).mockRejectedValueOnce(httpError(400, 'statement_required'))
+    const w = mountPanel('t-2')
+    await flushPromises()
+    confirmAsk.mockResolvedValueOnce(true)
+    await w.find('.tenant-suspend').trigger('click')
+    await flushPromises()
+    expect(w.find('.step-statement').exists()).toBe(true)
+    expect(w.text()).toContain('moderation.steps.errors.statementRequired')
   })
 
   it('a SUSPENDED tenant shows its own badge + notice and offers only bring-back-online', async () => {
@@ -214,9 +250,9 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     const w = mountPanel('t-2')
     await flushPromises()
     // Prefilled with where the tenant is now, so the field reads as "the address" and not as an empty command.
-    expect((w.findAll('input')[0].element as HTMLInputElement).value).toBe('live.example')
+    expect((w.find('form.change-domain input').element as HTMLInputElement).value).toBe('live.example')
 
-    await w.findAll('input')[0].setValue('moved.example')
+    await w.find('form.change-domain input').setValue('moved.example')
     confirmAsk.mockResolvedValueOnce(false)
     await submitMove(w)
     await flushPromises()
@@ -260,7 +296,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
       [{ status: 409, code: 'tenant_not_pending_or_active' }, 'offline tenants cannot move'],
       [{ status: 400, code: 'invalid_request' }, 'not an address'],
     ] as const) {
-      await w.findAll('input')[0].setValue(`x-${expected.length}.example`)
+      await w.find('form.change-domain input').setValue(`x-${expected.length}.example`)
       vi.mocked(changeTenantDomain).mockRejectedValueOnce(httpError(failure.status))
       vi.mocked(tenantError).mockResolvedValueOnce(failure)
       await submitMove(w)

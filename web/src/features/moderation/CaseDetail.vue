@@ -17,6 +17,7 @@ import Button from 'primevue/button'
 import DatePicker from 'primevue/datepicker'
 import Message from 'primevue/message'
 import type {
+  HoldExtensionReason,
   ModerationCase,
   ModerationGround,
   ModerationProposalStep,
@@ -58,9 +59,16 @@ const notice = ref('')
 const note = ref('')
 const extendUntil = ref<Date | null>(null)
 const extendReason = ref('')
+// The extension's reason type, in the clear (ADR 0093 § 4): on a child-sexual-abuse case only an authority's request
+// or an Art. 18 report in progress extends the hold, and the server refuses any other.
+const extendType = ref<HoldExtensionReason | ''>('')
+const EXTENSION_TYPES: HoldExtensionReason[] = ['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS', 'OBJECTION', 'LAWYERS_LETTER', 'LAWSUIT']
+const CSAM_EXTENSION_TYPES: HoldExtensionReason[] = ['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS']
 const GROUNDS: ModerationGround[] = ['CHILD_SEXUAL_ABUSE', 'TERRORIST_CONTENT', 'THREAT_TO_LIFE', 'ILLEGAL_CONTENT', 'TERMS_BREACH']
 const ground = ref<ModerationGround | ''>('')
 const facts = ref('')
+// The provision of the law or the clause of the terms the ground relies on (DSA Art. 17(3)(d), (e)) — required in the full form.
+const provision = ref('')
 // An authority's deferral of the next block's statement (ADR 0093 § 7): only with its request, at most six weeks.
 const deferAsked = ref(false)
 const deferUntil = ref<Date | null>(null)
@@ -71,6 +79,7 @@ const renewReason = ref<Record<string, string>>({})
 const SIX_WEEKS_DAYS = 42
 const deferMax = computed(() => new Date(Date.now() + SIX_WEEKS_DAYS * 24 * 60 * 60 * 1000))
 const csam = computed(() => current.value?.category === 'CHILD_SEXUAL_ABUSE')
+const extensionTypes = computed(() => (csam.value ? CSAM_EXTENSION_TYPES : EXTENSION_TYPES))
 
 const when = (d: Date) => d.toLocaleString(locale.value)
 const short = (id: string) => id.slice(0, 8)
@@ -172,12 +181,16 @@ const dismiss = () =>
   )
 
 /**
- * Take a block with its statement: refused here already when the full form lacks the facts, as the server would; the
- * ground defaults to the case's category, and the facts field empties once the block is taken.
+ * Take a block with its statement: refused here already when the full form lacks the facts or the provision, as the
+ * server would; the ground defaults to the case's category, and the facts field empties once the block is taken.
  */
 function block(label: string, reach: string, kind: MeasureKind, target: { shareId?: string; targetId?: string }) {
   if (fullForm.value && facts.value.trim() === '') {
     error.value = t('moderation.errors.factsRequired')
+    return
+  }
+  if (fullForm.value && provision.value.trim() === '') {
+    error.value = t('moderation.errors.provisionRequired')
     return
   }
   if (deferAsked.value && (!deferUntil.value || deferReason.value.trim() === '')) {
@@ -185,7 +198,7 @@ function block(label: string, reach: string, kind: MeasureKind, target: { shareI
     return
   }
   const deferral = deferAsked.value ? { until: deferUntil.value!, reason: deferReason.value } : null
-  const statement = { ground: (ground.value || current.value!.category) as ModerationGround, facts: facts.value, deferral }
+  const statement = { ground: (ground.value || current.value!.category) as ModerationGround, provision: provision.value, facts: facts.value, deferral }
   return decide(label, reach, 'pi pi-ban', async (n) => {
     const answered = await takeMeasure(id(), kind, target, n, statement, reporterNoticesOf(current.value!))
     facts.value = ''
@@ -258,11 +271,16 @@ async function extend() {
     error.value = t('moderation.errors.reasonRequired')
     return
   }
+  if (csam.value && !extendType.value) {
+    error.value = t('moderation.errors.extendTypeRequired')
+    return
+  }
   busy.value = true
   try {
-    current.value = await extendHold(id(), extendUntil.value, extendReason.value)
+    current.value = await extendHold(id(), extendUntil.value, extendReason.value, extendType.value || null)
     extendReason.value = ''
     extendUntil.value = null
+    extendType.value = ''
     if (current.value.hold) notice.value = t('moderation.case.extended', { time: when(current.value.hold.endsAt) })
   } catch (e) {
     error.value = t(await caseFailureKey(e))
@@ -341,6 +359,11 @@ onMounted(load)
             fluid
           />
           <span class="veyq-form-copy">{{ t('moderation.case.extendUntilHint') }}</span>
+          <label for="moderation-extend-type">{{ csam ? t('moderation.case.extendType') : t('moderation.case.extendTypeOptional') }}</label>
+          <select id="moderation-extend-type" v-model="extendType" class="moderation-extend-type" :disabled="busy">
+            <option value="" disabled>{{ t('moderation.case.extendTypePick') }}</option>
+            <option v-for="r in extensionTypes" :key="r" :value="r">{{ t(`moderation.case.extendTypes.${r}`) }}</option>
+          </select>
           <label for="moderation-extend-reason">{{ t('moderation.case.extendReason') }}</label>
           <textarea id="moderation-extend-reason" v-model="extendReason" class="moderation-extend-reason" rows="3" maxlength="2000" required :disabled="busy" />
           <span class="veyq-form-copy">{{ t(csam ? 'moderation.case.extendReasonHintCsam' : 'moderation.case.extendReasonHint') }}</span>
@@ -456,6 +479,9 @@ onMounted(load)
         <select id="moderation-statement-ground" v-model="ground" class="moderation-statement-ground" :disabled="busy">
           <option v-for="g in GROUNDS" :key="g" :value="g">{{ t(`report.categories.${g}`) }}</option>
         </select>
+        <label for="moderation-statement-provision">{{ fullForm ? t('moderation.decide.provision') : t('moderation.decide.provisionOptional') }}</label>
+        <input id="moderation-statement-provision" v-model="provision" class="moderation-statement-provision" type="text" maxlength="200" :disabled="busy" />
+        <span class="veyq-form-copy">{{ t('moderation.decide.provisionHint') }}</span>
         <label for="moderation-statement-facts">{{ fullForm ? t('moderation.decide.facts') : t('moderation.decide.factsOptional') }}</label>
         <textarea id="moderation-statement-facts" v-model="facts" class="moderation-statement-facts" rows="4" maxlength="2000" :disabled="busy" />
         <span class="veyq-form-copy">{{ fullForm ? t('moderation.decide.factsHint') : t('moderation.decide.factsHintReduced') }}</span>
