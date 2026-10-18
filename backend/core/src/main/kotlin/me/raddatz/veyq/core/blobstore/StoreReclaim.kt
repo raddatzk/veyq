@@ -1,7 +1,5 @@
 package me.raddatz.veyq.core.blobstore
 
-import me.raddatz.veyq.core.backup.ErasureKind
-import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
@@ -105,9 +103,9 @@ class StoreReclaimStore {
     @Inject
     lateinit var config: VeyqConfig
 
-    /** The erasure ledger, which a settled row's key enters (ADR 0056 decision 8) — field-injected, as [config] is. */
+    /** Told of a settled row's key (the erasure ledger, ADR 0056 decision 8) — field-injected, as [config] is. */
     @Inject
-    lateinit var ledger: ErasureLedger
+    lateinit var reclaimedKeys: ReclaimedKeys
 
     /**
      * How long a recorded key waits before the sweep may delete its objects: `veyq.blob.upload.retention`, the
@@ -177,7 +175,7 @@ class StoreReclaimStore {
         // The erasure ledger's line (ADR 0056 decision 8), only when this call settled the row — a second instance that
         // settled it first wrote it: the key is erased, not lost, and a restore's object check must say so.
         val key = StoreReclaimEntity.findById(id)?.storageKey ?: return
-        if (StoreReclaimEntity.delete("id", id) > 0) ledger.erased(ErasureKind.STORAGE_KEY, key)
+        if (StoreReclaimEntity.delete("id", id) > 0) reclaimedKeys.reclaimed(key)
     }
 
     /**
@@ -201,4 +199,13 @@ class StoreReclaimStore {
         row.persist()
         return false
     }
+}
+
+/**
+ * Told, **in the settling transaction**, that a storage key's objects are gone from the store — the seam the kernel's
+ * reclaim offers so the erasure ledger (`core.backup`, ADR 0056 decision 8) records a reclaimed key without the kernel
+ * naming the slice (developer-styleguide § 1): a restore's object check then counts the key as erased, not missing.
+ */
+interface ReclaimedKeys {
+    fun reclaimed(storageKey: String)
 }

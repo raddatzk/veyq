@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.backup
 
+import me.raddatz.veyq.core.blobstore.ReclaimedKeys
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
@@ -111,7 +112,11 @@ interface ApplicationErasures {
  * of these at the place it erases ([ErasureKind] lists them); a moderation block, its lift and a case's change too.
  */
 @ApplicationScoped
-class ErasureLedger {
+class ErasureLedger : ReclaimedKeys {
+
+    /** The store reclaim settled [storageKey]'s row: its objects are gone ([ErasureKind.STORAGE_KEY]). */
+    @Transactional(Transactional.TxType.MANDATORY)
+    override fun reclaimed(storageKey: String) = erased(ErasureKind.STORAGE_KEY, storageKey)
 
     /** A hard erasure of core's [kind] (never a moderation kind) of [id], in [scopeId] where it has one. */
     @Transactional(Transactional.TxType.MANDATORY)
