@@ -3,7 +3,7 @@
 - **ID:** uc.admin.delete-tenant
 - **Primary actor:** **Server Owner**, in admin-web or `veyq-admin tenant delete`
 - **Secondary actor:** the tenant's members (they lose the tenant, keep their accounts); a last owner erasing their
-  account ([uc.account.erase-account](../../account/use-cases/uc.account.erase-account.md) A3)
+  account, who chooses to delete the tenant along ([uc.account.erase-account](../../account/use-cases/uc.account.erase-account.md) A3)
 - **Goal:** Remove an `ACTIVE` or `SUSPENDED` tenant and everything in it
   ([ADR 0101](../../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
   decision 10).
@@ -18,12 +18,13 @@
 1. The Server Owner deletes the tenant and confirms by typing its domain.
 2. The server takes it offline as a suspension does — every request refused, ingress withdrawn, links dead — and marks
    it pending deletion until the retention ends.
-3. Each member whose account would be left in no tenant, and holds no server role, is mailed that their account goes
-   with the tenant.
+3. Each member is mailed, through the instance mail where it is set up, that the tenant is being deleted and when.
+   Every account stays, also one the deletion leaves in no tenant: nothing erases an account its person did not ask
+   to erase, and they may erase it themselves ([uc.account.erase-account](../../account/use-cases/uc.account.erase-account.md)).
 4. Where the deletion is over the tenant's content, the Server Owner enters the statement of reasons with it, and the
    tenant's owners receive it by mail (ADR 0093 § 7).
 5. When the retention ends, one purge erases every scope of the tenant through the scope erasure, then the tenant's
-   remaining rows and the tenant, erases the accounts step 3 named, and writes the erasures into the ledger.
+   remaining rows and the tenant, and writes the erasure into the ledger.
 
 ## Alternate / exception flows
 

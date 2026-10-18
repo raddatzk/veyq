@@ -7,7 +7,7 @@
 - **Goal:** Have an account and everything kept about it erased, apart from what the law keeps
   ([ADR 0101](../../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md); GDPR
   Art. 17).
-- **Preconditions:** The account exists and holds no server role. For the self-service door: the member is signed in
+- **Preconditions:** The account exists and is not the Server Owner's. For the self-service door: the member is signed in
   and proves their password.
 - **Postconditions (success):** The account can no longer sign in from the request on; after the scope trash's
   retention its row and every row keyed on it are gone, its own scopes are purged, and the erasure is in the erasure
@@ -37,13 +37,16 @@
 
 - **A1 — Wrong password** at the self-service door: refused, nothing changes.
 - **A2 — The Server Owner's own account:** refused (`server_owner_account`).
-- **A3 — The last owner of a tenant with other members**, at the self-service door: refused until another member is an
-  owner; the dialog says how. A tenant with no other member is deleted with the account
-  ([uc.admin.delete-tenant](../../admin/use-cases/uc.admin.delete-tenant.md)), and the dialog names it.
+- **A3 — The last owner of a tenant with other members**, at the self-service door: the dialog offers a choice per such
+  tenant — **delete the tenant along** ([uc.admin.delete-tenant](../../admin/use-cases/uc.admin.delete-tenant.md), its
+  window) **or name a new owner** from its members — and the erasure proceeds after either, in the request's one
+  transaction. A request that leaves such a tenant without a choice is refused (`last_owner_choice_required`), nothing
+  changed. A tenant with no other member is deleted with the account, and the dialog names it.
 - **A4 — The Server Owner's door for a last owner:** not refused; the tenant is left with no owner, and admin-web shows
   it so, to invite a new owner or delete the tenant.
 - **A5 — Stopped:** the Server Owner stops a pending erasure before the purge; the account can sign in again, and its
-  own scopes are still in the scope trash, restorable by it as before.
+  own scopes are still in the scope trash, restorable by it as before. The shared scopes and tenants it was cut from
+  need a new invite, and a tenant deleted along stays pending deletion until the Server Owner stops that too.
 - **A6 — No instance mail:** the erasure runs all the same; admin-web already warns that mail is missing.
 - **A7 — Restored from a backup:** the instance re-applies the ledger before it serves, and the account is erased again.
 

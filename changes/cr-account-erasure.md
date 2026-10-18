@@ -1,7 +1,7 @@
 ---
 id: cr-account-erasure
 title: An account is erased on request, and an active tenant can be deleted, with only what the law keeps staying
-status: planned
+status: in-progress
 satisfies: ["uc.account.erase-account", "uc.admin.delete-tenant"]
 adrs: ["0101", "0035", "0056", "0066", "0093", "0099"]
 invariants:
@@ -108,7 +108,7 @@ tenant is erased or cascades.
 
 ## Phases
 
-- [ ] **0 docs** — the two use-cases and ADR 0101 corrected to the owner's answers where they differ from the
+- [x] **0 docs** — the two use-cases and ADR 0101 corrected to the owner's answers where they differ from the
   recommendations. · Done when: feature-format, coverage, doc-link, doc-citation, change guards green.
 - [ ] **1 contracts** — `eraseOwnAccount` (signed in, password proof), `eraseAccount` and `stopAccountErasure` (admin
   channel, by address), `deleteTenant` and `stopTenantDeletion` (admin channel), the tenant member role change,
@@ -126,18 +126,20 @@ tenant is erased or cascades.
   its docstring carries the required fields.
 - [ ] **3 backend** — the pending erasure, its two doors and its stop; the lockout at the request (sessions, sign-in,
   pendings, the member removal per tenant, the roster); the mail; the purge after the window; the acceptance rows kept
-  while a case names the account; the tenant deletion, its stop and its purge, the accounts it leaves in no tenant;
+  while a case names the account; the tenant deletion, its stop and its purge, its mail to the members (whose
+  accounts stay, Q20);
   the role change and the owner invite; the ledger entries if `cr-backup-erasure-and-retention` has landed. · Done
   when: `./gradlew check` green and phase 2's guard green. **Bites, with controls:** erase a member who owns a personal
   scope, a group alone and uploads into a shared Memory → after the window every row of the first two and the account
   are gone, the shared Memory's media keep `created_by` (control: the account's favorites in that Memory are gone); an
   account a measure is in force on keeps its acceptance rows to the case date (control: an account no case names keeps
   none); sign-in during the window → refused (control: after a stop → admitted); the Server Owner's account →
-  `server_owner_account`; the last owner with members at the self door → refused (control: the Server Owner's door →
-  erased, the tenant listed ownerless); a deleted tenant's hold survives the purge (control: an ended hold does not);
+  `server_owner_account`; the last owner with members at the self door without a choice → refused
+  `last_owner_choice_required` (control: with "name a new owner" → erased, the named member the owner; with "delete
+  along" → the tenant pending deletion; the Server Owner's door → erased, the tenant listed ownerless) (Q18); a deleted tenant's hold survives the purge (control: an ended hold does not);
   `EveryStoredTimeHasAReaderTest` names the purge as the reader of the new times.
-- [ ] **4 web + admin-web** — the settings' erase dialog (what goes, what stays, the shared-scope advice, the last-owner
-  refusal and the sole-member tenant), clearing the browser's records for the address; "make owner" in the tenant's
+- [ ] **4 web + admin-web** — the settings' erase dialog (what goes, what stays, the shared-scope advice, the last
+  owner's choice per tenant — delete along or name a new owner — and the sole-member tenant), clearing the browser's records for the address; "make owner" in the tenant's
   member list; admin-web: an Accounts panel with erase and stop by address, the tenant panel's delete (typed domain)
   and stop, an ownerless tenant marked with its two ways on; the CLI verbs. · Done when: `npm run check` green in both;
   a browser pass of a self-erasure through to the refused sign-in, and of a tenant deletion and its stop, in DE and EN.
