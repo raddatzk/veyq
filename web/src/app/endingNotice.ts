@@ -16,12 +16,29 @@
  *   E1, inbox #322). Its plain 401 does not say whether the session expired or was ended elsewhere, so neither does the
  *   page: it names the causes. Only a tab that held a session gets here, so it says nothing about any account.
  * - `otherTab`: another tab of this browser ended the session and this one followed (uc.account.sign-out E3).
+ * - `erased`: this tab erased its own account (uc.account.erase-account): every session of it ended with the request,
+ *   and it cannot sign in again unless the Server Owner stops the erasure. The word names no account and no date.
  */
-export type EndingNotice = 'unconfirmed' | 'everywhere' | 'everywhereUnconfirmed' | 'grantInterrupted' | 'refused' | 'otherTab'
+export type EndingNotice =
+  | 'unconfirmed'
+  | 'everywhere'
+  | 'everywhereUnconfirmed'
+  | 'grantInterrupted'
+  | 'refused'
+  | 'otherTab'
+  | 'erased'
 
 // This tab's `sessionStorage`: it survives the document load in the same tab and nowhere else.
 const NOTICE_KEY = 'veyq.sign-out-notice'
-const NOTICES: readonly EndingNotice[] = ['unconfirmed', 'everywhere', 'everywhereUnconfirmed', 'grantInterrupted', 'refused', 'otherTab']
+const NOTICES: readonly EndingNotice[] = [
+  'unconfirmed',
+  'everywhere',
+  'everywhereUnconfirmed',
+  'grantInterrupted',
+  'refused',
+  'otherTab',
+  'erased',
+]
 
 /** Leave [notice] for the sign-in page the coming ending loads. `null` leaves nothing. */
 export function leaveEndingNotice(notice: EndingNotice | null): void {

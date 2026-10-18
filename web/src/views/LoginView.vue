@@ -347,6 +347,8 @@ function showSignOutNotice(left: SignOutNotice | null) {
   // inbox #322: any other ending this tab did not ask for — a refused refresh, or another tab's ending.
   else if (left === 'refused') warning.value = t('login.sessionEnded')
   else if (left === 'otherTab') warning.value = t('login.sessionEndedOtherTab')
+  // uc.account.erase-account: this tab erased its own account, so the panel that asked is gone with the session.
+  else if (left === 'erased') notice.value = t('erasure.ended')
 }
 
 /** The way back: reveal the Secret-Key field again on the still-live session, persisting nothing. */

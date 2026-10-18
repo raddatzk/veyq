@@ -363,6 +363,15 @@ export const emailChangeAttestationStatement = (s: {
 }): Uint8Array =>
   statement('veyq/v1/auth-attestation/change-email', utf8(s.userId), normalizedEmail(s.email), s.authPublicKey)
 
+/**
+ * The password proof a member's own account erasure carries (uc.account.erase-account, ADR 0101 decision 1): signed
+ * with the account's auth private key over the account and `nonce` — the DECODED bytes of a login challenge the server
+ * minted for the account's own address and spends with the request, so a captured proof erases nothing twice. Its own
+ * domain, so no other attestation stands for it. Password only: no Secret Key proof rides with it.
+ */
+export const eraseAccountAttestationStatement = (s: { userId: string; nonce: Uint8Array }): Uint8Array =>
+  statement('veyq/v1/auth-attestation/erase-account', utf8(s.userId), s.nonce)
+
 /** Sign a statement with the proof key's private half. Ed25519 is deterministic, so the vectors pin signatures. */
 export const secretKeyProofSign = (privateKey: Uint8Array, stmt: Uint8Array): Uint8Array => ed25519.sign(stmt, privateKey)
 

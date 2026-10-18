@@ -6,9 +6,9 @@
 // depend on this typed surface, never on the generator runtime.
 import { tenantsApi } from '../../api/client'
 import { decodeHttpError } from '../../shared/httpError'
-import type { TenantCreated, TenantInviteState, TenantSummary } from '../../api/generated/tenants'
+import type { TenantCreated, TenantDeletion, TenantInviteState, TenantSummary } from '../../api/generated/tenants'
 
-export type { TenantSummary, TenantInviteState, TenantCreated } from '../../api/generated/tenants'
+export type { TenantSummary, TenantInviteState, TenantCreated, TenantDeletion } from '../../api/generated/tenants'
 
 /** Create a PENDING tenant and mint an owner invite. */
 export function createTenant(tenantName: string, domain: string, ownerEmail: string): Promise<TenantCreated> {
@@ -55,6 +55,38 @@ export function suspendTenant(tenantId: string): Promise<void> {
 /** Bring a SUSPENDED tenant back to ACTIVE. 409 `tenant_not_suspended` if it isn't suspended. */
 export function reactivateTenant(tenantId: string): Promise<void> {
   return tenantsApi().reactivateTenant({ tenantId })
+}
+
+/**
+ * Delete an ACTIVE or SUSPENDED tenant (uc.admin.delete-tenant, ADR 0101 decision 10): it goes offline at once as a
+ * suspension takes it, its status becomes PENDING_DELETION, and one purge erases everything in it at `dueAt`. Members
+ * keep their accounts and are mailed. `domain` is the domain as the confirmation typed it — the server compares it with
+ * the tenant's, so a wrong id deletes nothing (409 `tenant_domain_mismatch`); 409 `tenant_not_deletable` for a PENDING
+ * tenant (revoke it) or one pending deletion already.
+ */
+export function deleteTenant(tenantId: string, domain: string): Promise<TenantDeletion> {
+  return tenantsApi().deleteTenant({ tenantId, deleteTenantRequest: { domain: domain.trim().toLowerCase() } })
+}
+
+/** Stop a pending deletion before the purge: the tenant returns SUSPENDED and is reactivated as usual.
+ *  409 `tenant_not_pending_deletion`. */
+export function stopTenantDeletion(tenantId: string): Promise<void> {
+  return tenantsApi().stopTenantDeletion({ tenantId })
+}
+
+/**
+ * The way out of an ownerless tenant (ADR 0101 decision 9): an OWNER invite to one of its **members** — accepting it
+ * makes that member an owner. Mailed through the instance mail where it is set up; the returned `bootstrapSecret` is
+ * the copy-link otherwise (`delivery` says which). 409 `tenant_not_active` unless ACTIVE; 409 `not_tenant_member`.
+ */
+export function inviteTenantOwner(tenantId: string, email: string): Promise<TenantInviteState> {
+  return tenantsApi().inviteTenantOwner({ tenantId, inviteTenantOwnerRequest: { email: email.trim() } })
+}
+
+/** The delete confirmation's rule: the typed domain is the tenant's own (case-insensitive, as a domain is). */
+export function domainConfirmed(typed: string, domain: string): boolean {
+  const s = typed.trim().toLowerCase()
+  return s.length > 0 && s === domain.toLowerCase()
 }
 
 /** One GiB — the unit a quota is entered in, in the UI and the CLI alike; the wire carries bytes. */

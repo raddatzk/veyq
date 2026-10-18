@@ -13,6 +13,8 @@ vi.mock('./members', () => ({
   reissueMemberInvite: vi.fn(),
   revokeMemberInvite: vi.fn(),
   removeTenantMember: vi.fn(),
+  setTenantMemberRole: vi.fn(),
+  SetTenantMemberRoleRequestRoleEnum: { Owner: 'OWNER', Member: 'MEMBER' },
   memberError: vi.fn(),
 }))
 vi.mock('./scopes', () => ({
@@ -30,7 +32,7 @@ const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOption: confirmAskWithOption }) }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, memberError } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError } from './members'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares } from './scopes'
 import { trustStates } from '../account/identityPins'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
@@ -260,5 +262,45 @@ describe('TenantMembersPanel - who is verified (ADR 0028 Decision 3)', () => {
     vi.mocked(trustStates).mockResolvedValue({ 'u-own': { state: 'pinned', pinVerified: false } })
     const w = await mountPanel('MEMBER')
     expect(rowOf(w, 'owner').find('[data-testid^="member-trust-"]').exists()).toBe(false)
+  })
+})
+
+// ADR 0101 decision 9: a tenant may have several owners, so its last one can hand it on before erasing their account.
+describe('TenantMembersPanel - make owner (ADR 0101 decision 9)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+    vi.mocked(setTenantMemberRole).mockResolvedValue(undefined)
+  })
+
+  it('offers the owner "Make co-owner" on a MEMBER row only, and makes them an owner', async () => {
+    const w = await mountPanel('OWNER')
+    expect(w.find('[data-promote="u-own"]').exists()).toBe(false)
+    const promote = w.get('[data-promote="u-pend"]')
+    expect(promote.text()).toBe(t('members.promote'))
+    vi.mocked(listScopeMembers).mockClear()
+    await promote.trigger('click')
+    await flushPromises()
+    expect(setTenantMemberRole).toHaveBeenCalledWith('t-1', 'u-pend', 'OWNER')
+    expect(listScopeMembers).toHaveBeenCalled() // the directory re-read shows the new role
+  })
+
+  it('control: a member is offered no role change at all', async () => {
+    const w = await mountPanel('MEMBER')
+    expect(w.find('[data-promote]').exists()).toBe(false)
+    expect(w.find('[data-demote]').exists()).toBe(false)
+  })
+
+  it('an owner steps back to member; the last owner is refused in words', async () => {
+    vi.mocked(setTenantMemberRole).mockRejectedValue(httpError(409, 'last_owner'))
+    vi.mocked(memberError).mockResolvedValue({ status: 409, code: 'last_owner' })
+    const w = await mountPanel('OWNER')
+    await w.get('[data-demote="u-own"]').trigger('click')
+    await flushPromises()
+    expect(setTenantMemberRole).toHaveBeenCalledWith('t-1', 'u-own', 'MEMBER')
+    expect(w.find('.msg').text()).toBe(t('members.lastOwner'))
   })
 })

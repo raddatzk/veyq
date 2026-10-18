@@ -5,7 +5,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // `features/tenant/` with the surfaces an ordinary user reaches — see `tenantInvite.test.ts` (ADR 0065).
 vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 
-import { createTenant, listTenants, parseQuotaGib, reassignInvite, resendInvite, revokeTenant, setTenantStorageQuota } from './tenants'
+import {
+  createTenant, deleteTenant, domainConfirmed, inviteTenantOwner, listTenants, parseQuotaGib, reassignInvite, resendInvite,
+  revokeTenant, setTenantStorageQuota, stopTenantDeletion,
+} from './tenants'
 import { tenantsApi } from '../../api/client'
 import type { TenantCreated, TenantInviteState } from '../../api/generated/tenants'
 import { stubApi } from '../../test/apiMock'
@@ -36,6 +39,9 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
       revokeTenant: undefined,
       setTenantStorageQuota: undefined,
       clearTenantStorageQuota: undefined,
+      deleteTenant: { dueAt: new Date('2026-11-17T12:00:00Z') },
+      stopTenantDeletion: undefined,
+      inviteTenantOwner: INVITE,
     })
 
   beforeEach(() => {
@@ -88,5 +94,31 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
   it('revoke passes the tenant id', async () => {
     await revokeTenant('t1')
     expect(api.revokeTenant).toHaveBeenCalledWith({ tenantId: 't1' })
+  })
+
+  // uc.admin.delete-tenant (ADR 0101 decision 10)
+  it('delete sends the typed domain as the confirmation, trimmed and lower-cased, and hands back when it is erased', async () => {
+    const deletion = await deleteTenant('t1', '  Family.Example.com ')
+    expect(api.deleteTenant).toHaveBeenCalledWith({ tenantId: 't1', deleteTenantRequest: { domain: 'family.example.com' } })
+    expect(deletion.dueAt).toEqual(new Date('2026-11-17T12:00:00Z'))
+  })
+
+  it('stop-deletion passes the tenant id', async () => {
+    await stopTenantDeletion('t1')
+    expect(api.stopTenantDeletion).toHaveBeenCalledWith({ tenantId: 't1' })
+  })
+
+  // ADR 0101 decision 9: the way out of an ownerless tenant
+  it('invite-owner wraps the member address in an InviteTenantOwnerRequest', async () => {
+    await inviteTenantOwner('t1', ' member@example.com ')
+    expect(api.inviteTenantOwner).toHaveBeenCalledWith({ tenantId: 't1', inviteTenantOwnerRequest: { email: 'member@example.com' } })
+  })
+
+  it('domainConfirmed holds only the tenant’s own domain, case-insensitively — never an empty or a near one', () => {
+    expect(domainConfirmed('family.example.com', 'family.example.com')).toBe(true)
+    expect(domainConfirmed(' FAMILY.example.com ', 'family.example.com')).toBe(true)
+    for (const bad of ['', '   ', 'family.example', 'family.example.co', 'other.example.com']) {
+      expect(domainConfirmed(bad, 'family.example.com')).toBe(false)
+    }
   })
 })

@@ -58,6 +58,7 @@ export const invitePreview = (o: Partial<InvitePreview> = {}): InvitePreview => 
   ownerEmail: 'owner@example.com',
   hasAccount: false,
   role: 'OWNER',
+  handover: false,
   ...o,
 })
 
