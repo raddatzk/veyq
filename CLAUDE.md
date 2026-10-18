@@ -6,8 +6,10 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 
 ## Hard invariants — never violate
 - **Operator-blind E2EE everywhere.** The server sees only ciphertext + opaque metadata (IDs,
-  sizes, exact server-observed timestamps, scope/membership, blinded tokens). A user's unshared personal space
-  is confidential even from the operator. No path may break this.
+  sizes, exact server-observed timestamps, scope/membership, blinded tokens) — and, while the Server Owner keeps the
+  guest-write record on, a link guest's client address, source port and time per write (never content), kept
+  N ≤ 30 days as evidence ([ADR 0093](docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10).
+  A user's unshared personal space is confidential even from the operator. No path may break this.
 - **Product language: Memory / Chapter** — it belongs to the Memories application. Folders organize only.
   Never "Album" / "Explorer". Say "application" (de: *Anwendung*), never "plugin"; "app" means only an installable native client, never an
   application ([ADR 0086](docs/decisions/0086-one-word-per-meaning.md) holds the other word rules).
