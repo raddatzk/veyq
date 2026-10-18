@@ -80,3 +80,13 @@ acceptanceCriteria:
           - GrantWriterSnapshotSliceTest.aGrantDeliveryRecordsTheWorkersKey
       web:
         unit: [src/features/spaces/scopes.test.ts, src/features/memory/sealBinding.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`e2e/tests/features/node-urls.spec.ts`) drives `switch-space-by-fragment` in Chromium
+    against the release candidate's two images, installed through `veyqctl` (ADR 0090): the address grammar of ADR 0015
+    (a folder's slash, a Memory's `memories/`, a reserved name numbered, a file and a folder of one slug apart, two
+    files of one slug numbered by creation, a folder's address without its slash), each address written by a click
+    and opened cold in a new document. The scope tokens (`~username`, `@group`) are not driven there. Green only in
+    local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits the first CI run (no
+    remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run the file
+    becomes a ref on the criterion its tests are tagged with, and this gap goes.
