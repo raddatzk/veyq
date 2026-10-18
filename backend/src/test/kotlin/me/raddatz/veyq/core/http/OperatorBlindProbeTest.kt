@@ -284,6 +284,7 @@ class OperatorBlindProbeTest {
             "getInstanceReleaseNotices", "setInstanceReleaseCheck",
             "getInstanceMailSettings", "updateInstanceMailSettings", "confirmInstanceMail",
             "getInstanceModeration", "appointModerator", "removeModerator", "mintModerationEpoch",
+            "getModerationSteps", "declineModerationProposal", "blockAccountSignIn", "unblockAccountSignIn",
             "getStoreReconcile", "confirmStoreExclusiveBucket", "withdrawStoreExclusiveBucket", "pauseStoreReconcile",
             "resumeStoreReconcile",
             "getInstanceOperator", "setInstanceOperator", "clearInstanceOperator", "confirmOperatorNotification",
@@ -324,6 +325,11 @@ class OperatorBlindProbeTest {
             "moderator route: MODERATOR role + key proof (ADR 0099 § 2). It acts for the Server Owner across the " +
                 "instance, inside no space, so no space's gate applies; who may call it is ModerationProofPostureSweepTest's.",
             "stepDownAsModerator", "listPendingModerationDeliveries", "putModerationDelivery",
+            "listModerationCases", "getModerationCase", "dismissModerationCase", "takeModerationMeasure", "liftModerationMeasure",
+            "proposeModerationStep", "extendModerationHold", "barModerationReporter",
+            // the review reads (cr-moderation-review-and-measures decision 6): a case's held snapshot, read from the hold —
+            // the case outlives its space, and a suspended tenant's case is reviewed all the same (ADR 0093 § 1)
+            "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles",
         )
         reason(
             "moderator route before the key: the caller's own appointment, its address confirmation, its own grants and " +

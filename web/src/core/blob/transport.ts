@@ -216,6 +216,15 @@ export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: s
  * applies). Shared by the authed [openBlob] and an anonymous share viewer (presign via the gated share endpoint,
  * cr-0100) — the decrypt is identical; only who presigns differs.
  */
+/**
+ * Open a blob whose `K_blob` the caller already holds — a moderator's review of a reported medium, whose report share
+ * hands over each blob's key itself rather than the key it is wrapped under (uc.moderation.review-a-case).
+ */
+export async function openBlobWithKey(blobKey: Uint8Array, getUrls: string[]): Promise<Uint8Array> {
+  const frames = await Promise.all(getUrls.map((url) => getChunk(url)))
+  return v1.concat(...frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame)))
+}
+
 export async function openBlobFromUrls(scopeId: string, key: Uint8Array, ref: BlobRef, getUrls: string[]): Promise<Uint8Array> {
   const blobKey = unwrapBlobKey(scopeId, key, ref)
   const frames = await Promise.all(getUrls.map((url) => getChunk(url)))

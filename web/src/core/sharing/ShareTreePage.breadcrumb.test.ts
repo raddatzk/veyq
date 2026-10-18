@@ -44,7 +44,7 @@ const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { id, parentId, kind: FOLDER_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind: FOLDER_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 const head: PublicShareHead = {
   shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role: ShareRole.Read, rootKind: FOLDER_KIND,

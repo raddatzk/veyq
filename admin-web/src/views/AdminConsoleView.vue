@@ -229,9 +229,10 @@ async function signOut() {
         <CapabilitiesPanel v-else-if="serverPanel === 'capabilities'" />
         <ExternalServicesPanel v-else-if="serverPanel === 'services'" />
         <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
-        <!-- The roster and the key, then how long a guest's write keeps its address (en.moderation.guest-write-record). -->
+        <!-- The roster, the key and the Server Owner's steps, then how long a guest's write keeps its address
+             (en.moderation.guest-write-record). -->
         <div v-else-if="serverPanel === 'moderation'" class="admin-shell__stack">
-          <ModerationPanel />
+          <ModerationPanel @open-tenant="selected = $event; serverPanel = null" />
           <GuestWriteRecordPanel />
         </div>
         <OperatingModePanel v-else-if="serverPanel === 'mode'" />

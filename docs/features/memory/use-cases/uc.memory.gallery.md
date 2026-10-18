@@ -104,6 +104,11 @@
   item heart still marks, it just has no audience to report.
 - **E5 — a filter that empties the grid** (e.g. *only mine* with nothing marked yet): the grid shows an empty
   state that names the active filter, so it never reads as a broken or empty Memory.
+- **E6 — a medium blocked by the operator**
+  ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)): its tile and the
+  lightbox show *Blocked by the operator* with no reason and load no bytes (each answers `451 blocked_by_operator`), for
+  members and guests alike; its uploader may still delete it, and it cannot be restored from the trash while blocked.
+  A Memory blocked as a whole shows as that placeholder in its level and does not open.
 
 ## Quality notes
 

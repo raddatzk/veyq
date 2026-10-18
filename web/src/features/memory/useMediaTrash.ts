@@ -160,7 +160,10 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   const trashMenuModel = computed<MenuItem[]>(() => {
     const id = menuTargetId.value
     return [
-      { label: t('memory.trash.restore'), icon: 'pi pi-replay', command: () => { if (id) void onRestoreFromTrash(id) } },
+      // A medium a moderator blocked is deleted, never restored (uc.moderation.take-a-measure): its menu offers no restore.
+      ...(trashedItems.value.find((it) => it.mediaId === id)?.blocked
+        ? []
+        : [{ label: t('memory.trash.restore'), icon: 'pi pi-replay', command: () => { if (id) void onRestoreFromTrash(id) } }]),
       { label: t('memory.trash.purge'), icon: 'pi pi-trash', command: () => { if (id) requestPurge([id]) } },
     ]
   })

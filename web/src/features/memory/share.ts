@@ -17,7 +17,8 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { contentApi, publicSharesApi } from '../../api/client'
-import { publicShareMediaApi } from './api'
+import { caseMediaApi, publicShareMediaApi } from './api'
+import { activeReview } from '../../core/sharing/review'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { resolvePublicShare, ShareUnavailableError, type PublicShareHead } from '../../core/sharing/resolvePublicShare'
@@ -35,7 +36,7 @@ import {
 } from '../../core/sharing/manageShares'
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
 import { createGuestIdentity, identityNameContext, type GuestIdentity } from '../../core/sharing/guestIdentity'
-import { guestReserve, guestWindow, type GuestUploadTarget } from '../../core/sharing/guestBlob'
+import { guestReserve, guestWindow, shareChunkUrls, type GuestUploadTarget } from '../../core/sharing/guestBlob'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { EpochKeys } from '../spaces/epochs'
 import {
@@ -326,6 +327,7 @@ function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): Media
     })),
     wrappedMeta: m.wrappedMeta ?? undefined,
     uploader,
+    ...(m.blockedByOperator ? { blocked: true } : {}),
   }
 }
 
@@ -344,6 +346,9 @@ export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [] }
  */
 export async function listShareMedia(shareId: string, role: ShareRole, pwToken?: string): Promise<ShareMediaListing> {
   if (role === ShareRole.WriteOnly) return NO_SHARE_MEDIA
+  // A moderator's review lists the media its case's hold copied — never the link's own read (core/sharing/review.ts).
+  const review = activeReview()
+  if (review) return caseMediaApi().listCaseMedia({ caseId: review.caseId, ...(await review.proof('listCaseMedia')) })
   try {
     return await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken })
   } catch {
@@ -409,8 +414,7 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_node`.
  *  A password-protected share needs the same guest token (cr-0118) as the resolve. */
 async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): Promise<Uint8Array> {
-  const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })
-  const getUrls = [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
+  const getUrls = await shareChunkUrls(shareId, ref.blobId, pwToken) // a moderator's review: the held object (core/sharing/review.ts)
   return openBlobFromUrls(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, getUrls)
 }
 
@@ -420,10 +424,7 @@ async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwTok
  * `chunkProvider`; only the presign differs, so the SW never learns which route served the bytes (ADR 0047).
  */
 export function shareChunkProvider(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): ChunkProvider {
-  return makeChunkProvider(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, async () => {
-    const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })
-    return [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
-  })
+  return makeChunkProvider(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, () => shareChunkUrls(shareId, ref.blobId, pwToken))
 }
 
 /** Open a shared media's grid (thumbnail) tier. */

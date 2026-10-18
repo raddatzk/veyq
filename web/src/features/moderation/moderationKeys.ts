@@ -19,6 +19,11 @@ export function currentModerationKey(): { epoch: number; key: Uint8Array } | nul
   return m ? { epoch: current, key: m.slice() } : null
 }
 
+/** A copy of [epoch]'s `M_n` — what opens a report or a note sealed to it — or null when not held. The caller zeroes it. */
+export function moderationKeyOf(epoch: number): Uint8Array | null {
+  return keys.get(epoch)?.slice() ?? null
+}
+
 /** Whether any key is held. */
 export const holdsModerationKeys = (): boolean => keys.size > 0
 

@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.blobstore.presignPuts
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
@@ -69,6 +70,7 @@ class BlobUploadHandler(
     private val reclaim: StoreReclaimStore,
     private val access: ScopeAccess,
     private val quota: StorageQuota,
+    private val blocks: ModerationBlocks,
     /** The roles the applications attach a member's upload in (see [MemberBlobRoles]); none → no member start.
      *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
     @All private val memberRoles: MutableList<MemberBlobRoles>,
@@ -275,6 +277,8 @@ class BlobUploadHandler(
     private fun downloadOne(scopeId: String, blobId: String, domain: String?): DownloadItemResult {
         val blob = store.findBlob(scopeId, blobId)
             ?: return DownloadItemResult(presignedGets = null, error = "upload_not_found")
+        // A content block refuses the bytes to a member too (uc.moderation.take-a-measure): the per-item form of a 451.
+        if (blocks.blobBlocked(scopeId, blobId)) return DownloadItemResult(presignedGets = null, error = Failures.blockedByOperator.code)
         val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain)
             ?: return DownloadItemResult(presignedGets = null, error = "store_unavailable")
         return DownloadItemResult(presignedGets = gets, error = null)

@@ -755,7 +755,7 @@ paths:
         refuses every API request, sign-in included, before authentication (ADR 0066). Availability only: no key,
         grant, content row or session is read, written or revoked, and the transition is reversible via
         `reactivateTenant`. Server-Owner only — and Server-Owner status does not exempt the caller's own
-        membership while the tenant is suspended.
+        membership while the tenant is suspended. Settles every open moderator proposal to take this tenant offline as taken (uc.moderation.take-a-measure).
       security:
         - bearerAuth: []
       parameters:

@@ -17,6 +17,10 @@ vi.mock('./moderation', async () => {
     appointModerator: vi.fn(),
     removeModerator: vi.fn(),
     rotateModerationKey: vi.fn(),
+    getModerationSteps: vi.fn(),
+    declineProposal: vi.fn(),
+    blockSignIn: vi.fn(),
+    liftSignInBlock: vi.fn(),
   }
 })
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
@@ -24,8 +28,10 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import ModerationPanel from './ModerationPanel.vue'
 import {
-  appointModerator, getModeration, removeModerator, rotateModerationKey,
-  type InstanceModeration, type InstanceModerator,
+  appointModerator, blockSignIn, declineProposal, getModeration, getModerationSteps, liftSignInBlock, removeModerator,
+  rotateModerationKey,
+  type AccountSignInBlock, type InstanceModeration, type InstanceModerator, type ModerationSteps,
+  type OpenModerationProposal,
 } from './moderation'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
@@ -76,8 +82,11 @@ function on(over: Partial<InstanceModeration> = {}): InstanceModeration {
 
 const off: InstanceModeration = { ...on(), enabled: false, currentEpoch: null, moderators: [] }
 
-async function mountPanel(initial: InstanceModeration) {
+const noSteps: ModerationSteps = { proposals: [], signInBlocks: [] }
+
+async function mountPanel(initial: InstanceModeration, initialSteps: ModerationSteps = noSteps) {
   vi.mocked(getModeration).mockResolvedValue(initial)
+  vi.mocked(getModerationSteps).mockResolvedValue(initialSteps)
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
   const w = mount(ModerationPanel, { global: { plugins: [router, i18n], stubs } })
   await flushPromises()
@@ -188,5 +197,168 @@ describe('ModerationPanel (uc.moderation.appoint-moderators, admin-web)', () => 
     await flushPromises()
     expect(w.find('.mod-error').exists()).toBe(false)
     expect((w.find('.mod-address').element as HTMLInputElement).value).toBe('')
+  })
+})
+
+// uc.moderation.take-a-measure step 5 + uc.admin.suspend-tenant A4 — the Server Owner's steps. Each case is one
+// observable: the lists render what the server says stands; each action reaches its operation with the right
+// arguments (and the block only after a confirm that says what it does); each refusal is shown in its own words.
+describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-measure step 5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    i18n.global.locale.value = 'en'
+  })
+
+  const PROPOSED = new Date('2026-10-17T12:00:00Z')
+
+  function memberProposal(over: Partial<OpenModerationProposal> = {}): OpenModerationProposal {
+    return {
+      id: 'p-member', caseId: 'case-1', category: 'ILLEGAL_CONTENT', step: 'MEMBER_SIGN_IN', accountId: 'acc-1',
+      address: 'member@example.com', tenantId: null, tenantDomain: null, proposedAt: PROPOSED, ...over,
+    }
+  }
+  function tenantProposal(over: Partial<OpenModerationProposal> = {}): OpenModerationProposal {
+    return {
+      id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', accountId: null,
+      address: null, tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: PROPOSED, ...over,
+    }
+  }
+  function signInBlock(over: Partial<AccountSignInBlock> = {}): AccountSignInBlock {
+    return { id: 'b-1', accountId: 'acc-2', address: 'blocked@example.com', caseId: 'case-3', blockedAt: PROPOSED, ...over }
+  }
+  const open: ModerationSteps = {
+    proposals: [memberProposal(), tenantProposal()],
+    signInBlocks: [signInBlock(), signInBlock({ id: 'b-2', accountId: 'acc-3', address: 'ordered@example.com', caseId: null })],
+  }
+  const proposal = (w: Awaited<ReturnType<typeof mountPanel>>, id: string) => w.find(`[data-proposal="${id}"]`)
+  const blockRow = (w: Awaited<ReturnType<typeof mountPanel>>, address: string) => w.find(`[data-block="${address}"]`)
+  const at = PROPOSED.toLocaleString('en')
+
+  it('lists each open proposal — its step, the case’s category, its target, when — and every block in force', async () => {
+    const w = await mountPanel(on(), open)
+    const member = proposal(w, 'p-member')
+    expect(member.text()).toContain(t('moderation.steps.stepMemberSignIn'))
+    expect(member.find('.mod-proposal__category').text()).toBe(t('moderation.steps.categories.ILLEGAL_CONTENT'))
+    expect(member.find('.mod-proposal__target').text()).toBe('member@example.com')
+    expect(member.find('.mod-proposal__when').text()).toBe(t('moderation.steps.proposedAt', { at, caseId: 'case-1' }))
+    const tenant = proposal(w, 'p-tenant')
+    expect(tenant.text()).toContain(t('moderation.steps.stepTenantOffline'))
+    expect(tenant.find('.mod-proposal__category').text()).toBe(t('moderation.steps.categories.TERRORIST_CONTENT'))
+    expect(tenant.find('.mod-proposal__target').text()).toBe('club.example.org')
+
+    expect(blockRow(w, 'blocked@example.com').find('.mod-block__since').text())
+      .toBe(t('moderation.steps.blockedForCase', { at, caseId: 'case-3' }))
+    expect(blockRow(w, 'ordered@example.com').find('.mod-block__since').text())
+      .toBe(t('moderation.steps.blockedNoCase', { at }))
+  })
+
+  it('says when there is nothing to take and nothing blocked — control', async () => {
+    const w = await mountPanel(on())
+    expect(w.find('.mod-proposals-empty').text()).toBe(t('moderation.steps.noProposals'))
+    expect(w.find('.mod-blocks-empty').text()).toBe(t('moderation.steps.noBlocks'))
+  })
+
+  it('keeps a block in force liftable while moderation is off', async () => {
+    const w = await mountPanel(off, { proposals: [], signInBlocks: [signInBlock()] })
+    expect(w.find('.mod-off').exists()).toBe(true)
+    expect(blockRow(w, 'blocked@example.com').find('.mod-block__lift').exists()).toBe(true)
+  })
+
+  it('blocks a member’s sign-in with the address and the case, after a confirm that says what it does', async () => {
+    vi.mocked(blockSignIn).mockResolvedValue({ proposals: [tenantProposal()], signInBlocks: [signInBlock({ address: 'member@example.com' })] })
+    const w = await mountPanel(on(), open)
+    confirmAsk.mockResolvedValueOnce(true)
+    await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    await flushPromises()
+    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({
+      header: t('moderation.steps.blockTitle', { address: 'member@example.com' }),
+      message: t('moderation.steps.blockBody'),
+    }))
+    expect(blockSignIn).toHaveBeenCalledWith('member@example.com', 'case-1')
+    // the answer is what is shown: the proposal is settled, the block is in force
+    expect(proposal(w, 'p-member').exists()).toBe(false)
+    expect(blockRow(w, 'member@example.com').exists()).toBe(true)
+  })
+
+  it('blocks nothing when the block is not confirmed', async () => {
+    const w = await mountPanel(on(), open)
+    confirmAsk.mockResolvedValueOnce(false)
+    await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    await flushPromises()
+    expect(blockSignIn).not.toHaveBeenCalled()
+  })
+
+  it('offers no block for a proposal whose account is gone, and still lets it be declined', async () => {
+    const w = await mountPanel(on(), { proposals: [memberProposal({ address: null })], signInBlocks: [] })
+    expect(proposal(w, 'p-member').find('.mod-proposal__block').exists()).toBe(false)
+    expect(proposal(w, 'p-member').find('.mod-proposal__target').text()).toBe(t('moderation.steps.accountGone'))
+    expect(proposal(w, 'p-member').find('.mod-proposal__decline').exists()).toBe(true)
+  })
+
+  it('takes a tenant-offline proposal to the tenant’s own page, where the suspension lives — and blocks nothing', async () => {
+    const w = await mountPanel(on(), open)
+    expect(proposal(w, 'p-tenant').find('.mod-proposal__block').exists()).toBe(false)
+    await proposal(w, 'p-tenant').find('.mod-proposal__tenant').trigger('click')
+    expect(w.emitted('openTenant')).toEqual([['tn-9']])
+    expect(blockSignIn).not.toHaveBeenCalled()
+  })
+
+  it('declines either kind of proposal by its id, after asking', async () => {
+    for (const id of ['p-tenant', 'p-member']) {
+      vi.mocked(declineProposal).mockResolvedValueOnce({ ...open, proposals: open.proposals.filter((p) => p.id !== id) })
+      const w = await mountPanel(on(), open)
+      confirmAsk.mockResolvedValueOnce(true)
+      await proposal(w, id).find('.mod-proposal__decline').trigger('click')
+      await flushPromises()
+      expect(confirmAsk).toHaveBeenLastCalledWith(expect.objectContaining({ header: t('moderation.steps.declineTitle') }))
+      expect(declineProposal).toHaveBeenLastCalledWith(id)
+      expect(proposal(w, id).exists()).toBe(false)
+    }
+  })
+
+  it('declines nothing when the decline is not confirmed', async () => {
+    const w = await mountPanel(on(), open)
+    confirmAsk.mockResolvedValueOnce(false)
+    await proposal(w, 'p-member').find('.mod-proposal__decline').trigger('click')
+    await flushPromises()
+    expect(declineProposal).not.toHaveBeenCalled()
+  })
+
+  it('lifts a block by its id', async () => {
+    vi.mocked(liftSignInBlock).mockResolvedValue({ ...open, signInBlocks: [open.signInBlocks[1]] })
+    const w = await mountPanel(on(), open)
+    await blockRow(w, 'blocked@example.com').find('.mod-block__lift').trigger('click')
+    await flushPromises()
+    expect(liftSignInBlock).toHaveBeenCalledWith('b-1')
+    expect(blockRow(w, 'blocked@example.com').exists()).toBe(false)
+  })
+
+  // One row per code the step operations name (instance.openapi.yaml): each must reach the Server Owner in its own
+  // words, never as the generic failure — and the steps are read again, since a refusal most often means someone
+  // else took the step meanwhile.
+  const refusals: [string, number, string, 'block' | 'decline' | 'lift'][] = [
+    ['account_not_found', 404, 'moderation.steps.errors.accountNotFound', 'block'],
+    ['case_not_found', 404, 'moderation.steps.errors.caseNotFound', 'block'],
+    ['sign_in_block_exists', 409, 'moderation.steps.errors.blockExists', 'block'],
+    ['cannot_block_server_owner', 409, 'moderation.steps.errors.cannotBlockOwner', 'block'],
+    ['invalid_request', 400, 'moderation.steps.errors.invalidRequest', 'block'],
+    ['not_server_owner', 403, 'moderation.steps.errors.notOwner', 'block'],
+    ['proposal_not_found', 404, 'moderation.steps.errors.proposalNotFound', 'decline'],
+    ['sign_in_block_not_found', 404, 'moderation.steps.errors.blockNotFound', 'lift'],
+  ]
+  it.each(refusals)('shows %s in its own words and reads the steps again', async (code, status, key, action) => {
+    const refusal = httpError(status, code)
+    vi.mocked(blockSignIn).mockRejectedValue(refusal)
+    vi.mocked(declineProposal).mockRejectedValue(refusal)
+    vi.mocked(liftSignInBlock).mockRejectedValue(refusal)
+    const w = await mountPanel(on(), open)
+    vi.mocked(getModerationSteps).mockResolvedValue(noSteps)
+    confirmAsk.mockResolvedValueOnce(true)
+    if (action === 'block') await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    if (action === 'decline') await proposal(w, 'p-member').find('.mod-proposal__decline').trigger('click')
+    if (action === 'lift') await blockRow(w, 'blocked@example.com').find('.mod-block__lift').trigger('click')
+    await flushPromises()
+    expect(w.find('.mod-error').text()).toBe(t(key))
+    expect(w.find('.mod-proposals-empty').exists()).toBe(true) // read again
   })
 })

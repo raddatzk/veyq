@@ -16,6 +16,7 @@ import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.depot.DepotNodeKinds
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CompleteFileOutcome {
@@ -28,6 +29,8 @@ sealed interface CompleteFileOutcome {
     object NoNode : CompleteFileOutcome, HttpFailure by Failures.nodeNotFound
     /** The node is live but no `FILE`. */
     object IllegalTarget : CompleteFileOutcome, HttpFailure by httpFailure("illegal_target", UNPROCESSABLE)
+    /** A moderator blocked the file or a node above it (uc.moderation.take-a-measure): its content is not replaced (451). */
+    object Blocked : CompleteFileOutcome, HttpFailure by Failures.blockedByOperator
     /** No open session of this caller under the upload id (never started, spent, expired). */
     object NoUpload : CompleteFileOutcome, HttpFailure by httpFailure("upload_not_found", NOT_FOUND)
     /** The session was not started for this node in the role `FILE_CONTENT` (ADR 0072). */
@@ -63,6 +66,7 @@ class FilesHandler(
     private val nodes: NodesStore,
     private val completions: UploadCompletions,
     private val store: FilesStore,
+    private val blocks: ModerationBlocks,
 ) {
     /**
      * `completeFile`: the upload [uploadId] becomes the blob of the file [nodeId], replacing [expectedBlobId] (null:
@@ -76,6 +80,7 @@ class FilesHandler(
             .refusal(CompleteFileOutcome.NoScope, CompleteFileOutcome.Suspended, CompleteFileOutcome.Deleting)?.let { return it }
         val node = nodes.findInScope(scopeId, nodeId) ?: return CompleteFileOutcome.NoNode
         if (node.kind != DepotNodeKinds.FILE) return CompleteFileOutcome.IllegalTarget
+        if (blocks.contentView(scopeId).nodeBlocked(nodeId)) return CompleteFileOutcome.Blocked
 
         val item = DepotUploadCompletion.item(nodeId, uploadId, expectedBlobId)
         val result = completions.complete(scopeId, listOf(item), UploadOpener.Member(userId)).single()

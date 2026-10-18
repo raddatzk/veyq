@@ -151,6 +151,7 @@ describe('createFolder', () => {
 /** A listed row whose name is sealed under `entryKey` and whose key wraps `ownKey` under the same key. */
 function row(id: string, parentId: string | null, entryKey: Uint8Array, ownKey: Uint8Array, name: string, epoch = 0): NodeSummary {
   return {
+    blockedByOperator: false,
     id, parentId, kind: 'FOLDER', epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
     encryptedName: sealUnder(entryKey, id, epoch, name), wrappedContentKey: wrap(entryKey, id, ownKey, epoch),
   }
@@ -229,8 +230,8 @@ describe('listTrash', () => {
     const NEW = '5c09e000-0000-4000-8000-0000000000a2'
     mockContent({
       listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue([
-        { id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, placementRevision: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter, attached: false },
-        { id: NEW, parentId: F1, kind: 'FOLDER', epoch: 1, placementRevision: 0, encryptedName: sealUnder(folderKey, NEW, 1, 'Sommer'), deletedAt, purgeAfter, attached: false },
+        { blockedByOperator: false, id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, placementRevision: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter, attached: false },
+        { blockedByOperator: false, id: NEW, parentId: F1, kind: 'FOLDER', epoch: 1, placementRevision: 0, encryptedName: sealUnder(folderKey, NEW, 1, 'Sommer'), deletedAt, purgeAfter, attached: false },
       ]),
     })
 
@@ -378,6 +379,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
       .mockResolvedValueOnce(undefined)
     // what a peer's rename left: M at revision 1, its name and wrap sealed there
     const listed = (): NodeSummary[] => tree().map((n) => ({
+      blockedByOperator: false,
       id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.id === M ? 1 : 0,
       encryptedName: b64std(v1.sealField(
@@ -445,6 +447,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   function summaryOf(n: TreeNode): NodeSummary {
     const entryKey = n.parentId === null ? e0 : n.parentId === A ? keys.A : n.parentId === B ? keys.B : keys.M
     return {
+      blockedByOperator: false,
       id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.placementRevision, wrappedContentKey: n.wrappedContentKey,
       encryptedName: b64std(v1.sealField({ purpose: 'node-name', ...at(n.id, n.epoch, n.placementRevision) }, entryKey, v1.utf8(n.name))),

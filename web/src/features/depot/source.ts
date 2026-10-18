@@ -23,7 +23,8 @@ import { withRefresh } from '../../app/sessionRefresh'
 import type { EpochKeys } from '../spaces/epochs'
 import type { FileBlobRef, FileUploaderName } from '../../api/generated/depot'
 import { ShareRole } from '../../api/generated/sharing'
-import { filesApi, publicShareFilesApi } from './api'
+import { caseFilesApi, filesApi, publicShareFilesApi } from './api'
+import { activeReview } from '../../core/sharing/review'
 import { downloadFile, fileChunkProvider } from './download'
 import { FileUploadError, fileUploadJob, type FileJobExtra, type FileReplace, type FileUploadResult } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
@@ -258,7 +259,11 @@ export function guestDepotSource(access: () => GuestAccess, host: { move?: (node
     listKey: () => access().head,
     async listBlobs() {
       const a = access()
-      const page = await publicShareFilesApi().listShareFiles({ shareId: a.shareId, xSharePassword: a.pwToken })
+      // A moderator's review lists the files its case's hold copied — never the link's own read (core/sharing/review.ts).
+      const review = activeReview()
+      const page = review
+        ? await caseFilesApi().listCaseFiles({ caseId: review.caseId, ...(await review.proof('listCaseFiles')) })
+        : await publicShareFilesApi().listShareFiles({ shareId: a.shareId, xSharePassword: a.pwToken })
       return new Map(page.items.map((i) => [i.nodeId, i.fileBlob ?? null]))
     },
     download(key, nodeId, blob, name) {
@@ -308,7 +313,7 @@ function guestTree(ctx: GuestTreeContext, levelId: string): FilesTreeUpload {
         const { nodeId, contentKey } = await createShareNodeAsGuest(ctx, { parentId, kind: FOLDER_KIND, name })
         ctx.keys.set(nodeId, contentKey)
         ctx.names.set(nodeId, name)
-        ctx.nodes.set(nodeId, { id: nodeId, parentId, kind: FOLDER_KIND, epoch: ctx.nodes.get(parentId)?.epoch ?? 0 })
+        ctx.nodes.set(nodeId, { id: nodeId, parentId, kind: FOLDER_KIND, epoch: ctx.nodes.get(parentId)?.epoch ?? 0, blockedByOperator: false })
         return nodeId
       } catch (e) {
         const err = await guestTreeErrorOf(e)

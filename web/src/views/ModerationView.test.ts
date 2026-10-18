@@ -18,8 +18,11 @@ vi.mock('../features/moderation/unlockModeration', async (orig) => ({
   unlockModeration: vi.fn(),
 }))
 vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
+// The queue behind the gate reads the cases with a key proof; here it is empty (ModerationQueue.test.ts covers it).
+vi.mock('../features/moderation/cases', () => ({ listCases: vi.fn() }))
 
 import ModerationView from './ModerationView.vue'
+import { listCases } from '../features/moderation/cases'
 import { acceptAppointment, confirmAddress, myAppointment, stepDown } from '../features/moderation/appointment'
 import { ModerationBundleMismatch, unlockModeration } from '../features/moderation/unlockModeration'
 import { session } from '../app/session'
@@ -55,6 +58,7 @@ describe('ModerationView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     session.accessToken = 'access-token'
+    vi.mocked(listCases).mockResolvedValue([])
   })
 
   it('signed out, it signs in itself and reads nothing before', async () => {

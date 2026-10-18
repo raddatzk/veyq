@@ -121,5 +121,13 @@ class ModerationEventEntity : PanacheEntityBase {
     @Column(name = "expires_at")
     var expiresAt: Instant? = null
 
+    /** The id a measure or a proposal named (a case event). */
+    @Column(name = "target_id", length = 64)
+    var targetId: String? = null
+
+    /** A hold extension's new end — the event's own retention date stays [expiresAt]. */
+    @Column(name = "hold_until")
+    var holdUntil: Instant? = null
+
     companion object : PanacheCompanionBase<ModerationEventEntity, String>
 }

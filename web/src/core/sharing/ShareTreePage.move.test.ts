@@ -59,7 +59,7 @@ const NOTE_KIND = 'NOTE'
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string, placementRevision = 0): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision }
-  return { id, parentId, kind, epoch: 0, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 // Familie/ ─ Briefe/ ─ Feldpost/ (version 2)    Notizen, Zettel (NOTE, nodes a contributor added)
 function head(role: ShareRole): PublicShareHead {

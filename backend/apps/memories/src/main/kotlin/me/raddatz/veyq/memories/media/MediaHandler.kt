@@ -20,6 +20,7 @@ import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CompleteOutcome {
@@ -80,6 +81,8 @@ sealed interface RestoreMediaOutcome {
     object Done : RestoreMediaOutcome
     /** No such scope/media (e.g. already purged), or the caller holds no grant (a 404). */
     object NoMedia : RestoreMediaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
+    /** A moderator blocked it, or its node or one above (uc.moderation.take-a-measure) — never restored while it stands (451). */
+    object Blocked : RestoreMediaOutcome, HttpFailure by Failures.blockedByOperator
 }
 
 sealed interface PurgeMediaOutcome {
@@ -157,6 +160,7 @@ class MediaHandler(
     private val completions: UploadCompletions,
     private val access: ScopeAccess,
     private val itemsRevisions: NodeItemsRevisions,
+    private val blocks: ModerationBlocks,
 ) {
     /** The member's `completeMedia`: the access check, then core's dispatcher, attributing each item to [userId]. */
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
@@ -243,6 +247,8 @@ class MediaHandler(
     fun restoreMedia(userId: String, scopeId: String, mediaId: String): RestoreMediaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(RestoreMediaOutcome.NoMedia, RestoreMediaOutcome.Suspended, RestoreMediaOutcome.Deleting)?.let { return it }
+        val medium = MediaEntity.find("id = ?1 and scopeId = ?2", mediaId, scopeId).firstResult()
+        if (medium != null && blocks.contentView(scopeId).itemBlocked(medium.id, medium.nodeId)) return RestoreMediaOutcome.Blocked
         return if (store.restoreMedia(scopeId, mediaId) != null) RestoreMediaOutcome.Done else RestoreMediaOutcome.NoMedia
     }
 

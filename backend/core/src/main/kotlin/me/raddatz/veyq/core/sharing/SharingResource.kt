@@ -38,6 +38,7 @@ import me.raddatz.veyq.core.moderation.report.ReportHandler
 import me.raddatz.veyq.core.moderation.report.ReportReceived
 import me.raddatz.veyq.core.moderation.report.Reporter
 import me.raddatz.veyq.core.moderation.report.ReportsResource
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.moderation.report.ReportsResource.Companion.toReport
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -72,6 +73,7 @@ class SharingResource(
     private val tenant: RequestTenant,
     private val reports: ReportHandler,
     private val received: ReportReceived,
+    private val blocks: ModerationBlocks,
     /** The client a guest write records (ADR 0093 § 10, ADR 0094): resolved once per write, handed down to it. */
     private val client: RequestClient,
     /** What a guest page discloses before the first write (ADR 0093 § 10, decision 6 of cr-guest-write-record). */
@@ -157,6 +159,7 @@ class SharingResource(
             GuestStop.Reason.TENANT_SWITCH -> ShareGuestStop.Reason.tenantSwitch
             GuestStop.Reason.LINK_PASSWORD -> ShareGuestStop.Reason.linkPassword
             GuestStop.Reason.LINK_MAX_DAYS -> ShareGuestStop.Reason.linkMaxDays
+            GuestStop.Reason.OPERATOR_BLOCKED -> ShareGuestStop.Reason.operatorBlocked
         },
         capabilityId = capabilityId,
         maxDays = maxDays,
@@ -249,7 +252,7 @@ class SharingResource(
                     rootKind = o.rootKind, // every unlocked role, WRITE_ONLY included (inbox #329); the Locked arm sets none
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
-                    nodes = o.nodes.map(::toShareNode),
+                    nodes = blocks.contentView(o.share.scopeId).let { view -> o.nodes.map { toShareNode(it, view.nodeBlocked(it.id)) } },
                     // N while the switch is on and the role writes — the sentence the page shows before a first write. In
                     // the body, so the tag below changes when the switch or N does and an open page learns it.
                     guestWriteRecordDays = guestWriteRecords.disclosedDays(o.share.scopeId, o.share.role),
@@ -320,7 +323,7 @@ class SharingResource(
             ReportsResource.answer(reports.report(Reporter.Guest(shareId, xSharePassword, xShareWrite), report), received, report.receiptAddress)
         }
 
-    private fun toShareNode(n: ShareNodeRow) = ShareNode(
+    private fun toShareNode(n: ShareNodeRow, blocked: Boolean) = ShareNode(
         id = UUID.fromString(n.id),
         kind = n.kind,
         parentId = n.parentId?.let(UUID::fromString),
@@ -333,6 +336,8 @@ class SharingResource(
         sealedDropPrivateKey = n.sealedDropPrivateKey,
         shareIdentityId = n.shareIdentityId?.let(UUID::fromString),
         wrappedIdentityKey = n.wrappedIdentityKey,
+        // Kept and marked, not left out (uc.moderation.take-a-measure): a guest sees the placeholder a member sees.
+        blockedByOperator = blocked,
     )
 
     // --- contributor guest ops (cr-0101; @PermitAll — account-less, gated only by share state + token) ---

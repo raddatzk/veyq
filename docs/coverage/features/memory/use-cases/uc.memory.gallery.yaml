@@ -322,6 +322,23 @@ acceptanceCriteria:
         integration:
           - NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects
           - ItemFavoritesSliceTest.removingAMemberDropsTheirItemFavorites
+  - id: a-medium-blocked-by-the-operator
+    # Exception flow E6, added by cr-moderation-review-and-measures (uc.moderation.take-a-measure).
+    text: >-
+      A medium a moderator blocked stays listed, marked blockedByOperator, for members and guests alike; its tile and
+      the lightbox show "Blocked by the operator" with no reason and load no bytes (each answers 451
+      blocked_by_operator); its uploader may still delete it, and it is not restored from the trash while blocked. A
+      Memory blocked as a whole is that placeholder in its level, does not open, and blocks every medium below it.
+    coverage:
+      backend:
+        integration: [ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationMemoriesSliceTest.aBlockedMediumIsDeletedButNeverRestored, ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
+      web:
+        unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The tile, the lightbox and a blocked node's level row are held (LevelView.blocked.test.ts with a stub kind, not
+          the Memory kind itself); the trash's "can be deleted, not restored" refusal (mediaRefusal.ts) has no test.
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040

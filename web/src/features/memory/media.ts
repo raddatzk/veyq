@@ -189,6 +189,9 @@ export type MediaItem = {
   /** Set when a WRITE_ONLY guest added this media: its seals are under that guest's own key, which [mediaKey]
    *  opens from here (ADR 0031 point 7). Undefined for every other media, whose seals are under `K_node`. */
   uploader?: UploaderOrigin
+  /** A moderator blocked this medium, its node or a node above it (uc.moderation.take-a-measure): its tile and the
+   *  lightbox show "Blocked by the operator" and load no bytes (each would answer 451); only delete is offered. */
+  blocked?: boolean
 }
 
 /** What a per-media write or lazy read needs: the media's id and, for one a WRITE_ONLY guest added, its origin. */
@@ -219,6 +222,7 @@ export function summaryToItem(s: MediaSummary, uploader?: UploaderOrigin): Media
     ownerKey: s.ownerKey ?? undefined,
     bucketId: s.bucketId ?? undefined,
     uploader,
+    ...(s.blockedByOperator ? { blocked: true } : {}),
   }
 }
 

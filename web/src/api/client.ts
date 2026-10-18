@@ -32,7 +32,7 @@ import { ContentApi, Configuration as ContentConfiguration } from './generated/c
 import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { ModerationApi, ReportsApi, Configuration as ModerationConfiguration } from './generated/moderation'
-import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
+import { CaseReviewApi, SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
 import { FavoritesApi, Configuration as FavoritesConfiguration } from './generated/favorites'
 import { OperatorApi, Configuration as OperatorConfiguration } from './generated/operator'
 import { session } from '../app/session'
@@ -179,6 +179,12 @@ export function sharesApi(): SharingApi {
 
 export function publicSharesApi(): SharingApi {
   return new SharingApi(new SharingConfiguration(publicParams()))
+}
+
+/** A moderator's review of a case (uc.moderation.review-a-case): the held snapshot in the guest viewer's shapes, behind
+ *  the MODERATOR role and a key proof — bearer-authed, never a guest's read (`core/sharing/review.ts`). */
+export function caseReviewApi(): CaseReviewApi {
+  return new CaseReviewApi(new SharingConfiguration(bearerParams()))
 }
 
 // Who runs this instance (ADR 0093 § 11, ADR 0035 decision 7): the operator's published values, read before sign-in on

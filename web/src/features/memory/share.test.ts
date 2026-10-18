@@ -170,9 +170,9 @@ describe('resolveShare (anonymous viewer)', () => {
       scopeId: SCOPE_ID,
       wrap,
       sealedName,
-      nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
+      nodes: [{ blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
     }, {
-      media: [{ nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta }],
+      media: [{ blockedByOperator: false, nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta }],
       identities: [],
     })
 
@@ -209,11 +209,11 @@ describe('resolveShare (anonymous viewer)', () => {
       wrap,
       sealedName,
       nodes: [
-        { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey, encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
+        { blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
+        { blockedByOperator: false, id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey, encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
       ],
     }, {
-      media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: chapterMeta }],
+      media: [{ blockedByOperator: false, nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: chapterMeta }],
       identities: [],
     })
 
@@ -241,11 +241,11 @@ describe('resolveShare (anonymous viewer)', () => {
     mockGuest({
       role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName,
       nodes: [
-        { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(kNode, CHAPTER_ID, chapterKey), encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
-        { id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(chapterKey, NESTED), encryptedName: nodeName(chapterKey, NESTED, 'Morning') },
+        { blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
+        { blockedByOperator: false, id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(kNode, CHAPTER_ID, chapterKey), encryptedName: nodeName(kNode, CHAPTER_ID, 'Day 1') },
+        { blockedByOperator: false, id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(chapterKey, NESTED), encryptedName: nodeName(chapterKey, NESTED, 'Morning') },
         // the pre-ADR-0080 entry: a chapter title sealed under a scope key the guest does not hold
-        { id: STALE, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(kNode, STALE), encryptedName: nodeName(v1.randomBytes(32), STALE, 'Hidden') },
+        { blockedByOperator: false, id: STALE, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: contentKey(kNode, STALE), encryptedName: nodeName(v1.randomBytes(32), STALE, 'Hidden') },
       ],
     })
     const head = await resolvePublicShare(minted.shareId, b64url(minted.kShare))
@@ -274,8 +274,8 @@ describe('resolveShare (anonymous viewer)', () => {
       mockGuest({
         role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName,
         nodes: [
-          { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-          { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision, ...entry },
+          { blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
+          { blockedByOperator: false, id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision, ...entry },
         ],
       })
       return openGuestTreeParts(await resolvePublicShare(minted.shareId, b64url(minted.kShare))).names
@@ -302,11 +302,11 @@ describe('resolveShare (anonymous viewer)', () => {
       wrap,
       sealedName,
       nodes: [
-        { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: movedWrap },
+        { blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
+        { blockedByOperator: false, id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0, wrappedContentKey: movedWrap },
       ],
     }, {
-      media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }],
+      media: [{ blockedByOperator: false, nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }],
       identities: [],
     })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -318,7 +318,7 @@ describe('resolveShare (anonymous viewer)', () => {
     mockCurator(create)
     const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    mockGuest({ role: 'READ', passwordRequired: false, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] })
+    mockGuest({ role: 'READ', passwordRequired: false, wrap, sealedName, nodes: [{ blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] })
     await expect(resolveShare(minted.shareId, b64url(minted.kShare))).rejects.toBeInstanceOf(ShareUnavailableError)
   })
 
@@ -327,7 +327,7 @@ describe('resolveShare (anonymous viewer)', () => {
     mockCurator(create)
     await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    mockGuest({ role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] })
+    mockGuest({ role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] })
 
     // a DIFFERENT (well-formed) 32-byte key can't open the wrap
     const wrongKey = 'A'.repeat(43) // 32 zero-ish bytes worth of base64url
@@ -345,8 +345,8 @@ describe('resolveShare (anonymous viewer)', () => {
     const kNode = v1.randomBytes(32)
     const minted = await createShare(SCOPE_ID, NODE_ID, kNode, EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    const head = { role: 'READ' as const, passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] }
-    const row = { nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }
+    const head = { role: 'READ' as const, passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0, blockedByOperator: false }] }
+    const row = { nodeId: NODE_ID, blockedByOperator: false, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }
     const { listShareMedia } = mockGuest(head, { media: [row], identities: [] })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
     expect(resolved.items.map((i) => i.item.mediaId)).toEqual([MEDIA_1])
@@ -516,7 +516,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     // the anonymous viewer opens the note map with the fragment key, then picks its locale
     mockGuest({
       role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap: req.wrap, sealedName: req.sealedName, sealedNote: req.sealedNote,
-      nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
+      nodes: [{ blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
     })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
     expect(pickLocaleText(resolved.noteByLocale, 'de')).toBe('Viel Spaß!')
@@ -643,7 +643,7 @@ describe('password protection (cr-0118)', () => {
       .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', nodes: [] })
       .mockResolvedValueOnce({
         passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', scopeId: SCOPE_ID, wrap, sealedName,
-        nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
+        nodes: [{ blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
       })
     fakeApi(publicSharesApi, { resolveShare: resolveMock })
     const { listShareMedia } = stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
@@ -750,7 +750,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const drop = v1.generateDropKey()
     const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kNode, v1.serializeDropKey(drop)))
     stubApi(contentApi, {
-      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaRevision: 0, placementRevision: 0, createdAt: new Date(0) }],
+      listNodes: [{ blockedByOperator: false, id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaRevision: 0, placementRevision: 0, createdAt: new Date(0) }],
     })
     const { old, reissue } = await oldShare(kNode, ShareRole.WriteOnly, '')
 
@@ -843,16 +843,17 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
     mockGuest({
       role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, rootKind: 'CHAPTER',
       nodes: [
-        { id: CHAPTER_ID, parentId: null, kind: 'CHAPTER', epoch: 0 }, // the root: no entry, no parent served
+        { blockedByOperator: false, id: CHAPTER_ID, parentId: null, kind: 'CHAPTER', epoch: 0 }, // the root: no entry, no parent served
         {
+          blockedByOperator: false,
           id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementRevision: 0,
           wrappedContentKey: contentKey(chapterKey, NESTED, nestedKey), encryptedName: nodeName(chapterKey, NESTED, 'Morning'),
         },
       ],
     }, {
       media: [
-        { nodeId: CHAPTER_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(chapterKey, MEDIA_1, { v: 1, w: 1600, h: 1200 }) },
-        { nodeId: NESTED, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(nestedKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
+        { blockedByOperator: false, nodeId: CHAPTER_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(chapterKey, MEDIA_1, { v: 1, w: 1600, h: 1200 }) },
+        { blockedByOperator: false, nodeId: NESTED, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(nestedKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
       ],
       identities: [],
     })
@@ -874,7 +875,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
     mockCurator(create)
     const chapterKey = v1.randomBytes(32)
     stubApi(contentApi, {
-      listNodes: [{ id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaRevision: 0, placementRevision: 0, createdAt: new Date(0) }],
+      listNodes: [{ blockedByOperator: false, id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaRevision: 0, placementRevision: 0, createdAt: new Date(0) }],
     })
 
     const minted = await createShare(SCOPE_ID, CHAPTER_ID, chapterKey, EPOCHS, 'Day 1', ShareRole.WriteOnly)
@@ -928,9 +929,9 @@ describe('openSharedMemory on a folder link (cr-node-key-hierarchy 5b.4b)', () =
   }
   const listing: ShareMediaListing = {
     media: [
-      { nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(memoryKey, MEDIA_1, { v: 1, w: 1600, h: 1200 }) },
-      { nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(chapterKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
-      { nodeId: SIBLING, mediaId: MEDIA_3, blobId: 'b3', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(siblingKey, MEDIA_3, { v: 1, w: 640, h: 480 }) },
+      { blockedByOperator: false, nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(memoryKey, MEDIA_1, { v: 1, w: 1600, h: 1200 }) },
+      { blockedByOperator: false, nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(chapterKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
+      { blockedByOperator: false, nodeId: SIBLING, mediaId: MEDIA_3, blobId: 'b3', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(siblingKey, MEDIA_3, { v: 1, w: 640, h: 480 }) },
     ],
     identities: [],
   }

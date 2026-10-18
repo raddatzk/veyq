@@ -55,6 +55,10 @@ vi.mock('../features/instance/moderation', async (importOriginal) => ({
   appointModerator: vi.fn(),
   removeModerator: vi.fn(),
   rotateModerationKey: vi.fn(),
+  getModerationSteps: vi.fn(),
+  declineProposal: vi.fn(),
+  blockSignIn: vi.fn(),
+  liftSignInBlock: vi.fn(),
 }))
 // The rules stay real (the notice's tick, the preset's changes, the merge base): what is asserted is what they send.
 vi.mock('../features/instance/operator', async (importOriginal) => ({
@@ -91,8 +95,11 @@ import {
   clearInstanceCapabilityRequirement, listInstanceCapabilities, setInstanceCapability, setInstanceCapabilityRequirement,
 } from '../features/instance/capabilities'
 import type { InstanceCapability } from '../features/instance/capabilities'
-import { appointModerator, getModeration, removeModerator, rotateModerationKey } from '../features/instance/moderation'
-import type { InstanceModeration } from '../features/instance/moderation'
+import {
+  appointModerator, blockSignIn, declineProposal, getModeration, getModerationSteps, liftSignInBlock, removeModerator,
+  rotateModerationKey,
+} from '../features/instance/moderation'
+import type { InstanceModeration, ModerationSteps } from '../features/instance/moderation'
 import { clearOperator, getOperatingMode, getOperator, setOperator } from '../features/instance/operator'
 import type { InstanceOperatingMode, InstanceOperator } from '../features/instance/operator'
 import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
@@ -628,6 +635,103 @@ describe('veyq-admin — moderators and the moderation key (uc.moderation.appoin
   })
 })
 
+describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.take-a-measure step 5, uc.admin.suspend-tenant A4)', () => {
+  const steps = (over: Partial<ModerationSteps> = {}): ModerationSteps => ({
+    proposals: [
+      {
+        id: 'p-member', caseId: 'case-1', category: 'ILLEGAL_CONTENT', step: 'MEMBER_SIGN_IN', accountId: 'acc-1',
+        address: 'member@example.com', tenantId: null, tenantDomain: null, proposedAt: EXPIRES,
+      },
+      {
+        id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', accountId: null,
+        address: null, tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: EXPIRES,
+      },
+    ],
+    signInBlocks: [
+      { id: 'b-1', accountId: 'acc-2', address: 'Blocked@Example.com', caseId: 'case-3', blockedAt: EXPIRES },
+      { id: 'b-2', accountId: 'acc-3', address: 'ordered@example.com', caseId: null, blockedAt: EXPIRES },
+    ],
+    ...over,
+  })
+
+  it('moderation proposals prints each proposal with what takes it — an address or a tenant — and every block', async () => {
+    vi.mocked(getModerationSteps).mockResolvedValueOnce(steps())
+    const r = await invoke(['moderation', 'proposals'])
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({
+      proposals: [
+        { id: 'p-member', caseId: 'case-1', category: 'ILLEGAL_CONTENT', step: 'MEMBER_SIGN_IN', address: 'member@example.com', proposedAt: EXPIRES.toISOString() },
+        { id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: EXPIRES.toISOString() },
+      ],
+      signInBlocks: [
+        { address: 'Blocked@Example.com', caseId: 'case-3', blockedAt: EXPIRES.toISOString() },
+        { address: 'ordered@example.com', caseId: null, blockedAt: EXPIRES.toISOString() },
+      ],
+    })
+  })
+
+  it('moderation decline passes the proposal id to the facade, and a refusal exits 1 with its code', async () => {
+    vi.mocked(declineProposal).mockResolvedValueOnce(steps({ proposals: [] }))
+    expect((await invoke(['moderation', 'decline', '--proposal', 'p-tenant'])).code).toBe(0)
+    expect(declineProposal).toHaveBeenCalledWith('p-tenant')
+    vi.mocked(declineProposal).mockRejectedValueOnce(httpError(404, 'proposal_not_found'))
+    const r = await invoke(['moderation', 'decline', '--proposal', 'gone'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 404 proposal_not_found')
+  })
+
+  it('account block passes the address and the case, or no case when none is given', async () => {
+    vi.mocked(blockSignIn).mockResolvedValue(steps())
+    expect((await invoke(['account', 'block', '--address', 'member@example.com', '--case', 'case-1'])).code).toBe(0)
+    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', 'case-1')
+    expect((await invoke(['account', 'block', '--address', 'member@example.com'])).code).toBe(0)
+    expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', null)
+  })
+
+  it('account block exits 1 with each refusal’s code', async () => {
+    for (const [status, code] of [[404, 'account_not_found'], [404, 'case_not_found'], [409, 'sign_in_block_exists'], [409, 'cannot_block_server_owner']] as const) {
+      vi.mocked(blockSignIn).mockRejectedValueOnce(httpError(status, code))
+      const r = await invoke(['account', 'block', '--address', 'member@example.com'])
+      expect(r.code).toBe(1)
+      expect(r.err).toBe(`veyq-admin: request failed: HTTP ${status} ${code}`)
+    }
+  })
+
+  it('account block refuses a missing address before signing in, and blocks nothing', async () => {
+    const r = await invoke(['account', 'block', '--case', 'case-1'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--address is required')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(blockSignIn).not.toHaveBeenCalled()
+  })
+
+  it('account unblock finds the block in force by address, case-insensitively, and lifts it by its id', async () => {
+    vi.mocked(getModerationSteps).mockResolvedValueOnce(steps())
+    vi.mocked(liftSignInBlock).mockResolvedValueOnce(steps({ signInBlocks: [] }))
+    const r = await invoke(['account', 'unblock', '--address', 'blocked@example.COM'])
+    expect(r.code).toBe(0)
+    expect(liftSignInBlock).toHaveBeenCalledWith('b-1')
+    expect(JSON.parse(r.out).signInBlocks).toEqual([])
+  })
+
+  it('account unblock says clearly when the address has no block in force, and lifts nothing', async () => {
+    vi.mocked(getModerationSteps).mockResolvedValueOnce(steps())
+    const r = await invoke(['account', 'unblock', '--address', 'member@example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('member@example.com has no sign-in block in force')
+    expect(liftSignInBlock).not.toHaveBeenCalled()
+  })
+
+  it('account unblock exits 1 with the lift’s refusal', async () => {
+    vi.mocked(getModerationSteps).mockResolvedValueOnce(steps())
+    vi.mocked(liftSignInBlock).mockRejectedValueOnce(httpError(404, 'sign_in_block_not_found'))
+    const r = await invoke(['account', 'unblock', '--address', 'ordered@example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 404 sign_in_block_not_found')
+    expect(liftSignInBlock).toHaveBeenCalledWith('b-2')
+  })
+})
+
 describe('veyq-admin — the operating mode and the operator details (uc.admin.operator-details A4)', () => {
   const guestRecord = {
     id: 'core.public-shares.guest-write-record', title: { en: 'Guest-write record', de: 'Gast-Schreibprotokoll' },
@@ -712,7 +816,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

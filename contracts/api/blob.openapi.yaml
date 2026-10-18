@@ -418,7 +418,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found` = unknown blob, `store_unavailable`); null on success.
+          description: Per-item error code (`upload_not_found` = unknown blob, `store_unavailable`, `blocked_by_operator` = a moderator blocked its content — the per-item form of a byte read's `451`, uc.moderation.take-a-measure); null on success.
           maxLength: 64
           example: null
 

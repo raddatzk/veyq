@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -76,6 +77,8 @@ sealed interface RestoreNodeOutcome {
     object Suspended : RestoreNodeOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeDeleting : RestoreNodeOutcome, HttpFailure by Failures.scopeDeleting
     object SlugTaken : RestoreNodeOutcome, HttpFailure by Failures.slugTaken
+    /** A moderator blocked it or a node above it — deleted, never restored, while the block stands (451). */
+    object Blocked : RestoreNodeOutcome, HttpFailure by Failures.blockedByOperator
 }
 
 sealed interface ListTrashOutcome {
@@ -99,6 +102,7 @@ class NodesHandler(
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All private val kindRules: MutableList<NodeKindRules>,
     private val capabilities: CapabilityRegistry,
+    private val blocks: ModerationBlocks,
 ) {
 
     private fun parentAllows(kind: String, parent: ParentSlot): Boolean =
@@ -396,6 +400,8 @@ class NodesHandler(
     ): RestoreNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(RestoreNodeOutcome.NotFound, RestoreNodeOutcome.Suspended, RestoreNodeOutcome.ScopeDeleting)?.let { return it }
+        // uc.moderation.take-a-measure: a blocked item can be deleted, never restored, while the block stands.
+        if (blocks.contentView(scopeId).nodeBlocked(nodeId)) return RestoreNodeOutcome.Blocked
         return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName, PrincipalKey.User(userId))) {
             NodesStore.RestoreResult.DONE -> RestoreNodeOutcome.Restored
             NodesStore.RestoreResult.SLUG_TAKEN -> RestoreNodeOutcome.SlugTaken

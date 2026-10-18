@@ -73,6 +73,14 @@ acceptanceCriteria:
     text: A request whose Host resolves to no tenant is unaffected by any tenant's suspension.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.aHostClaimingNoTenantPassesThroughUnchanged] }
+  - id: taken-on-a-moderators-proposal
+    # Alternate flow A4, added by cr-moderation-review-and-measures (uc.moderation.take-a-measure).
+    text: >-
+      A moderator's proposal to take a tenant offline is listed to the Server Owner on the admin channel with its case;
+      suspending the tenant settles every open such proposal as taken, and the Server Owner may decline one instead.
+    coverage:
+      backend:
+        integration: [ModerationMeasuresSliceTest.theServerOwnersStepsAreProposalsTakenOrDeclinedOnTheAdminChannelOnly]
 gaps:
   admin-web: >-
     The suspend/reactivate controls live here (ADR 0065), and their suites exist and pass locally, but
@@ -81,7 +89,9 @@ gaps:
     the detail panel and `veyq-admin tenant suspend|reactivate` (cr-admin-cli) — each pinned to the operation
     and tenant id it sends, and neither to the flip itself, which is the backend ref's sentence. On the first
     run whose log shows admin-web's suites executed, `suspend-active-tenant` and `reactivate-suspended-tenant`
-    each gain `src/features/tenants/TenantDetailPanel.test.ts` and `src/cli/cli.test.ts`, and this gap goes.
+    each gain `src/features/tenants/TenantDetailPanel.test.ts` and `src/cli/cli.test.ts`, and this gap goes. The
+    proposals' list (`taken-on-a-moderators-proposal`) is held by `src/features/instance/ModerationPanel.test.ts` and
+    `src/cli/cli.test.ts` (`moderation proposals|decline`) under the same wait.
   web: >-
     No web part. The lockout is the backend's pre-matching `TenantSuspensionFilter`, refusing every request on
     the tenant's own domain before authentication, and the suspend/reactivate controls are the Server Owner's

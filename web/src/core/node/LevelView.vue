@@ -292,7 +292,8 @@ interface Item { key: string; node: TreeNode; kind: NodeKind; row: LevelRow; fol
 // A node's cover is the leading visual of its row or tile wherever its application did not supply one (a Memory's row draws its
 // own, from the same covers): the image with its crop; the kind's icon stays the default (inbox #411).
 function withCover(item: Item): Item {
-  const loaded = item.row.leading ? null : cover.covers.value.get(item.node.id)
+  // A blocked node's cover is refused like every byte of it (451): its placeholder draws none.
+  const loaded = item.row.leading || item.node.blockedByOperator ? null : cover.covers.value.get(item.node.id)
   if (!loaded) return item
   return { ...item, row: { ...item.row, leading: { component: NodeCoverImage, props: { src: loaded.url, crop: loaded.crop, alt: '' } } } }
 }
@@ -301,6 +302,27 @@ const items = computed<Item[]>(() => {
   return ordered.map((node): Item => withCover(rawItem(node)))
 })
 function rawItem(node: TreeNode): Item {
+  return node.blockedByOperator ? blockedItem(node, unblockedItem(node)) : unblockedItem(node)
+}
+/**
+ * A node a moderator blocked (uc.moderation.take-a-measure): the placeholder "Blocked by the operator", with no reason, for
+ * members and guests alike (inbox #401: a row state, not a guest screen). It does not open and shows no cover; of its
+ * actions only delete is kept — the uploader may still delete it, nothing else reaches it.
+ */
+function blockedItem(node: TreeNode, item: Item): Item {
+  return {
+    ...item,
+    row: {
+      icon: 'pi pi-ban',
+      title: node.name,
+      meta: t('node.blockedByOperator'),
+      primary: { label: node.name, onClick: () => {}, disabled: true },
+      actions: item.row.actions.filter((a) => a.id === 'delete'),
+      selection: { move: false, delete: item.row.selection?.delete ?? false },
+    },
+  }
+}
+function unblockedItem(node: TreeNode): Item {
   if (node.kind === FOLDER_KIND) {
     const label = folderLabels.value.get(node.id) ?? node.name
     return {
@@ -427,8 +449,9 @@ watch(levelItems, (now) => selection.retain(now.keys()))
 // The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
 // cover" / "Remove cover" in the row's menu, gated by `coverRights` (a writer, a kind that opted in; a guest none).
 // Core's "Copy to…" (uc.platform.copy-node) sits beside the application's "Move to…" in the row's menu, for a member only.
+// A node a moderator blocked gets none of them: its placeholder keeps the application's delete alone (`blockedItem`).
 const coreRowActions = (item: Item): CoreRowAction[] =>
-  item.unsupported
+  item.unsupported || item.node.blockedByOperator
     ? []
     : [
         ...favoriteRowActions(t, props.access, item.node),

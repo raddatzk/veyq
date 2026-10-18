@@ -77,7 +77,7 @@ const GUEST: GuestIdentity = { identityId: 'id-1', contributorToken: 'tok-1' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
   const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A Memory link with one chapter. */
 function head(role: ShareRole): PublicShareHead {
@@ -91,7 +91,7 @@ function head(role: ShareRole): PublicShareHead {
 }
 /** What the share's chunk provider hands back, as a marker (its own suite opens the bytes). */
 const CHUNKS = { meta: vi.fn(), chunk: vi.fn() } as unknown as ReturnType<typeof share.shareChunkProvider>
-const row = (mediaId: string, nodeId: string): ShareMedia => ({ mediaId, nodeId, blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' })
+const row = (mediaId: string, nodeId: string): ShareMedia => ({ blockedByOperator: false, mediaId, nodeId, blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' })
 
 let requestGuest: ReturnType<typeof vi.fn<() => Promise<GuestIdentity | null>>>
 function guest(role: ShareRole): { source: MemorySource; access: GuestAccess } {

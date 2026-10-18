@@ -3,6 +3,7 @@ title: "Etwas melden"
 sources:
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
+  - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
 ---
 
 Siehst du in einem Bereich oder über einen Link etwas, das rechtswidrig ist oder gegen die Nutzungsbedingungen
@@ -43,5 +44,22 @@ Fehlt **Melden**, hat der Server noch keinen Moderationsschlüssel, und es gibt 
   Kategorien erreichen sie sofort.
 - **Deine Adresse** geht einmal an den Server, für die Bestätigung, die er dir schickt; er behält nur die Kopie, die
   allein die Moderation lesen kann.
+
+## Von der Moderation gesperrt
+
+Entscheidet die Moderation, dass etwas nicht mehr gezeigt werden darf, sperrt sie es. An seiner Stelle siehst du dann
+**Von der Moderation gesperrt**, mit seinem Namen und ohne Begründung: in der Liste eines Ordners, als Kachel in einer
+Erinnerung und in der Großansicht. Mitglieder des Bereichs und Gäste eines Links sehen dasselbe.
+
+- **Es öffnet sich nicht.** Nichts davon wird angezeigt oder heruntergeladen, auch nichts in einem gesperrten Ordner
+  oder einer gesperrten Erinnerung.
+- **Löschen geht weiterhin.** Wer es vorher löschen konnte — etwa die Person, die es hochgeladen hat —, kann es noch.
+  Sonst erreicht es nichts: Es lässt sich nicht öffnen, umbenennen oder verschieben, der Inhalt einer Datei lässt sich
+  nicht ersetzen, und gelöscht lässt es sich nicht aus dem Papierkorb wiederherstellen, solange die Sperre besteht.
+- **Eine Sperre löscht nichts.** Hebt die Moderation sie auf, ist es wieder so da, wie es war.
+- **Ein gesperrter Link** öffnet sich für niemanden mehr, dem er geschickt wurde: Er erscheint wie ein Link, den es
+  nicht gibt. Die Person, die ihn erstellt hat, kann ihn weder reaktivieren noch erneuern, solange die Sperre besteht. Hat
+  die Moderation einen Gast gesperrt, der über einen Link hochgeladen hat, funktioniert auch dieser Link nicht mehr, und
+  die Person, die ihn erstellt hat, darf ihn erneuern: Der erneuerte Link hat eine neue Adresse.
 
 Wie sicher der Rest deiner Daten bleibt: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

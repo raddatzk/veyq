@@ -28,8 +28,8 @@ enum class ReportCategory(val urgent: Boolean) {
 /** What a reported item is (the wire's `kind`). A LINK's id is its share id. */
 enum class ReportItemKind { NODE, ITEM, LINK }
 
-/** A case's state. Only [OPEN] is reached until the review lands (cr-moderation-review-and-measures closes cases). */
-enum class CaseState { OPEN, CLOSED }
+/** A case's state: [OPEN] until a decision, [DECIDED] once a measure was taken, [CLOSED] when dismissed or when its last hold ended after a decision (uc.moderation.review-a-case). */
+enum class CaseState { OPEN, DECIDED, CLOSED }
 
 /** One report (`veyq_moderation_report`): the clear fields and the sealed part. No foreign key into a space. */
 @Entity
@@ -101,6 +101,14 @@ class ModerationCaseEntity : PanacheEntityBase {
 
     @Column(name = "notice_kind", length = 8)
     var noticeKind: String? = null
+
+    /** When the case's first measure was taken; null while open, and for a dismissed case. */
+    @Column(name = "decided_at")
+    var decidedAt: Instant? = null
+
+    /** When the case closed — dismissed, or its last hold ended after a decision; its events are kept from it. */
+    @Column(name = "closed_at")
+    var closedAt: Instant? = null
 
     companion object : PanacheCompanionBase<ModerationCaseEntity, String> {
         const val NOTICE_URGENT = "URGENT"

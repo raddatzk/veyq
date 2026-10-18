@@ -346,15 +346,26 @@ server-blind token makes this work without the server ever seeing a name:
   the Server Owner's. A second moderator reviews an objection where there is one. Against the operator this is
   accountability, not a control: the Server Owner owns the server and the roster, and the surface is
   operator-served, passive-operator-safe only ([ADR 0026](../decisions/0026-client-trust-tiers.md)).
-  **Built today: the intake half.** A member or a guest reports what they see: their client seals the report share
-  and their text to the current epoch, the server stores the category, time and ids in the clear, opens one case per
-  item and takes a **hold** — a copy of the reported rows and a pin on their store objects that the reclaim sweep
-  skips, so a delete after the report removes the item for everyone but the moderators, for up to 90 days
+  **Built today: the intake, the review and the measures.** A member or a guest reports what they see: their client
+  seals the report share and their text to the current epoch, the server stores the category, time and ids in the
+  clear, opens one case per item and takes a **hold** — a copy of the reported rows and a pin on their store objects
+  that the reclaim sweep skips, so a delete after the report removes the item for everyone but the moderators
   ([uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
-  [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)). Not built: the review and every
-  decision — the moderation surface does not list or open a report yet, and the operator has no action on a single
-  share — revoking one is its creator's alone (`SharingHandler.revoke`); the operator's only lever is suspending the
-  whole tenant, every link in it ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
+  [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)). A moderator lists the queue in clear
+  fields, opens a case's sealed reports in the browser, and reviews the held snapshot in the share viewer's moderation
+  mode on the reported tenant's host, over moderation reads behind the role and a key proof per operation and case that
+  serve only the hold's ciphertext and log an *opened* event per fetch — never a guest endpoint, a link's password or
+  a scope client ([uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md)). The
+  decisions are rows by id that delete nothing and lift by closing the row: dismissing (the hold ends at once),
+  extending a hold with a sealed reason, barring a reporter, and the measures — a link blocked (every guest path answers
+  as an unknown link), content blocked (`451 blocked_by_operator` on every byte path, the two `presignGets` callers held
+  by `PresignGetsHonourContentBlocksTest`, listings marking it), a guest uploader blocked with its link — while a
+  member's sign-in block (every session ended, every sign-in refused) and a tenant's suspension are the Server Owner's,
+  on the admin channel, taken or declined from a moderator's proposal
+  ([uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). Measures are clear
+  metadata, since the server must refuse what they name; notes and reasons are sealed (`moderation-note` [epoch,
+  caseId]). Not built: the statement of reasons and the objection, so no second moderator reviews one yet (ADR 0093
+  § 7), and an authority's order (§§ 12–13). No moderation path has run on a deployed instance.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

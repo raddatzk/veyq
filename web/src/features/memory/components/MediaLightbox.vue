@@ -139,7 +139,8 @@ const item = computed(() => props.items[current.value])
 const isCover = computed(() => !!item.value && item.value.mediaId === props.coverMediaId) // this photo is the Memory's cover
 const canPrev = computed(() => current.value > 0)
 const canNext = computed(() => current.value < props.items.length - 1)
-const previewable = computed(() => (item.value ? hasDerivatives(item.value) : false))
+// A medium a moderator blocked (uc.moderation.take-a-measure) previews nothing: every byte of it answers 451.
+const previewable = computed(() => (item.value && !item.value.blocked ? hasDerivatives(item.value) : false))
 // The original's sealed blob meta (inbox #397): its type, the file name it was uploaded under, its modified time —
 // opened synchronously from the listed item (it rides the listing beside the K_blob wrap), so the download name and
 // the video signal are known the moment the item shows; nothing waits for the lazy EXIF tier. Null = none / unopenable.
@@ -704,6 +705,7 @@ onBeforeUnmount(() => {
           <span class="pi" :class="playing ? 'pi-pause' : 'pi-play'" />
         </button>
         <button
+          v-if="!item?.blocked"
           class="veyq-icon-button lightbox-icon-button"
           type="button"
           :aria-label="t('media.download')"
@@ -782,7 +784,8 @@ onBeforeUnmount(() => {
           @pointercancel="zoomable && zoom.onPointerUp($event)"
           @wheel="zoomable && zoom.onWheel($event)"
         >
-          <p v-if="error" class="media-lightbox-error">{{ t('media.loadError') }}</p>
+          <p v-if="item?.blocked" class="media-lightbox-error media-lightbox-blocked">{{ t('node.blockedByOperator') }}</p>
+          <p v-else-if="error" class="media-lightbox-error">{{ t('media.loadError') }}</p>
           <!-- Video playback (#104, ADR 0047): once the user clicks play, the video plays either from the SW range
                path (`videoSwUrl` = /__media/<handle>, Slice 2) or, as a fallback, a decrypted typed blob URL
                (`videoUrl`, Slice 1). Before that, a video shows its poster (the PREVIEW tier) + a play affordance. -->

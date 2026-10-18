@@ -58,6 +58,11 @@ tags:
       file below the root (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/files`
       subtree: longer than core's `sharing` root `/api/shares`, so these routes reach this resource and every other
       `/api/shares` route stays core's.
+  - name: case-files
+    description: >
+      A moderator's review of a case's files (uc.moderation.review-a-case), behind core's moderation gate. Its own tag so
+      its resource owns `/api/moderation/cases/{caseId}/files`: longer than core's moderation root `/api/moderation`, so
+      this route reaches it and every other moderation route stays core's.
 
 paths:
   /api/scopes/{scopeId}/files:
@@ -171,6 +176,12 @@ paths:
             `FILE_CONTENT` (`upload_mismatch`: its wrap would not open here).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+        "451":
+          description: >
+            A moderator blocked this file's content, or a node above it (`blocked_by_operator`,
+            uc.moderation.take-a-measure): its content is not replaced while the block stands; it can still be deleted.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
 
   /api/shares/{shareId}/files:
     get:
@@ -283,6 +294,47 @@ paths:
           description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+        "451":
+          description: >
+            A moderator blocked this file's content, or a node above it (`blocked_by_operator`,
+            uc.moderation.take-a-measure): its content is not replaced while the block stands.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
+
+  /api/moderation/cases/{caseId}/files:
+    get:
+      tags: [case-files]
+      operationId: listCaseFiles
+      summary: A moderator's review of a case's files — the held file blobs in the guest listing's shape.
+      description: >
+        The share viewer's moderation mode reads this instead of `listShareFiles` (uc.moderation.review-a-case): the file
+        content blobs of every `FILE` node the case's hold copied, from the snapshot only, so it answers after the file,
+        the node or the space were deleted. `404 nothing_held` once the hold ended. Behind the `MODERATOR` role and a
+        key proof over this case — core's moderation gate, never a guest's.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The held files' blobs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareFileListing" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`, `not_moderator`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+        "404":
+          description: "`case_not_found`, or `nothing_held` = the case's hold has ended."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
 
   /api/shares/{shareId}/files/drop-folder:
     post:
@@ -362,6 +414,30 @@ components:
       description: The opaque access token issued by login / refresh. Any authenticated caller holding a grant for the scope (enforced by code).
 
   parameters:
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case's id — bound into every key proof made for it.
+      schema: { type: string, format: uuid, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+    ModerationChallenge:
+      name: X-Veyq-Moderation-Challenge
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The challenge `createModerationChallenge` issued, as it returned it. Declared optional so a call without the
+        proof reaches the gate and gets its `403 moderation_proof_invalid`; the gate is what requires it.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ModerationSignature:
+      name: X-Veyq-Moderation-Signature
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        Ed25519 signature with the current epoch's moderation signing key over `moderation-proof` (the challenge, this
+        operation's `operationId`, the case id in the path or none), standard base64.
+      schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
     ScopeId:
       name: scopeId
       in: path

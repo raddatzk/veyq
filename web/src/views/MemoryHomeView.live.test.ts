@@ -66,7 +66,7 @@ const sealed = (nodeId: string, name: string) => ({
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f1'
 const FILE_ID = '5c09e000-0000-4000-8000-0000000000a1'
 function row(id: string, kind: string, name: string): NodeSummary {
-  return { id, parentId: null, kind, epoch: 0, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), ...sealed(id, name) }
+  return { blockedByOperator: false, id, parentId: null, kind, epoch: 0, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), ...sealed(id, name) }
 }
 // Stable ciphertext per (id, name): the same row twice must fingerprint equal, as the server serves it.
 const cache = new Map<string, NodeSummary>()
@@ -280,6 +280,7 @@ describe("the drop box's page, live", () => {
   const sealedRow = (
     id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<NodeSummary> = {},
   ): NodeSummary => ({
+    blockedByOperator: false,
     id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
     encryptedName: sealName(entryKey, at(id), name), slugToken: 'c2x1Zw==', wrappedContentKey: wrapContentKey(entryKey, at(id), key), ...extra,
   })

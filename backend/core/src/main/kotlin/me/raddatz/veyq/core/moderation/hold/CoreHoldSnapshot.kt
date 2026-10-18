@@ -23,6 +23,9 @@ class CoreHoldSnapshot : HoldSnapshotContributor {
                     snapshot.blob(attachment["blob_id"])
                     snapshot.identity(attachment["share_identity_id"])
                 }
+                // The links rooted in the subtree: a guest's report of a link's root hands over the link's name key
+                // (`LINK_NAME`), which opens the held link's name, not the node's (uc.moderation.review-a-case step 4).
+                snapshot.copy("veyq_share", "node_id", target.nodeIds)
             }
             is HoldTarget.Link -> snapshot.copy("veyq_share", "id", listOf(target.shareId))
             is HoldTarget.Item -> {} // an application's item: its owner copies it

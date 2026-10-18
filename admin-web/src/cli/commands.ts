@@ -8,8 +8,11 @@
 // + the tenant storage quota + release info with the release check's notices and its switch + the config-secret state +
 // the object-store setting and its check + the bucket reconcile and its two switches + the capability switches with
 // their requirements + the external services +
-// the moderator roster and the rotation of the instance moderation key (ADR 0099) + the operating mode and the
-// operator's published values (ADR 0093 §§ 11 and 14) + the guest-write record's retention (ADR 0093 § 10). The operating mode's notice is printed from admin-web's own
+// the moderator roster and the rotation of the instance moderation key (ADR 0099) + the Server Owner's moderation
+// steps: the moderators' open proposals, a member's sign-in block and its lift (uc.moderation.take-a-measure step 5;
+// a tenant-offline proposal is taken with `tenant suspend`, which settles it) + the operating mode and the
+// operator's published values (ADR 0093 §§ 11 and 14) + the guest-write record's retention (ADR 0093 § 10). The
+// operating mode's notice is printed from admin-web's own
 // i18n (`i18n/operatingModeNotice.ts`), the words the console shows, and *private* needs `--accept-notice` — the
 // facade's rule (`operatingModeRequest`), not one of this file's. The notification address's code is typed into the
 // console only, as instance mail's is.
@@ -76,11 +79,17 @@ import {
 } from '../features/instance/externalServices'
 import {
   appointModerator,
+  blockSignIn,
+  declineProposal,
   getModeration,
+  getModerationSteps,
+  liftSignInBlock,
+  ProposalStep,
   removeModerator,
   rotateModerationKey,
   RotationReason,
   type InstanceModeration,
+  type ModerationSteps,
 } from '../features/instance/moderation'
 import {
   clearOperator,
@@ -215,6 +224,31 @@ async function moderatorByAddress(address: string): Promise<string> {
   const found = (await getModeration()).moderators.find((m) => m.address.toLowerCase() === wanted)
   if (!found) throw new CliError(`${address} is not on the moderator roster (see \`moderator list\`)`)
   return found.accountId
+}
+
+/** The Server Owner's steps as a script reads them: per open proposal its id (what `moderation decline` takes), its
+ *  case, the case's category, the step and its target — the member's address (what `account block` takes), or the
+ *  tenant's id and domain (what `tenant suspend` takes) — and when; per block in force its address, case and since. */
+function renderSteps(s: ModerationSteps): string {
+  return renderResult({
+    proposals: s.proposals.map((p) => ({
+      id: p.id,
+      caseId: p.caseId,
+      category: p.category,
+      step: p.step,
+      ...(p.step === ProposalStep.TenantOffline ? { tenantId: p.tenantId, tenantDomain: p.tenantDomain } : { address: p.address }),
+      proposedAt: p.proposedAt,
+    })),
+    signInBlocks: s.signInBlocks.map((b) => ({ address: b.address, caseId: b.caseId, blockedAt: b.blockedAt })),
+  })
+}
+
+/** The sign-in block in force for this address (case-insensitive, as the server matches an account address). */
+async function signInBlockByAddress(address: string): Promise<string> {
+  const wanted = address.trim().toLowerCase()
+  const found = (await getModerationSteps()).signInBlocks.find((b) => b.address.toLowerCase() === wanted)
+  if (!found) throw new CliError(`${address} has no sign-in block in force (see \`moderation proposals\`)`)
+  return found.id
 }
 
 /** `mode set <word>` → the mode. */
@@ -610,6 +644,37 @@ export const COMMANDS: Record<string, Command> = {
     flags: { reason: { describe: 'the reason category the moderation log records', required: true, oneOf: Object.keys(ROTATION_REASONS) } },
     run: (f) => rotateModerationKey(ROTATION_REASONS[f.reason]),
     render: (r) => renderRoster(r as InstanceModeration),
+  },
+  'moderation proposals': {
+    usage: 'moderation proposals',
+    summary: 'Print the moderators’ open proposals — each with its case, category, step and target (a member’s address, or a tenant) — and every sign-in block in force. Take a sign-in proposal with `account block`, a tenant one with `tenant suspend`.',
+    flags: {},
+    run: () => getModerationSteps(),
+    render: (r) => renderSteps(r as ModerationSteps),
+  },
+  'moderation decline': {
+    usage: 'moderation decline --proposal <id>',
+    summary: 'Decline an open proposal instead of taking it; the case shows it as declined and the moderation log records it.',
+    flags: { proposal: { describe: 'the proposal id, as `moderation proposals` prints it', required: true } },
+    run: (f) => declineProposal(f.proposal),
+    render: (r) => renderSteps(r as ModerationSteps),
+  },
+  'account block': {
+    usage: 'account block --address <address> [--case <caseId>]',
+    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing.',
+    flags: {
+      address: { describe: 'the account’s address', required: true },
+      case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
+    },
+    run: (f) => blockSignIn(f.address, f.case ?? null),
+    render: (r) => renderSteps(r as ModerationSteps),
+  },
+  'account unblock': {
+    usage: 'account unblock --address <address>',
+    summary: 'Lift the sign-in block of an account; it signs in again with its own keys.',
+    flags: { address: { describe: 'the blocked account’s address, as `moderation proposals` prints it', required: true } },
+    run: async (f) => liftSignInBlock(await signInBlockByAddress(f.address)),
+    render: (r) => renderSteps(r as ModerationSteps),
   },
 }
 

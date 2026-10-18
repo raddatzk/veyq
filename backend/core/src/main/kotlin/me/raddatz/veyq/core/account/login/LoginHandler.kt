@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.instance.InstanceStore
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.normalizeEmail
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -29,6 +30,7 @@ class LoginHandler(
     private val sessions: SessionService,
     private val challengeStore: LoginChallengeStore,
     private val accounts: AccountStore,
+    private val blocks: ModerationBlocks,
 ) {
 
     /** Issue a single-use, time-bounded challenge. A nonce is always returned; it is only stored (and
@@ -72,7 +74,9 @@ class LoginHandler(
         val user = accounts.findByEmail(normalized, lock = true)
 
         val ok = verifySignature(challenge, user, signatureB64)
-        return if (ok && user != null) sessions.issue(user.id) else null
+        // A blocked sign-in (uc.account.login E5) answers as a wrong password, decided after the full verification and
+        // under the account lock the block takes too (`SignInBlocks`), so the answer tells nobody the account is blocked.
+        return if (ok && user != null && !blocks.signInBlocked(user.id)) sessions.issue(user.id) else null
     }
 
     private fun verifySignature(challenge: LoginChallengeEntity?, user: VeyqUser?, signatureB64: String): Boolean {

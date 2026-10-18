@@ -27,6 +27,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 
 /**
  * HTTP adapter for media (en.memory.media, cr-0028). Implements the generated [MediaApi]; thin (ADR 0001) —
@@ -46,6 +47,7 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 )
 class MediaResource(
     private val handler: MediaHandler,
+    private val blocks: ModerationBlocks,
     private val identity: SecurityIdentity,
 ) : MediaApi {
 
@@ -85,7 +87,9 @@ class MediaResource(
         ) {
             is ListMediaOutcome.Page -> Response.ok(
                 MediaListPage(
-                    media = o.rows.map(::toSummary),
+                    media = blocks.contentView(scopeId.toString()).let { view ->
+                        o.rows.map { toSummary(it, view.itemBlocked(it.mediaId, nodeId.toString())) }
+                    },
                     mediaRevision = o.mediaRevision,
                     deleteRevision = o.deleteRevision,
                     mediaIds = o.mediaIds?.map(UUID::fromString),
@@ -132,7 +136,7 @@ class MediaResource(
             is HttpFailure -> httpError(o)
         }
 
-    private fun toSummary(row: MediaRow) = MediaSummary(
+    private fun toSummary(row: MediaRow, blocked: Boolean) = MediaSummary(
         mediaId = UUID.fromString(row.mediaId),
         blobId = UUID.fromString(row.blobId),
         chunkCount = row.chunkCount,
@@ -148,6 +152,8 @@ class MediaResource(
         bucketId = row.bucketId?.let(UUID::fromString), // cr-0113: the media's bucket (null = the uploader's primary)
         metaRevision = row.metaRevision,
         wrappedBlobMeta = row.wrappedBlobMeta,
+        // Kept and marked, not left out (uc.moderation.take-a-measure): the tile shows the placeholder.
+        blockedByOperator = blocked,
     )
 
     private fun toDerivativeSummary(d: DerivativeRow) = MediaDerivativeSummary(

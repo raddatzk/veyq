@@ -9,8 +9,8 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
-/** Why a hold exists (ADR 0093 § 4's table). Only [CASE_OPEN] is taken until the review and the order path land. */
-enum class HoldTrigger { CASE_OPEN }
+/** Why a hold ends when it does (ADR 0093 § 4's table): taken with the case ([CASE_OPEN], 90 days), moved by a decision ([MEASURE], six months after it), or set by a logged extension ([EXTENDED]). The order path adds its own. */
+enum class HoldTrigger { CASE_OPEN, MEASURE, EXTENDED }
 
 /** A hold (`veyq_hold`, en.moderation.hold): its trigger and its end. */
 @Entity

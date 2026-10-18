@@ -60,7 +60,7 @@ const BROKEN_KIND = 'BROKEN'
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 
 function head(role: ShareRole = ShareRole.Read): PublicShareHead {

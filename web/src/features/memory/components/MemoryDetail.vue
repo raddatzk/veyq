@@ -602,6 +602,7 @@ watch(
                     height: `${tile.renderedHeight}px`,
                   }"
                   :src="thumbs.get(item.media.mediaId)"
+                  :blocked="item.media.blocked"
                   :has-derivatives="hasDerivatives(item.media)"
                   :is-video="galleryVideoIds.has(item.media.mediaId)"
                   :open-label="t('media.openItem', { index: item.index + 1 })"
@@ -714,6 +715,7 @@ watch(
                     height: `${tile.renderedHeight}px`,
                   }"
                   :src="trashThumbs.get(item.media.mediaId)"
+                  :blocked="item.media.blocked"
                   :has-derivatives="hasDerivatives(item.media)"
                   :is-video="trashVideoIds.has(item.media.mediaId)"
                   :open-label="t('media.openItem', { index: item.index + 1 })"

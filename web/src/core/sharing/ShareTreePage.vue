@@ -211,8 +211,10 @@ function createError(e: unknown): string {
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div v-if="renderedNote" class="veyq-surface markdown-body" v-html="renderedNote"></div>
 
+    <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — a guest sees what a member sees. -->
+    <p v-if="current?.blockedByOperator" class="veyq-empty node-blocked">{{ t('node.blockedByOperator') }}</p>
     <LevelView
-      v-if="atFolder && current"
+      v-else-if="atFolder && current"
       :folder="current"
       :level="level"
       :access="access"

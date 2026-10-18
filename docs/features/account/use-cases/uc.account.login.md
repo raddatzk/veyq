@@ -77,6 +77,10 @@ sequenceDiagram
 - **E4 — someone else asks for a challenge for your email, or sends a bad verify for it:** they get, and
   can only burn, **their own** challenge. The one your device is signing stays outstanding, so your login
   completes. They cannot learn your nonce: it goes only to the client that asked for it.
+- **E5 — the account's sign-in is blocked** by the Server Owner on a moderator's proposal
+  ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)): the block ended every
+  session family of the account, and a correct signature still answers the **generic auth failure**, decided after the
+  full verification, so the answer tells nobody the account is blocked. Lifting the block lets it sign in again.
 
 ## Login state
 

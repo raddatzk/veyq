@@ -1428,6 +1428,174 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: moderation_grants_incomplete }
 
+  /api/instance/moderation/steps:
+    get:
+      tags: [instance-moderation]
+      operationId: getModerationSteps
+      x-veyq-channel: admin
+      summary: The Server Owner's moderation steps — open proposals and the sign-in blocks in force.
+      description: >
+        What the moderators proposed that only the Server Owner takes (ADR 0099 § 6, decided with the owner 2;
+        uc.moderation.take-a-measure step 5): each open proposal with its case, the case's category, the step and its
+        target — a member's account with its address, or a tenant with its domain — and every member sign-in block in
+        force. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The open proposals and the sign-in blocks.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationSteps" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/instance/moderation/proposals/{proposalId}/decline:
+    post:
+      tags: [instance-moderation]
+      operationId: declineModerationProposal
+      x-veyq-channel: admin
+      summary: Decline a moderator's proposal.
+      description: >
+        Settles an open proposal as declined; the case shows it and the log records it. Taking a proposal needs no
+        operation of its own: a sign-in block of its account (`blockAccountSignIn`) or the suspension of its tenant
+        (`suspendTenant`) settles every open proposal of that step and target as taken. A proposal already settled
+        changes nothing. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProposalId"
+      responses:
+        "200":
+          description: Declined; the steps as they now stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationSteps" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No proposal has this id (`proposal_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: proposal_not_found }
+
+  /api/instance/moderation/sign-in-blocks:
+    post:
+      tags: [instance-moderation]
+      operationId: blockAccountSignIn
+      x-veyq-channel: admin
+      summary: Block a member's sign-in on the instance — every session of the account ends at once.
+      description: >
+        ADR 0093 § 6, ADR 0099 § 6 (the Server Owner's step; owner decision Q10): a row naming the account, the case it
+        answers (optional — an authority's order names none), who took it and when. Every session family of the account
+        ends in the same transaction, and every sign-in answers the generic authentication failure until the block is
+        lifted (uc.account.login E5). Settles the open `MEMBER_SIGN_IN` proposals for the account as taken. The account
+        is named by its address, as an appointment names it. `409 sign_in_block_exists` while one is in force;
+        `409 cannot_block_server_owner` for the Server Owner's own account. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BlockAccountSignInRequest" }
+            example: { address: member@example.com, caseId: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+      responses:
+        "200":
+          description: Blocked; the steps as they now stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationSteps" }
+        "400":
+          description: The request was malformed (`invalid_request`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: "`account_not_found` = no account has this address; `case_not_found` = no case has the id given."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: account_not_found }
+        "409":
+          description: "`sign_in_block_exists` = the account is blocked already; `cannot_block_server_owner` = it is the Server Owner's own."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: sign_in_block_exists }
+
+  /api/instance/moderation/sign-in-blocks/{blockId}:
+    delete:
+      tags: [instance-moderation]
+      operationId: unblockAccountSignIn
+      x-veyq-channel: admin
+      summary: Lift a member's sign-in block — the account may sign in again.
+      description: >
+        Records when the block was lifted and by whom (it deleted nothing); the account signs in again with its own keys.
+        A block already lifted changes nothing. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/SignInBlockId"
+      responses:
+        "200":
+          description: Lifted; the steps as they now stand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationSteps" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No sign-in block has this id (`sign_in_block_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: sign_in_block_not_found }
+
   /api/instance/operator:
     get:
       tags: [instance-operator]
@@ -2014,8 +2182,139 @@ components:
       required: true
       description: The moderator's account id.
       schema: { type: string, format: uuid }
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      description: A moderator's proposal's id.
+      schema: { type: string, format: uuid }
+    SignInBlockId:
+      name: blockId
+      in: path
+      required: true
+      description: A sign-in block's id.
+      schema: { type: string, format: uuid }
 
   schemas:
+    ModerationSteps:
+      type: object
+      description: The Server Owner's moderation steps.
+      required: [proposals, signInBlocks]
+      properties:
+        proposals:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/OpenModerationProposal" }
+        signInBlocks:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/AccountSignInBlock" }
+
+    OpenModerationProposal:
+      type: object
+      description: One open proposal of a moderator.
+      required: [id, caseId, category, step, accountId, address, tenantId, tenantDomain, proposedAt]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 2c1f2d3e-4a5b-4c7c-8f0e-2a9b1d4a6e8b }
+        caseId: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+        category:
+          x-veyq-visibility: enum
+          type: string
+          description: The case's category (ADR 0093 § 1), most urgent of its reports.
+          enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
+          example: ILLEGAL_CONTENT
+        step:
+          x-veyq-visibility: enum
+          type: string
+          description: "`MEMBER_SIGN_IN` = block the account's sign-in; `TENANT_OFFLINE` = suspend the tenant (ADR 0066)."
+          enum: [MEMBER_SIGN_IN, TENANT_OFFLINE]
+          example: TENANT_OFFLINE
+        accountId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The member's account, for `MEMBER_SIGN_IN`; null otherwise.
+          example: null
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The member's account address, already server-held plaintext — how the Server Owner names an account to
+            block (`blockAccountSignIn`), shown back only on the admin channel.
+          type: [string, "null"]
+          description: The member's account address, for `MEMBER_SIGN_IN`; null otherwise or once the account is gone.
+          maxLength: 254
+          example: null
+        tenantId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The tenant, for `TENANT_OFFLINE`; null otherwise.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        tenantDomain:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The tenant's domain, for `TENANT_OFFLINE` — the Server Owner's configuration; null otherwise.
+          maxLength: 253
+          example: club.example.org
+        proposedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was proposed.
+          example: 2026-10-17T12:00:00Z
+
+    AccountSignInBlock:
+      type: object
+      description: A member's sign-in block in force.
+      required: [id, accountId, address, caseId, blockedAt]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
+        accountId: { type: string, format: uuid, x-veyq-visibility: id, example: 6e8b2c1f-2d3e-4a5b-8c7c-3f0e2a9b1d4a }
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The blocked account's address, already server-held plaintext — how the Server Owner recognises whom they
+            blocked, shown back only on the admin channel.
+          type: string
+          description: The blocked account's address.
+          maxLength: 254
+          example: member@example.com
+        caseId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The case the block answers; null when none was named.
+          example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
+        blockedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was blocked.
+          example: 2026-10-17T12:00:00Z
+
+    BlockAccountSignInRequest:
+      type: object
+      description: The account to block, by its address, and the case the block answers.
+      required: [address]
+      properties:
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner names an existing account by its address, as an appointment does (ADR 0099 § 1); the server
+            looks the account up by the address it already holds and stores nothing new.
+          type: string
+          format: email
+          description: The account's address.
+          maxLength: 254
+          example: member@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        caseId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The case the block answers (a moderator's proposal); null for none.
+          example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
+
     InstanceRelease:
       type: object
       description: >

@@ -40,6 +40,11 @@ const CASES: { stop: ShareGuestStop; en: string; de: string }[] = [
     de: 'Dieser Bereich ist pausiert oder wird gelöscht.',
   },
   {
+    stop: { reason: 'operatorBlocked' },
+    en: 'Blocked by the operator. Only a moderator can lift it, and it cannot be renewed meanwhile.',
+    de: 'Von der Moderation gesperrt. Nur die Moderation kann das aufheben; bis dahin lässt er sich nicht erneuern.',
+  },
+  {
     stop: { reason: 'instanceSwitch', capabilityId: 'core.public-shares' },
     en: 'Public links are switched off on this server. Only whoever runs the server can switch them back on.',
     de: 'Öffentliche Links sind auf diesem Server ausgeschaltet. Nur wer den Server betreibt, kann sie wieder einschalten.',
@@ -99,7 +104,7 @@ describe('ShareGuestStops', () => {
     expect(mountStops([]).find('.share-guest-stops').exists()).toBe(false)
     expect(mountStops([{ reason: 'revoked' }]).find('.share-guest-stops').exists()).toBe(false)
     // …but a revoked link that also misses a requirement says what reactivating alone would not fix
-    expect(reasons(mountStops([{ reason: 'revoked' }, { reason: 'linkPassword' }]))).toEqual([CASES[5]!.en])
+    expect(reasons(mountStops([{ reason: 'revoked' }, { reason: 'linkPassword' }]))).toEqual([CASES[6]!.en])
   })
 
   it('names a switch it has no words for plainly, and a reason from a newer server too', () => {
@@ -145,7 +150,9 @@ describe('ShareGuestStops', () => {
     expect(mountStops([{ reason: 'linkPassword' }], { canEdit: false }).findAll('.fix')).toHaveLength(0)
     const old = mountStops([{ reason: 'linkMaxDays', maxDays: 7 }], { createdAt: new Date(Date.now() - 30 * DAY), canRenew: false })
     expect(old.findAll('.fix')).toHaveLength(0)
-    expect(mountStops([CASES[1]!.stop, CASES[2]!.stop]).findAll('.fix')).toHaveLength(0)
+    expect(mountStops([CASES[1]!.stop, CASES[3]!.stop]).findAll('.fix')).toHaveLength(0)
+    // a moderator's block: no member's fix, the renew included (uc.moderation.take-a-measure)
+    expect(mountStops([{ reason: 'operatorBlocked' }]).findAll('.fix')).toHaveLength(0)
   })
 })
 

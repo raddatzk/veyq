@@ -520,6 +520,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
         "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "451":
+          description: >
+            A moderator blocked this medium, or its node or a node above it (`blocked_by_operator`,
+            uc.moderation.take-a-measure): it can be deleted for good, never restored, while the block stands.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
 
   /api/scopes/{scopeId}/media/{mediaId}/purge:
     post:
@@ -721,8 +727,16 @@ components:
         original blob only on download. Its seals (blob keys, and `wrappedMeta` and EXIF under field keys derived from it) are under `K_node`, except
         for a row a WRITE_ONLY guest added: that row's are under the guest's identity key, which the page's
         `uploaderKeys` carries (ADR 0031 point 7) — including after a member edits its metadata.
-      required: [mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, updatedAt]
+      required: [mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, updatedAt, blockedByOperator]
       properties:
+        blockedByOperator:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            A moderator blocked this medium, or its node or a node above it (uc.moderation.take-a-measure): its tile and
+            the lightbox show *Blocked by the operator* with no reason, every blob of it answers `451`, and it cannot be
+            restored from the trash. Kept in the listing, not left out; its uploader may still delete it.
+          example: false
         mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
         blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
         chunkCount:

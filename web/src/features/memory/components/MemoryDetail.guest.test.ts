@@ -79,7 +79,7 @@ const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
   const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A folder link: the folder, a Memory in it, a chapter in the Memory. */
 function head(role: ShareRole): PublicShareHead {
@@ -97,7 +97,7 @@ function head(role: ShareRole): PublicShareHead {
   }
 }
 // No derivatives: the tiles draw the file icon, so no thumbnail is fetched.
-const row = (mediaId: string, nodeId: string): ShareMedia => ({ mediaId, nodeId, blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' })
+const row = (mediaId: string, nodeId: string): ShareMedia => ({ blockedByOperator: false, mediaId, nodeId, blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' })
 
 let router: Router
 let requestGuest: ReturnType<typeof vi.fn<() => Promise<GuestIdentity | null>>>

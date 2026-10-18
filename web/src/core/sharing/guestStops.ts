@@ -49,6 +49,9 @@ export function guestStopLines(stops: ShareGuestStop[], createdAt: Date, now: Da
         return [{ key: 'share.guestStops.expired', fix: 'edit', fixKey: 'share.guestStops.expiredFix' }]
       case Reason.SpaceUnavailable:
         return [{ key: 'share.guestStops.spaceUnavailable', fix: null }]
+      case Reason.OperatorBlocked:
+        // A moderator's measure (uc.moderation.take-a-measure): no member's fix — a renew is refused while it stands.
+        return [{ key: 'share.guestStops.operatorBlocked', fix: null }]
       case Reason.InstanceSwitch:
       case Reason.TenantSwitch:
         return [{

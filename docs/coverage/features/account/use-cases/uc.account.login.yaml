@@ -85,3 +85,11 @@ acceptanceCriteria:
     text: GET /api/setup carries a stable instance salt (consumed at registration and login).
     coverage:
       backend: { integration: [LoginSliceTest.setupStatusCarriesStableInstanceSalt] }
+  - id: a-blocked-account-signs-in-nowhere
+    # Exception flow E5, added by cr-moderation-review-and-measures (uc.moderation.take-a-measure).
+    text: >-
+      The Server Owner's sign-in block ends every session family of the account at once, and a correct signature then
+      answers the generic auth failure until the block is lifted; a sign-in racing the block leaves no session active.
+    coverage:
+      backend:
+        integration: [ModerationMeasuresSliceTest.aSignInBlockEndsEverySessionAndRefusesEverySignInUntilLifted, ModerationRacesSliceTest.aSignInRacingASignInBlockLeavesNoSessionOfTheAccountActive]

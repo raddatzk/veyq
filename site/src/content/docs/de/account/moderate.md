@@ -3,14 +3,15 @@ title: "Eine Instanz moderieren"
 sources:
   - docs/features/moderation/use-cases/uc.moderation.serve-as-moderator.md
   - docs/features/moderation/enablers/en.moderation.log.md
+  - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
+  - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
 ---
 
 Die Person, die einen veyq-Server betreibt, kann dich bitten, ihn zu **moderieren**: dir anzusehen, was gemeldet wird,
-in jedem Bereich auf diesem Server, und zu entscheiden, was damit geschieht. Melden können Leute schon
-([Etwas melden](/veyq/de/help/report-something/)): Meldungen kommen versiegelt für den Schlüssel an, den du halten
-wirst, was sie nennen, bleibt für dich erhalten, und du bekommst eine Mail, wenn ein neuer Fall eingeht. Die Seite, die
-sie auflistet und öffnet, ist noch nicht gebaut.
-Heute kannst du die Aufgabe übernehmen, damit du den Schlüssel hältst, für den Meldungen versiegelt werden.
+in jedem Bereich auf diesem Server, und zu entscheiden, was damit geschieht ([Etwas melden](/veyq/de/help/report-something/)).
+Meldungen kommen versiegelt für den Schlüssel an, den du hältst, was sie nennen, bleibt für dich erhalten, und du
+bekommst eine Mail, wenn ein neuer Fall eingeht. Zuerst übernimmst du die Aufgabe, damit du diesen Schlüssel hältst;
+dann prüfst du Fälle und entscheidest.
 
 ## Annehmen
 
@@ -39,17 +40,61 @@ er nicht mehr, wähle **Neuen Code senden**. Änderst du die Adresse deines Kont
    der Schlüssel dieser Person der ist, den du schon kennst. Hat sich ihr Kontoschlüssel geändert, geht er nicht
    weiter, und die Seite sagt das: Vergleiche zuerst ihre Sicherheitsnummer
    ([Eine Person verifizieren](/veyq/de/account/verify-a-person/)).
-5. Danach zeigt die Seite **Meldungen**. Solange die Liste der Meldungen nicht gebaut ist, steht dort, dass nichts
-   gemeldet wurde, auch wenn Meldungen eingegangen sind; die Mail über einen neuen Fall sagt dir, dass einer kam.
+5. Danach zeigt die Seite **Meldungen**, die Fälle aller Bereiche auf dem Server.
 
 Sagt die Seite, sie habe **abgebrochen**, weil der Schlüssel, den der Server veröffentlicht, nicht der ist, den du
 hältst, mach nicht weiter und sag der Person Bescheid, die den Server betreibt.
+
+## Einen Fall prüfen
+
+1. **Meldungen** listet jeden Fall mit seiner Kategorie, der Art des Elements, wann und wie oft es gemeldet wurde, der
+   Adresse, unter der es gemeldet wurde, seinem Stand und bis wann es gesichert bleibt. Die dringenden Kategorien stehen
+   oben. **Abgeschlossene Fälle zeigen** zeigt die abgeschlossenen.
+2. Wähle bei einem Fall **Öffnen**. Du siehst jede Meldung — ihre Begründung, den Kontakt, den die meldende Person
+   hinterlassen hat, und den Zusammenhang, auf deinem Gerät mit dem Moderationsschlüssel geöffnet — und die Maßnahmen,
+   die Vorschläge, die Sicherung und das Protokoll des Falls.
+3. Wähle **Gemeldetes ansehen**. Es öffnet sich unter der Adresse des gemeldeten Bereichs, wo du den
+   Moderationsschlüssel erneut öffnest. Dann siehst du das Gemeldete so, wie ein Gast eines Links es sähe, nur zum
+   Ansehen, mit den Meldungen daneben: so, wie es bei der Meldung war, auch wenn es seitdem geändert oder gelöscht wurde,
+   und auch, wenn es jetzt gesperrt ist. Das Protokoll hält fest, dass du es geöffnet hast.
+
+Eine Meldung, die für einen Schlüssel versiegelt ist, den du nicht hältst, sagt, dass sie sich nicht öffnen lässt.
+Öffnet sich keine Meldung eines Falls mit den Schlüsseln, die du hältst, bleibt auch das Gemeldete verschlossen.
+
+## Entscheiden
+
+Unter **Entscheiden** schreibst du, wenn du willst, eine **Notiz** — sie gehört zu deinem nächsten Schritt und ist so
+versiegelt, dass nur die Moderation sie lesen kann — und wählst einen Schritt. Jeder sagt, was er erreicht, bevor du
+ihn bestätigst.
+
+- **Fall zurückweisen** — die Meldung war unbegründet. Der Fall wird abgeschlossen, und was für ihn gesichert war, wird
+  sofort freigegeben.
+- **Link sperren** — alle Gäste dieses Links sehen dann einen Link, den es nicht gibt. Die Person, die ihn erstellt hat,
+  kann ihn weder reaktivieren noch erneuern, solange die Sperre besteht.
+- **Inhalt sperren** — niemand kann ihn mehr öffnen, auch die Mitglieder nicht. Alle sehen an seiner Stelle **Von der
+  Moderation gesperrt**. Gelöscht wird nichts.
+- **Hochladenden Gast sperren** — der Gast kann nichts mehr hinzufügen, und der Link, über den er kam, wird mit ihm
+  gesperrt.
+- **Meldende Person sperren** — weitere Meldungen dieses Mitglieds oder über diesen Link werden abgelehnt. Die schon
+  abgegebenen Meldungen bleiben.
+- **Vorschlagen**, die Anmeldung eines Mitglieds zu sperren oder alles unter der gemeldeten Adresse offline zu nehmen.
+  Diese Schritte nimmt nur die Person vor, die den Server betreibt; der Fall zeigt deinen Vorschlag und was aus ihm
+  wurde.
+- **Sicherung verlängern**, solange etwas gesichert ist: Wähle ein **Neues Ende**, nach dem jetzigen und höchstens
+  sechs Monate ab heute, und gib eine **Begründung** an, etwa die Anfrage einer Behörde oder eine Klage. Die Begründung
+  ist Pflicht und wird versiegelt wie eine Notiz.
+
+Eine Sperre entscheidet den Fall, und was für ihn gesichert ist, bleibt dann sechs Monate gesichert. **Aufheben** bei
+einer Maßnahme — deiner oder der einer anderen moderierenden Person — liefert das Gesperrte wieder unverändert aus. Wird
+die letzte Maßnahme in Kraft aufgehoben, wird das Gesicherte freigegeben und der Fall abgeschlossen.
 
 ## Was festgehalten wird, und wie lange
 
 Das Moderationsprotokoll hält fest, wann du ernannt wurdest und angenommen hast, jedes Weitergeben des Schlüssels und
 wann du niederlegst: wer, wann und für wen, nie einen Schlüssel und nie Inhalte. Es wird bis zum 31. Dezember des
-dritten Jahres nach dem Ende deiner Moderation aufbewahrt und dann gelöscht.
+dritten Jahres nach dem Ende deiner Moderation aufbewahrt und dann gelöscht. In einem Fall hält es jedes Öffnen zur
+Prüfung fest und jeden Schritt und jedes Aufheben, jeweils wer und wann; deine Notizen und Begründungen nur versiegelt. Das
+Protokoll eines Falls wird bis zum 31. Dezember des dritten Jahres nach seinem Abschluss aufbewahrt.
 
 ## Niederlegen
 

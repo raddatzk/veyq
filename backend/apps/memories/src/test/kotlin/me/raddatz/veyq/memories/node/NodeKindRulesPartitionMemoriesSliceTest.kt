@@ -19,6 +19,7 @@ import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 
 /**
  * Core's placement seam ([NodeKindRules], ADR 0079): the one rule that handles a node's kind decides where it may
@@ -48,6 +49,9 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     lateinit var capabilities: CapabilityRegistry
 
     @Inject
+    lateinit var blocks: ModerationBlocks
+
+    @Inject
     lateinit var handler: NodesHandler
 
     /** A rule for [kind] that allows it anywhere and records each placement it is asked about. */
@@ -74,7 +78,7 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Test
     fun withCoreAloneOnlyAFolderIsPlaced() {
         val (userId, scopeId) = seedMemberScope()
-        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities)
+        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, blocks)
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = "aw==")
 

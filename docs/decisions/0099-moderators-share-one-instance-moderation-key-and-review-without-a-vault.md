@@ -5,11 +5,15 @@
   rules), § 6's moderation surface as a shell (sign-in, accept, unlock without the vault, the empty queue), § 7's
   address confirmation, and the instance events of the moderation log
   ([uc.moderation.appoint-moderators](../features/moderation/use-cases/uc.moderation.appoint-moderators.md),
-  [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md)). Not built:
-  the queue's content, review, decisions and the objection rule of § 5. § 7's new-case mail is built with the report
+  [uc.moderation.serve-as-moderator](../features/moderation/use-cases/uc.moderation.serve-as-moderator.md)). § 6's
+  queue, review and decisions are built too, with the Server Owner's steps on the admin channel
+  (cr-moderation-review-and-measures, 2026-10-18;
+  [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
+  [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). Not built: the
+  objection rule of § 5. § 7's new-case mail is built with the report
   (cr-report-and-hold, 2026-10-17, [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md)). It changes
-  [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md), which is not built
-  in the parts touched here (§§ 1–3, 6–7, 11–13), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
+  [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md), whose parts touched
+  here (§§ 1–3, 6–7, 11–13) were not built then and are partly built since (ADR 0093's status names which), and [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
   decisions 3, 5 and 6; both are edited in place (§ Consequences lists the edits). From [inbox](../inbox.md) #463
   (owner 2026-10-17: build it; the three questions under § Decided with the owner answered as recommended).
 - Date: 2026-10-17

@@ -9,6 +9,19 @@ package me.raddatz.veyq.core.moderation.report
  */
 interface ReportableItems {
     fun locate(itemId: String): ReportableItem?
+
+    /**
+     * Every blob of the item [itemId] — trashed or not — or none for an id that is not one of this application's items:
+     * what a content block on the item refuses to serve (uc.moderation.take-a-measure; `ModerationBlocks.blobBlocked`).
+     */
+    fun blobIdsOf(itemId: String): Set<String>
+
+    /**
+     * A content block on the item [itemId] was taken or lifted: the application tells its live lists, so a member's and a
+     * guest's open view learn the item's new `blockedByOperator` (its keyset delta and revision, ADR 0033). Joins the
+     * caller's transaction; an id that is not one of this application's items is no-op.
+     */
+    fun blockChanged(itemId: String)
 }
 
 /** An item's place: its space and the node it sits on. */

@@ -1,7 +1,10 @@
 ---
 title: Moderation
-description: What a Server Owner can do about abuse on an instance they cannot read, and what is not built.
+description: What a Server Owner and the moderators can do about abuse on an instance they cannot read, and what is not built.
 sources:
+  - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
+  - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
+  - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
   - docs/decisions/0066-tenant-suspension.md
@@ -19,7 +22,7 @@ sources:
 
 There is no central moderation service, because there is no central service. And an instance's operator cannot
 read what its members keep: private content is unscannable by design. Moderation on a veyq instance therefore
-works where content is distributed, at the public share, and with one lever on the whole tenant
+works on what someone reports: exactly that opens to the moderators, and every step they take acts on its ids
 ([security model § Sharing & share-boundary Trust & Safety](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#sharing--share-boundary-trust--safety)).
 
 ## What a report does
@@ -47,17 +50,83 @@ A report a member sends counts against a cap of open reports per account (`veyq.
 guest has no account, so a guest's reports are bounded only per address and per link (`veyq.moderation.report.per-share-max-requests`).
 Someone rotating addresses can still send many; each costs you a moderator's look and the held bytes for 90 days.
 
-## A reported public share
+## Review a case
 
-A public link carries its key in the URL fragment. So a report that includes the full link lets you open the share
-in a browser, decrypt it like any guest, and judge it. Nothing else of the tenant opens with it.
+The moderators — you among them — review reports on `/moderation`, on the address of any space they sign in on
+([uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md)).
+Every list and every step there carries a signature with the moderation key, so a moderator's session alone opens
+none of it.
 
-What you cannot do today is act on that one share. Revoking a link belongs to its creator alone; the server has no
-operator action on a single share. Ask the tenant's owner, who can ask the share's creator, or take the whole tenant
-offline (below).
+- **The queue** lists the cases of every tenant in the fields the server holds in the clear: the category, the kind of
+  item, when it was first and last reported, how many reports, the tenant's address, the state (open, decided,
+  closed) and when its hold ends. The urgent categories come first, then the oldest. **Show closed cases** lists the
+  closed ones.
+- **A case** shows each report's reason, contact and context — opened in the moderator's browser with the moderation
+  key — and the case's measures, proposals, hold and log.
+- **Review what was reported** opens `https://<tenant address>/s/<case id>#moderation`, on the reported tenant's
+  address; when that tenant is gone or offline, on the address the moderator is on. The page unlocks the moderation key
+  again and keeps nothing else of the moderator's account open, fetches the held copy and shows it the way a guest of a
+  link sees it, read-only, with the reports beside it. It shows what was held when it was reported: after the link, the
+  item or the whole space were deleted, and also what a measure blocks. Each fetch is an *opened* event in the log. A
+  link's password plays no part, and once the hold has ended there is nothing left to review.
 
-Review the link **before** you take its tenant offline: while the tenant is offline, every link of it answers as a
-revoked link, including the one you were sent.
+## Decide
+
+In a case, any moderator takes these steps; each takes an optional note, sealed in their browser so that only
+moderators can read it ([uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md)):
+
+- **Dismiss the case** — closes it without a measure. Its hold ends at once: what was kept only for the review is
+  released, and the store reclaims what was deleted meanwhile.
+- **Block a link** — the reported link, a link a guest reported through, or a link that reaches what was reported.
+  Every guest of it then gets the answer of an unknown link. Its creator can neither re-activate nor renew it while the
+  block stands.
+- **Block the content** — the reported folder, Memory, file or photo. Nobody can open it any more, members included:
+  every listing keeps it as **Blocked by the operator**, with no reason, and every byte of it, and of everything below
+  it, is refused with `451`. Whoever could delete it still can; it cannot be restored from the trash, and a file's
+  content cannot be replaced, while the block stands. An upload link has no content to block.
+- **Block a guest uploader** — a guest the held copy names as an uploader. It can add nothing more, and the link it came
+  through is blocked with it, since a guest could otherwise name itself anew on the same link. The link's creator may
+  renew it, under a new address: that is a member's new decision.
+- **Bar this reporter** — further reports from that member, or through that link, are refused until the bar is lifted.
+  The reports already made stay. A bar decides nothing about the content.
+- **Extend the hold** — while something is held: a new end after the current one and at most six months from now, with
+  a reason, which is required and sealed like a note.
+- **Propose** one of your steps — blocking a member's sign-in, or taking the tenant offline (below).
+
+A measure decides the case, and its hold then ends six months after the decision. **Lift** on a measure — any
+moderator's — serves its target again, unchanged; lifting the case's last measure in force ends its hold and closes
+the case. Blocking deletes nothing. A step on something the case does not know, or one already in force, is refused.
+A block reaches the reported item only: a copy a member made of it is a new item.
+
+## A member's sign-in, and a tenant: your steps
+
+Blocking a member's sign-in and taking a tenant offline are yours alone. They are operations of the admin console's
+channel, so a moderator's page cannot reach them. The moderators propose them in a case; **Server → Moderation** lists
+the open **Proposals**, each with its case, its category and its target:
+
+- **Block sign-in** — every session of the account ends at once, and every sign-in is refused, with the same answer as
+  a wrong one, until you lift the block under **Sign-in blocks**. Nothing of the account is deleted. Your own account
+  cannot be blocked. Blocking an account settles every open proposal to block it as taken.
+- **Open the tenant to suspend it** — takes you to the tenant, where **Take offline** settles its open proposals as
+  taken ([below](#take-a-tenant-offline)).
+- **Decline** — nothing is done; the case shows the proposal as declined, and the log records it.
+
+The same with the CLI:
+
+```sh
+docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
+  admin veyq-admin moderation proposals
+```
+
+`moderation proposals` prints each open proposal (its id, case, category, step and target: a member's address, or a
+tenant's id and address) and every sign-in block in force. Then, in the same `exec`:
+
+- `veyq-admin account block --address <address> [--case <caseId>]` blocks a sign-in, with the case it answers when
+  there is one;
+- `veyq-admin account unblock --address <address>` lifts it;
+- `veyq-admin moderation decline --proposal <id>` declines a proposal;
+- `veyq-admin tenant suspend --tenant-id <id>` takes a tenant offline (below).
 
 ## Take a tenant offline
 
@@ -179,7 +248,7 @@ You decide who acts on reports for the whole instance
 [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)).
 A moderator is an existing account, and every moderator holds the same **moderation key**, which reports will be
 sealed to. The server stores the key's public half and a copy of the key sealed to each moderator's account; it can
-open none of them. Reports themselves are not built yet (below), so today this sets up who will review them.
+open none of them.
 
 **From first-run setup on.** Setting the instance up also makes the first moderation key: the admin console seals it
 to the account it has just created for you and forgets it. You are the first moderator, and reporting is on from the
@@ -214,7 +283,10 @@ happens when a moderator replaces their account keys; they get the key again fro
 
 **What is logged.** Every appointment, acceptance, handing on of the key, removal, step-down and new key is an entry
 in the moderation log: who, when and for whom, never a key. Entries are kept until 31 December of the third year after
-the moderator concerned left the roster, then deleted.
+the moderator concerned left the roster, then deleted. A case's log holds each report's arrival, each opening for
+review, each step and each lift, each proposal and what became of it, an extension and the end of the hold: who and
+when, a measure's kind and target, and the notes and reasons only sealed. It is kept until 31 December of the third
+year after the case closed.
 
 **What this does not protect against.** You own the server and the roster. A server that hands out a key of its own
 choosing could read later reports; moderators' pages compare the key the server publishes with the one they hold and
@@ -223,16 +295,17 @@ control against the operator.
 
 ## Not built
 
-- **An operator action on a single share.**
-- **The review and every decision.** Reports arrive and are kept (above), but the moderation page does not list or open
-  them yet: the queue's content, ending a hold before its 90 days, blocking a share or its content, and the review of
-  an objection by a second moderator are decided in
-  [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
-  and not built.
+- **The statement of reasons and the objection.** Nobody affected by a decision is told of it yet, nor can they object
+  to it, and the review of an objection by a second moderator does not exist
+  ([ADR 0093 § 7](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+- **An authority's order and the reports of child sexual abuse material** (ADR 0093 §§ 12–13): the steps above act on
+  ids and are what an order will reuse, but no order can be entered yet, and the hold ends of those cases are not built.
+- **A report of a single field, or of everything by one uploader.**
 
 These are on the security model's target, decided in
-[ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md);
+[ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+and [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md);
 see the [Security roadmap](/veyq/security/roadmap/).
 
-**How far this is proven.** Suspension, reactivation and the feature switches are covered by the backend's tests of
-their use-cases. No moderation path has run on a deployed instance.
+**How far this is proven.** Suspension, reactivation, the feature switches, the review and every step above are covered
+by the backend's and the web app's tests of their use-cases. No moderation path has run on a deployed instance.

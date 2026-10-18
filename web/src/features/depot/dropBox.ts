@@ -151,7 +151,7 @@ export async function ensureDropFolder(
  * pre-checked: a taken one is the server's `slug_taken`. Nothing is ever re-resolved (the guest places nothing).
  */
 export function dropGuestContext(head: PublicShareHead, session: DropGuestSession, folder: DropFolder, pwToken?: string): GuestTreeContext {
-  const row: ShareNode = { id: folder.nodeId, kind: FOLDER_KIND, parentId: head.share.nodeId, orderIndex: 0, epoch: folder.epoch, placementRevision: folder.placementRevision }
+  const row: ShareNode = { id: folder.nodeId, kind: FOLDER_KIND, parentId: head.share.nodeId, orderIndex: 0, epoch: folder.epoch, placementRevision: folder.placementRevision, blockedByOperator: false }
   const parts = {
     head,
     rootId: folder.nodeId,

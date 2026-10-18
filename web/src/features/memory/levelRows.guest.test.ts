@@ -54,6 +54,7 @@ const UPLOAD_REF = { blobId: 'cover-blob', chunkCount: 1, byteSize: 3, wrappedBl
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string, meta?: object): ShareNode {
   const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
   return {
+    blockedByOperator: false,
     id, parentId, kind, epoch: 0, placementRevision: 0,
     encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key),
     wrappedMeta: meta ? sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, ...meta }) : null,
@@ -117,6 +118,7 @@ beforeEach(() => {
   stubApi(publicShareMediaApi, {
     listShareMedia: {
       media: [{
+        blockedByOperator: false,
         nodeId: NEW, mediaId: 'm-rom', blobId: 'b-rom', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'eA==',
         derivatives: [{ kind: 'THUMBNAIL', blobId: 't-rom', chunkCount: 1, byteSize: 5, wrappedBlobKey: 'eA==' }],
       }],

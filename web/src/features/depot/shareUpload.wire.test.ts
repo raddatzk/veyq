@@ -41,8 +41,8 @@ afterEach(() => vi.unstubAllGlobals())
 const fileOf = (n: number) => new File([new Uint8Array(n).map((_, i) => i % 251)], NAME, { type: 'application/pdf', lastModified: MODIFIED })
 
 function context(): GuestTreeContext {
-  const root: ShareNode = { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 2 }
-  const existing: ShareNode = { id: EXISTING, parentId: ROOT, kind: FILE_KIND, epoch: 2, placementRevision: 0 }
+  const root: ShareNode = { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 2 }
+  const existing: ShareNode = { blockedByOperator: false, id: EXISTING, parentId: ROOT, kind: FILE_KIND, epoch: 2, placementRevision: 0 }
   return {
     head: {} as GuestTreeContext['head'],
     rootId: ROOT,

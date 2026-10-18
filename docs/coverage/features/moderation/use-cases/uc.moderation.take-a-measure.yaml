@@ -1,0 +1,102 @@
+useCase: uc.moderation.take-a-measure
+feature: moderation
+title: Take a measure
+# Built by cr-moderation-review-and-measures: core/moderation/block (ModerationBlocks, the rows) and
+# core/moderation/cases (CaseDecisions, SignInBlocks) on the backend, with the guest gate's OPERATOR_BLOCKED stop, the two
+# presignGets callers' block check and the listings' blockedByOperator in core, Memories and Depot; features/moderation's
+# decision panel and the "Blocked by the operator" placeholder (LevelView, MediaTile, MediaLightbox) on web; the
+# proposals and the sign-in blocks in admin-web's Server → Moderation and `veyq-admin moderation proposals|decline`,
+# `account block|unblock`. Lane L1's browser pass is e2e/tests/features/review-and-measures.spec.ts, tagged per
+# criterion; `stack` waits under gaps until a run admits it.
+acceptanceCriteria:
+  - id: a-blocked-share-answers-as-an-unknown-link
+    text: >-
+      A blocked link answers every guest path exactly as an unknown link; its creator's list names the stop, and neither
+      a reactivation nor a re-issue passes while it stands.
+    coverage:
+      backend:
+        integration: [ModerationMeasuresSliceTest.aBlockedShareAnswersEveryGuestPathAsAnUnknownLinkAndServesAgainOnceLifted]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/core/sharing/ShareGuestStops.test.ts]
+  - id: blocked-content-is-refused-and-marked
+    text: >-
+      Blocked content answers every byte read, a member's and a guest's, with 451 blocked_by_operator while a sibling is
+      still served; every listing keeps it marked blockedByOperator; its delete stays allowed, a content replace and a
+      restore are refused.
+    coverage:
+      backend:
+        integration: [ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationMemoriesSliceTest.aBlockedMediumIsDeletedButNeverRestored, ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt, ModerationDepotSliceTest.aBlockedFileIsNeitherReadNorReplacedByAnyoneWhileTheReviewStillReadsIt]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts]
+  - id: every-byte-path-honours-a-content-block
+    text: >-
+      Every caller of presignGets checks the content block or is exempt with a reason; a new caller that does neither
+      turns the build red.
+    coverage:
+      backend:
+        unit: [PresignGetsHonourContentBlocksTest.everyCheckedCallerAsksTheBlockBeforeItPresigns, PresignGetsHonourContentBlocksTest.noOtherFilePresignsAGet, PresignGetsHonourContentBlocksTest.noUnlistedFunctionOfACheckedFilePresigns, PresignGetsHonourContentBlocksTest.theScanSeesWhatItClaimsToGuard]
+  - id: a-blocked-guest-identity-and-its-link
+    text: >-
+      A blocked guest identity's token is refused and its link answers as unknown, while an identity on the link its
+      creator re-issued writes.
+    coverage:
+      backend:
+        integration: [ModerationMeasuresSliceTest.aBlockedGuestUploaderIsRefusedWithItsLinkWhileTheCreatorsReissuedLinkTakesANewGuest, ModerationMeasuresSliceTest.anIdentityBlockAloneRefusesItsTokenWhileTheLinkStillServes]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts]
+  - id: server-owner-steps-are-proposals-on-the-admin-channel
+    text: >-
+      A moderator proposes a member's sign-in block or the tenant's suspension; only the Server Owner, on the admin
+      channel, lists the proposals and takes or declines them, and a moderator's session reaches none of it.
+    coverage:
+      backend:
+        integration: [ModerationMeasuresSliceTest.theServerOwnersStepsAreProposalsTakenOrDeclinedOnTheAdminChannelOnly, AdminChannelGateSliceTest.everyRoleGatedMarkedOperationIsAnUnknownRouteOnThePublicPortAndAnswersOnTheAdminListener]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
+  - id: a-sign-in-block-ends-every-session
+    text: >-
+      A member's sign-in block ends every session family of the account and refuses every sign-in until it is lifted;
+      the Server Owner's own account cannot be blocked.
+    coverage:
+      backend:
+        integration: [ModerationMeasuresSliceTest.aSignInBlockEndsEverySessionAndRefusesEverySignInUntilLifted, ModerationRacesSliceTest.aSignInRacingASignInBlockLeavesNoSessionOfTheAccountActive]
+  - id: placeholder-for-members-and-guests
+    text: >-
+      Members and guests see "Blocked by the operator" in the level rows and tiles, the lightbox and the file view, with
+      no reason; the uploader is offered delete, never replace or restore.
+    coverage:
+      backend:
+        integration: [ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
+      web:
+        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memory/components/MediaTile.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/FolderShareGuest.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The level row (member and guest, delete alone kept), the tile, the lightbox and a blocked node's own page (the
+          file page reached by its address: FolderShareGuest.test.ts) are held. The trash's "can be deleted, not
+          restored" wording (mediaRefusal.ts) is untested.
+  - id: every-measure-is-lifted-and-logged
+    text: >-
+      Every measure is lifted by any moderator (a sign-in block by the Server Owner), the target serves again unchanged,
+      and every step and lift is a log event; a measure moves the hold's end to six months after the decision, and
+      lifting the case's last one ends it.
+    coverage:
+      backend:
+        integration: [ModerationCasesSliceTest.aMeasureMovesTheHoldToSixMonthsAndLiftingTheLastOneEndsItAndClosesTheCase, ModerationMeasuresSliceTest.aBlockedShareAnswersEveryGuestPathAsAnUnknownLinkAndServesAgainOnceLifted, ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationDepotSliceTest.aBlockedFileIsNeitherReadNorReplacedByAnyoneWhileTheReviewStillReadsIt, ModerationMeasuresSliceTest.aSignInBlockEndsEverySessionAndRefusesEverySignInUntilLifted, ModerationMeasuresSliceTest.theServerOwnersStepsAreProposalsTakenOrDeclinedOnTheAdminChannelOnly]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
+    gaps:
+      - surface: backend
+        reason: >-
+          The log events asserted are DISMISSED, HOLD_EXTENDED and PROPOSAL_TAKEN (ModerationCasesSliceTest,
+          ModerationMeasuresSliceTest); MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_DECLINED and REPORTER_BARRED
+          are written by CaseDecisions and SignInBlocks but no test reads them back.
+gaps:
+  admin-web: >-
+    Built and tested (features/instance/ModerationPanel.test.ts — the proposals, a sign-in block and its lift, a decline
+    —, features/instance/moderation.test.ts, cli/cli.test.ts for `moderation proposals|decline` and
+    `account block|unblock`), but admin-web's job has never executed (ADR 0040).
+  stack: >-
+    e2e/tests/features/review-and-measures.spec.ts (lane L1, being written with cr-moderation-review-and-measures) tags
+    blocked-content-is-refused-and-marked, placeholder-for-members-and-guests and every-measure-is-lifted-and-logged;
+    stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

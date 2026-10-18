@@ -95,6 +95,9 @@ export type PublicShareHead = {
   /** The kind of the share's root node (`PublicShare.rootKind`); null when the server names none — a root in the
    *  trash, which serves nothing (the shell then shows its unavailable state). */
   rootKind: NodeKind | null
+  /** A moderator's review only (`core/sharing/review.ts`): the root's key, handed over by a report share, in place of
+   *  the `wrap` a link opens with `K_share` — the review holds no `K_share` and its share carries no wrap. Key material. */
+  rootKey?: Uint8Array
 }
 
 /** `K_share` out of the URL fragment; [ShareUnavailableError] when it is missing or malformed. */

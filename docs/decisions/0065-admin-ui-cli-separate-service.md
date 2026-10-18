@@ -89,7 +89,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     structurally blind to a file that is **owner-scoped by the state it reads** and that nothing imports from
     outside, which is exactly what those two panels are — a **fourth** audience, the tenant owner, that an
     import graph cannot show. A **fifth** is the **moderator**
-    ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6, not built):
+    ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6, built):
     an account the Server Owner appoints, whose review and decisions the backend gates by a `MODERATOR` role and a
     moderation-key signature on the public listener, not by the Server-Owner gate — so the moderation surface
     stays in `web/`, while the roster and minting and rotating the moderation key are Server-Owner operations

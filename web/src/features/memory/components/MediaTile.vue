@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 // The one media tile shared by the Galerie, Papierkorb and Beiträge grids (cr-0125). A positioned wrapper with a
 // single clickable image button (emits `open`) + an optional `#overlay` slot (a selection check + a 3-dot menu).
 // Renders the decrypted thumbnail, a file icon (non-derivable), or the shimmer placeholder — with the image FIT
@@ -32,14 +33,18 @@ defineProps<{
   markedByMe?: boolean
   /** aria-label for the mark toggle. */
   markLabel?: string
+  /** A moderator blocked it (uc.moderation.take-a-measure): the placeholder "Blocked by the operator", no image. */
+  blocked?: boolean
 }>()
 defineEmits<{ open: []; 'toggle-mark': [] }>()
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="media-tile" :class="{ 'is-selected': selected }">
     <button type="button" class="media-tile-open" :aria-label="openLabel" @click="$emit('open')">
-      <img v-if="src" class="media-tile-img" :src="src" alt="" />
+      <span v-if="blocked" class="media-tile-blocked"><span class="pi pi-ban" aria-hidden="true" />{{ t('node.blockedByOperator') }}</span>
+      <img v-else-if="src" class="media-tile-img" :src="src" alt="" />
       <span v-else-if="!hasDerivatives" class="media-grid-icon pi pi-file" aria-hidden="true" />
       <span v-else class="media-grid-tile-placeholder" aria-hidden="true" />
     </button>
@@ -61,6 +66,21 @@ defineEmits<{ open: []; 'toggle-mark': [] }>()
 </template>
 
 <style scoped>
+/* A blocked medium (uc.moderation.take-a-measure): the tile's own surface, the reason-less text centred on it. */
+.media-tile-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+  font-size: 0.75rem;
+  text-align: center;
+}
 /* The mark toggle. Always legible over a photo (the scrim), and the COUNT sits beside the heart rather than in a
    tooltip: it is the standing evidence that a mark is seen by the others, and a tooltip only informs whoever
    hovers. `.has-others` is the case where the number is not just the caller's own. */

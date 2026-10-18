@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation
 
+import me.raddatz.veyq.core.moderation.cases.CaseDecisions
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseNotices
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -21,6 +22,7 @@ class ModerationPurge(
     private val rotationDue: RotationDueNotice,
     private val holds: Holds,
     private val caseNotices: CaseNotices,
+    private val decisions: CaseDecisions,
 ) {
 
     @Scheduled(every = "{veyq.moderation.purge.every}")
@@ -29,7 +31,8 @@ class ModerationPurge(
     fun sweep(now: Instant) {
         QuarkusTransaction.requiringNew().run { ModerationChallengeEntity.delete("expiresAt < ?1", now) }
         QuarkusTransaction.requiringNew().run { log.purgeExpired(now) }
-        holds.purgeExpired(now)
+        // A hold past its end goes with its snapshot and pins; its case logs the end, and a decided one then closes.
+        decisions.holdsEnded(holds.purgeExpired(now), now)
         // The new-case mail (ADR 0093 § 2, owner decision Q7): an urgent one that could not go out, and the day's bundle.
         caseNotices.mailUrgent(now)
         caseNotices.mailBundle(now)
