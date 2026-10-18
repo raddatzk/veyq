@@ -11,6 +11,8 @@ import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.ShareRetiredIdEntity
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
@@ -78,6 +80,8 @@ class SharingStore(
     /** What still names a guest identity (today: core's attachments, Memories' media + buckets). Combined with "any". */
     private val identityUsages: Instance<GuestIdentityUsage>,
     private val tree: NodesStore,
+    /** A measure on a link or a guest identity ends with it (ADR 0093 § 6): [tombstone], [dropDeadIdentities]. */
+    private val measures: MeasureTargets,
 ) {
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
@@ -330,8 +334,10 @@ class SharingStore(
      * nothing is ever minted under it again), the scope, node, role and creation time, and the foreign key the link's guest
      * identities hang off. Never touches the identities' wrapped keys, the application rows under the node (Memories' media and
      * buckets), or its drop key: an uploader guest's uploads open only through them, and they belong to the node, not to the link — an
-     * identity goes only once nothing of the guest's remains ([dropDeadIdentities]). Runs inside its caller's
-     * transaction.
+     * identity goes only once nothing of the guest's remains ([dropDeadIdentities]). A moderation measure on the link — a
+     * block, or a guest reporter's bar — ends with it ([MeasureTargets.erased]): nothing of the link serves again, so the
+     * measure would stand on nothing forever and hold its case's records with it. Runs inside its caller's transaction,
+     * which holds the share row's lock (every caller locks it first).
      */
     fun tombstone(share: ShareEntity) {
         share.enabled = false
@@ -352,6 +358,7 @@ class SharingStore(
         share.sealedPassword = null
         share.writeVerifier = null
         share.expiresAt = null
+        measures.erased(MeasureTargets.ON_LINK, listOf(share.id))
         dropDeadIdentities(ShareIdentityEntity.find("shareId", share.id).list().map { it.id })
     }
 
@@ -370,15 +377,19 @@ class SharingStore(
      * a medium, live or trashed, whose wrapped key is the only way to open an uploader guest's upload, or a bucket). An
      * open upload session does not hold it: it can never complete once the link is gone, and the stale-session sweep
      * reclaims its objects by storage key alone. Candidates are passed in — the caller knows which identities it
-     * just orphaned; this never scans the table. Runs inside its caller's transaction.
+     * just orphaned; this never scans the table. A block of a dropped guest uploader ends with it ([MeasureTargets.erased]).
+     * Runs inside its caller's transaction.
      */
     fun dropDeadIdentities(candidateIds: Collection<String>) {
+        val dropped = mutableListOf<String>()
         for (id in candidateIds.toSet()) {
             val identity = ShareIdentityEntity.findById(id) ?: continue
             if (ShareEntity.findById(identity.shareId)?.deleted != true) continue
             if (!GuestIdentityUsage.unreferenced(identityUsages, id)) continue
             ShareIdentityEntity.deleteById(id)
+            dropped += id
         }
+        measures.erased(listOf(BlockKind.GUEST_IDENTITY), dropped)
     }
 
     /** Soft-revoke every enabled share a removed member created in a scope (cr-0104) — their links then 404 on

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
@@ -95,6 +97,8 @@ class MediaStore(
     private val items: NodeItemsRevisions,
     /** Core's guest-write record: a medium's rows go with the medium (ADR 0093 § 10), from [purgeMediaRows]. */
     private val guestWriteRecords: GuestWriteRecords,
+    /** Core's measures: a content block on a medium ends with it (ADR 0093 § 6), from [purgeMediaRows]. */
+    private val measures: MeasureTargets,
 ) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
@@ -264,6 +268,9 @@ class MediaStore(
         MediaEntity.deleteById(media.id)
         blobIds.forEach { blobs.deleteBlobRow(it) }
         guestWriteRecords.forget(listOf(media.id)) // a guest's upload record names the medium: it goes with it
+        // A content block on the medium ends with it (ADR 0093 § 6, GDPR Art. 5(1)(e)) — it would otherwise stand on nothing
+        // and hold its case's records forever. After the row's delete, which it flushes (MeasureTargets.erased).
+        measures.erased(listOf(BlockKind.CONTENT_ITEM), listOf(media.id))
     }
 
     /**
