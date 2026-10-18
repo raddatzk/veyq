@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.crypto.SecretKeyProof
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.normalizeEmail
 import me.raddatz.veyq.core.membership.MembershipStore
@@ -117,7 +118,8 @@ class RecoveryHandler(
     fun deliver(email: String, tenant: ResolvedTenant): RequestOutcome {
         val normalized = normalizeEmail(email)
         val user = QuarkusTransaction.requiringNew().call {
-            accounts.findByEmail(normalized)?.takeIf { membership.belongsToTenant(it.id, tenant.id) }
+            // An account whose erasure is pending is unknown here too (ADR 0101 decision 2): its holder signs in nowhere.
+            accounts.findByEmail(normalized)?.takeIf { membership.belongsToTenant(it.id, tenant.id) && !AccountErasureEntity.isPending(it.id) }
         } ?: return RequestOutcome.NO_ACCOUNT
 
         val token = Tokens.random()

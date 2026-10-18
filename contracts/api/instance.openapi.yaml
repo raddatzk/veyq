@@ -2272,8 +2272,10 @@ paths:
         address changes go, the member removal runs in every tenant it belongs to, and it leaves the moderator roster;
         the account is purged after the scope trash's retention (`veyq.scope.delete.retention`). **This door never
         refuses a last owner** (an erasure cannot wait on a third person, GDPR Art. 12(2)): a tenant whose last owner
-        this was is left with no owner, which `listTenants` shows, and nor does it refuse the last holder of the
-        moderation key. One mail goes to the account's address through the instance mail where it is set up.
+        this was is left with no owner, which `listTenants` shows. It does refuse the last holder of the moderation key
+        (`409 moderation_last_holder`), at both doors: the key, and every report and hold sealed to it, would be lost with
+        them (ADR 0099 § 5) — another moderator holds it first. One mail goes to the account's address through the
+        instance mail where it is set up.
         `409 server_owner_account` for the Server Owner's own account; `409 account_erasure_pending` while one is
         pending already. Server-Owner only.
       security:
@@ -2315,7 +2317,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: account_not_found }
         "409":
-          description: "`server_owner_account` = it is the Server Owner's own account; `account_erasure_pending` = its erasure is pending already."
+          description: "`server_owner_account` = it is the Server Owner's own account; `account_erasure_pending` = its erasure is pending already; `moderation_last_holder` = it is the last holder of the moderation key."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }

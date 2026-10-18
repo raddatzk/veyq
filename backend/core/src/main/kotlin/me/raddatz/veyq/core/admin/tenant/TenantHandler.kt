@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.quota.StorageUsage
 import me.raddatz.veyq.core.sharing.SharingStore
+import me.raddatz.veyq.core.spaces.scope.MembershipPolicy
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.tasks.TasksStore
 import me.raddatz.veyq.core.generated.model.DeliveryResult
@@ -81,6 +82,39 @@ sealed interface ReactivateOutcome {
     data object Done : ReactivateOutcome
     data object NotFound : ReactivateOutcome, HttpFailure by Failures.tenantNotFound
     data object NotSuspended : ReactivateOutcome, HttpFailure by httpFailure("tenant_not_suspended", FailureStatus.CONFLICT)
+}
+
+/** Result of the Server Owner deleting an ACTIVE or SUSPENDED tenant (ADR 0101 decision 10). */
+sealed interface DeleteTenantOutcome {
+    data class Deleted(val dueAt: Instant) : DeleteTenantOutcome
+    data object NotFound : DeleteTenantOutcome, HttpFailure by Failures.tenantNotFound
+    data object DomainMismatch : DeleteTenantOutcome, HttpFailure by httpFailure("tenant_domain_mismatch", FailureStatus.CONFLICT)
+    data object NotDeletable : DeleteTenantOutcome, HttpFailure by httpFailure("tenant_not_deletable", FailureStatus.CONFLICT)
+}
+
+/** Result of stopping a pending tenant deletion — the tenant returns SUSPENDED. */
+sealed interface StopTenantDeletionOutcome {
+    data object Done : StopTenantDeletionOutcome
+    data object NotFound : StopTenantDeletionOutcome, HttpFailure by Failures.tenantNotFound
+    data object NotPendingDeletion : StopTenantDeletionOutcome, HttpFailure by httpFailure("tenant_not_pending_deletion", FailureStatus.CONFLICT)
+}
+
+/** Result of a tenant owner setting a member's TENANT-scope role ("make owner", ADR 0101 decision 9). */
+sealed interface SetTenantRoleOutcome {
+    data object Done : SetTenantRoleOutcome
+    data object Suspended : SetTenantRoleOutcome, HttpFailure by Failures.tenantSuspended
+    data object NotFound : SetTenantRoleOutcome, HttpFailure by Failures.tenantNotFound
+    data object NotOwner : SetTenantRoleOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
+    data object MemberNotFound : SetTenantRoleOutcome, HttpFailure by Failures.memberNotFound
+    data object LastOwner : SetTenantRoleOutcome, HttpFailure by Failures.lastOwner
+}
+
+/** Result of the Server Owner inviting a member of an ACTIVE tenant to own it (ADR 0101 decision 9). */
+sealed interface OwnerInviteOutcome {
+    data class Done(val invite: InviteView, val delivery: DeliveryResult) : OwnerInviteOutcome
+    data object NotFound : OwnerInviteOutcome, HttpFailure by Failures.tenantNotFound
+    data object NotActive : OwnerInviteOutcome, HttpFailure by httpFailure("tenant_not_active", FailureStatus.CONFLICT)
+    data object NotMember : OwnerInviteOutcome, HttpFailure by httpFailure("not_tenant_member", FailureStatus.CONFLICT)
 }
 
 /** Result of a tenant owner inviting a member by email (cr-0077). */
@@ -171,9 +205,11 @@ class TenantHandler(
     private val quota: StorageUsage,
     private val storeSettings: StoreSettings,
     private val moderationSteps: SignInBlocks,
+    private val deletionMail: TenantDeletionMail,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
+    private val deletionRetention: Duration = config.scope().delete().retention()
     private val maxAttempts: Int = config.tasks().maxAttempts()
 
     /**
@@ -315,6 +351,78 @@ class TenantHandler(
         }
         if (outcome is ReactivateOutcome.Done) reproject()
         return outcome
+    }
+
+    /**
+     * Delete an ACTIVE or SUSPENDED tenant (uc.admin.delete-tenant, ADR 0101 decision 10). It goes offline exactly as a
+     * suspension takes it — the scope-access gate and the domain filter refuse `PENDING_DELETION` as they refuse
+     * `SUSPENDED` — and [reproject] withdraws its routers; `TenantPurge` erases it after the scope trash's retention.
+     * The domain the confirmation typed must be this tenant's, so a wrong id deletes nothing. A moderator's proposal to
+     * take the tenant offline is taken by the deletion, as by a suspension. Every member is mailed after the commit;
+     * every account stays (owner, Q20).
+     */
+    fun delete(tenantId: String, domain: String, serverOwnerId: String): DeleteTenantOutcome {
+        val dueAt = Instant.now().plus(deletionRetention)
+        val outcome = QuarkusTransaction.requiringNew().call {
+            val tenant = store.findTenant(tenantId) ?: return@call DeleteTenantOutcome.NotFound
+            if (tenant.domain != domain.trim().lowercase()) return@call DeleteTenantOutcome.DomainMismatch
+            if (!store.markForDeletion(tenantId, dueAt)) return@call DeleteTenantOutcome.NotDeletable
+            moderationSteps.settle(ProposalStep.TENANT_OFFLINE, tenantId, serverOwnerId)
+            DeleteTenantOutcome.Deleted(dueAt)
+        }
+        if (outcome is DeleteTenantOutcome.Deleted) {
+            reproject()
+            deletionMail.tenantDeleted(tenantId, dueAt)
+        }
+        return outcome
+    }
+
+    /** Stop a pending deletion (ADR 0101 decision 10): the tenant returns SUSPENDED and is reactivated as one is. */
+    fun stopDeletion(tenantId: String): StopTenantDeletionOutcome {
+        val outcome = QuarkusTransaction.requiringNew().call {
+            store.findTenant(tenantId) ?: return@call StopTenantDeletionOutcome.NotFound
+            if (store.stopDeletion(tenantId)) StopTenantDeletionOutcome.Done else StopTenantDeletionOutcome.NotPendingDeletion
+        }
+        if (outcome is StopTenantDeletionOutcome.Done) reproject()
+        return outcome
+    }
+
+    /**
+     * A tenant **owner** sets one member's TENANT-scope role — "make owner" (ADR 0101 decision 9). Membership-gated
+     * first, then owner-gated; demoting the last OWNER is refused. A pure role change: every member holds the tenant's
+     * key already. Decided under the tenant scope's lock, which a removal and every other role change take, so two
+     * owners demoting each other cannot both pass the last-owner count.
+     */
+    fun setMemberRole(callerId: String, tenantId: String, targetId: String, role: String): SetTenantRoleOutcome {
+        access.check(callerId, tenantId, WRITE)
+            .refusal(SetTenantRoleOutcome.NotFound, SetTenantRoleOutcome.Suspended)?.let { return it }
+        return QuarkusTransaction.requiringNew().call {
+            scopes.lockScope(tenantId)
+            if (!store.isOwner(callerId, tenantId)) return@call SetTenantRoleOutcome.NotOwner
+            val current = MembershipEntity.find("userId = ?1 and scopeId = ?2 and pendingConsent = false", targetId, tenantId)
+                .firstResult()?.role ?: return@call SetTenantRoleOutcome.MemberNotFound
+            if (MembershipPolicy.isLastOwnerDemote(current, role, store.ownerCount(tenantId))) return@call SetTenantRoleOutcome.LastOwner
+            store.setTenantRole(tenantId, targetId, role)
+            SetTenantRoleOutcome.Done
+        }
+    }
+
+    /**
+     * The Server Owner invites a **member** of an ACTIVE tenant to own it (ADR 0101 decision 9) — the way out of an
+     * ownerless tenant. Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 6), so an
+     * owner from outside would wait for a key no member could vouch for. Committed then sent, as setup's invite is.
+     */
+    fun inviteOwner(tenantId: String, email: String): OwnerInviteOutcome = commitThenSend {
+        val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(OwnerInviteOutcome.NotFound)
+        if (tenant.status != TenantEntity.ACTIVE) return@commitThenSend MintResult.Rejected(OwnerInviteOutcome.NotActive)
+        val member = accounts.findByEmail(normalizeEmail(email))?.takeIf { store.isTenantMember(it.id, tenantId) }
+            ?: return@commitThenSend MintResult.Rejected(OwnerInviteOutcome.NotMember)
+        val token = Tokens.random()
+        val expiresAt = Instant.now().plus(inviteTtl)
+        val invite = store.mintOwnerInvite(tenantId, member.email, Tokens.hash(token), expiresAt)
+        MintResult.ToSend(tenant.id, tenant.domain, member.email, token, expiresAt) { delivery ->
+            OwnerInviteOutcome.Done(invite.copy(bootstrapSecret = token), delivery)
+        }
     }
 
     /**
@@ -476,11 +584,26 @@ class TenantHandler(
 
     private fun cutUnderLocks(callerId: String, tenantId: String, targetId: String, revokeLinks: Boolean): RemoveTenantMemberOutcome {
         gateRemoval(callerId, tenantId)?.let { return it }
+        return cascade(tenantId, targetId, revokeLinks, allowLastOwner = false)
+    }
+
+    /**
+     * The account erasure's member removal (ADR 0101 decision 2): the same cascade a tenant owner's removal runs — own
+     * scopes into the scope trash with their membership kept, shared ones cut and their links off, a sole-owned group
+     * handed on, the picture cleared — without the caller's gates, inside the erasure's transaction, which took the
+     * locks of every scope the account is in first. [allowLastOwner] is the Server Owner's door, which never refuses.
+     * Returns false only for a last owner the caller did not allow, so the erasure rolls back whole.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun removeForErasure(tenantId: String, targetId: String, allowLastOwner: Boolean): Boolean =
+        cascade(tenantId, targetId, revokeLinks = false, allowLastOwner = allowLastOwner) != RemoveTenantMemberOutcome.LastOwner
+
+    private fun cascade(tenantId: String, targetId: String, revokeLinks: Boolean, allowLastOwner: Boolean): RemoveTenantMemberOutcome {
         // Impure shell: load the directory (ownerCount pre-resolved per row), ask the pure policy, execute its steps.
         // Every branch and boundary of the decision lives in RemovalPolicy, where it is mutation-verified (ADR 0045 §2).
         val rows = scopes.membershipsInTenant(targetId, tenantId)
             .map { RemovalScope(it.scopeId, it.kind, it.role, it.memberCount, it.ownerCount) }
-        return when (val plan = RemovalPolicy.plan(rows, tenantId)) {
+        return when (val plan = RemovalPolicy.plan(rows, tenantId, allowLastOwner)) {
             RemovalPlan.MemberNotFound -> RemoveTenantMemberOutcome.MemberNotFound
             RemovalPlan.LastOwner -> RemoveTenantMemberOutcome.LastOwner
             is RemovalPlan.Cascade -> {

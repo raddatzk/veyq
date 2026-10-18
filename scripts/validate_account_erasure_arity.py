@@ -13,10 +13,10 @@
   2. *The tenant closure.* The same for `veyq_tenant` and `TenantPurge.eraseTenant`, with one delegation: the tables at
      or below `veyq_scope` are the scope erasure's (held by `validate_scope_erasure_arity.py`), so they count as covered
      exactly while `eraseTenant` calls it (`scopePurge.purge(`).
-  3. *The second angle — account ids without a key.* Every column in the migrations whose name says it carries an
-     account id (`…user_id`, `…account_id`, `…_account`, `…_by`, `personal_owner`, `owner_key`, `lease_holder`,
-     `worker_id`, `moderator_id`, `actor_id`, `recipient_id`, `target_id`) and that is not a foreign key into the
-     account closure is classified in the erasers' code — an entry `"table.column" to ERASED` or `"table.column" to
+  3. *The second angle — account ids and addresses without a key.* Every column in the migrations whose name says it
+     carries an account id (`…user_id`, `…account_id`, `…_account`, `…_by`, `personal_owner`, `owner_key`,
+     `lease_holder`, `worker_id`, `moderator_id`, `actor_id`, `recipient_id`, `target_id`) or an address (`email`,
+     `…_email`, `…_address`) and that is not a foreign key into the account closure is classified in the erasers' code — an entry `"table.column" to ERASED` or `"table.column" to
      kept("reason")` in `AccountPurge` or an `AccountEraser` — and every entry names a column that exists. A kept entry
      carries its reason (content attribution, a moderation record the law keeps).
 
@@ -33,7 +33,11 @@ so the twin was written before the eraser, and run red on the tree without it.
       column is really cleared — `AccountErasureSliceTest` and `TenantDeletionSliceTest` execute the purges for that.
   (b) The second angle sees a column only under one of the spellings above. A column that names an account under any
       other name (`subject`, `who`) is invisible to it; the spellings came from the refine's locator plus the moderation
-      tables' `moderator_id`, `actor_id`, `recipient_id` and `target_id`, which the first locator missed.
+      tables' `moderator_id`, `actor_id`, `recipient_id` and `target_id`, which the first locator missed, and the
+      address spellings, which no locator had: the implementation found the tenant's `owner_email` and the old
+      invites' `owner_email` still holding an erased owner's address (its admin-web half read it off the tenant list).
+      An address column also holds addresses that are no account's (the operator's published contact), so those are
+      classified kept with that reason rather than left out of the spelling.
   (c) The polymorphic columns (`target_id`, `recipient_id`, `owner_key`, `created_by`) are classified as a whole: the
       guard cannot tell the rows that hold an account id from those that hold a share or node id.
   (d) Eraser discovery is textual, as the scope guard's limit (e) says: a `class … : AccountEraser` line and every
@@ -75,13 +79,18 @@ NOT_A_COLUMN = {"CONSTRAINT", "PRIMARY", "UNIQUE", "KEY", "INDEX", "FOREIGN", "C
 ACCOUNT_SUFFIXES = ("user_id", "account_id", "_account", "_by")
 ACCOUNT_NAMES = {"personal_owner", "owner_key", "lease_holder", "worker_id", "moderator_id", "actor_id",
                  "recipient_id", "target_id"}
+# An address names its account as surely as its id does, and outlives the row wherever it was copied (ADR 0101
+# decision 4: the address goes).
+ADDRESS_SUFFIXES = ("_email", "_address")
+ADDRESS_NAMES = {"email"}
 
 FATE = re.compile(r'"(veyq_\w+)\.(\w+)"\s+to\s+(?:ERASED\b|kept\(\s*"([^"]*)"\s*\))')
 
 
 def says_account(column: str) -> bool:
     name = column.lower()
-    return name in ACCOUNT_NAMES or name.endswith(ACCOUNT_SUFFIXES)
+    return (name in ACCOUNT_NAMES or name.endswith(ACCOUNT_SUFFIXES)
+            or name in ADDRESS_NAMES or name.endswith(ADDRESS_SUFFIXES))
 
 
 def schema() -> tuple[list[dict], dict[tuple[str, str], str]]:
@@ -245,7 +254,7 @@ def main() -> int:
     kept = sum(1 for r in fates.values() if r is not None)
     print(
         f"OK: {len(account_reached)} table(s) below {ACCOUNT_ROOT} and the tables below {TENANT_ROOT} are erased or "
-        f"cascade; {len(fates)} account-id column(s) without a key classified ({kept} kept, {len(fates) - kept} erased)."
+        f"cascade; {len(fates)} account-id and address column(s) without a key classified ({kept} kept, {len(fates) - kept} erased)."
     )
     return 0
 

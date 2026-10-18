@@ -60,7 +60,7 @@ class TenantIngressProjector(config: VeyqConfig, private val sink: TenantIngress
         // under exactly that configuration.
         if (!sink.enabled) return
         val domains = QuarkusTransaction.requiringNew().call {
-            TenantEntity.list("status != ?1", TenantEntity.SUSPENDED).map { it.domain }
+            TenantEntity.list("status not in ?1", TenantEntity.OFFLINE).map { it.domain }
         }
         val routable = domains
             .map { it.lowercase() }

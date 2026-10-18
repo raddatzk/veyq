@@ -153,6 +153,20 @@ class ModerationHandler(
     fun remove(ownerId: String, accountId: String, now: Instant = Instant.now()): ModerationOutcome<Unit> =
         leave(accountId, ownerId, ModerationEvent.REMOVED, now, ModerationFailures.notModeratorOnRoster)
 
+    /**
+     * An account erasure takes its moderator off the roster as a removal does (ADR 0101 decision 2, ADR 0099): every
+     * grant goes and the epoch is due for rotation, in the erasure's transaction. Logged as a step-down when the account
+     * erases itself, as a removal when the Server Owner does. Not on the roster: nothing to do. The last holder of the
+     * current epoch is refused at both doors — the moderation key, and with it every report and hold sealed to it, would
+     * be lost with them (ADR 0099 § 5); another moderator holds it first.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun leaveForErasure(accountId: String, actorId: String, now: Instant): ModerationOutcome<Unit> {
+        if (ModeratorEntity.findById(accountId)?.onRoster != true) return ModerationOutcome.Ok(Unit)
+        val event = if (actorId == accountId) ModerationEvent.STEPPED_DOWN else ModerationEvent.REMOVED
+        return leave(accountId, actorId, event, now, ModerationFailures.notModeratorOnRoster)
+    }
+
     /** The next epoch for exactly the accepted moderators (ADR 0099 §§ 3–4). */
     @Transactional
     fun mint(ownerId: String, epoch: Int, kem: String, sign: String, reason: MintReason, grants: List<GrantIn>, now: Instant = Instant.now()): ModerationOutcome<Unit> {

@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.UploadAdmission
 import me.raddatz.veyq.core.scope.MembershipEraser
+import me.raddatz.veyq.core.identity.AccountEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
@@ -78,6 +79,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var scopeErasers: MutableList<ScopeEraser>
     @Inject @All lateinit var subtreeErasers: MutableList<NodeSubtreeEraser>
     @Inject @All lateinit var membershipErasers: MutableList<MembershipEraser>
+    @Inject @All lateinit var accountErasers: MutableList<AccountEraser>
     @Inject @All lateinit var identityUsages: MutableList<GuestIdentityUsage>
     @Inject @All lateinit var contributors: MutableList<SharedSubtreeContributor>
     @Inject @All lateinit var guestWrites: MutableList<ShareGuestWrites>
@@ -100,6 +102,7 @@ class ModuleCompositionTest {
         ScopeEraser::class.java to scopeErasers,
         NodeSubtreeEraser::class.java to subtreeErasers,
         MembershipEraser::class.java to membershipErasers,
+        AccountEraser::class.java to accountErasers,
         GuestIdentityUsage::class.java to identityUsages,
         SharedSubtreeContributor::class.java to contributors,
         ShareGuestWrites::class.java to guestWrites,

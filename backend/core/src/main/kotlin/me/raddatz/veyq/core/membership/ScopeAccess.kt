@@ -43,7 +43,7 @@ class ScopeAccess {
     fun check(userId: String, scopeId: String, mode: AccessMode): Access {
         if (!accepted(userId, scopeId)) return Access.NotMember
         val scope = ScopeEntity.findById(scopeId) ?: return Access.NotMember
-        if (TenantEntity.findById(scope.tenantId)?.status == TenantEntity.SUSPENDED) return Access.Suspended
+        if (TenantEntity.isOffline(TenantEntity.findById(scope.tenantId)?.status)) return Access.Suspended
         if (mode == AccessMode.WRITE) {
             if (!accepted(userId, scope.tenantId)) return Access.NotMember
             if (scope.deletedAt != null) return Access.Deleting
@@ -67,7 +67,7 @@ class ScopeAccess {
     }
 
     /** Whether a tenant is not suspended — the guest-facing half of [isLive], for tenant-addressed tokens. */
-    fun isTenantLive(tenantId: String): Boolean = TenantEntity.findById(tenantId)?.status != TenantEntity.SUSPENDED
+    fun isTenantLive(tenantId: String): Boolean = !TenantEntity.isOffline(TenantEntity.findById(tenantId)?.status)
 
     private fun accepted(userId: String, scopeId: String): Boolean =
         MembershipEntity.count("userId = ?1 and scopeId = ?2 and pendingConsent = false", userId, scopeId) > 0

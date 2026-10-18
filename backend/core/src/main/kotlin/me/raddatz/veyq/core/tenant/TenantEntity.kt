@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
+import java.time.Instant
 
 /**
  * A tenant: a domain-scoped container resolved by Host. Operational metadata only — name, domain and the
@@ -60,6 +61,11 @@ class TenantEntity : PanacheEntityBase {
     @Column(name = "storage_quota_bytes")
     var storageQuotaBytes: Long? = null
 
+    /** When the purge erases a tenant the Server Owner deleted (ADR 0101 decision 10): set with `PENDING_DELETION`,
+     *  cleared by a stop. Read by `TenantPurge`'s work list and the Server Owner's tenant list. */
+    @Column(name = "deletion_due_at")
+    var deletionDueAt: Instant? = null
+
     companion object : PanacheCompanionBase<TenantEntity, String> {
         /** 10 GiB — enough for an event's uploads, too little for a leaked link to eat a disk (ADR 0073 §4). The
          *  `share_link_limit_bytes` column default is the same number. */
@@ -70,5 +76,14 @@ class TenantEntity : PanacheEntityBase {
 
         /** Reversibly offline (ADR 0066). `status` is the *only* column either transition touches. */
         const val SUSPENDED = "SUSPENDED"
+
+        /** Deleted by the Server Owner and offline exactly as [SUSPENDED] until `TenantPurge` erases it (ADR 0101
+         *  decision 10); a stop returns it to [SUSPENDED]. */
+        const val PENDING_DELETION = "PENDING_DELETION"
+
+        /** The statuses every gate refuses as a suspension: offline, its own domain included (ADR 0066, ADR 0101). */
+        val OFFLINE: List<String> = listOf(SUSPENDED, PENDING_DELETION)
+
+        fun isOffline(status: String?): Boolean = status in OFFLINE
     }
 }

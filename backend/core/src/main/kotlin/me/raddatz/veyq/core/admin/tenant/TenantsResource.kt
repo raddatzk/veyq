@@ -2,6 +2,11 @@ package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.generated.api.TenantsApi
 import me.raddatz.veyq.core.generated.model.AcceptInviteRequest
+import me.raddatz.veyq.core.generated.model.AcceptOwnershipRequest
+import me.raddatz.veyq.core.generated.model.DeleteTenantRequest
+import me.raddatz.veyq.core.generated.model.InviteTenantOwnerRequest
+import me.raddatz.veyq.core.generated.model.SetTenantMemberRoleRequest
+import me.raddatz.veyq.core.generated.model.TenantDeletion
 import me.raddatz.veyq.core.generated.model.AcceptPreviewRequest
 import me.raddatz.veyq.core.generated.model.AcceptTermsRequest
 import me.raddatz.veyq.core.generated.model.ChangeDomainRequest
@@ -119,6 +124,29 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // Delete an ACTIVE or SUSPENDED tenant and stop it (uc.admin.delete-tenant, ADR 0101 decision 10): Server-Owner-gated
+    // like suspend, and like it offline at once; the purge erases it after the scope trash's retention.
+    override fun deleteTenant(tenantId: UUID, deleteTenantRequest: DeleteTenantRequest): Response =
+        when (val o = handler.delete(tenantId.toString(), deleteTenantRequest.domain, identity.principal.name)) {
+            is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc())).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun stopTenantDeletion(tenantId: UUID): Response =
+        when (val o = handler.stopDeletion(tenantId.toString())) {
+            StopTenantDeletionOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // An owner invite into an ACTIVE tenant, to one of its members (ADR 0101 decision 9): the way out of an ownerless one.
+    override fun inviteTenantOwner(tenantId: UUID, inviteTenantOwnerRequest: InviteTenantOwnerRequest): Response =
+        when (val o = handler.inviteOwner(tenantId.toString(), inviteTenantOwnerRequest.email)) {
+            is OwnerInviteOutcome.Done -> Response.ok(
+                TenantInviteState(o.invite.ownerEmail, InviteStatus.decode(o.invite.status), o.invite.expiresAt.utc(), o.invite.bootstrapSecret!!, o.delivery),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
     // Suspend / reactivate (uc.admin.suspend-tenant, ADR 0066): Server-Owner-gated by the class-level
     // @RolesAllowed, exactly like revokeTenant. Note these two are themselves subject to TenantSuspensionFilter,
     // which guards the tenant's own domain: reaching them **there** is refused like any other request, which is the
@@ -203,6 +231,14 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // "Make owner" (ADR 0101 decision 9): @Authenticated (not Server-Owner); membership- then owner-gated in the handler.
+    @Authenticated
+    override fun setTenantMemberRole(tenantId: UUID, userId: UUID, setTenantMemberRoleRequest: SetTenantMemberRoleRequest): Response =
+        when (val o = handler.setMemberRole(identity.principal.name, tenantId.toString(), userId.toString(), setTenantMemberRoleRequest.role.value)) {
+            SetTenantRoleOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
     // A member's sealed picture (ADR 0084): @Authenticated, membership-gated in the handler (a non-member: 404, ADR 0042).
     // `Cache-Control: private` - the answer is for this signed-in member, never a shared cache.
     @Authenticated
@@ -229,9 +265,19 @@ class TenantsResource(
                     ownerEmail = outcome.ownerEmail,
                     hasAccount = outcome.hasAccount,
                     role = InviteRole.decode(outcome.role),
+                    handover = outcome.handover,
                 ),
             ).build()
             is HttpFailure -> httpError(outcome)
+        }
+
+    // A member accepts an owner invite into an ACTIVE tenant (ADR 0101 decision 9): @Authenticated, any user; the
+    // handler binds it to the invited address and to the tenant's membership.
+    @Authenticated
+    override fun acceptTenantOwnership(acceptOwnershipRequest: AcceptOwnershipRequest): Response =
+        when (val o = acceptHandler.acceptOwnership(identity.principal.name, acceptOwnershipRequest.bootstrapSecret)) {
+            AcceptOwnershipOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
         }
 
     @Authenticated
@@ -474,6 +520,8 @@ class TenantsResource(
         inviteExpiresAt = inviteExpiresAt?.utc(),
         storageUsedBytes = storageUsedBytes,
         storageQuotaBytes = storageQuotaBytes,
+        ownerless = ownerless,
+        deletionDueAt = deletionDueAt?.utc(),
     )
 
     private fun Instant.utc() = atOffset(ZoneOffset.UTC)

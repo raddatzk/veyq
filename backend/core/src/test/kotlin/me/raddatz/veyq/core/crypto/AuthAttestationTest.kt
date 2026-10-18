@@ -51,6 +51,22 @@ class AuthAttestationTest {
         assertFalse(AuthAttestation.verify(b64(a["current_auth_public_key"]), build(), "not base64 !"))
     }
 
+    private val e: JsonNode =
+        ObjectMapper().readTree(File("../contracts/crypto/vectors/v1.json"))["auth_attestation"]["erase_account"]
+
+    @Test
+    fun theErasureStatementIsTheVectorsAndBindsTheAccountAndTheChallenge() {
+        val statement = AuthAttestation.eraseAccountStatement(e["user_id"].asText(), e["nonce_b64"].asText())
+        assertArrayEquals(hex(e["statement"]), statement)
+        val sig = b64(e["signature"])
+        val pub = b64(e["auth_public_key"])
+        assertTrue(AuthAttestation.verify(pub, statement, sig))
+        // Control: another account, or another challenge, is no proof.
+        assertFalse(AuthAttestation.verify(pub, AuthAttestation.eraseAccountStatement("c0ffee00-0000-4000-8000-0000000000ab", e["nonce_b64"].asText()), sig))
+        assertFalse(AuthAttestation.verify(pub, AuthAttestation.eraseAccountStatement(e["user_id"].asText(), "AAAA"), sig))
+        assertNull(AuthAttestation.eraseAccountStatement(e["user_id"].asText(), "not base64 !"))
+    }
+
     private fun hex(n: JsonNode): ByteArray = HexFormat.of().parseHex(n.asText())
 
     private fun b64(n: JsonNode): String = Base64.getEncoder().encodeToString(hex(n))
