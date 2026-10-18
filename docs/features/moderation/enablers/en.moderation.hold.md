@@ -9,7 +9,9 @@
   Memories' `MediaHoldSnapshot`, `StoreReclaimStore.due`'s skip; the reconcile's claim query and the backup's blob index
   read the pins too. The ends of a dismissed, decided, lifted or extended case and the review's reads of the snapshot
   (`CaseSnapshots`, `CaseReviewResource`, Memories' `CaseMediaResource`, Depot's `CaseFilesResource`) by
-  cr-moderation-review-and-measures; an authority's order's ends and the floor by cr-authority-orders-and-art18-reports (`AuthorityOrderHandler`).
+  cr-moderation-review-and-measures; an authority's order's ends and the floor by cr-authority-orders-and-art18-reports (`AuthorityOrderHandler`);
+  a child-sexual-abuse case's bound and its end at the handover by the moderation-retention follow-up of inbox #462
+  (2026-10-18: `Holds.moveEnd`'s ceiling, `Holds.capAt`, `CaseDecisions.handoverIn`).
 - **Provides:** a copy of what was reported, taken when it was reported, that no delete, overwrite or revoke reaches —
   the evidence a moderator opens with the keys a report hands over.
 - **Serves (use-cases):** [uc.moderation.report](../use-cases/uc.moderation.report.md),
@@ -42,14 +44,16 @@ descendant whose key is wrapped under it, which is why a node report holds the s
 ## The tables
 
 All core's, none with a foreign key into a space, a node, a share or a blob — so erasing the reported space, node or
-link leaves them standing (ADR 0093 § 4: the report share reads from the snapshot).
+link leaves them standing (ADR 0093 § 4: the report share reads from the snapshot). The hold's three tables end by
+the table below; the report, the case and the report share go with the case's log ([en.moderation.log](en.moderation.log.md)
+§ Retention).
 
 | Table | Rows | In the clear |
 |---|---|---|
-| `veyq_moderation_report` | one per report | epoch, received at, category, the reporter's account (a member) or link (a guest); the sealed part |
+| `veyq_moderation_report` | one per report | epoch, received at, category, the reporter's account (a member) or link (a guest); the sealed part, and the contact sealed apart (`sealed_contact`, `moderation-report-contact` [epoch]) until six months after the decision was told |
 | `veyq_moderation_case` | one per reported item | item kind and id, the space, category (the most urgent of its reports), state; `open_key` is the item while the case is open, unique — the one-case-per-item rule held by the database |
 | `veyq_report_share` | one per report and case | the report share, opaque |
-| `veyq_hold` | one per case at a time | its trigger (`CASE_OPEN`) and `expires_at` |
+| `veyq_hold` | one per case at a time | its trigger, `expires_at`, an order's `floor_until`, a child-sexual-abuse case's `ceiling_until` |
 | `veyq_hold_row` | one per copied row | source table and row id, the row as JSON — ciphertext and metadata, as stored |
 | `veyq_hold_pin` | one per pinned store object prefix | storage key, chunk count, `expires_at` (the hold's) |
 
@@ -86,7 +90,7 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 | Extended by a moderator | the end the extension names: after the current end, at most six months from now, with a sealed reason | cr-moderation-review-and-measures |
 | An authority's order (its own case, no report) | six months after the block (removal), 60 days after receipt (preservation), the days named or else six months after receipt (information) — and that end is the hold's **floor** (`veyq_hold.floor_until`): `Holds.moveEnd` and `Holds.endNow` never end it sooner, so a lift or a decision leaves it to its floor and the case closes only then | cr-authority-orders-and-art18-reports (`AuthorityOrderHandler`, `Holds`) |
 | A statement an authority deferred | six months past the deferral's end while it holds; six months after the sending once it went out | cr-authority-orders-and-art18-reports (`StatementDeferrals`) |
-| Child sexual abuse material | as any case's: ADR 0093 § 4's "at the confirmed handover" is not built — whether keeping it until then is covered for a non-commercial operator is open (§ 184b(5) StGB, ADR 0093 § Legal basis, Still open 1), so a recorded handover changes no hold | — |
+| Child sexual abuse material | at the recorded handover to an authority (`HANDED_OVER` or `INFORMATION_GIVEN`), at the latest 90 days (`Holds.CHILD_SEXUAL_ABUSE`) after the report that took the hold or made the case one of this category — its `ceiling_until`: a measure or a statement moves the end at most to it, and a report that makes a decided case one of this category brings a later end back to it. A logged extension may pass it, the handover still ends it; an order's floor always wins (§ 184b(5) StGB: keeping it serves only the report). A hold that runs until the handover past 90 days is not built (ADR 0093 § Legal basis, Still open 1) | the moderation-retention follow-up of #462 (`Holds`, `ReportHandler`, `CaseDecisions.handoverIn`) |
 
 A hold's rows are copied as the database returns them, but a time column as the instant it is (ISO-8601, UTC,
 `HoldSnapshot.text`): a `TIMESTAMP` holds the wall clock of the zone its writer ran in, and the Art. 18 export read a

@@ -347,7 +347,8 @@ server-blind token makes this work without the server ever seeing a name:
   accountability, not a control: the Server Owner owns the server and the roster, and the surface is
   operator-served, passive-operator-safe only ([ADR 0026](../decisions/0026-client-trust-tiers.md)).
   **Built today: the intake, the review and the measures.** A member or a guest reports what they see: their client
-  seals the report share and their text to the current epoch, the server stores the category, time and ids in the
+  seals the report share and their text to the current epoch — their address apart, so it can go alone six months
+  after the decision was told — the server stores the category, time and ids in the
   clear, opens one case per item and takes a **hold** — a copy of the reported rows and a pin on their store objects
   that the reclaim sweep skips, so a delete after the report removes the item for everyone but the moderators
   ([uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
@@ -378,8 +379,12 @@ server-blind token makes this work without the server ever seeing a name:
   them to the end it sets; an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
   guest-write record — never content ([uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
-  Not built, both open legally: a child-sexual-abuse hold ending at the handover, and an authority's link to a held
-  copy. No moderation path has run on a deployed instance.
+  A child-sexual-abuse case's hold ends at the recorded handover, at the latest 90 days after the report; no measure
+  or statement keeps it longer (§ 184b(5) StGB). **Retention:** a closed case's records — reports with their sealed
+  parts and report shares, measures, statements, objections, orders — go with its log at 31 December of the third year
+  after the close, never while a measure of it is in force ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
+  Not built, open legally: a hold until the handover beyond 90 days, and an authority's link to a held copy. No
+  moderation path has run on a deployed instance.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

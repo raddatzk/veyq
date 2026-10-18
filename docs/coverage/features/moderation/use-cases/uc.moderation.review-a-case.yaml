@@ -48,6 +48,16 @@ acceptanceCriteria:
           "Unlocks only the moderation grants" is the shared ModerationGate's, which ShareReview.vue mounts with `review`;
           its unlock is held where /moderation uses it (uc.moderation.serve-as-moderator's coverage), while
           ShareReview.guard.test.ts mounts ReviewBody, past the gate, and no test mounts the review page through the gate.
+  - id: a-closed-case-goes-whole-with-its-log
+    text: >-
+      A closed case goes with its log on 31 December of the third year after it closed, not a day sooner: the case, its
+      reports' sealed parts and report shares (a report of two items with its last case), measures, proposals,
+      statements and recipients, deferrals, objections, the orders that opened it and its events — never while a
+      measure of it is in force, whose lift dates it again; the purge takes the case row first, so a decision at the
+      same moment either moves the date or finds the case gone.
+    coverage:
+      backend:
+        integration: [ModerationRetentionSliceTest.aClosedCaseGoesWholeOnItsLogsDateAndNotADaySooner, ModerationRetentionSliceTest.aMeasureInForceKeepsItsCaseAndItsLiftDatesItAgain, ModerationRetentionSliceTest.aReportOfTwoItemsGoesWithItsLastCase, ModerationRecordsRaceSliceTest.aHandoverInsideThePurgesWindowFindsTheCaseGoneAndLeavesNothing, ModerationRecordsRaceSliceTest.aPurgeInsideAHandoversWindowSeesItsEventAndKeepsTheCase]
   - id: dismissal-ends-the-hold-at-once
     text: >-
       A dismissal closes the case, ends its hold at once (snapshot dropped, pins released, the sweep reclaims what was

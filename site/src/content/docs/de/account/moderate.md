@@ -55,7 +55,8 @@ hältst, mach nicht weiter und sag der Person Bescheid, die den Server betreibt.
    oben. **Abgeschlossene Fälle zeigen** zeigt die abgeschlossenen.
 2. Wähle bei einem Fall **Öffnen**. Du siehst jede Meldung — ihre Begründung, den Kontakt, den die meldende Person
    hinterlassen hat, und den Zusammenhang, auf deinem Gerät mit dem Moderationsschlüssel geöffnet — und die Maßnahmen,
-   die Vorschläge, die Sicherung und das Protokoll des Falls.
+   die Vorschläge, die Sicherung und das Protokoll des Falls. Der Kontakt wird sechs Monate, nachdem die meldende
+   Person die Entscheidung erfahren hat, gelöscht.
 3. Wähle **Gemeldetes ansehen**. Es öffnet sich unter der Adresse des gemeldeten Bereichs, wo du den
    Moderationsschlüssel erneut öffnest. Dann siehst du das Gemeldete so, wie ein Gast eines Links es sähe, nur zum
    Ansehen, mit den Meldungen daneben: so, wie es bei der Meldung war, auch wenn es seitdem geändert oder gelöscht wurde,
@@ -112,7 +113,8 @@ nennt; nur seine Kennung verlässt dein Gerät –, das **Aktenzeichen der Behö
 es lesen kann, und der **Eingang bei der Kontaktstelle**. Eine Entfernungsanordnung sperrt den Link und alles, wozu er
 Zugang gibt, nach deiner Bestätigung sofort für alle; du siehst dann, wann, auf die Sekunde, und den Text für das
 Rückmeldeformular der Behörde zum **Kopieren**. Gibt es hier keinen solchen Link, wird nichts gesperrt, und du bekommst
-einen Entwurf, der das sagt. Jede Anordnung bleibt bei ihrem Fall; **Eingetragene Anordnungen** listet sie auf.
+einen Entwurf, der das sagt. Jede Anordnung bleibt bei ihrem Fall und wird mit ihm gelöscht (unten);
+**Eingetragene Anordnungen** listet sie auf.
 
 **Die Betroffenen später informieren.** Nur eine Behörde kann verlangen, die Betroffenen noch nicht zu informieren. Dann
 setze unter **Entscheiden** das Häkchen bei **Eine Behörde hat verlangt, die Betroffenen noch nicht zu informieren**,
@@ -124,19 +126,24 @@ der Behörde einmal an.
 weiß – den Fall, seine Kategorie, jede Zeit in UTC, die Maßnahmen, wer es hochgeladen hat und bei einem Gast die
 festgehaltene Adresse und Zeit – als Text zum **Kopieren** in das Formular der Behörde. Lade das Gemeldete nie herunter,
 leite es nie weiter und mache kein Bild davon. **Festhalten, dass an eine Behörde gemeldet wurde** hält das mit dem
-Aktenzeichen der Behörde im Protokoll des Falls fest.
+Aktenzeichen der Behörde im Protokoll des Falls fest – kopiere die Angaben also vorher: Bei Darstellungen sexuellen
+Missbrauchs von Kindern beendet das auch, was vom Fall aufbewahrt wird.
 
 **Darstellungen sexuellen Missbrauchs von Kindern.** Bevor sich ein solcher Fall öffnet, sagt eine ganze Seite, was du
 nie tun sollst und was zuerst zu tun ist. **Zurück zur Liste** lässt ihn geschlossen; **Verstanden – Fall öffnen** öffnet
-ihn, mit **Inhalt sperren** als erstem Schritt.
+ihn, mit **Inhalt sperren** als erstem Schritt. Solche Inhalte werden nur aufbewahrt, bis du festhältst, dass an eine
+Behörde gemeldet wurde, und nie länger als 90 Tage nach der Meldung – das Sperren verlängert das nicht. Verlängere nur,
+solange deine Meldung an die Behörde noch läuft oder weil die Behörde darum bittet.
 
 ## Was festgehalten wird, und wie lange
 
 Das Moderationsprotokoll hält fest, wann du ernannt wurdest und angenommen hast, jedes Weitergeben des Schlüssels und
 wann du niederlegst: wer, wann und für wen, nie einen Schlüssel und nie Inhalte. Es wird bis zum 31. Dezember des
 dritten Jahres nach dem Ende deiner Moderation aufbewahrt und dann gelöscht. In einem Fall hält es jedes Öffnen zur
-Prüfung fest und jeden Schritt und jedes Aufheben, jeweils wer und wann; deine Notizen und Begründungen nur versiegelt. Das
-Protokoll eines Falls wird bis zum 31. Dezember des dritten Jahres nach seinem Abschluss aufbewahrt.
+Prüfung fest und jeden Schritt und jedes Aufheben, jeweils wer und wann; deine Notizen und Begründungen nur versiegelt. Ein
+Fall – sein Protokoll, seine Meldungen und alles, was darin entschieden wurde – wird bis zum 31. Dezember des dritten
+Jahres nach seinem Abschluss aufbewahrt und dann gelöscht, aber nie, solange eine seiner Sperren noch gilt. Die Adresse
+einer meldenden Person wird sechs Monate, nachdem sie die Entscheidung erfahren hat, gelöscht.
 
 ## Niederlegen
 
