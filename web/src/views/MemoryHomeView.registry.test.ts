@@ -49,7 +49,7 @@ vi.mock('../core/node/treeStore', async () => {
 // A blocked node's page mounts the statement notice, which loads the member's statements: none here, so it renders nothing.
 vi.mock('../features/moderation/statement/statements', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/moderation/statement/statements')>()),
-  loadStatements: vi.fn(async () => {}),
+  loadStatements: vi.fn(),
 }))
 vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
@@ -70,6 +70,7 @@ import { treeNode } from '../test/models'
 import { targetOf, type Access, type TreeSource } from '../core/access'
 import type { LevelRowsFactory } from '../core/node/levelRow'
 import { titlesOf } from '../test/levelRows'
+import { loadStatements } from '../features/moderation/statement/statements'
 
 // A detail renders whether a share is POSSIBLE for it, from what the host handed it: the instance's public links (the
 // access) AND its kind's descriptor (the rights target core builds from the registry) — every application's
@@ -109,6 +110,7 @@ async function mountAt(hash: string) {
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(loadStatements).mockResolvedValue(undefined)
   holder.reg = fullRegistry()
   capabilityState.ids = [CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
   treeStore.nodes = [
