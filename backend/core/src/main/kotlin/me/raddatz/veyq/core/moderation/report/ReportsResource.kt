@@ -35,7 +35,8 @@ class ReportsResource(
             category = ReportCategory.valueOf(category.name),
             epoch = epoch,
             sealedReport = sealedReport,
-            items = items.map { ReportItemIn(ReportItemKind.valueOf(it.kind.name), it.id?.toString(), it.sealedShare) },
+            sealedContact = sealedContact?.takeIf { it.isNotBlank() },
+            items =items.map { ReportItemIn(ReportItemKind.valueOf(it.kind.name), it.id?.toString(), it.sealedShare) },
             receiptAddress = receiptAddress?.takeIf { it.isNotBlank() },
         )
 

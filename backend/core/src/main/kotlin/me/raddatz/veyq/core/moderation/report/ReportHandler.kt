@@ -33,6 +33,7 @@ data class ReportIn(
     val epoch: Int,
     val sealedReport: String,
     val items: List<ReportItemIn>,
+    val sealedContact: String? = null,
     val receiptAddress: String?,
 )
 
@@ -207,6 +208,7 @@ class ReportHandler(
             receivedAt = now
             category = r.category.name
             sealedReport = r.sealedReport
+            sealedContact = r.sealedContact
             this.reporterAccount = reporterAccount
             this.reporterShare = reporterShare
         }
@@ -215,9 +217,17 @@ class ReportHandler(
             val itemId = item.id ?: reporterShare!!
             val (case, opened) = caseFor(item.kind, itemId, scopeId, r.category)
             // The hold (ADR 0093 § 4): taken with the case, and again by a report that finds the case's hold ended —
-            // never twice while one is alive. A case-open hold ends 90 days after the report that took it.
+            // never twice while one is alive. A case-open hold ends 90 days after the report that took it. A case of
+            // child sexual abuse bounds its hold to 90 days after the report that took it or made it one: no measure or
+            // statement keeps it longer (§ 184b(5) StGB), and the handover ends it (CaseDecisions.handover).
+            val csamBound = report.receivedAt.plus(Holds.CHILD_SEXUAL_ABUSE).takeIf { case.category == ReportCategory.CHILD_SEXUAL_ABUSE.name }
             if (!holds.aliveFor(case.id, now)) {
-                holds.take(case.id, holdTarget(item.kind, itemId, scopeId), HoldTrigger.CASE_OPEN, report.receivedAt.plus(Holds.CASE_OPEN))
+                holds.take(
+                    case.id, holdTarget(item.kind, itemId, scopeId), HoldTrigger.CASE_OPEN, report.receivedAt.plus(Holds.CASE_OPEN),
+                    ceilingUntil = csamBound,
+                )
+            } else if (csamBound != null) {
+                holds.aliveOf(case.id, now)?.let { holds.capAt(it, csamBound) }
             }
             ReportShareEntity().apply {
                 id = UUID.randomUUID().toString()
