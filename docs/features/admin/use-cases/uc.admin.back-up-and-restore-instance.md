@@ -161,6 +161,22 @@
   were, A4), the key from the operator's medium, and as its last step the gate's record set to the
   backup's release, so that release's next start passes. The gate names no pool (ADR 0098 decision 4); the Job may
   pass `--objects-from` like any restore, then only into an empty store.
+- **A12 — A capture is kept at most B days** (ADR 0056 decision 8). B is an instance setting the Server Owner sets in
+  admin-web or with `veyq-admin backup-retention set` (7 to 365, 30 until set). Every capture veyq's tooling wrote is
+  deleted once it is older than B, the newest included: `veyqctl` at every `backup`, `upgrade` and `start` and with
+  `veyqctl backup prune` on a daily timer, the cluster's gate at every start and the chart's daily prune; `backup.keep`
+  stays a second bound. An object pool's ledger drops its entries older than B, and the pool's prune follows. A copy
+  the operator moved off the host is theirs to delete by B. `veyqctl status` warns while no capture younger than B
+  exists.
+- **A13 — An erasure made after the capture is made again** (ADR 0056 decision 8). The instance keeps an erasure
+  ledger, `erasures.log`, beside leg (c)'s key, which no restore touches: one line per hard erasure no restored row
+  would trigger again (an account, a tenant, a scope, a node, a medium, a link, a reclaimed storage key) and per
+  moderation block, lift and case. At every start, before it answers a request, the application reads it and erases
+  every listed object whose row exists, through its own eraser; it blocks again an item whose last line is a block and
+  that the restored database does not block, never one lifted since; and it recreates a case the database lacks as a
+  stub. A restore given the ledger (`--erasures`) counts a key it lists as erased, never as missing. Without the ledger
+  the object check runs as before, and says so; a restore onto a new host re-applies only the ledger the operator
+  carried there with leg (c).
 - **A8 — Only the users' half is lost.** Nothing here helps. A perfectly restored server whose people lost their
   passwords and Emergency Kits is unreadable ciphertext, and that is the design, not a defect
   ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) A7).

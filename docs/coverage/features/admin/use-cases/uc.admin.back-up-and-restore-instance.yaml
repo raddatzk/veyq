@@ -223,6 +223,44 @@ acceptanceCriteria:
       A capture the cluster's backup gate writes records the config-secret key as kept separately and never holds it:
       the gate does not mount the key's claim, so no capture on the backup volume can open the tenants' SMTP
       passwords; its restore asks for the key from the operator's own medium.
+  - id: every-capture-is-pruned-at-b
+    # A12, ADR 0056 decision 8. No coverage on a surface: the observable is the operator tools' exits and what they
+    # leave on disk — Python operator tools and a chart, no coverage surface (ADR 0040). Proven by
+    # scripts/instance_backup_selftest.py (group R: captures past B gone on a fake clock, the newest too, `keep` still a
+    # bound, the pool's ledger entries past B dropped and their objects with them, B read from the database and 30 when
+    # it cannot be), scripts/veyqctl_selftest.py (`backup`, `upgrade`, `start` and `backup prune` run the prune, `status`
+    # warns while no capture is younger than B) and scripts/chart_meta_check.py (the daily prune's CronJob reaches the
+    # database and the backup claim alone, and never the key's claim).
+    text: >-
+      Every capture veyq's tooling wrote — Compose's under the instance's home, the cluster gate's on its claim, an
+      object pool's ledger entries — is deleted once it is older than B days, an instance setting the Server Owner sets
+      (30 until set), the newest capture included; `keep` stays a second bound. The tooling reads B from the database it
+      captures and assumes 30 when it cannot. Both deployment targets prune at every capture and start, and daily.
+  - id: erasures-are-re-applied-before-the-instance-serves
+    # A13, ADR 0056 decision 8, ADR 0101 decision 8. The backend refs below are the start's re-application against a
+    # database that holds rows the ledger lists as erased — the shape a restore produces.
+    text: >-
+      Every hard erasure no restored row would trigger again writes a line to the erasure ledger in its own
+      transaction, and a sweep appends it to a file beside leg (c)'s key that no restore touches. At every start,
+      before the instance answers a request, every listed object whose row exists is erased through its kind's own
+      eraser; applying a line twice changes nothing; a line older than B is dropped. The ledger holds kinds, opaque ids
+      and times, never content or a name.
+  - id: moderation-survives-a-restore
+    # A13, ADR 0056 decision 8 (owner 2026-10-18; TCO Art. 3, DSA Art. 17): the same ledger, the same start.
+    text: >-
+      A block, a lift and a case enter the erasure ledger too. At start, per item the last block or lift line wins: an
+      item whose last line is a block and that the restored database does not block is blocked again on its basis, and
+      a lifted one is never blocked again. A case the database lacks is recreated as a stub — no report, no sealed
+      content, marked as restored — that keeps its retention date, so the queue shows that it existed.
+  - id: the-object-check-honours-erased-keys
+    # A13. No coverage on a surface (a Python operator tool, ADR 0040). Proven by scripts/instance_backup_selftest.py
+    # (group L: a key the ledger lists is reported as erased and never refuses; no ledger, today's refusal and the
+    # restore says no ledger was given) and the veyqctl self-test (restore and rollback hand the tool the ledger read
+    # from the state volume).
+    text: >-
+      A restore given the erasure ledger counts an object whose storage key the ledger lists as erased, never as
+      missing, and does not refuse for it; given none, it checks the objects as before and says that no ledger was
+      given.
   - id: the-server-owner-reads-the-config-secret-state
     # GET /api/instance/config-secret on the admin listener (admin console Server → Config-secret key,
     # `veyq-admin config-secret`). The Server Owner seeded here owns no tenant. "Changes nothing" is pinned by the
