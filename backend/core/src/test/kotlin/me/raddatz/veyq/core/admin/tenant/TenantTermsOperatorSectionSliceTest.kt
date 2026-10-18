@@ -132,6 +132,14 @@ class TenantTermsOperatorSectionSliceTest {
         postAccept(member, tenantId, priv).then().statusCode(200)
         assertTrue(read(member, tenantId).getBoolean("accepted"))
         assertEquals(setOf("FULL", "REDUCED"), variantsAccepted(member, tenantId), "one history row per accepted triple")
+
+        // Switching back to a variant the member already accepted asks nothing again (owner decision 2026-10-18): the gate
+        // answers from the whole history, not from the latest row.
+        modes.set(OperatingMode.ORGANISATION)
+        val back = read(member, tenantId)
+        assertEquals("FULL", back.getString("operatorSection.variant"))
+        assertTrue(back.getBoolean("accepted"), "a variant accepted before stays accepted")
+        assertEquals(2, acceptances(member, tenantId), "and no history row is added")
     }
 
     @Test
@@ -207,4 +215,7 @@ class TenantTermsOperatorSectionSliceTest {
         QuarkusTransaction.requiringNew().call {
             TenantTermsAcceptanceEntity.list("userId = ?1 and tenantId = ?2", userId, tenantId).map { it.variant }.toSet()
         }
+
+    private fun acceptances(userId: String, tenantId: String): Long =
+        QuarkusTransaction.requiringNew().call { TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", userId, tenantId) }
 }

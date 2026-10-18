@@ -54,7 +54,8 @@ acceptanceCriteria:
     text: >-
       What a member accepts is the triple of the space's revision, the section's revision and its variant, one history
       row per triple: a release that changes the section or a changed operating mode reopens the gate, a value changed
-      in admin-web renders at once and reopens nothing, nor does the guest-write record switched; an accept naming
+      in admin-web renders at once and reopens nothing, nor does the guest-write record switched, nor the mode
+      switched back to a variant the member accepted at the current revisions (no row is added); an accept naming
       another triple is 409.
     coverage:
       backend:
