@@ -63,6 +63,13 @@ tags:
       own, so its resource owns the
       `/api/instance/guest-write-record` subtree.
 
+  - name: instance-backup-retention
+    description: >
+      How long a backup is kept (ADR 0056 decision 8): B days, an instance setting the Server Owner sets (ADR 0089).
+      The capture tooling reads it from the database it captures and prunes every capture veyq's tooling wrote once it
+      is older than B, on Compose and on the cluster; the erasure ledger drops its lines at the same age. A tag of its
+      own, so its resource owns the `/api/instance/backup-retention` subtree.
+
   - name: instance-store-reconcile
     description: >
       The bucket reconcile (ADR 0062 § Consequences, uc.admin.configure-object-store A7): what its passes found and the
@@ -2064,6 +2071,85 @@ paths:
         "404":
           description: The identity id is not a UUID, so no route matches it.
 
+  /api/instance/backup-retention:
+    get:
+      tags: [instance-backup-retention]
+      operationId: getInstanceBackupRetention
+      x-veyq-channel: admin
+      summary: Read how many days a backup is kept.
+      description: >
+        B, the days every capture veyq's tooling wrote is kept (ADR 0056 decision 8): 30 until the Server Owner sets
+        another value (`chosen: false`). Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The retention.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceBackupRetention" }
+              example: { retentionDays: 30, chosen: false }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    put:
+      tags: [instance-backup-retention]
+      operationId: setInstanceBackupRetention
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the retention is one value, and the capture tooling and the ledger read it as
+          it stands.
+      x-veyq-channel: admin
+      summary: Set how many days a backup is kept.
+      description: >
+        Stores B, 7 to 365 (ADR 0056 decision 8). The capture tooling reads it at its next run — `veyqctl` at every
+        `backup`, `upgrade`, `start` and `backup prune`, the cluster's gate at every start and its daily prune — and
+        deletes every capture older than B as it then stands, the newest included; the erasure ledger drops its lines
+        older than B at the next start. A value above 30 needs a reason the Server Owner writes into their record of
+        processing; that is admin-web's and the CLI's to say, the server does not record it. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InstanceBackupRetentionUpdate" }
+            example: { retentionDays: 14 }
+      responses:
+        "200":
+          description: Set; the retention as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceBackupRetention" }
+        "400":
+          description: The request was malformed (no value, or one outside 7 to 365).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
   /api/instance/store/reconcile:
     get:
       tags: [instance-store-reconcile]
@@ -3925,6 +4011,36 @@ components:
           maximum: 30
           example: 14
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(30)'
+
+    InstanceBackupRetention:
+      type: object
+      description: How many days a backup is kept, and whether the Server Owner set it.
+      required: [retentionDays, chosen]
+      properties:
+        retentionDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: B, 7 to 365; 30 until set.
+          example: 30
+        chosen:
+          x-veyq-visibility: flag
+          type: boolean
+          description: False while no value was ever set; B is then the default, 30.
+          example: false
+
+    InstanceBackupRetentionUpdate:
+      type: object
+      description: The retention to store.
+      required: [retentionDays]
+      properties:
+        retentionDays:
+          x-veyq-visibility: measure
+          type: integer
+          description: B, the days a capture is kept, 7 to 365.
+          minimum: 7
+          maximum: 365
+          example: 14
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(7) @field:jakarta.validation.constraints.Max(365)'
 
     GuestWriteRecordErasure:
       type: object
