@@ -14,7 +14,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { freshOwner, readKit } from '../../src/accounts'
 import { recordTyped } from '../../src/canaries'
-import { instance, newDevice, passwordField, tenantOrigin, type Device } from '../../src/devices'
+import { instance, newDevice, passwordField, saveDeputy, tenantOrigin, type Device } from '../../src/devices'
 import { awaitMails } from '../../src/mail'
 import { stack } from '../../src/stack'
 
@@ -201,5 +201,7 @@ test(
     await openModerationPanel(admin.page)
     await expect(admin.page.locator(`.mod-row[data-address="${deputyAccount.email}"]`)).toContainText('Moderator, holds the key')
     await expect(admin.page.locator(`.mod-row[data-address="${deputyAccount.email}"]`)).toContainText('Address confirmed')
+    // The second moderator decides an objection to the Server Owner's measure later (statement-and-objection.spec.ts).
+    saveDeputy({ ...deputyAccount, tenantDomain: deputyDomain() })
   },
 )
