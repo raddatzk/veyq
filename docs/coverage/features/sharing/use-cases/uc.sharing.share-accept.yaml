@@ -65,3 +65,29 @@ acceptanceCriteria:
         integration: [ShareSliceTest.shareTermsIsTheSameNonEnumerable404AsResolve, ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance]
       web:
         unit: [src/views/ShareView.test.ts]
+  # cr-operator-section-of-the-terms (ADR 0035 decision 6): the operator section after the space's text, the guest's
+  # local key on the triple, and the section's public page.
+  - id: the-guest-accepts-the-triple
+    text: >-
+      The share's terms read serves the operator section after the space's text, and the gate shows both; the visitor's
+      local acceptance holds the triple, so a release that changed the section or a changed operating mode asks again
+      and a changed value does not, and an acceptance stored before the section existed asks once more.
+    coverage:
+      backend:
+        integration: [ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance, ShareSliceTest.shareTermsRevisionZeroWhenTenantPublishedNoTerms]
+      web:
+        unit: [src/views/ShareView.test.ts, src/core/sharing/resolvePublicShare.test.ts]
+  - id: the-section-is-public-without-an-account
+    text: >-
+      The operator section is publicly available without an account (DSA Art. 14(1)) at a page of its own, linked from
+      the login page, the share page and the signed-in shell; the guest-write record's first-layer sentence links its
+      record passage there, in a tab of its own so the share page keeps its key.
+    coverage:
+      backend:
+        integration: [TenantTermsOperatorSectionSliceTest.aSpaceWithNoTermsServesTheSectionWithoutAGate]
+      web:
+        unit: [src/views/OperatorTermsView.test.ts, src/core/operator/OperatorIdentification.test.ts, src/core/sharing/GuestWriteRecordNotice.test.ts]
+gaps:
+  stack: >-
+    Lane L1 walks this in a browser in e2e/tests/features/terms-operator-section.spec.ts, tagged per criterion
+    (cr-operator-section-of-the-terms), but no CI run has executed that lane yet (ADR 0040).

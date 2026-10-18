@@ -34,8 +34,10 @@
   § 10's guest-write record is built and carries the catalog's first preset (cr-guest-write-record, 2026-10-17;
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
   N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
-  first-layer sentence — whose wording waits on counsel (Still open 4) and whose link waits on the operator section of
-  the terms. It is on the V1 line (owner
+  first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
+  operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which is built in both
+  variants (cr-operator-section-of-the-terms, 2026-10-18; its text a draft until a qualified review, its gaps against
+  the law named there). It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
