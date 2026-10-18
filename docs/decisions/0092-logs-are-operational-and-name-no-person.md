@@ -1,6 +1,7 @@
 # ADR 0092 — Logs are operational and name no person; evidence never rides a log
 
-- Status: Proposed 2026-10-16; **ready for acceptance** (re-grounded 2026-10-18 after moderation landed, inbox #462).
+- Status: **Accepted 2026-10-18** by the owner, with Q29–Q33 of `changes/cr-logging.md` as recommended (proposed
+  2026-10-16; re-grounded 2026-10-18 after moderation landed, inbox #462).
   **Built:** § 1's separation, held by `ModerationLogSliceTest` (no moderation event in a log line) and
   `GuestWriteRecordCoreSliceTest` (neither the recorded nor a forged address in a log line); § 2 whole, by
   cr-guest-write-record and ADR 0093 § 10; § 3 at the mail, invite and recovery sites (inbox #481, the first two pinned
