@@ -250,14 +250,21 @@ def measurement_overlay(source: Path, target: Path, cpuset: str, outside: str) -
         if name in services:
             services[name]["cpuset"] = outside
     services["mailpit"]["ports"] = ["127.0.0.1::8025"]
+    # L1 turns the store's per-request log back on for its wire sweep's control; an operator's instance runs the
+    # recipe's `garage=warn`, and so does the measured one — a log line per thumbnail is a cost no household pays.
+    garage_env = (services.get("garage") or {}).get("environment") or {}
+    garage_env.pop("RUST_LOG", None)
+    if "garage" in services and not garage_env:
+        services["garage"].pop("environment", None)
     target.write_text("# Written by scripts/measure_volume.py boot: infra/e2e/docker-compose.e2e.yml plus the "
                       "measurement's pins.\n" + yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
 
 
 def boot(directory: Path, app: str, admin: str, cpuset: str, outside: str) -> None:
-    if (directory / "instance.json").exists():
-        raise Refused(f"{directory} already holds an instance — `teardown` it first")
     directory.mkdir(parents=True, exist_ok=True)
+    left = [p.name for p in directory.iterdir() if p.name != "fixtures" and not p.name.startswith("torn-")]
+    if left:
+        raise Refused(f"{directory} still holds an instance's files ({', '.join(sorted(left)[:5])}) — `teardown` it first")
     os.environ.setdefault("VEYQ_STACK_WAIT_SECS", "900")
     os.environ.setdefault("VEYQ_STACK_CERT_SECS", "300")
     sys.path.insert(0, str(ROOT / "scripts"))
@@ -319,8 +326,14 @@ def status(inst: Instance) -> dict:
 
 def teardown(inst: Instance) -> None:
     run(["docker", "compose", "-p", inst.project, "down", "-v"], cwd=inst.dir, env=name_only_env(), capture=False)
-    (inst.dir / "instance.json").rename(inst.dir / f"instance.torn-{time.strftime('%m%d%H%M%S')}.json")
-    say(f"teardown: {inst.project} removed with its volumes")
+    # Everything the instance owned (its home, release, credentials, manifest) moves aside, so the next `boot` starts
+    # from the fixtures alone and no seeder reads a dead instance's accounts or places.
+    torn = inst.dir / f"torn-{inst.project}"
+    torn.mkdir()
+    for entry in inst.dir.iterdir():
+        if entry.name != "fixtures" and not entry.name.startswith("torn-"):
+            entry.rename(torn / entry.name)
+    say(f"teardown: {inst.project} removed with its volumes; its files are in {torn}")
 
 
 def invite_limit(inst: Instance, limit: str) -> None:
