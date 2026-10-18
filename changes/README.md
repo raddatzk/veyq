@@ -1911,6 +1911,18 @@ call the CR had not made. So a refine that ties a new write to an existing one g
 begins (`@Transactional`, `QuarkusTransaction`, `createOrConflict` along the call path) and names that layer, and for
 a write behind a seam, the hook through which the seam's implementations take part.
 
+### A CR that tells "the affected" lists, per kind of recipient, the channel that reaches them — or says "nobody"
+
+`cr-statement-of-reasons-and-objection` sent a statement to "the share's creator, the uploader and the scope owner",
+and two of its sentences disagreed about guests: its context let a guest object through the contact "where the
+statement offers one", while ADR 0093 § 4 counted "a guest uploader with no contact" as nobody to tell. A guest has no
+account, so no mail and no list of statements; whether its placeholder shows one is a design question the CR had not
+asked, and the implementer had to pick a reading. The same held for the reporter's decision: the address it needs is
+stored only sealed, so only the deciding moderator's browser can supply it — a channel no sentence named. So a refine
+that tells someone something writes a row per recipient kind (member, guest, reporter, Server Owner) with the channel
+that reaches them (in the app — on which screen —, by mail — from which address the server holds in the clear —, or
+none), and the measures or steps the duty does NOT reach (the Server Owner's own steps carried no statement here).
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
