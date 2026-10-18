@@ -22,6 +22,14 @@ interface ReportableItems {
      * caller's transaction; an id that is not one of this application's items is no-op.
      */
     fun blockChanged(itemId: String)
+
+    /**
+     * Lock the row of the item [itemId] and answer whether it exists — trashed or not, as only its purge erases it — or
+     * false for an id that is not one of this application's items. **Joins the caller's transaction**: a measure-taker's
+     * half of the race with the item's purge (`MeasureTargets.lockStanding`), so the row's lock is the one every purge
+     * of the item takes.
+     */
+    fun lockExisting(itemId: String): Boolean
 }
 
 /** An item's place: its space and the node it sits on. */

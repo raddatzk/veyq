@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.node
 
 import me.raddatz.veyq.core.items.NodeItemsRevisionEntity
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -11,13 +13,18 @@ import jakarta.enterprise.context.ApplicationScoped
  * references a blob any more (inbox #341), so blobs may go first.
  */
 @ApplicationScoped
-class NodeScopeEraser : ScopeEraser {
+class NodeScopeEraser(private val measures: MeasureTargets) : ScopeEraser {
     override val phase = 700
 
     override fun eraseScope(scopeId: String) {
+        val nodeIds = NodeEntity.getEntityManager()
+            .createQuery("select n.id from NodeEntity n where n.scopeId = :scope", String::class.java)
+            .setParameter("scope", scopeId).resultList
         // The node's item-list counters (inbox #410) carry no scope_id: by their nodes, before the node rows go.
         NodeItemsRevisionEntity.delete("nodeId in (select n.id from NodeEntity n where n.scopeId = ?1)", scopeId)
         NodeEntity.delete("scopeId", scopeId)
+        // A content block on one of them ends with it (ADR 0093 § 6): after the delete, which holds the rows' locks.
+        measures.erased(listOf(BlockKind.CONTENT_NODE), nodeIds)
         ScopeTreeRevisionEntity.delete("scopeId", scopeId) // the scope's tree counter (ADR 0081); fk_tree_revision_scope refuses the scope row's delete while it stays
     }
 }
