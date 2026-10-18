@@ -292,6 +292,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      stands. **Left open on purpose** — the same data-flow gap as 25: a constant holding the whole name IS caught,
      and the realistic regression (a hand parse in the moderation CR's guest-write path) spells the name. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
+  84 a baseline entry recording a `500` under `status_code_conformance`, with a reason, passes
+     `validate_api_fuzz_baseline`, which keeps `not_a_server_error` out of the baseline by its check name. **Left
+     open on purpose** — the same response is red under `not_a_server_error` in the same run, and that entry is the
+     one the guard refuses, so a 5xx cannot be accepted through the baseline as a whole. Pinned so the limit in
+     that guard's docstring is executable rather than a sentence.
   30 a `web/src` comment citing a use-case id under a feature directory that does not exist passes
      `validate_doc_citations`, which reads an id only under a real feature directory. **Left open on purpose** —
      that anchor is what keeps attribute chains (`.parent.parent`, `.value.trim()`) from reading as ids; without
@@ -1190,6 +1195,21 @@ def forge_forwarded_for_read_through_an_assembled_name(root: pathlib.Path) -> st
     return "a forwarded-for read through a name assembled from two literals (the data-flow open gap)"
 
 
+def forge_fuzz_baseline_5xx_under_another_check(root: pathlib.Path) -> str:
+    # validate_api_fuzz_baseline refuses a 5xx by its CHECK NAME: an entry that records the same 500 as an undeclared
+    # status passes. The operation is read out of a spec, so a renamed path does not turn this into a different red.
+    f = root / "infra/fuzz/baseline.json"
+    if not f.is_file():
+        raise ForgeError("infra/fuzz/baseline.json is missing — the API fuzzing's baseline moved or was deleted")
+    doc = json.loads(f.read_text())
+    doc["entries"] = list(doc.get("entries") or []) + [{
+        "operation": "GET /api/setup", "check": "status_code_conformance", "failure": "UndefinedStatusCode",
+        "signature": "Received: 500", "reason": "a guard-gap probe: a 500 recorded as an undeclared status",
+    }]
+    f.write_text(json.dumps(doc, indent=2) + "\n")
+    return "a baseline entry recording a 500 under status_code_conformance (the check-name open gap)"
+
+
 def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
     # validate_stylesheet_anchors judges a selector's ANCHOR compound and nothing deeper, so a class no markup
     # applies is green wherever it sits behind a combinator. The live anchor is read out of the sheet rather
@@ -1528,6 +1548,7 @@ CASES = [
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
     ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
+    ("84", "validate_api_fuzz_baseline.py", forge_fuzz_baseline_5xx_under_another_check, True),
 ]
 
 
