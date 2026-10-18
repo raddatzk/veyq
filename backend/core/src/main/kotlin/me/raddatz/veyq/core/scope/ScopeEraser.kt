@@ -14,7 +14,9 @@ package me.raddatz.veyq.core.scope
  *
  * An implementation erases rows only. It must not record store objects for reclaim (`ScopePurge` does that for
  * blobs and sessions before any eraser runs) and must not call the blob store — `validate_store_reclaim_arity.py`
- * holds the second half. It runs inside `ScopePurge`'s per-scope transaction and the scope row's lock.
+ * holds the second half. One that erases a moderation measure's target ends the measures on it after its delete
+ * (`MeasureTargets.erased`; `validate_measure_target_erasure.py`). It runs inside `ScopePurge`'s per-scope transaction and
+ * the scope row's lock.
  *
  * `scripts/validate_scope_erasure_arity.py` unions the entities deleted across every implementation of this
  * interface, so a table that drops out of its eraser is red there.

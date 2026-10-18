@@ -11,7 +11,7 @@
   § 6, decided with the owner 2).
 - **Preconditions:** An open or decided case the moderator reviewed ([uc.moderation.review-a-case](uc.moderation.review-a-case.md)).
 - **Postconditions (success):** A measure is a row naming its kind, its target id, the case, who took it and when; it
-  deletes nothing and holds until it is lifted. A moderator's step carries its statement of reasons to the affected
+  deletes nothing and holds until it is lifted, or until its target is erased (A7). A moderator's step carries its statement of reasons to the affected
   ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md)). The case is decided and its hold ends six
   months after the statement is sent. Every step and every lift is an event in the moderation log.
 
@@ -60,6 +60,12 @@
 - **A5 — A copy escapes.** A copy a member made is a new blob under a new key; a block reaches only the reported one.
 - **A6 — A guest of a blocked link** sees an unknown link, exactly as after a revoke; a member keeps every other
   function of the share list.
+- **A7 — Its target is erased.** When what a measure stands on is erased — a link deleted (its tombstone), a node or a
+  medium purged from the trash, a guest identity dropped with the last thing it named, a space, an account or a tenant
+  purged — the measure ends in the erasure's transaction, lifted by no one and logged so, and its case's records run to
+  their date (ADR 0093 § 11) instead of standing on nothing forever (GDPR Art. 5(1)(e)). Its hold keeps its own end. A
+  measure or a bar taken on a target already erased is taken and ends at once; the decision and its statement stay. A
+  trashed node or medium still stands: only its purge erases it.
 
 ## Quality notes
 

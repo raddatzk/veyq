@@ -163,7 +163,8 @@ time the server observes live is not kept for them. What it does hold, each with
   text — a decision's note, an extension's reason — only sealed to the moderation key in the moderator's browser, bound
   to its epoch and case (`moderation-note` [epoch, caseId]). Kept to 31 December of the third year after the
   moderator's removal; a case's events, and everything of the case below, to 31 December of the third year after the
-  case closed — never while a measure of it is in force — and then deleted together.
+  case closed — never while a measure of it is in force (a measure ends when it is lifted or what it stands on is
+  erased) — and then deleted together.
 - A key proof's challenge, for five minutes.
 - **A report's clear fields** ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
   its category, the epoch it is sealed to, when it arrived, each reported item's kind and id, and who sent it — the
