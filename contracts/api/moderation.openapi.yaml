@@ -1123,9 +1123,11 @@ paths:
       description: >
         ADR 0093 §§ 11-13 (uc.moderation.report-to-an-authority): `REPORTED` = the case was reported to an authority
         (an Art. 18 report to the BKA, a criminal complaint); `INFORMATION_GIVEN` = information was handed over in
-        answer to an order. The reference is sealed (`moderation-note` [epoch, caseId]). The event changes no hold —
-        ending a hold at the handover waits on counsel (§ 184b(5) StGB, ADR 0093 § Legal basis, Still open 1). Logged
-        (`HANDED_OVER`, `INFORMATION_GIVEN`). Key-proved over this case.
+        answer to an order. The reference is sealed (`moderation-note` [epoch, caseId]). On a case of child sexual
+        abuse either one ends the case's hold at once (ADR 0093 § 4, § 184b(5) StGB: keeping the content serves only
+        the report), logged as `HOLD_ENDED`, and a decided case left with nothing held and no objection open closes;
+        an authority's order's end still holds. On any other case it changes no hold. Logged (`HANDED_OVER`,
+        `INFORMATION_GIVEN`). Key-proved over this case.
       security:
         - bearerAuth: []
       parameters:
@@ -1679,10 +1681,19 @@ components:
         category: { $ref: "#/components/schemas/ReportCategory" }
         sealedReport:
           type: string
-          description: "`K_report`, the reason, the contact and the context, sealed to the epoch's key (`moderation-report` [epoch])."
+          description: "`K_report`, the reason and the context, sealed to the epoch's key (`moderation-report` [epoch])."
           contentEncoding: base64
           maxLength: 24000
           example: AXJlcG9ydA==
+        sealedContact:
+          type: [string, "null"]
+          description: >
+            The reporter's contact, sealed apart to the epoch's key (`moderation-report-contact` [epoch]); null when
+            they left none, and from six months after the decision on the report was told — the `DECISION_SENT` event
+            stays (ADR 0093 § 11).
+          contentEncoding: base64
+          maxLength: 2300
+          example: AWNvbnRhY3Q=
         reporter:
           x-veyq-visibility: enum
           type: string
@@ -1867,7 +1878,7 @@ components:
           x-veyq-visibility: enum
           type: string
           description: The event.
-          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN]
+          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, RECEIPT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN]
           example: OPENED
         at:
           x-veyq-visibility: time
