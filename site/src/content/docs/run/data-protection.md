@@ -99,10 +99,10 @@ cd /opt/veyq
 release=<running release>               # state.json's "release"
 recipe="releases/${release}/docker-compose.prod.yml"
 docker compose -f "$recipe" --env-file .env exec mariadb \
-  mariadb -u root -p veyq -e "SELECT id, email, email_confirmed_at, server_role FROM veyq_user WHERE email = 'someone@example.org'"
+  mariadb -u root -p -D veyq -e "SELECT id, email, email_confirmed_at, server_role FROM veyq_user WHERE email = 'someone@example.org'"
 
 # Kubernetes, with the bundled database:
-kubectl -n veyq exec -it veyq-mariadb-0 -- mariadb -u root -p veyq
+kubectl -n veyq exec -it veyq-mariadb-0 -- mariadb -u root -p -D veyq
 ```
 
 Then, for that id:
