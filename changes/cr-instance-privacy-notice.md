@@ -90,7 +90,7 @@ says what veyq builds and the question stays a named blocker.
 
 ## Open questions (owner) and legal items
 
-**Decided (Q26–Q28).** Owner 2026-10-18, one by one: all three as recommended.
+**Decided (Q26–Q28).** Owner 2026-10-18, one by one: all three as recommended. **Added the same day** (from the guest-write-record objection tool, `veyq-admin guest-write-record forget`): a guest's own view shows a copyable **guest id for an objection** in its session line, so a guest can name the identity whose rows the Server Owner erases (GDPR Art. 21(1) with 12(2)); the id is the share identity's random id and reveals nothing else. An objection erases the rows so far and does not stop later writes from being recorded — the notice says so (owner: keep it so).
 
 - **Q26 — Shown in the *private* mode too?** **Recommendation: yes.** Every passage is a fact of the software, true on
   every instance; the household exemption only makes it not owed. In *private* an unset value is absent and nothing
