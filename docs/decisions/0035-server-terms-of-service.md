@@ -76,9 +76,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 
 3. **Anonymous share acceptance — client-side** (uc.sharing.share-accept). An accountless public-share visitor
    sees the tenant terms + revision and must accept (**hard gate + re-accept** on a revision change), but acceptance
-   is stored **client-side** (localStorage, keyed **per tenant**, holding the accepted revision with the operator
-   section's revision and variant, decision 6 — accepting on one share of a tenant clears the gate on every share of
-   that tenant, since they are the *space's* terms, not the link's) — the server
+   is stored **client-side** (localStorage, keyed **per tenant**, holding the triples accepted — the revision with the
+   operator section's revision and variant, decision 6 — accepting on one share of a tenant clears the gate on every
+   share of that tenant, since they are the *space's* terms, not the link's) — the server
    records **nothing** about the accountless visitor, preserving anonymity. This reuses the same tenant terms (the
    T&S decryptable-on-report corollary).
 
@@ -170,9 +170,12 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    switching the mode **reopens the gate**, since what members accepted changed. Switching the record does not: its
    information reaches a guest at the write itself (ADR 0093 § 10), like a changed value. A member's history keeps one
    row per accepted triple (space revision, section revision, variant), and the gate asks whether the current triple
-   has one; a guest's device keeps the last triple it accepted. An unset value follows the variant in the record passage
-   too — a visible gap in the full one, absent in the reduced one — as the owner decided for the private mode's privacy
-   texts (decision 8, Q26 of `cr-instance-privacy-notice`); the sentences around a value stay.
+   has one; a guest's device keeps the last four triples it accepted, and its gate asks the same question. Four, since
+   both revisions only grow: both variants at the current revisions and at the previous ones (a rolled-back release) are
+   all that can come back. So switching the mode back to a variant accepted before asks nobody again, member or guest
+   (the owner's decision of 2026-10-18). An unset value follows the variant in the record passage too — a visible gap
+   in the full one, absent in the reduced one — as the owner decided for the private mode's privacy texts (decision 8,
+   Q26 of `cr-instance-privacy-notice`); the sentences around a value stay.
 
    **Gaps against the law, named rather than papered over** (the owner's rule of 2026-10-18: a legal duty wins over
    what an ADR or the code says). Each is a correction owed before the first release, or a question for the qualified

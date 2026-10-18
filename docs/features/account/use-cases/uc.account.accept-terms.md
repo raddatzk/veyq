@@ -31,7 +31,9 @@ accepted triple, so the earlier acceptances stay beside it. `accepted_at` is the
 acceptance — audit evidence of when which revision was accepted, also for a dispute about a superseded revision; read
 by operators from the database and served by no API; re-accepting a recorded revision keeps its first time. The
 gate asks whether a row for the current triple exists. No entry until accepted. **Anonymous public-share visitors are out of scope** — they have no account, so their acceptance is
-**client-side** (localStorage) on the share page, a later slice ([sharing](../../sharing/_index.md)).
+**client-side** on the share page: localStorage keeps the last four triples the device accepted and asks the same
+question of them, so a mode switched back asks a guest nothing again either
+([uc.sharing.share-accept](../../sharing/use-cases/uc.sharing.share-accept.md)).
 
 ## Main flow
 
@@ -47,7 +49,8 @@ gate asks whether a row for the current triple exists. No entry until accepted. 
   re-appears (re-accept); already-open tabs re-gate on their next route change.
 - **A tenant with no terms** (`terms_revision = 0`) → nothing to accept; the gate never triggers.
 - **The operating mode changes, or a release changes the section's text** → the triple moved, the gate re-appears.
-  A changed value or the guest-write record switched does not.
+  A changed value or the guest-write record switched does not, nor does the mode switched back to a variant the member
+  accepted at the current revisions: that triple's row is still in their history.
 - **The triple moved while the gate was open** → the accept is refused (`409 terms_revision_changed`), the view
   re-reads and re-presents.
 - **Decline** → no acceptance recorded; the member stays out of the shell (they can sign out). No content is
