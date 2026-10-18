@@ -111,9 +111,12 @@ async function birth(name: string, domain: string, handle: string, device: Devic
   await tab.getByRole('checkbox', { name: 'I have saved my Emergency Kit somewhere safe.' }).check()
   await tab.getByRole('button', { name: 'Accept & activate' }).click()
   await expect(tab.getByText(`“${name}” is now active and yours.`)).toBeVisible({ timeout: 60_000 })
+  // "Sign in" opens the sign-in form of this new device: email, password and the Secret Key the kit just carried.
   await tab.getByRole('button', { name: 'Sign in', exact: true }).click()
+  const account = { email: fresh.email, password: fresh.password, secretKey: kit.secretKey }
+  await submitSignIn(tab, account)
   await expect(tab.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
-  return { email: fresh.email, password: fresh.password, secretKey: kit.secretKey }
+  return account
 }
 
 /** The sign-in form of a device that holds no key for the account: email, password and Secret Key. */
