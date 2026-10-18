@@ -268,8 +268,9 @@ a block reaches only the reported copy.
   Server Owner says it is over content). Its recipients are the blocked member, and the tenant's owners for a tenant;
   a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
   address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
-  moderation key for the log — and the objection goes to the instance contact (owner questions in
-  `cr-statement-legal-gaps`).
+  moderation key for the log — and the objection goes to the instance contact (owner decisions Q24–Q25, 2026-10-18:
+  facts by mail rather than a restricted second session kind for one case; a tenant's owners only, since facts mailed to
+  every member could expose one member's content to all). The mail goes once: the server keeps no clear copy to retry.
 - **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
   report again with more information, the instance contact, that they may go to court, and that they may complain to
   the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
