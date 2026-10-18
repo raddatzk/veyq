@@ -240,7 +240,8 @@ acceptanceCriteria:
     # A13, ADR 0056 decision 8, ADR 0101 decision 8. The backend refs below are the start's re-application against a
     # database that holds rows the ledger lists as erased — the shape a restore produces, each with a control a start
     # leaves alone. Live once on a throwaway Compose project (cr-backup-erasure-and-retention): a scope erased after a
-    # `veyqctl backup`, the capture rolled back in place, the scope gone before the restarted instance answered.
+    # `veyqctl backup`, the database emptied and the capture restored with `veyqctl restore` (the ledger handed over from
+    # the app's volume), the scope erased again before the started instance answered (its log line before `Listening on`).
     text: >-
       Every hard erasure no restored row would trigger again writes a line to the erasure ledger in its own
       transaction, and a sweep appends it to a file beside leg (c)'s key that no restore touches. At every start,
