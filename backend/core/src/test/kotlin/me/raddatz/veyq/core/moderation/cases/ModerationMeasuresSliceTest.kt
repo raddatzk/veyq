@@ -37,6 +37,8 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
+import org.hamcrest.Matchers.contains
+import org.hamcrest.Matchers.containsInAnyOrder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -208,7 +210,10 @@ class ModerationMeasuresSliceTest {
         mod.case(caseId).then()
             .body("proposals.find { it.step == 'TENANT_OFFLINE' }.outcome", equalTo("TAKEN"))
             .body("proposals.find { it.step == 'MEMBER_SIGN_IN' }.outcome", equalTo("DECLINED"))
-            .body("events.event", hasItem("PROPOSAL_TAKEN"))
+            // The log reads back each step: both proposals, the one taken and the one declined, each naming its step and target.
+            .body("events.findAll { it.event == 'PROPOSED' }.detail", containsInAnyOrder("MEMBER_SIGN_IN $member", "TENANT_OFFLINE ${w.tenantId}"))
+            .body("events.findAll { it.event == 'PROPOSAL_TAKEN' }.detail", contains("TENANT_OFFLINE ${w.tenantId}"))
+            .body("events.findAll { it.event == 'PROPOSAL_DECLINED' }.detail", contains("MEMBER_SIGN_IN $member"))
     }
 
     @Test

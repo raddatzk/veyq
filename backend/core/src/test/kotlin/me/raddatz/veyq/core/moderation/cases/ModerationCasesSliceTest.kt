@@ -25,6 +25,7 @@ import io.quarkus.test.junit.QuarkusTest
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
+import org.hamcrest.Matchers.contains
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -173,6 +174,7 @@ class ModerationCasesSliceTest {
         val another = seedNode(r.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val bar = mod.bar(r.caseId, reportId).then().statusCode(201).body("reports[0].barred", equalTo(true))
             .body("state", equalTo("OPEN")) // a bar is no decision on the content
+            .body("events.findAll { it.event == 'REPORTER_BARRED' }.detail", contains("REPORTER ${r.userId}")) // logged, naming the account
             .extract().path<String>("measures[0].id")
         mod.bar(r.caseId, reportId).then().statusCode(409).body("code", equalTo("moderation_measure_exists"))
         asMember(r.userId, r.scopeId, body(listOf(item("NODE", another)))).then().statusCode(403).body("code", equalTo("reporter_barred"))
@@ -190,7 +192,9 @@ class ModerationCasesSliceTest {
         asGuest(link, body(listOf(item("NODE", folder)))).then().statusCode(201)
         val caseId = openCase("NODE", folder)!!.id
         val reportId = mod.case(caseId).then().body("reports[0].reporter", equalTo("LINK")).extract().path<String>("reports[0].id")
-        val bar = mod.bar(caseId, reportId).then().statusCode(201).extract().path<String>("measures[0].id")
+        val bar = mod.bar(caseId, reportId).then().statusCode(201)
+            .body("events.findAll { it.event == 'REPORTER_BARRED' }.detail", contains("REPORTER $link")) // logged, naming the link
+            .extract().path<String>("measures[0].id")
         asGuest(link, body(listOf(item("NODE", sub)))).then().statusCode(403).body("code", equalTo("reporter_barred"))
         // The bar is on reporting only: the link still serves its guests.
         io.restassured.RestAssured.given().`when`().get("/api/shares/$link").then().statusCode(200)

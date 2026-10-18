@@ -214,6 +214,26 @@ describe('useMediaTrash — a restore the server refuses (inbox #432)', () => {
     ])
   })
 
+  it('a restore of a medium the operator blocked is named as deletable, not restorable, and the rest is still restored', async () => {
+    // uc.moderation.take-a-measure: a blocked medium's restore answers 451 blocked_by_operator; its delete stays allowed.
+    vi.mocked(listTrash).mockResolvedValue([item('a'), item('b')])
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) => ({ v: 1, type: 'image/jpeg', name: `${m.mediaId}.jpg` }))
+    vi.mocked(restoreMedia).mockImplementation(async (_s, id) => {
+      if (id === 'a') throw refusal(451, 'blocked_by_operator')
+    })
+    const { vm } = setup()
+    await vm.loadTrash()
+    await flushPromises()
+    vm.toggleSelectAllTrash()
+    await vm.restoreSelected()
+    await flushPromises()
+
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      'Not restored: a.jpg. Blocked by the operator: it can be deleted, not restored.',
+    ])
+    expect(restoreMedia).toHaveBeenCalledTimes(2) // the refusal did not stop b
+  })
+
   it("the menu's Restore names its refused restore, with no unhandled rejection", async () => {
     const unhandled = vi.fn()
     process.on('unhandledRejection', unhandled)
