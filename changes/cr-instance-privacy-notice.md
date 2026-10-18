@@ -130,7 +130,8 @@ says what veyq builds and the question stays a named blocker.
 - [ ] **4 docs** — ADR 0035's status (decision 8 built); the security model's sentence on what is disclosed where;
   site: `privacy/is-my-data-safe.md` and its DE twin (point to the instance's own notice for what *this* instance
   keeps), `run/first-run.mdx` or `run/moderation.md` (the values the notice renders and the Server Owner's duty to keep
-  them true, the record of processing and processor agreements as the operator's — the audit's D items), coverage refs
+  them true; the record of processing, processor agreements, a breach and an access request — the audit's D items —
+  are **already written** on `run/data-protection.md`, inbox #485: point there and keep its tables in step), coverage refs
   for the three use-cases. · Done when: coverage, wiki-sources and the site check green.
 
 ## Definition of done

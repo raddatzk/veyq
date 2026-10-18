@@ -55,9 +55,17 @@ interface TenantInviteMailer {
  *    need it via the API response, not the console;
  *  - the owner-supplied `domain` is validated as a bare hostname up front, so once a real mailer builds a
  *    link from it, it can't be tricked into a different scheme/host/path (phishing / link-injection).
+ *
+ * Neither line names the owner: a log carries ids, never an email address (ADR 0092 § 3), so both name the tenant
+ * by id and the Server Owner looks the invite up by it.
+ *
+ * [launchMode] exists for the test, which runs in TEST mode and still has to reach the production branch; the bean
+ * gets the no-argument constructor Kotlin generates when every parameter has a default.
  */
 @ApplicationScoped
-class LoggingTenantInviteMailer : TenantInviteMailer {
+class LoggingTenantInviteMailer(
+    private val launchMode: () -> LaunchMode = { LaunchMode.current() },
+) : TenantInviteMailer {
     private val log = Logger.getLogger(LoggingTenantInviteMailer::class.java)
 
     /** This bean *is* the no-SMTP path, so it can never send. Only the owner-bootstrap invite may still use it
@@ -66,11 +74,11 @@ class LoggingTenantInviteMailer : TenantInviteMailer {
 
     override fun sendInvite(tenantId: String, domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult {
         require(HOSTNAME.matches(domain)) { "invalid tenant domain" }
-        if (LaunchMode.current() == LaunchMode.NORMAL) {
+        if (launchMode() == LaunchMode.NORMAL) {
             // Production: never write the bootstrap secret to logs. A real SMTP-backed mailer must be wired.
             log.warnf(
-                "No SMTP mailer configured: tenant invite for %s (expires %s) was NOT delivered.",
-                ownerEmail, expiresAt,
+                "No SMTP mailer configured: the owner invite of tenant %s (expires %s) was NOT delivered.",
+                tenantId, expiresAt,
             )
             // No mail sent — the copy-link is the channel (this bean is the fallback / SMTP-less path).
             return DeliveryResult.FALLBACK_COPYLINK
@@ -79,8 +87,8 @@ class LoggingTenantInviteMailer : TenantInviteMailer {
         // the accept link that embeds it — to a log, in any launch mode. Whoever needs it gets it from the API
         // response, never the console; TenantInviteMailerLogTest pins it.
         log.infof(
-            "Tenant invite minted for %s (expires %s); secret delivered via the API response, not logged.",
-            ownerEmail, expiresAt,
+            "Owner invite of tenant %s minted (expires %s); secret delivered via the API response, not logged.",
+            tenantId, expiresAt,
         )
         return DeliveryResult.FALLBACK_COPYLINK
     }

@@ -12,6 +12,7 @@ import io.vertx.ext.mail.MailAttachment
 import io.vertx.ext.mail.MailClient
 import io.vertx.ext.mail.MailConfig
 import io.vertx.ext.mail.MailMessage
+import io.vertx.ext.mail.SMTPException
 import io.vertx.ext.mail.StartTLSOptions
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
@@ -38,7 +39,7 @@ data class SmtpTransport(
  * (`InstanceNoticeMailer`, ADR 0097) so both build their `MailClient` the same way. It decides whether a transport can
  * send and puts one message on the wire; it knows nothing about whose transport it is or what the message says.
  *
- * Best-effort by design: a failure is logged secret-free and reported as [DeliveryResult.FAILED], never thrown.
+ * Best-effort by design: a failure is logged secret-free and without the recipient, and reported as [DeliveryResult.FAILED], never thrown.
  * Callers send **after** their own transaction commits, so the bounded [SEND_TIMEOUT_SECONDS] block never holds a DB
  * connection (cr-email-invite-send-hardening).
  */
@@ -100,8 +101,11 @@ class SmtpDelivery(
             client.sendMail(message).toCompletionStage().toCompletableFuture().get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             DeliveryResult.SENT
         } catch (e: Exception) {
-            // Never log a token, a code or a link; only the kind, the recipient and a cause message.
-            log.warnf("SMTP delivery of %s to %s failed: %s", what, to, e.message)
+            // The kind and a cause that names no person (ADR 0092 § 3): never a token, a code or a link, and never
+            // the recipient — neither as a parameter nor inside a message, since an SMTP server's reply text
+            // routinely echoes the address it refused ("550 5.1.1 <someone@example.org>: …"). The caller knows
+            // whose mail it was. SmtpDeliveryLogTest pins it.
+            log.warnf("SMTP delivery of %s failed: %s", what, cause(e))
             DeliveryResult.FAILED
         } finally {
             client.close()
@@ -110,6 +114,19 @@ class SmtpDelivery(
 
     companion object {
         const val DEFAULT_SMTP_PORT = 587
+
+        /**
+         * What a failed send logs as its cause: the SMTP reply code when the server answered, else the innermost
+         * exception's class. Never a message — the reply lines and a transport error's text can both carry the
+         * recipient.
+         */
+        internal fun cause(e: Throwable): String {
+            val chain = generateSequence(e) { it.cause }.take(MAX_CAUSE_DEPTH).toList()
+            chain.firstNotNullOfOrNull { it as? SMTPException }?.let { return "SMTP reply ${it.replyCode}" }
+            return chain.last().javaClass.simpleName
+        }
+
+        private const val MAX_CAUSE_DEPTH = 8
 
         /** Bounded, and outside any transaction — long enough for a healthy MTA handshake, short enough that a hung
          *  server does not hold the calling thread. */

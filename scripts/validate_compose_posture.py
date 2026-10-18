@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every service of the production compose recipe runs unprivileged, the internet-facing proxy cannot reach the database, and the client port's source is true.
+"""Every service of the production compose recipe runs unprivileged, the internet-facing proxy cannot reach the database, the client port's source is true, and every log is bounded.
 
 **What it asserts** (ADR 0071), over `infra/docker-compose.prod.yml` as YAML with its merge keys resolved, and
 over every service the file declares — the set is the file's, never a list here:
@@ -28,6 +28,11 @@ over every service the file declares — the set is the file's, never a list her
      `/plugins-local/src/<m>/`, and that mounted manifest's `import` is `<m>`. No service declares a remote plugin
      (`--experimental.plugins.`), and no service sets `QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL` (Traefik sends no PROXY
      header to an HTTP service).
+  6. **Logs are bounded and the store keeps no request log** (ADR 0092 § 5). Every service sets `logging:` with the
+     `json-file` or `local` driver and both `max-size` and `max-file`, so no container's log grows without bound. The
+     store — the service the app's `VEYQ_BUNDLED_STORE_ENDPOINT` names — sets `RUST_LOG`, and no directive in it is
+     `info`, `debug` or `trace`: unset, the image's own `garage=info` logs every request with the peer's address and
+     the URI. The positive control on the same predicate: the store is found, or the level would go unchecked.
 
 **Scoped to the production file on purpose.** The dev stack (`infra/docker-compose.yml`) is not internet-facing:
 it runs no app container, publishes its ports for a developer's host, and ships `change-me` passwords. A rule
@@ -46,7 +51,12 @@ notices until an instance starts offline; the app reading a header no plugin ove
 client forges. The rest fails loudly at runtime (a Traefik that cannot load the plugin answers 404 on the app's
 routers; a PROXY-only app closes every connection) and is caught here more cheaply. Bitten by snapshot-and-restore:
 the manifest mount dropped, a remote-plugin flag added, the source `none` with the plugin declared, the PROXY variable
-set, the manifest importing another module, and the declaration removed with the source still `header`.
+set, the manifest importing another module, and the declaration removed with the source still `header`. Assertion 6
+came with a legal audit (2026-10-18), live when written: no service had a `logging:` block, so on a stock Linux Docker
+every log was `json-file` without rotation, and Garage ran at its image's `garage=info`, logging every reader's address
+with the object key. Its first run on that tree was red on all six services and on the store. Bitten by
+snapshot-and-restore: one service's block removed, `max-file` dropped, the store's `RUST_LOG` removed, set to
+`garage=info`, and kept at `garage=warn` with one crate raised to `debug`.
 
 **Its limits — what a green run does NOT prove.** It reads the file; it runs nothing. So a read-only root that
 misses a scratch path, a `tmpfs:` a process cannot write, or a uid the image cannot run as are all green here
@@ -59,7 +69,10 @@ says nothing about the chart, which `scripts/chart_meta_check.py` holds to the s
 NetworkPolicy set is this file's networks on the other target. Assertion 5 reads the declaration and the mounts, not
 Traefik: whether the pinned Traefik loads the plugin, whether the plugin overwrites the header, and whether the
 middleware name the app's routing file renders is the one declared here are the stack lane's `client port` stage and
-the lane's own routing (`scripts/run_stack_e2e.py`); it also cannot see an edge in front of Traefik.
+the lane's own routing (`scripts/run_stack_e2e.py`); it also cannot see an edge in front of Traefik. Assertion 6 reads
+the declaration, not the daemon or Garage: that the pinned Garage reads `RUST_LOG` as a target-prefix filter, and that
+`warn` drops its request line, was measured on the image, and an operator's override file (the e2e overlay raises the
+store to `info` on purpose) is outside its reach. It bounds a log's size, never its age.
 
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """
@@ -95,6 +108,11 @@ REMOTE_PLUGIN_FLAG = re.compile(r"^--experimental\.plugins\.", re.IGNORECASE)
 PLUGIN_ROOT = "/plugins-local/src/"
 MANIFEST = ".traefik.yml"
 PORT_SOURCE_ENV = "VEYQ_HTTP_CLIENT_PORT_SOURCE"
+# 6: the drivers that rotate when given a size, the store the app points at, and the levels that log every request.
+BOUNDED_LOG_DRIVERS = {"json-file", "local"}
+STORE_ENV = "VEYQ_BUNDLED_STORE_ENDPOINT"
+STORE_HOST = re.compile(r"^https?://([^:/]+)")
+VERBOSE_LEVELS = {"info", "debug", "trace"}
 
 errors: list[str] = []
 
@@ -320,6 +338,32 @@ if (source == "header") != bool(plugins):
         fail(f"{', '.join(plugins)} loads the client-address plugin but the app's {PORT_SOURCE_ENV} is {source!r}, not "
              f"`header` — the app never reads what the edge writes, so the port is unknown while the recipe says otherwise")
 
+# --- 6: bounded logs, and no request log at the store (ADR 0092 § 5) ---
+for name, service in sorted(services.items()):
+    logging = service.get("logging")
+    driver = logging.get("driver") if isinstance(logging, dict) else None
+    options = (logging.get("options") or {}) if isinstance(logging, dict) else {}
+    if driver not in BOUNDED_LOG_DRIVERS:
+        fail(f"service `{name}` sets no `logging:` driver of {sorted(BOUNDED_LOG_DRIVERS)} — the daemon's default "
+             f"(json-file without rotation on a stock Linux Docker) keeps its log without bound (ADR 0092 § 5)")
+    missing = [k for k in ("max-size", "max-file") if not str(options.get(k) or "").strip()]
+    if missing:
+        fail(f"service `{name}`'s `logging:` sets no {' or '.join(missing)} — its log rotates never, or keeps every file")
+
+store_host = STORE_HOST.match(env_of(services[app]).get(STORE_ENV, "")) if app else None
+store = store_host.group(1) if store_host and store_host.group(1) in services else None
+if store is None:
+    fail(f"control: the app's {STORE_ENV} names no service of this file — the store cannot be found, so its log level is unchecked")
+else:
+    rust_log = env_of(services[store]).get("RUST_LOG")
+    levels = [d.rpartition("=")[2].strip().lower() for d in (rust_log or "").split(",") if d.strip()]
+    if not levels:
+        fail(f"the store `{store}` sets no RUST_LOG — the image's own `garage=info` logs every request with the "
+             f"peer's address and the URI with its query (ADR 0092 § 5)")
+    elif VERBOSE_LEVELS & set(levels):
+        fail(f"the store `{store}` sets RUST_LOG={rust_log} — a level of {sorted(VERBOSE_LEVELS & set(levels))} "
+             f"logs every request with the peer's address (ADR 0092 § 5); keep it at warn")
+
 if errors:
     print("COMPOSE POSTURE CHECK FAILED:")
     for e in errors:
@@ -330,5 +374,6 @@ print(
     f"escalate and run read-only; every third-party image runs non-root except the ownership step "
     f"({', '.join(steps) or 'none'}), which chowns to the uid that writes; the proxy ({', '.join(proxies)}) shares no "
     f"network with the database ({database}), and the app reaches both; the app's port source is "
-    f"{source or 'unset'} with {', '.join(plugins) or 'no'} local plugin, no remote plugin and no PROXY protocol"
+    f"{source or 'unset'} with {', '.join(plugins) or 'no'} local plugin, no remote plugin and no PROXY protocol; every "
+    f"service's log rotates by size, and the store ({store}) logs below info"
 )

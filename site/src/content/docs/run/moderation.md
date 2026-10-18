@@ -287,6 +287,23 @@ Criminal law and the hosting privilege's "once known, act" reach every operator 
 ([§ 7 DDG](https://www.gesetze-im-internet.de/ddg/__7.html)). The operating mode below is how you record your own
 answer.
 
+## Transparency reports
+
+> **Research, not legal advice** ([ADR 0093 § Legal basis, 8](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#legal-basis)).
+
+Three reports may fall on you as the instance's provider. **veyq compiles none of them:** you count from the cases on
+the moderation page, their log and the orders you entered, and publish or send the result yourself.
+
+| Report | Who owes it | What | By when |
+|---|---|---|---|
+| [DSA Art. 15](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2065) | Every provider the DSA reaches ([which law](#which-law-reaches-your-instance)) **unless it is a micro or small enterprise**: fewer than 50 staff and a turnover or balance sheet of at most EUR 10 million, counting the enterprises it is linked to ([Recommendation 2003/361/EC](https://eur-lex.europa.eu/eli/reco/2003/361/oj)). A company or a large association running veyq for its people is likely reached. Whether a club or a household with no economic activity is an enterprise at all, and so covered by the exemption, is open ([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#still-open), Still open 8). | A public, machine-readable report on the orders authorities sent you, the notices (reports) you received and what you did, the moderation you did on your own initiative, and any automated means — on the templates of [Implementing Regulation 2024/2835](https://eur-lex.europa.eu/eli/reg_impl/2024/2835/oj) | Each calendar year, published within two months of its end (by the end of February) |
+| [TCO Art. 7(2)](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32021R0784) | Every host, **whatever its size**, for a calendar year in which it took action against terrorist content or was required to — a removal order is enough | A public report: your measures, how many items you removed or blocked after orders, orders you could not carry out and why, complaints, reviews and reinstatements (Art. 7(3)) | Before 1 March of the following year |
+| [§ 3(2) TerrOIBG](https://www.gesetze-im-internet.de/terroibg/__3.html) | Every host under German jurisdiction | To the Bundesnetzagentur, not published: how many requests from authorities for access to content you preserved after a removal (TCO Art. 21(1)(c), Art. 6) | Each calendar year, by 1 March of the following year |
+
+Whether a year with nothing to count still needs a report is not settled by the text; the Bundesnetzagentur answers
+that for § 3(2). Each order you [enter](#an-authoritys-order) opens a case of its own that keeps its kind, when it
+reached you and when it blocked — what the TCO counts ask for; its reference is sealed to the moderation key.
+
 ## The operating mode
 
 At first-run setup you choose how the instance is run, and you can change it under **Server → Operating mode** or
@@ -348,6 +365,13 @@ Everything else expires.
   keep such a backup at most 30 days (call it B), open it only to restore it, and let the restored instance start once
   (its cleanup then deletes what is past N at boot). A guest's data can then live N + B days, and what you tell guests
   has to say so.
+- **A guest objects** (GDPR Art. 21(1)): unless you have compelling reasons to keep what was kept, delete it —
+  `veyq-admin guest-write-record forget <identity-id>`. It deletes every kept write of that guest identity at once and
+  prints how many went and how many a hold keeps: rows a report's or an authority's hold copied **stay until that hold
+  ends**, because a report or an order concerns them — tell the guest so. Answer within a month (Art. 12(3)). A later
+  write by the same identity is recorded again; a guest who does not want that can view the link but not add to it.
+  The command takes the identity's id, as a moderation case names it; the guest page does not show a guest its own id
+  yet, so a guest who objects cannot name it themselves.
 
 ## Who runs the instance
 

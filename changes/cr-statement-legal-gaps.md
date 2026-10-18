@@ -157,9 +157,9 @@ the statement names — the Server Owner lifts with the existing unblock or reac
   browser pass of a moderator's full-form decision, a Server Owner's sign-in block with its mail (in the dev mail
   catcher), and a guest's notice on a blocked link in DE and EN.
 - [ ] **4 docs** — ADR 0093's status line (the four gaps built); `site/src/content/docs/run/moderation.md` (the "not
-  built" note on the Server Owner's statement goes; the statement's provision; **who owes a transparency report and by
-  when**: DSA Art. 15 for a medium or large enterprise, TCO Art. 7(2) after acting on terrorist content, by 1 March —
-  ADR 0093 § Consequences); `site/src/content/docs/account/moderate.md` and its DE twin (the provision field);
+  built" note on the Server Owner's statement goes; the statement's provision; who owes a transparency report and by
+  when is **already written** — § Transparency reports, inbox #483, with ADR 0093 § Legal basis 8 — so keep it in step
+  rather than adding it); `site/src/content/docs/account/moderate.md` and its DE twin (the provision field);
   `help/report-something.mdx` and its DE twin (what a reporter may do after a decision); `sharing/what-guests-see.mdx`
   and its DE twin (the order notice); coverage refs for the new criteria. · Done when: coverage, wiki-sources and the
   site check green.
