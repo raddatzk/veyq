@@ -1,0 +1,25 @@
+useCase: uc.memory.banner
+feature: memory
+title: Memory banner — an image or a video above the Memory, framed once for every screen
+status: planned
+# Refined 2026-10-18 from the owner's request of that day (ADR 0102, proposed); the work order is cr-memory-banner.
+acceptanceCriteria:
+  - id: sealed-banner-in-node-meta
+    text: A MEMORY or CHAPTER node's `wrappedMeta.banner` names the banner's attachments (`BANNER`, and `BANNER_POSTER` for a video) with its medium, frame (fill/fit), focal point (0..1) and optional description, sealed in the node-meta field; the server never sees which medium, the focal point, the frame or the description.
+  - id: one-write-for-slots-and-meta
+    text: setMemoryBanner attaches the banner's upload(s) and compare-and-sets the meta in one transaction — a refused meta write attaches nothing, a replaced blob (and a poster an image replaces) is freed in the same write; removeMemoryBanner frees both slots and writes the meta without the banner.
+  - id: members-only-write-guests-see
+    text: Only a member who may write the scope sets, re-frames or removes a banner; no link role has a banner operation or may upload in a banner role; a READ or READ_WRITE guest sees the banner exactly as a member does, through the share's gated attachment route.
+  - id: not-in-the-gallery
+    text: A banner's bytes never appear as a medium — not in the media list, the item count, the live-update revision or the media trash — whether uploaded or made from a gallery medium.
+  - id: gallery-source-is-a-copy
+    text: A banner made from a gallery medium is derived from that medium's original on the editor's device into the banner's own attachments; the medium is unchanged, and deleting it keeps the banner (the delete confirmation says so and offers to remove the banner too).
+  - id: lifecycle-follows-the-memory
+    text: The banner's attachments are trashed and restored with the Memory, freed by its purge, by the scope's erasure (account erasure, tenant deletion), counted in the tenant's quota, copied and pinned by a hold on a report of the Memory, and exported and copied with the Memory.
+  - id: frame-and-focal-point
+    text: The banner's frame is about 3:1 on a wide column and 16:9 on a narrow one, at most about 35 % of the viewport's height; fill keeps the stored focal point in view in both; a portrait medium defaults to fit with blurred, enlarged sides drawn by the client; the banner scrolls away and the tab row sticks below the shell's top bar (at the top on a share page).
+  - id: video-poster-no-autoplay-small-copy
+    text: A video banner shows its poster and a play button, never plays on its own, and on a click plays the small copy (H.264, long edge at most 1280) through the media service worker — never the original; a video longer than 2 minutes, or on a browser that cannot encode H.264, is refused for a banner with a message.
+gaps:
+  backend: "Not built: no banner operation, BANNER slot or role; cr-memory-banner phases 1-2 add them."
+  web: "Not built: no banner model, transcoder, dialog or display; cr-memory-banner phases 3-4 build them."
