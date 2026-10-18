@@ -58,9 +58,13 @@ spot until cr-platform-contract-split slice 4 opened `NodeKind` to a patterned t
 `@Valid` cascade descends are proven by the slice tests `MediaCoreSliceTest.startBlobUploadsOverItsItemBoundIs400`,
 `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` and
 `ShareContributorSliceTest.shareUploadOverItsItemBoundIs400` — one per mechanism, not per field; `EachElement`'s by
-`MalformedRequestSliceTest.aListElementOutsideItsBoundsIsInvalidRequest`. It does not see
-path/query/header **parameters** (the `jaxrs-spec` generator derives their annotations itself, and no test sends
-an out-of-range one), **response** schemas, **presence** beyond rule 5 (a missing object, enum or uuid field is
+`MalformedRequestSliceTest.aListElementOutsideItsBoundsIsInvalidRequest`; the cascade into a nullable nested object
+(`oneOf` [a schema, `null`], whose annotation the generator dropped until `buildSrc`'s `NullableObjectCascade` wrote it
+back) by `MalformedRequestSliceTest.aNullableNestedObjectIsValidatedInto`. It does not see
+path/query/header **parameters** (the `jaxrs-spec` generator derives their annotations itself) or **response**
+schemas — both are exercised by the API fuzzing stage (`scripts/run_api_fuzz.py`, ADR 0091 decision 9), which sends
+every parameter out of range and reads every response it gets against its schema, a run and not a guard —, nor
+**presence** beyond rule 5 (a missing object, enum or uuid field is
 refused by deserialization on its own; `@NotBlank` beyond N = 1). And it ties the annotation to the schema only — never either to the
 DB column (`validate_maxlength_storage.py` does that for base64 caps) or to what a client sends, so a bound that
 is the *wrong value* is green here.

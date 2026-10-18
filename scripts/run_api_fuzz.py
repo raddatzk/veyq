@@ -49,11 +49,12 @@ store — its own database and bucket only, and `up --no-recreate`, so a running
 git worktree, pin the stack to the main checkout's `infra/` (`VEYQ_INFRA_DIR=<main>/infra`) and the jar to the
 worktree's (`VEYQ_JAR`), as that script's `compose_up` explains; `run_pipeline.py` does the first for every job.
 
-**Measured** (2026-10-18, local: macOS arm64, Docker Desktop, a load average of ~12 from parallel sessions;
-`MAX_EXAMPLES` 10): boot and seed 30 s; public-negative 130 s (175 operations, 16 spec files), public-positive 53 s (50
-GETs), admin-negative 23 s (53 operations), admin-positive 5 s (15 GETs) — 236 s in all. With the jar build and `npm ci`
-before it the job fits its 15 minutes on that machine; a CI runner has fewer cores, and its first run replaces these
-numbers (ADR 0091 decision 1). `MAX_EXAMPLES` is the knob if it does not.
+**Measured** (2026-10-19, local: macOS arm64, Docker Desktop, a load average of 7-9 from parallel sessions;
+`MAX_EXAMPLES` 10; the green run): the image already built, the boot and the seed about 30 s; public-negative 62 s (180
+operations in 17 runs — `logout`'s own run included), public-positive 17 s (52 GETs), admin-negative 13 s (59
+operations), admin-positive 2 s (16 GETs) — 159 s in all. With the jar build, `npm ci` and the image build before it
+the job fits its 15 minutes on that machine; a CI runner has fewer cores, and its first run replaces these numbers
+(ADR 0091 decision 1). `MAX_EXAMPLES` is the knob if it does not.
 
 Usage:
     python3 scripts/run_api_fuzz.py                      # the whole run, as CI calls it
