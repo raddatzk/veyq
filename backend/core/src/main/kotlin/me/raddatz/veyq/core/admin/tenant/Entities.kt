@@ -10,13 +10,14 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * One acceptance of one tenant terms revision by one member (cr-0114, ADR 0035 §4). Keyed logically by
- * (user_id, tenant_id, accepted_revision) — a surrogate id + a UNIQUE — so the table is the member's **history** of
- * acceptances, one row per revision, never overwritten (owner decision 2026-10-10, inbox #402): acceptance is
- * evidence should a violation or dispute arise, and a dispute about an older revision needs that revision's row.
- * **Operational metadata** (like membership), never content. The gate reads the highest revision accepted: when it
- * is below `tenant.termsRevision` the member accept gate re-fires (uc.account.accept-terms); accepting the current
- * revision adds its row.
+ * One acceptance of one terms **triple** by one member (cr-0114, ADR 0035 §4 and decision 6): the space's
+ * [acceptedRevision], the operator section's [operatorRevision] and its [variant] (FULL or REDUCED). Keyed logically by
+ * (user_id, tenant_id, accepted_revision, operator_revision, variant) — a surrogate id + a UNIQUE — so the table is the
+ * member's **history** of acceptances, one row per triple, never overwritten (owner decision 2026-10-10, inbox #402):
+ * acceptance is evidence should a violation or dispute arise, and a dispute about an older text needs that text's row.
+ * **Operational metadata** (like membership), never content. The gate asks whether a row for the current triple
+ * exists (uc.account.accept-terms); accepting it adds its row. A row written before the operator section existed has
+ * [operatorRevision] 0 and [variant] null, and matches no current triple.
  *
  * [acceptedAt] is the server-observed time the member accepted [acceptedRevision] — audit evidence of *when* which
  * terms revision was accepted. No code path reads it and no API serves it: operators and support read it from the
@@ -43,6 +44,12 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
 
     @Column(name = "accepted_revision", nullable = false)
     var acceptedRevision: Int = 0
+
+    @Column(name = "operator_revision", nullable = false)
+    var operatorRevision: Int = 0
+
+    @Column(name = "variant", length = 16)
+    var variant: String? = null
 
     @Column(name = "accepted_at", nullable = false)
     lateinit var acceptedAt: Instant

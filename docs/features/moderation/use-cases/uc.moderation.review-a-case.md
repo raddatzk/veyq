@@ -20,7 +20,10 @@
 
 1. **The queue.** With a key proof the surface lists the instance's open and decided cases, across every tenant, in
    clear fields only: the category, the item's kind, when it was first and last reported, how many reports, the
-   tenant's domain, the state and the hold's end. The urgent categories come first, then the oldest.
+   tenant's domain, the state and the hold's end. The urgent categories come first, then the oldest. **No case closes
+   itself** (ADR 0093 § 11): a case still undecided 90 days after its first report is marked overdue, and at 30, 75 and
+   90 days the accepted moderators and the instance contact's confirmed notification address are mailed a reminder
+   naming each such case only by its category and age (DSA Art. 16(6)).
 2. **A case.** Opening one fetches its details with a fresh proof over that case: each report's time, category and
    sealed part — opened in the browser with the epoch's key into the reason and the context, and the contact sealed
    apart, until it goes six months after the decision was told (ADR 0093 § 11) — the case's
@@ -45,9 +48,11 @@
 ## Alternate / exception flows
 
 - **A1 — Extend the hold.** While a hold is alive the moderator extends it with a concrete reason (an authority's
-  request, an objection, a lawyer's letter, a lawsuit, an Art. 18 report in progress), sealed to the moderation key, and
-  a new end at most six months from now and after the current end. The log records the reason and the end; without a
-  new reason the hold ends at that date.
+  request, an objection, a lawyer's letter, a lawsuit, an Art. 18 report in progress), sealed to the moderation key, its
+  kind named in the clear, and a new end at most six months from now and after the current end. The log records the
+  reason, its kind and the end; without a new reason the hold ends at that date. On a case of child sexual abuse
+  material only an authority's request or an Art. 18 report in progress extends it, and the server refuses any other
+  kind (`extension_reason_not_allowed`, § 184b(5) StGB).
 - **A2 — Bar a reporter.** From a report in the case the moderator bars its reporter: the reporting member's account,
   or the link a guest reported through. Every further report from that account or through that link is refused
   (`reporter_barred`) until the bar is lifted; the reports already made stay.

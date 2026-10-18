@@ -36,3 +36,24 @@ acceptanceCriteria:
     text: The terms text is the space's public policy (served, no content key); terms_revision is a plain int. No user content, no E2EE key — the operator-blind boundary is unaffected (ADR 0035).
     coverage:
       backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsRevisionAndIdempotentReSaveDoesNot] }
+  # cr-operator-section-of-the-terms (ADR 0035 decision 6): the section is veyq's, not the space owner's.
+  - id: the-operator-section-is-not-the-owners
+    text: >-
+      Below the space's own terms the panel shows the operator section read-only, to the owner as to a member, with no
+      control that edits or removes it; its text comes from the build alone, and its revision never moves the space's.
+    coverage:
+      backend:
+        unit: [OperatorSectionRendererTest.theJarCarriesTheContractFileUnchanged]
+      web:
+        unit: [src/features/tenant/TenantTermsPanel.test.ts]
+  - id: the-template-leaves-the-hosts-duties-to-the-section
+    text: >-
+      The starter template's clause 9 points to the operator section instead of regulating review itself, and clauses 2
+      and 7 point there for what the server keeps, in both languages.
+    coverage:
+      web:
+        unit: [src/features/tenant/termsTemplate.test.ts]
+gaps:
+  stack: >-
+    Lane L1 walks this in a browser in e2e/tests/features/terms-operator-section.spec.ts, tagged per criterion
+    (cr-operator-section-of-the-terms), but no CI run has executed that lane yet (ADR 0040).

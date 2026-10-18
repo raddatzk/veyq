@@ -7,9 +7,11 @@
 // the notice follows the switch, never the operating mode.
 //
 // The wording waits on counsel (ADR 0093 § Legal basis, Still open 4: what the port is worth behind an operator's own
-// NAT); the full Art. 13 text is the operator section of the terms, whose link joins here when that section exists
-// (cr-operator-section-of-the-terms, anchor `#guest-write-record`).
+// NAT). The full Art. 13 text — who the controller is, the purpose, the basis, N, the recipients, the rights and the
+// objection — is the operator section of the terms (ADR 0035 decision 6): the notice links its record passage on the
+// public page (`/operator-terms#guest-write-record`), in a tab of its own so the share page keeps its fragment key.
 import { useI18n } from 'vue-i18n'
+import { OPERATOR_TERMS_PATH, RECORD_ANCHOR } from '../terms/operatorSection'
 
 defineProps<{ days?: number | null }>()
 const { t } = useI18n()
@@ -20,6 +22,14 @@ const { t } = useI18n()
     <span class="guest-write-record-kept">{{ t('share.guest.recordKept', { days }, days) }}</span>
     {{ ' ' }}
     <span class="guest-write-record-objection">{{ t('share.guest.recordObjection') }}</span>
+    {{ ' ' }}
+    <a
+      class="guest-write-record-more"
+      data-testid="guest-write-record-more"
+      :href="`${OPERATOR_TERMS_PATH}#${RECORD_ANCHOR}`"
+      target="_blank"
+      rel="noopener"
+    >{{ t('share.guest.recordMore') }}</a>
   </p>
 </template>
 
@@ -28,5 +38,8 @@ const { t } = useI18n()
   margin: 0.25rem 0 0;
   font-size: 0.85rem;
   color: var(--app-muted);
+}
+.guest-write-record-more {
+  color: var(--app-accent);
 }
 </style>

@@ -37,6 +37,7 @@ import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.moderation.report.ModerationReportEntity
 import me.raddatz.veyq.core.moderation.report.ReportCategory
 import me.raddatz.veyq.core.moderation.report.ReportShareEntity
+import me.raddatz.veyq.core.moderation.report.CaseReminders
 import me.raddatz.veyq.core.moderation.statement.ModerationObjectionEntity
 import me.raddatz.veyq.core.moderation.statement.ModerationStatementEntity
 import me.raddatz.veyq.core.moderation.statement.RecipientKind
@@ -100,6 +101,7 @@ class CaseViews(
                 objectionOpen = ModerationObjectionEntity.openOn(case.id),
                 origin = ModerationCaseOrigin.valueOf(case.origin),
                 statementDeferredUntil = deferred[case.id]?.minOrNull()?.utc(),
+                overdue = case.state == CaseState.OPEN.name && !times.min().plus(CaseReminders.OVERDUE).isAfter(now),
             )
         }
     }

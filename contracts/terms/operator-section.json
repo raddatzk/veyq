@@ -1,0 +1,357 @@
+{
+  "revision": 1,
+  "draft": true,
+  "note": "The operator section of the terms (ADR 0035 decision 6, ADR 0093 § 14; uc.admin.tenant-terms, uc.account.accept-terms, uc.sharing.share-accept): fixed text veyq ships, DE and EN, served after every space's own terms by the endpoints that serve them, filled with the values the Server Owner sets. Read by the backend alone (core/terms/OperatorSection.kt renders it); clients render what the endpoints serve. Nobody edits it at runtime. 'revision' moves with the text and only with it, in the release that changes it; a bump reopens every terms gate. 'draft' is true until a qualified legal review (ADR 0093 § Legal basis: every text needs one before anything ships); while it is true every rendering starts with 'draftBanner'. Each passage is marked by 'part': 'both' (both variants), 'full' (only the full variant, the club, organisation or company mode's; the private mode's reduced variant leaves it out — exactly what ADR 0035 decision 6 lists under drops) or 'record' (the guest-write record's GDPR Art. 13 information, rendered exactly while core.public-shares.guest-write-record is on for the space, in either variant). A record passage with 'separate': true is the right to object (Art. 21(4)), served apart from the rest. Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line with a placeholder whose value is empty is left out where the line is 'optional', in the reduced variant (the private mode: an unset value is simply absent, record passage included — ADR 0035 decision 8's rule, owner Q26); otherwise the value renders as 'gap' — a visible 'not stated by this operator', never an empty sentence. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {supervisoryAuthority}, {contactEmail}, {contactLanguages} (the tags, joined by ', '), {privacyContact} (the address the disclosures name, else the contact) and {retention} (N with its unit, from 'retentionUnit'). Each takes a value the Server Owner typed to be published, never user data; a newline in a value renders as ', '.",
+  "draftBanner": {
+    "en": "*Draft: this section has not yet been reviewed by a lawyer.*",
+    "de": "*Entwurf: Dieser Abschnitt ist noch nicht anwaltlich geprüft.*"
+  },
+  "gap": {
+    "en": "not stated by this operator",
+    "de": "von der Betreiberseite nicht angegeben"
+  },
+  "retentionUnit": {
+    "en": {
+      "one": "1 day",
+      "other": "{n} days"
+    },
+    "de": {
+      "one": "1 Tag",
+      "other": "{n} Tage"
+    }
+  },
+  "passages": [
+    {
+      "id": "intro",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## On this instance: reports, measures and what is kept",
+          "de": "## Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung"
+        },
+        {
+          "en": "This section is the same for every space on this veyq instance. veyq provides its text, whoever runs the instance (the operator) provides the details in it, and the owner of a space can neither change nor remove it.",
+          "de": "Dieser Abschnitt gilt gleich für jeden Bereich auf dieser veyq-Instanz. Den Text stellt veyq bereit, die Angaben darin macht, wer die Instanz betreibt (die Betreiberseite), und wem ein Bereich gehört, kann ihn weder ändern noch entfernen."
+        }
+      ]
+    },
+    {
+      "id": "provider",
+      "part": "both",
+      "lines": [
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Operator: {providerName}",
+          "de": "Betrieben von: {providerName}"
+        },
+        {
+          "en": "Address: {providerAddress}",
+          "de": "Anschrift: {providerAddress}"
+        },
+        {
+          "en": "Email: {providerEmail}",
+          "de": "E-Mail: {providerEmail}"
+        },
+        {
+          "en": "Represented by: {providerRepresentative}",
+          "de": "Vertreten durch: {providerRepresentative}",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "id": "notice",
+      "part": "both",
+      "lines": [
+        {
+          "en": "### Reporting content",
+          "de": "### Inhalte melden"
+        },
+        {
+          "en": "Anyone who can see something on this instance can report it: a member, and a guest of a link that shows content. A guest of an upload link reports the link itself. Use *Report* on what you see.",
+          "de": "Wer auf dieser Instanz etwas sehen kann, kann es melden: ein Mitglied, und ein Gast über einen Link, der Inhalte zeigt. Wer als Gast über einen Upload-Link kommt, meldet den Link selbst. Nutze dafür *Melden* an dem, was du siehst."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "A report names a category (child sexual abuse material, terrorist content, a threat to life or safety, other illegal content, or a breach of the terms), gives a reason, and confirms that it is accurate and complete to the best of the reporter's knowledge. A contact is optional, and a report of child sexual abuse material is expected without a name.",
+          "de": "Eine Meldung nennt eine Kategorie (Darstellung sexuellen Missbrauchs von Kindern, terroristische Inhalte, eine Gefahr für Leben oder Sicherheit, andere rechtswidrige Inhalte oder ein Verstoß gegen die Nutzungsbedingungen), gibt einen Grund an und bestätigt, dass die Angaben nach bestem Wissen richtig und vollständig sind. Ein Kontakt ist freiwillig, und eine Meldung von Darstellungen sexuellen Missbrauchs von Kindern wird ohne Namen erwartet."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "A report is encrypted so that only the moderators of this instance can read it, and nobody else learns of it: not the person who shared the content, nor the space's owner. A person reviews every report; a report alone blocks nothing. Moderators see only what was reported; everything else stays end-to-end encrypted, unreadable to the operator.",
+          "de": "Eine Meldung wird so verschlüsselt, dass nur die Moderation dieser Instanz sie lesen kann, und sonst erfährt niemand davon: weder die Person, die den Inhalt geteilt hat, noch wem der Bereich gehört. Jede Meldung prüft ein Mensch; eine Meldung allein sperrt nichts. Die Moderation sieht nur, was gemeldet wurde; alles andere bleibt Ende-zu-Ende-verschlüsselt und für die Betreiberseite unlesbar."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Whoever leaves a contact receives a confirmation and later the decision. The contact is sealed apart so that only the moderators can read it, is used for nothing else, and is deleted six months after the decision was told (or, where it could not be told, after the decision).",
+          "de": "Wer einen Kontakt angibt, erhält eine Bestätigung und später die Entscheidung. Der Kontakt wird getrennt so verschlüsselt, dass nur die Moderation ihn lesen kann, für nichts anderes verwendet und sechs Monate, nachdem die Entscheidung mitgeteilt wurde (oder, wo sie nicht mitgeteilt werden konnte, nach der Entscheidung), gelöscht."
+        }
+      ]
+    },
+    {
+      "id": "kept",
+      "part": "both",
+      "lines": [
+        {
+          "en": "### What is kept after a report",
+          "de": "### Was nach einer Meldung aufbewahrt wird"
+        },
+        {
+          "en": "When something is reported, the server keeps an encrypted copy of exactly what was reported, with who uploaded it and, where one exists, its guest-write record. The copy is hidden, only the moderators can open it, and deleting the original does not delete it. It is kept:",
+          "de": "Wird etwas gemeldet, bewahrt der Server eine verschlüsselte Kopie genau dessen auf, was gemeldet wurde, mit der Angabe, wer es hochgeladen hat, und, wo es eine gibt, ihrer Aufzeichnung des Gast-Schreibens. Die Kopie ist unsichtbar, nur die Moderation kann sie öffnen, und das Löschen des Originals löscht sie nicht. Sie wird aufbewahrt:"
+        },
+        {
+          "en": "- while the case is open: until the decision, at the latest 90 days after the report;",
+          "de": "- solange der Fall offen ist: bis zur Entscheidung, höchstens 90 Tage nach der Meldung;"
+        },
+        {
+          "en": "- when a report is dismissed: not at all, the copy is deleted at once;",
+          "de": "- wird eine Meldung abgewiesen: gar nicht, die Kopie wird sofort gelöscht;"
+        },
+        {
+          "en": "- after a measure: six months after those affected were told why (where nobody can be told, after the decision); lifting the measure ends it at once;",
+          "de": "- nach einer Maßnahme: sechs Monate, nachdem die Betroffenen die Begründung erhalten haben (wo niemand benachrichtigt werden kann, nach der Entscheidung); wird die Maßnahme aufgehoben, endet sie sofort;"
+        },
+        {
+          "en": "- for child sexual abuse material: until it was handed over to the authorities, at the latest 90 days after the report.",
+          "de": "- bei Darstellungen sexuellen Missbrauchs von Kindern: bis zur Übergabe an die Behörden, höchstens 90 Tage nach der Meldung."
+        },
+        {
+          "en": "Longer only for a concrete reason recorded with the case (an authority's request, an objection, legal proceedings), six months at a time.",
+          "de": "Länger nur aus einem konkreten Grund, der beim Fall festgehalten wird (eine Bitte einer Behörde, ein Widerspruch, ein Gerichtsverfahren), jeweils höchstens sechs Monate."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "What a case recorded — its reports, its steps, its statements, objections and orders, never the content itself — is kept until 31 December of the third year after the case closed, and never deleted while a measure of it is in force. Backups of the server can hold all of this past these dates, until the backup itself is deleted.",
+          "de": "Was ein Fall festgehalten hat — seine Meldungen, seine Schritte, seine Begründungen, Widersprüche und Anordnungen, nie die Inhalte selbst —, wird bis zum 31. Dezember des dritten Jahres nach Abschluss des Falls aufbewahrt und nie gelöscht, solange eine seiner Maßnahmen gilt. Sicherungen des Servers können all das über diese Fristen hinaus enthalten, bis die Sicherung selbst gelöscht wird."
+        }
+      ]
+    },
+    {
+      "id": "measures",
+      "part": "both",
+      "lines": [
+        {
+          "en": "### Measures",
+          "de": "### Maßnahmen"
+        },
+        {
+          "en": "A moderator decides, and measures come in steps:",
+          "de": "Eine Person aus der Moderation entscheidet, und Maßnahmen gibt es in Stufen:"
+        },
+        {
+          "en": "- the link is blocked: it answers as if it did not exist;",
+          "de": "- der Link wird gesperrt: Er antwortet, als gäbe es ihn nicht;"
+        },
+        {
+          "en": "- the content is blocked: nobody is shown it any more, members included, and it appears as \"Blocked by the operator\"; it can still be deleted, but not replaced or restored;",
+          "de": "- der Inhalt wird gesperrt: Er wird niemandem mehr angezeigt, auch Mitgliedern nicht, und erscheint als „Von der Moderation gesperrt“; er kann weiterhin gelöscht, aber nicht ersetzt oder wiederhergestellt werden;"
+        },
+        {
+          "en": "- a guest is blocked, together with the link they came through;",
+          "de": "- ein Gast wird gesperrt, zusammen mit dem Link, über den der Gast kam;"
+        },
+        {
+          "en": "- the operator blocks a member's sign-in on this instance, or takes a whole space offline.",
+          "de": "- die Betreiberseite sperrt die Anmeldung eines Mitglieds auf dieser Instanz oder nimmt einen ganzen Bereich vom Netz."
+        },
+        {
+          "en": "A measure deletes nothing, and every measure can be lifted.",
+          "de": "Eine Maßnahme löscht nichts, und jede Maßnahme kann aufgehoben werden."
+        }
+      ]
+    },
+    {
+      "id": "statement",
+      "part": "both",
+      "lines": [
+        {
+          "en": "### Being told why, and objecting",
+          "de": "### Begründung und Widerspruch"
+        },
+        {
+          "en": "Those a measure affects are told what was blocked and why, in veyq and by mail: the person who created the link, the person who uploaded the content and, when content is blocked, the owners of the space it lies in. A guest has no account and is not told in veyq.",
+          "de": "Wen eine Maßnahme betrifft, erfährt in veyq und per E-Mail, was gesperrt wurde und warum: die Person, die den Link erstellt hat, die Person, die den Inhalt hochgeladen hat, und bei gesperrten Inhalten, wem der Bereich gehört, in dem sie liegen. Ein Gast hat kein Konto und wird in veyq nicht benachrichtigt."
+        },
+        {
+          "en": "A guest can write to {contactEmail}.",
+          "de": "Ein Gast kann an {contactEmail} schreiben."
+        },
+        {
+          "en": "When the operator blocks a member's sign-in or takes a space offline because of its content, the member, or the space's owners, are told why by mail, with what was found, since they cannot read it in veyq; they object by writing to {contactEmail}.",
+          "de": "Sperrt die Betreiberseite die Anmeldung eines Mitglieds oder nimmt sie einen Bereich wegen seiner Inhalte offline, erfahren das Mitglied oder die Personen, denen der Bereich gehört, per E-Mail und mit dem Festgestellten, warum, da sie es in veyq nicht lesen können; sie widersprechen, indem sie an {contactEmail} schreiben."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Whoever is affected can object once per measure, in veyq, where they see the statement. Another moderator decides the objection where there is one.",
+          "de": "Wer betroffen ist, kann einmal je Maßnahme widersprechen, in veyq, dort, wo die Begründung steht. Über den Widerspruch entscheidet eine andere Person aus der Moderation, sofern es eine gibt."
+        }
+      ]
+    },
+    {
+      "id": "statement-full",
+      "part": "full",
+      "lines": [
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "The statement also names the facts found, whether a report or an authority's order led to the measure, that a person and no automated means decided, the ground with the law or the clause of the terms it relies on, that the measure applies wherever this instance is reached until it is lifted, and that the courts are open at any time, without an objection first.",
+          "de": "Die Begründung nennt außerdem die festgestellten Tatsachen, ob eine Meldung oder eine behördliche Anordnung zu der Maßnahme geführt hat, dass ein Mensch und kein automatisiertes Verfahren entschieden hat, den Grund mit dem Gesetz oder der Klausel der Nutzungsbedingungen, auf die sie sich stützt, dass die Maßnahme überall gilt, wo diese Instanz erreichbar ist, bis sie aufgehoben wird, und dass der Weg zu den Gerichten jederzeit offensteht, auch ohne vorherigen Widerspruch."
+        }
+      ]
+    },
+    {
+      "id": "deferral",
+      "part": "full",
+      "lines": [
+        {
+          "en": "Only an authority can ask for those affected to be told later: then the statement waits up to six weeks, renewed at most once, and goes out at the end.",
+          "de": "Nur eine Behörde kann verlangen, dass die Betroffenen später benachrichtigt werden: Dann wartet die Begründung bis zu sechs Wochen, höchstens einmal verlängert, und geht danach hinaus."
+        }
+      ]
+    },
+    {
+      "id": "authorities",
+      "part": "full",
+      "lines": [
+        {
+          "en": "### Authorities and contact",
+          "de": "### Behörden und Kontakt"
+        },
+        {
+          "en": "Where the operator learns of information that gives rise to a suspicion of a criminal offence threatening someone's life or safety, child sexual abuse included, they inform the competent authorities (in Germany the Federal Criminal Police Office, BKA). Orders of authorities are complied with.",
+          "de": "Erfährt die Betreiberseite von Informationen, die den Verdacht einer Straftat begründen, die Leben oder Sicherheit von Menschen bedroht, sexueller Missbrauch von Kindern eingeschlossen, informiert sie die zuständigen Behörden (in Deutschland das Bundeskriminalamt, BKA). Anordnungen von Behörden werden befolgt."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Terrorist content is prohibited on this instance. Once the operator knows of it, it is blocked; an authority's removal order is carried out within one hour of its receipt, and what it blocked is kept for six months, longer while an authority asks. A preservation order keeps what it names for 60 days, another order for the time it names, else six months. No automated means detect content here: the server cannot read it.",
+          "de": "Terroristische Inhalte sind auf dieser Instanz verboten. Sobald die Betreiberseite davon weiß, werden sie gesperrt; eine Entfernungsanordnung einer Behörde wird binnen einer Stunde nach ihrem Eingang umgesetzt, und was sie gesperrt hat, wird sechs Monate aufbewahrt, länger, solange eine Behörde darum bittet. Eine Sicherungsanordnung bewahrt, was sie nennt, 60 Tage auf, eine andere Anordnung für die Zeit, die sie nennt, sonst sechs Monate. Kein automatisiertes Verfahren erkennt hier Inhalte: Der Server kann sie nicht lesen."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "The single point of contact for users and authorities, also for removal orders of terrorist content, is {contactEmail}, in these languages: {contactLanguages}.",
+          "de": "Die zentrale Kontaktstelle für Nutzende und Behörden, auch für Entfernungsanordnungen zu terroristischen Inhalten, ist {contactEmail}, in diesen Sprachen: {contactLanguages}."
+        }
+      ]
+    },
+    {
+      "id": "record",
+      "part": "record",
+      "lines": [
+        {
+          "en": "### Your IP address when you add something as a guest",
+          "de": "### Deine IP-Adresse, wenn du als Gast etwas hinzufügst"
+        },
+        {
+          "en": "This is the information of Art. 13 GDPR.",
+          "de": "Dies sind die Informationen nach Art. 13 DSGVO."
+        },
+        {
+          "en": "Responsible for this processing (the controller) is the operator: {providerName}, {providerAddress}.",
+          "de": "Verantwortlich für diese Verarbeitung ist die Betreiberseite: {providerName}, {providerAddress}."
+        },
+        {
+          "en": "Contact for data protection: {privacyContact}.",
+          "de": "Kontakt für den Datenschutz: {privacyContact}."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "When you add something through a link as a guest (upload a file, name yourself, create or rename a folder, change its details), the server records that write: your IP address, the source port where it is known, the exact time, which guest identity wrote, and which item it wrote to; never what you wrote or uploaded. Nothing is recorded while you only look.",
+          "de": "Wenn du als Gast über einen Link etwas hinzufügst (eine Datei hochlädst, dir einen Namen gibst, einen Ordner anlegst oder umbenennst, seine Angaben änderst), zeichnet der Server diesen Schreibvorgang auf: deine IP-Adresse, den Quellport, wo er bekannt ist, die genaue Uhrzeit, welche Gast-Identität geschrieben hat und in welches Element; nie, was du geschrieben oder hochgeladen hast. Solange du nur ansiehst, wird nichts aufgezeichnet."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Purpose: tracing the misuse of a guest link once it is reported. Legal basis: Art. 6(1)(f) GDPR, the operator's legitimate interest in tracing such misuse and in answering authorities.",
+          "de": "Zweck: den Missbrauch eines Gast-Links nachverfolgen zu können, wenn er gemeldet wird. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse der Betreiberseite, einen solchen Missbrauch nachzuverfolgen und Behörden Auskunft geben zu können."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Each record is deleted {retention} after the write. It is kept longer only when a report or an authority's order concerns what was written: then a copy stays with what is kept after a report, as long as that section says. The instance's own backup leaves these records out; a backup the operator makes another way can hold them until that backup is deleted.",
+          "de": "Jede Aufzeichnung wird {retention} nach dem Schreibvorgang gelöscht. Länger bleibt sie nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was geschrieben wurde: Dann bleibt eine Kopie bei dem, was nach einer Meldung aufbewahrt wird, so lange, wie jener Abschnitt sagt. Die instanzeigene Sicherung lässt diese Aufzeichnungen aus; eine Sicherung, die die Betreiberseite auf anderem Weg macht, kann sie enthalten, bis diese Sicherung gelöscht wird."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Recipients: the moderators of this instance, and law enforcement authorities on their request or order, or when the operator reports a suspected offence.",
+          "de": "Empfänger: die Moderation dieser Instanz und Strafverfolgungsbehörden auf deren Ersuchen oder Anordnung, oder wenn die Betreiberseite den Verdacht einer Straftat meldet."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "You have the right of access, rectification, erasure and restriction of processing, and the right to lodge a complaint with a supervisory authority.",
+          "de": "Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung sowie das Recht, dich bei einer Aufsichtsbehörde zu beschweren."
+        },
+        {
+          "en": "The supervisory authority competent for the operator: {supervisoryAuthority}.",
+          "de": "Zuständige Aufsichtsbehörde für die Betreiberseite: {supervisoryAuthority}."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "If you do not want this, you can still look at what a link shows, without adding anything.",
+          "de": "Wenn du das nicht möchtest, kannst du weiterhin ansehen, was ein Link zeigt, ohne etwas hinzuzufügen."
+        }
+      ]
+    },
+    {
+      "id": "record-objection",
+      "part": "record",
+      "separate": true,
+      "lines": [
+        {
+          "en": "### Your right to object",
+          "de": "### Dein Widerspruchsrecht"
+        },
+        {
+          "en": "You have the right to object at any time, on grounds relating to your particular situation, to this processing of your data (Art. 21 GDPR). The operator then no longer processes it, unless there are compelling legitimate grounds that override your interests, rights and freedoms, or it is needed to establish, exercise or defend legal claims.",
+          "de": "Du hast das Recht, aus Gründen, die sich aus deiner besonderen Situation ergeben, jederzeit gegen diese Verarbeitung deiner Daten Widerspruch einzulegen (Art. 21 DSGVO). Die Betreiberseite verarbeitet sie dann nicht mehr, es sei denn, sie kann zwingende schutzwürdige Gründe nachweisen, die deine Interessen, Rechte und Freiheiten überwiegen, oder die Verarbeitung dient der Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen."
+        },
+        {
+          "en": "Write to {privacyContact}.",
+          "de": "Schreib dazu an {privacyContact}."
+        }
+      ]
+    }
+  ]
+}

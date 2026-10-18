@@ -74,7 +74,7 @@ class Statements(
             // snapshot (ADR 0078), and a lift that committed meanwhile must refuse the objection.
             val statement = ModerationStatementEntity.findById(statementId, LockModeType.PESSIMISTIC_WRITE)
                 ?: return@createOrConflict refused(StatementFailures.statementNotFound)
-            val case = ModerationCaseEntity.findById(statement.caseId, LockModeType.PESSIMISTIC_WRITE)
+            val case = statement.caseId?.let { ModerationCaseEntity.findById(it, LockModeType.PESSIMISTIC_WRITE) }
                 ?: return@createOrConflict refused(StatementFailures.statementNotFound)
             val recipient = recipientRow(statementId, accountId) ?: return@createOrConflict refused(StatementFailures.statementNotFound)
             if (ModerationObjectionEntity.count("statementId", statementId) > 0) return@createOrConflict refused(StatementFailures.objectionExists)
@@ -118,13 +118,15 @@ class Statements(
     private fun view(r: StatementRecipientEntity, accountId: String, form: StatementForm, contact: String?): ModerationStatement? {
         val s = ModerationStatementEntity.findById(r.statementId) ?: return null
         val sentAt = s.sentAt ?: return null
+        // A Server Owner's step's statement is a mail's alone (ADR 0093 § 7): its kind has no wire name, and it has no case.
+        val caseId = s.caseId ?: return null
         val m = ModerationBlockEntity.findById(s.measureId) ?: return null
         val kind = m.blockKind.wire ?: return null
         val objection = ModerationObjectionEntity.find("statementId", s.id).firstResult()
         val inForce = m.activeKey != null
         return ModerationStatement(
             id = UUID.fromString(s.id),
-            caseId = UUID.fromString(s.caseId),
+            caseId = UUID.fromString(caseId),
             measureKind = ModerationStatement.MeasureKind.valueOf(kind),
             targetId = m.targetId,
             shareId = when (kind) {
@@ -134,6 +136,7 @@ class Statements(
             },
             scopeId = m.scopeId?.let(UUID::fromString),
             ground = ModerationGround.valueOf(s.ground),
+            provision = s.provision,
             basis = WireBasis.valueOf(s.basis),
             form = WireForm.valueOf(form.name),
             sentAt = sentAt.utc(),

@@ -15,7 +15,7 @@ import Password from 'primevue/password'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
-import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError, type TenantBirth, type TenantOwner } from '../features/tenant/tenantInvite'
+import { previewInvite, acceptInvite, acceptOwnership, registerAndAccept, bornTenantScope, tenantError, type TenantBirth, type TenantOwner } from '../features/tenant/tenantInvite'
 import { sealName, sealAvatar, myUserId } from '../features/account/profile/profile'
 import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
@@ -51,11 +51,16 @@ const ownerEmail = ref('')
 // grant-less (no scope birth, no grant) and a key-holder delivers the key later (cr-0076).
 const role = ref<InviteRole>(InviteRole.Owner)
 const isMember = computed(() => role.value === InviteRole.Member)
+// An OWNER invite into an ACTIVE tenant whose member the invitee already is (ADR 0101 decision 9): accepting makes them
+// an owner — no birth, no username, no name — through `acceptOwnership`. They hold an account by premise, so the
+// view goes straight to the sign-in phase.
+const handover = ref(false)
 
-// Role-aware copy: a MEMBER joins the shared space, an OWNER takes ownership. Falls back to the base (owner)
-// key when no `<base>Member` variant exists.
+// Role-aware copy: a MEMBER joins the shared space, an OWNER takes ownership, a member handed the space becomes its
+// owner. Each phase names only the `<base>Member` / `<base>Handover` variants that exist for its bases.
 function jcopy(base: string, params?: Record<string, unknown>): string {
-  return t(`tenant.join.${isMember.value ? `${base}Member` : base}`, params ?? {})
+  const variant = handover.value ? 'Handover' : isMember.value ? 'Member' : ''
+  return t(`tenant.join.${base}${variant}`, params ?? {})
 }
 
 // register + signin form: the per-tenant handle chosen on join (ADR 0023), plus an OPTIONAL real name. For an
@@ -75,6 +80,8 @@ const secretKey = ref('')
 // Fast path: the session lapsed while the vault stayed unlocked → ask for the password only (re-login), never
 // the Secret Key (the identity key is already in memory).
 const needsReauth = ref(false)
+// A sign-in accept needs a username — except a handover, which keeps the member's own.
+const usernameReady = computed(() => handover.value || username.value.trim().length > 0)
 
 // This browser already holds the INVITED owner's unlocked vault (same-origin setup → create-tenant flow):
 // the identity key is in memory, so we can seal the grant and accept in one click — no password, no Secret
@@ -105,7 +112,8 @@ onMounted(async () => {
     domain.value = p.domain
     ownerEmail.value = p.ownerEmail
     role.value = p.role
-    phase.value = p.hasAccount ? 'signin' : 'register'
+    handover.value = p.handover
+    phase.value = p.hasAccount || p.handover ? 'signin' : 'register'
   } catch (e) {
     const { status } = await tenantError(e)
     phase.value = status === HttpStatus.gone ? 'expired' : 'invalid'
@@ -191,6 +199,11 @@ async function signInAndAccept() {
   try {
     await login(ownerEmail.value, password.value)
     await unlockMasterKey(password.value, secretKey.value.trim())
+    if (handover.value) {
+      await acceptOwnership(secret)
+      phase.value = 'done'
+      return
+    }
     const priv = identityPrivate()
     if (!priv) throw new Error('locked')
     let birth: TenantBirth | undefined
@@ -215,6 +228,12 @@ async function signInAndAccept() {
 /** With an already-unlocked identity in memory, cold-birth the scope grant and accept. acceptInvite isn't
  *  withRefresh-wrapped itself, so wrap it here: an expired access token rotates silently from the cookie. */
 async function sealAndAccept() {
+  if (handover.value) {
+    await withRefresh(() => acceptOwnership(secret))
+    password.value = ''
+    phase.value = 'done'
+    return
+  }
   const priv = identityPrivate()
   if (!priv) throw new Error('locked')
   let birth: TenantBirth | undefined
@@ -281,6 +300,7 @@ async function mapError(e: unknown): Promise<string> {
   if (code === 'email_taken') return t('tenant.join.emailTaken')
   if (code === 'username_taken') return t('tenant.join.usernameTaken')
   if (code === 'not_invited_owner') return t('tenant.join.wrongOwner')
+  if (code === 'not_tenant_member') return t('tenant.join.notMemberHandover')
   return t('tenant.join.failed')
 }
 </script>
@@ -336,12 +356,13 @@ async function mapError(e: unknown): Promise<string> {
       <template v-else-if="phase === 'signin'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
 
-        <!-- The per-tenant handle (ADR 0023): an existing account still picks a username for THIS tenant. -->
-        <label class="veyq-form-field">{{ t('tenant.join.username') }}
+        <!-- The per-tenant handle (ADR 0023): an existing account still picks a username for THIS tenant — unless it is
+             handed the space it is a member of already, which keeps its handle. -->
+        <label v-if="!handover" class="veyq-form-field">{{ t('tenant.join.username') }}
           <InputText v-model="username" name="username" autocomplete="username" required />
           <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
         </label>
-        <template v-if="!isMember">
+        <template v-if="!isMember && !handover">
           <div class="name-row">
             <label class="veyq-form-field">{{ t('profile.firstName') }}
               <InputText v-model="firstName" name="given-name" autocomplete="given-name" />
@@ -363,13 +384,13 @@ async function mapError(e: unknown): Promise<string> {
               <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="reauth-password" /></label>
               <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
               <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
-                      :disabled="!username.trim() || password.length === 0" />
+                      :disabled="!usernameReady || password.length === 0" />
             </form>
           </template>
           <template v-else>
             <p class="veyq-form-copy">{{ jcopy('signinReadySub', { email: ownerEmail }) }}</p>
             <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-            <Button :label="jcopy('join')" icon="pi pi-check" :loading="busy" :disabled="!username.trim()" @click="acceptDirect" />
+            <Button :label="jcopy('join')" icon="pi pi-check" :loading="busy" :disabled="!usernameReady" @click="acceptDirect" />
           </template>
         </template>
 
@@ -384,7 +405,7 @@ async function mapError(e: unknown): Promise<string> {
             </label>
             <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
             <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
-                    :disabled="!username.trim() || password.length === 0 || secretKey.trim().length === 0" />
+                    :disabled="!usernameReady || password.length === 0 || secretKey.trim().length === 0" />
           </form>
         </template>
       </template>
@@ -392,7 +413,9 @@ async function mapError(e: unknown): Promise<string> {
       <template v-else-if="phase === 'done'">
         <Message severity="success" :closable="false">{{ jcopy('done', { tenant: tenantName }) }}</Message>
         <p class="veyq-form-copy">{{ jcopy('doneNote') }}</p>
-        <Button :label="t('login.title')" icon="pi pi-sign-in" @click="router.push({ name: 'login' })" />
+        <!-- A handover leaves this browser signed in and unlocked on the space it now owns: open it. -->
+        <Button v-if="handover" :label="t('tenant.join.openSpace')" icon="pi pi-arrow-right" @click="router.push('/')" />
+        <Button v-else :label="t('login.title')" icon="pi pi-sign-in" @click="router.push({ name: 'login' })" />
       </template>
     </template>
   </Card>

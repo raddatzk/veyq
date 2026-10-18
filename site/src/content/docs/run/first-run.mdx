@@ -6,6 +6,8 @@ sources:
   - docs/features/admin/use-cases/uc.admin.admin-channel.md
   - docs/features/admin/use-cases/uc.admin.configure-object-store.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
+  - docs/features/admin/use-cases/uc.admin.delete-tenant.md
+  - docs/features/account/use-cases/uc.account.erase-account.md
   - docs/decisions/0065-admin-ui-cli-separate-service.md
   - docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md
 ---
@@ -148,6 +150,18 @@ quota*.
 - **Storage quota (GiB)** — **Save quota** or **Remove quota**. Uploads that would go over it are refused; nothing
   already stored is removed, and trash counts until it is emptied.
 - **Take offline** / **Bring back online** — see [Moderation](/veyq/run/moderation/).
+- **Delete tenant** — for an active or offline tenant. Type its domain into **Type the tenant's domain, …, to confirm**
+  first. The tenant goes offline at once, exactly as **Take offline** takes it, shows **Being deleted** with the date,
+  and everything in it is erased on that date — 30 days later, the trash's retention. Until then **Stop deletion**
+  returns it offline, and **Bring back online** reactivates it. Every member is told by mail through the instance mail,
+  and every account stays, also one the deletion leaves in no tenant: nobody's account is erased without their asking.
+  Holds and the moderation records survive the deletion to their own ends. A deletion **over content** carries a
+  statement of reasons to the tenant's owners: tick **Over content** in the form and fill it in (see
+  [Moderation](/veyq/run/moderation/)).
+- **No owner** — a tenant whose last owner's account you erased (see [Accounts](#accounts)) has nobody to run it. Its
+  two ways on: **Invite owner** with the address of one of its members — they accept the link and become its owner; it
+  must be a member, because only a member already holds the tenant's key and you can admit nobody into it — or
+  **Delete tenant**.
 
 A tenant's mail settings, terms and per-link upload limit are not here: they belong to the tenant's owner, in the
 app.
@@ -173,6 +187,26 @@ app.
   mode would change ([Moderation](/veyq/run/moderation/#the-operating-mode)).
 - **Operator** — the instance contact, the provider identification and the supervisory authority, and the private
   notification address with its code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)).
+- **Accounts** — erase an account for a request that reached you another way, and stop a pending erasure
+  ([below](#accounts)).
+
+### Accounts
+
+A person erases their own account in the app's settings. When the request reaches you instead — a mail, a letter,
+someone who lost their password — you answer it here (GDPR Art. 17; you have a month, Art. 12(3)): type the
+**Account address** twice and choose **Erase account**.
+
+- The account stops at once: every session ends, sign-in is refused, it leaves every tenant as a removal takes it
+  (its own spaces into the trash, shared ones cut, a group it owned alone handed on) and the moderator roster.
+- It is erased 30 days later with its own spaces, its address and everything kept about it. What it put into shared
+  spaces stays with them, shown as a former member's; holds and the moderation records naming it stay to their own
+  ends.
+- Until then it is listed under **Pending erasures**, and **Stop erasure** lets it sign in again — for a mistaken or
+  coerced request. The memberships it was cut from need a new invitation.
+- Your own account cannot be erased this way. The last holder of the moderation key is refused until another
+  moderator holds it. The last owner of a tenant is not refused: the tenant is left with **No owner**
+  ([above](#tenants)).
+- The person is told by mail through the instance mail.
 
 ## The veyq-admin CLI
 
@@ -201,6 +235,9 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `tenant change-domain --tenant-id <id> --domain <domain>` | Move a tenant to another domain |
 | `tenant revoke --tenant-id <id>` | Delete a pending tenant |
 | `tenant suspend --tenant-id <id>` / `tenant reactivate --tenant-id <id>` | Take a tenant offline, bring it back |
+| `tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]` / `tenant stop-deletion --tenant-id <id>` | Delete an active or offline tenant (offline at once, erased after 30 days); stop it, which leaves it offline |
+| `tenant invite-owner --tenant-id <id> --email <address>` | Invite one of a tenant's members to own it, and print the invitation |
+| `account erase --address <address>` / `account stop-erasure --address <address>` / `account erasures` | Erase an account (erased after 30 days); stop a pending erasure; list the pending ones |
 | `tenant quota --tenant-id <id> --gib <GiB\|none>` | Set or clear a tenant's storage quota |
 | `release` | Print the running release |
 | `config-secret` | Print the config-secret key's state (`OK`, `ABSENT` or `MISMATCH`); changes nothing |

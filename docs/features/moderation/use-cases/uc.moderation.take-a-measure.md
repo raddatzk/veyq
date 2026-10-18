@@ -34,9 +34,13 @@
    tenant, taking it offline. The case shows the proposal; the Server Owner sees it in admin-web (`veyq-admin moderation
    proposals`) and takes it — a member's sign-in block, which ends every session of the account at once and refuses
    every sign-in until lifted (`veyq-admin account block|unblock`); or the tenant's suspension
-   ([uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md)) — or declines it.
+   ([uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md)) — or declines it. A step from a
+   proposal is over content and carries its statement of reasons, entered with it — ground, provision, facts —, by
+   mail to the member or to the tenant's owners ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md)
+   A7); a step without a case carries one when the Server Owner marks it as over content.
 6. Each step takes an optional note sealed to the moderation key. A moderator's step (2–4) also takes its **statement
-   of reasons** — the ground, and the facts sealed to the moderation key and to each affected member's identity key —
+   of reasons** — the ground, the provision or clause it relies on, and the facts sealed to the moderation key and to
+   each affected member's identity key —
    sent with it ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) steps 1–6); a reporter who
    left a contact is told the decision. The case is *decided*, and its hold now ends six months after the statement is
    sent (from the decision where nobody can be told).

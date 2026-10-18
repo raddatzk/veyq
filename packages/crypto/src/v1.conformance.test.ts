@@ -726,6 +726,43 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('erase-account attestation (uc.account.erase-account)', () => {
+    const a = vectors.auth_attestation.erase_account
+    const nonce = () => Uint8Array.from(Buffer.from(a.nonce_b64, 'base64'))
+    const build = (over: Partial<{ userId: string; nonce: Uint8Array }> = {}) =>
+      v1.eraseAccountAttestationStatement({ userId: a.user_id, nonce: nonce(), ...over })
+
+    it('statement bytes and the auth key\'s signature', () => {
+      expect(hex(build())).toBe(a.statement)
+      expect(hex(ed25519.getPublicKey(unhex(a.auth_private_key)))).toBe(a.auth_public_key)
+      expect(hex(v1.authSign(unhex(a.auth_private_key), build()))).toBe(a.signature)
+      expect(v1.authVerify(unhex(a.auth_public_key), build(), unhex(a.signature))).toBe(true)
+    })
+
+    // The nonce is bound as its DECODED bytes: the base64 text in its place is another statement.
+    it('binds the decoded nonce, not its base64 text', () => {
+      expect(hex(build({ nonce: v1.utf8(a.nonce_b64) }))).not.toBe(a.statement)
+    })
+
+    // Each bound value, moved: the signature must stop verifying, so a captured proof erases no other account and
+    // answers for no other challenge.
+    it('answers for no other account or challenge', () => {
+      const sig = unhex(a.signature)
+      const pub = unhex(a.auth_public_key)
+      expect(v1.authVerify(pub, build({ userId: 'c0ffee00-0000-4000-8000-0000000000ab' }), sig)).toBe(false)
+      const other = nonce()
+      other[0] ^= 1
+      expect(v1.authVerify(pub, build({ nonce: other }), sig)).toBe(false)
+    })
+
+    it('has its own domain, so no other attestation stands for it', () => {
+      const domain = 'veyq/v1/auth-attestation/erase-account'
+      expect(a.domain).toBe(domain)
+      expect(new TextDecoder().decode(build().slice(4, 4 + domain.length))).toBe(domain)
+      expect(domain).not.toBe(vectors.auth_attestation.change_email.domain)
+    })
+  })
+
   describe('admission tag (ADR 0020 move 6)', () => {
     const a = vectors.admission_tag
     type Case = { context: v1.Admission; statement: string; tag: string }

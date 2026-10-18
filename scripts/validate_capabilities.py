@@ -34,11 +34,13 @@ And it checks every preset (ADR 0088 decision 14): an entry may carry `modes`, i
 entry whose `levels` hold `instance`, since choosing a mode sets the Server Owner's switch and never a tenant's. The
 backend generates `CapabilityPresets` from it and the mode's write sets exactly those entries, so a missing key would
 leave an entry unset in one mode, and a preset on an entry the Server Owner cannot switch would be a write with no
-switch behind it. The defect that bought it: no incident. Built with cr-instance-contact-and-provider-identification,
-whose catalog carries no `modes` yet (the first, `core.public-shares.guest-write-record`, comes with
-cr-guest-write-record); bitten by snapshot-and-restore of the catalog, a `modes` on an entry without `instance` and one
-missing `organisation` each red. The `instance` half is implied by the `levels` check below today (every entry must
-hold `instance`); it stays its own rule so a later tenant-only level cannot take a preset with it. Its limit: it reads
+switch behind it. An entry without `modes` is not refused: a preset is optional, and an entry the mode does not touch
+keeps whatever the Server Owner set. The defect that bought it: no incident. Built with
+cr-instance-contact-and-provider-identification, before any entry carried `modes`, and bitten then by
+snapshot-and-restore of the catalog (a `modes` on an entry without `instance` and one missing `organisation` each red);
+re-bitten on the first real preset, `core.public-shares.guest-write-record` (cr-guest-write-record): dropping its
+`organisation` is red. The `instance` half is implied by the `levels` check above today (every entry must hold
+`instance`); it stays its own rule so a later tenant-only level cannot take a preset with it. Its limit: it reads
 the catalog only — that the mode's write sets these entries and no other is `OperatorDetailsSliceTest`'s, and
 whether an entry's value per mode is the right one is the refinement's, read by a person against ADR 0093 § 14.
 

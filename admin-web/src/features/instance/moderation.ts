@@ -24,6 +24,7 @@ import {
 } from '../../api/generated/instance'
 import { deserializeIdentityPublic, generateModerationKey, moderationBundle, sealTo } from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import type { ServerOwnerStatementInput } from './stepStatement'
 
 export type {
   AccountSignInBlock, InstanceModeration, InstanceModerator, ModerationSteps, OpenModerationProposal,
@@ -142,12 +143,16 @@ export function declineProposal(proposalId: string): Promise<ModerationSteps> {
 /**
  * Block an account's sign-in, by its address, answering `caseId` when a proposal asked for it: every session of the
  * account ends at once and every sign-in is refused until the block is lifted. Settles the account's open
- * MEMBER_SIGN_IN proposals as taken. Refusals: 404 `account_not_found` / `case_not_found`, 409
- * `sign_in_block_exists` / `cannot_block_server_owner`.
+ * MEMBER_SIGN_IN proposals as taken. Over content — a case, an open proposal, or `overContent` — it carries its
+ * `statement` (ADR 0093 § 7, `stepStatement.ts`), mailed with the facts to the account's address. Refusals: 400
+ * `statement_required` / `statement_facts_required` / `statement_provision_required`, 404 `account_not_found` /
+ * `case_not_found`, 409 `sign_in_block_exists` / `cannot_block_server_owner` / `moderation_epoch_changed`.
  */
-export function blockSignIn(address: string, caseId?: string | null): Promise<ModerationSteps> {
+export function blockSignIn(
+  address: string, caseId?: string | null, statement?: ServerOwnerStatementInput | null, overContent = false,
+): Promise<ModerationSteps> {
   return instanceModerationApi().blockAccountSignIn({
-    blockAccountSignInRequest: { address: address.trim(), caseId: caseId ?? null },
+    blockAccountSignInRequest: { address: address.trim(), caseId: caseId ?? null, overContent: overContent || !!statement, statement: statement ?? null },
   })
 }
 

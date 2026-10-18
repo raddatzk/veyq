@@ -279,7 +279,14 @@ A refined CR nails **decisions, not keystrokes**:
   carries) comes from the caller, never from the data. A CR that edits a pre-release baseline says there are **no existing rows** (every dev
   database is recreated) rather than designing for legacy rows that cannot exist (cr-file-uploader). A CR that changes an
   identifier greps the client's local records keyed by it too (cr-change-email found the remember-me record and the
-  session vault only by following the address end to end). A proof that seems to need a root Linux host (a file's owner in a
+  session vault only by following the address end to end), and a CR that erases what an identifier names greps the
+  server's copies of it as well as the keys onto its row: cr-account-erasure's second angle searched for account ids and
+  missed the address a tenant row and its old invites had copied, which its admin-web implementer found on the tenant
+  list. A refine that lets the operator give someone a role in a space names who hands them its key: ADR 0101 let the
+  Server Owner invite a new owner into an active tenant, and only a member can ever be given the key (ADR 0020 move 6),
+  so the implementation had to narrow the invite to members. And a refine that reuses an operation ("as a removal
+  does") lists that operation's refusals beside its own decision: the same ADR's "the Server Owner's door does not
+  refuse" met the moderator removal's last-holder refusal only in the implementation. A proof that seems to need a root Linux host (a file's owner in a
   Docker volume) usually needs only a root container that mounts the volume (cr-restore-places-the-key-as-the-runtime-user
   waited two weeks on the owner for a run an agent then did in an hour); and an expected log line in a CR is measured, not
   remembered.

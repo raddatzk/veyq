@@ -33,6 +33,7 @@ import ModerationPanel from '../features/instance/ModerationPanel.vue'
 import OrderPanel from '../features/instance/OrderPanel.vue'
 import OperatingModePanel from '../features/instance/OperatingModePanel.vue'
 import OperatorPanel from '../features/instance/OperatorPanel.vue'
+import AccountsPanel from '../features/instance/AccountsPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
@@ -55,7 +56,8 @@ const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
 const serverPanel = ref<
-  'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | 'moderation' | 'mode' | 'operator' | null
+  | 'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | 'moderation' | 'accounts' | 'mode' | 'operator'
+  | null
 >(null)
 const loading = ref(true)
 // The object store as last read or changed (ADR 0089 decision 6): a tenant waits for a store that passed its check.
@@ -95,6 +97,12 @@ async function onCreated() {
  *  this surface does not have, which redirected to the page it was on and left both stale). */
 async function onRevoked() {
   selected.value = null
+  await loadTenants().catch(() => {})
+}
+
+/** A tenant's status or ownership moved elsewhere (a deletion, its stop, an account erasure): read the list again, so its
+ *  ownerless marker and storage lines follow. The open panel stays open. */
+async function onTenantsChanged() {
   await loadTenants().catch(() => {})
 }
 
@@ -156,7 +164,12 @@ async function signOut() {
             >
               <span class="pi pi-server" aria-hidden="true" />
               <span class="admin-shell__tenant">
-                {{ tn.name }}
+                <span>
+                  {{ tn.name }}
+                  <!-- ADR 0101 decision 9: its last owner's account was erased at the Server Owner's door; the tenant's
+                       page offers the two ways on (an owner invite to a member, or deletion). -->
+                  <span v-if="tn.ownerless" class="veyq-badge warning admin-shell__ownerless">{{ t('admin.ownerless') }}</span>
+                </span>
                 <small class="admin-shell__storage">{{ storageLine(tn) }}</small>
               </span>
             </button>
@@ -207,6 +220,11 @@ async function signOut() {
             </button>
           </li>
           <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'accounts' }" @click="serverPanel = 'accounts'">
+              <span class="pi pi-users" aria-hidden="true" /> {{ t('accounts.navTitle') }}
+            </button>
+          </li>
+          <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'mode' }" @click="serverPanel = 'mode'">
               <span class="pi pi-home" aria-hidden="true" /> {{ t('operatingMode.navTitle') }}
             </button>
@@ -238,9 +256,17 @@ async function signOut() {
           <OrderPanel />
           <GuestWriteRecordPanel />
         </div>
+        <!-- An erasure can leave a tenant ownerless (a stop, owned again): the list's marker is read again. -->
+        <AccountsPanel v-else-if="serverPanel === 'accounts'" @changed="onTenantsChanged" />
         <OperatingModePanel v-else-if="serverPanel === 'mode'" />
         <OperatorPanel v-else-if="serverPanel === 'operator'" />
-        <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" @revoked="onRevoked" />
+        <TenantDetailPanel
+          v-else-if="selected"
+          :key="selected"
+          :tenant-id="selected"
+          @revoked="onRevoked"
+          @changed="onTenantsChanged"
+        />
       </section>
     </div>
 
@@ -319,6 +345,11 @@ async function signOut() {
 }
 .admin-shell__tenant {
   display: grid;
+}
+.admin-shell__ownerless {
+  margin-left: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 .admin-shell__storage {
   color: var(--app-muted);

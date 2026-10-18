@@ -22,9 +22,12 @@ The Server-Owner administration surface, extracted from `web/` by
 The line that actually holds:
 
 - **Here:** what only the **Server Owner** does — tenant CRUD (create/list/resend/reassign/revoke/
-  change-domain/suspend/reactivate), each tenant's storage quota (ADR 0073 §1), release info and the release check's
-  notices and switch, the instance's own mail to the Server Owner (ADR 0097), the config-secret state, the object
-  store and its check (ADR 0089), the capability switches (ADR 0088), first-run setup.
+  change-domain/suspend/reactivate), a tenant's deletion (its typed domain, offline at once, stoppable until the purge;
+  over content with its statement of reasons, ADR 0101 decision 10) and the owner invite to a member of an ownerless
+  tenant, an account's erasure by address with the pending erasures and their stop (ADR 0101), each tenant's storage
+  quota (ADR 0073 §1), release info and the release check's notices and switch, the instance's own mail to the Server
+  Owner (ADR 0097), the config-secret state, the object store and its check (ADR 0089), the capability switches
+  (ADR 0088), first-run setup.
 - **In `web/`:** what an **ordinary or anonymous user** does — accepting a tenant invite, accepting terms —
   *and* what a **tenant OWNER** does for their own tenant: terms authoring, per-tenant mail settings, and the
   per-link storage limit (which the owner distributes below the quota, and reads the quota beside).

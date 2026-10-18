@@ -137,6 +137,8 @@ paths:
                   inviteExpiresAt: 2026-07-03T12:00:00Z
                   storageUsedBytes: 0
                   storageQuotaBytes: null
+                  ownerless: false
+                  deletionDueAt: null
         "401":
           description: Generic authentication failure.
           content:
@@ -572,6 +574,40 @@ paths:
               example: { code: invite_not_found }
 
   /api/tenants/{tenantId}/members/{userId}:
+    patch:
+      tags: [tenants]
+      operationId: setTenantMemberRole
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries only the role the owner chose for one member; the last-owner guard is decided under the
+          tenant scope's lock.
+      summary: Make a tenant member an owner, or an owner a member again.
+      description: >
+        A tenant owner's "make owner" (ADR 0101 decision 9, uc.spaces.remove-tenant-member's neighbour): sets the TENANT
+        scope role of one member to `OWNER` or `MEMBER`. Membership-gated first (a non-member gets `404
+        tenant_not_found`, ADR 0042), then owner-gated (`403 not_tenant_owner`); the **last-owner guard** rejects
+        demoting the last remaining OWNER (`409 last_owner`). A pure role change — no key moves: every member of the
+        tenant already holds its key. Enforced by code, not this spec (ADR 0008).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - { name: userId, in: path, required: true, description: Opaque id of the member whose role to set., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetTenantMemberRoleRequest" }
+            example: { role: OWNER }
+      responses:
+        "204":
+          description: The member holds the role now.
+        "400": { description: Malformed (invalid role)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
+        "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
+        "403": { description: "The caller is a member of this tenant but not its owner (`not_tenant_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_tenant_owner } } } }
+        "404": { description: "No such member of this tenant (`member_not_found`); or no such tenant, or the caller is not a member of it (`tenant_not_found`, indistinguishable per ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
+        "409": { description: "The last remaining OWNER cannot be demoted (`last_owner`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
     delete:
       tags: [tenants]
       operationId: removeTenantMember
@@ -741,6 +777,180 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_pending }
 
+  /api/tenants/{tenantId}/deletion:
+    post:
+      tags: [tenants]
+      operationId: deleteTenant
+      x-veyq-channel: admin
+      summary: Delete an active or suspended tenant — offline at once, erased after the scope trash's retention.
+      description: >
+        ADR 0101 decision 10 (uc.admin.delete-tenant). The tenant goes offline at once exactly as a suspension takes it
+        (ADR 0066: every operation on it refused, its own domain refused before authentication, its routers withdrawn,
+        its links dead) and its status becomes `PENDING_DELETION`; after `veyq.scope.delete.retention` one purge erases
+        every scope through the scope erasure, every other row keyed on the tenant and the tenant itself. Holds and the
+        moderation records survive: they hang on cases, not tenants. Every member is told by mail through the instance
+        mail where it is set up; every account stays. The body repeats the tenant's domain, as the confirmation typed it,
+        so a wrong tenant id deletes nothing (`409 tenant_domain_mismatch`). `409 tenant_not_deletable` for a `PENDING`
+        tenant (revoke it) or one pending deletion already. Settles every open moderator proposal to take this tenant
+        offline as taken, as a suspension does. Server-Owner only.
+
+        **Over content it carries a statement of reasons** to the tenant's owners (ADR 0093 § 7, DSA Art. 17(1)(c) — a
+        termination of the service): always when a moderator's proposal to take the tenant offline is open, and when
+        `overContent` says so. Then `statement` is required (`400 statement_required`); it is recorded with the deletion,
+        in its transaction, as a measure of kind `TENANT_DELETED` that `stopTenantDeletion` lifts, and mailed with the
+        facts to each owner once the deletion committed — exactly as `suspendTenant`'s statement.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteTenantRequest" }
+            example: { domain: family.example.com }
+      responses:
+        "200":
+          description: The tenant is offline and pending deletion; when the purge erases it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDeletion" }
+        "400":
+          description: >
+            `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
+            `statement_required` = the deletion is over content and carries no statement; `statement_facts_required` /
+            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: "`tenant_domain_mismatch` = the domain is not this tenant's; `tenant_not_deletable` = the tenant is PENDING or pending deletion already."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_deletable }
+    delete:
+      tags: [tenants]
+      operationId: stopTenantDeletion
+      x-veyq-channel: admin
+      summary: Stop a tenant's pending deletion — it returns SUSPENDED.
+      description: >
+        ADR 0101 decision 10: before the purge the Server Owner stops a deletion; the tenant returns `SUSPENDED`, as it
+        was taken offline, and is reactivated as a suspended one is (`reactivateTenant`). Nothing was erased before the
+        purge, so nothing is rebuilt. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "204":
+          description: The deletion is stopped; the tenant is SUSPENDED.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The tenant is not pending deletion (`tenant_not_pending_deletion`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_pending_deletion }
+
+  /api/tenants/{tenantId}/owner-invite:
+    post:
+      tags: [tenants]
+      operationId: inviteTenantOwner
+      x-veyq-channel: admin
+      summary: Invite one of an active tenant's members to become its owner — the way out of an ownerless tenant.
+      description: >
+        ADR 0101 decision 9: a tenant whose last owner's account was erased at the Server Owner's door has no owner. The
+        Server Owner mints an OWNER invite, as setup does, to the address of one of the tenant's **members**; accepting it
+        makes that member an OWNER (`acceptTenantInvite`), so nobody is made to answer for a space without being asked.
+        Only a member: the operator can admit nobody into the tenant's key (ADR 0020 move 6), so an owner the invite
+        brought in from outside would wait for a key no member could vouch for. A newer owner invite supersedes an older
+        one; the tenant's member invites are untouched. The link is mailed through the instance mail where it is set up,
+        and returned for the Server Owner to hand over otherwise. `409 tenant_not_active` unless the tenant is ACTIVE;
+        `409 not_tenant_member` when the address is no member of it. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InviteTenantOwnerRequest" }
+            example: { email: member@example.com }
+      responses:
+        "200":
+          description: The owner invite and how it was delivered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantInviteState" }
+        "400":
+          description: The request was malformed (`invalid_request`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: "`tenant_not_active` = the tenant is not ACTIVE; `not_tenant_member` = no member of the tenant has this address."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_member }
+
   /api/tenants/{tenantId}/suspend:
     post:
       tags: [tenants]
@@ -756,13 +966,36 @@ paths:
         grant, content row or session is read, written or revoked, and the transition is reversible via
         `reactivateTenant`. Server-Owner only — and Server-Owner status does not exempt the caller's own
         membership while the tenant is suspended. Settles every open moderator proposal to take this tenant offline as taken (uc.moderation.take-a-measure).
+
+        **Over content it carries a statement of reasons** (ADR 0093 § 7, DSA Art. 17(1)(c); uc.moderation.object-to-a-measure
+        A7): always when it takes a moderator's open proposal (the suspension is then recorded on that proposal's case),
+        and when `overContent` says so. Then `statement` is required (`400 statement_required`); it is recorded with the
+        suspension, in its transaction, as a measure of kind `TENANT_OFFLINE` that `reactivateTenant` lifts, and mailed
+        with the facts to each owner of the tenant once the suspension committed (owner decision Q25). A suspension for
+        any other reason (unpaid, maintenance) sends no body, or `overContent` false, and carries none. The request is
+        JSON either way (`Content-Type: application/json`, with or without a body).
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SuspendTenantRequest" }
+            example: { overContent: true, statement: { statementId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, ground: TERMS_BREACH, provision: "Space terms, clause 4", facts: The space hosts a public link to unlawful content after two warnings., factsForLog: { epoch: 2, sealedFacts: c2VhbGVkLWZhY3Rz } } }
       responses:
         "204":
           description: The tenant is now SUSPENDED.
+        "400":
+          description: >
+            `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
+            `statement_required` = the suspension is over content and carries no statement; `statement_facts_required` /
+            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: statement_required }
         "401":
           description: Generic authentication failure.
           content:
@@ -799,7 +1032,8 @@ paths:
       description: >
         Brings a SUSPENDED tenant back: flips its status to ACTIVE, and every operation on the tenant answers
         again — its shares and invites included, unchanged, and its waiting background jobs resume. Nothing was torn down by the suspension, so nothing is rebuilt here (ADR 0066) — a member whose
-        session stayed technically valid throughout simply resumes. Server-Owner only.
+        session stayed technically valid throughout simply resumes. A suspension taken over content was recorded as a
+        measure of kind `TENANT_OFFLINE` (ADR 0093 § 7); reactivating lifts it and logs the lift. Server-Owner only.
       security:
         - bearerAuth: []
       parameters:
@@ -838,9 +1072,10 @@ paths:
       operationId: getTenantTerms
       summary: Read a tenant's current terms + the caller's accepted revision.
       description: >
-        Returns the tenant's per-locale terms markdown, the current `termsRevision`, and the **caller's**
-        `acceptedRevision` (0 = not yet accepted). Serves the owner editor (loads the current text), the member
-        accept-gate (compare `acceptedRevision` to `termsRevision`), and the `/terms` accept view. The terms are
+        Returns the tenant's per-locale terms markdown, the current `termsRevision`, the operator section served after
+        it (ADR 0035 decision 6, the operating mode's variant with the current values), and whether the **caller**
+        `accepted` the current triple (space revision, operator revision, variant). Serves the owner editor (loads the
+        current text), the member accept-gate (`termsRevision > 0` and not `accepted`), and the `/terms` accept view. The terms are
         the operator's **public** policy (operational content, not E2EE); for now this is gated to **members**
         of the tenant (a non-member is `404`, indistinguishable) — a pre-auth public-serving path is a later
         slice. `@Authenticated`, enforced by code (ADR 0008, ADR 0035).
@@ -856,10 +1091,16 @@ paths:
               schema: { $ref: "#/components/schemas/TenantTerms" }
               example:
                 termsRevision: 3
-                acceptedRevision: 2
+                accepted: false
                 terms:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
+                operatorSection:
+                  revision: 1
+                  variant: FULL
+                  text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
+                  record: null
+                  objection: null
         "401":
           description: Generic authentication failure.
           content:
@@ -910,10 +1151,16 @@ paths:
               schema: { $ref: "#/components/schemas/TenantTerms" }
               example:
                 termsRevision: 3
-                acceptedRevision: 3
+                accepted: true
                 terms:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
+                operatorSection:
+                  revision: 1
+                  variant: FULL
+                  text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
+                  record: null
+                  objection: null
         "400":
           description: The request was malformed (terms too long).
           content:
@@ -950,12 +1197,15 @@ paths:
         fields:
           - field: revision
             conflictCode: terms_revision_changed
+          - field: operatorRevision
+            conflictCode: terms_revision_changed
       summary: Accept the tenant's current terms (member gate; re-accept on a bump).
       description: >
-        The signed-in **member** accepts the tenant's terms at the revision they were shown. The server records
-        `accepted_terms_revision = revision` for `(caller, tenant)` — **only if** `revision` equals the current
-        `terms_revision`, else `409 terms_revision_changed` (the space owner bumped them meanwhile → the client
-        re-reads and re-presents). Acceptance — which revision, and when, to the second — is **operational
+        The signed-in **member** accepts the tenant's terms at the triple they were shown — the space's revision, the
+        operator section's revision and its variant. The server adds a row for that triple to `(caller, tenant)`'s
+        history — **only if** each part equals the current one, else `409 terms_revision_changed` (the space owner
+        bumped them, a release changed the section, or the operating mode changed meanwhile → the client re-reads and
+        re-presents). Acceptance — which revision, and when, to the second — is **operational
         metadata** (like membership), never
         content. `@Authenticated`; a non-member is `404` (uc.account.accept-terms, ADR 0035).
       security:
@@ -967,19 +1217,25 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/AcceptTermsRequest" }
-            example: { revision: 3 }
+            example: { revision: 3, operatorRevision: 1, variant: FULL }
       responses:
         "200":
-          description: Accepted; the current terms state (with the updated acceptedRevision) is returned.
+          description: Accepted; the current terms state (now `accepted`) is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantTerms" }
               example:
                 termsRevision: 3
-                acceptedRevision: 3
+                accepted: true
                 terms:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
+                operatorSection:
+                  revision: 1
+                  variant: FULL
+                  text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
+                  record: null
+                  objection: null
         "400":
           description: The request was malformed (missing/invalid revision).
           content:
@@ -1733,6 +1989,7 @@ paths:
                 ownerEmail: kevin@example.com
                 hasAccount: false
                 role: OWNER
+                handover: false
         "400":
           description: The request was malformed (missing/blank bootstrap secret).
           content:
@@ -1819,6 +2076,66 @@ paths:
           description: >
             The invite is no longer valid (superseded, consumed, or expired) — or its tenant is suspended, which an
             invite holder is told exactly as a dead invite (uc.spaces.scope-access A4).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_no_longer_valid }
+
+  /api/tenants/accept/ownership:
+    post:
+      tags: [tenants]
+      operationId: acceptTenantOwnership
+      summary: Accept an owner invite into an active tenant as its member — become an owner.
+      description: >
+        The other half of `inviteTenantOwner` (ADR 0101 decision 9): the signed-in invitee, whose address the invite is
+        bound to and who is a member of the tenant, becomes an OWNER of it; the invite is consumed in the same
+        transaction. Nothing is born and no key moves — the member already holds the tenant's key. `403
+        not_invited_owner` when the caller's address is not the invited one; `409 not_tenant_member` when the caller is
+        no member of the tenant (any more); `410 invite_no_longer_valid` for a superseded, consumed or expired invite, or
+        one whose tenant is not ACTIVE.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptOwnershipRequest" }
+            example: { bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc }
+      responses:
+        "204":
+          description: The caller is an owner of the tenant.
+        "400":
+          description: The request was malformed (missing secret).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the invited owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_invited_owner }
+        "404":
+          description: No owner invite into an active tenant matches that secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "409":
+          description: The caller is no member of the tenant (`not_tenant_member`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_member }
+        "410":
+          description: The invite is no longer valid (superseded, consumed, or expired), or its tenant is not ACTIVE.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2016,7 +2333,7 @@ components:
 
     TenantSummary:
       type: object
-      required: [tenantId, name, domain, ownerEmail, status, storageUsedBytes, storageQuotaBytes]
+      required: [tenantId, name, domain, ownerEmail, status, storageUsedBytes, storageQuotaBytes, ownerless, deletionDueAt]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -2070,6 +2387,83 @@ components:
             The tenant's storage quota, set by the Server Owner (`setTenantStorageQuota`, `clearTenantStorageQuota`);
             null = none.
           example: 107374182400
+        ownerless:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True for an ACTIVE or SUSPENDED tenant no member owns — its last owner's account was erased at the Server
+            Owner's door (ADR 0101 decision 9). Its two ways on: an owner invite to a member (`inviteTenantOwner`), or
+            `deleteTenant`.
+          example: false
+        deletionDueAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the purge erases a tenant pending deletion; null for any other.
+          example: 2026-11-17T10:00:00Z
+
+    DeleteTenantRequest:
+      type: object
+      required: [domain]
+      properties:
+        domain:
+          x-veyq-visibility: public
+          type: string
+          description: The tenant's domain, as the confirmation typed it.
+          maxLength: 253
+          example: family.example.com
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253)'
+        overContent:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The Server Owner says the deletion is over content though no moderator's proposal names the tenant, so it
+            carries a statement. A deletion that takes an open proposal is over content regardless.
+          example: false
+        statement:
+          description: The statement of reasons the deletion carries when it is over content; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerStatementInput"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    TenantDeletion:
+      type: object
+      required: [dueAt]
+      properties:
+        dueAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the purge erases the tenant — the deletion plus the scope trash's retention.
+          example: 2026-11-17T10:00:00Z
+
+    InviteTenantOwnerRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The owner invite is bound to the address it is mailed to, as setup's owner invite is (ADR 0007); the address is
+            a member's the server already holds.
+          type: string
+          format: email
+          maxLength: 254
+          example: member@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    SetTenantMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          x-veyq-visibility: structure
+          type: string
+          description: The TENANT scope role to set — `OWNER` or `MEMBER`.
+          enum: [OWNER, MEMBER]
+          example: OWNER
 
     TenantInviteState:
       type: object
@@ -2279,10 +2673,18 @@ components:
     # generator still emits a `LocalizedMarkdown` model in this module while the shape is single-sourced.
     LocalizedMarkdown:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+    OperatorSection:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
+    OperatorSectionVariant:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
 
     TenantTerms:
       type: object
-      required: [termsRevision, acceptedRevision]
+      description: >
+        A tenant's terms as a member reads them: the space's own text and revision, the operator section served after
+        it (ADR 0035 decision 6), and whether the caller accepted what is current — the triple of `termsRevision`,
+        `operatorSection.revision` and `operatorSection.variant` (uc.account.accept-terms).
+      required: [termsRevision, accepted, operatorSection]
       properties:
         termsRevision:
           x-veyq-visibility: structure
@@ -2290,19 +2692,20 @@ components:
           format: int32
           description: The tenant's current terms revision. 0 = no terms set (nothing to accept, the gate never fires).
           example: 3
-        acceptedRevision:
+        accepted:
           x-veyq-visibility: structure
-          type: integer
-          format: int32
+          type: boolean
           description: >
-            The **caller's** accepted revision. 0 = not yet accepted; anything below `termsRevision` = the accept
-            gate fires (uc.account.accept-terms).
-          example: 2
+            Whether the **caller's** acceptance history holds the current triple. False with `termsRevision` above 0 =
+            the accept gate fires (uc.account.accept-terms); at revision 0 nothing gates.
+          example: false
         terms:
           description: The current per-locale terms (absent/empty until the owner publishes).
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"
+        operatorSection:
+          $ref: "#/components/schemas/OperatorSection"
 
     TenantTermsUpdate:
       type: object
@@ -2315,7 +2718,8 @@ components:
 
     AcceptTermsRequest:
       type: object
-      required: [revision]
+      description: The triple the member was shown; every part must equal the current one, else 409.
+      required: [revision, operatorRevision, variant]
       properties:
         revision:
           x-veyq-visibility: structure
@@ -2325,6 +2729,16 @@ components:
           minimum: 1
           example: 3
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        operatorRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The operator section's revision the member was shown — must equal the current one, else 409.
+          minimum: 1
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        variant:
+          $ref: "#/components/schemas/OperatorSectionVariant"
 
     # --- cr-email-smtp-transport (ADR 0048/0049/0050): per-tenant SMTP + owner-authored invite templates ---
     TenantMailSettings:
@@ -2732,6 +3146,29 @@ components:
           example: true
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
 
+    SuspendTenantRequest:
+      type: object
+      description: Whether the suspension is over content, and the statement of reasons it then carries (ADR 0093 § 7).
+      properties:
+        overContent:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The Server Owner says the suspension is over content though no moderator's proposal names the tenant, so it
+            carries a statement. A suspension that takes an open proposal is over content regardless.
+          example: true
+        statement:
+          description: The statement of reasons the suspension carries when it is over content; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerStatementInput"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
+    ServerOwnerStatementInput:
+      $ref: '_common.openapi.yaml#/components/schemas/ServerOwnerStatementInput'
+
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
 
@@ -2751,7 +3188,7 @@ components:
 
     InvitePreview:
       type: object
-      required: [tenantId, tenantName, domain, ownerEmail, hasAccount, role]
+      required: [tenantId, tenantName, domain, ownerEmail, hasAccount, role, handover]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -2784,6 +3221,25 @@ components:
           example: false
         role:
           $ref: "#/components/schemas/InviteRole"
+        handover:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True for an OWNER invite into an ACTIVE tenant (`inviteTenantOwner`): the invitee is already its member and
+            accepts with `acceptTenantOwnership` — nothing is born, they become an owner (ADR 0101 decision 9).
+          example: false
+
+    AcceptOwnershipRequest:
+      type: object
+      required: [bootstrapSecret]
+      properties:
+        bootstrapSecret:
+          x-veyq-visibility: token
+          type: string
+          description: The owner invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
+          maxLength: 128
+          example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
 
     AcceptInviteRequest:
       type: object

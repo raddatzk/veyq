@@ -8,17 +8,23 @@
 // content and acceptance is coarse metadata — no crypto.
 import { tenantsApi } from '../../api/client'
 import type { LocalizedMarkdown, TenantTerms } from '../../api/generated/tenants'
+import type { TermsTriple } from '../../core/terms/operatorSection'
 
 export type { TenantTerms, LocalizedMarkdown } from '../../api/generated/tenants'
 
-/** The tenant's current terms + the caller's accepted revision (member-readable; a non-member is 404). */
+/** The tenant's current terms, the operator section after them, and whether the caller accepted the current triple
+ *  (member-readable; a non-member is 404). */
 export function getTenantTerms(tenantId: string): Promise<TenantTerms> {
   return tenantsApi().getTenantTerms({ tenantId })
 }
 
-/** Member: accept the tenant's current terms at [revision] — must equal the current revision, else 409. */
-export function acceptTenantTerms(tenantId: string, revision: number): Promise<TenantTerms> {
-  return tenantsApi().acceptTenantTerms({ tenantId, acceptTermsRequest: { revision } })
+/** Member: accept the triple the member was shown (ADR 0035 decision 6) — every part must equal the current one, else
+ *  409 `terms_revision_changed`. */
+export function acceptTenantTerms(tenantId: string, triple: TermsTriple): Promise<TenantTerms> {
+  return tenantsApi().acceptTenantTerms({
+    tenantId,
+    acceptTermsRequest: { revision: triple.revision, operatorRevision: triple.operatorRevision, variant: triple.variant },
+  })
 }
 
 /** Owner-only: set/replace the tenant's per-locale terms — a normalized change bumps the revision (else 403). */

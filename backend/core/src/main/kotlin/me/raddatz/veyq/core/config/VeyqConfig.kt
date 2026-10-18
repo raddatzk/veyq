@@ -36,6 +36,7 @@ interface VeyqConfig {
     fun release(): Release
     fun releaseCheck(): ReleaseCheck
     fun tenant(): Tenant
+    fun account(): Account
     fun session(): Session
     fun recovery(): Recovery
     fun emailConfirmation(): EmailConfirmation
@@ -125,6 +126,14 @@ interface VeyqConfig {
     interface Tenant {
         fun invite(): Invite
         fun ingress(): Ingress
+
+        /** The deletion of an active tenant (ADR 0101 decision 10): how often `TenantPurge` looks for a due one. Its
+         *  window is the scope trash's (`veyq.scope.delete.retention`), on purpose one value. */
+        fun deletion(): Deletion
+
+        interface Deletion {
+            fun purge(): Interval
+        }
 
         /**
          * The DB→reverse-proxy routing projection (ADR 0063). The `%dev`/`%test` default is a clean no-op: a
@@ -363,6 +372,16 @@ interface VeyqConfig {
              *  (uc.account.onboard-device E1). */
             @WithDefault("P1D")
             fun retention(): Duration
+        }
+    }
+
+    /** The account erasure (ADR 0101): how often `AccountPurge` looks for a due one. Its window is the scope trash's
+     *  (`veyq.scope.delete.retention`): an account goes when its own scopes go. */
+    interface Account {
+        fun erasure(): Erasure
+
+        interface Erasure {
+            fun purge(): Interval
         }
     }
 

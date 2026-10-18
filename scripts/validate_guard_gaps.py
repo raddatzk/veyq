@@ -292,6 +292,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      stands. **Left open on purpose** — the same data-flow gap as 25: a constant holding the whole name IS caught,
      and the realistic regression (a hand parse in the moderation CR's guest-write path) spells the name. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
+  84 a baseline entry recording a `500` under `status_code_conformance`, with a reason, passes
+     `validate_api_fuzz_baseline`, which keeps `not_a_server_error` out of the baseline by its check name. **Left
+     open on purpose** — the same response is red under `not_a_server_error` in the same run, and that entry is the
+     one the guard refuses, so a 5xx cannot be accepted through the baseline as a whole. Pinned so the limit in
+     that guard's docstring is executable rather than a sentence.
   30 a `web/src` comment citing a use-case id under a feature directory that does not exist passes
      `validate_doc_citations`, which reads an id only under a real feature directory. **Left open on purpose** —
      that anchor is what keeps attribute chains (`.parent.parent`, `.value.trim()`) from reading as ids; without
@@ -426,7 +431,8 @@ BANNER_MIGRATION = "backend/core/src/main/resources/db/migration/V209912312359__
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
 TRASH_PURGE = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaTrashPurge.kt"
 TENANT_HANDLER = "backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/TenantHandler.kt"
-TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
+# The suspend arm re-projects inside its `Done` block, before mailing a statement of reasons (cr-statement-legal-gaps).
+TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) {\n            reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
 # `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
@@ -1152,7 +1158,7 @@ def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
     src = f.read_text()
     if TENANT_REPROJECT_CALL not in src:
         raise ForgeError("the suspend arm's reproject() call drifted — re-anchor this forgery")
-    f.write_text(_sub(src, TENANT_REPROJECT_CALL, ""))
+    f.write_text(_sub(src, TENANT_REPROJECT_CALL, "        if (outcome is SuspendOutcome.Done) {\n"))
     return "a tenant suspend that never re-projects the routing (must be REJECTED — the domain keeps resolving)"
 
 
@@ -1188,6 +1194,21 @@ def forge_forwarded_for_read_through_an_assembled_name(root: pathlib.Path) -> st
     )
     f.write_text(_sub(f.read_text(), RATE_LIMIT_FILTERS_ANCHOR, probe + RATE_LIMIT_FILTERS_ANCHOR))
     return "a forwarded-for read through a name assembled from two literals (the data-flow open gap)"
+
+
+def forge_fuzz_baseline_5xx_under_another_check(root: pathlib.Path) -> str:
+    # validate_api_fuzz_baseline refuses a 5xx by its CHECK NAME: an entry that records the same 500 as an undeclared
+    # status passes. The operation is read out of a spec, so a renamed path does not turn this into a different red.
+    f = root / "infra/fuzz/baseline.json"
+    if not f.is_file():
+        raise ForgeError("infra/fuzz/baseline.json is missing — the API fuzzing's baseline moved or was deleted")
+    doc = json.loads(f.read_text())
+    doc["entries"] = list(doc.get("entries") or []) + [{
+        "operation": "GET /api/setup", "check": "status_code_conformance", "failure": "UndefinedStatusCode",
+        "signature": "Received: 500", "reason": "a guard-gap probe: a 500 recorded as an undeclared status",
+    }]
+    f.write_text(json.dumps(doc, indent=2) + "\n")
+    return "a baseline entry recording a 500 under status_code_conformance (the check-name open gap)"
 
 
 def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
@@ -1528,6 +1549,7 @@ CASES = [
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
     ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
+    ("84", "validate_api_fuzz_baseline.py", forge_fuzz_baseline_5xx_under_another_check, True),
 ]
 
 

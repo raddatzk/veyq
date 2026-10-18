@@ -2,6 +2,11 @@ package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.generated.api.TenantsApi
 import me.raddatz.veyq.core.generated.model.AcceptInviteRequest
+import me.raddatz.veyq.core.generated.model.AcceptOwnershipRequest
+import me.raddatz.veyq.core.generated.model.DeleteTenantRequest
+import me.raddatz.veyq.core.generated.model.InviteTenantOwnerRequest
+import me.raddatz.veyq.core.generated.model.SetTenantMemberRoleRequest
+import me.raddatz.veyq.core.generated.model.TenantDeletion
 import me.raddatz.veyq.core.generated.model.AcceptPreviewRequest
 import me.raddatz.veyq.core.generated.model.AcceptTermsRequest
 import me.raddatz.veyq.core.generated.model.ChangeDomainRequest
@@ -30,6 +35,8 @@ import me.raddatz.veyq.core.generated.model.TenantActivatedWithUser
 import me.raddatz.veyq.core.generated.model.TenantCreated
 import me.raddatz.veyq.core.generated.model.TenantInviteState
 import me.raddatz.veyq.core.generated.model.TenantStatus
+import me.raddatz.veyq.core.generated.model.SuspendTenantRequest
+import me.raddatz.veyq.core.moderation.statement.toStepInput
 import me.raddatz.veyq.core.generated.model.TenantStorage
 import me.raddatz.veyq.core.generated.model.TenantStorageFit
 import me.raddatz.veyq.core.generated.model.TenantStorageFitRequest
@@ -38,6 +45,8 @@ import me.raddatz.veyq.core.generated.model.TenantStorageUpdate
 import me.raddatz.veyq.core.generated.model.TenantSummary
 import me.raddatz.veyq.core.generated.model.TenantTerms
 import me.raddatz.veyq.core.generated.model.TenantTermsUpdate
+import me.raddatz.veyq.core.terms.toSection
+import me.raddatz.veyq.core.terms.toWire
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.http.Failures
@@ -119,19 +128,52 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // Delete an ACTIVE or SUSPENDED tenant and stop it (uc.admin.delete-tenant, ADR 0101 decision 10): Server-Owner-gated
+    // like suspend, and like it offline at once; the purge erases it after the scope trash's retention.
+    override fun deleteTenant(tenantId: UUID, deleteTenantRequest: DeleteTenantRequest): Response =
+        when (
+            val o = handler.delete(
+                tenantId.toString(), deleteTenantRequest.domain, identity.principal.name, deleteTenantRequest.overContent ?: false,
+                deleteTenantRequest.statement?.toStepInput(),
+            )
+        ) {
+            is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc())).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun stopTenantDeletion(tenantId: UUID): Response =
+        when (val o = handler.stopDeletion(tenantId.toString(), identity.principal.name)) {
+            StopTenantDeletionOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // An owner invite into an ACTIVE tenant, to one of its members (ADR 0101 decision 9): the way out of an ownerless one.
+    override fun inviteTenantOwner(tenantId: UUID, inviteTenantOwnerRequest: InviteTenantOwnerRequest): Response =
+        when (val o = handler.inviteOwner(tenantId.toString(), inviteTenantOwnerRequest.email)) {
+            is OwnerInviteOutcome.Done -> Response.ok(
+                TenantInviteState(o.invite.ownerEmail, InviteStatus.decode(o.invite.status), o.invite.expiresAt.utc(), o.invite.bootstrapSecret!!, o.delivery),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
     // Suspend / reactivate (uc.admin.suspend-tenant, ADR 0066): Server-Owner-gated by the class-level
     // @RolesAllowed, exactly like revokeTenant. Note these two are themselves subject to TenantSuspensionFilter,
     // which guards the tenant's own domain: reaching them **there** is refused like any other request, which is the
     // deliberate reading of the use-case's E1 — Server-Owner status is global, it is not a per-tenant exemption.
     // The Server Owner reactivates from the server-admin surface (ADR 0065), which is not that domain.
-    override fun suspendTenant(tenantId: UUID): Response =
-        when (val o = handler.suspend(tenantId.toString(), identity.principal.name)) {
+    override fun suspendTenant(tenantId: UUID, suspendTenantRequest: SuspendTenantRequest?): Response =
+        when (
+            val o = handler.suspend(
+                tenantId.toString(), identity.principal.name, suspendTenantRequest?.overContent ?: false,
+                suspendTenantRequest?.statement?.toStepInput(),
+            )
+        ) {
             SuspendOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 
     override fun reactivateTenant(tenantId: UUID): Response =
-        when (val o = handler.reactivate(tenantId.toString())) {
+        when (val o = handler.reactivate(tenantId.toString(), identity.principal.name)) {
             ReactivateOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
@@ -203,6 +245,14 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // "Make owner" (ADR 0101 decision 9): @Authenticated (not Server-Owner); membership- then owner-gated in the handler.
+    @Authenticated
+    override fun setTenantMemberRole(tenantId: UUID, userId: UUID, setTenantMemberRoleRequest: SetTenantMemberRoleRequest): Response =
+        when (val o = handler.setMemberRole(identity.principal.name, tenantId.toString(), userId.toString(), setTenantMemberRoleRequest.role.value)) {
+            SetTenantRoleOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
     // A member's sealed picture (ADR 0084): @Authenticated, membership-gated in the handler (a non-member: 404, ADR 0042).
     // `Cache-Control: private` - the answer is for this signed-in member, never a shared cache.
     @Authenticated
@@ -229,9 +279,19 @@ class TenantsResource(
                     ownerEmail = outcome.ownerEmail,
                     hasAccount = outcome.hasAccount,
                     role = InviteRole.decode(outcome.role),
+                    handover = outcome.handover,
                 ),
             ).build()
             is HttpFailure -> httpError(outcome)
+        }
+
+    // A member accepts an owner invite into an ACTIVE tenant (ADR 0101 decision 9): @Authenticated, any user; the
+    // handler binds it to the invited address and to the tenant's membership.
+    @Authenticated
+    override fun acceptTenantOwnership(acceptOwnershipRequest: AcceptOwnershipRequest): Response =
+        when (val o = acceptHandler.acceptOwnership(identity.principal.name, acceptOwnershipRequest.bootstrapSecret)) {
+            AcceptOwnershipOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
         }
 
     @Authenticated
@@ -279,7 +339,7 @@ class TenantsResource(
     @Authenticated
     override fun getTenantTerms(tenantId: UUID): Response =
         when (val o = termsHandler.read(identity.principal.name, tenantId.toString())) {
-            is TermsReadOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
+            is TermsReadOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -288,14 +348,17 @@ class TenantsResource(
         when (val o = termsHandler.update(
             identity.principal.name, tenantId.toString(), tenantTermsUpdate.terms.de, tenantTermsUpdate.terms.en,
         )) {
-            is TermsUpdateOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
+            is TermsUpdateOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
     @Authenticated
     override fun acceptTenantTerms(tenantId: UUID, acceptTermsRequest: AcceptTermsRequest): Response =
-        when (val o = termsHandler.accept(identity.principal.name, tenantId.toString(), acceptTermsRequest.revision)) {
-            is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
+        when (val o = termsHandler.accept(
+            identity.principal.name, tenantId.toString(), acceptTermsRequest.revision, acceptTermsRequest.operatorRevision,
+            acceptTermsRequest.variant.toSection(),
+        )) {
+            is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -474,6 +537,8 @@ class TenantsResource(
         inviteExpiresAt = inviteExpiresAt?.utc(),
         storageUsedBytes = storageUsedBytes,
         storageQuotaBytes = storageQuotaBytes,
+        ownerless = ownerless,
+        deletionDueAt = deletionDueAt?.utc(),
     )
 
     private fun Instant.utc() = atOffset(ZoneOffset.UTC)

@@ -37,7 +37,7 @@ import {
   derivePasswordToken,
   fetchShareTerms,
   pickShareTerms,
-  acceptedTermsRevision,
+  acceptedTermsKeys,
   recordTermsAccepted,
   pickLocaleText,
   SharePasswordRequiredError,
@@ -57,9 +57,12 @@ import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
+import OrderNotice from '../core/sharing/OrderNotice.vue'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
+import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
+import { tripleKey, tripleOf, type OperatorSection } from '../core/terms/operatorSection'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -94,35 +97,52 @@ const head = shallowRef<PublicShareHead | null>(null)
 // FAILS OPEN: a transient terms-fetch error is treated as "no terms" (revision 0) so a network blip never locks a
 // visitor out. The terms come from the share (GET /api/shares/{shareId}/terms) — a public share is Host-independent,
 // so the tenant can't come from the Host, and the member terms endpoint is auth+membership-gated.
+//
+// After the space's text comes the fixed operator section (ADR 0035 decision 6), and what is accepted is the TRIPLE —
+// the space's revision, the section's revision and its variant — so a release that changed the section or a switched
+// operating mode asks again, and a changed operator value or the guest-write record switched does not. The device keeps
+// the triples it accepted (the last four), so a mode switched back to a variant accepted before asks nobody again, as
+// for a member.
 const termsTenantId = ref('')
 const termsRevision = ref(0) // 0 = no gate (also the fail-open value on a fetch error)
-const acceptedRevision = ref(0) // the locally-recorded accepted revision; bumped in-memory on accept so the gate clears
+const operatorSection = ref<OperatorSection | null>(null)
+const acceptedKeys = ref<string[]>([]) // the locally-recorded accepted triples; extended in-memory on accept so the gate clears
 const termsMarkdown = ref('')
 const renderedTerms = computed(() => (termsMarkdown.value ? renderMarkdown(termsMarkdown.value) : ''))
+const currentKey = computed(() =>
+  operatorSection.value ? tripleKey(tripleOf(termsRevision.value, operatorSection.value)) : '',
+)
 // The gate fires once the share is resolved (post-password), the tenant has published terms, and the locally-stored
-// accepted revision is below current. Sits BETWEEN the password shell and the display-name pre-screen in the template.
-const needsTerms = computed(() => status.value === 'ready' && termsRevision.value > 0 && acceptedRevision.value < termsRevision.value)
+// triples do not include the current one. Sits BETWEEN the password shell and the display-name pre-screen in the template.
+const needsTerms = computed(
+  () => status.value === 'ready' && termsRevision.value > 0 && !acceptedKeys.value.includes(currentKey.value),
+)
 
-/** Fetch the owning tenant's terms + read the locally-stored accepted revision. FAILS OPEN (uc.sharing.share-accept):
+/** Fetch the owning tenant's terms + read the locally-stored accepted triples. FAILS OPEN (uc.sharing.share-accept):
  *  a transient error is treated as "no terms" (revision 0) so the visitor is never locked out by a network blip. */
 async function loadTerms() {
   try {
     const terms = await fetchShareTerms(shareId)
     termsTenantId.value = terms.tenantId
     termsRevision.value = terms.termsRevision
+    operatorSection.value = terms.operatorSection
     termsMarkdown.value = pickShareTerms(terms, locale.value)
-    acceptedRevision.value = acceptedTermsRevision(terms.tenantId)
+    acceptedKeys.value = acceptedTermsKeys(terms.tenantId)
   } catch {
     termsRevision.value = 0
-    acceptedRevision.value = 0
+    operatorSection.value = null
+    acceptedKeys.value = []
   }
 }
 
 /** Record acceptance client-side (localStorage, per tenant) + clear the gate in-memory. No server call — the
  *  accountless visitor's acceptance is client-only, so the server keeps no record (anonymity preserved). */
 function acceptTerms() {
-  recordTermsAccepted(termsTenantId.value, termsRevision.value)
-  acceptedRevision.value = termsRevision.value
+  const section = operatorSection.value
+  if (!section) return
+  const triple = tripleOf(termsRevision.value, section)
+  recordTermsAccepted(termsTenantId.value, triple)
+  acceptedKeys.value = [...acceptedKeys.value, tripleKey(triple)]
 }
 
 // --- the note's acceptance gate (uc.sharing.share-note, ADR 0036 point 2) ----------------------------------------
@@ -327,6 +347,9 @@ onMounted(() => {
       <span class="pi pi-lock" />
       <h1>{{ t('share.unavailable') }}</h1>
       <p>{{ t('share.unavailableHint') }}</p>
+      <!-- TCO Art. 11: a guest uploader whose upload an authority's removal order took down is told so here, on its own
+           link, though the link answers everyone else as unknown (asked only when this device holds its session). -->
+      <OrderNotice :share-id="shareId" />
     </div>
 
     <!-- cr-0118: a password-protected share resolves to a LOCKED shell (nothing else crossed the wire) — prompt for
@@ -362,8 +385,11 @@ onMounted(() => {
         <span class="pi pi-file-check share-terms-icon" />
         <h1>{{ t('share.termsTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.termsIntro') }}</p>
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="share-terms-body markdown-body" v-html="renderedTerms"></div>
+        <div class="share-terms-body">
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div class="markdown-body" v-html="renderedTerms"></div>
+          <OperatorSectionView v-if="operatorSection" :section="operatorSection" />
+        </div>
         <button class="share-name-submit" type="button" @click="acceptTerms">{{ t('share.termsAccept') }}</button>
       </div>
     </div>

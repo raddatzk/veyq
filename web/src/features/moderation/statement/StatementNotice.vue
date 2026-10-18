@@ -37,6 +37,7 @@ const passages = computed(() => {
     date: day(s.sentAt),
     contact: s.contactAddress,
     hasFacts: s.sealedFacts != null,
+    provision: s.provision,
   })
 })
 

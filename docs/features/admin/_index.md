@@ -27,9 +27,11 @@ handling of reported shares.
   purpose and effect-when-off, stored in the database and acting without a restart; a device switch withholds its
   wraps at once, and the web client keeps the device and asks for the password and the Secret Key.
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **built (backend + admin-web; the owner accepts in web)**
-- [Delete a tenant](use-cases/uc.admin.delete-tenant.md) — **planned** (cr-account-erasure;
+- [Delete a tenant](use-cases/uc.admin.delete-tenant.md) — **built** (cr-account-erasure;
   [ADR 0101](../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 10):
-  an active or suspended tenant, offline at once and erased after the retention; today only a pending one is revoked.
+  an active or suspended tenant, offline at once and erased after the retention, its members mailed and their accounts
+  kept; an ownerless tenant's two ways on — an owner invite to a member, or the deletion. The erasure ledger's entry is
+  open.
 - ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built**: both transitions,
   the `Host` filter on the tenant's own domain, step 4's routing withdrawal, which
   [tenant-reachability](use-cases/uc.admin.tenant-reachability.md) owns and this transition triggers, and the

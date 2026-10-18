@@ -31,7 +31,10 @@
 4. A saved notification address that is not confirmed gets a one-time code through instance mail; typing it into the
    same panel confirms it. Moderation notices reach it only once confirmed.
 5. The contact with its languages, the statement address, the identification and the supervisory authority are served
-   before sign-in, the same on every host; the web app shows the identification on the login and the share pages.
+   before sign-in, the same on every host; the web app shows the identification and the contact with its languages
+   (the point of contact DSA Art. 11–12 and TCO Art. 15 ask to be public) on the login page, the share page and in
+   the signed-in shell, beside a link to the public terms of the instance (the operator section of the terms,
+   [ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6), which the same values fill.
 
 ```mermaid
 ---

@@ -181,7 +181,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/media.test.ts
   - id: lightbox-video-playback
-    text: Opening a video (sealed mediaType video/*) shows its poster (the PREVIEW tier) with a play affordance; clicking play fetches + decrypts the pristine original on device and plays it from a typed blob URL in a <video> element (Slice 1 interim, ADR 0047 — no service-worker range layer yet, no size cap). An image shows no play affordance. Operator-blind — the original is fetched as ciphertext via presigned GET and decrypted under K_node. cr-inline-video-playback (#104).
+    text: Opening a video (sealed mediaType video/*) shows its poster (the PREVIEW tier) with a play affordance; clicking play plays the pristine original in a <video> element from a synthetic /__media/<handle> URL that the controlling Service Worker answers range by range (sw-range-streaming, ADR 0047), and only where no usable Service Worker controls the page (none, a stale or mismatched one, a failed registration) fetches + decrypts the whole original on device into a typed blob URL (no size cap). An image shows no play affordance. Operator-blind — the original is fetched as ciphertext via presigned GET and decrypted under K_node. cr-inline-video-playback (#104).
     coverage:
       web:
         unit:
@@ -333,12 +333,12 @@ acceptanceCriteria:
       backend:
         integration: [ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationMemoriesSliceTest.aBlockedMediumIsDeletedButNeverRestored, ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
       web:
-        unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts]
+        unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts, src/features/memory/useMediaTrash.test.ts, src/views/MemoryHomeView.registry.test.ts]
     gaps:
       - surface: web
         reason: >-
-          The tile, the lightbox and a blocked node's level row are held (LevelView.blocked.test.ts with a stub kind, not
-          the Memory kind itself); the trash's "can be deleted, not restored" refusal (mediaRefusal.ts) has no test.
+          A blocked node's level row is held with a stub kind (LevelView.blocked.test.ts), and its page opened by its
+          address with a stub detail (MemoryHomeView.registry.test.ts), not with the Memory kind itself.
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
@@ -351,9 +351,13 @@ gaps:
     and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
     executed, the suite goes back under that criterion and this gap goes.
   stack: >-
-    Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`, `e2e/tests/features/depot-download.spec.ts`)
+    Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`, `e2e/tests/features/depot-download.spec.ts`,
+    `e2e/tests/features/video-playback.spec.ts`)
     drives `thumbnail-grid`, `download-stable-name` (the lightbox saves the original under its sealed name, byte for
-    byte, through the Service Worker's download route, after a reload) in Chromium
+    byte, through the Service Worker's download route, after a reload), `lightbox-video-playback` and
+    `sw-range-streaming` (a WebM uploaded, reloaded, played from `/__media/<handle>`: every answer the Service Worker's
+    206 with the original's exact size in Content-Range, a window past the first chunk served, a seek near the end
+    lands and plays on) in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
     criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits
     the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.

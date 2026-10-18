@@ -18,6 +18,9 @@ import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.block.ProposalOutcome
 import me.raddatz.veyq.core.moderation.block.ProposalStep
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
+import me.raddatz.veyq.core.moderation.statement.StatementMail
+import me.raddatz.veyq.core.moderation.statement.StepStatementInput
+import me.raddatz.veyq.core.moderation.statement.StepStatements
 import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -46,12 +49,19 @@ object StepFailures {
  * every sign-in and every pairing delegation takes before it adds a session (`AccountStore.lock`) — writes the block and
  * revokes every family under it: a sign-in that won the lock issued its family before, and the revoke sees it; one that
  * waited reads the block and is refused (`LoginHandler.verify`). No window leaves a session alive beside a block.
+ *
+ * **Over content it carries a statement of reasons** (ADR 0093 § 7, DSA Art. 17(1)(d)): a block that answers a case or
+ * takes a moderator's open proposal, always; one with neither when the Server Owner says so. The statement is written in
+ * the block's transaction ([StepStatements]) and mailed to the account's address with the facts after the commit. A
+ * block that takes a proposal and names no case is recorded on the proposal's case, so its records go with that case's.
  */
 @ApplicationScoped
 class SignInBlocks(
     private val accounts: AccountStore,
     private val sessions: SessionService,
     private val log: ModerationLog,
+    private val statements: StepStatements,
+    private val mail: StatementMail,
 ) {
 
     /** The open proposals and the sign-in blocks in force. */
@@ -89,13 +99,27 @@ class SignInBlocks(
         )
     }
 
-    /** Block the sign-in of the account under [address], for [caseId] or none. Answers the refusal, or null when done. */
-    fun block(serverOwnerId: String, address: String, caseId: String?, now: Instant = Instant.now()): HttpFailure? =
-        createOrConflict(conflict = { StepFailures.blockExists }) { blockIn(serverOwnerId, address, caseId, now) }
+    /**
+     * Block the sign-in of the account under [address], for [caseId] or none; over content ([overContent], or a case or an
+     * open proposal) with its [statement]. Answers the refusal, or null when done — the statement mailed after the commit.
+     */
+    fun block(
+        serverOwnerId: String, address: String, caseId: String?, now: Instant = Instant.now(),
+        overContent: Boolean = false, statement: StepStatementInput? = null,
+    ): HttpFailure? {
+        val refusal = createOrConflict(conflict = { StepFailures.blockExists }) {
+            blockIn(serverOwnerId, address, caseId, now, overContent, statement)
+        }
+        if (refusal == null && statement != null) mailStatement(statement)
+        return refusal
+    }
 
     /** [block]'s writes, **in the caller's transaction** — the race test holds them uncommitted (`ModerationRacesSliceTest`). */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun blockIn(serverOwnerId: String, address: String, caseId: String?, now: Instant): HttpFailure? {
+    fun blockIn(
+        serverOwnerId: String, address: String, caseId: String?, now: Instant,
+        overContent: Boolean = false, statement: StepStatementInput? = null,
+    ): HttpFailure? {
         // Locked as the first read of the account: the lock a sign-in and a pairing delegation take before they add a
         // session (AccountStore.lock).
         val user = accounts.findByEmail(address, lock = true) ?: return StepFailures.accountNotFound
@@ -103,24 +127,131 @@ class SignInBlocks(
         if (user.serverRole == ServerRoles.SERVER_OWNER) return StepFailures.serverOwner
         val key = ModerationBlockEntity.activeKeyOf(BlockKind.MEMBER_SIGN_IN, user.id)
         if (ModerationBlockEntity.count("activeKey", key) > 0) return StepFailures.blockExists
-        ModerationBlockEntity().apply {
+        // A block that takes a moderator's proposal answers its case; it is over content then, as one on a case is.
+        val onCase = caseId ?: proposedCase(ProposalStep.MEMBER_SIGN_IN, user.id)
+        statements.refusal(overContent || onCase != null, statement)?.let { return it }
+        val row = ModerationBlockEntity().apply {
             id = UUID.randomUUID().toString()
             kind = BlockKind.MEMBER_SIGN_IN.name
             targetId = user.id
-            this.caseId = caseId
+            this.caseId = onCase
             takenBy = serverOwnerId
             takenAt = now
             activeKey = key
-        }.persist()
+        }
+        row.persist()
         sessions.revokeAllForUser(user.id)
-        if (caseId != null) {
-            log.appendCase(ModerationEvent.MEASURE_TAKEN, now, caseId, moderatorId = serverOwnerId, reason = BlockKind.MEMBER_SIGN_IN.name, targetId = user.id)
+        if (onCase != null) {
+            log.appendCase(ModerationEvent.MEASURE_TAKEN, now, onCase, moderatorId = serverOwnerId, reason = BlockKind.MEMBER_SIGN_IN.name, targetId = user.id)
         } else {
             log.appendSignInBlock(ModerationEvent.MEASURE_TAKEN, now, serverOwnerId, user.id)
         }
+        statement?.let { statements.write(row, it, serverOwnerId, now) }
         settle(ProposalStep.MEMBER_SIGN_IN, user.id, serverOwnerId, now)
         return null
     }
+
+    /**
+     * Whether a suspension of [tenantId] may go ahead with [statement] (ADR 0093 § 7): over content when [overContent] or a
+     * moderator's proposal to take it offline is open. In the suspension's transaction, before it flips the status.
+     */
+    fun offlineRefusal(tenantId: String, overContent: Boolean, statement: StepStatementInput?): HttpFailure? =
+        statements.refusal(overContent || proposedCase(ProposalStep.TENANT_OFFLINE, tenantId) != null, statement)
+
+    /**
+     * [tenantId] was taken offline, **in the caller's transaction** (the suspension's): with a [statement] — over content —
+     * a `TENANT_OFFLINE` measure records it (on the proposal's case where one was open) and carries the statement; every
+     * open proposal to take it offline is settled as taken.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun takenOffline(tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) =
+        tenantStep(BlockKind.TENANT_OFFLINE, tenantId, serverOwnerId, statement, now)
+
+    /**
+     * [tenantId] was deleted, **in the caller's transaction** (the deletion's; ADR 0101 decision 10): over content, a
+     * `TENANT_DELETED` measure records it and carries the statement (DSA Art. 17(1)(c), a termination of the service for its
+     * owners), exactly as a suspension's `TENANT_OFFLINE` does; every open proposal to take it offline is settled as taken.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun deleted(tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) =
+        tenantStep(BlockKind.TENANT_DELETED, tenantId, serverOwnerId, statement, now)
+
+    private fun tenantStep(kind: BlockKind, tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) {
+        if (statement != null) {
+            val onCase = proposedCase(ProposalStep.TENANT_OFFLINE, tenantId)
+            val row = ModerationBlockEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.kind = kind.name
+                targetId = tenantId
+                caseId = onCase
+                takenBy = serverOwnerId
+                takenAt = now
+                activeKey = ModerationBlockEntity.activeKeyOf(kind, tenantId)
+            }
+            row.persist()
+            if (onCase != null) {
+                log.appendCase(ModerationEvent.MEASURE_TAKEN, now, onCase, moderatorId = serverOwnerId, reason = row.kind, targetId = tenantId)
+            } else {
+                log.appendCaselessStep(ModerationEvent.MEASURE_TAKEN, now, serverOwnerId, tenantId, row.kind)
+            }
+            statements.write(row, statement, serverOwnerId, now)
+        }
+        settle(ProposalStep.TENANT_OFFLINE, tenantId, serverOwnerId, now)
+    }
+
+    /** [tenantId] came back, **in the caller's transaction** (the reactivation's): a `TENANT_OFFLINE` measure in force is lifted. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun backOnline(tenantId: String, serverOwnerId: String, now: Instant) = lift(BlockKind.TENANT_OFFLINE, tenantId, serverOwnerId, now)
+
+    /** [tenantId]'s deletion was stopped, **in the caller's transaction**: a `TENANT_DELETED` measure in force is lifted. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun deletionStopped(tenantId: String, serverOwnerId: String, now: Instant) = lift(BlockKind.TENANT_DELETED, tenantId, serverOwnerId, now)
+
+    /**
+     * [targetId] — an account or a tenant — was erased, **in its purge's transaction** (ADR 0101 decisions 7, 10): every
+     * measure of [kinds] on it still in force ends with it, lifted by no one and logged so, dated from [now]. Without
+     * this a measure on nothing would stand forever, and its statement and its case's records with it — the retention of
+     * ADR 0093 § 11 counts from a lift (GDPR Art. 5(1)(e)).
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun targetErased(targetId: String, kinds: List<BlockKind>, now: Instant) {
+        ModerationBlockEntity.list("targetId = ?1 and kind in ?2 and activeKey is not null", targetId, kinds.map { it.name })
+            .forEach { row ->
+                row.liftedAt = now
+                row.activeKey = null
+                val caseId = row.caseId
+                if (caseId != null) {
+                    log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = targetId)
+                } else {
+                    log.append(ModerationEvent.MEASURE_LIFTED, now, moderatorId = null, actorId = null, reason = row.kind, targetId = targetId, datedFrom = now)
+                }
+            }
+    }
+
+    private fun lift(kind: BlockKind, tenantId: String, serverOwnerId: String, now: Instant) {
+        val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, tenantId)).firstResult()
+            ?: return
+        row.liftedAt = now
+        row.liftedBy = serverOwnerId
+        row.activeKey = null
+        val caseId = row.caseId
+        if (caseId != null) {
+            log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, moderatorId = serverOwnerId, reason = row.kind, targetId = tenantId)
+        } else {
+            log.appendCaselessStep(ModerationEvent.MEASURE_LIFTED, now, serverOwnerId, tenantId, row.kind)
+        }
+    }
+
+    /** Mail a step's [statement] with its facts — after the step committed, once (`StatementMail.statementSent`). */
+    fun mailStatement(statement: StepStatementInput) {
+        mail.statementSent(statement.statementId, statement.facts?.takeIf { it.isNotBlank() })
+    }
+
+    /** The case of the oldest open proposal of [step] on [targetId], or null. */
+    private fun proposedCase(step: ProposalStep, targetId: String): String? =
+        ModerationProposalEntity.find(
+            "step = ?1 and targetId = ?2 and outcome = ?3 order by proposedAt", step.name, targetId, ProposalOutcome.OPEN.name,
+        ).firstResult()?.caseId
 
     /** Lift the sign-in block [blockId]; one already lifted changes nothing. */
     @Transactional

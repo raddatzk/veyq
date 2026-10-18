@@ -162,7 +162,8 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
   space); the tenant's **terms text + `terms_revision`** (the space owner's *public* policy,
   served to everyone incl. pre-auth) and a member's **accepted terms revisions** and **when they accepted each**
-  (one row per revision, never overwritten; `accepted_at`, the server's own clock, written once per revision — audit
+  (one row per accepted triple — the space's revision, the operator section's revision and its variant — never
+  overwritten; `accepted_at`, the server's own clock, written once per revision — audit
   evidence for a dispute, also about a superseded revision; restored by owner decision 2026-10-09 after #318 had
   dropped it, kept as a history since #402) (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
@@ -373,18 +374,32 @@ server-blind token makes this work without the server ever seeing a name:
   took the measure while another holds the key ([uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
   The identity a moderator seals the facts to is the one the server serves, unpinned — the moderation surface holds no
   Master Key to read a pin store — which costs nothing against the operator: the Server Owner holds the moderation key
-  and reads the log's copy of the same facts anyway. An **authority's order** acts on ids without a key: entered by a
+  and reads the log's copy of the same facts anyway. **A Server Owner's own step over content** (a sign-in block, a
+  tenant offline) carries a statement too, and it is the one place facts reach a mail: the blocked member cannot sign in
+  to open a sealed copy, so the Server Owner's own words go by mail to the member or the tenant's owners — a disclosure
+  by their author, the server reading them as it sends them (ADR 0049 decision 2) — and are stored only sealed to the
+  moderation key's public half by admin-web or the CLI (`moderation-step-facts` [epoch, statementId]); the server keeps
+  no clear copy, so a failed send is not retried. The **provision** a ground relies on is clear text beside it, the
+  moderator's or Server Owner's own short reference. An **authority's order** acts on ids without a key: entered by a
   moderator with the key proof or by the Server Owner on the admin channel, its reference sealed by the entering client
   to the moderation key's public half (`moderation-order` [epoch, orderId]), it blocks a link and its content and holds
-  them to the end it sets; an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
+  them to the end it sets, and the guest identity whose upload a removal order blocked is told so on its link through
+  its contributor token, when the order was received and the instance contact — nothing a guest without that token
+  learns (TCO Art. 11); an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
   guest-write record — never content ([uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
   A child-sexual-abuse case's hold ends at the recorded handover, at the latest 90 days after the report; no measure
   or statement keeps it longer (§ 184b(5) StGB). **Retention:** a closed case's records — reports with their sealed
   parts and report shares, measures, statements, objections, orders — go with its log at 31 December of the third year
-  after the close, never while a measure of it is in force ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
+  after the close, never while a measure of it is in force; a Server Owner's step on no case goes with its statement at
+  31 December of the third year after its lift ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
   Not built, open legally: a hold until the handover beyond 90 days, and an authority's link to a held copy. No
   moderation path has run on a deployed instance.
+  The fixed **operator section** every space's terms carry
+  states all this to members and guests — the notice path, what is kept, the measures, the statement and the
+  objection, in the club, organisation or company mode the authorities, and while the guest-write record is on its
+  GDPR Art. 13 information — veyq's text filled with the operator's published values, public without an account
+  ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6); it is a draft until a qualified legal review.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
@@ -393,7 +408,8 @@ server-blind token makes this work without the server ever seeing a name:
   A link guest has no account, so the evidence a report about its upload can carry is the connection: while the
   Server Owner keeps the record on, each write that enters a guest as last editor stores the client address the
   network vouches for, its source port and a millisecond time, for N days (1 to 30, default 7); a report's hold copies
-  the rows of what it concerns. Guests are told before their first write, with N and the right to object. The record
+  the rows of what it concerns. Guests are told before their first write, with N and the right to object, and linked
+  to the full Art. 13 text in the operator section of the terms. The record
   adds operator-visible metadata about guests, never content, and nothing about members or readers; an address
   without a port may name no single subscriber behind carrier-grade NAT, and on Helm the address is only as strong as
   an enforced NetworkPolicy ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
@@ -450,7 +466,7 @@ server-blind token makes this work without the server ever seeing a name:
 - **The accountless-visitor terms acceptance is client-only** ([ADR 0035](../decisions/0035-server-terms-of-service.md)
   §3, [uc.sharing.share-accept](../features/sharing/use-cases/uc.sharing.share-accept.md)): before viewing, an
   account-less share visitor accepts the space's terms, but the acceptance lives in **localStorage** (per
-  tenant + revision) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
+  tenant, holding the last four triples accepted: the revision with the operator section's revision and variant) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
   terms are **public operational content** (no blindness cost), served from the *share* via a guest
   `GET /api/shares/{shareId}/terms` keyed on the non-enumerable `shareId` (no `tenantId` existence oracle). It is an
   **operational gate, not enforcement** — bypassable by an accountless visitor and no legal-non-repudiation record;
@@ -640,8 +656,15 @@ re-applies before it serves ([ADR 0056](../decisions/0056-instance-durable-state
 decision 8) — **decided, not built**: today only the cluster's gate and the object pool rotate, by count, Compose's
 captures are kept until the operator deletes them, and a restore brings back what was erased after its capture. An
 account is erased on request and an active tenant can be deleted
-([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), decided, not
-built; today no path deletes an account). The two steps carry
+([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)): the account stops
+at the request — sessions, sign-in, its pending invites and pairings, its memberships of shared scopes — and after the
+scope trash's retention one purge erases it with its own scopes, every row keyed on it and its address wherever it was
+copied; a tenant goes offline at once and is erased after the same window. Nothing is decrypted to erase: what goes is
+ciphertext and metadata, its bytes through the reclaim list. What it put into shared scopes stays with the scope under
+its opaque id, shown as a former member's, and holds and the moderation records naming it stay to their own ends, its
+terms acceptance rows with them while a case names it. `scripts/validate_account_erasure_arity.py` holds that every
+table reachable by foreign key from an account or a tenant is erased or cascades and that every column naming an
+account or its address without a key is classified. The two steps carry
 different authority. **Trashing is reversible** — an item moves to a trash and is restorable for the retention
 window — so it may be done by **any member of the scope** (recovery, not destruction), and it is **audited**:
 the trashed record carries **who** trashed it and **when**, so the action is accountable rather than anonymous.

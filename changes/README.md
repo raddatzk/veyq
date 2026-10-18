@@ -1346,6 +1346,12 @@ both reach the database. cr-client-port-sources planned three boots against an a
 time (a converter, as `trusted-proxies` has) is seen without a database; an observer's needs a reachable one, a
 throwaway container of the pinned image.
 
+**And a harness that reads a test's verdict from its result file deletes that file before each injected run.** A run
+whose injection broke the build writes no JUnit XML, and the previous run's file — the clean one, green — is still in
+`build/test-results`, so a harness reading "the named case's status" scores the last run's verdict as this run's.
+cr-statement-legal-gaps' harness deleted the class's `TEST-*.xml` before every run and scored a missing one as
+`not-run`, never as a verdict.
+
 ### When the CR's gate is a bespoke measurement, bite the MEASUREMENT before trusting its green
 
 **§ *bite-proof a guard* applied one level up.** Every rule around it assumes the gate is `check` or a
@@ -1399,6 +1405,10 @@ printed `BUILD DONE` over a build still running. Two shapes, one rule:
   *"the producing process is gone AND the artifact is absent"*, which is decidable and cannot be spelled wrong.
 
 The tell is a step whose success is reported by the same command that was supposed to do it.
+
+**And never pipe a long run into `head`.** `cr-account-erasure` filtered `./gradlew check` through `grep … | head -40`:
+forty lines of expected test log noise later `head` exited, the pipe broke, the build died mid-suite, and the chain
+reported `0`. Write the run to a file and read the file.
 
 ### A new universal check meets every existing local one
 
@@ -1780,6 +1790,15 @@ the real byte path was dead for a wave without anyone knowing. So a CR that tigh
 suites (`grep -rln 'EnabledIfEnvironmentVariable' backend/src/test`) for fixtures that seed through it, and runs
 the ones it can.
 
+### Giving a body-less operation an optional body changes what every caller must send
+
+The generated resource then `@Consumes` JSON, and RESTEasy answers a request with no `Content-Type` `415` — before any
+handler, however optional the body is. cr-statement-legal-gaps gave `suspendTenant` an optional statement: admin-web's
+generated client sends the header on every call and kept working, while nine slice tests and two projector tests that
+posted the suspension bare went red at once. So a CR that adds an optional body to an existing operation greps its
+route across the test trees, `e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
+contract that the request is JSON either way.
+
 ### A locator for an endpoint's callers greps its route, not only its operation name
 
 **Slice tests call the API by URL, so a grep for the Kotlin/TS symbol misses them.** `cr-removal-rotates-in-one-request`
@@ -1930,6 +1949,17 @@ goes out with its measure in one transaction: a deferral entered on the statemen
 nothing. The implementer had to put it on the two requests that fire the statement (the order, the measure) and leave
 the separate operation to the renewal. So a refine that adds a hold-back, an opt-out or a delay names the request it
 travels with, ahead of the effect — or says why the effect waits for it.
+
+### A CR that writes a legal text derives its surfaces from the duty, not from the product
+
+`cr-operator-section-of-the-terms` listed where the operator section shows from where a space's terms already showed —
+the member gate, the share gate, "the login page once it exists" — and grounded each against the code, as the rule
+asks. The law named other surfaces: DSA Art. 14(1) wants the terms publicly available without an account, Art. 11–12
+and TCO Art. 15 a public point of contact, § 5 DDG an identification permanently available; a legal audit added all
+three mid-implementation. Code and ADRs cannot answer for a duty they never encoded. So a refine that writes a legal
+text lists, per duty it serves, the surface and the content the law names, and only then fits the built surfaces to
+it; where the build cannot back a sentence the law asks, the CR names it as a legal blocker with an owner rather than
+leave the implementer to choose between the code and the law.
 
 ### Every CR closes with a short, honest retrospective
 

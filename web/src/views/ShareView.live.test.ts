@@ -47,6 +47,7 @@ import { viewModeStorageKey, setViewMode } from '../shared/state/useViewMode'
 import { levelTabStorageKey } from '../shared/state/useLevelTab'
 import { setAccountUserId } from '../app/account'
 import { dropKeysForShare, mintIdentityKey, openDropKey } from '../core/sharing/dropKey'
+import { OPERATOR_SECTION } from '../test/models'
 
 const SCOPE = '77777777-7777-4777-8777-777777777777'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_s'
@@ -113,7 +114,7 @@ beforeEach(() => {
   vi.mocked(pollPublicShare).mockReset().mockImplementation(async (_id, _key, _pw, ifNoneMatch) =>
     ifNoneMatch === servedTag ? null : { head: served, etag: servedTag },
   )
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
 })
 afterEach(() => {
   vi.useRealTimers()

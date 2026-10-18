@@ -55,6 +55,7 @@ import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
 import { MEMORY_KIND } from '../features/memory/kinds'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
+import { OPERATOR_SECTION } from '../test/models'
 
 function head(over: Partial<PublicShareHead> = {}): PublicShareHead {
   return {
@@ -91,7 +92,7 @@ beforeEach(() => {
   localStorage.clear()
   holder.reg = registryWith([MEMORY_KIND])
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(head())
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   vi.mocked(derivePasswordToken).mockReset().mockResolvedValue('tok')
 })
 
@@ -182,7 +183,7 @@ describe('ShareView runs the gates ahead of the body: password -> terms -> body'
       .mockReset()
       .mockRejectedValueOnce(new SharePasswordRequiredError('salt'))
       .mockResolvedValue(head())
-    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsRevision: 1, terms: { en: '## Rules' } })
+    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsRevision: 1, operatorSection: OPERATOR_SECTION, terms: { en: '## Rules' } })
     const w = mountShare()
     await flushPromises()
 

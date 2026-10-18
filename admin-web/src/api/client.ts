@@ -12,6 +12,7 @@ import { Configuration as AuthConfiguration, LoginApi, SessionApi } from './gene
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import {
   Configuration as InstanceConfiguration,
+  InstanceAccountsApi,
   InstanceApi,
   InstanceGuestWriteRecordApi,
   InstanceModerationApi,
@@ -76,4 +77,10 @@ export function instanceOperatorApi(): InstanceOperatorApi {
 // instance spec: one more client CLASS, still four contracts.
 export function instanceGuestWriteRecordApi(): InstanceGuestWriteRecordApi {
   return new InstanceGuestWriteRecordApi(new InstanceConfiguration(bearerParams()))
+}
+
+// The Server Owner's door to an account erasure and its stop (ADR 0101 decisions 1-3, uc.account.erase-account) — the
+// `instance-accounts` tag of the same instance spec: one more client CLASS, still four contracts.
+export function instanceAccountsApi(): InstanceAccountsApi {
+  return new InstanceAccountsApi(new InstanceConfiguration(bearerParams()))
 }

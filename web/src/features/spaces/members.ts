@@ -6,12 +6,13 @@ import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
 import { admissionFor } from './scopes'
-import type { MemberInviteState, PendingMemberInvite } from '../../api/generated/tenants'
+import { SetTenantMemberRoleRequestRoleEnum, type MemberInviteState, type PendingMemberInvite } from '../../api/generated/tenants'
 import { SetMemberRoleRequestRoleEnum, type ScopeMember, type ResolvedGroupCandidate, type GroupInvitation } from '../../api/generated/scopes'
 
 export type { ScopeMember, ResolvedGroupCandidate, GroupInvitation } from '../../api/generated/scopes'
 export { SetMemberRoleRequestRoleEnum } from '../../api/generated/scopes'
 export type { MemberInviteState, PendingMemberInvite } from '../../api/generated/tenants'
+export { SetTenantMemberRoleRequestRoleEnum } from '../../api/generated/tenants'
 // The invite delivery result (cr-email-invite-send-hardening): SENT / FALLBACK_COPYLINK / FAILED — the three-state
 // signal the invite dialogs branch on so the owner always knows whether the mail actually went out.
 export { DeliveryResult } from '../../api/generated/tenants'
@@ -60,6 +61,16 @@ export function listScopeMembers(scopeId: string): Promise<ScopeMember[]> {
  */
 export function removeTenantMember(tenantId: string, userId: string, revokeLinks = false): Promise<void> {
   return withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId, ...(revokeLinks ? { revokeLinks } : {}) }))
+}
+
+/**
+ * Make a tenant member an owner, or an owner a member again (ADR 0101 decision 9: a tenant may have several owners, so
+ * its last one can hand it on) — owner-gated (`403 not_tenant_owner`); `404 member_not_found`; the last-owner guard
+ * refuses demoting the last OWNER (`409 last_owner`). A pure role change: no key moves, the member already holds the
+ * tenant's key.
+ */
+export function setTenantMemberRole(tenantId: string, userId: string, role: SetTenantMemberRoleRequestRoleEnum): Promise<void> {
+  return withRefresh(() => tenantsApi().setTenantMemberRole({ tenantId, userId, setTenantMemberRoleRequest: { role } }))
 }
 
 /**

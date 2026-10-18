@@ -78,6 +78,6 @@ class TenantSuspensionFilter(private val hosts: TenantHostResolver) {
         val path = ctx.uriInfo.path.trimStart('/')
         if (path != "api" && !path.startsWith("api/")) return null
         val tenant = hosts.tenantFor(hosts.hostOf { ctx.getHeaderString(it) }) ?: return null
-        return if (tenant.status == TenantEntity.SUSPENDED) httpError(Failures.tenantSuspended) else null
+        return if (TenantEntity.isOffline(tenant.status)) httpError(Failures.tenantSuspended) else null
     }
 }

@@ -15,11 +15,13 @@
   moderator's measure carries its statement in the form the operating mode sets, to its recipients in the app and by
   instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
   measure's hold counts from the statement (§ 4); a guest is told nothing in the app for a moderator's measure (it
-  has no account, so a guest uploader counts as nobody to tell, DSA Art. 17(2)). Four legal gaps the audit of
-  2026-10-18 found in § 7 and § 12 are **decided, not built** (`cr-statement-legal-gaps`): the reporter's redress
-  information (DSA Art. 16(5)), a statement for the Server Owner's own steps (Art. 17(1)(c), (d)), the clause or
-  provision a ground relies on and the measure's territorial scope (Art. 17(3)(a), (d), (e)), and a guest uploader's
-  notice of a removal on an authority's order (TCO Art. 11(1)). §§ 12 and 13, § 7's
+  has no account, so a guest uploader counts as nobody to tell, DSA Art. 17(2)). The four legal gaps the audit of
+  2026-10-18 found in § 7 and § 12 are built (cr-statement-legal-gaps, 2026-10-18): the reporter's redress in the
+  decision mail (DSA Art. 16(5), Art. 53), a statement for the Server Owner's own steps over content by mail with the
+  facts (Art. 17(1)(c), (d); owner Q24–Q25), the provision or clause a ground relies on and the territorial sentence
+  (Art. 17(3)(a), (d), (e)), and a guest uploader's notice of a removal on an authority's order (TCO Art. 11(1)) — every
+  text a draft until a qualified review. A tenant's deletion over content carries it too (with `cr-account-erasure`,
+  2026-10-18: a `TENANT_DELETED` record a stop lifts and the tenant's purge ends). §§ 12 and 13, § 7's
   deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
   [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):
@@ -42,8 +44,10 @@
   § 10's guest-write record is built and carries the catalog's first preset (cr-guest-write-record, 2026-10-17;
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
   N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
-  first-layer sentence — whose wording waits on counsel (Still open 4) and whose link waits on the operator section of
-  the terms. It is on the V1 line (owner
+  first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
+  operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which is built in both
+  variants (cr-operator-section-of-the-terms, 2026-10-18; its text a draft until a qualified review, its gaps against
+  the law named there). It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
@@ -210,10 +214,13 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
 - **An extension** needs a concrete reason, sealed in the moderation log (§ 11) as its own event with its own
   `expires_at`: an authority's request or order with its reference, an objection, a lawyer's letter, a lawsuit, an
   Art. 18 report in progress. Each step is at most **six months** and lapses without a new reason. No extension
-  ends a hold before the duration an authority's order sets. On a child-sexual-abuse case only an Art. 18 report in
-  progress or an authority's request extends it — keeping that content is exempt only while it serves the report
-  (§ 184b(5) StGB, L) — and the handover still ends it; the server cannot read a sealed reason, so the moderation surface
-  says so where the reason is written.
+  ends a hold before the duration an authority's order sets. Beside the sealed reason the extension names its **reason
+  type in the clear** — `AUTHORITY_REFERENCE`, `ART18_REPORT_IN_PROGRESS`, `OBJECTION`, `LAWYERS_LETTER`, `LAWSUIT` —
+  metadata only, the details staying sealed. On a child-sexual-abuse case only an Art. 18 report in progress or an
+  authority's request extends it — keeping that content is exempt only while it serves the report (§ 184b(5) StGB, L)
+  — and **the server checks it**: such an extension must carry `AUTHORITY_REFERENCE` or `ART18_REPORT_IN_PROGRESS` and
+  is refused otherwise (`409 extension_reason_not_allowed`, owner 2026-10-18); the handover still ends the hold. On
+  every other case the type is optional and nothing about it is refused.
 - **At the end** the snapshot is dropped, the pins released, and the sweep catches up. The same purge that runs at
   startup (§ 10) ends an expired hold.
 
@@ -261,8 +268,9 @@ a block reaches only the reported copy.
   Server Owner says it is over content). Its recipients are the blocked member, and the tenant's owners for a tenant;
   a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
   address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
-  moderation key for the log — and the objection goes to the instance contact (owner questions in
-  `cr-statement-legal-gaps`).
+  moderation key for the log — and the objection goes to the instance contact (owner decisions Q24–Q25, 2026-10-18:
+  facts by mail rather than a restricted second session kind for one case; a tenant's owners only, since facts mailed to
+  every member could expose one member's content to all). The mail goes once: the server keeps no clear copy to retry.
 - **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
   report again with more information, the instance contact, that they may go to court, and that they may complain to
   the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
@@ -389,7 +397,12 @@ range and its no-extension rule (§ 2 there).
   the civil limitation period from year's end, and the one for the DSA's fines — dismissed cases included, since a
   dismissal is what an injured party may later contest. A case closes when its last hold has ended and no objection
   is open: a dismissal, the lift of its last measure, a decided case whose hold the cleanup or — on a child-sexual-abuse
-  case — the handover ended. An undecided case stays open, in the queue, while a moderator still owes its decision.
+  case — the handover ended. An undecided case stays open, in the queue, while a moderator still owes its decision:
+  **no case closes itself** — that would be a decision no person took (owner 2026-10-18). Instead the moderators are
+  reminded (DSA Art. 16(6), "timely"): at 30, 75 and 90 days after the case's first report, while it is undecided, every
+  accepted moderator with a confirmed address and the instance contact's confirmed notification address get one mail
+  per reminder, with each case's category and age — no id, no link, as the new-case mail (§ 2) — and the queue marks a
+  case older than 90 days as **overdue**.
   Longer only while proceedings are pending, as a logged extension (not built for the records; a hold's is).
 - **Every moderation record goes with its case's log, in one purge** (owner 2026-10-18; GDPR Art. 5(1)(e)): on the
   case's date the case row, its reports' sealed parts with their reporter fields and its report shares — which wrap
@@ -398,7 +411,8 @@ range and its no-extension rule (§ 2 there).
   events. **Never while a measure of it is in force**: deleting the row would lift a block nobody lifted (§ 6), and a
   standing measure needs its statement for as long as it can be contested (DSA Art. 17, GDPR Art. 17(3)(e)); its lift
   is an event of its own date, which moves the case's. Nor while a proposal of it waits for the Server Owner. An order
-  that opened no case goes with its event at 31 December of the third year after its entry. The hold's snapshot and
+  that opened no case goes with its event at 31 December of the third year after its entry; a Server Owner's step on no
+  case (§ 7) goes with its statement at 31 December of the third year after its lift. The hold's snapshot and
   pins are content and end by § 4's table, long before.
 - The **reporter's contact** goes **six months after the decision is told to them** (DSA Art. 16(5)), or — where it
   could not be told — six months after the case's decision, and never while a case of the report is open; a "receipt
@@ -528,7 +542,9 @@ responsibility, and switching back to the second mode turns it on again.
   owner and gains an emergency page: 110, the BKA portal registered ahead, `TCO@bka.bund.de`, what never to do;
   the security model's T&S section, `CLAUDE.md`'s invariant on what the server keeps,
   [ADR 0035](0035-server-terms-of-service.md) decisions 3, 6 and 7 and the terms template's clauses 2, 7 and 9)
-  change in one CR shared with 0092.
+  change; each ADR's CR carries its own share of what this ADR and [ADR 0092](0092-logs-are-operational-and-name-no-person.md)
+  both touch. This ADR's is clause 9, clause 7's guest uploads and clause 2's sentence on what the host keeps about a
+  guest write; clause 2's sentence on logs is 0092's.
 
 ## Rejected alternatives
 

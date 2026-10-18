@@ -11,6 +11,7 @@ import LoginView from './views/LoginView.vue'
 import SettingsHubView from './views/SettingsHubView.vue'
 import TenantJoinView from './views/TenantJoinView.vue'
 import TermsAcceptView from './views/TermsAcceptView.vue'
+import OperatorTermsView from './views/OperatorTermsView.vue'
 import MemoryHomeView from './views/MemoryHomeView.vue'
 import GroupInvitationsView from './views/GroupInvitationsView.vue'
 import ShareView from './views/ShareView.vue'
@@ -19,6 +20,7 @@ import ConfirmEmailView from './views/ConfirmEmailView.vue'
 import ConfirmEmailChangeView from './views/ConfirmEmailChangeView.vue'
 import ModerationView from './views/ModerationView.vue'
 import { MODERATION_PATH } from './app/moderationPath'
+import { OPERATOR_TERMS_PATH } from './core/terms/operatorSection'
 
 // A fresh instance lands on /not-set-up; an already-set-up one on /login. First-run setup is NOT a route here
 // any more — it moved to `admin-web` with the rest of the Server-Owner surface (ADR 0065), which is what lets
@@ -51,6 +53,9 @@ const router = createRouter({
     // reach a `requiresUnlock` shell route bounces here (below). Not itself unlock-gated: it reads the active
     // tenant from `activeSpace` (set by the shell) and bounces to `/` if none is resolved yet.
     { path: '/terms', name: 'terms', component: TermsAcceptView },
+    // The operator section of the terms, public (ADR 0035 decision 6, DSA Art. 14(1)): no session, no gate — what every
+    // space's terms carry after their own text, read by anyone. Its record passage is the anchor `#guest-write-record`.
+    { path: OPERATOR_TERMS_PATH, name: 'operator-terms', component: OperatorTermsView },
     // Public anonymous viewer share (uc.sharing.share-public-viewer, cr-0100). No session gate — an account-less
     // visitor opens ONE Memory read-only; the share key rides the #fragment (`/s/{shareId}#k=<K_share>`), resolved
     // + decrypted client-side. `layout: 'plain'` gives the gallery the full viewport (not the narrow public card).

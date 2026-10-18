@@ -69,6 +69,11 @@ tags:
       Server Owner's two switches over its deletions — the exclusive-bucket confirmation and the pause. A tag of its own,
       so its resource owns the `/api/instance/store/reconcile` subtree.
 
+  - name: instance-accounts
+    description: >
+      The Server Owner's door to the account erasure (ADR 0101): erase an account by its address, list the pending
+      erasures, stop one before its purge. A tag of its own, so its resource owns the `/api/instance/accounts` subtree.
+
 # x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
 # request that came through the admin container; the public port 404s it. Reachability, not a role: the role
 # stays in code (ADR 0008). The backend derives its set from this marker at build time, and a posture sweep
@@ -1515,6 +1520,13 @@ paths:
         lifted (uc.account.login E5). Settles the open `MEMBER_SIGN_IN` proposals for the account as taken. The account
         is named by its address, as an appointment names it. `409 sign_in_block_exists` while one is in force;
         `409 cannot_block_server_owner` for the Server Owner's own account. Server-Owner only.
+
+        **Over content it carries a statement of reasons** (ADR 0093 § 7, DSA Art. 17(1)(d); uc.moderation.object-to-a-measure
+        A7): a block that answers a case, or takes a moderator's open proposal, always; a block with neither when
+        `overContent` says so. Then `statement` is required (`400 statement_required`) and is written with the block, in
+        its transaction — the row, its recipient (the account), the log event — and mailed to the account's address with
+        the facts once the block committed. A block with no case, no proposal and `overContent` false carries none. A
+        block from a proposal with no case named is recorded on the proposal's case.
       security:
         - bearerAuth: []
       requestBody:
@@ -1530,11 +1542,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationSteps" }
         "400":
-          description: The request was malformed (`invalid_request`).
+          description: >
+            `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
+            `statement_required` = the block is over content and carries no statement; `statement_facts_required` /
+            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invalid_request }
+              example: { code: statement_required }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1554,7 +1569,10 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: account_not_found }
         "409":
-          description: "`sign_in_block_exists` = the account is blocked already; `cannot_block_server_owner` = it is the Server Owner's own."
+          description: >
+            `sign_in_block_exists` = the account is blocked already; `cannot_block_server_owner` = it is the Server
+            Owner's own; `moderation_epoch_changed` = the facts are not sealed to the current epoch; `moderation_off` =
+            no epoch exists to seal them to; `id_taken` = the statement id is taken.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2271,6 +2289,145 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
 
+  /api/instance/accounts/erasures:
+    get:
+      tags: [instance-accounts]
+      operationId: listAccountErasures
+      x-veyq-channel: admin
+      summary: The account erasures that are pending, with the addresses they will erase.
+      description: >
+        Every account whose erasure was requested and has not been purged yet (ADR 0101 decisions 1-3): its address, when
+        the erasure was requested and by whom, and when the purge erases it. The Server Owner stops one here before that
+        date. An erased account is no longer listed — nothing names it any more. Server-Owner only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The pending erasures, earliest due first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountErasureList" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+    post:
+      tags: [instance-accounts]
+      operationId: eraseAccount
+      x-veyq-channel: admin
+      summary: Erase an account by its address — the Server Owner's door for a request that reached them another way.
+      description: >
+        ADR 0101 decisions 1, 2 and 9: starts the same erasure the account's holder starts in the settings. In one
+        transaction every session of the account ends, sign-in is refused, its pending invites, pairings, recoveries and
+        address changes go, the member removal runs in every tenant it belongs to, and it leaves the moderator roster;
+        the account is purged after the scope trash's retention (`veyq.scope.delete.retention`). **This door never
+        refuses a last owner** (an erasure cannot wait on a third person, GDPR Art. 12(2)): a tenant whose last owner
+        this was is left with no owner, which `listTenants` shows. It does refuse the last holder of the moderation key
+        (`409 moderation_last_holder`), at both doors: the key, and every report and hold sealed to it, would be lost with
+        them (ADR 0099 § 5) — another moderator holds it first. One mail goes to the account's address through the
+        instance mail where it is set up.
+        `409 server_owner_account` for the Server Owner's own account; `409 account_erasure_pending` while one is
+        pending already. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountAddressRequest" }
+            example: { address: member@example.com }
+      responses:
+        "200":
+          description: The erasure is pending; when the purge erases the account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PendingAccountErasure" }
+        "400":
+          description: The request was malformed (`invalid_request`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No account has this address (`account_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: account_not_found }
+        "409":
+          description: "`server_owner_account` = it is the Server Owner's own account; `account_erasure_pending` = its erasure is pending already; `moderation_last_holder` = it is the last holder of the moderation key."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: server_owner_account }
+
+  /api/instance/accounts/erasures/stop:
+    post:
+      tags: [instance-accounts]
+      operationId: stopAccountErasure
+      x-veyq-channel: admin
+      summary: Stop a pending account erasure — for a mistaken or coerced request.
+      description: >
+        ADR 0101 decision 3: until the purge, only the Server Owner can stop an erasure (its holder cannot sign in to do
+        so). The account signs in again; its own scopes are still in the scope trash, restorable as any trashed scope;
+        the shared scopes and tenants it was cut from need a new invite, and a tenant deleted along with it stays pending
+        deletion until `stopTenantDeletion`. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountAddressRequest" }
+            example: { address: member@example.com }
+      responses:
+        "204":
+          description: Stopped; the account signs in again.
+        "400":
+          description: The request was malformed (`invalid_request`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No pending erasure is for an account with this address (`account_erasure_not_found`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: account_erasure_not_found }
+
 components:
   parameters:
     ModeratorAccountId:
@@ -2411,6 +2568,20 @@ components:
           format: uuid
           description: The case the block answers (a moderator's proposal); null for none.
           example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
+        overContent:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The Server Owner says a block with no case and no open proposal is over content, so it carries a statement
+            (ADR 0093 § 7). A block that answers a case or a proposal is over content regardless.
+          example: false
+        statement:
+          description: The statement of reasons the block carries when it is over content; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerStatementInput"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     InstanceRelease:
       type: object
@@ -3773,6 +3944,10 @@ components:
     OperatingMode:
       $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
 
+    # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
+    ServerOwnerStatementInput:
+      $ref: '_common.openapi.yaml#/components/schemas/ServerOwnerStatementInput'
+
     # An authority's order is single-sourced with the moderator's door (moderation.openapi.yaml, enterModerationOrder).
     AuthorityOrderKind:
       $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrderKind'
@@ -4017,6 +4192,67 @@ components:
           format: int64
           description: Storage keys the sweep gave up on after its retries — bytes that are counted, not deleted.
           example: 0
+
+    AccountAddressRequest:
+      type: object
+      description: An account, named by its address.
+      required: [address]
+      properties:
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner names an existing account by its address, as a sign-in block names it; the server looks the
+            account up by the address it already holds and stores nothing new.
+          type: string
+          format: email
+          description: The account's address.
+          maxLength: 254
+          example: member@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    AccountErasureRequester:
+      x-veyq-visibility: enum
+      type: string
+      description: Who asked for the erasure — the account's holder in the settings, or the Server Owner on this channel.
+      enum: [SELF, SERVER_OWNER]
+      example: SELF
+
+    PendingAccountErasure:
+      type: object
+      description: One account whose erasure is pending (ADR 0101 decision 3).
+      required: [address, requestedAt, requestedBy, dueAt]
+      properties:
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner stops an erasure by the address the account holds until the purge; the address is the one the
+            server already holds, shown back on the admin channel only.
+          type: string
+          maxLength: 254
+          example: member@example.com
+        requestedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the erasure was requested (the server's clock).
+          example: 2026-10-18T10:00:00Z
+        requestedBy:
+          $ref: "#/components/schemas/AccountErasureRequester"
+        dueAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the purge erases the account — the request plus the scope trash's retention.
+          example: 2026-11-17T10:00:00Z
+
+    AccountErasureList:
+      type: object
+      required: [erasures]
+      properties:
+        erasures:
+          type: array
+          maxItems: 100000
+          items: { $ref: "#/components/schemas/PendingAccountErasure" }
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

@@ -27,6 +27,10 @@ data class TenantView(
     val storageUsedBytes: Long,
     /** The Server Owner's quota for the tenant; null = none (ADR 0073 §1). */
     val storageQuotaBytes: Long?,
+    /** An ACTIVE or SUSPENDED tenant no member owns — its last owner was erased at the Server Owner's door (ADR 0101). */
+    val ownerless: Boolean = false,
+    /** When the purge erases a tenant pending deletion (ADR 0101 decision 10); null otherwise. */
+    val deletionDueAt: Instant? = null,
 )
 
 /** The state of a tenant's current invite after a mint/resend/reassign. `bootstrapSecret` is the raw token,
@@ -46,9 +50,9 @@ fun TenantInviteEntity.admission(): Admission? {
     return Admission(id, admissionEpoch ?: return null, admissionTag ?: return null)
 }
 
-/** A tenant's current terms + a specific caller's accepted revision (cr-0114). `markdownByLocale` is the raw
+/** A tenant's current terms (cr-0114). `markdownByLocale` is the raw
  *  serialized locale→markdown map (null = none set); the handler decodes it into the per-locale DTO. */
-data class TenantTermsRow(val revision: Int, val acceptedRevision: Int, val markdownByLocale: String?)
+data class TenantTermsRow(val revision: Int, val markdownByLocale: String?)
 
 /** A tenant's current terms with **no** caller — revision + the raw serialized markdown, no acceptance lookup
  *  (the accountless share terms read, uc.sharing.share-accept). Distinct from [TenantTermsRow] which carries a
@@ -371,6 +375,71 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             domain, tenantId, TenantEntity.PENDING, TenantEntity.ACTIVE,
         ) > 0
 
+    /**
+     * Delete an ACTIVE or SUSPENDED tenant (ADR 0101 decision 10): it goes offline as a suspension takes it, under
+     * `PENDING_DELETION`, until [dueAt]. The same guarded-`UPDATE` shape as [suspend]: the `status in (…)` decides the
+     * transition, so a concurrent reactivate or a second delete cannot be overwritten. Returns whether it happened.
+     */
+    @Transactional
+    fun markForDeletion(tenantId: String, dueAt: Instant): Boolean =
+        TenantEntity.update(
+            "status = ?1, deletionDueAt = ?2 where id = ?3 and status in (?4, ?5)",
+            TenantEntity.PENDING_DELETION, dueAt, tenantId, TenantEntity.ACTIVE, TenantEntity.SUSPENDED,
+        ) > 0
+
+    /** Stop a pending deletion: the tenant returns SUSPENDED, as it was taken offline (ADR 0101 decision 10). */
+    @Transactional
+    fun stopDeletion(tenantId: String): Boolean =
+        TenantEntity.update(
+            "status = ?1, deletionDueAt = null where id = ?2 and status = ?3",
+            TenantEntity.SUSPENDED, tenantId, TenantEntity.PENDING_DELETION,
+        ) > 0
+
+    /** The tenants whose deletion is due at [now] — `TenantPurge`'s work list. */
+    fun dueForDeletion(now: Instant): List<String> =
+        TenantEntity.list("status = ?1 and deletionDueAt <= ?2", TenantEntity.PENDING_DELETION, now).map { it.id }
+
+    /** Whether [userId] is an accepted member of the tenant's TENANT scope (its root, `scopeId == tenantId`). */
+    fun isTenantMember(userId: String, tenantId: String): Boolean =
+        MembershipEntity.count("userId = ?1 and scopeId = ?2 and pendingConsent = false", userId, tenantId) > 0
+
+    /** The accepted members of the tenant's TENANT scope, by account id. */
+    fun tenantMemberIds(tenantId: String): List<String> =
+        MembershipEntity.list("scopeId = ?1 and pendingConsent = false", tenantId).map { it.userId }
+
+    /** How many OWNERs the tenant's TENANT scope has. */
+    fun ownerCount(tenantId: String): Long =
+        MembershipEntity.count("scopeId = ?1 and role = ?2 and pendingConsent = false", tenantId, MembershipEntity.OWNER)
+
+    /** Set [userId]'s TENANT-scope role — decides nothing; the caller holds the tenant scope's lock and the gates. */
+    @Transactional
+    fun setTenantRole(tenantId: String, userId: String, role: String) {
+        MembershipEntity.update("role = ?1 where userId = ?2 and scopeId = ?3", role, userId, tenantId)
+    }
+
+    /**
+     * Mint an OWNER invite into an ACTIVE tenant for one of its members (ADR 0101 decision 9). Supersedes the tenant's
+     * live OWNER invites only — never its member invites, which [supersedeAndMintInvite] would end too.
+     */
+    @Transactional
+    fun mintOwnerInvite(tenantId: String, email: String, tokenHash: String, expiresAt: Instant): InviteView {
+        TenantInviteEntity.update(
+            "status = ?1 where tenantId = ?2 and status = ?3 and role = ?4",
+            TenantInviteEntity.SUPERSEDED, tenantId, TenantInviteEntity.ACTIVE, TenantInviteEntity.OWNER,
+        )
+        mintInvite(tenantId, email, tokenHash, expiresAt, Instant.now())
+        return InviteView(email, TenantInviteEntity.ACTIVE, expiresAt)
+    }
+
+    /**
+     * An erased account's address leaves the tenants whose owner invite went to it (ADR 0101 decision 4): the tenant
+     * stays, the record of whom its first owner invite named does not. Not a routing column: no reprojection.
+     */
+    @Transactional
+    fun forgetOwnerAddress(address: String) {
+        TenantEntity.update("ownerEmail = ?1 where ownerEmail = ?2", "", address)
+    }
+
     /** Revoke a pending tenant: delete its invite history then the tenant itself. */
     @Transactional
     fun deleteTenant(tenantId: String) {
@@ -392,6 +461,8 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
                 inviteExpiresAt = invite?.expiresAt,
                 storageUsedBytes = usageByTenant[t.id] ?: 0,
                 storageQuotaBytes = t.storageQuotaBytes,
+                ownerless = (t.status == TenantEntity.ACTIVE || t.status == TenantEntity.SUSPENDED) && ownerCount(t.id) == 0L,
+                deletionDueAt = t.deletionDueAt,
             )
         }
 
@@ -400,16 +471,19 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
 
     // --- terms of service (cr-0114, ADR 0035) ---
 
-    /** The tenant's current terms + the highest revision [userId] accepted (0 if never). Null if no such tenant.
-     *  The highest is the gate's answer: an accept is refused unless it names the current revision and a revision only
-     *  ever grows, so "highest == current" is exactly "has a row for the current revision". */
-    fun termsFor(tenantId: String, userId: String): TenantTermsRow? {
+    /** The tenant's current terms. Null if no such tenant. */
+    fun termsFor(tenantId: String): TenantTermsRow? {
         val tenant = TenantEntity.findById(tenantId) ?: return null
-        val accepted = TenantTermsAcceptanceEntity
-            .find("userId = ?1 and tenantId = ?2 order by acceptedRevision desc", userId, tenantId)
-            .firstResult()?.acceptedRevision ?: 0
-        return TenantTermsRow(tenant.termsRevision, accepted, tenant.termsMarkdownByLocale)
+        return TenantTermsRow(tenant.termsRevision, tenant.termsMarkdownByLocale)
     }
+
+    /** Whether [userId]'s history for [tenantId] holds a row for the triple — the member gate's answer (ADR 0035
+     *  decision 6): the space's [revision], the operator section's [operatorRevision] and its [variant]. */
+    fun hasAccepted(userId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: String): Boolean =
+        TenantTermsAcceptanceEntity.count(
+            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3 and operatorRevision = ?4 and variant = ?5",
+            userId, tenantId, revision, operatorRevision, variant,
+        ) > 0
 
     /** The tenant's current terms **without** a caller — revision + serialized markdown, and **no** acceptance
      *  lookup (uc.sharing.share-accept: the accountless visitor's acceptance is client-only, so the server keeps
@@ -431,21 +505,20 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         return tenant.termsRevision
     }
 
-    /** Record [userId]'s acceptance of [revision] for [tenantId], stamped with the server's own time — one row per
-     *  revision (keyed by the (user, tenant, revision) UNIQUE), so an older revision's row and time stay as evidence
-     *  (ADR 0035 §4). Written once per revision: re-accepting a revision already recorded changes nothing — the first
-     *  time stands. */
+    /** Record [userId]'s acceptance of the triple for [tenantId], stamped with the server's own time — one row per
+     *  triple (keyed by the (user, tenant, revision, operator revision, variant) UNIQUE), so an older triple's row and
+     *  time stay as evidence (ADR 0035 §4). Written once per triple: re-accepting one already recorded changes nothing
+     *  — the first time stands. */
     @Transactional
-    fun recordAcceptance(userId: String, tenantId: String, revision: Int) {
-        val recorded = TenantTermsAcceptanceEntity.count(
-            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3", userId, tenantId, revision,
-        ) > 0
-        if (recorded) return
+    fun recordAcceptance(userId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: String) {
+        if (hasAccepted(userId, tenantId, revision, operatorRevision, variant)) return
         TenantTermsAcceptanceEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
             this.tenantId = tenantId
             acceptedRevision = revision
+            this.operatorRevision = operatorRevision
+            this.variant = variant
             acceptedAt = Instant.now()
         }.persist()
     }

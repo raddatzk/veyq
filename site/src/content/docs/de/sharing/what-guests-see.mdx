@@ -5,6 +5,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
+  - docs/features/moderation/use-cases/uc.moderation.authority-order.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -13,7 +14,8 @@ Ein Gast öffnet den Link in irgendeinem Browser. Bevor etwas gezeigt wird, kann
 
 1. **Diese Freigabe ist passwortgeschützt**: Er gibt das Passwort ein und wählt **Entsperren**.
 2. **Bitte akzeptiere die Nutzungsbedingungen**, wenn dein Bereich [Bedingungen](/veyq/de/space-owners/terms/) hat: Er
-   wählt **Akzeptieren und fortfahren**. Gefragt wird einmal, und wieder, wenn sich die Bedingungen ändern.
+   liest deine Bedingungen und danach den Abschnitt der Person, die den Server betreibt, und wählt **Akzeptieren und
+   fortfahren**. Gefragt wird einmal, und wieder, wenn sich eines von beiden ändert.
    Die Zustimmung bleibt nur im eigenen Browser und geht nie an den Server; das Öffnen des Links bleibt also anonym.
 3. **Bitte lies diesen Hinweis**, wenn der Hinweis akzeptiert werden muss: Er wählt **Akzeptieren und fortfahren**. Die
    Zustimmung bleibt auf seinem eigenen Gerät; niemand bekommt eine Liste, wer zugestimmt hat.
@@ -32,15 +34,23 @@ dir geteilt · schreibgeschützt**. Die Rolle nimmt nur Schaltflächen weg; ein 
 Wo die Person, die den Server betreibt, Schreibvorgänge von Gästen festhält, liest ein Gast, der etwas hinzufügen kann,
 vor dem ersten Hinzufügen, dass seine IP-Adresse, sein Quellport und die Uhrzeit für eine Zahl von Tagen aufbewahrt
 werden, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was er hinzugefügt hat, und dass er
-widersprechen kann. Ein Gast, der nur ansieht, liest nichts davon, weil über ihn nichts aufbewahrt wird. Diese
+widersprechen kann. **Wer es aufbewahrt, warum, und deine Rechte** daneben öffnet die vollständigen Angaben in einem
+eigenen Tab. Ein Gast, der nur ansieht, liest nichts davon, weil über ihn nichts aufbewahrt wird. Diese
 Aufzeichnung gehört der Person, die den Server betreibt, nicht dir: Du kannst sie nicht sehen.
 
 Unten erklärt **Wie sicher ist das?** in einfachen Worten, warum der Server nicht lesen kann, was geteilt wurde. Wo
-angegeben ist, wer den Server betreibt, zeigt **Impressum** daneben Namen, Anschrift und E-Mail (auch auf der
-Anmeldeseite). Gäste
+angegeben ist, wer den Server betreibt, zeigt **Impressum** daneben Namen, Anschrift und E-Mail sowie die Adresse für
+Nutzende und Behörden mit ihren Sprachen (auch auf der Anmeldeseite). **Bedingungen dieser Instanz** öffnet den
+Abschnitt der Person, die den Server betreibt, lesbar ohne Konto. Gäste
 sehen nie, wer sonst in deinem Bereich ist, wer bei einer Erinnerung dabei war, oder jemandes Bild.
 
 Wurde der Link abgeschaltet, ist er abgelaufen oder unvollständig, sagt die Seite **Dieser Link ist nicht verfügbar**.
+
+Hat eine Behörde angeordnet, etwas zu entfernen, das ein Gast über den Link hochgeladen hat, erfährt es der Browser,
+in dem sich der Gast einen Namen gegeben hat, auf dem Link, auch wenn der Link allen
+anderen als nicht verfügbar antwortet: dass es auf Anordnung einer Behörde entfernt wurde, die an diesem Tag eingegangen
+ist, und wo man die Gründe oder eine Kopie der Anordnung erfragen kann. Niemand sonst sieht das, und nichts davon wird
+gezeigt, solange die Behörde den Server gebeten hat zu warten.
 
 Alles, was ein Gast sieht, wird in seinem eigenen Browser mit dem Schlüssel aus dem Link geöffnet:
 [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

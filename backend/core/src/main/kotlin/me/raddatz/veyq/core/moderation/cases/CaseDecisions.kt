@@ -60,14 +60,16 @@ enum class MeasureStep { SHARE, CONTENT, GUEST_IDENTITY }
 data class ResolvedStep(val kind: BlockKind, val targetId: String, val shareId: String?)
 
 /**
- * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the [ground], the [facts] sealed to the
- * moderation key, and [factsFor] — the facts sealed to each affected member's identity, by account id.
+ * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the [ground], the [provision] of the law or
+ * clause of the terms it relies on (in the clear, DSA Art. 17(3)(d), (e)), the [facts] sealed to the moderation key, and
+ * [factsFor] — the facts sealed to each affected member's identity, by account id.
  */
 data class StatementInput(
     val ground: StatementGround,
     val facts: SealedNote?,
     val factsFor: Map<String, String>,
     val deferral: DeferralInput? = null,
+    val provision: String? = null,
 )
 
 /** An authority's deferral as the moderator enters it (ADR 0093 § 7): its end, and the authority's request sealed. */
@@ -75,6 +77,9 @@ data class DeferralInput(val until: Instant, val reason: SealedNote)
 
 /** A handover to an authority (ADR 0093 §§ 11-13): reported to one, or information given to one. */
 enum class HandoverKind(val event: ModerationEvent) { REPORTED(ModerationEvent.HANDED_OVER), INFORMATION_GIVEN(ModerationEvent.INFORMATION_GIVEN) }
+
+/** The reason types that extend a hold on a case of child sexual abuse material (ADR 0093 § 4, `HoldExtensionReason`). */
+val CSAM_EXTENSION_REASONS: Set<String?> = setOf("AUTHORITY_REFERENCE", "ART18_REPORT_IN_PROGRESS")
 
 /** A decision's refusals (codes per `moderation.openapi.yaml`). */
 object CaseFailures {
@@ -92,6 +97,7 @@ object CaseFailures {
     val epochChanged = httpFailure("moderation_epoch_changed", FailureStatus.CONFLICT)
     val invalid = httpFailure("invalid_request", FailureStatus.BAD_REQUEST)
     val factsRequired = httpFailure("statement_facts_required", FailureStatus.BAD_REQUEST)
+    val provisionRequired = httpFailure("statement_provision_required", FailureStatus.BAD_REQUEST)
     val recipientsChanged = httpFailure("statement_recipients_changed", FailureStatus.CONFLICT)
     val objectionNotFound = httpFailure("objection_not_found", FailureStatus.NOT_FOUND)
     val objectionDecided = httpFailure("objection_decided", FailureStatus.CONFLICT)
@@ -100,6 +106,7 @@ object CaseFailures {
     val statementNotFound = httpFailure("statement_not_found", FailureStatus.NOT_FOUND)
     val statementNotDeferred = httpFailure("statement_not_deferred", FailureStatus.CONFLICT)
     val deferralRenewed = httpFailure("deferral_renewed", FailureStatus.CONFLICT)
+    val extensionReasonNotAllowed = httpFailure("extension_reason_not_allowed", FailureStatus.CONFLICT)
 }
 
 /**
@@ -260,10 +267,11 @@ class CaseDecisions(
         val known = targets.of(case, held)
         val (resolved, refusal) = resolve(case, step, shareId, targetId, known)
         if (resolved == null) return@createOrConflict refused(refusal!!)
-        // The statement's form follows the operating mode, read now (ADR 0093 § 14): the full form requires the facts.
-        if (statement.facts == null && operatingMode.read().mode == OperatingMode.ORGANISATION) {
-            return@createOrConflict refused(CaseFailures.factsRequired)
-        }
+        // The statement's form follows the operating mode, read now (ADR 0093 § 14): the full form requires the facts and
+        // the provision or clause the ground relies on (DSA Art. 17(3)(d), (e)).
+        val full = operatingMode.read().mode == OperatingMode.ORGANISATION
+        if (statement.facts == null && full) return@createOrConflict refused(CaseFailures.factsRequired)
+        if (statement.provision.isNullOrBlank() && full) return@createOrConflict refused(CaseFailures.provisionRequired)
         noteRefusal(statement.facts)?.let { return@createOrConflict refused(it) }
         statement.deferral?.let { d ->
             if (!deferrals.inBounds(d.until, now)) return@createOrConflict refused(CaseFailures.deferralOutOfBounds)
@@ -291,6 +299,7 @@ class CaseDecisions(
             measureId = row.id
             this.caseId = case.id
             ground = statement.ground.name
+            provision = statement.provision?.trim()?.takeIf { it.isNotEmpty() }
             basis = StatementBasis.REPORT.name
             epoch = statement.facts?.epoch
             sealedFacts = statement.facts?.sealed
@@ -459,9 +468,19 @@ class CaseDecisions(
         DecisionOutcome.Done
     }
 
-    fun extend(moderatorId: String, caseId: String, until: Instant, reason: SealedNote, now: Instant = Instant.now()): DecisionOutcome =
+    /**
+     * Extend [caseId]'s hold to [until] for [reason], whose kind [reasonType] is named in the clear (ADR 0093 § 4). On a
+     * case of child sexual abuse material only [CSAM_EXTENSION_REASONS] extend it — keeping that content serves only the
+     * report to an authority (§ 184b(5) StGB) — and anything else, or no type, is refused (owner 2026-10-18).
+     */
+    fun extend(
+        moderatorId: String, caseId: String, until: Instant, reason: SealedNote, now: Instant = Instant.now(), reasonType: String? = null,
+    ): DecisionOutcome =
         QuarkusTransaction.requiringNew().call {
             val case = lock(caseId) ?: return@call refused(CaseFailures.caseNotFound)
+            if (case.category == ReportCategory.CHILD_SEXUAL_ABUSE.name && reasonType !in CSAM_EXTENSION_REASONS) {
+                return@call refused(CaseFailures.extensionReasonNotAllowed)
+            }
             val hold = holds.aliveOf(case.id, now) ?: return@call refused(CaseFailures.nothingHeld)
             if (!until.isAfter(hold.expiresAt) || until.isAfter(now.plus(Holds.SIX_MONTHS))) {
                 return@call refused(CaseFailures.extensionOutOfBounds)
@@ -470,7 +489,7 @@ class CaseDecisions(
             holds.moveEnd(hold, until, HoldTrigger.EXTENDED)
             log.appendCase(
                 ModerationEvent.HOLD_EXTENDED, now, case.id, moderatorId = moderatorId, epoch = reason.epoch,
-                sealedText = reason.sealed, holdUntil = until,
+                sealedText = reason.sealed, holdUntil = until, reason = reasonType,
             )
             DecisionOutcome.Done
         }

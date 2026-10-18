@@ -219,6 +219,7 @@ class OperatorBlindProbeTest {
         "reissueMemberInvite" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue") },
         "revokeMemberInvite" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/member-invites/$someId") },
         "removeTenantMember" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/members/$someId") },
+        "setTenantMemberRole" to Probe(Address.TENANT) { s -> Call("PATCH", "/api/tenants/${s.tenantId}/members/$someId", """{"role":"OWNER"}""") },
         "getTenantTerms" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/terms") },
         // A member's picture (ADR 0084): tenant-gated like the directory. The control reaches the handler and answers
         // `404 avatar_not_found` for the invented member - a code the gate's own `tenant_not_found` is not.
@@ -227,7 +228,7 @@ class OperatorBlindProbeTest {
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")
         },
         // The live tenant publishes no terms, so the control's accept answers `409 terms_revision_changed` — past the gate.
-        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"revision":1}""") },
+        "acceptTenantTerms" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/terms/accept", """{"revision":1,"operatorRevision":1,"variant":"FULL"}""") },
         "getTenantMailSettings" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/mail-settings") },
         "updateTenantMailSettings" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")
@@ -266,14 +267,17 @@ class OperatorBlindProbeTest {
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
-            "reportInShare",
-            "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite",
+            "reportInShare", "getShareOrderNotice",
+            "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )
         reason(
             "Server-Owner route: @RolesAllowed(SERVER_OWNER) plus its own lifecycle guards; it administers tenants, " +
                 "it does not act inside one.",
             "createTenant", "listTenants", "resendTenantInvite", "reassignTenantInvite", "changeTenantDomain",
             "revokeTenant", "suspendTenant", "reactivateTenant", "setTenantStorageQuota", "clearTenantStorageQuota",
+            "deleteTenant", "stopTenantDeletion", "inviteTenantOwner",
+            // the account erasure's Server Owner door (ADR 0101): it acts on an account across every tenant
+            "listAccountErasures", "eraseAccount", "stopAccountErasure",
             "getInstanceRelease",
             "getInstanceStoreProvisioning",
             "getInstanceConfigSecret",
@@ -300,6 +304,7 @@ class OperatorBlindProbeTest {
             "getDeviceRegister", "putDeviceRegister", "rotateAccountKeys", "changePassword", "listSessionFamilies",
             "revokeOtherSessionFamilies", "revokeSessionFamily", "delegatePairingSession", "sealPairingChannel",
             "clearDeclinesForAcceptedKey", "getAccountEmail", "confirmEmail", "listRotationScopeStates",
+            "getOwnAccountErasurePreview", "eraseOwnAccount",
         )
         reason(
             "Host-resolved and self-scoped: reads or writes only the caller's own rows on the Host's own tenant, so " +
@@ -361,6 +366,11 @@ class OperatorBlindProbeTest {
             "public: the values the Server Owner published about who runs the instance (ADR 0093 § 11, ADR 0035 " +
                 "decision 7) — instance-wide, the same on every host; it names no space and no account.",
             "getOperatorDetails",
+        )
+        reason(
+            "public: the operator section of the terms (ADR 0035 decision 6), fixed text rendered with those published " +
+                "values — publicly available as DSA Art. 14(1) asks, instance-wide; it names no space and no account.",
+            "getOperatorTerms",
         )
     }
 

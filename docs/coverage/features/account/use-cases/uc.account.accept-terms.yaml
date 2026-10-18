@@ -35,3 +35,55 @@ acceptanceCriteria:
       # construction (both endpoints are membership-gated — no path writes a record without a session) and has
       # no dedicated test; an anonymous-visitor assertion is the honest remaining thin spot, not a false citation.
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.readOrAcceptByANonMemberIs404] }
+  # cr-operator-section-of-the-terms (ADR 0035 decision 6): the fixed operator section after the space's text, and the
+  # gate on the triple (space revision, operator revision, variant). The text is contracts/terms/operator-section.json,
+  # a draft until a qualified legal review.
+  - id: the-operator-section-follows-the-space-terms
+    text: >-
+      Every member terms read serves, after the space's own text, the fixed operator section veyq ships, rendered with
+      the values the Server Owner set and marked a draft until a legal review; the member gate shows it after the
+      space's text. A space with no terms (revision 0) does not gate, and its members read the section in the space's
+      terms panel.
+    coverage:
+      backend:
+        integration: [TenantTermsOperatorSectionSliceTest.aSpaceWithNoTermsServesTheSectionWithoutAGate]
+        unit: [OperatorSectionRendererTest.theJarCarriesTheContractFileUnchanged, OperatorSectionRendererTest.aDraftSaysSoFirstAndOnlyWhileItIsOne, OperatorSectionRendererTest.everyPlaceholderTheFileNamesIsOneTheRendererKnows, OperatorSectionRendererTest.anUnknownPlaceholderIsRefusedRatherThanPrinted]
+      web:
+        unit: [src/views/TermsAcceptView.test.ts, src/features/tenant/TenantTermsPanel.test.ts]
+  - id: the-gate-compares-the-triple
+    text: >-
+      What a member accepts is the triple of the space's revision, the section's revision and its variant, one history
+      row per triple: a release that changes the section or a changed operating mode reopens the gate, a value changed
+      in admin-web renders at once and reopens nothing, nor does the guest-write record switched, nor the mode
+      switched back to a variant the member accepted at the current revisions (no row is added); an accept naming
+      another triple is 409.
+    coverage:
+      backend:
+        integration: [TenantTermsOperatorSectionSliceTest.aValueChangedInAdminWebRendersAtOnceAndReopensNoGate, TenantTermsOperatorSectionSliceTest.aModeChangeReopensTheGateAndARecordSwitchDoesNot, TenantTermsOperatorSectionSliceTest.anAcceptNamingAnotherVariantIsRefused]
+      web:
+        unit: [src/features/tenant/tenantTerms.test.ts, src/views/TermsAcceptView.test.ts]
+  - id: the-variant-follows-the-operating-mode
+    text: >-
+      The club, organisation or company mode serves the full variant; the private mode the reduced one, without the
+      authorities, the statement's deferral and the statement's further content, with the notice path whole. In the
+      full variant an empty value is a visible "not stated by this operator"; in the reduced one it is absent.
+    coverage:
+      backend:
+        integration: [TenantTermsOperatorSectionSliceTest.thePrivateModeServesTheReducedVariant]
+        unit: [OperatorSectionRendererTest.theReducedVariantLeavesOutTheAuthoritiesAndTheDeferralAndKeepsTheNoticePath, OperatorSectionRendererTest.theFullOnlyPassagesAreExactlyWhatAdr0035ListsUnderDrops, OperatorSectionRendererTest.anEmptyValueIsAVisibleGapInTheFullVariantAndAbsentInTheReducedOne, OperatorSectionRendererTest.anOptionalLineGoesInBothVariantsWhereItsValueIsEmpty, OperatorSectionRendererTest.aValuesNewlinesRenderInlineSoATypedAddressCannotStartAMarkdownBlock]
+  - id: the-record-information-follows-its-switch
+    text: >-
+      The guest-write record's GDPR Art. 13 information (controller, purpose, basis, N, recipients, rights) is in the
+      section exactly while core.public-shares.guest-write-record is on, in either variant, with the right to object
+      set apart; an unset value is a visible gap there in the full variant and absent in the reduced one, as everywhere
+      in the section.
+    coverage:
+      backend:
+        integration: [TenantTermsOperatorSectionSliceTest.theRecordPassageFollowsItsSwitchInBothVariants]
+        unit: [OperatorSectionRendererTest.theRecordFollowsItsSwitchNotTheVariant, OperatorSectionRendererTest.theRecordShowsAMissingControllerAsAGapInTheFullVariantAndLeavesItOutInTheReducedOne, OperatorSectionRendererTest.theRetentionCarriesItsUnitPerLanguage]
+      web:
+        unit: [src/views/TermsAcceptView.test.ts]
+gaps:
+  stack: >-
+    Lane L1 walks this in a browser in e2e/tests/features/terms-operator-section.spec.ts, tagged per criterion
+    (cr-operator-section-of-the-terms), but no CI run has executed that lane yet (ADR 0040).

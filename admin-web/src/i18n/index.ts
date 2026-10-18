@@ -48,6 +48,9 @@ const en = {
     "reactivate": "Bring back online",
     "suspendConfirm": "Take this tenant offline? Nobody — including its members — can reach it until you bring it back. Nothing inside it is changed or deleted.",
     "suspendConfirmTitle": "Take this tenant offline",
+    "suspendOverContent": "Over content — a moderator proposed it, or it is over what the tenant hosts",
+    "suspendOverContentHint": "Then each owner of the tenant gets a statement of reasons by mail. A suspension for any other reason (unpaid, maintenance) carries none.",
+    "suspendSend": "Take offline and send the statement",
     "suspended": "Tenant taken offline.",
     "reactivated": "Tenant is back online.",
     "suspendedHint": "This tenant is offline. Every request to its address is refused until you bring it back; its content and members are untouched.",
@@ -73,7 +76,28 @@ const en = {
     "loading": "Loading tenants…",
     "loadFailed": "Could not load tenants. Please try again.",
     "notAuthorized": "Only the server owner can manage tenants.",
-    "empty": "No tenants yet. Create the first one."
+    "empty": "No tenants yet. Create the first one.",
+    "statusPendingDeletion": "Being deleted",
+    "pendingDeletionHint": "This tenant is offline and will be erased with everything in it on {date}. Until then you can stop the deletion; it then stays offline until you bring it back online.",
+    "stopDeletion": "Stop deletion",
+    "deletionStopped": "Deletion stopped. The tenant stays offline until you bring it back online.",
+    "deleteTitle": "Delete this tenant",
+    "deleteHint": "The tenant goes offline at once, as when you take it offline. After 30 days everything in it is erased for good; until then you can stop the deletion here. Its members keep their accounts and are told by mail.",
+    "deleteOverContentHint": "Then each owner of the tenant gets a statement of reasons by mail. A deletion for any other reason (the tenant asked to close, unpaid) carries none.",
+    "deleteConfirmLabel": "Type the tenant's domain, {domain}, to confirm",
+    "delete": "Delete tenant",
+    "deletionStarted": "The tenant is being deleted. It will be erased on {date}.",
+    "deleteDomainMismatch": "That is not this tenant's domain. Nothing was deleted.",
+    "notDeletable": "This tenant can't be deleted: it is still pending (revoke it instead) or already being deleted.",
+    "ownerlessHint": "This tenant has no owner: the account of its last owner was erased. Invite one of its members to own it, or delete the tenant.",
+    "ownerlessSuspendedHint": "Bring it back online to invite an owner.",
+    "inviteOwnerTitle": "Invite an owner",
+    "inviteOwnerEmail": "Address of one of its members",
+    "inviteOwner": "Invite owner",
+    "ownerInviteMailed": "Owner invite mailed to {email}.",
+    "ownerInviteCopy": "No mail went out: this server has no mail set up, or sending failed. Copy the link and send it to {email}.",
+    "notTenantMember": "That address is no member of this tenant. Only a member can be invited to own it.",
+    "ownerInviteNotActive": "Only a tenant that is online can get an owner. Bring it back online first."
   },
   "release": {
     "navTitle": "Release",
@@ -330,7 +354,24 @@ const en = {
         "proposalNotFound": "This proposal no longer exists.",
         "blockNotFound": "This block no longer exists.",
         "invalidRequest": "The step couldn’t be sent as it is. Read the list again and retry.",
-        "notOwner": "Only the server owner can take these steps."
+        "notOwner": "Only the server owner can take these steps.",
+        "statementRequired": "This step is over content: write its statement of reasons first.",
+        "factsRequired": "Write what you found: on this instance the statement must state the facts.",
+        "provisionRequired": "Name the law or the clause it relies on: on this instance the statement must name it.",
+        "epochChanged": "The moderation key changed meanwhile. Try again.",
+        "moderationOff": "Moderation is off, so what you found can’t be sealed for the log. Turn it on first."
+      },
+      "statement": {
+        "title": "Statement of reasons",
+        "copy": "A step over content goes with a statement to the people it affects — the blocked member, or the tenant’s owners — by the instance mail and with what you found, since they cannot sign in to read it. Objections go to the instance contact. A draft until a lawyer has reviewed it.",
+        "ground": "Ground",
+        "provision": "The law or the clause it relies on",
+        "provisionHint": "A short reference, for example “§ 86a StGB” or “Space terms, clause 4”. Required on an instance run by a club, an organisation or a company.",
+        "facts": "What you found",
+        "factsHint": "Why the content falls under the law or the clause. It goes in the mail in your words; the server keeps it only sealed to the moderation key. Required on an instance run by a club, an organisation or a company.",
+        "noMail": "Without the instance mail set up, nobody is told.",
+        "send": "Block and send the statement",
+        "cancel": "Cancel"
       }
     }
   },
@@ -545,6 +586,37 @@ const en = {
     "pwnedAnyway": "Use it anyway",
     "pwnedUnavailable": "This password could not be checked against known data breaches."
   },
+  "accounts": {
+    "navTitle": "Accounts",
+    "title": "Erase an account",
+    "sub": "For a request to erase an account that reached you another way than the member's own settings.",
+    "address": "Account address",
+    "addressAgain": "Type the address again",
+    "eraseStops": "The account stops at once: every session ends and it can no longer sign in.",
+    "eraseAfter": "After 30 days it is erased for good, with everything kept about it.",
+    "eraseStoppable": "Until then you can stop the erasure below, and the account can sign in again.",
+    "eraseNotServerOwner": "Your own account, the Server Owner's, can't be erased.",
+    "eraseLastOwner": "If it is the last owner of a tenant, that tenant is left without an owner and is marked so in the tenant list, to invite a new owner or delete it.",
+    "eraseStays": "Holds and moderation records that name the account stay until their own end.",
+    "erase": "Erase account",
+    "erased": "{address} will be erased on {date}.",
+    "eraseFailed": "Couldn’t erase the account. Please try again.",
+    "notFound": "No account has that address.",
+    "serverOwner": "That is your own account, the Server Owner's. It can't be erased.",
+    "alreadyPending": "An erasure of that account is already pending.",
+    "lastModerationHolder": "That account is the last moderator who holds the moderation key. Let another moderator hold it first, or every report sealed to it would be lost.",
+    "pendingTitle": "Pending erasures",
+    "pendingNone": "No erasure is pending.",
+    "loading": "Reading the pending erasures…",
+    "loadFailed": "Couldn’t read the pending erasures.",
+    "bySelf": "Requested by the account itself on {at}",
+    "byServerOwner": "Requested by you on {at}",
+    "due": "To be erased on {date}",
+    "stop": "Stop erasure",
+    "stopped": "The erasure of {address} is stopped. The account can sign in again.",
+    "stopFailed": "Couldn’t stop the erasure. Please try again.",
+    "notOwner": "Only the server owner can erase accounts."
+  },
   "admin": {
     "title": "Server administration",
     "sub": "The instance itself: its tenants and the release it runs.",
@@ -562,7 +634,8 @@ const en = {
     "signInFailed": "Sign-in failed. Check the email and password.",
     "sessionExpired": "Your session has ended. Sign in again — what you just did was not applied.",
     "noTenants": "No tenants yet. Create the first one.",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "ownerless": "No owner"
   }
 }
 
@@ -607,6 +680,9 @@ const de: typeof en = {
     "reactivate": "Wieder online nehmen",
     "suspendConfirm": "Diesen Tenant offline nehmen? Niemand — auch seine Mitglieder nicht — kommt hinein, bis du ihn wieder online nimmst. Nichts darin wird geändert oder gelöscht.",
     "suspendConfirmTitle": "Diesen Tenant offline nehmen",
+    "suspendOverContent": "Betrifft Inhalte — die Moderation hat es vorgeschlagen, oder es geht um das, was der Tenant bereitstellt",
+    "suspendOverContentHint": "Dann erhält jede Besitzperson des Tenants eine Begründung per E-Mail. Ein Offline-Nehmen aus einem anderen Grund (unbezahlt, Wartung) trägt keine.",
+    "suspendSend": "Offline nehmen und Begründung senden",
     "suspended": "Tenant ist offline.",
     "reactivated": "Tenant ist wieder online.",
     "suspendedHint": "Dieser Tenant ist offline. Jede Anfrage an seine Adresse wird abgewiesen, bis du ihn wieder online nimmst; Inhalte und Mitglieder bleiben unberührt.",
@@ -632,7 +708,28 @@ const de: typeof en = {
     "loading": "Tenants werden geladen…",
     "loadFailed": "Tenants konnten nicht geladen werden. Bitte erneut versuchen.",
     "notAuthorized": "Nur wer den Server besitzt, kann Tenants verwalten.",
-    "empty": "Noch keine Tenants. Lege den ersten an."
+    "empty": "Noch keine Tenants. Lege den ersten an.",
+    "statusPendingDeletion": "Wird gelöscht",
+    "pendingDeletionHint": "Dieser Tenant ist offline und wird am {date} mit allem darin gelöscht. Bis dahin kannst du das Löschen stoppen; er bleibt dann offline, bis du ihn wieder online nimmst.",
+    "stopDeletion": "Löschen stoppen",
+    "deletionStopped": "Löschen gestoppt. Der Tenant bleibt offline, bis du ihn wieder online nimmst.",
+    "deleteTitle": "Diesen Tenant löschen",
+    "deleteHint": "Der Tenant geht sofort offline, wie beim Offline-Nehmen. Nach 30 Tagen wird alles darin endgültig gelöscht; bis dahin kannst du das Löschen hier stoppen. Seine Mitglieder behalten ihre Konten und werden per E-Mail informiert.",
+    "deleteOverContentHint": "Dann erhält jede Besitzperson des Tenants eine Begründung per E-Mail. Ein Löschen aus einem anderen Grund (der Tenant wollte schließen, unbezahlt) trägt keine.",
+    "deleteConfirmLabel": "Gib zur Bestätigung die Domain des Tenants ein: {domain}",
+    "delete": "Tenant löschen",
+    "deletionStarted": "Der Tenant wird gelöscht. Endgültig gelöscht wird er am {date}.",
+    "deleteDomainMismatch": "Das ist nicht die Domain dieses Tenants. Nichts wurde gelöscht.",
+    "notDeletable": "Dieser Tenant kann nicht gelöscht werden: Er ist noch ausstehend (widerrufe ihn stattdessen) oder wird bereits gelöscht.",
+    "ownerlessHint": "Diesen Tenant besitzt niemand mehr: Das Konto der letzten Person, die ihn besaß, wurde gelöscht. Lade eines seiner Mitglieder ein, ihn zu besitzen, oder lösche den Tenant.",
+    "ownerlessSuspendedHint": "Nimm ihn wieder online, um eine Besitz-Einladung zu verschicken.",
+    "inviteOwnerTitle": "Besitz-Einladung",
+    "inviteOwnerEmail": "Adresse eines seiner Mitglieder",
+    "inviteOwner": "Zum Besitz einladen",
+    "ownerInviteMailed": "Besitz-Einladung an {email} verschickt.",
+    "ownerInviteCopy": "Es ging keine E-Mail raus: Auf diesem Server ist keine E-Mail eingerichtet, oder der Versand schlug fehl. Kopiere den Link und schick ihn an {email}.",
+    "notTenantMember": "Diese Adresse gehört keinem Mitglied dieses Tenants. Nur ein Mitglied kann eingeladen werden, ihn zu besitzen.",
+    "ownerInviteNotActive": "Nur ein Tenant, der online ist, kann eine besitzende Person bekommen. Nimm ihn zuerst wieder online."
   },
   "release": {
     "navTitle": "Release",
@@ -889,7 +986,24 @@ const de: typeof en = {
         "proposalNotFound": "Diesen Vorschlag gibt es nicht mehr.",
         "blockNotFound": "Diese Sperre gibt es nicht mehr.",
         "invalidRequest": "Der Schritt konnte so nicht gesendet werden. Lies die Liste neu und versuche es erneut.",
-        "notOwner": "Nur die Besitzperson des Servers kann diese Schritte vornehmen."
+        "notOwner": "Nur die Besitzperson des Servers kann diese Schritte vornehmen.",
+        "statementRequired": "Dieser Schritt betrifft Inhalte: Schreib zuerst seine Begründung.",
+        "factsRequired": "Schreib, was du festgestellt hast: Auf dieser Instanz muss die Begründung die Tatsachen nennen.",
+        "provisionRequired": "Nenne das Gesetz oder die Klausel, auf die er sich stützt: Auf dieser Instanz muss die Begründung sie nennen.",
+        "epochChanged": "Der Moderationsschlüssel hat sich inzwischen geändert. Versuche es erneut.",
+        "moderationOff": "Die Moderation ist aus, daher lässt sich das Festgestellte nicht für das Protokoll versiegeln. Schalte sie zuerst ein."
+      },
+      "statement": {
+        "title": "Begründung",
+        "copy": "Ein Schritt, der Inhalte betrifft, geht mit einer Begründung an die Betroffenen — das gesperrte Mitglied oder die Besitzpersonen des Tenants — per Instanz-E-Mail und mit dem, was du festgestellt hast, denn sie können sich nicht anmelden, um sie zu lesen. Widersprüche gehen an den Instanzkontakt. Ein Entwurf, bis er rechtlich geprüft ist.",
+        "ground": "Grund",
+        "provision": "Gesetz oder Klausel, auf die er sich stützt",
+        "provisionHint": "Ein kurzer Verweis, etwa „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
+        "facts": "Was du festgestellt hast",
+        "factsHint": "Warum der Inhalt unter das Gesetz oder die Klausel fällt. Es geht in deinen Worten in die E-Mail; der Server behält es nur an den Moderationsschlüssel versiegelt. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
+        "noMail": "Ohne eingerichtete Instanz-E-Mail erfährt es niemand.",
+        "send": "Sperren und Begründung senden",
+        "cancel": "Abbrechen"
       }
     }
   },
@@ -1104,6 +1218,37 @@ const de: typeof en = {
     "pwnedAnyway": "Trotzdem verwenden",
     "pwnedUnavailable": "Dieses Passwort konnte nicht mit bekannten Datenlecks abgeglichen werden."
   },
+  "accounts": {
+    "navTitle": "Konten",
+    "title": "Ein Konto löschen",
+    "sub": "Für die Bitte, ein Konto zu löschen, die dich auf anderem Weg erreicht hat als über die Einstellungen des Mitglieds.",
+    "address": "Adresse des Kontos",
+    "addressAgain": "Adresse noch einmal eingeben",
+    "eraseStops": "Das Konto endet sofort: Jede Sitzung endet, und es kann sich nicht mehr anmelden.",
+    "eraseAfter": "Nach 30 Tagen wird es endgültig gelöscht, mit allem, was über es gespeichert ist.",
+    "eraseStoppable": "Bis dahin kannst du das Löschen unten stoppen; das Konto kann sich dann wieder anmelden.",
+    "eraseNotServerOwner": "Dein eigenes Konto, mit dem du diesen Server verwaltest, kann nicht gelöscht werden.",
+    "eraseLastOwner": "Besitzt das Konto als letztes einen Tenant, bleibt dieser Tenant ohne Besitz und ist in der Tenant-Liste so markiert – um ein Mitglied zum Besitz einzuladen oder ihn zu löschen.",
+    "eraseStays": "Aufbewahrungen (Holds) und Moderationsaufzeichnungen, die das Konto nennen, bleiben bis zu ihrem eigenen Ende.",
+    "erase": "Konto löschen",
+    "erased": "{address} wird am {date} gelöscht.",
+    "eraseFailed": "Das Konto konnte nicht gelöscht werden. Bitte erneut versuchen.",
+    "notFound": "Kein Konto hat diese Adresse.",
+    "serverOwner": "Das ist dein eigenes Konto, mit dem du diesen Server verwaltest. Es kann nicht gelöscht werden.",
+    "alreadyPending": "Das Löschen dieses Kontos ist bereits angestoßen.",
+    "lastModerationHolder": "Dieses Konto hält als letztes den Moderationsschlüssel. Lass ihn zuerst eine andere Person halten, die moderiert – sonst ginge jede damit versiegelte Meldung verloren.",
+    "pendingTitle": "Angestoßene Löschungen",
+    "pendingNone": "Keine Löschung ist angestoßen.",
+    "loading": "Angestoßene Löschungen werden gelesen…",
+    "loadFailed": "Die angestoßenen Löschungen konnten nicht gelesen werden.",
+    "bySelf": "Vom Konto selbst angestoßen am {at}",
+    "byServerOwner": "Von dir angestoßen am {at}",
+    "due": "Wird am {date} gelöscht",
+    "stop": "Löschen stoppen",
+    "stopped": "Das Löschen von {address} ist gestoppt. Das Konto kann sich wieder anmelden.",
+    "stopFailed": "Das Löschen konnte nicht gestoppt werden. Bitte erneut versuchen.",
+    "notOwner": "Nur die Besitzperson des Servers kann Konten löschen."
+  },
   "admin": {
     "title": "Serververwaltung",
     "sub": "Die Instanz selbst: ihre Tenants und die laufende Version.",
@@ -1121,7 +1266,8 @@ const de: typeof en = {
     "signInFailed": "Anmeldung fehlgeschlagen. Bitte E-Mail und Passwort prüfen.",
     "sessionExpired": "Deine Sitzung ist abgelaufen. Melde dich erneut an — was du gerade getan hast, wurde nicht übernommen.",
     "noTenants": "Noch keine Tenants. Lege den ersten an.",
-    "loading": "Wird geladen…"
+    "loading": "Wird geladen…",
+    "ownerless": "Ohne Besitz"
   }
 }
 

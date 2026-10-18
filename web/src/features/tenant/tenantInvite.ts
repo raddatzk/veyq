@@ -30,6 +30,13 @@ export function acceptInvite(
   return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, sealedName, sealedAvatar } })
 }
 
+/** Accept an owner invite into an ACTIVE tenant whose member the signed-in caller already is (`InvitePreview.handover`,
+ *  ADR 0101 decision 9): they become an owner. Nothing is born and no username is chosen — the member holds the tenant's
+ *  key and its handle already. */
+export function acceptOwnership(bootstrapSecret: string): Promise<void> {
+  return tenantsApi().acceptTenantOwnership({ acceptOwnershipRequest: { bootstrapSecret } })
+}
+
 /** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
  *  the caller's per-tenant handle; `sealedName` is the OPTIONAL real name sealed under `K_tenant` at join
  *  (owner cold-birth only — a grant-less member seals it later via the profile op, ADR 0023); `sealedAvatar` the

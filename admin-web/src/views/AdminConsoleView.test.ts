@@ -37,7 +37,7 @@ vi.mock('../features/instance/store', async (importOriginal) => ({
 }))
 vi.mock('../features/instance/StorePanel.vue', () => ({ default: { template: '<div class="stub-store" />' } }))
 vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({
-  default: { emits: ['revoked'], template: '<button class="stub-detail" @click="$emit(\'revoked\', \'tn-7\')" />' },
+  default: { name: 'TenantDetailPanel', emits: ['revoked', 'changed'], template: '<button class="stub-detail" @click="$emit(\'revoked\', \'tn-7\')" />' },
 }))
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
 vi.mock('../features/instance/CapabilitiesPanel.vue', () => ({ default: { template: '<div class="stub-capabilities" />' } }))
@@ -49,6 +49,9 @@ vi.mock('../features/instance/ModerationPanel.vue', () => ({
 }))
 vi.mock('../features/instance/GuestWriteRecordPanel.vue', () => ({ default: { template: '<div class="stub-guest-write-record" />' } }))
 vi.mock('../features/instance/OrderPanel.vue', () => ({ default: { template: '<div class="stub-orders" />' } }))
+vi.mock('../features/instance/AccountsPanel.vue', () => ({
+  default: { emits: ['changed'], template: '<button class="stub-accounts" @click="$emit(\'changed\')" />' },
+}))
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
@@ -68,8 +71,9 @@ const i18n = createI18n({
         title: 'Server administration', sub: 's', signOut: 'Sign out', tenants: 'Tenants', server: 'Server',
         forbidden: 'This account is not the Server Owner.', forbiddenSub: 'reason', unreachable: 'unreachable',
         noTenants: 'No tenants yet.', loading: 'Loading…',
-        storageOfQuota: '{used} of {quota}', storageNoQuota: '{used}, no quota',
+        storageOfQuota: '{used} of {quota}', storageNoQuota: '{used}, no quota', ownerless: 'No owner',
       },
+      accounts: { navTitle: 'Accounts' },
       tenant: { create: 'Create' },
       release: { navTitle: 'Release' },
       capabilities: { navTitle: 'Capabilities' },
@@ -129,7 +133,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('renders the console for the Server Owner, listing the tenants it administers', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
     ])
     const { w } = await mountConsole()
     expect(w.find('.admin-shell__nav').exists()).toBe(true)
@@ -140,8 +144,8 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
   // uc.admin.tenant-storage-quota: the list shows each tenant's usage beside its quota, or that it has none.
   it('shows each tenant’s storage usage beside its quota in the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3 },
-      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null },
+      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
     ])
     const { w } = await mountConsole()
     const lines = w.findAll('.admin-shell__storage').map((s) => s.text())
@@ -150,7 +154,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('opens a tenant’s detail page from the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
     ])
     const { w } = await mountConsole()
     const item = w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!
@@ -160,7 +164,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
   })
 
   it('closes a revoked tenant’s panel and reads the list again', async () => {
-    const acme = { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' as const, storageUsedBytes: 0, storageQuotaBytes: null }
+    const acme = { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' as const, storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null }
     vi.mocked(listTenants).mockResolvedValue([acme])
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
@@ -174,7 +178,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('opens Server → Capabilities from the nav in place of the open tenant (uc.admin.switch-capabilities)', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
     ])
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
@@ -219,6 +223,52 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     expect(w.find('.stub-mail').exists()).toBe(false)
   })
 
+  // uc.account.erase-account: the Server Owner's door to an erasure is its own rubric under Server.
+  it('opens Server → Accounts from the nav, one rubric at a time, and reads the tenant list again on a change', async () => {
+    vi.mocked(listTenants).mockResolvedValue([])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Moderation'))!.trigger('click')
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Accounts'))!.trigger('click')
+    await flushPromises()
+    expect(w.find('.stub-accounts').exists()).toBe(true)
+    expect(w.find('.stub-moderation').exists()).toBe(false)
+
+    // an erasure left a last owner's tenant ownerless: the list is read again, and marks it
+    vi.mocked(listTenants).mockResolvedValue([
+      { tenantId: 'tn-1', name: 'Orphan', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: true, deletionDueAt: null },
+    ])
+    await w.find('.stub-accounts').trigger('click')
+    await flushPromises()
+    expect(w.find('.admin-shell__ownerless').exists()).toBe(true)
+    expect(w.find('.stub-accounts').exists()).toBe(true) // the panel stays open
+  })
+
+  // ADR 0101 decision 9: an ownerless tenant is marked in the list, so the Server Owner finds it without opening each.
+  it('marks an ownerless tenant in the list, and only that one', async () => {
+    vi.mocked(listTenants).mockResolvedValue([
+      { tenantId: 'tn-1', name: 'Orphan', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: true, deletionDueAt: null },
+      { tenantId: 'tn-2', name: 'Owned', domain: 'w.example', ownerEmail: 'o@w.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+    ])
+    const { w } = await mountConsole()
+    const item = (name: string) => w.findAll('.admin-shell__nav button').find((b) => b.text().includes(name))!
+    expect(item('Orphan').find('.admin-shell__ownerless').text()).toBe('No owner')
+    expect(item('Owned').find('.admin-shell__ownerless').exists()).toBe(false)
+  })
+
+  it('reads the tenant list again when the tenant page reports a change (a deletion, or its stop)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+    ])
+    const { w } = await mountConsole()
+    await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
+    await flushPromises()
+    vi.mocked(listTenants).mockClear()
+    w.findComponent({ name: 'TenantDetailPanel' }).vm.$emit('changed')
+    await flushPromises()
+    expect(listTenants).toHaveBeenCalledOnce()
+    expect(w.find('.stub-detail').exists()).toBe(true) // the panel stays open
+  })
+
   // uc.admin.suspend-tenant A4: a proposal to take a tenant offline is taken on that tenant's own page, where the
   // suspension already lives — the moderation panel asks, the console opens it in its place.
   it('opens the tenant a take-offline proposal names when the moderation panel asks for it', async () => {
@@ -246,7 +296,7 @@ describe('AdminConsoleView — creating a tenant', () => {
     expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)
 
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
+      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
     ])
     w.findComponent({ name: 'CreateTenantDialog' }).vm.$emit('created')
     await flushPromises()

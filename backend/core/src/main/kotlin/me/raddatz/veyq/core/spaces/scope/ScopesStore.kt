@@ -687,7 +687,7 @@ class ScopesStore(
                 val role = root?.role ?: MembershipEntity.MEMBER
                 val rootScope = ScopeEntity.findById(tenantId)
                 TenantEntity.findById(tenantId)?.let { t ->
-                    val open = t.status != TenantEntity.SUSPENDED
+                    val open = !TenantEntity.isOffline(t.status)
                     val grant = root?.wrappedGrant?.takeIf { open }
                     TenantRow(
                         t.id, t.name, t.domain, role, t.status,

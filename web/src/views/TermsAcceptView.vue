@@ -3,6 +3,8 @@
 // (no app shell): the router bounces any member whose accepted_terms_revision is below the active tenant's current
 // revision here, and they can only ACCEPT (records it server-side → returns them where they were headed) or SIGN
 // OUT. Operator-blind: the terms are the space owner's PUBLIC policy; acceptance is coarse operational metadata.
+// After the space's own text comes the fixed operator section (ADR 0035 decision 6), and what is accepted is the triple:
+// the space's revision, the section's revision and its variant.
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -15,6 +17,8 @@ import { activeSpace, markTermsAccepted } from '../app/activeSpace'
 import { takeRoute } from '../app/pendingRoute'
 import { signOut } from '../features/account/login/signOut'
 import { renderMarkdown } from '../shared/markdown'
+import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
+import { tripleOf } from '../core/terms/operatorSection'
 import { handle401 } from '../shared/handle401'
 import { isUnauthorized } from '../shared/httpError'
 
@@ -67,8 +71,8 @@ async function accept() {
   error.value = ''
   busy.value = true
   try {
-    const updated = await acceptTenantTerms(activeSpace.tenantId!, terms.value.termsRevision)
-    markTermsAccepted(updated.acceptedRevision) // clears termsStale() so the guard lets the member back in
+    await acceptTenantTerms(activeSpace.tenantId!, tripleOf(terms.value.termsRevision, terms.value.operatorSection))
+    markTermsAccepted() // clears termsStale() so the guard lets the member back in
     phase.value = 'done'
     // Return the member to where the guard intercepted them (remembered deep link), else the shell home.
     await router.push(takeRoute() ?? { name: 'home' })
@@ -100,8 +104,11 @@ async function accept() {
 
       <template v-else-if="phase === 'ready'">
         <p class="veyq-form-copy">{{ t('terms.gateIntro') }}</p>
-        <!-- eslint-disable-next-line vue/no-v-html — renderMarkdown escapes first (safe subset, no raw HTML). -->
-        <div class="terms-body markdown-body" v-html="renderedBody"></div>
+        <div class="terms-body">
+          <!-- eslint-disable-next-line vue/no-v-html — renderMarkdown escapes first (safe subset, no raw HTML). -->
+          <div class="markdown-body" v-html="renderedBody"></div>
+          <OperatorSectionView v-if="terms" :section="terms.operatorSection" />
+        </div>
         <Message v-if="error" severity="warn" :closable="false">{{ error }}</Message>
         <div class="terms-actions">
           <Button :label="t('terms.accept')" icon="pi pi-check" :loading="busy" @click="accept" />

@@ -752,6 +752,15 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(wrapper.text()).toContain(t('pairing.grantInterrupted'))
   })
 
+  it('says the account is being erased after this tab erased it (uc.account.erase-account), and nothing else', async () => {
+    vi.mocked(takeSignOutNotice).mockReturnValue('erased')
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(t('erasure.ended'))
+    expect(wrapper.text()).not.toContain(t('login.sessionEnded'))
+  })
+
   it.each([
     ['refused', 'login.sessionEnded'],
     ['otherTab', 'login.sessionEndedOtherTab'],
