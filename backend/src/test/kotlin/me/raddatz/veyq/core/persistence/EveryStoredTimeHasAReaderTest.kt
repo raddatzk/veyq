@@ -142,6 +142,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_authority_order.blocked_at" to "served: AuthorityOrder.blockedAt — the Annex II text's block time",
             "veyq_authority_order.hold_until" to "served: AuthorityOrder.holdUntil, the end the order sets for its hold",
             "veyq_hold.floor_until" to "Holds.moveEnd and Holds.endNow never end a hold before it; served: ModerationHold.floorUntil",
+            "veyq_hold.ceiling_until" to "Holds.moveEnd moves a measure's end at most to it and Holds.capAt brings a hold " +
+                "back to it (a child-sexual-abuse case's 90 days, ADR 0093 § 4)",
             "veyq_moderation_statement.deferred_until" to "StatementDeferrals.releaseDue sends the statement once it passed; " +
                 "served: ModerationMeasureStatement.deferredUntil, ModerationCaseSummary.statementDeferredUntil",
             // --- the guest-write record (ADR 0093 § 10, en.moderation.guest-write-record)

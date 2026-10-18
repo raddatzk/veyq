@@ -83,7 +83,7 @@ let moderationKey: Uint8Array
 /** A case over a reported folder: one report, sealed to the held epoch, whose report share hands over the folder's key. */
 function review(): CaseReview {
   const reportKey = v1.randomBytes(32)
-  const body = { reportKey, reason: 'Gewaltdarstellung', contact: 'melder@example.org', context: 'Im zweiten Ordner' }
+  const body = { reportKey, reason: 'Gewaltdarstellung', context: 'Im zweiten Ordner' }
   return {
     caseId: CASE_ID,
     itemKind: 'NODE',
@@ -91,6 +91,7 @@ function review(): CaseReview {
     reports: [{
       reportId: 'r-1', epoch: EPOCH, receivedAt: new Date('2026-10-01T10:00:00Z'),
       sealedReport: b64std(v1.sealReport(EPOCH, v1.moderationBundle(moderationKey).kem, body)),
+      sealedContact: b64std(v1.sealReportContact(EPOCH, v1.moderationBundle(moderationKey).kem, 'melder@example.org')),
       sealedShare: b64std(v1.sealReportShare(reportKey, { kind: 'NODE', id: ROOT }, [{ role: 'NODE', ref: null, key: keys.root }])),
     }],
     share: {

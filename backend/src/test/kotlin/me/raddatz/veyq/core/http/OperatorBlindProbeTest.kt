@@ -295,7 +295,7 @@ class OperatorBlindProbeTest {
             "resumeStoreReconcile",
             "getInstanceOperator", "setInstanceOperator", "clearInstanceOperator", "confirmOperatorNotification",
             "getInstanceOperatingMode", "setInstanceOperatingMode",
-            "getInstanceGuestWriteRecord", "setInstanceGuestWriteRecord",
+            "getInstanceGuestWriteRecord", "setInstanceGuestWriteRecord", "eraseGuestWriteRecordsOfIdentity",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

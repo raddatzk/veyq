@@ -172,6 +172,13 @@ class ReportMailSliceTest {
         assertEquals(3, receipts.size, "at most three receipts an address an hour (veyq.moderation.report.receipts-per-address)")
         assertTrue(textOf(receipts.first()).contains("Reference: ${ReportReceived.reference(reportIds.first())}"), textOf(receipts.first()))
 
+        // Each receipt that went out is a "receipt sent" event on its report's case — the proof that stays once the
+        // sealed contact went (ADR 0093 § 11); the one the bound held back is none.
+        QuarkusTransaction.requiringNew().run {
+            val sent = reportIds.map { id -> me.raddatz.veyq.core.moderation.ModerationEventEntity.count("event = ?1 and targetId = ?2", "RECEIPT_SENT", id) }
+            assertEquals(listOf(1L, 1L, 1L, 0L), sent)
+        }
+
         QuarkusTransaction.requiringNew().run {
             val stored = ModerationReportEntity.list("reporterAccount", m.userId).flatMap {
                 listOf(it.sealedReport, it.reporterShare ?: "", it.category)

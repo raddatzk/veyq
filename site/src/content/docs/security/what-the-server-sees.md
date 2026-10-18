@@ -157,23 +157,27 @@ time the server observes live is not kept for them. What it does hold, each with
   moderator's identity. Never the key itself: it opens on a moderator's device only.
 - **The moderation log's structured fields**: the event (appointed, accepted, key handed on, removed, stepped down,
   identity replaced, new key; for a case: report received or attached, opened for review, dismissed, measure taken or
-  lifted, proposed, proposal taken or declined, hold extended or ended, reporter barred), its time, the moderator it
+  lifted, proposed, proposal taken or declined, hold extended or ended, reporter barred, receipt or decision sent to a
+  reporter, statement sent or deferred, objection received or decided, order received, handed to an authority), its time, the moderator it
   concerns, who acted, the epoch, a reason category, a measure's kind and target id, and an extension's new end. Free
   text — a decision's note, an extension's reason — only sealed to the moderation key in the moderator's browser, bound
   to its epoch and case (`moderation-note` [epoch, caseId]). Kept to 31 December of the third year after the
-  moderator's removal, a case's events after the case closed.
+  moderator's removal; a case's events, and everything of the case below, to 31 December of the third year after the
+  case closed — never while a measure of it is in force — and then deleted together.
 - A key proof's challenge, for five minutes.
 - **A report's clear fields** ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
   its category, the epoch it is sealed to, when it arrived, each reported item's kind and id, and who sent it — the
-  reporting member's account, or the link a guest came through. The reporter's text, address and context, and the keys
-  to what they reported, are sealed to the moderation key. The address also crosses once in the clear, for the receipt
-  the server mails, and is not stored that way. A case per item (its category and state), a log event per report, and
+  reporting member's account, or the link a guest came through. The reporter's text and context, their address apart,
+  and the keys to what they reported, are sealed to the moderation key. The address also crosses once in the clear, for
+  the receipt the server mails, and is not stored that way; its sealed copy is deleted six months after the reporter was
+  told the decision. A case per item (its category and state), a log event per report, and
   whether the "new case" mail went out.
 - **A hold** ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)):
   copies of the reported rows as stored (ciphertext and metadata) and the storage keys it pins, until its end — so the
   server keeps what a member deleted after a report, readable to no one but the moderators: for up to 90 days while
   the case is open (a dismissal ends it at once), six months after a measure (its lift ends it), and beyond that only
-  by a moderator's extension, at most six months at a time.
+  by a moderator's extension, at most six months at a time, or for as long as an authority's order says. Child sexual
+  abuse material is kept only until the handover to an authority is recorded, at the latest 90 days after the report.
 - **A case's measures** ([uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md)),
   in the clear, because the server must refuse what they name: per measure its kind (a link, content, a guest identity,
   a member's sign-in, a barred reporter), the id it names — the link, the node or item, the guest identity, the account

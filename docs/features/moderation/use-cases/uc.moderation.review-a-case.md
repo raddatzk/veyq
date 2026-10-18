@@ -22,7 +22,8 @@
    clear fields only: the category, the item's kind, when it was first and last reported, how many reports, the
    tenant's domain, the state and the hold's end. The urgent categories come first, then the oldest.
 2. **A case.** Opening one fetches its details with a fresh proof over that case: each report's time, category and
-   sealed part — opened in the browser with the epoch's key into the reason, the contact and the context — the case's
+   sealed part — opened in the browser with the epoch's key into the reason and the context, and the contact sealed
+   apart, until it goes six months after the decision was told (ADR 0093 § 11) — the case's
    measures and proposals, its hold, and its log, whose sealed notes open the same way.
 3. **Review.** *Review* navigates to `https://<tenant domain>/s/<case id>#moderation` on the reported tenant's host. The
    share viewer sees the moderation fragment and switches to moderation mode: it signs the moderator in and unlocks as
@@ -38,7 +39,8 @@
    upload link as its name and note. The reports' details sit beside it.
 6. **Dismiss.** The moderator dismisses the case in the surface, with an optional note sealed to the moderation key. The
    case closes, its hold ends at once — the snapshot is dropped and the pins released, so the sweep reclaims whatever was
-   deleted meanwhile — and the log keeps the decision until 31 December of the third year after the close.
+   deleted meanwhile — and the case with its records and its log is kept until 31 December of the third year after the
+   close ([en.moderation.log](../enablers/en.moderation.log.md) § Retention).
 
 ## Alternate / exception flows
 
@@ -51,8 +53,8 @@
   (`reporter_barred`) until the bar is lifted; the reports already made stay.
 - **A3 — The original is gone.** The share, the node or the space was deleted after the report: the review reads the
   held rows and the pinned objects all the same.
-- **A4 — The hold has ended** (a decided case six months on, an extension that lapsed): the details and the log stay,
-  the review finds nothing held and says so.
+- **A4 — The hold has ended** (a decided case six months on, an extension that lapsed, a child-sexual-abuse case's
+  handover): the details and the log stay until the case's records go, the review finds nothing held and says so.
 - **A5 — A medium.** A reported medium has no node key in its report share: the review shows it in the lightbox, read
   from its `K_blob`s, with its metadata where its field keys opened it.
 - **A6 — An upload link.** The review shows the link's name and note; its guests' uploads were not reported.

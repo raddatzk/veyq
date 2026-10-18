@@ -362,6 +362,54 @@ class GuestWriteRecordCoreSliceTest {
         givenAdminChannel().header("Authorization", bearer(seedUser())).`when`().get(PATH).then().statusCode(403)
     }
 
+    // --- a guest's objection (GDPR Art. 21) ---------------------------------------------------------------------------
+
+    /**
+     * The Server Owner deletes one identity's live rows on the admin channel; what a hold copied stays, and the answer
+     * counts it. Controls on the same predicate: another identity's row stays, and the held copy is still there. Bites:
+     * delete by object instead of identity, or delete the hold's copies too, and a control goes red.
+     */
+    @Test
+    fun anObjectionDeletesTheIdentitysLiveRowsAndLeavesWhatAHoldCopied() {
+        val owner = seedUser(serverRole = "SERVER_OWNER")
+        val t = tree()
+        val other = tree()
+        val held = guestCreate(t, xff = "203.0.113.30")
+        val free = guestCreate(t, xff = "203.0.113.31")
+        val theirs = guestCreate(other, xff = "203.0.113.32")
+        val identity = rows(held).single().shareIdentityId
+        assertEquals(identity, rows(free).single().shareIdentityId, "control: both writes are the one identity's")
+        val holdId = QuarkusTransaction.requiringNew().call {
+            holds.take(null, HoldTarget.Subtree(t.scopeId, listOf(held)), HoldTrigger.CASE_OPEN, Instant.now().plus(Duration.ofDays(1)))
+        }
+        fun erase(id: String, caller: String = owner) =
+            givenAdminChannel().header("Authorization", bearer(caller)).`when`().delete("$PATH/identities/$id").then()
+        try {
+            erase(identity).statusCode(200).body("erased", equalTo(2)).body("keptInHolds", equalTo(1))
+            assertEquals(0L, count("shareIdentityId = ?1", identity), "every live row of the identity is gone")
+            assertEquals(1, seen(theirs).size, "control: another identity's row stays")
+            val copies = QuarkusTransaction.requiringNew().call {
+                HoldRowEntity.list("holdId = ?1 and sourceTable = ?2", holdId, "veyq_guest_write_record").map { it.payload }
+            }
+            assertEquals(1, copies.size, "the hold's copy stays until its hold ends")
+            assertTrue(copies.single().contains("203.0.113.30"), "…and it is the held write's row")
+            erase(identity).statusCode(200).body("erased", equalTo(0)).body("keptInHolds", equalTo(1)) // idempotent
+            erase(identity, caller = seedUser()).statusCode(403)
+            assertEquals(1, seen(theirs).size, "a non-owner deleted nothing")
+        } finally {
+            QuarkusTransaction.requiringNew().run {
+                HoldRowEntity.delete("holdId", holdId); HoldPinEntity.delete("holdId", holdId); HoldEntity.deleteById(holdId)
+            }
+        }
+    }
+
+    @Test
+    fun anIdentityIdThatIsNoUuidMatchesNoRoute() {
+        val owner = seedUser(serverRole = "SERVER_OWNER")
+        givenAdminChannel().header("Authorization", bearer(owner)).`when`().delete("$PATH/identities/not-a-uuid").then()
+            .statusCode(404)
+    }
+
     // --- helpers ----------------------------------------------------------------------------------------------------
 
     private fun guestCreate(t: Tree, xff: String, portHeader: String? = null): String {

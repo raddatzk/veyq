@@ -1048,4 +1048,31 @@ describe('veyq-admin guest-write-record (en.moderation.guest-write-record)', () 
     expect(r.err).toContain('from 1 to 30')
     expect(api.setInstanceGuestWriteRecord).not.toHaveBeenCalled()
   })
+
+  const IDENTITY = '0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e'
+
+  it('forget deletes one identity’s rows and says what a hold keeps', async () => {
+    const api = stubApi(instanceGuestWriteRecordApi, { eraseGuestWriteRecordsOfIdentity: { erased: 3, keptInHolds: 1 } })
+    const r = await invoke(['guest-write-record', 'forget', IDENTITY])
+    expect(r.code).toBe(0)
+    expect(api.eraseGuestWriteRecordsOfIdentity).toHaveBeenCalledWith({ identityId: IDENTITY })
+    expect(r.out).toContain(`guest-write-record forget ${IDENTITY}: 3 kept write(s) deleted`)
+    expect(r.out).toContain('1 copied into a hold stay until the hold ends')
+  })
+
+  it('forget says when no hold keeps a copy', async () => {
+    stubApi(instanceGuestWriteRecordApi, { eraseGuestWriteRecordsOfIdentity: { erased: 0, keptInHolds: 0 } })
+    const r = await invoke(['guest-write-record', 'forget', IDENTITY])
+    expect(r.code).toBe(0)
+    expect(r.out).toContain('No hold keeps a copy.')
+    expect(r.out).not.toContain('stay until the hold ends')
+  })
+
+  it.each(['not-an-id', '0b1c2d3e', `${IDENTITY}x`])('forget refuses %j and deletes nothing', async (id) => {
+    const api = stubApi(instanceGuestWriteRecordApi, { eraseGuestWriteRecordsOfIdentity: { erased: 0, keptInHolds: 0 } })
+    const r = await invoke(['guest-write-record', 'forget', id])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("a share identity's id")
+    expect(api.eraseGuestWriteRecordsOfIdentity).not.toHaveBeenCalled()
+  })
 })

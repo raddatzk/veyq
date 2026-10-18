@@ -131,6 +131,8 @@ every [upgrade](/veyq/run/upgrade/).
   and `restore`.
 - [Hardening](/veyq/run/hardening/) — what is hardened by default, and what is yours to keep that way.
 - [Moderation](/veyq/run/moderation/) — a reported public share, and taking a tenant offline.
+- [Data protection](/veyq/run/data-protection/) — your duties as the controller: a breach, your record of processing,
+  your providers' contracts and an access request, with what the instance processes.
 
 ## Further reading
 

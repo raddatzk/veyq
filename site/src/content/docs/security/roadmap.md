@@ -31,7 +31,7 @@ this page says so.
 |---|---|---|---|
 | [Key Transparency](#key-transparency) | an identity installed by the operator; TOFU's first-use gap | named as the end-state; no design recorded | ADR 0060 (g), ADR 0028 |
 | [Strict verification mode](#strict-verification-mode) | verification is advisory; nothing enforces it before a first share | decided in principle; shape open | ADR 0028 Decision 4 |
-| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | a child-sexual-abuse hold does not end at the handover; no authority link to a snapshot | built but for two legal questions | ADR 0093 §§ 7, 12–13 |
+| [Statement of reasons, objection and authority orders](#statement-of-reasons-objection-and-authority-orders) | a child-sexual-abuse hold cannot run until the handover past 90 days; no authority link to a snapshot | built but for two legal questions | ADR 0093 §§ 7, 12–13 |
 | [Passkey unlock](#passkey-unlock) | no passwordless login and unlock | method named in the contract; no client | en.account.key-model |
 | [Hybrid ML-DSA signatures](#hybrid-ml-dsa-signatures) | signatures are classical (Ed25519) | strategy only | ADR 0017 |
 | [A client served by a trusted third party](#a-client-served-by-a-trusted-third-party) | operator-served web is passive-operator only | trust tier defined; needs a central origin | ADR 0026 |
@@ -99,8 +99,9 @@ prepares the clear fields of an Art. 18 report as text and warns before a case o
 ([uc.moderation.authority-order](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.authority-order.md),
 [uc.moderation.report-to-an-authority](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
 
-**Gap it would close.** A child-sexual-abuse case's hold does not end at the confirmed handover to an authority: whether
-keeping it until then is covered for a non-commercial operator (§ 184b(5) StGB) is open, so a handover changes no hold.
+**Gap it would close.** A child-sexual-abuse case's hold ends at the recorded handover to an authority, at the latest 90
+days after the report; whether it may run until the handover past those 90 days — and for a non-commercial operator
+whether even the bounded hold is covered (§ 184b(5) StGB) — is open.
 A time-bound link for the police to a hold snapshot is not built and will not be without the police's or a specialist's
 answer: it would be a making-available. The Server Owner's own steps (a member's sign-in, a tenant offline) carry no
 statement yet. The texts of the order forms and the warning are drafts until a qualified legal review.

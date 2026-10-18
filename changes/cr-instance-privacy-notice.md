@@ -90,7 +90,7 @@ says what veyq builds and the question stays a named blocker.
 
 ## Open questions (owner) and legal items
 
-**Decided (Q26–Q28).** Owner 2026-10-18, one by one: all three as recommended.
+**Decided (Q26–Q28).** Owner 2026-10-18, one by one: all three as recommended. **Added the same day** (from the guest-write-record objection tool, `veyq-admin guest-write-record forget`): a guest's own view shows a copyable **guest id for an objection** in its session line, so a guest can name the identity whose rows the Server Owner erases (GDPR Art. 21(1) with 12(2)); the id is the share identity's random id and reveals nothing else. An objection erases the rows so far and does not stop later writes from being recorded — the notice says so (owner: keep it so).
 
 - **Q26 — Shown in the *private* mode too?** **Recommendation: yes.** Every passage is a fact of the software, true on
   every instance; the household exemption only makes it not owed. In *private* an unset value is absent and nothing
@@ -130,7 +130,8 @@ says what veyq builds and the question stays a named blocker.
 - [ ] **4 docs** — ADR 0035's status (decision 8 built); the security model's sentence on what is disclosed where;
   site: `privacy/is-my-data-safe.md` and its DE twin (point to the instance's own notice for what *this* instance
   keeps), `run/first-run.mdx` or `run/moderation.md` (the values the notice renders and the Server Owner's duty to keep
-  them true, the record of processing and processor agreements as the operator's — the audit's D items), coverage refs
+  them true; the record of processing, processor agreements, a breach and an access request — the audit's D items —
+  are **already written** on `run/data-protection.md`, inbox #485: point there and keep its tables in step), coverage refs
   for the three use-cases. · Done when: coverage, wiki-sources and the site check green.
 
 ## Definition of done

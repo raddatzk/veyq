@@ -174,6 +174,7 @@ export default defineConfig({
             'run/troubleshooting',
             'run/hardening',
             'run/moderation',
+            'run/data-protection',
           ],
         },
         {

@@ -2,9 +2,10 @@
 // the confirmation dialog, `shared/state/useConfirm.ts`'s shape) is opened from wherever something can be reported —
 // a level's selection bar, a row's or a header's actions, Memories' lightbox, an upload link's page — with the items and
 // a way to their keys. Sending builds the bundle here, on the client: a fresh `K_report`; per item its keys sealed under
-// it (`v1.sealReportShare`); the reason, the address and the context sealed to the published epoch's public half
-// (`v1.sealReport`). In the clear go only the category, the epoch and the items' kinds and ids — and the address once,
-// for the receipt (owner decision Q6), which the server mails and does not keep.
+// it (`v1.sealReportShare`); the reason and the context sealed to the published epoch's public half (`v1.sealReport`),
+// and the address apart (`v1.sealReportContact`), so the server can drop it alone six months after the decision was
+// told (ADR 0093 § 11). In the clear go only the category, the epoch and the items' kinds and ids — and the address
+// once, for the receipt (owner decision Q6), which the server mails and does not keep.
 import { ref, shallowRef } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
@@ -157,9 +158,9 @@ async function buildSubmission(access: Access, key: PublishedKey, targets: reado
     return {
       category: form.category,
       epoch: key.epoch,
-      sealedReport: b64std(v1.sealReport(key.epoch, key.kem, { reportKey, reason: form.reason, contact, context: '' })),
+      sealedReport: b64std(v1.sealReport(key.epoch, key.kem, { reportKey, reason: form.reason, context: '' })),
       items,
-      ...(contact ? { receiptAddress: contact } : {}),
+      ...(contact ? { sealedContact: b64std(v1.sealReportContact(key.epoch, key.kem, contact)), receiptAddress: contact } : {}),
     }
   } finally {
     reportKey.fill(0) // K_report lives only as long as the sealing; the moderators open it from the sealed part

@@ -90,6 +90,11 @@ photo's file name and EXIF text, the share's label. Every spec file that execute
 | Every container log of the project, since the run began | `sweep_containers()` | the sentinel key, sent through Traefik on the public origin to the bucket and found percent-encoded in Garage's log; the `app` container's log must name its database (Flyway's JDBC line) — the backend's log is a container log here |
 | Statement log, for the window around the browser stage | `StatementLog`, `sweep_statements()` | the two sentinel statements; and, since the app's pool connected at `up`, before the window, the owner's email in a literal the backend sent (`written`) in place of a `Connect` entry |
 
+The store's request log the container control reads exists only because the run asks for it: the production recipe
+and the chart run Garage at `RUST_LOG=garage=warn`, which logs no request
+([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) § 5), and `infra/e2e/docker-compose.e2e.yml`
+raises it back to `garage=info` for the lane; the development stack keeps the image's own `garage=info`.
+
 Not swept on the lane, by construction: the HTTP recording and the capability tokens derived from it (the browser
 records no HTTP; the API-level suites sweep both), boot logs (there are none — the app's log is a container log),
 and the mailbox (the recipe ships no relay and a fresh tenant has no mail settings).

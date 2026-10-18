@@ -92,8 +92,10 @@ class RecoveryHandler(
                 deliver(normalized, tenant)
             } catch (e: Exception) {
                 // deliver() logs its own send failures secret-free; this is what it cannot catch (a DB error).
-                // The tenant and the cause only — never the address, its outcome, or a token.
-                log.warnf("recovery delivery for tenant %s failed: %s", tenant.id, e.message)
+                // The tenant and the cause's class only — never the address, its outcome, or a token. Not the
+                // message either: a database error's text carries the values it was bound with, the address
+                // among them (ADR 0092 § 3).
+                log.warnf("recovery delivery for tenant %s failed: %s", tenant.id, e.javaClass.simpleName)
             } finally {
                 context.terminate()
             }

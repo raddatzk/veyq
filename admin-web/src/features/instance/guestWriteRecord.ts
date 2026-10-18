@@ -1,7 +1,7 @@
 import { instanceGuestWriteRecordApi } from '../../api/client'
-import type { InstanceGuestWriteRecord } from '../../api/generated/instance'
+import type { GuestWriteRecordErasure, InstanceGuestWriteRecord } from '../../api/generated/instance'
 
-export type { InstanceGuestWriteRecord } from '../../api/generated/instance'
+export type { GuestWriteRecordErasure, InstanceGuestWriteRecord } from '../../api/generated/instance'
 
 /** The retention's range and default (ADR 0092 § 2): one to thirty days, seven until set. */
 export const MIN_DAYS = 1
@@ -21,6 +21,20 @@ export function getGuestWriteRecord(): Promise<InstanceGuestWriteRecord> {
  *  `invalid_request` outside the range, which [parseRetentionDays] already refuses here. */
 export function setGuestWriteRecord(retentionDays: number): Promise<InstanceGuestWriteRecord> {
   return instanceGuestWriteRecordApi().setInstanceGuestWriteRecord({ instanceGuestWriteRecordUpdate: { retentionDays } })
+}
+
+/**
+ * A guest's objection (GDPR Art. 21): delete every live row one share identity wrote. Rows a hold copied stay until
+ * their hold ends; the answer counts both. An id that is no UUID matches no route (404), which [isIdentityId]
+ * already refuses here.
+ */
+export function eraseGuestWriteRecordsOfIdentity(identityId: string): Promise<GuestWriteRecordErasure> {
+  return instanceGuestWriteRecordApi().eraseGuestWriteRecordsOfIdentity({ identityId })
+}
+
+/** Whether what was typed is a share identity's id — a UUID in its usual text form. */
+export function isIdentityId(text: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text.trim())
 }
 
 /** A whole number of days in the range, from what was typed — or undefined. The one rule the console and the CLI share. */

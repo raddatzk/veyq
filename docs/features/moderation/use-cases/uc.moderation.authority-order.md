@@ -48,11 +48,12 @@
    taken and the block time in UTC to the second. One template, `contracts/moderation/authority-order-forms.json`,
    rendered by admin-web (and its CLI) and web/; a **draft** until a qualified legal review.
 8. **Information handed over** to an authority in answer to an order is an event in the case's log, its reference
-   sealed (uc.moderation.report-to-an-authority).
+   sealed (uc.moderation.report-to-an-authority); it changes no hold of an order's case, whose end the order sets.
 
 ## Alternate / exception flows
 
-- **A1 — Unknown share.** A share id the server does not know is recorded all the same, with no case and no block;
+- **A1 — Unknown share.** A share id the server does not know is recorded all the same, with no case and no block —
+  kept with its event until 31 December of the third year after it was entered (ADR 0093 § 11);
   out comes a draft of the obstacle form (TCO Annex III): the content could not be found on this instance.
 - **A2 — A preservation order or a request for information** blocks nothing; the case and its hold are the same.
 - **A3 — The same order twice** (the same client-minted id): refused, `order_exists`; nothing changes.
