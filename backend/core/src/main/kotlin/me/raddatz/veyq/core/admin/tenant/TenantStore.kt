@@ -50,9 +50,9 @@ fun TenantInviteEntity.admission(): Admission? {
     return Admission(id, admissionEpoch ?: return null, admissionTag ?: return null)
 }
 
-/** A tenant's current terms + a specific caller's accepted revision (cr-0114). `markdownByLocale` is the raw
+/** A tenant's current terms (cr-0114). `markdownByLocale` is the raw
  *  serialized locale→markdown map (null = none set); the handler decodes it into the per-locale DTO. */
-data class TenantTermsRow(val revision: Int, val acceptedRevision: Int, val markdownByLocale: String?)
+data class TenantTermsRow(val revision: Int, val markdownByLocale: String?)
 
 /** A tenant's current terms with **no** caller — revision + the raw serialized markdown, no acceptance lookup
  *  (the accountless share terms read, uc.sharing.share-accept). Distinct from [TenantTermsRow] which carries a
@@ -471,16 +471,19 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
 
     // --- terms of service (cr-0114, ADR 0035) ---
 
-    /** The tenant's current terms + the highest revision [userId] accepted (0 if never). Null if no such tenant.
-     *  The highest is the gate's answer: an accept is refused unless it names the current revision and a revision only
-     *  ever grows, so "highest == current" is exactly "has a row for the current revision". */
-    fun termsFor(tenantId: String, userId: String): TenantTermsRow? {
+    /** The tenant's current terms. Null if no such tenant. */
+    fun termsFor(tenantId: String): TenantTermsRow? {
         val tenant = TenantEntity.findById(tenantId) ?: return null
-        val accepted = TenantTermsAcceptanceEntity
-            .find("userId = ?1 and tenantId = ?2 order by acceptedRevision desc", userId, tenantId)
-            .firstResult()?.acceptedRevision ?: 0
-        return TenantTermsRow(tenant.termsRevision, accepted, tenant.termsMarkdownByLocale)
+        return TenantTermsRow(tenant.termsRevision, tenant.termsMarkdownByLocale)
     }
+
+    /** Whether [userId]'s history for [tenantId] holds a row for the triple — the member gate's answer (ADR 0035
+     *  decision 6): the space's [revision], the operator section's [operatorRevision] and its [variant]. */
+    fun hasAccepted(userId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: String): Boolean =
+        TenantTermsAcceptanceEntity.count(
+            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3 and operatorRevision = ?4 and variant = ?5",
+            userId, tenantId, revision, operatorRevision, variant,
+        ) > 0
 
     /** The tenant's current terms **without** a caller — revision + serialized markdown, and **no** acceptance
      *  lookup (uc.sharing.share-accept: the accountless visitor's acceptance is client-only, so the server keeps
@@ -502,21 +505,20 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         return tenant.termsRevision
     }
 
-    /** Record [userId]'s acceptance of [revision] for [tenantId], stamped with the server's own time — one row per
-     *  revision (keyed by the (user, tenant, revision) UNIQUE), so an older revision's row and time stay as evidence
-     *  (ADR 0035 §4). Written once per revision: re-accepting a revision already recorded changes nothing — the first
-     *  time stands. */
+    /** Record [userId]'s acceptance of the triple for [tenantId], stamped with the server's own time — one row per
+     *  triple (keyed by the (user, tenant, revision, operator revision, variant) UNIQUE), so an older triple's row and
+     *  time stay as evidence (ADR 0035 §4). Written once per triple: re-accepting one already recorded changes nothing
+     *  — the first time stands. */
     @Transactional
-    fun recordAcceptance(userId: String, tenantId: String, revision: Int) {
-        val recorded = TenantTermsAcceptanceEntity.count(
-            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3", userId, tenantId, revision,
-        ) > 0
-        if (recorded) return
+    fun recordAcceptance(userId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: String) {
+        if (hasAccepted(userId, tenantId, revision, operatorRevision, variant)) return
         TenantTermsAcceptanceEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
             this.tenantId = tenantId
             acceptedRevision = revision
+            this.operatorRevision = operatorRevision
+            this.variant = variant
             acceptedAt = Instant.now()
         }.persist()
     }

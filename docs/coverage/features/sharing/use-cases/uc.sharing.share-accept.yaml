@@ -6,8 +6,8 @@ title: Share accept — an accountless visitor accepts the tenant's terms before
 # shareId is a global key resolvable on any Host — so the tenant cannot come from the Host, and the member
 # getTenantTerms is bearerAuth + membership-gated), via a guest GET /api/shares/{shareId}/terms keyed on the already
 # non-enumerable shareId (reusing activeShare()) → the same non-enumerable 404 as resolveShare, so NO tenantId
-# existence oracle (the tenantId is only returned). Acceptance is client-only localStorage keyed per tenant+revision
-# (accept once per tenant, not per share); the server records NOTHING about the accountless visitor. Ordering on the
+# existence oracle (the tenantId is only returned). Acceptance is client-only localStorage keyed per tenant, holding the
+# last four triples accepted (accept once per tenant, not per share); the server records NOTHING about the accountless visitor. Ordering on the
 # share page: password (cr-0118) → terms → display-name (cr-0101/0102) → content. Fail-open on a transient
 # terms-fetch error. Honest limit: an OPERATIONAL gate, not enforcement — client-side localStorage is bypassable by
 # an accountless visitor (mirrors the member gate's framing in activeSpace.ts); the terms' content + the
@@ -25,9 +25,9 @@ acceptanceCriteria:
         unit: [src/views/ShareView.test.ts]
   - id: accept-persists-client-side
     text: >
-      Accepting writes the accepted termsRevision to localStorage keyed by tenantId; the gate then clears and the
+      Accepting adds the accepted triple to those kept in localStorage keyed by tenantId; the gate then clears and the
       content (or, for WRITE_ONLY, the display-name pre-screen) shows. A reload does not re-prompt for the
-      same revision. Accepting on one share of a tenant clears the gate on every share of that tenant.
+      same triple. Accepting on one share of a tenant clears the gate on every share of that tenant.
     # Client-only by design (acceptance is localStorage, keyed per tenant — the server keeps no record for the
     # accountless visitor, so there is no backend behaviour to cover): ShareView.test.ts drives accept → clears +
     # persists, and a reload (seeded localStorage) → no re-prompt.
@@ -36,7 +36,7 @@ acceptanceCriteria:
         unit: [src/views/ShareView.test.ts]
   - id: re-accept-on-revision-bump
     text: >
-      When the space owner bumps the tenant's termsRevision, the stored acceptance is now below current, so the gate
+      When the space owner bumps the tenant's termsRevision, no stored triple is the current one, so the gate
       re-fires; the visitor re-reads and re-accepts the current revision before proceeding.
     coverage:
       web:
@@ -65,3 +65,39 @@ acceptanceCriteria:
         integration: [ShareSliceTest.shareTermsIsTheSameNonEnumerable404AsResolve, ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance]
       web:
         unit: [src/views/ShareView.test.ts]
+  # cr-operator-section-of-the-terms (ADR 0035 decision 6): the operator section after the space's text, the guest's
+  # local key on the triple, and the section's public page.
+  - id: the-guest-accepts-the-triple
+    text: >-
+      The share's terms read serves the operator section after the space's text, and the gate shows both; the visitor's
+      local acceptance holds the triple, so a release that changed the section or a changed operating mode asks again
+      and a changed value does not, and an acceptance stored before the section existed asks once more.
+    coverage:
+      backend:
+        integration: [ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance, ShareSliceTest.shareTermsRevisionZeroWhenTenantPublishedNoTerms]
+      web:
+        unit: [src/views/ShareView.test.ts, src/core/sharing/resolvePublicShare.test.ts]
+  # The owner's decision of 2026-10-18: a guest behaves as a member when the mode is switched back.
+  - id: the-guest-keeps-every-accepted-triple
+    text: >-
+      The device keeps the triples it accepted per tenant, the last four, a re-accepted one moved to the end, and the
+      gate asks whether the current triple is among them: a mode switched back to a variant accepted before asks
+      nothing again. The single triple an earlier client stored counts as accepted; a bare revision does not, and the
+      next accept drops it.
+    coverage:
+      web:
+        unit: [src/views/ShareView.test.ts, src/core/sharing/resolvePublicShare.test.ts]
+  - id: the-section-is-public-without-an-account
+    text: >-
+      The operator section is publicly available without an account (DSA Art. 14(1)) at a page of its own, linked from
+      the login page, the share page and the signed-in shell; the guest-write record's first-layer sentence links its
+      record passage there, in a tab of its own so the share page keeps its key.
+    coverage:
+      backend:
+        integration: [TenantTermsOperatorSectionSliceTest.aSpaceWithNoTermsServesTheSectionWithoutAGate]
+      web:
+        unit: [src/views/OperatorTermsView.test.ts, src/core/operator/OperatorIdentification.test.ts, src/core/sharing/GuestWriteRecordNotice.test.ts]
+gaps:
+  stack: >-
+    Lane L1 walks this in a browser in e2e/tests/features/terms-operator-section.spec.ts, tagged per criterion
+    (cr-operator-section-of-the-terms), but no CI run has executed that lane yet (ADR 0040).

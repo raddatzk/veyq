@@ -9,9 +9,10 @@
   built by cr-guest-write-record (2026-10-17): `core/moderation/guestwrite` (`GuestWriteRecords`, the purge, the
   eraser, the hold's contributor, the retention's resource), `core/http/RequestClient`, the writes that call it, the
   instance backup's schema-only dump, admin-web's Server → Moderation and `veyq-admin guest-write-record`, and web's
-  `GuestWriteRecordNotice`; a guest's objection (one identity's rows deleted on the admin channel and in the CLI) came
-  with a legal audit (2026-10-18). Open: the notice's wording (counsel) and its link to the operator section, which
-  cr-operator-section-of-the-terms builds.
+  `GuestWriteRecordNotice`, whose link to the record passage of the operator section of the terms
+  ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6) is built (cr-operator-section-of-the-terms,
+  2026-10-18); a guest's objection (one identity's rows deleted on the admin channel and in the CLI) came with a legal
+  audit (2026-10-18). Open: the notice's wording (counsel).
 - **Provides:** for every write a link's guest makes that enters it as the last editor of something
   ([en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md)), the client address and source port
   the server saw and the time, kept for N days, so a hold can copy them as evidence when the written item is reported.
@@ -99,9 +100,12 @@ a change). The guest page shows one first-layer sentence with that N wherever th
 write — core's `GuestNaming` in every shape: the naming dialog of a `READ_WRITE` link, the line that says whose session
 the device holds, the drop pages of Memories and Depot — and the right to object (GDPR Art. 21) as a sentence of its
 own. A `READ` guest sees nothing, because nothing is recorded. The sentence follows the switch, never the mode. Its
-wording waits on counsel (ADR 0093 § Legal basis, Still open 4); the full text, and the link to it (anchor
-`#guest-write-record`), come with the operator section of the terms (cr-operator-section-of-the-terms), which does not
-exist yet — so no link is shown until then.
+wording waits on counsel (ADR 0093 § Legal basis, Still open 4). The full GDPR Art. 13 text — controller and contact,
+purpose, basis and legitimate interest, the data, N, what a hold keeps, the recipients, the rights and the supervisory
+authority, with the right to object apart — is the record passage of the operator section of the terms
+([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6), in every space's terms while the switch is
+on; the sentence links it on the section's public page (`/operator-terms#guest-write-record`), in a tab of its own so a
+share page keeps its key.
 
 ## Related
 

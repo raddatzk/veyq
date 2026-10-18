@@ -52,6 +52,41 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: rate_limited }
 
+  /api/operator/terms:
+    get:
+      tags: [operator]
+      operationId: getOperatorTerms
+      summary: Read the operator section of the terms — public, without sign-in.
+      description: >
+        The fixed operator section of the terms ([ADR 0035](../../docs/decisions/0035-server-terms-of-service.md)
+        decision 6) as every space's terms carry it, rendered in the operating mode's variant with the values the
+        Server Owner set, and with the guest-write record's information (its right to object apart) while that record
+        is on for the instance. DSA Art. 14(1) asks for the terms to be publicly available and easily accessible, so
+        this read needs no account: web/ shows it at a page of its own, linked from the login page, the share page and
+        the signed-in shell, and the guest-write record's first-layer sentence links its record passage. The same
+        section rides each space's terms (`getTenantTerms`, `getShareTerms`) after the space's own text; only there is
+        it accepted. Host-independent: instance-wide like `getOperatorDetails`. Unauthenticated; rate-limited per
+        client address. Every text is a draft until a qualified legal review and says so.
+      security: []
+      responses:
+        "200":
+          description: The rendered section.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorSection" }
+              example:
+                revision: 1
+                variant: FULL
+                text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
+                record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
+                objection: { de: "### Dein Widerspruchsrecht …", en: "### Your right to object …" }
+        "429":
+          description: Too many requests from this address; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
 components:
   schemas:
     OperatorDetails:
@@ -140,3 +175,9 @@ components:
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+    LocalizedMarkdown:
+      $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+    OperatorSection:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
+    OperatorSectionVariant:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'

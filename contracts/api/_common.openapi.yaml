@@ -560,6 +560,55 @@ components:
           example: "## Terms of use\n…"
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 20000)'
 
+    OperatorSectionVariant:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        Which variant of the operator section is served (ADR 0035 decision 6, ADR 0093 § 14): FULL in the club,
+        organisation or company mode, REDUCED in the private mode (without the authorities, the statement's deferral
+        and the statement's further content). Part of what a terms gate compares, so a mode change reopens it.
+      enum: [FULL, REDUCED]
+      example: FULL
+
+    OperatorSection:
+      # Shared by the tenants spec (the member gate), the sharing spec (the accountless share gate) and the operator
+      # spec (the public page, DSA Art. 14(1)), like LocalizedMarkdown (ADR 0038).
+      type: object
+      description: >
+        The fixed operator section of the terms (ADR 0035 decision 6), rendered by the server from
+        `contracts/terms/operator-section.json` in the operating mode's variant, with the values the Server Owner set
+        and the guest-write record's N. Clients show it after the space's own terms and never edit it. Public
+        operational content, never E2EE. Every text is a draft until a qualified legal review, and says so.
+      required: [revision, variant, text]
+      properties:
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The section's revision — it moves with its text, that is with a veyq release, never with a value.
+          example: 1
+        variant:
+          $ref: "#/components/schemas/OperatorSectionVariant"
+        text:
+          # The section in both languages, the record's passages left out (they are `record` and `objection`). No
+          # description beside the $ref: the generator would emit an inline copy of LocalizedMarkdown.
+          $ref: "#/components/schemas/LocalizedMarkdown"
+        record:
+          description: >
+            The guest-write record's GDPR Art. 13 information, present exactly while
+            `core.public-shares.guest-write-record` is on for the space (either variant); null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedMarkdown"
+            - type: "null"
+        objection:
+          description: >
+            The right to object (GDPR Art. 21), stated apart from the rest (Art. 21(4)) — present exactly when `record`
+            is; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedMarkdown"
+            - type: "null"
+
     PresignedUrl:
       # Shared by the blob spec (member upload/download) and the sharing spec (a guest's upload/download) — one
       # presigned-URL shape, one generated type.

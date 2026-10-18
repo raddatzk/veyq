@@ -38,6 +38,7 @@ import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import { fakeApi, stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
 import { authenticatedCalls } from '../test/guestMode'
+import { OPERATOR_SECTION } from '../test/models'
 
 const SCOPE_ID = '66666666-6666-4666-8666-666666666666'
 const ROOT = '6e5a0000-0000-4000-8000-0000000000e0'
@@ -106,7 +107,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   route.hash = `#k=${b64url(K_SHARE)}`
   route.query = {}
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
 })
 
 describe('ShareView: a guest reports', () => {

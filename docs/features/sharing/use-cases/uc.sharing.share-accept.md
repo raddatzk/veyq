@@ -13,7 +13,7 @@
   password-protected ([uc.sharing.share-password](uc.sharing.share-password.md)) the visitor has already unlocked
   it — the terms gate sits **after** the password shell.
 - **Postconditions (success):** the visitor's acceptance is recorded **client-side only** (localStorage, keyed by
-  the tenant + revision); the gate clears and the visitor proceeds to the content — or, for a WRITE_ONLY share, to
+  the tenant, holding the triples accepted there, the latest four); the gate clears and the visitor proceeds to the content — or, for a WRITE_ONLY share, to
   the display-name pre-screen ([uc.sharing.share-uploader](uc.sharing.share-uploader.md)); a READ_WRITE visitor is
   asked its name at its first contribution ([uc.sharing.share-contributor](uc.sharing.share-contributor.md)). **The server records nothing** about the accountless
   visitor — anonymity is preserved.
@@ -39,11 +39,25 @@ a dedicated **guest** endpoint keyed on the (already non-enumerable) `shareId`:
   `tenantId` is only *returned*, and only to a caller already holding a valid `shareId`). It serves only public
   terms content, independent of the share password.
 
-**Acceptance is client-only.** On accept, the client writes the accepted `termsRevision` to **localStorage keyed by
-`tenantId`** — so accepting on one share of a tenant clears the gate on **every** share of that tenant (you accept
+**The operator section comes with them** ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6):
+the same endpoint serves, after the space's text, the fixed section the Server Owner fills with values, in the variant
+the operating mode picks, with the guest-write record's information and its right to object (set apart) while that
+record is on. What is accepted is the **triple** of the space's `termsRevision`, the section's revision and its variant,
+as for a member ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)). A space with no terms
+(revision 0) does not gate: the visitor reads the section behind the page's *Terms* link, which the guest-write
+record's first-layer sentence opens at the record's passage.
+
+**Acceptance is client-only.** On accept, the client adds the accepted triple to those kept in **localStorage keyed
+by `tenantId`** — so accepting on one share of a tenant clears the gate on **every** share of that tenant (you accept
 the *space's* terms, not the link). The returned `tenantId` is the localStorage key; the endpoint's `shareId`
-keying is what removes the oracle. When the space owner bumps `termsRevision`, the stored value is now below current →
-the gate re-fires (re-accept).
+keying is what removes the oracle. The gate asks whether the current triple is among those kept, the same question a
+member's gate asks of their history: when the space owner bumps `termsRevision`, a release changes the section's text
+or the Server Owner switches the operating mode to a variant this device never accepted, it is not → the gate re-fires
+(re-accept). A mode switched **back** to a variant accepted before asks nothing again (the owner's decision of
+2026-10-18), nor does a changed value or the record switched. The device keeps the **last four** triples: both
+revisions only grow, so both variants at the current revisions and at the previous ones (a rolled-back release) are
+all that can come back. A single triple an earlier client stored counts as kept; a bare revision an older client
+stored is no triple, so that visitor is asked once more, and the next accept drops it.
 
 **Honest about its limits — this is an operational gate, not enforcement.** A client-side localStorage gate is
 **bypassable** by an accountless visitor (devtools, a fresh profile, or resolving the share directly). It is the
@@ -59,10 +73,11 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
 ## Main flow
 
 1. A visitor opens `/s/{shareId}#k=…`. The share resolves (past the password shell, if any).
-2. The client fetches `GET /api/shares/{shareId}/terms`. If `termsRevision > 0` **and** the locally-stored accepted
-   revision for that `tenantId` is lower, the **terms gate** shows: the space's terms (viewer's locale, rendered
-   with the safe markdown renderer reused from member terms + share notes) and an **Accept** button.
-3. The visitor accepts → the client writes `termsRevision` to `localStorage[tenant]` → the gate clears.
+2. The client fetches `GET /api/shares/{shareId}/terms`. If `termsRevision > 0` **and** the current triple is not
+   among those stored for that `tenantId`, the **terms gate** shows: the space's terms, then the operator
+   section (viewer's locale, rendered with the safe markdown renderer reused from member terms + share notes) and an
+   **Accept** button.
+3. The visitor accepts → the client adds the triple to `localStorage[tenant]` → the gate clears.
 4. The visitor proceeds: straight to the content (READ, READ_WRITE — a contributor names itself at its first
    contribution), or to the mandatory display-name pre-screen (WRITE_ONLY) and then contributing.
 
@@ -70,9 +85,12 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
 
 - **Tenant has no terms** (`termsRevision == 0`) → no gate; step 2 falls straight through to the content / name
   pre-screen.
-- **Already accepted this revision** → the stored revision equals current, so the gate does not fire (a reload does
-  not re-prompt).
-- **Operator bumped the revision** → stored `<` current → the gate re-fires; the visitor re-reads and re-accepts.
+- **Already accepted this triple** → it is among those stored, so the gate does not fire (a reload does not
+  re-prompt).
+- **The space owner bumped the revision, a release changed the section, or the operating mode changed** → the current
+  triple is not among those stored → the gate re-fires; the visitor re-reads and re-accepts.
+- **The operating mode switched back** to a variant this device accepted at the current revisions → that triple is
+  still stored → no gate.
 - **Password-protected share** → the password shell ([uc.sharing.share-password](uc.sharing.share-password.md))
   comes **first**; the terms gate only appears once the share is unlocked. Order: **password → terms → note → name →
   content**, the note's gate only where the curator asked for it ([uc.sharing.share-note](uc.sharing.share-note.md)).

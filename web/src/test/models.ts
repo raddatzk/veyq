@@ -162,3 +162,12 @@ export const scopeSummary = (o: Partial<ScopeSummary> = {}): ScopeSummary => ({
   id: 'scope-1', kind: ScopeKind.Tenant, role: 'OWNER', tenantId: 'tenant-1', nameEpoch: 0, iconEpoch: 0, currentEpoch: 0,
   grantedEpoch: 0, wrappedGrant: 'AAAA', ...o,
 })
+
+/** An operator section of the terms as the share and tenant terms reads serve it (ADR 0035 decision 6). */
+export const OPERATOR_SECTION = {
+  revision: 1,
+  variant: 'FULL' as const,
+  text: { de: '## Auf dieser Instanz', en: '## On this instance' },
+  record: null,
+  objection: null,
+}

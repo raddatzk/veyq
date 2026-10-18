@@ -241,7 +241,11 @@ sealed interface NodeSharesOutcome {
 
 sealed interface ShareTermsOutcome {
     /** The owning tenant's public terms — `termsRevision` 0 (with null `de`/`en`) when the space owner published none. */
-    data class Found(val tenantId: String, val termsRevision: Int, val de: String?, val en: String?) : ShareTermsOutcome
+    data class Found(
+        val tenantId: String, val termsRevision: Int, val de: String?, val en: String?,
+        /** The operator section after the space's text (ADR 0035 decision 6). */
+        val section: me.raddatz.veyq.core.terms.RenderedSection,
+    ) : ShareTermsOutcome
     /** Unknown/disabled/expired share — the same non-enumerable 404 as [ResolveShareOutcome.NotFound]. */
     object NotFound : ShareTermsOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
 }
@@ -651,8 +655,8 @@ class SharingHandler(
         // The share→tenant hop: share.scopeId → the scope's tenant (a PERSONAL scope still resolves its tenant;
         // ADR 0029 §6). Defensive null (a share always has a scope+tenant by FK) → the same non-enumerable 404.
         val tenantId = scopes.scopeTenantId(share.scopeId) ?: return ShareTermsOutcome.NotFound
-        val terms = tenantTerms.guestTerms(tenantId)
-        return ShareTermsOutcome.Found(tenantId, terms?.revision ?: 0, terms?.terms?.de, terms?.terms?.en)
+        val terms = tenantTerms.guestTerms(tenantId) ?: return ShareTermsOutcome.NotFound
+        return ShareTermsOutcome.Found(tenantId, terms.revision, terms.terms?.de, terms.terms?.en, terms.section)
     }
 
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------

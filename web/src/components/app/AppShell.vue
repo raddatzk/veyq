@@ -3,7 +3,9 @@
 // .app-shell grid: .app-compact-header places the sidebar + topbar, .app-workspace > main.content holds the
 // route) so layout.css styles it identically. Ours only differs in the gate: routes flagged
 // `meta.layout === 'app'` render the workspace shell; everything else keeps the centered .public-shell. The
-// router already gates app routes on session + unlocked, so this only decides layout.
+// router already gates app routes on session + unlocked, so this only decides layout. Below the workspace sits the
+// operator footer (uc.admin.operator-details): who runs the instance and its terms, reachable from every page of the
+// signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms.
 import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -13,6 +15,7 @@ import AppSidebar from './AppSidebar.vue'
 import AppTopbar from './AppTopbar.vue'
 import IncompatibleScreen from './IncompatibleScreen.vue'
 import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
+import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -43,6 +46,9 @@ const plainLayout = computed(() => route.meta.layout === 'plain')
         <FinishProfilePrompt />
         <RouterView />
       </main>
+      <footer class="app-operator-footer">
+        <OperatorIdentification />
+      </footer>
     </div>
   </div>
   <main v-else-if="plainLayout" class="plain-shell">
@@ -57,6 +63,12 @@ const plainLayout = computed(() => route.meta.layout === 'plain')
 </template>
 
 <style scoped>
+.app-operator-footer {
+  display: flex;
+  justify-content: center;
+  padding: 0 1.25rem 1.25rem;
+  text-align: center;
+}
 .veyq-shell-inner {
   width: min(460px, 100%);
 }

@@ -1935,6 +1935,17 @@ nothing. The implementer had to put it on the two requests that fire the stateme
 the separate operation to the renewal. So a refine that adds a hold-back, an opt-out or a delay names the request it
 travels with, ahead of the effect — or says why the effect waits for it.
 
+### A CR that writes a legal text derives its surfaces from the duty, not from the product
+
+`cr-operator-section-of-the-terms` listed where the operator section shows from where a space's terms already showed —
+the member gate, the share gate, "the login page once it exists" — and grounded each against the code, as the rule
+asks. The law named other surfaces: DSA Art. 14(1) wants the terms publicly available without an account, Art. 11–12
+and TCO Art. 15 a public point of contact, § 5 DDG an identification permanently available; a legal audit added all
+three mid-implementation. Code and ADRs cannot answer for a duty they never encoded. So a refine that writes a legal
+text lists, per duty it serves, the surface and the content the law names, and only then fits the built surfaces to
+it; where the build cannot back a sentence the law asks, the CR names it as a legal blocker with an owner rather than
+leave the implementer to choose between the code and the law.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong

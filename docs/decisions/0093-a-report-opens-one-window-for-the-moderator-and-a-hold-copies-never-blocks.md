@@ -42,8 +42,10 @@
   § 10's guest-write record is built and carries the catalog's first preset (cr-guest-write-record, 2026-10-17;
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
   N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
-  first-layer sentence — whose wording waits on counsel (Still open 4) and whose link waits on the operator section of
-  the terms. It is on the V1 line (owner
+  first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
+  operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which is built in both
+  variants (cr-operator-section-of-the-terms, 2026-10-18; its text a draft until a qualified review, its gaps against
+  the law named there). It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
@@ -528,7 +530,9 @@ responsibility, and switching back to the second mode turns it on again.
   owner and gains an emergency page: 110, the BKA portal registered ahead, `TCO@bka.bund.de`, what never to do;
   the security model's T&S section, `CLAUDE.md`'s invariant on what the server keeps,
   [ADR 0035](0035-server-terms-of-service.md) decisions 3, 6 and 7 and the terms template's clauses 2, 7 and 9)
-  change in one CR shared with 0092.
+  change; each ADR's CR carries its own share of what this ADR and [ADR 0092](0092-logs-are-operational-and-name-no-person.md)
+  both touch. This ADR's is clause 9, clause 7's guest uploads and clause 2's sentence on what the host keeps about a
+  guest write; clause 2's sentence on logs is 0092's.
 
 ## Rejected alternatives
 

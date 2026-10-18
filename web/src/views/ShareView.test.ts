@@ -2,7 +2,9 @@
 // The accountless terms gate on the share page (uc.sharing.share-accept, ADR 0035 §3). Load-bearing behaviours:
 // a not-yet-accepted visitor sees the gate (not the content); accepting clears it and reveals the content and
 // persists per tenant (a reload does not re-prompt); an owner revision bump re-gates; a transient terms-fetch
-// error FAILS OPEN (content, never a lock-out). We drive the REAL terms helpers (localStorage per tenant, the
+// error FAILS OPEN (content, never a lock-out). The operator section comes after the space's text (ADR 0035 decision 6)
+// and what is stored is every accepted TRIPLE: an operator-revision bump or a variant change re-gates, a value change does
+// not, and a variant switched back to one accepted before does not either. We drive the REAL terms helpers (localStorage per tenant, the
 // locale pick) + the REAL ShareView wiring (needsTerms/loadTerms/acceptTerms) — only the network resolve/terms
 // reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -25,7 +27,7 @@ vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), 
 // A resolvable, unlocked share reached via a valid fragment link.
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
 
-// Keep the REAL terms helpers (acceptedTermsRevision/recordTermsAccepted/pickShareTerms) + error classes; override
+// Keep the REAL terms helpers (acceptedTermsKeys/recordTermsAccepted/pickShareTerms) + error classes; override
 // only the two network reads so no resolve crypto runs.
 // The shell resolves the platform half and fetches the terms; the drop page opens the rest. Only those reads are
 // stubbed — the shell, the registry, the page and the helpers it uses are real. The gates are role-independent, so they
@@ -51,6 +53,7 @@ import { ShareRole } from '../api/generated/sharing'
 import { realI18n, t } from '../test/i18n'
 import type { NodeKind } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
+import { OPERATOR_SECTION } from '../test/models'
 
 function mountShareView() {
   return mount(ShareView, {
@@ -87,6 +90,7 @@ describe('ShareView — accountless terms gate', () => {
       tenantId: TENANT,
       termsRevision: 1,
       terms: { de: '## Regeln', en: '## Rules' },
+      operatorSection: OPERATOR_SECTION,
     })
   })
 
@@ -96,8 +100,10 @@ describe('ShareView — accountless terms gate', () => {
 
     expect(wrapper.find('.share-terms-card').exists()).toBe(true) // the gate
     expect(wrapper.find('.share-view-header').exists()).toBe(false) // content is withheld
-    // the terms markdown is rendered (safe markdown) inside the gate
-    expect(wrapper.find('.share-terms-body').html()).toContain('Rules')
+    // the terms markdown is rendered (safe markdown) inside the gate, the operator section after it
+    const body = wrapper.find('.share-terms-body').text()
+    expect(body).toContain('Rules')
+    expect(body.indexOf('On this instance')).toBeGreaterThan(body.indexOf('Rules'))
   })
 
   it('accepting clears the gate, reveals the content, and persists per tenant', async () => {
@@ -109,11 +115,11 @@ describe('ShareView — accountless terms gate', () => {
 
     expect(wrapper.find('.share-terms-card').exists()).toBe(false) // gate cleared
     expect(wrapper.find('.share-view-header').exists()).toBe(true) // content shown
-    expect(localStorage.getItem(ACCEPT_KEY)).toBe('1') // acceptance is client-only, keyed per tenant
+    expect(localStorage.getItem(ACCEPT_KEY)).toBe('1:1:FULL') // client-only, keyed per tenant, holding the triple
   })
 
   it('does not re-prompt after a reload once accepted for the revision', async () => {
-    localStorage.setItem(ACCEPT_KEY, '1') // accepted on a previous visit
+    localStorage.setItem(ACCEPT_KEY, '1:1:FULL') // accepted on a previous visit
     const wrapper = mountShareView()
     await flushPromises()
 
@@ -122,13 +128,60 @@ describe('ShareView — accountless terms gate', () => {
   })
 
   it('re-gates when the space owner bumps the terms revision', async () => {
-    localStorage.setItem(ACCEPT_KEY, '1') // previously accepted v1
-    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 2, terms: { en: '## Rules v2' } })
+    localStorage.setItem(ACCEPT_KEY, '1:1:FULL') // previously accepted v1
+    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 2, operatorSection: OPERATOR_SECTION, terms: { en: '## Rules v2' } })
     const wrapper = mountShareView()
     await flushPromises()
 
     expect(wrapper.find('.share-terms-card').exists()).toBe(true) // stored 1 < current 2 → gate re-fires
     expect(wrapper.find('.share-view-header').exists()).toBe(false)
+  })
+
+  it('re-gates on an operator-section revision bump and on a variant change, not on a changed value', async () => {
+    localStorage.setItem(ACCEPT_KEY, '1:1:FULL')
+    const served = (section: typeof OPERATOR_SECTION | Record<string, unknown>) =>
+      vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: section as typeof OPERATOR_SECTION, terms: { en: '## Rules' } })
+    const gated = async () => {
+      const w = mountShareView()
+      await flushPromises()
+      return w.find('.share-terms-card').exists()
+    }
+    served({ ...OPERATOR_SECTION, text: { en: '## On this instance\nOperator: Neuer Verein e. V.' } })
+    expect(await gated()).toBe(false) // control: a changed value reopens nothing
+    served({ ...OPERATOR_SECTION, revision: 2 })
+    expect(await gated()).toBe(true) // a release changed the section
+    served({ ...OPERATOR_SECTION, variant: 'REDUCED' })
+    expect(await gated()).toBe(true) // the operating mode changed
+  })
+
+  it('a mode switched back to a variant this device accepted asks nothing again, as for a member', async () => {
+    const accept = async (variant: 'FULL' | 'REDUCED') => {
+      vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: { ...OPERATOR_SECTION, variant }, terms: { en: '## Rules' } })
+      const w = mountShareView()
+      await flushPromises()
+      const gated = w.find('.share-terms-card').exists()
+      if (gated) await w.find('.share-terms-card .share-name-submit').trigger('click')
+      await flushPromises()
+      return gated
+    }
+    expect(await accept('FULL')).toBe(true) // first visit: asked
+    expect(await accept('REDUCED')).toBe(true) // the Server Owner switched to the private mode: asked again
+    expect(await accept('FULL')).toBe(false) // switched back: the FULL triple is still accepted on this device
+    expect(await accept('REDUCED')).toBe(false) // and so is the REDUCED one
+  })
+
+  it('the single triple an earlier client stored still counts as accepted', async () => {
+    localStorage.setItem(ACCEPT_KEY, '1:1:FULL')
+    const wrapper = mountShareView()
+    await flushPromises()
+    expect(wrapper.find('.share-terms-card').exists()).toBe(false)
+  })
+
+  it('an acceptance an older client stored (a bare revision) asks once more: the section was not part of it', async () => {
+    localStorage.setItem(ACCEPT_KEY, '1')
+    const wrapper = mountShareView()
+    await flushPromises()
+    expect(wrapper.find('.share-terms-card').exists()).toBe(true)
   })
 
   it('fails open (shows content, no gate) on a transient terms-fetch error', async () => {
@@ -147,7 +200,7 @@ describe('ShareView — terms come before the name pre-screen', () => {
   it('a not-yet-accepted uploader sees the terms first and the name screen only after accepting', async () => {
     localStorage.clear()
     serve(dropShare())
-    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 1, terms: { en: '## Rules' } })
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: OPERATOR_SECTION, terms: { en: '## Rules' } })
     const wrapper = mountShareView()
     await flushPromises()
 
@@ -168,7 +221,7 @@ describe('ShareView — terms come before the name pre-screen', () => {
 describe('ShareView — who sees a guest name', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, terms: {} })
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   })
 
   it("the uploader's name screen says only the Memory's members see the name", async () => {
@@ -191,7 +244,7 @@ describe('ShareView — who sees a guest name', () => {
 describe('ShareView — a chapter share', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, terms: {} })
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   })
 
   it('an uploader link rooted at a CHAPTER reaches the drop\'s name screen', async () => {
@@ -211,7 +264,7 @@ describe('ShareView — a Memory drop: core\'s naming form and its "Not you?"', 
   beforeEach(() => {
     if (confirmRequest.value) settleConfirm(false)
     localStorage.clear()
-    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, terms: {} })
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
     vi.mocked(createContributorIdentity).mockReset()
   })
 
