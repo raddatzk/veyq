@@ -9,10 +9,11 @@
 //   3. the deputy opens the case the first order opened and prepares the fields for an Art. 18 report: a text block with
 //      the case id and the time zone stated — never a file — and records the report's handover in the log.
 //
-// It runs after moderation.spec.ts (the deputy, `deputy.json`) — files run in name order. The references and every name
-// are canaries (`recordTyped`): lane L1's sweep proves they reached the server sealed. The labels are web/'s and
+// It runs after moderation.spec.ts (the deputy, `deputy.json`) — files run in name order. The references, the pasted
+// links (their fragment is the share's key, which must never reach the server) and every name are canaries
+// (`recordTyped`): lane L1's sweep proves they reached the server sealed or not at all. The labels are web/'s and
 // admin-web's own (each package's i18n, en).
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
 import { deputy as deputyAccount, instance, newDevice, passwordField, signInOwner, tenantOrigin, type Device } from '../../src/devices'
@@ -35,10 +36,17 @@ let orderCase = ''
 
 const shareIdOf = (link: string) => /\/s\/([A-Za-z0-9_-]{43})/.exec(link)![1]
 
+/**
+ * What the guest's browser reads for [link]'s share now — a same-origin fetch from the guest's page, so it goes the way
+ * the browser goes (its name resolution, Traefik), as the share page's own read does.
+ */
+async function guestStatus(page: Page, link: string): Promise<number> {
+  return page.evaluate(async (path) => (await fetch(path, { cache: 'no-store' })).status, `/api/shares/${shareIdOf(link)}`)
+}
+
 /** Poll the guest's read of [link] until it answers [status]; the milliseconds it took from [since]. */
-async function guestAnswers(request: APIRequestContext, link: string, status: number, since: number): Promise<number> {
-  const url = `${tenantOrigin()}/api/shares/${shareIdOf(link)}`
-  await expect.poll(async () => (await request.get(url)).status(), { timeout: 60_000, intervals: [100, 250, 500] }).toBe(status)
+async function guestAnswers(page: Page, link: string, status: number, since: number): Promise<number> {
+  await expect.poll(() => guestStatus(page, link), { timeout: 60_000, intervals: [100, 250, 500] }).toBe(status)
   return Date.now() - since
 }
 
@@ -105,7 +113,7 @@ test(
     for (const [i, link] of links.entries()) {
       await guest.page.goto(link)
       await expect(guest.page.getByRole('heading', { level: 1, name: memories[i] })).toBeVisible({ timeout: 60_000 })
-      expect((await guest.page.request.get(`${tenantOrigin()}/api/shares/${shareIdOf(link)}`)).status()).toBe(200)
+      expect(await guestStatus(guest.page, link)).toBe(200)
     }
   },
 )
@@ -123,14 +131,15 @@ test(
     const account = deputyAccount()
     await openModeration(page, `https://${account.tenantDomain}`, account)
     await page.locator('.moderation-orders-toggle').click()
-    await page.locator('#moderation-order-share').fill(links[0])
+    // The link as the authority sent it, key and all: a canary, so the sweep proves its fragment never reached the server.
+    await page.locator('#moderation-order-share').fill(recordTyped(links[0]))
     await page.locator('#moderation-order-reference').fill(recordTyped(moderatorReference))
     await page.locator('.moderation-order-submit').click()
     const confirm = page.getByRole('dialog', { name: 'An authority’s order' })
     await expect(confirm).toBeVisible()
     const submitted = Date.now()
     await confirm.getByRole('button', { name: 'Enter the order', exact: true }).click()
-    const took = await guestAnswers(guest.page.request, links[0], 404, submitted)
+    const took = await guestAnswers(guest.page, links[0], 404, submitted)
     test.info().annotations.push({ type: 'moderator: submit → guest 404 (ms)', description: String(took) })
     await expect(page.locator('.moderation-order-blocked')).toContainText(/Blocked at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/, { timeout: 60_000 })
     const annex = page.locator('.moderation-order-text')
@@ -142,7 +151,7 @@ test(
     await expect(page.locator('.moderation-case')).toBeVisible({ timeout: 60_000 })
     orderCase = await page.evaluate(() => document.querySelector('.moderation-case')?.getAttribute('data-case-id') ?? '')
     // The other link still serves: the order blocked by id, not more.
-    expect((await guest.page.request.get(`${tenantOrigin()}/api/shares/${shareIdOf(links[1])}`)).status()).toBe(200)
+    expect(await guestStatus(guest.page, links[1])).toBe(200)
   },
 )
 
@@ -164,14 +173,14 @@ test(
     await expect(consoleHeading).toBeVisible({ timeout: 60_000 })
     await page.getByRole('button', { name: 'Moderation', exact: true }).click()
     await expect(page.getByRole('heading', { level: 2, name: 'An authority\'s order' })).toBeVisible()
-    await page.locator('.order-share').fill(links[1])
+    await page.locator('.order-share').fill(recordTyped(links[1]))
     await page.locator('.order-reference').fill(recordTyped(ownerReference))
     await page.locator('.order-submit').click()
     const confirm = page.getByRole('dialog', { name: 'Enter this order?' })
     await expect(confirm).toBeVisible()
     const submitted = Date.now()
     await confirm.getByRole('button', { name: 'Enter the order', exact: true }).click()
-    const took = await guestAnswers(guest.page.request, links[1], 404, submitted)
+    const took = await guestAnswers(guest.page, links[1], 404, submitted)
     test.info().annotations.push({ type: 'Server Owner: submit → guest 404 (ms)', description: String(took) })
     await expect(page.locator('.order-blocked')).toContainText(/Blocked at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC/, { timeout: 60_000 })
     await expect(page.locator('textarea.order-form-text')).toHaveValue(
