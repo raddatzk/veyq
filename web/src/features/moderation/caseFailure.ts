@@ -25,12 +25,27 @@ const byCode: Record<string, string> = {
   objection_not_found: 'moderation.errors.objectionNotFound',
   objection_decided: 'moderation.errors.objectionDecided',
   objection_needs_another_moderator: 'moderation.errors.needsAnotherModerator',
+  // an authority's order and the deferral (uc.moderation.authority-order)
+  deferral_out_of_bounds: 'moderation.errors.deferralOutOfBounds',
+  statement_not_found: 'moderation.errors.statementNotFound',
+  statement_not_deferred: 'moderation.errors.statementNotDeferred',
+  deferral_renewed: 'moderation.errors.deferralRenewed',
+  order_exists: 'moderation.errors.orderExists',
+}
+
+/** This surface's own refusals, before anything is sent: a text the moderator must give. */
+const byMessage: Record<string, string> = {
+  extension_reason_required: 'moderation.errors.reasonRequired',
+  deferral_reason_required: 'moderation.errors.reasonRequired',
+  handover_reference_required: 'moderation.errors.orderReference',
+  'order_invalid:share': 'moderation.errors.orderShare',
+  'order_invalid:reference': 'moderation.errors.orderReference',
 }
 
 /** The i18n key for [e], or [fallback] when the failure names no code this surface knows. */
 export async function caseFailureKey(e: unknown, fallback = 'moderation.errors.failed'): Promise<string> {
   if (e instanceof ModerationKeyMissing) return 'moderation.errors.reload'
-  if (e instanceof Error && e.message === 'extension_reason_required') return 'moderation.errors.reasonRequired'
+  if (e instanceof Error && byMessage[e.message]) return byMessage[e.message]
   if (isUnauthorized(e)) return 'moderation.errors.signedOut'
   const { code } = await decodeHttpError(e)
   return (code && byCode[code]) || fallback

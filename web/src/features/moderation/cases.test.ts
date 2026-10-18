@@ -4,7 +4,7 @@
 // with a real moderation key: a decision's note, an extension's reason, a report.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 vi.mock('../../api/client', () => ({ moderationApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: <T>(f: () => Promise<T>) => f() }))
@@ -19,12 +19,15 @@ import {
   dismissCase,
   extendHold,
   getCase,
+  getExport,
   liftMeasure,
   listCases,
   openNote,
   openObjectionOf,
   openReportOf,
   proposeStep,
+  recordHandover,
+  renewDeferral,
   reporterNoticesOf,
   reviewUrl,
   sealNote,
@@ -66,7 +69,7 @@ const aCase: ModerationCase = {
 }
 
 const NO_FACTS = { ground: 'TERMS_BREACH' as const, facts: '' }
-const STATEMENT_NONE = { ground: 'TERMS_BREACH', facts: null, factsFor: [] }
+const STATEMENT_NONE = { ground: 'TERMS_BREACH', facts: null, factsFor: [], deferral: null }
 
 const stub = () =>
   stubApi(moderationApi, {
@@ -80,6 +83,9 @@ const stub = () =>
     barModerationReporter: aCase,
     decideModerationObjection: aCase,
     getModerationStatementRecipients: { accounts: [], guests: 0 },
+    deferModerationStatement: aCase,
+    recordModerationHandover: aCase,
+    getModerationCaseExport: { caseId: CASE, category: 'TERMS_BREACH', origin: 'REPORT', timeZone: 'UTC', reportedAt: [], measures: [], uploaders: [], guestWrites: [], held: false },
   })
 
 let api: ReturnType<typeof stub>
@@ -138,6 +144,13 @@ const decisions: Decision[] = [
   ],
   ['extendModerationHold', () => extendHold(CASE, UNTIL, 'an authority asked'), { moderationHoldExtension: expect.objectContaining({ until: UNTIL }) }],
   ['barModerationReporter', () => barReporter(CASE, REPORT, ''), { reportId: REPORT, moderationDecisionNote: { note: null } }],
+  [
+    'deferModerationStatement',
+    () => renewDeferral(CASE, MEASURE, UNTIL, 'the authority renewed its request'),
+    { statementId: MEASURE, moderationStatementDeferral: expect.objectContaining({ until: UNTIL }) },
+  ],
+  ['recordModerationHandover', () => recordHandover(CASE, 'REPORTED', 'BKA 17'), { moderationHandover: expect.objectContaining({ kind: 'REPORTED' }) }],
+  ['getModerationCaseExport', () => getExport(CASE), {}],
 ]
 
 describe('a decision carries a fresh proof over its own operation and its case', () => {
@@ -280,5 +293,25 @@ describe('reviewUrl', () => {
 
   it('stays on this host when the server names no domain', () => {
     expect(reviewUrl(CASE, null, here)).toBe(`https://mod.example.org:8443/s/${CASE}#moderation`)
+  })
+})
+
+describe('an authority’s deferral (uc.moderation.authority-order `the-authority-defers-the-statement`)', () => {
+  it('goes with the measure, the authority’s request sealed to the case and opened with the epoch key', async () => {
+    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', { ...NO_FACTS, deferral: { until: UNTIL, reason: 'BKA asked: not before 1 April' } })
+    const deferral = api.takeModerationMeasure.mock.calls[0][0].moderationMeasureRequest.statement.deferral!
+    expect(deferral.until).toEqual(UNTIL)
+    expect(deferral.reason.epoch).toBe(EPOCH)
+    expect(v1.openModerationNote(EPOCH, CASE, v1.moderationKemSecret(key), fromB64std(deferral.reason.sealedNote))).toBe('BKA asked: not before 1 April')
+  })
+
+  it('is refused without the authority’s request, and nothing is sent', async () => {
+    await expect(takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', { ...NO_FACTS, deferral: { until: UNTIL, reason: '  ' } }))
+      .rejects.toThrow('deferral_reason_required')
+    await expect(renewDeferral(CASE, MEASURE, UNTIL, '')).rejects.toThrow('deferral_reason_required')
+    await expect(recordHandover(CASE, 'REPORTED', '')).rejects.toThrow('handover_reference_required')
+    expect(api.takeModerationMeasure).not.toHaveBeenCalled()
+    expect(api.deferModerationStatement).not.toHaveBeenCalled()
+    expect(api.recordModerationHandover).not.toHaveBeenCalled()
   })
 })

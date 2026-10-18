@@ -23,6 +23,7 @@ vi.mock('./cases', () => ({
   openNote: vi.fn(),
   openReportOf: vi.fn(),
   reviewUrl: vi.fn(),
+  renewDeferral: vi.fn(),
 }))
 
 import CaseDetail from './CaseDetail.vue'
@@ -37,6 +38,7 @@ import {
   openObjectionOf,
   openReportOf,
   proposeStep,
+  renewDeferral,
   reporterNoticesOf,
   reviewUrl,
   takeMeasure,
@@ -57,7 +59,7 @@ const BLOCKED_LINK = 'blockedblockedblockedblockedblockedblocked1'
 const OPEN_LINK = 'reachesreachesreachesreachesreachesreache1'
 const STATEMENT = '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e'
 const OBJECTION = '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f'
-const FACTS = { ground: 'TERMS_BREACH', facts: 'the facts' }
+const FACTS = { ground: 'TERMS_BREACH', facts: 'the facts', deferral: null }
 
 const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
   id: CASE,
@@ -128,6 +130,7 @@ const stubs = {
   },
   Message: { template: '<div class="msg"><slot /></div>' },
   DatePicker: { name: 'DatePicker', props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="datepicker" />' },
+  AuthoritySection: { props: ['current', 'busy'], template: '<div class="authority-section-stub" />' },
 }
 
 async function mountCase(c: ModerationCase = caseOf()): Promise<VueWrapper> {
@@ -296,7 +299,7 @@ describe('CaseDetail', () => {
       expect((w.find('.moderation-statement-ground').element as HTMLSelectElement).value).toBe('TERMS_BREACH')
       await w.find('.moderation-statement-ground').setValue('ILLEGAL_CONTENT')
       await click(w, '.moderation-block-content')
-      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', facts: '' }, [
+      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', facts: '', deferral: null }, [
         { reportId: REPORT, address: 'r@example.org' },
       ])
     })
@@ -418,5 +421,78 @@ describe('CaseDetail', () => {
       expect(reviewUrl).toHaveBeenCalledWith(CASE, 'club.example.org')
       expect(assign).toHaveBeenCalledWith(`https://club.example.org/s/${CASE}#moderation`)
     })
+  })
+})
+
+describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderation.report-to-an-authority)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ask.mockResolvedValue(true)
+    vi.mocked(openReportOf).mockReturnValue(null)
+    vi.mocked(openNote).mockReturnValue(null)
+    vi.mocked(reporterNoticesOf).mockReturnValue([])
+  })
+
+  const picker = (w: VueWrapper, id: string) => w.findAllComponents({ name: 'DatePicker' }).find((c) => c.attributes('input-id') === id)!
+
+  it('a block carries the authority’s deferral only when asked for, with its end and its request', async () => {
+    vi.mocked(takeMeasure).mockResolvedValue(caseOf({ state: 'DECIDED' }))
+    const until = new Date('2026-11-20T00:00:00Z')
+    const w = await mountCase()
+    await w.find('.moderation-statement-facts').setValue('the facts')
+    await w.find('.moderation-defer-toggle').setValue(true)
+    // Asked for but incomplete: refused here, nothing sent.
+    await click(w, '.moderation-block-content')
+    expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.reasonRequired'))
+    expect(takeMeasure).not.toHaveBeenCalled()
+    picker(w, 'moderation-defer-until').vm.$emit('update:modelValue', until)
+    await w.find('.moderation-defer-reason').setValue('BKA: not before 20 November')
+    await click(w, '.moderation-block-content')
+    expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', {
+      ground: 'TERMS_BREACH', facts: 'the facts', deferral: { until, reason: 'BKA: not before 20 November' },
+    }, [])
+  })
+
+  it('shows a held statement’s end and renews it once with the authority’s renewed request', async () => {
+    const held = new Date('2026-11-20T00:00:00Z')
+    const c = caseOf()
+    const measure = c.measures[0]
+    const deferred = caseOf({ measures: [{ ...measure, statement: { ...measure.statement!, sentAt: null, deferredUntil: held, renewed: false } }] })
+    vi.mocked(renewDeferral).mockResolvedValue(
+      caseOf({ measures: [{ ...measure, statement: { ...measure.statement!, sentAt: null, deferredUntil: new Date('2026-12-20T00:00:00Z'), renewed: true } }] }),
+    )
+    const w = await mountCase(deferred)
+    expect(w.find('.moderation-measure-statement').text()).toContain(t('moderation.deferral.deferredUntil', { time: held.toLocaleString('en') }))
+    const until = new Date('2026-12-20T00:00:00Z')
+    picker(w, `moderation-renew-until-${STATEMENT}`).vm.$emit('update:modelValue', until)
+    await w.find('.moderation-renew-reason').setValue('BKA renewed')
+    await w.find('.moderation-renew').trigger('submit')
+    await flushPromises()
+    expect(renewDeferral).toHaveBeenCalledWith(CASE, STATEMENT, until, 'BKA renewed')
+    // Renewed once: no second renewal is offered.
+    expect(w.find('.moderation-renew').exists()).toBe(false)
+    expect(w.find('.moderation-measure-statement').text()).toContain(t('moderation.deferral.renewed'))
+  })
+
+  it('on child sexual abuse material, "Block the content" leads the decision panel as the proposed first step', async () => {
+    const w = await mountCase(caseOf({ category: 'CHILD_SEXUAL_ABUSE' }))
+    const first = w.find('.moderation-decide .veyq-list .veyq-list-row')
+    expect(first.classes()).toContain('moderation-proposed-first')
+    expect(first.text()).toContain(t('moderation.csam.proposed'))
+    expect(w.findAll('.moderation-block-content')).toHaveLength(1)
+    // Control: another category keeps the panel's order, with nothing proposed.
+    const other = await mountCase(caseOf())
+    expect(other.find('.moderation-proposed-first').exists()).toBe(false)
+    expect(other.findAll('.moderation-block-content')).toHaveLength(1)
+  })
+
+  it('an order’s case has no review to open, and every case offers the report to an authority', async () => {
+    const order = await mountCase(caseOf({ origin: 'ORDER', reports: [] }))
+    expect(order.find('.moderation-case-review').exists()).toBe(false)
+    expect(order.find('.moderation-case-order-badge').exists()).toBe(true)
+    expect(order.find('.authority-section-stub').exists()).toBe(true)
+    const reported = await mountCase(caseOf())
+    expect(reported.find('.moderation-case-review').exists()).toBe(true)
+    expect(reported.find('.authority-section-stub').exists()).toBe(true)
   })
 })
