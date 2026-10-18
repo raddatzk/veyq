@@ -89,6 +89,7 @@ import { fakeApi, stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
 import { authenticatedCalls } from '../test/guestMode'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
+import { OPERATOR_SECTION } from '../test/models'
 
 const SCOPE = '77777777-7777-4777-8777-777777777777'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_s'
@@ -134,7 +135,7 @@ beforeEach(async () => {
   authenticatedCalls.length = 0
   vi.clearAllMocks()
   setViewMode('grid')
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-1', MEMORY), row('c-1', CHAPTER)], identities: [] } })
   // A tier read (the lightbox's preview) is refused: the stage shows its error, the download stays.
   fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
@@ -362,7 +363,7 @@ describe('a note that asks to be accepted before the share opens', () => {
   }
 
   it('comes after the tenant terms', async () => {
-    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsRevision: 1, terms: { en: 'Be nice.' } })
+    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: 't-1', termsRevision: 1, operatorSection: OPERATOR_SECTION, terms: { en: 'Be nice.' } })
     const w = await mountPage(asks(head(ShareRole.Read)))
     expect(w.text()).toContain(t('share.termsTitle'))
     expect(gate(w).exists(), 'not before the terms').toBe(false)

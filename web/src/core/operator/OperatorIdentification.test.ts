@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
-// uc.admin.operator-details `the-identification-appears-on-the-login-and-share-pages` (ADR 0035 decision 7): the
-// provider identification behind a footer link, read through the PUBLIC client — a guest-mode mount, so any call to an
-// authenticated client is red (inbox #401) — and fail-open (A5): no identification published, or a failed read, shows
-// nothing and throws nothing. The values open only on the click, as the link promises.
+// uc.admin.operator-details `the-identification-appears-on-the-login-and-share-pages` (ADR 0035 decision 7) and the
+// operator section's public reach (ADR 0035 decision 6): the footer always links the public terms page — no read needed,
+// so a failed read leaves it standing — and behind "Legal notice" shows the provider identification and the point of
+// contact for users and authorities with its languages (ADR 0093 § 11), read through the PUBLIC client — a guest-mode
+// mount, so any call to an authenticated client is red (inbox #401) — and fail-open (A5). The values open only on the
+// click, as the link promises.
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { vi } from 'vitest'
@@ -18,7 +20,7 @@ import type { OperatorDetails } from '../../api/generated/operator'
 
 function details(over: Partial<OperatorDetails> = {}): OperatorDetails {
   return {
-    contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: null, providerName: null,
+    contactEmail: null, contactLanguages: [], statementEmail: null, providerName: null,
     providerAddress: null, providerEmail: null, providerRepresentative: null, supervisoryAuthority: null, ...over,
   }
 }
@@ -56,24 +58,46 @@ describe('OperatorIdentification (uc.admin.operator-details, web)', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
+  it('shows the point of contact for users and authorities with its languages, a contact alone included', async () => {
+    stubApi(publicOperatorApi, { getOperatorDetails: details({ contactEmail: 'contact@example.org', contactLanguages: ['de', 'en'] }) })
+    const w = await mountIt()
+    await w.find('.operator-identification__link').trigger('click')
+    const contact = w.find('.operator-identification__contact')
+    expect(contact.text()).toContain('Contact for users and authorities:')
+    expect(contact.find('a').attributes('href')).toBe('mailto:contact@example.org')
+    expect(w.find('.operator-identification__languages').text()).toBe('Languages: de, en')
+  })
+
+  it('always links the public terms of this instance, in a tab of its own', async () => {
+    stubApi(publicOperatorApi, { getOperatorDetails: details() })
+    const w = await mountIt()
+    const link = w.find('.operator-identification__terms')
+    expect(link.text()).toBe('Terms of this instance')
+    expect(link.attributes('href')).toBe('/operator-terms')
+    expect(link.attributes('target')).toBe('_blank')
+  })
+
   it('speaks the page’s language', async () => {
     stubApi(publicOperatorApi, { getOperatorDetails: identified })
     i18n.global.locale.value = 'de'
     const w = await mountIt()
     expect(w.find('.operator-identification__link').text()).toBe('Impressum')
+    expect(w.find('.operator-identification__terms').text()).toBe('Bedingungen dieser Instanz')
   })
 
-  it('shows nothing while no part of the identification is published — a contact alone is not one', async () => {
+  it('shows no legal notice while nothing of it is published (control: the terms link stays)', async () => {
     stubApi(publicOperatorApi, { getOperatorDetails: details() })
     const w = await mountIt()
-    expect(w.find('.operator-identification').exists()).toBe(false)
+    expect(w.find('.operator-identification__link').exists()).toBe(false)
+    expect(w.find('.operator-identification__terms').exists()).toBe(true)
     expect(authenticatedCalls).toEqual([])
   })
 
-  it('a failed read shows nothing and blocks nothing (fail-open)', async () => {
+  it('a failed read shows no legal notice and blocks nothing (fail-open), the terms link stays', async () => {
     fakeApi(publicOperatorApi, { getOperatorDetails: () => Promise.reject(new Error('offline')) })
     const w = await mountIt()
-    expect(w.find('.operator-identification').exists()).toBe(false)
+    expect(w.find('.operator-identification__link').exists()).toBe(false)
     expect(w.html()).not.toContain('Legal notice')
+    expect(w.find('.operator-identification__terms').exists()).toBe(true)
   })
 })

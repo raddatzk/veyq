@@ -7,6 +7,7 @@ import { fakeApi, stubApi } from './apiMock'
 
 vi.mock('../api/client', () => ({ publicSharesApi: vi.fn() }))
 import { publicSharesApi } from '../api/client'
+import { OPERATOR_SECTION } from '../test/models'
 
 const SHARE: PublicShare = { role: 'READ', passwordRequired: false, nodes: [] }
 
@@ -36,7 +37,7 @@ describe('stubApi', () => {
 
 describe('fakeApi', () => {
   it('runs each implementation, and keeps a typed vi.fn the test already holds', async () => {
-    const terms = vi.fn<SharingApi['getShareTerms']>().mockResolvedValue({ tenantId: 't', termsRevision: 1 })
+    const terms = vi.fn<SharingApi['getShareTerms']>().mockResolvedValue({ tenantId: 't', termsRevision: 1, operatorSection: OPERATOR_SECTION })
     const api = fakeApi(publicSharesApi, {
       resolveShare: async ({ shareId }) => ({ ...SHARE, nodeId: shareId }),
       getShareTerms: terms,
