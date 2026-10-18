@@ -119,6 +119,9 @@ passed, and it named what it did not run:
 The `stack` job came after that run. The local pipeline cannot run it on any one machine: it waits for every leg of the
 image build, and one machine builds only its own architecture.
 
+`api-fuzz` came after that run too. Run through it alone (`--job api-fuzz`, 2026-10-19), it was green but for the
+one step only GitHub runs, the check of the Gradle wrapper: 4.2 minutes with the jar build and `npm ci`.
+
 ## How a release will be gated
 
 A publish is started by hand from `main` or a `release/<major>.x` branch and runs the whole pipeline once more. The

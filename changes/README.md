@@ -1289,6 +1289,18 @@ owner), so the owner rule refused the key. Both were stated in ADR 0098's own Co
 database … needs a policy change"). So a refine lists, for each pod, Job or container it adds, the peers it dials
 against the policy set and the owner of every directory it writes, rather than once for the design.
 
+### A CR that adds a gate runs it once at refine, against the untouched tree
+
+A new gate's first run is the CR's real inventory, and the decisions it forces are owner questions — so they belong in
+the refine, not in the implementation. cr-api-fuzzing refined Schemathesis offline (the specs load, cases generate) and
+predicted its findings ("expect undeclared 404s and Quarkus' 405/415"); the first live run, an hour into
+implementation, failed on every spec file with ~600 failures by nine mechanisms, four of them decisions about the wire
+or the check — `null` vs absent in every response, 405/`OPTIONS` semantics, whether a credential may be refused before
+its shape, and an official image that loads a proprietary plugin. The CR stopped at its triage and waited a round trip
+for Q4–Q8. A probe run of the gate over three spec files at refine would have put those questions on the table with the
+others. So a CR whose deliverable is a gate (a fuzzer, a scanner, a new check over the whole tree) runs that gate once
+at refine — whatever form is cheapest that is LIVE, not offline — and asks the decisions its findings raise there.
+
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
 **Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a
