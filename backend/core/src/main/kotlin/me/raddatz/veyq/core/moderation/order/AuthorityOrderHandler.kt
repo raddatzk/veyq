@@ -245,8 +245,10 @@ class AuthorityOrderHandler(
 
     /**
      * [measure]'s statement of reasons (ADR 0093 § 7, § 12 "the notice to the uploader follows § 7"): basis `ORDER`, the
-     * ground terrorist content, no facts — the order is what led to it — to the recipients a moderator's block would
-     * reach. Sent now where a member is named, unless the authority deferred it. Answers its id when it went out now.
+     * ground terrorist content and its provision ([REMOVAL_PROVISION]), no facts — the order is what led to it — to the
+     * recipients a moderator's block would reach. Sent now where a member is named, unless the authority deferred it.
+     * Answers its id when it went out now. A guest uploader among the recipients asks for its notice on the link
+     * ([GuestOrderNotices], TCO Art. 11(1)) — the same row, so the same deferral holds both back.
      */
     private fun statementFor(measure: ModerationBlockEntity, case: ModerationCaseEntity, order: AuthorityOrderEntity, deferUntil: Instant?, now: Instant): String? {
         val held = snapshots.rowsOf(case.id, now)
@@ -259,6 +261,7 @@ class AuthorityOrderHandler(
             measureId = measure.id
             caseId = case.id
             ground = StatementGround.TERRORIST_CONTENT.name
+            provision = REMOVAL_PROVISION
             basis = StatementBasis.ORDER.name
             this.sentAt = sentAt
         }
@@ -311,10 +314,13 @@ class AuthorityOrderHandler(
 
     private fun Instant.utc(): OffsetDateTime = atOffset(ZoneOffset.UTC)
 
-    private companion object {
-        const val LIST_LIMIT = 500
+    companion object {
+        private const val LIST_LIMIT = 500
+
+        /** The provision a removal order's statement relies on (DSA Art. 17(3)(d); the case is filed as terrorist content). */
+        const val REMOVAL_PROVISION = "Regulation (EU) 2021/784, Art. 3 (removal order)"
 
         /** How far a receipt time may lie ahead of the server's clock before it is refused as a typo. */
-        val CLOCK_SKEW: Duration = Duration.ofMinutes(5)
+        private val CLOCK_SKEW: Duration = Duration.ofMinutes(5)
     }
 }

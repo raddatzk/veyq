@@ -69,7 +69,7 @@ const aCase: ModerationCase = {
 }
 
 const NO_FACTS = { ground: 'TERMS_BREACH' as const, facts: '' }
-const STATEMENT_NONE = { ground: 'TERMS_BREACH', facts: null, factsFor: [], deferral: null }
+const STATEMENT_NONE = { ground: 'TERMS_BREACH', provision: null, facts: null, factsFor: [], deferral: null }
 
 const stub = () =>
   stubApi(moderationApi, {
@@ -250,12 +250,14 @@ describe('the statement of reasons', () => {
     const a = recipient()
     const identity = (kem: Uint8Array) => b64std(v1.serializeIdentityPublic({ kem, sign: new Uint8Array(32) }))
     api.getModerationStatementRecipients.mockResolvedValueOnce({ accounts: [{ accountId: ACCOUNT, identityPublicKey: identity(a.kem) }], guests: 1 })
-    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', facts: 'the photo shows a threat' })
+    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', provision: ' § 241 StGB ', facts: 'the photo shows a threat' })
     expect(proofFor).toHaveBeenNthCalledWith(1, 'getModerationStatementRecipients', CASE)
     expect(proofFor).toHaveBeenNthCalledWith(2, 'takeModerationMeasure', CASE)
     expect(api.getModerationStatementRecipients).toHaveBeenCalledWith(expect.objectContaining({ caseId: CASE, kind: 'CONTENT', targetId: ITEM }))
     const { statement } = api.takeModerationMeasure.mock.calls[0][0].moderationMeasureRequest
     expect(statement.ground).toBe('ILLEGAL_CONTENT')
+    // The provision travels in the clear beside the ground (DSA Art. 17(3)(d)), trimmed; the facts stay sealed.
+    expect(statement.provision).toBe('§ 241 StGB')
     expect(openNote(statement.facts!.epoch, CASE, statement.facts!.sealedNote)).toBe('the photo shows a threat')
     expect(statement.factsFor).toHaveLength(1)
     expect(statement.factsFor![0].accountId).toBe(ACCOUNT)

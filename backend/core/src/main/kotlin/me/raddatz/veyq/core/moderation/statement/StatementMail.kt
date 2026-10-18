@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.ModeratorNotices
+import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.report.ReportRateLimiter
 import me.raddatz.veyq.core.moderation.report.ReportReceived
@@ -32,11 +33,16 @@ data class ReporterNotice(val reportId: String, val address: String)
  * widened it; uc.moderation.object-to-a-measure), all through the instance mail and **after** the decision committed —
  * a mail that fails costs the decision nothing:
  *  - [statementSent]: each member a statement names, at their account address — the template's clear parts in the
- *    current form ([StatementTemplate.mailBody]), **never the facts**: their passage says they are in veyq (ADR 0049).
- *    A recipient whose mail did not go out is retried by the hourly cleanup ([retryDue]) for seven days.
- *  - [tellReporters]: a reporter who left a contact, the dismissal or the decision — once per report (a
- *    `DECISION_SENT` event is the record), from the address the deciding moderator's browser opened and sent, mailed
- *    from memory and stored nowhere, bounded per address as a receipt is ([ReportRateLimiter.allowReceipt]).
+ *    current form ([StatementTemplate.mailBody]), **never the facts** of a moderator's measure: their passage says they
+ *    are in veyq (ADR 0049). A recipient whose mail did not go out is retried by the hourly cleanup ([retryDue]) for
+ *    seven days. **A Server Owner's own step** (a sign-in block, a tenant taken offline) is mailed with its facts, the
+ *    Server Owner's own words handed in with the step and held only in memory (owner decision Q24 of
+ *    cr-statement-legal-gaps; ADR 0049 decision 2: a consented disclosure by their author) — once: the server keeps no
+ *    clear copy to retry from, so [retryDue] leaves those statements alone.
+ *  - [tellReporters]: a reporter who left a contact, the dismissal or the decision and their redress (DSA Art. 16(5),
+ *    [StatementTemplate.renderRedress] in the current form) — once per report (a `DECISION_SENT` event is the record),
+ *    from the address the deciding moderator's browser opened and sent, mailed from memory and stored nowhere, bounded
+ *    per address as a receipt is ([ReportRateLimiter.allowReceipt]).
  *  - [objectionReceived]: every confirmed moderator and the contact's notification address, that an objection arrived.
  *  - [objectionAnswered]: the objector, that the answer is in veyq.
  * Nothing here logs an address (ADR 0092 § 1).
@@ -57,9 +63,12 @@ class StatementMail(
 
     private data class Outgoing(val recipientRowId: String, val address: String, val body: String)
 
-    /** Mail every member [statementId] names whose mail has not gone out. Answers how many went out now. */
-    fun statementSent(statementId: String): Int = runCatching {
-        val outgoing = QuarkusTransaction.requiringNew().call { outgoingOf(statementId) }
+    /**
+     * Mail every member [statementId] names whose mail has not gone out. Answers how many went out now. [stepFacts] are a
+     * Server Owner's step's facts, which only that step's own call hands in.
+     */
+    fun statementSent(statementId: String, stepFacts: String? = null): Int = runCatching {
+        val outgoing = QuarkusTransaction.requiringNew().call { outgoingOf(statementId, stepFacts) }
         outgoing.count { o ->
             val sent = mailer.mailTo(o.address, StatementTemplate.MAIL_SUBJECT.en + " / " + StatementTemplate.MAIL_SUBJECT.de, o.body, "a statement of reasons") ==
                 DeliveryResult.SENT
@@ -74,7 +83,10 @@ class StatementMail(
     /** The cleanup's retry: every statement sent in the last seven days that still owes a member its mail. */
     fun retryDue(now: Instant = Instant.now()): Int {
         val due = QuarkusTransaction.requiringNew().call {
-            val recent = ModerationStatementEntity.list("sentAt > ?1", now.minus(RETRY_WINDOW)).map { it.id }
+            // A Server Owner's step is not retried: its facts were held only for the one send (see the class comment).
+            val recent = ModerationStatementEntity.list("sentAt > ?1", now.minus(RETRY_WINDOW))
+                .filter { ModerationBlockEntity.findById(it.measureId)?.blockKind?.isServerOwnerStep != true }
+                .map { it.id }
             if (recent.isEmpty()) emptyList()
             else StatementRecipientEntity.list(
                 "statementId in ?1 and recipientKind = ?2 and mailedAt is null", recent, RecipientKind.ACCOUNT.name,
@@ -83,13 +95,19 @@ class StatementMail(
         return due.sumOf { statementSent(it) }
     }
 
-    private fun outgoingOf(statementId: String): List<Outgoing> {
+    private fun outgoingOf(statementId: String, stepFacts: String?): List<Outgoing> {
         val statement = ModerationStatementEntity.findById(statementId) ?: return emptyList()
         val sentAt = statement.sentAt ?: return emptyList()
         val measure = ModerationBlockEntity.findById(statement.measureId) ?: return emptyList()
-        val kind = measure.blockKind.wire ?: return emptyList()
-        val case = ModerationCaseEntity.findById(statement.caseId) ?: return emptyList()
-        val domain = ScopeEntity.findById(case.scopeId)?.tenantId?.let { TenantEntity.findById(it) }?.domain ?: return emptyList()
+        val step = measure.blockKind.isServerOwnerStep
+        val kind = measure.blockKind.wire ?: measure.kind.takeIf { step } ?: return emptyList()
+        // The host a moderator's statement sends the reader to, and the tenant a suspension names; a sign-in block needs none.
+        val domain = when (measure.blockKind) {
+            BlockKind.MEMBER_SIGN_IN -> ""
+            BlockKind.TENANT_OFFLINE -> TenantEntity.findById(measure.targetId)?.domain ?: return emptyList()
+            else -> statement.caseId?.let { ModerationCaseEntity.findById(it) }
+                ?.let { ScopeEntity.findById(it.scopeId) }?.tenantId?.let { TenantEntity.findById(it) }?.domain ?: return emptyList()
+        }
         val form = formNow(operatingMode)
         val contact = contactOf(operator)
         return StatementRecipientEntity.list(
@@ -103,7 +121,10 @@ class StatementMail(
                 ground = StatementGround.valueOf(statement.ground),
                 date = TIME.format(sentAt),
                 contact = contact,
-                hasFacts = statement.sealedFacts != null,
+                hasFacts = if (step) stepFacts != null else statement.sealedFacts != null,
+                provision = statement.provision,
+                channel = if (step) ObjectionChannel.BY_CONTACT else ObjectionChannel.IN_APP,
+                mailFacts = stepFacts.takeIf { step },
             )
             Outgoing(r.id, address, StatementTemplate.mailBody(form, fields, domain))
         }
@@ -121,7 +142,8 @@ class StatementMail(
                     if (ofCase && !told) ReportReceived.reference(notice.reportId) else null
                 } ?: return@runCatching
                 if (!limiter.allowReceipt(notice.address)) return@runCatching
-                if (mailer.mailTo(notice.address, DECISION_SUBJECT, decisionBody(reference, decision), "a report's decision") == DeliveryResult.SENT) {
+                val body = decisionBody(reference, decision, formNow(operatingMode), contactOf(operator))
+                if (mailer.mailTo(notice.address, DECISION_SUBJECT, body, "a report's decision") == DeliveryResult.SENT) {
                     QuarkusTransaction.requiringNew().run {
                         moderationLog.appendCase(
                             ModerationEvent.DECISION_SENT, Instant.now(), caseId, moderatorId = moderatorId, reason = decision.name,
@@ -164,8 +186,11 @@ class StatementMail(
         const val OBJECTION_SUBJECT = "veyq: an objection to a moderation decision / ein Widerspruch gegen eine Moderationsentscheidung"
         const val ANSWER_SUBJECT = "veyq: your objection was decided / über deinen Widerspruch wurde entschieden"
 
-        /** A reporter's decision: their reference and the outcome — nothing of the case (ADR 0049). */
-        fun decisionBody(reference: String, decision: Decision): String {
+        /**
+         * A reporter's decision: their reference, the outcome and their redress in [form] (DSA Art. 16(5); the template's
+         * `reporterDecision`) — nothing of the case (ADR 0049).
+         */
+        fun decisionBody(reference: String, decision: Decision, form: StatementForm, contact: String?): String {
             val en = if (decision == Decision.DISMISSED) {
                 "The moderators of this veyq instance looked at your report and took no measure."
             } else {
@@ -176,13 +201,17 @@ class StatementMail(
             } else {
                 "Die Moderation dieser veyq-Instanz hat deine Meldung geprüft und eine Maßnahme ergriffen."
             }
+            val redressEn = StatementTemplate.renderRedress(StatementLang.EN, form, contact)
+            val redressDe = StatementTemplate.renderRedress(StatementLang.DE, form, contact)
             return """
                 |$en
+                |$redressEn
                 |Reference: $reference
                 |
                 |—
                 |
                 |$de
+                |$redressDe
                 |Aktenzeichen: $reference
             """.trimMargin()
         }

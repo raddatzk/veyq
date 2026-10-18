@@ -134,11 +134,34 @@ class ChildAbuseHoldSliceTest {
     }
 
     @Test
+    fun aChildAbuseHoldIsExtendedOnlyForAnAuthorityOrAnArt18ReportNamedInTheClear() {
+        val mod = CaseTestKit.moderator()
+        val r = reported("CHILD_SEXUAL_ABUSE")
+        val until = Instant.now().plus(120, ChronoUnit.DAYS).truncatedTo(ChronoUnit.MILLIS)
+        val before = holdOf(r.caseId)!!.expiresAt
+        // No type, or one keeping the content would not serve the report (§ 184b(5) StGB): refused, the hold unchanged.
+        for (type in listOf(null, "OBJECTION", "LAWYERS_LETTER", "LAWSUIT")) {
+            mod.extend(r.caseId, until.toString(), reasonType = type).then().statusCode(409).body("code", equalTo("extension_reason_not_allowed"))
+        }
+        assertEquals(before, holdOf(r.caseId)!!.expiresAt)
+        // An authority's reference extends it, and the log names the type in the clear beside the sealed reason.
+        mod.extend(r.caseId, until.toString(), reasonType = "AUTHORITY_REFERENCE").then().statusCode(200).body("hold.trigger", equalTo("EXTENDED"))
+        assertEquals(until, holdOf(r.caseId)!!.expiresAt)
+        val logged = QuarkusTransaction.requiringNew().call {
+            ModerationEventEntity.find("caseId = ?1 and event = ?2", r.caseId, "HOLD_EXTENDED").firstResult()!!
+        }
+        assertEquals("AUTHORITY_REFERENCE", logged.reason)
+        // Control — another category keeps today's rule: any type, or none.
+        val other = reported("TERMS_BREACH")
+        mod.extend(other.caseId, until.toString(), reasonType = "OBJECTION").then().statusCode(200)
+    }
+
+    @Test
     fun aLoggedExtensionMayPassTheBoundAndTheHandoverStillEndsIt() {
         val mod = CaseTestKit.moderator()
         val r = reported("CHILD_SEXUAL_ABUSE")
         val until = Instant.now().plus(150, ChronoUnit.DAYS).truncatedTo(ChronoUnit.MILLIS)
-        mod.extend(r.caseId, until.toString()).then().statusCode(200).body("hold.trigger", equalTo("EXTENDED"))
+        mod.extend(r.caseId, until.toString(), reasonType = "ART18_REPORT_IN_PROGRESS").then().statusCode(200).body("hold.trigger", equalTo("EXTENDED"))
         // A measure after it neither lengthens nor shortens the extension.
         mod.take(r.caseId, "CONTENT", targetId = r.folder, ground = "CHILD_SEXUAL_ABUSE").then().statusCode(201)
         assertEquals(until, holdOf(r.caseId)!!.expiresAt)

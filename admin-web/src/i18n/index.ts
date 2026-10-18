@@ -48,6 +48,9 @@ const en = {
     "reactivate": "Bring back online",
     "suspendConfirm": "Take this tenant offline? Nobody — including its members — can reach it until you bring it back. Nothing inside it is changed or deleted.",
     "suspendConfirmTitle": "Take this tenant offline",
+    "suspendOverContent": "Over content — a moderator proposed it, or it is over what the tenant hosts",
+    "suspendOverContentHint": "Then each owner of the tenant gets a statement of reasons by mail. A suspension for any other reason (unpaid, maintenance) carries none.",
+    "suspendSend": "Take offline and send the statement",
     "suspended": "Tenant taken offline.",
     "reactivated": "Tenant is back online.",
     "suspendedHint": "This tenant is offline. Every request to its address is refused until you bring it back; its content and members are untouched.",
@@ -330,7 +333,24 @@ const en = {
         "proposalNotFound": "This proposal no longer exists.",
         "blockNotFound": "This block no longer exists.",
         "invalidRequest": "The step couldn’t be sent as it is. Read the list again and retry.",
-        "notOwner": "Only the server owner can take these steps."
+        "notOwner": "Only the server owner can take these steps.",
+        "statementRequired": "This step is over content: write its statement of reasons first.",
+        "factsRequired": "Write what you found: on this instance the statement must state the facts.",
+        "provisionRequired": "Name the law or the clause it relies on: on this instance the statement must name it.",
+        "epochChanged": "The moderation key changed meanwhile. Try again.",
+        "moderationOff": "Moderation is off, so what you found can’t be sealed for the log. Turn it on first."
+      },
+      "statement": {
+        "title": "Statement of reasons",
+        "copy": "A step over content goes with a statement to the people it affects — the blocked member, or the tenant’s owners — by the instance mail and with what you found, since they cannot sign in to read it. Objections go to the instance contact. A draft until a lawyer has reviewed it.",
+        "ground": "Ground",
+        "provision": "The law or the clause it relies on",
+        "provisionHint": "A short reference, for example “§ 86a StGB” or “Space terms, clause 4”. Required on an instance run by a club, an organisation or a company.",
+        "facts": "What you found",
+        "factsHint": "Why the content falls under the law or the clause. It goes in the mail in your words; the server keeps it only sealed to the moderation key. Required on an instance run by a club, an organisation or a company.",
+        "noMail": "Without the instance mail set up, nobody is told.",
+        "send": "Block and send the statement",
+        "cancel": "Cancel"
       }
     }
   },
@@ -607,6 +627,9 @@ const de: typeof en = {
     "reactivate": "Wieder online nehmen",
     "suspendConfirm": "Diesen Tenant offline nehmen? Niemand — auch seine Mitglieder nicht — kommt hinein, bis du ihn wieder online nimmst. Nichts darin wird geändert oder gelöscht.",
     "suspendConfirmTitle": "Diesen Tenant offline nehmen",
+    "suspendOverContent": "Betrifft Inhalte — die Moderation hat es vorgeschlagen, oder es geht um das, was der Tenant bereitstellt",
+    "suspendOverContentHint": "Dann erhält jede Besitzperson des Tenants eine Begründung per E-Mail. Ein Offline-Nehmen aus einem anderen Grund (unbezahlt, Wartung) trägt keine.",
+    "suspendSend": "Offline nehmen und Begründung senden",
     "suspended": "Tenant ist offline.",
     "reactivated": "Tenant ist wieder online.",
     "suspendedHint": "Dieser Tenant ist offline. Jede Anfrage an seine Adresse wird abgewiesen, bis du ihn wieder online nimmst; Inhalte und Mitglieder bleiben unberührt.",
@@ -889,7 +912,24 @@ const de: typeof en = {
         "proposalNotFound": "Diesen Vorschlag gibt es nicht mehr.",
         "blockNotFound": "Diese Sperre gibt es nicht mehr.",
         "invalidRequest": "Der Schritt konnte so nicht gesendet werden. Lies die Liste neu und versuche es erneut.",
-        "notOwner": "Nur die Besitzperson des Servers kann diese Schritte vornehmen."
+        "notOwner": "Nur die Besitzperson des Servers kann diese Schritte vornehmen.",
+        "statementRequired": "Dieser Schritt betrifft Inhalte: Schreib zuerst seine Begründung.",
+        "factsRequired": "Schreib, was du festgestellt hast: Auf dieser Instanz muss die Begründung die Tatsachen nennen.",
+        "provisionRequired": "Nenne das Gesetz oder die Klausel, auf die er sich stützt: Auf dieser Instanz muss die Begründung sie nennen.",
+        "epochChanged": "Der Moderationsschlüssel hat sich inzwischen geändert. Versuche es erneut.",
+        "moderationOff": "Die Moderation ist aus, daher lässt sich das Festgestellte nicht für das Protokoll versiegeln. Schalte sie zuerst ein."
+      },
+      "statement": {
+        "title": "Begründung",
+        "copy": "Ein Schritt, der Inhalte betrifft, geht mit einer Begründung an die Betroffenen — das gesperrte Mitglied oder die Besitzpersonen des Tenants — per Instanz-E-Mail und mit dem, was du festgestellt hast, denn sie können sich nicht anmelden, um sie zu lesen. Widersprüche gehen an den Instanzkontakt. Ein Entwurf, bis er rechtlich geprüft ist.",
+        "ground": "Grund",
+        "provision": "Gesetz oder Klausel, auf die er sich stützt",
+        "provisionHint": "Ein kurzer Verweis, etwa „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
+        "facts": "Was du festgestellt hast",
+        "factsHint": "Warum der Inhalt unter das Gesetz oder die Klausel fällt. Es geht in deinen Worten in die E-Mail; der Server behält es nur an den Moderationsschlüssel versiegelt. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
+        "noMail": "Ohne eingerichtete Instanz-E-Mail erfährt es niemand.",
+        "send": "Sperren und Begründung senden",
+        "cancel": "Abbrechen"
       }
     }
   },

@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.moderation.statement
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsEntity
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsHandler
 import me.raddatz.veyq.core.admin.instance.InstanceMailUpdateOutcome
+import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationTestKit.asUser
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
@@ -58,6 +59,9 @@ class StatementMailSliceTest {
 
     @Inject
     lateinit var mail: StatementMail
+
+    @Inject
+    lateinit var operator: me.raddatz.veyq.core.admin.operator.OperatorDetailsStore
 
     private lateinit var mailbox: GreenMail
     private lateinit var mod: CaseTestKit.Moderator
@@ -160,6 +164,39 @@ class StatementMailSliceTest {
             assertTrue(stored.none { it.contains(reporter) }, "the address is stored")
         }
     }
+
+    @Test
+    fun aReportersDecisionCarriesTheirRedressInTheFormTheModeSets() {
+        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
+        try {
+            // Organisation: the full redress — report again, the courts, the Digital Services Coordinator (DSA Art. 16(5), 53).
+            mode(null)
+            val reporter = "redress-${UUID.randomUUID()}@example.com"
+            val org = reported()
+            mod.dismiss(org.caseId, reporters = listOf(org.reportId to reporter)).then().statusCode(200)
+            val full = textOf(mailsTo(reporter).single { it.subject == StatementMail.DECISION_SUBJECT })
+            assertTrue(full.contains("If you have more information, you can report it again."), full)
+            assertTrue(full.contains("You can also go to court."), full)
+            assertTrue(full.contains("Digital Services Coordinator of the Member State where you live or are established"), full)
+            assertTrue(full.contains("Koordinator für digitale Dienste"), full)
+            // Private: the reduced form drops the courts and the coordinator — and keeps "report again" (the control).
+            mode("PRIVATE")
+            mailbox.purgeEmailFromAllMailboxes()
+            val privateReporter = "redress-${UUID.randomUUID()}@example.com"
+            val priv = reported()
+            mod.take(priv.caseId, "CONTENT", targetId = priv.folder, facts = false, reporters = listOf(priv.reportId to privateReporter))
+                .then().statusCode(201)
+            val reduced = textOf(mailsTo(privateReporter).single { it.subject == StatementMail.DECISION_SUBJECT })
+            assertTrue(reduced.contains("If you have more information, you can report it again."), reduced)
+            assertFalse(reduced.contains("go to court"), reduced)
+            assertFalse(reduced.contains("Digital Services Coordinator"), reduced)
+        } finally {
+            mode(before)
+        }
+    }
+
+    /** The operating mode's column alone — the statement's form reads it. */
+    private fun mode(value: String?) = QuarkusTransaction.requiringNew().run { operator.lockedRow().operatingMode = value }
 
     @Test
     fun theModeratorsLearnOfAnObjectionAndTheObjectorOfItsAnswer() {

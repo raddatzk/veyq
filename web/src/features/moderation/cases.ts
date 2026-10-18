@@ -9,6 +9,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { moderationApi } from '../../api/client'
 import type {
+  HoldExtensionReason,
   ModerationCase,
   ModerationCaseExport,
   ModerationCaseState,
@@ -123,10 +124,16 @@ export async function dismissCase(caseId: string, note: string, reporterNotices:
 export type MeasureKind = 'SHARE' | 'CONTENT' | 'GUEST_IDENTITY'
 
 /**
- * What a step's statement carries: the ground, the facts the moderator wrote (empty for none), and — only when an
+ * What a step's statement carries: the ground, the provision of the law or the clause of the terms it relies on (in the
+ * clear, DSA Art. 17(3)(d), (e); empty for none), the facts the moderator wrote (empty for none), and — only when an
  * authority asked for it (ADR 0093 § 7) — its deferral: the end, and the authority's request, sealed as its reason.
  */
-export type StatementDraft = { ground: ModerationGround; facts: string; deferral?: { until: Date; reason: string } | null }
+export type StatementDraft = {
+  ground: ModerationGround
+  provision?: string
+  facts: string
+  deferral?: { until: Date; reason: string } | null
+}
 
 /**
  * The facts sealed for every member [kind] on [target] would tell — the server's list, read with a proof over the case.
@@ -164,7 +171,7 @@ export async function takeMeasure(
     shareId: target.shareId ?? null,
     targetId: target.targetId ?? null,
     note: sealNote(caseId, note),
-    statement: { ground: statement.ground, facts, factsFor: sealedFor, deferral },
+    statement: { ground: statement.ground, provision: statement.provision?.trim() || null, facts, factsFor: sealedFor, deferral },
     reporterNotices,
   }
   const proof = await proofFor('takeModerationMeasure', caseId)
@@ -203,11 +210,13 @@ export async function proposeStep(caseId: string, step: ModerationProposalStep, 
   return withRefresh(() => moderationApi().proposeModerationStep({ caseId, moderationProposalRequest: body, ...proof }))
 }
 
-export async function extendHold(caseId: string, until: Date, reason: string): Promise<ModerationCase> {
+export async function extendHold(
+  caseId: string, until: Date, reason: string, reasonType: HoldExtensionReason | null = null,
+): Promise<ModerationCase> {
   const sealed = sealNote(caseId, reason)
   if (!sealed) throw new Error('extension_reason_required')
   const proof = await proofFor('extendModerationHold', caseId)
-  return withRefresh(() => moderationApi().extendModerationHold({ caseId, moderationHoldExtension: { until, reason: sealed }, ...proof }))
+  return withRefresh(() => moderationApi().extendModerationHold({ caseId, moderationHoldExtension: { until, reasonType, reason: sealed }, ...proof }))
 }
 
 /** An authority's deferral with its request sealed as the reason; the request is required — deferring is never the moderator's call. */

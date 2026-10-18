@@ -195,8 +195,14 @@ class ModerationMeasuresSliceTest {
             .body("proposals.size()", equalTo(2))
             .body("proposals.find { it.step == 'TENANT_OFFLINE' }.tenantDomain", not(equalTo(null)))
             .body("proposals.find { it.step == 'MEMBER_SIGN_IN' }.address", equalTo(emailOf(member)))
-        // Suspending the tenant takes its proposal; declining the other settles it.
-        ModerationTestKit.asOwner(mod.id).`when`().post("/api/tenants/${w.tenantId}/suspend").then().statusCode(204)
+        // Suspending the tenant takes its proposal — over content, so only with its statement of reasons (ADR 0093 § 7);
+        // declining the other settles it.
+        ModerationTestKit.asOwner(mod.id).`when`().post("/api/tenants/${w.tenantId}/suspend").then().statusCode(400)
+            .body("code", equalTo("statement_required"))
+        ModerationTestKit.asOwner(mod.id).body(
+            """{"statement":{"statementId":"${UUID.randomUUID()}","ground":"TERMS_BREACH","provision":"Space terms, clause 4",""" +
+                """"facts":"what was found","factsForLog":{"epoch":1,"sealedFacts":"c2VhbGVk"}}}""",
+        ).`when`().post("/api/tenants/${w.tenantId}/suspend").then().statusCode(204)
         val memberProposal = ModerationTestKit.asOwner(mod.id).`when`().get("/api/instance/moderation/steps").then()
             .body("proposals.size()", equalTo(1)).extract().path<String>("proposals[0].id")
         ModerationTestKit.asOwner(mod.id).`when`().post("/api/instance/moderation/proposals/$memberProposal/decline")

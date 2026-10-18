@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation
 
+import me.raddatz.veyq.core.moderation.statement.toStepInput
 import me.raddatz.veyq.core.generated.api.InstanceModerationApi
 import me.raddatz.veyq.core.generated.model.AppointModeratorRequest
 import me.raddatz.veyq.core.generated.model.BlockAccountSignInRequest
@@ -59,8 +60,9 @@ class InstanceModerationResource(
 
     override fun declineModerationProposal(proposalId: UUID): Response = stepped(steps.decline(caller(), proposalId.toString()))
 
-    override fun blockAccountSignIn(blockAccountSignInRequest: BlockAccountSignInRequest): Response =
-        stepped(steps.block(caller(), blockAccountSignInRequest.address, blockAccountSignInRequest.caseId?.toString()))
+    override fun blockAccountSignIn(blockAccountSignInRequest: BlockAccountSignInRequest): Response = with(blockAccountSignInRequest) {
+        stepped(steps.block(caller(), address, caseId?.toString(), overContent = overContent ?: false, statement = statement?.toStepInput()))
+    }
 
     override fun unblockAccountSignIn(blockId: UUID): Response = stepped(steps.unblock(caller(), blockId.toString()))
 
