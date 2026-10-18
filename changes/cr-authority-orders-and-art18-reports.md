@@ -1,7 +1,7 @@
 ---
 id: cr-authority-orders-and-art18-reports
 title: An authority's order blocks by id within the hour; Art. 18 reports and the child-sexual-abuse-material flow
-status: in-progress
+status: done
 satisfies: [uc.moderation.authority-order, uc.moderation.report-to-an-authority]
 adrs: ["0093", "0099", "0065", "0088"]
 invariants:
@@ -94,11 +94,11 @@ Phase 0 writes `uc.moderation.authority-order` (removal, preservation, informati
 - [x] **3 admin-web + CLI** — the order form (share URL or id, reference, time of receipt) with the Annex II text and
   the Annex III draft to copy; `veyq-admin order remove|preserve|inform`. · Done when: `npm run check` in `admin-web/`
   green; a test that a pasted URL's fragment is dropped before the request leaves (bite: send it → red).
-- [ ] **4 web: moderation surface** — the same order form for a moderator; the deferral entry and reminder; the export
+- [x] **4 web: moderation surface** — the same order form for a moderator; the deferral entry and reminder; the export
   block; the CSAM warning and preselection (decision 5); the handover. EN+DE. · Done when: `npm run check` green; a
   browser pass of a removal order entered by a moderator and one by the Server Owner, each timed from submit to the
   guest's `404`.
-- [ ] **5 docs + coverage** — `run/moderation.md` gains the emergency page ADR 0093 § Consequences lists (110, the BKA
+- [x] **5 docs + coverage** — `run/moderation.md` gains the emergency page ADR 0093 § Consequences lists (110, the BKA
   portal registered ahead, `TCO@bka.bund.de`, what never to do; forward the contact to a phone; turn public links off if
   the hour cannot be kept), and the table of which instances the DSA, the TCO Regulation and the GDPR reach by operator
   kind; coverage refs. · Done when: coverage, wiki-sources and the site check green.
@@ -113,4 +113,28 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+**Legal blockers at close — all still open, none answered** (ADR 0093 § Legal basis, Still open): § 184b(5) StGB — the
+hold-until-handover is **not built** (a recorded handover changes no hold; the Run docs advise the police at once and
+nothing beyond the hold); the time-bound authority link — **not built**; the port's worth — the export carries the
+port as a bare field and no wording about it; every text (the Annex drafts, the warning, the emergency page, the law
+table) is marked a draft pending qualified review.
+
+- **Planning — the deferral had no moment to be entered.** Decision 3 made the deferral "a row on the statement", but a
+  statement goes out with its measure in one transaction, so a deferral entered afterwards would defer nothing. Built:
+  the deferral rides with the removal order and with a moderator's measure, and the separate operation only renews it.
+  The CR settled *what* the switch is and not *when* it can still be thrown (harvested into `changes/README.md`).
+  *Next time:* a refine that adds a switch holding back a side effect names where it is entered before that effect fires.
+- **Execution — a bite went red for the wrong reason, twice.** Two backend bites ran while I edited the instance
+  contract in parallel; both "failed" on a compile error, not on their assertion, and only reading the logs showed it.
+  A third (the deferral's end) stayed green because the query already filtered what the bitten re-check refused — the
+  two layers had to be held off together. Both are rules `changes/README.md` already carries; I followed them only
+  after the logs disagreed. *Next time:* nothing that reaches a bitten module's compile is edited while its bite runs.
+- **Process — the worktree resolved `@veyq/crypto` from the main checkout.** A worktree under `.claude/worktrees/` has
+  no `node_modules` of its own, so Node walks up into the main checkout's, and admin-web type-checked against main's
+  crypto (no `sealOrderReference`). The root `npm ci` in the worktree fixed it. *Next time:* a worktree runs the root
+  `npm ci` before its first client check.
+- **Locator changes against the CR's substrate (re-grounded at `26e3cfff`):** the share-link line is
+  `web/src/core/sharing/shareLink.ts:27` (`buildShareLink`), and nothing parsed a pasted link, so each client got its
+  own `parseShareReference`; the block rows and the hold-end setter are `veyq_moderation_block` (`active_key`,
+  `lifted_at`) and `Holds.moveEnd`, now with a floor; an order's case is keyed `ORDER:<id>`, never taking a report's
+  place as its item's open case. No locator change altered a decision.

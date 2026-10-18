@@ -1923,6 +1923,14 @@ that tells someone something writes a row per recipient kind (member, guest, rep
 that reaches them (in the app — on which screen —, by mail — from which address the server holds in the clear —, or
 none), and the measures or steps the duty does NOT reach (the Server Owner's own steps carried no statement here).
 
+### A switch that holds back a side effect names where it is entered before the effect fires
+
+`cr-authority-orders-and-art18-reports` decided the authority's deferral as "a row on the statement", and a statement
+goes out with its measure in one transaction: a deferral entered on the statement afterwards would have deferred
+nothing. The implementer had to put it on the two requests that fire the statement (the order, the measure) and leave
+the separate operation to the renewal. So a refine that adds a hold-back, an opt-out or a delay names the request it
+travels with, ahead of the effect — or says why the effect waits for it.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
