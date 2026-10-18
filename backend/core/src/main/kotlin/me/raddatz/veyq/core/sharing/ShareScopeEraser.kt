@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -13,13 +15,17 @@ import jakarta.enterprise.context.ApplicationScoped
  * node — then `veyq_share_identity` (FK to `veyq_share`, no `scope_id`, so by share ids), then the shares.
  */
 @ApplicationScoped
-class ShareScopeEraser : ScopeEraser {
+class ShareScopeEraser(private val measures: MeasureTargets) : ScopeEraser {
     override val phase = 800
 
     override fun eraseScope(scopeId: String) {
         val shareIds = ShareEntity.find("scopeId", scopeId).list().map { it.id }
+        val identityIds = if (shareIds.isEmpty()) emptyList() else ShareIdentityEntity.list("shareId in ?1", shareIds).map { it.id }
         shareIds.forEach { id -> ShareRetiredIdEntity().apply { this.id = id }.persist() }
         if (shareIds.isNotEmpty()) ShareIdentityEntity.delete("shareId in ?1", shareIds)
         ShareEntity.delete("scopeId", scopeId)
+        // A measure on a link or a guest uploader ends with it (ADR 0093 § 6): after the deletes, which hold the rows' locks.
+        measures.erased(MeasureTargets.ON_LINK, shareIds)
+        measures.erased(listOf(BlockKind.GUEST_IDENTITY), identityIds)
     }
 }

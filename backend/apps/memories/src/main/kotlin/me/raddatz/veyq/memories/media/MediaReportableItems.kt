@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.moderation.report.ReportableItem
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 
@@ -35,4 +36,8 @@ class MediaReportableItems(private val revisions: NodeItemsRevisions) : Reportab
         medium.updatedAt = Instant.now()
         revisions.bump(medium.scopeId, medium.nodeId)
     }
+
+    /** The medium's row, locked as every purge of it locks it (`MediaStore.purgeMedia`, the retention purge, a guest's delete). */
+    override fun lockExisting(itemId: String): Boolean =
+        MediaEntity.find("id", itemId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
 }

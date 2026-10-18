@@ -15,6 +15,7 @@ import jakarta.transaction.Transactional
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * The erasure ledger's kinds (ADR 0056 decision 8) — a **sealed set**: [ErasureReapplication] re-applies a line through a
@@ -168,15 +169,28 @@ class ErasureLedger {
     }
 
     private fun write(kind: String, subject: String, extra: LinkedHashMap<String, String?>, at: Instant? = null) {
-        val now = at ?: Instant.now()
-        val fields = linkedMapOf<String, String?>("at" to now.toString(), "kind" to kind, "id" to subject)
+        val recorded = nextRecordedAt()
+        val fields = linkedMapOf<String, String?>("at" to (at ?: recorded).toString(), "kind" to kind, "id" to subject)
         extra.forEach { (k, v) -> if (v != null) fields[k] = v }
         ErasureOutboxEntity().apply {
             id = UUID.randomUUID().toString()
             this.kind = kind
             subjectId = subject
             line = LedgerLine(fields).json()
-            recordedAt = Instant.now()
+            recordedAt = recorded
         }.persist()
     }
+
+    /**
+     * The outbox's order is the file's, and the file's order is what "the last line wins" reads (a block and its lift, a
+     * case's events): so every row gets a `recorded_at` strictly after the one before it, on the column's millisecond.
+     * A plain `Instant.now()` gave a case's last event and its close, written in one transaction, the same millisecond,
+     * and the sweep's tie-break — a random id — then put the case's open state last about half the time.
+     */
+    private fun nextRecordedAt(): Instant {
+        val now = Instant.now().toEpochMilli()
+        return Instant.ofEpochMilli(lastMillis.updateAndGet { last -> maxOf(now, last + 1) })
+    }
+
+    private val lastMillis = AtomicLong(0)
 }

@@ -1,6 +1,8 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.backup.ErasureLedger
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
@@ -98,6 +100,8 @@ class MediaStore(
     private val guestWriteRecords: GuestWriteRecords,
     /** Core's erasure ledger: a hard-deleted medium enters it as Memories' `MEDIA` (ADR 0056 decision 8, [MemoriesErasures]). */
     private val ledger: ErasureLedger,
+    /** Core's measures: a content block on a medium ends with it (ADR 0093 § 6), from [purgeMediaRows]. */
+    private val measures: MeasureTargets,
 ) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
@@ -270,6 +274,9 @@ class MediaStore(
         // The erasure ledger's line (ADR 0056 decision 8): a guest's delete of its own upload leaves no trash to re-fire,
         // and a capture older than any of these brings the medium back.
         ledger.erasedByApplication(MemoriesErasures.Kind.MEDIA.name, media.id, media.scopeId)
+        // A content block on the medium ends with it (ADR 0093 § 6, GDPR Art. 5(1)(e)) — it would otherwise stand on nothing
+        // and hold its case's records forever. After the row's delete, which it flushes (MeasureTargets.erased).
+        measures.erased(listOf(BlockKind.CONTENT_ITEM), listOf(media.id))
     }
 
     /**

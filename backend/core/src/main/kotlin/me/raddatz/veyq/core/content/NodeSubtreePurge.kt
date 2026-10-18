@@ -2,6 +2,8 @@ package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.sharing.SharingStore
@@ -43,13 +45,15 @@ import org.jboss.logging.Logger
  * And it **ends every link on the erased nodes** (ADR 0029 §7). Trashing a node leaves its links resolving to
  * nothing and bringing it back on restore; once the node is erased there is nothing to bring back, and a link left
  * standing kept answering `200` with its sealed title, listed nowhere a member could revoke it. With the links go the
- * guest identities nothing can use or open any more (inbox #229).
+ * guest identities nothing can use or open any more (inbox #229). And every moderation measure on an erased node, link
+ * or identity ends in the same transaction ([MeasureTargets.erased]).
  */
 @ApplicationScoped
 class NodeSubtreePurge(
     private val sharing: SharingStore,
     private val nodes: NodesStore,
     private val ledger: ErasureLedger,
+    private val measures: MeasureTargets,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All erasers: MutableList<NodeSubtreeEraser>,
@@ -148,6 +152,9 @@ class NodeSubtreePurge(
         // a capture older than the trash brings the node back live.
         erased.forEach { ledger.erased(ErasureKind.NODE, it.id, scopeId) }
         erased.forEach { NodeEntity.deleteById(it.id) }
+        // A content block on an erased node ends with it (ADR 0093 § 6, GDPR Art. 5(1)(e)): it would otherwise stand on
+        //    nothing forever and hold its case's records with it. After the deletes, which it flushes (MeasureTargets).
+        measures.erased(listOf(BlockKind.CONTENT_NODE), nodeIds)
 
         // The guests of ANY deleted link whose last attachment, identity folder, field or application row naming them went above — a link
         //    deleted earlier loses its guests here, with the last node that held their uploads. After every eraser

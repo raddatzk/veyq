@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.block.ProposalOutcome
@@ -65,6 +66,7 @@ class SignInBlocks(
     private val statements: StepStatements,
     private val mail: StatementMail,
     private val ledger: ErasureLedger,
+    private val targets: MeasureTargets,
 ) {
 
     /** The open proposals and the sign-in blocks in force. */
@@ -214,25 +216,11 @@ class SignInBlocks(
 
     /**
      * [targetId] — an account or a tenant — was erased, **in its purge's transaction** (ADR 0101 decisions 7, 10): every
-     * measure of [kinds] on it still in force ends with it, lifted by no one and logged so, dated from [now]. Without
-     * this a measure on nothing would stand forever, and its statement and its case's records with it — the retention of
-     * ADR 0093 § 11 counts from a lift (GDPR Art. 5(1)(e)).
+     * measure of [kinds] on it still in force ends with it, lifted by no one and logged so, dated from [now] — the one
+     * rule every eraser follows ([MeasureTargets.erased]).
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun targetErased(targetId: String, kinds: List<BlockKind>, now: Instant) {
-        ModerationBlockEntity.list("targetId = ?1 and kind in ?2 and activeKey is not null", targetId, kinds.map { it.name })
-            .forEach { row ->
-                row.liftedAt = now
-                row.activeKey = null
-                ledger.blockLifted(row)
-                val caseId = row.caseId
-                if (caseId != null) {
-                    log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = targetId)
-                } else {
-                    log.append(ModerationEvent.MEASURE_LIFTED, now, moderatorId = null, actorId = null, reason = row.kind, targetId = targetId, datedFrom = now)
-                }
-            }
-    }
+    fun targetErased(targetId: String, kinds: List<BlockKind>, now: Instant) = targets.erased(kinds, listOf(targetId), now)
 
     private fun lift(kind: BlockKind, tenantId: String, serverOwnerId: String, now: Instant) {
         val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, tenantId)).firstResult()

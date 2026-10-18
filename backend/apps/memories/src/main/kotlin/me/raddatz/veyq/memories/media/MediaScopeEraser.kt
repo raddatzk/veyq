@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -12,12 +14,14 @@ import jakarta.enterprise.context.ApplicationScoped
  * Deliberately **not** `MediaStore.purgeMediaRows` (the per-media purge): this erases set-based by scope.
  */
 @ApplicationScoped
-class MediaScopeEraser : ScopeEraser {
+class MediaScopeEraser(private val measures: MeasureTargets) : ScopeEraser {
     override val phase = 100
 
     override fun eraseScope(scopeId: String) {
         val mediaIds = MediaEntity.find("scopeId", scopeId).list().map { it.id }
         if (mediaIds.isNotEmpty()) MediaDerivativeEntity.delete("mediaId in ?1", mediaIds)
         MediaEntity.delete("scopeId", scopeId)
+        // A content block on a medium ends with it (ADR 0093 § 6): after the delete, which holds the rows' locks.
+        measures.erased(listOf(BlockKind.CONTENT_ITEM), mediaIds)
     }
 }

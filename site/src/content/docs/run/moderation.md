@@ -121,7 +121,10 @@ moderator. Without instance mail ([Configuration](/veyq/run/configuration/)) the
 A measure decides the case, and its hold then ends six months after its statement is sent (after the decision, where
 nobody could be told). **Lift** on a measure — any
 moderator's — serves its target again, unchanged; lifting the case's last measure in force ends its hold and closes
-the case. Blocking deletes nothing. A step on something the case does not know, or one already in force, is refused.
+the case. Blocking deletes nothing. A measure also ends when what it stands on is erased — a link deleted, a node or
+an item purged from the trash, a guest's identity dropped, a space, an account or a tenant purged: it ends then, lifted by
+no one, the log says so, and the case's records run to their date; its hold keeps its own end. A step taken on something
+already erased ends at once. A step on something the case does not know, or one already in force, is refused.
 A block reaches the reported item only: a copy a member made of it is a new item.
 
 ## A member's sign-in, and a tenant: your steps

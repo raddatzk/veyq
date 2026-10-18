@@ -7,24 +7,20 @@ import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.content.NodeSubtreePurge
-import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.report.CaseOrigin
 import me.raddatz.veyq.core.moderation.report.CaseState
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.moderation.report.ReportCategory
 import me.raddatz.veyq.core.moderation.report.ReportItemKind
-import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.sharing.ShareEntity
-import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.SharingStore
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
-import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -66,6 +62,7 @@ class ErasureReapplication(
     private val sharing: SharingStore,
     private val sessions: SessionService,
     private val log: ModerationLog,
+    private val measures: MeasureTargets,
     private val config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin.collections.List with @All (ScopePurge says why).
     @All applications: MutableList<ApplicationErasures>,
@@ -165,16 +162,9 @@ class ErasureReapplication(
         val target = line["target"] ?: return false
         val key = ModerationBlockEntity.activeKeyOf(kind, target)
         if (ModerationBlockEntity.count("activeKey", key) > 0) return false
-        val exists = when (kind) {
-            BlockKind.SHARE, BlockKind.REPORTER_LINK -> ShareEntity.findById(target) != null
-            BlockKind.GUEST_IDENTITY -> ShareIdentityEntity.findById(target) != null
-            BlockKind.CONTENT_NODE -> NodeEntity.findById(target) != null
-            // An application's item: core cannot ask for its row, the space must be there.
-            BlockKind.CONTENT_ITEM -> line["scope"]?.let { ScopeEntity.findById(it) != null } ?: true
-            BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT -> VeyqUser.findById(target) != null
-            BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED -> TenantEntity.findById(target) != null
-        }
-        if (!exists) return false // created after the capture: the restored database cannot hold what it stood on
+        // The row it stands on, locked as every measure-taker locks it (`MeasureTargets.lockStanding`, an application's
+        // item through its own `ReportableItems`): one created after the capture, or erased, is not there to block.
+        if (!measures.lockStanding(kind, target)) return false
         val caseId = line["case"]?.takeIf { ModerationCaseEntity.findById(it) != null }
         val takenAt = line.at
         val row = ModerationBlockEntity().apply {

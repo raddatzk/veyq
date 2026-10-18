@@ -97,6 +97,10 @@ A block decides the case, and what was kept for it is then kept for six months. 
 another moderator's — serves what it blocked again, unchanged. Lifting the last measure in force releases what was kept
 and closes the case.
 
+A measure ends on its own when what it blocks is deleted for good — a link deleted, something purged from the trash, a
+space deleted: the case then shows it lifted, though nobody lifted it. What was kept for the case stays kept for its six months all the same.
+A block you take on something already deleted for good ends at once; your decision and its statement stay.
+
 ## Objections
 
 Someone affected by a block can object once. The case then shows the objection under **Objections**, opened for you,

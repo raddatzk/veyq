@@ -115,6 +115,18 @@ class ErasureLedgerSliceTest {
         assertEquals(setOf("at", "kind", "id", "scope"), line.fields.keys, "ids and a time — never content or a name")
     }
 
+    /** "The last line wins" reads the file's order, which is the outbox's: lines written in one millisecond — a case's
+     *  last event and its close, in one transaction — must still come out in the order they were written. */
+    @Test
+    fun linesWrittenInOneMillisecondKeepTheirOrder() {
+        val ids = (1..40).map { "%02d-%s".format(it, UUID.randomUUID()) }
+        QuarkusTransaction.requiringNew().run { ids.forEach { ledger.erased(ErasureKind.SCOPE, it) } }
+        val times = read { ErasureOutboxEntity.list("order by recordedAt").map { it.recordedAt } }
+        assertTrue(times.zipWithNext().all { (a, b) -> b.isAfter(a) }, "every row strictly after the one before")
+        file.sweep()
+        assertEquals(ids, lines().map { it.id }, "the file in the order the lines were written")
+    }
+
     @Test
     fun aLineOlderThanBIsDroppedAtStartAndAYoungerOneStays() {
         val now = Instant.now()
@@ -278,6 +290,35 @@ class ErasureLedgerSliceTest {
         assertEquals(1L, read { ModerationBlockEntity.count("activeKey", key) }, "blocked again, on its basis")
         assertEquals(0L, read { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", lifted) }, "a lift is never re-blocked")
         assertEquals(0, start.run().reblocked, "a block in force is not taken twice")
+    }
+
+    /** A measure the erasure of its target ended (`MeasureTargets.erased`) is a lift line too: a restore of a capture from
+     *  before the erasure brings the account and its block back, and the start erases the one and lifts the other. */
+    @Test
+    fun aMeasureEndedByItsTargetsErasureIsALiftAndARestoreDoesNotBringItBack() {
+        val owner = seedUser(serverRole = "SERVER_OWNER")
+        val member = seedUser()
+        assertNull(blocks.block(owner, "u-$member@example.com", null))
+        val block = read { ModerationBlockEntity.find("targetId", member).firstResult()!!.id }
+        val user = read { VeyqUser.findById(member)!! }
+        QuarkusTransaction.requiringNew().run {
+            AccountErasureEntity().apply {
+                accountId = member; requestedAt = Instant.now(); requestedBy = AccountErasureEntity.SERVER_OWNER; dueAt = Instant.now()
+            }.persist()
+        }
+        accounts.purge(member)
+        assertEquals(listOf("BLOCK", "LIFT"), read {
+            ErasureOutboxEntity.list("subjectId = ?1 order by recordedAt", block).map { it.kind }
+        }, "the eraser's end of the measure is a lift line")
+        // The restore: the account and its block, in force, as a capture before the erasure holds them.
+        restore(user)
+        QuarkusTransaction.requiringNew().run {
+            ModerationBlockEntity.update("liftedAt = null, activeKey = ?1 where id = ?2",
+                ModerationBlockEntity.activeKeyOf(BlockKind.MEMBER_SIGN_IN, member), block)
+        }
+        start.run()
+        assertNull(read { VeyqUser.findById(member) })
+        assertEquals(0L, read { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", member) })
     }
 
     @Test

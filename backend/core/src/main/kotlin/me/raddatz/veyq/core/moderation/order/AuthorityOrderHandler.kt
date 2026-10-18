@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationFailures
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTargets
 import me.raddatz.veyq.core.moderation.cases.ResolvedStep
@@ -107,6 +108,7 @@ class AuthorityOrderHandler(
     private val notices: CaseNotices,
     private val operator: OperatorDetailsHandler,
     private val ledger: ErasureLedger,
+    private val measureTargets: MeasureTargets,
 ) {
 
     /** What [enterIn] wrote: the order, the space whose live views learn a content block, the statements that went out. */
@@ -231,8 +233,14 @@ class AuthorityOrderHandler(
         return Written(row, if (blocked.any { it.blockKind == BlockKind.CONTENT_NODE }) share.scopeId else null, statements) to null
     }
 
-    private fun block(kind: BlockKind, target: String, case: ModerationCaseEntity, scopeId: String, by: String, now: Instant) =
-        ModerationBlockEntity().apply {
+    /**
+     * Block [target] by id — its row locked first, as its eraser locks it ([MeasureTargets.lockStanding]): a link already
+     * deleted gets its block ended at once, lifted by no one, so the order's block and its date stay on record and no
+     * measure stands on nothing.
+     */
+    private fun block(kind: BlockKind, target: String, case: ModerationCaseEntity, scopeId: String, by: String, now: Instant): ModerationBlockEntity {
+        val standing = measureTargets.lockStanding(kind, target)
+        return ModerationBlockEntity().apply {
             id = UUID.randomUUID().toString()
             this.kind = kind.name
             targetId = target
@@ -245,7 +253,9 @@ class AuthorityOrderHandler(
             row.persist()
             ledger.blockTaken(row, BlockBasis.ORDER)
             log.appendCase(ModerationEvent.MEASURE_TAKEN, now, case.id, moderatorId = by, reason = row.kind, targetId = row.targetId)
+            if (!standing) measureTargets.erased(listOf(kind), listOf(target), now)
         }
+    }
 
     /**
      * [measure]'s statement of reasons (ADR 0093 § 7, § 12 "the notice to the uploader follows § 7"): basis `ORDER`, the
