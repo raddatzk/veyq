@@ -188,11 +188,12 @@ the moderation ADR's; this ADR only guarantees that no log is needed for it.
 - Backups are outside every retention veyq sets, except that the instance backup leaves the guest-write record's
   rows out (ADR 0093 § 10). The Run docs say so per table.
 
-## Inventory for the CR (moves into the joint CR when written; not built)
+## Inventory for the CR (moves into this ADR's CR when written; not built)
 
-The documentation that both ADRs change lands in one joint CR: `CLAUDE.md`'s invariant,
-`docs/crosscutting/security-model.md`, [ADR 0035](0035-server-terms-of-service.md) decision 3, and the terms
-template's clauses 2 and 7. What follows is this ADR's share.
+Each ADR's CR carries its own share of the documentation this ADR and ADR 0093 both change. ADR 0093's took the terms
+template's clause 9, clause 7's guest uploads and clause 2's sentence on what the host keeps about a guest write. This
+ADR's is `CLAUDE.md`'s invariant on what a log holds, the logs in `docs/crosscutting/security-model.md`,
+[ADR 0035](0035-server-terms-of-service.md) decision 3, and clause 2's sentence on logs; what follows is the rest of it.
 
 **Docs**
 - [ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md): the access-log remark at `:20` points here.

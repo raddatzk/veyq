@@ -25,6 +25,18 @@ it was asked for: it is a draft to edit, not a structure the terms are assembled
 individually toggled; the clause numbers are literal in the template text, so any subset would print a gap in
 the numbering. Absent a template insert, a language is free markdown from the first character.
 
+## The operator section beside them
+
+Every space's terms are followed by a fixed **operator section** ([ADR 0035](../../../decisions/0035-server-terms-of-service.md)
+decision 6): veyq's own text, DE and EN, filled with the values the Server Owner sets in admin-web and the CLI
+([uc.admin.operator-details](uc.admin.operator-details.md)) — the notice path, what is kept, the measures, the statement
+and the objection, and, in the *club, organisation or company* mode, the authorities; the guest-write record's
+information while that record is on. It is served by the same endpoints, after the space's text, in the variant the
+operating mode picks (**full** or **reduced**). The space owner cannot edit or remove it; the terms panel shows it,
+read-only, below their own text, and so does a member's. Its revision moves only with a veyq release, so the space's
+`terms_revision` stays the owner's alone; what the members' gate compares is
+[uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)'s.
+
 This is where the space owner states policy + the honest-operator caveat
 + the public-share **decryptable-on-report** ([security-model](../../../crosscutting/security-model.md),
 [ADR 0035](../../../decisions/0035-server-terms-of-service.md)). Every space writes its own terms, on any server: no
