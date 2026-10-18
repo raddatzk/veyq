@@ -218,6 +218,15 @@ and the hold walk attachments without a slot filter". Re-run its two commands an
 
 ## Owner questions (each with a recommendation)
 
+**Decided (Q1–Q5).** Owner 2026-10-19: **Q1** *Banner* (EN and DE). **Q2** a copy, as the cover already is (a gallery
+photo chosen as cover is re-derived and uploaded as the node's own `COVER` blob, `core/node/cover/coverWrite.ts`).
+**Q3** the tab row sticks. **Q4 differs: no length limit** — the banner is the Memory's lead-in, a whole holiday's
+video may be long. So the playback derivative is made for any length: the transcode runs as a job of the core upload
+queue with progress and cancel, streamed (never the whole file in memory), and the CR states the size it costs (about
+15 MB per minute at 2 Mbit/s) and whether a long input lowers the bitrate. **Q5** a browser without an encoder offers
+the first frame as an image banner. Implementation has the owner's go, after the gallery work (#488–#490) per the
+owner's order.
+
 - **Q1 — the word.** The owner said "Header"; *header* already names the Memory's title row (core's `NodeHeader`) and the
   place the cover shows ("detail header", `uc.memory.cover`). **Recommendation: *Banner*** (EN and DE), as written
   throughout. Alternative: *Header* with the title row renamed — a sweep through code and docs for no gain.
