@@ -138,10 +138,12 @@ object CaseTestKit {
             """{"step":"$step"""" + (targetId?.let { ""","targetId":"$it"""" } ?: "") + "}",
         )
 
-    fun Moderator.extend(caseId: String, until: String, epoch: Int = 1): Response =
+    /** Extend the hold to [until], the reason sealed (opaquely) to [epoch], its kind [reasonType] in the clear or none. */
+    fun Moderator.extend(caseId: String, until: String, epoch: Int = 1, reasonType: String? = null): Response =
         call(
             "extendModerationHold", caseId, "POST", "/api/moderation/cases/$caseId/hold/extension",
-            """{"until":"$until","reason":{"epoch":$epoch,"sealedNote":"$SEALED_NOTE"}}""",
+            """{"until":"$until",""" + (reasonType?.let { """"reasonType":"$it",""" } ?: "") +
+                """"reason":{"epoch":$epoch,"sealedNote":"$SEALED_NOTE"}}""",
         )
 
     fun Moderator.bar(caseId: String, reportId: String): Response =

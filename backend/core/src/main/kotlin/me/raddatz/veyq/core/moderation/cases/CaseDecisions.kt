@@ -78,6 +78,9 @@ data class DeferralInput(val until: Instant, val reason: SealedNote)
 /** A handover to an authority (ADR 0093 §§ 11-13): reported to one, or information given to one. */
 enum class HandoverKind(val event: ModerationEvent) { REPORTED(ModerationEvent.HANDED_OVER), INFORMATION_GIVEN(ModerationEvent.INFORMATION_GIVEN) }
 
+/** The reason types that extend a hold on a case of child sexual abuse material (ADR 0093 § 4, `HoldExtensionReason`). */
+val CSAM_EXTENSION_REASONS: Set<String?> = setOf("AUTHORITY_REFERENCE", "ART18_REPORT_IN_PROGRESS")
+
 /** A decision's refusals (codes per `moderation.openapi.yaml`). */
 object CaseFailures {
     val caseNotFound = httpFailure("case_not_found", FailureStatus.NOT_FOUND)
@@ -103,6 +106,7 @@ object CaseFailures {
     val statementNotFound = httpFailure("statement_not_found", FailureStatus.NOT_FOUND)
     val statementNotDeferred = httpFailure("statement_not_deferred", FailureStatus.CONFLICT)
     val deferralRenewed = httpFailure("deferral_renewed", FailureStatus.CONFLICT)
+    val extensionReasonNotAllowed = httpFailure("extension_reason_not_allowed", FailureStatus.CONFLICT)
 }
 
 /**
@@ -464,9 +468,19 @@ class CaseDecisions(
         DecisionOutcome.Done
     }
 
-    fun extend(moderatorId: String, caseId: String, until: Instant, reason: SealedNote, now: Instant = Instant.now()): DecisionOutcome =
+    /**
+     * Extend [caseId]'s hold to [until] for [reason], whose kind [reasonType] is named in the clear (ADR 0093 § 4). On a
+     * case of child sexual abuse material only [CSAM_EXTENSION_REASONS] extend it — keeping that content serves only the
+     * report to an authority (§ 184b(5) StGB) — and anything else, or no type, is refused (owner 2026-10-18).
+     */
+    fun extend(
+        moderatorId: String, caseId: String, until: Instant, reason: SealedNote, now: Instant = Instant.now(), reasonType: String? = null,
+    ): DecisionOutcome =
         QuarkusTransaction.requiringNew().call {
             val case = lock(caseId) ?: return@call refused(CaseFailures.caseNotFound)
+            if (case.category == ReportCategory.CHILD_SEXUAL_ABUSE.name && reasonType !in CSAM_EXTENSION_REASONS) {
+                return@call refused(CaseFailures.extensionReasonNotAllowed)
+            }
             val hold = holds.aliveOf(case.id, now) ?: return@call refused(CaseFailures.nothingHeld)
             if (!until.isAfter(hold.expiresAt) || until.isAfter(now.plus(Holds.SIX_MONTHS))) {
                 return@call refused(CaseFailures.extensionOutOfBounds)
@@ -475,7 +489,7 @@ class CaseDecisions(
             holds.moveEnd(hold, until, HoldTrigger.EXTENDED)
             log.appendCase(
                 ModerationEvent.HOLD_EXTENDED, now, case.id, moderatorId = moderatorId, epoch = reason.epoch,
-                sealedText = reason.sealed, holdUntil = until,
+                sealedText = reason.sealed, holdUntil = until, reason = reasonType,
             )
             DecisionOutcome.Done
         }

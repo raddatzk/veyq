@@ -764,9 +764,13 @@ paths:
       description: >
         ADR 0093 § 4: an extension needs a reason (an authority's request, an objection, a lawyer's letter, a lawsuit, an
         Art. 18 report in progress), sealed in the browser (`moderation-note` [epoch, caseId]) and logged with its own
-        end. `until` must lie after the hold's current end and at most six months (183 days) from now
-        (`400 extension_out_of_bounds`); without a new reason the hold ends then. Only while the case holds a hold alive
-        (`409 nothing_held`). Key-proved over this case.
+        end, and names its `reasonType` in the clear — metadata only, the details stay sealed. On a case of child sexual
+        abuse material only `AUTHORITY_REFERENCE` or `ART18_REPORT_IN_PROGRESS` extends the hold (§ 184b(5) StGB: keeping
+        that content serves only the report to an authority); any other type, or none, is refused there
+        (`409 extension_reason_not_allowed`, owner 2026-10-18). On every other case the type is optional. `until` must lie
+        after the hold's current end and at most six months (183 days) from now (`400 extension_out_of_bounds`); without
+        a new reason the hold ends then. Only while the case holds a hold alive (`409 nothing_held`). Key-proved over this
+        case.
       security:
         - bearerAuth: []
       parameters:
@@ -778,7 +782,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ModerationHoldExtension" }
-            example: { until: 2027-04-01T00:00:00Z, reason: { epoch: 2, sealedNote: c2VhbGVkLXJlYXNvbg== } }
+            example: { until: 2027-04-01T00:00:00Z, reasonType: AUTHORITY_REFERENCE, reason: { epoch: 2, sealedNote: c2VhbGVkLXJlYXNvbg== } }
       responses:
         "200":
           description: Extended; the case as it now stands.
@@ -793,7 +797,7 @@ paths:
         "403": { $ref: "#/components/responses/ProofInvalid" }
         "404": { $ref: "#/components/responses/CaseNotFound" }
         "409":
-          description: "`nothing_held` = the case holds no hold alive; `moderation_epoch_changed` = the reason is not sealed to the current epoch."
+          description: "`nothing_held` = the case holds no hold alive; `moderation_epoch_changed` = the reason is not sealed to the current epoch; `extension_reason_not_allowed` = on a case of child sexual abuse material, a reason type other than an authority's reference or an Art. 18 report in progress."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
 
@@ -1513,9 +1517,16 @@ components:
     ModerationCaseSummary:
       type: object
       description: One case of the queue, in clear fields only.
-      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt, objectionOpen, origin, statementDeferredUntil]
+      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt, objectionOpen, origin, statementDeferredUntil, overdue]
       properties:
         origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
+        overdue:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the case is still undecided more than 90 days after its first report (ADR 0093 § 11, DSA Art. 16(6)):
+            no case closes itself, so the queue marks it and the moderators are reminded.
+          example: false
         statementDeferredUntil:
           x-veyq-visibility: time
           type: [string, "null"]
@@ -2021,9 +2032,23 @@ components:
           format: date-time
           description: The new end — after the current one, at most six months from now.
           example: 2027-04-01T00:00:00Z
+        reasonType:
+          oneOf:
+            - $ref: "#/components/schemas/HoldExtensionReason"
+            - type: "null"
         reason:
           $ref: "#/components/schemas/SealedModerationNote"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    HoldExtensionReason:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        What kind of reason an extension rests on, in the clear (ADR 0093 § 4): an authority's request or order with its
+        reference, an Art. 18 report in progress, an objection, a lawyer's letter, a lawsuit. The details stay sealed.
+        A case of child sexual abuse material takes only the first two.
+      enum: [AUTHORITY_REFERENCE, ART18_REPORT_IN_PROGRESS, OBJECTION, LAWYERS_LETTER, LAWSUIT]
+      example: AUTHORITY_REFERENCE
 
     ModerationDismissal:
       type: object
