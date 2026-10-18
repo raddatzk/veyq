@@ -1,6 +1,10 @@
 # ADR 0092 — Logs are operational and name no person; evidence never rides a log
 
-- Status: Proposed 2026-10-16 (draft for refinement); nothing of it is built. The guest-write record, the hold, the
+- Status: Proposed 2026-10-16 (draft for refinement); not accepted. Two minimal parts are built ahead of it because a
+  legal audit (2026-10-18) named them duties: the backend's log sites name no person — the failed-mail line
+  (`SmtpDelivery`, which the table's `TenantMailSender.kt:81` became), the invite fallback and the recovery worker log
+  ids, kinds and reply codes, each pinned by a log-capture test (§ 4's second bullet, [inbox](../inbox.md) #477). The
+  rest is not built. The guest-write record, the hold, the
   report path and the moderation log belong to the moderation ADR,
   [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md); which client
   address a request has belongs to [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md). This
