@@ -103,6 +103,14 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
     expect(deletion.dueAt).toEqual(new Date('2026-11-17T12:00:00Z'))
   })
 
+  it('delete over content carries its statement of reasons; without one it claims nothing (ADR 0093 § 7)', async () => {
+    const statement = { statementId: 's-1', ground: 'ILLEGAL_CONTENT' as const, provision: '§ 130 StGB', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    await deleteTenant('t1', 'family.example.com', statement)
+    expect(api.deleteTenant).toHaveBeenLastCalledWith({ tenantId: 't1', deleteTenantRequest: { domain: 'family.example.com', overContent: true, statement } })
+    await deleteTenant('t1', 'family.example.com', null)
+    expect(api.deleteTenant).toHaveBeenLastCalledWith({ tenantId: 't1', deleteTenantRequest: { domain: 'family.example.com' } })
+  })
+
   it('stop-deletion passes the tenant id', async () => {
     await stopTenantDeletion('t1')
     expect(api.stopTenantDeletion).toHaveBeenCalledWith({ tenantId: 't1' })

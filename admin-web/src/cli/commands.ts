@@ -366,11 +366,11 @@ export const COMMANDS: Record<string, Command> = {
     run: (f) => reactivateTenant(f['tenant-id']),
   },
   'tenant delete': {
-    usage: 'tenant delete --tenant-id <id> --domain <domain>',
+    usage: 'tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
     summary:
-      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server.',
-    flags: { 'tenant-id': tenantId, domain: { describe: 'the tenant’s own domain, typed as the confirmation', required: true } },
-    run: (f) => deleteTenant(f['tenant-id'], f.domain),
+      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does.',
+    flags: { 'tenant-id': tenantId, domain: { describe: 'the tenant’s own domain, typed as the confirmation', required: true }, ...STATEMENT_FLAGS },
+    run: async (f) => deleteTenant(f['tenant-id'], f.domain, await statementOf(f)),
   },
   'tenant stop-deletion': {
     usage: 'tenant stop-deletion --tenant-id <id>',

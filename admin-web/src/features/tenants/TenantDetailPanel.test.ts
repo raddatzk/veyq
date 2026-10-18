@@ -434,10 +434,43 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, status: 'PENDING_DELETION', deletionDueAt: DUE }])
     await submitDelete(w)
     await flushPromises()
-    expect(deleteTenant).toHaveBeenCalledWith('t-2', 'Live.Example')
+    expect(deleteTenant).toHaveBeenCalledWith('t-2', 'Live.Example', null)
     expect(w.text()).toContain('Being deleted')
     expect(w.emitted('changed')).toHaveLength(1)
     expect(w.emitted('revoked')).toBeUndefined() // still there, pending — not gone
+  })
+
+  it('a deletion over content carries its statement of reasons to the tenant’s owners (ADR 0101 decision 10)', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    const statement = { statementId: 's-2', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValue(statement)
+    vi.mocked(deleteTenant).mockResolvedValue({ dueAt: DUE })
+    const w = mountPanel('t-2')
+    await flushPromises()
+    const form = w.find('form.tenant-delete')
+    expect(form.find('.step-statement').exists()).toBe(false)
+    await form.find('.tenant-delete-over-content__toggle').setValue(true)
+    expect(form.find('.step-statement').exists()).toBe(true)
+    await form.find('.step-statement__provision').setValue('Space terms, clause 4')
+    await form.find('.step-statement__facts').setValue('what was found')
+    await deleteInput(w).setValue('live.example')
+    await submitDelete(w)
+    await flushPromises()
+    expect(stepStatement).toHaveBeenCalledWith(expect.objectContaining({ provision: 'Space terms, clause 4', facts: 'what was found' }))
+    expect(deleteTenant).toHaveBeenCalledWith('t-2', 'live.example', statement)
+  })
+
+  it('a deletion the server finds over content asks for its statement', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(deleteTenant).mockRejectedValueOnce(httpError(400, 'statement_required'))
+    vi.mocked(tenantError).mockResolvedValueOnce({ status: 400, code: 'statement_required' })
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await deleteInput(w).setValue('live.example')
+    await submitDelete(w)
+    await flushPromises()
+    expect(deleteTenant).toHaveBeenCalledWith('t-2', 'live.example', null)
+    expect(w.find('form.tenant-delete .step-statement').exists()).toBe(true)
   })
 
   it('names the delete refusals apart', async () => {

@@ -271,7 +271,7 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES })
     const r = await invoke(['tenant', 'delete', '--tenant-id', 't1', '--domain', 'f.example.com'])
     expect(r.code).toBe(0)
-    expect(tenants.deleteTenant).toHaveBeenCalledWith('t1', 'f.example.com')
+    expect(tenants.deleteTenant).toHaveBeenCalledWith('t1', 'f.example.com', null)
     expect(JSON.parse(r.out)).toEqual({ dueAt: EXPIRES.toISOString() })
   })
 
@@ -775,6 +775,16 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
     expect(r.code).toBe(0)
     expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: '', facts: 'what was found' })
     expect(tenants.suspendTenant).toHaveBeenLastCalledWith('t3', statement)
+  })
+
+  it('tenant delete over content carries its statement to the tenant’s owners', async () => {
+    const statement = { statementId: 's-2', ground: 'ILLEGAL_CONTENT' as const, provision: '', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValueOnce(statement)
+    vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES })
+    const r = await invoke(['tenant', 'delete', '--tenant-id', 't3', '--domain', 'f.example.com', '--over-content', '--ground', 'ILLEGAL_CONTENT', '--facts', 'what was found'])
+    expect(r.code).toBe(0)
+    expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: '', facts: 'what was found' })
+    expect(tenants.deleteTenant).toHaveBeenLastCalledWith('t3', 'f.example.com', statement)
   })
 
   it('account block exits 1 with each refusal’s code', async () => {

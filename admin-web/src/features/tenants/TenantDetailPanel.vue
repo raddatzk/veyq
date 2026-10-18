@@ -262,22 +262,34 @@ async function revoke() {
 // typed confirmation, kept beside the action rather than in the shared ConfirmDialog, whose single-flight yes/no has no
 // field. The typed value is what is sent: the server compares it again, so a stale panel cannot delete another tenant.
 const deleteArmed = computed(() => tenant.value !== null && domainConfirmed(deleteTyped.value, tenant.value.domain))
+// Over content, the deletion carries a statement of reasons to the tenant's owners, as a suspension does (ADR 0093 § 7).
+const deleteOverContent = ref(false)
+const deleteDraft = ref<StepStatementDraft>({ ground: 'TERMS_BREACH', provision: '', facts: '' })
 async function removeTenant() {
   if (!deleteArmed.value) return
   actionError.value = ''
   try {
-    const { dueAt } = await deleteTenant(props.tenantId, deleteTyped.value)
+    const statement = deleteOverContent.value ? await stepStatement(deleteDraft.value) : null
+    const { dueAt } = await deleteTenant(props.tenantId, deleteTyped.value, statement)
     toast.success(t('tenant.deletionStarted', { date: at(dueAt) }))
+    deleteOverContent.value = false
+    deleteDraft.value = { ground: 'TERMS_BREACH', provision: '', facts: '' }
     emit('changed')
     await reload()
   } catch (e) {
+    if (e instanceof StepStatementInvalid) {
+      actionError.value = t('moderation.steps.errors.moderationOff')
+      return
+    }
     on401(e)
     if (isUnauthorized(e)) return
     const { code } = await tenantError(e)
+    if (code === 'statement_required') deleteOverContent.value = true
     actionError.value =
       code === 'tenant_domain_mismatch' ? t('tenant.deleteDomainMismatch')
         : code === 'tenant_not_deletable' ? t('tenant.notDeletable')
-          : t('tenant.actionFailed')
+          : code && SUSPEND_REFUSALS[code] ? t(SUSPEND_REFUSALS[code])
+            : t('tenant.actionFailed')
   }
 }
 
@@ -503,6 +515,12 @@ async function copyInviteLink() {
           {{ t('tenant.deleteConfirmLabel', { domain: tenant.domain }) }}
           <InputText v-model="deleteTyped" autocomplete="off" spellcheck="false" />
         </label>
+        <label class="tenant-over-content">
+          <input v-model="deleteOverContent" type="checkbox" class="tenant-delete-over-content__toggle" />
+          {{ t('tenant.suspendOverContent') }}
+        </label>
+        <small class="settings-muted">{{ t('tenant.deleteOverContentHint') }}</small>
+        <StepStatementFields v-if="deleteOverContent" v-model="deleteDraft" id-prefix="tenant-delete-statement" />
         <div class="veyq-dialog-action-row">
           <Button type="submit" :label="t('tenant.delete')" icon="pi pi-trash" severity="danger" :disabled="!deleteArmed" />
         </div>

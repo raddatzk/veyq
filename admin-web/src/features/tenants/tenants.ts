@@ -70,8 +70,10 @@ export function reactivateTenant(tenantId: string): Promise<void> {
  * the tenant's, so a wrong id deletes nothing (409 `tenant_domain_mismatch`); 409 `tenant_not_deletable` for a PENDING
  * tenant (revoke it) or one pending deletion already.
  */
-export function deleteTenant(tenantId: string, domain: string): Promise<TenantDeletion> {
-  return tenantsApi().deleteTenant({ tenantId, deleteTenantRequest: { domain: domain.trim().toLowerCase() } })
+export function deleteTenant(tenantId: string, domain: string, statement?: ServerOwnerStatementInput | null): Promise<TenantDeletion> {
+  // Over content the deletion carries its statement of reasons to the tenant's owners, as a suspension does (ADR 0093 § 7).
+  const overContent = statement ? { overContent: true, statement } : {}
+  return tenantsApi().deleteTenant({ tenantId, deleteTenantRequest: { domain: domain.trim().toLowerCase(), ...overContent } })
 }
 
 /** Stop a pending deletion before the purge: the tenant returns SUSPENDED and is reactivated as usual.
