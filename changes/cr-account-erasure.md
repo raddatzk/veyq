@@ -83,6 +83,8 @@ tenant is erased or cascades.
 
 ## Open questions (owner) and legal items
 
+**Decided (Q16–Q20).** Owner 2026-10-18, one by one: Q16, Q17 and Q19 as recommended. **Q18 differs:** the last owner of a tenant with other members is not refused at the self-service door; the dialog offers a choice — **delete the tenant along** (decision 10's deletion, its 30-day window) **or name a new owner** from the tenant's members first — and the erasure proceeds after either; the Server Owner's door still never refuses. **Q20 differs:** accounts a tenant deletion leaves in no tenant **stay**; nothing erases an account its person did not ask to erase (they may erase it themselves).
+
 - **Q16 — A window before the erasure, or none?** **Recommendation: 30 days, the scope trash's retention**, which the
   Server Owner alone can stop; the person cannot sign in meanwhile. It costs a pending state; it buys a way back from a
   coerced or mistaken request, and the own scopes wait 30 days in the trash anyway.

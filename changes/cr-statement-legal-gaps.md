@@ -114,6 +114,8 @@ the statement names — the Server Owner lifts with the existing unblock or reac
 
 ## Open questions (owner) and legal items
 
+**Decided (Q24–Q25).** Owner 2026-10-18, one by one: both as recommended.
+
 - **Q24 — How does a member blocked from sign-in read the facts?** **Recommendation: by mail, facts included**, the
   Server Owner's own words. The alternative — a sign-in that, after the password proof, shows only the member's
   statements — keeps the facts out of mail but builds a second, restricted session kind for one case. The facts of a

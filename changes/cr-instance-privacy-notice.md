@@ -90,6 +90,8 @@ says what veyq builds and the question stays a named blocker.
 
 ## Open questions (owner) and legal items
 
+**Decided (Q26–Q28).** Owner 2026-10-18, one by one: all three as recommended.
+
 - **Q26 — Shown in the *private* mode too?** **Recommendation: yes.** Every passage is a fact of the software, true on
   every instance; the household exemption only makes it not owed. In *private* an unset value is absent and nothing
   warns (ADR 0035 decision 8).

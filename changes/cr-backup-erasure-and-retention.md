@@ -83,6 +83,8 @@ before it serves. By the owner rule that a legal duty wins over what was decided
 
 ## Open questions (owner) and legal items
 
+**Decided (Q21–Q23).** Owner 2026-10-18, one by one: all three as recommended.
+
 - **Q21 — B's default and range.** **Recommendation: 30 days, settable 7 to 365**, the Run page asking for a reason in
   the record of processing above 30 (as for N above 7). Thirty is what the moderation Run page already recommends for a
   backup holding guest addresses.

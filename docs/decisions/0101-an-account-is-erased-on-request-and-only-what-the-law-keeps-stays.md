@@ -2,8 +2,9 @@
 
 - Status: Accepted 2026-10-18 for its duty, **decided, not built**. That an account and an active tenant can be erased is
   not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a legal duty and what veyq decided or built disagree,
-  the duty decides (owner rule, `CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** carry the
-  recommendation of an owner question in `cr-account-erasure` and change with the owner's answer.
+  the duty decides (owner rule, `CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** were owner
+  questions in `cr-account-erasure`, answered 2026-10-18 (Q16, Q17, Q19 as recommended; Q18 and Q20 as decisions 9
+  and 10 now say).
 - Date: 2026-10-18
 
 Provenance: **(M)** measured in this worktree with the command or line named; **(A)** the legal audit of 2026-10-18
@@ -95,13 +96,13 @@ an erased account at most B days (decision 8).
 An erasure enters the erasure ledger in the transaction that completes it, and a restore re-applies it before the
 instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8).
 
-### 9. Two refusals, and the last owner (Q)
+### 9. A refusal, and the last owner's choice
 
 - **The Server Owner's own account** is refused (`server_owner_account`): erasing it leaves nobody on the admin
   channel, and moving the server role to another account is not built (inbox #43).
-- **The last owner of a tenant** with other members is refused at the self-service door until another member is an
-  owner, which a tenant owner can now make one; a tenant with no other member is deleted with the account (decision
-  10), and the dialog names it. **The Server Owner's door does not refuse**: an erasure cannot wait on a third person
+- **The last owner of a tenant** with other members chooses at the self-service door (owner, Q18): **delete the tenant
+  along** (decision 10, its window) **or name a new owner** from its members first; the erasure proceeds after either. A
+  tenant with no other member is deleted with the account (decision 10), and the dialog names it. **The Server Owner's door does not refuse**: an erasure cannot wait on a third person
   (Art. 12(2)). The tenant then has no owner; admin-web shows it so, and the Server Owner invites a new owner into the
   active tenant (an owner invite, as setup mints one) or deletes it.
 
@@ -113,8 +114,8 @@ same `P30D` the Server Owner can still stop (Q), one purge erases every scope th
 onto the reclaim list), the tenant profiles, the terms rows (their cascade), the mail settings, the invites, the
 capability switches and quota, and the tenant row. Holds and the moderation records survive: their tables hang on
 cases, not tenants (`grep -n REFERENCES backend/core/src/main/resources/db/migration/V202610172000__core_moderation_holds.sql`).
-Members keep their accounts; an account left in no tenant and holding no server role is erased with the tenant, and
-told so by mail at the deletion (Q). Deleting a tenant over its content is a termination of the service for its owners
+Members keep their accounts, also one the deletion leaves in no tenant (owner, Q20): nothing erases an account its
+person did not ask to erase; they are told by mail and may erase it themselves. Deleting a tenant over its content is a termination of the service for its owners
 (DSA Art. 17(1)(c)) and carries their statement of reasons (ADR 0093 § 7).
 
 ### 11. The guard
