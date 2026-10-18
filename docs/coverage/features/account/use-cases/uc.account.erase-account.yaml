@@ -1,0 +1,22 @@
+useCase: uc.account.erase-account
+feature: account
+title: Erase an account
+status: planned
+# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 17); the work order is cr-account-erasure.
+acceptanceCriteria:
+  - id: both-doors-start-the-same-erasure
+    text: A member with their password, and the Server Owner by address on the admin channel, both start the same pending erasure; the Server Owner's own account is refused.
+  - id: the-account-stops-at-the-request
+    text: At the request every session ends, sign-in is refused, pending invites, pairings, recoveries and address changes go, and the member removal runs in every tenant, in one transaction.
+  - id: the-purge-erases-every-row-keyed-on-the-account
+    text: After the scope trash's retention the purge erases the account row and every row keyed on it, and a guard derived from the migrations holds every such table erased or cascading.
+  - id: what-the-law-keeps-stays
+    text: Holds, moderation records and, while a case names the account, its terms acceptance rows stay under the opaque id to their own ends; content in shared scopes keeps its attribution.
+  - id: the-last-owner-is-handled
+    text: A last owner with other members is refused at the self-service door, a sole-member tenant is deleted with the account, and the Server Owner's door leaves the tenant ownerless instead of refusing.
+  - id: a-restore-erases-it-again
+    text: An erased account restored from a backup is erased again before the instance serves.
+gaps:
+  backend: "Not built: no operation erases an account (AccountEmailResource.kt:35); cr-account-erasure builds it."
+  web: "Not built: the settings offer no erasure; cr-account-erasure builds it."
+  admin-web: "Not built: admin-web and veyq-admin have no account erasure; cr-account-erasure builds it."
