@@ -22,14 +22,17 @@
    Every account stays, also one the deletion leaves in no tenant: nothing erases an account its person did not ask
    to erase, and they may erase it themselves ([uc.account.erase-account](../../account/use-cases/uc.account.erase-account.md)).
 4. Where the deletion is over the tenant's content, the Server Owner enters the statement of reasons with it, and the
-   tenant's owners receive it by mail (ADR 0093 § 7).
+   tenant's owners receive it by mail (ADR 0093 § 7): a `TENANT_DELETED` record carries it, the tenant's other members
+   are told nothing beyond the deletion, and a moderator's open proposal to take the tenant offline makes the deletion
+   over content — without a statement it is refused.
 5. When the retention ends, one purge erases every scope of the tenant through the scope erasure, then the tenant's
-   remaining rows and the tenant, and writes the erasure into the ledger.
+   remaining rows and the tenant, and writes the erasure into the ledger. A record over content still in force on the
+   tenant (a suspension's or this deletion's) ends with it, so it and its statement go at their own date.
 
 ## Alternate / exception flows
 
 - **A1 — Stopped:** before the purge the Server Owner stops the deletion; the tenant returns `SUSPENDED`, as it was
-  taken offline, and is reactivated as a suspended one is.
+  taken offline, and is reactivated as a suspended one is. A deletion's record over content is lifted with it.
 - **A2 — A tenant with no owner** (an owner's account erased at the Server Owner's door): admin-web lists it as
   ownerless with the two ways on, an owner invite or this deletion. The owner invite goes to one of the tenant's
   members, who accepts it and becomes its owner: the operator can admit nobody into the tenant's key (ADR 0020 move 6).

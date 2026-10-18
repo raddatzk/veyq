@@ -36,6 +36,13 @@ acceptanceCriteria:
         integration:
           - TenantDeletionSliceTest.thePurgeErasesTheTenantAndLeavesItsAccountsAndItsLiveHolds
           - AccountErasureSliceTest.theErasureMailIsRetriedUntilItGoesOutAndADeletionMailsEveryMember
+  - id: a-deletion-over-content-carries-its-statement
+    text: A deletion over content is refused without a statement of reasons, carries one to the tenant's owners only as a record a stop lifts, and the purge ends a record still in force on the tenant so its records go at their date.
+    coverage:
+      backend:
+        integration:
+          - ServerOwnerStatementSliceTest.aTenantDeletedOverContentTellsItsOwnersOnlyAndAStopLiftsTheRecord
+          - ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate
   - id: an-ownerless-tenant-has-two-ways-on
     text: A tenant owner makes a member an owner, the last owner cannot be demoted, and the Server Owner's owner invite to a member of an ownerless tenant makes them its owner once they accept it; an address that is no member's is refused.
     coverage:
@@ -50,9 +57,9 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     Built and passing locally: `src/features/tenants/TenantDetailPanel.test.ts` (the typed delete refused until the
-    domain matches, the stop, the ownerless notice and the owner invite), `tenants.test.ts`,
-    `src/views/AdminConsoleView.test.ts` (the ownerless marker) and `src/cli/cli.test.ts` (`tenant delete`,
-    `stop-deletion`, `invite-owner`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
+    domain matches, the stop, the ownerless notice and the owner invite, the statement over content), `tenants.test.ts`,
+    `src/views/AdminConsoleView.test.ts` (the ownerless marker) and `src/cli/cli.test.ts` (`tenant delete` with and
+    without `--over-content`, `stop-deletion`, `invite-owner`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
   stack: >-
     Lane L1's browser pass (`e2e/tests/features/tenant-and-account-erasure.spec.ts`) deletes a tenant in the console with its typed
     domain and stops the deletion, against the release candidate's two images. Green only in local runs of

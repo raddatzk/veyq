@@ -20,8 +20,8 @@
   decision mail (DSA Art. 16(5), Art. 53), a statement for the Server Owner's own steps over content by mail with the
   facts (Art. 17(1)(c), (d); owner Q24–Q25), the provision or clause a ground relies on and the territorial sentence
   (Art. 17(3)(a), (d), (e)), and a guest uploader's notice of a removal on an authority's order (TCO Art. 11(1)) — every
-  text a draft until a qualified review. A tenant's deletion over content is wired by whichever of this and
-  `cr-account-erasure` lands second. §§ 12 and 13, § 7's
+  text a draft until a qualified review. A tenant's deletion over content carries it too (with `cr-account-erasure`,
+  2026-10-18: a `TENANT_DELETED` record a stop lifts and the tenant's purge ends). §§ 12 and 13, § 7's
   deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
   [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):

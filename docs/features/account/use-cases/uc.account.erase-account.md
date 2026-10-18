@@ -31,7 +31,9 @@
    terms acceptance rows (unless step 5 keeps them), and writes the erasure into the erasure ledger.
 5. **What stays.** Content in scopes the person did not own alone keeps its opaque attribution and shows as a former
    member's; a hold keeps its snapshot to its end; the moderation records naming the account stay to their case's log
-   retention date, and with them the terms acceptance rows while a case names the account.
+   retention date, and with them the terms acceptance rows while a case names the account. A measure on the account
+   still in force (a sign-in block, a reporter's bar) ends with the purge, so its records run to their date; a Server
+   Owner's block on no case keeps the terms rows to its own.
 
 ## Alternate / exception flows
 

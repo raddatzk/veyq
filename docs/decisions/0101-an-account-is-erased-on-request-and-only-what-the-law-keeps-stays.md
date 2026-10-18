@@ -85,14 +85,17 @@ the person, before they erase, to delete what they want gone from shared scopes 
 Deleted with the account (ADR 0035 decision 4 names the table for this), **except** while a moderation case names the
 account — a measure on it in force, or a case about its content not closed: then its rows stay under the opaque id
 until that case's log retention date (31 December of the third year after it closes, ADR 0093 § 11), as the evidence of
-which terms a breach was measured against (Art. 17(3)(e)). No new period: the case's.
+which terms a breach was measured against (Art. 17(3)(e)). No new period: the case's — or, for a Server Owner's step on
+no case (ADR 0093 § 7), the step's own: 31 December of the third year after its lift.
 
 ### 7. What survives, and is said to survive
 
 Holds keep their snapshot and its attribution to their own ends (ADR 0093 § 4; Art. 17(3)(b), (e), Art. 18); the
 moderation log, the reports the person made, the measures, statements, objections and orders that name the account
 stay to their case's log retention date, the reporter's sealed contact six months after the decision was told
-(ADR 0093 § 11). A sign-in block on the account stays as the record it is. The erase dialog, the mail of decision 2 and
+(ADR 0093 § 11). A sign-in block on the account stays as the record it is, and the purge ends it — lifted by no one,
+so it does not stand forever on nothing and hold its case's records with it (GDPR Art. 5(1)(e)); a tenant's purge
+ends the records over content on the tenant alike (decision 10). The erase dialog, the mail of decision 2 and
 the instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8) say this, and that backups keep
 an erased account at most B days (decision 8).
 
@@ -128,7 +131,8 @@ capability switches and quota, and the tenant row. Holds and the moderation reco
 cases, not tenants (`grep -n REFERENCES backend/core/src/main/resources/db/migration/V202610172000__core_moderation_holds.sql`).
 Members keep their accounts, also one the deletion leaves in no tenant (owner, Q20): nothing erases an account its
 person did not ask to erase; they are told by mail and may erase it themselves. Deleting a tenant over its content is a termination of the service for its owners
-(DSA Art. 17(1)(c)) and carries their statement of reasons (ADR 0093 § 7).
+(DSA Art. 17(1)(c)) and carries their statement of reasons (ADR 0093 § 7): a `TENANT_DELETED` record, as a
+suspension's `TENANT_OFFLINE` is, which a stop lifts and the purge ends.
 
 ### 11. The guard
 
@@ -149,9 +153,11 @@ user id without a foreign key classified in the eraser's code as erased or kept,
   stopped erasure gives back an account that can sign in, keeps its own scopes in the scope trash until their retention
   ends, and needs a new invite to the shared scopes and tenants it was cut from; a tenant deleted along is stopped on its
   own (`stopTenantDeletion`).
-- **Open:** the statement of reasons a deletion over content carries (decision 10, ADR 0093 § 7) waits for
-  `cr-statement-legal-gaps`, and the erasure ledger (decision 8) for `cr-backup-erasure-and-retention`; each purge
-  marks the one place its entry is written (`AccountPurge.eraseRows`, `TenantPurge.eraseTenant`).
+- **Open:** the erasure ledger (decision 8) waits for `cr-backup-erasure-and-retention`; each purge marks the one
+  place its entry is written (`AccountPurge.eraseRows`, `TenantPurge.eraseTenant`). The statement of reasons a
+  deletion over content carries (decision 10) is built on `cr-statement-legal-gaps`' Server Owner path. A content
+  measure (a link, a node, an item, a guest uploader) on what a scope's purge erases still stands on nothing: the purge
+  ends only the account's and the tenant's own measures.
 
 ## Rejected alternatives
 
