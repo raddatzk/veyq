@@ -446,9 +446,9 @@ What it says depends on the operating mode:
 | Authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your contact with its languages | no | yes |
 | The guest-write record's information (controller, purpose, legal basis, N, recipients, rights, the supervisory authority) and the right to object apart | while *Record guests' writes* is on | while it is on |
 
-In the record's part an empty identification or contact reads *not stated by this operator* in either mode: whoever
-records guests owes them that information. The values it uses are the instance contact and its languages, the address
-statements name (else the contact), the provider identification, the supervisory authority and N.
+In the record's part too an empty value reads *not stated by this operator* in the second mode and is left out in
+*private*. The values it uses are the instance contact and its languages, the address statements name (else the
+contact), the provider identification, the supervisory authority and N.
 
 **When members and guests are asked again.** A space's owner changing their terms, a veyq release that changes the
 section's text, or you switching the operating mode asks every member and guest of every space again. Changing a value,
@@ -458,8 +458,8 @@ N or the record switch asks nobody.
 instance, have it checked. Known gaps against the law, also named in ADR 0035 decision 6: it states no backup period B
 for backups you make another way (it says such a backup holds the record until it is deleted); your own steps — a
 member's sign-in block, a tenant taken offline — carry no statement yet although the section says those affected are
-told; in *private* the console does not warn about an empty identification while the record is on; and your members'
-own privacy information (their account, their acceptances) is in no text yet.
+told; and your members' own privacy information (their account, their acceptances) is in no text yet. Each has a
+change of its own planned.
 
 ## Not built
 

@@ -170,24 +170,23 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    switching the mode **reopens the gate**, since what members accepted changed. Switching the record does not: its
    information reaches a guest at the write itself (ADR 0093 § 10), like a changed value. A member's history keeps one
    row per accepted triple (space revision, section revision, variant), and the gate asks whether the current triple
-   has one; a guest's device keeps the last triple it accepted. The record passage shows an unset controller or contact
-   as the gap in either variant: GDPR Art. 13 asks them of whoever records, whatever the mode.
+   has one; a guest's device keeps the last triple it accepted. An unset value follows the variant in the record passage
+   too — a visible gap in the full one, absent in the reduced one — as the owner decided for the private mode's privacy
+   texts (decision 8, Q26 of `cr-instance-privacy-notice`); the sentences around a value stay.
 
    **Gaps against the law, named rather than papered over** (the owner's rule of 2026-10-18: a legal duty wins over
    what an ADR or the code says). Each is a correction owed before the first release, or a question for the qualified
    review the whole text waits on:
-   - **The backup period B** (GDPR Art. 13(2)(a), ADR 0093 § 10) is no value veyq holds: the record passage says a
+   - **The backup period B** (GDPR Art. 13(2)(a), ADR 0093 § 10) is no value veyq holds yet: the record passage says a
      backup made another way can hold the record "until that backup is deleted", a criterion where the law prefers a
-     period. Owed: B as an instance setting the passage renders, or counsel's word that the criterion suffices.
+     period. `cr-backup-erasure-and-retention` makes B a value; the passage then renders it.
    - **The Server Owner's own steps carry no statement** (ADR 0093 § 7's status): blocking a member's sign-in and taking
      a space offline restrict a recipient as much as a moderator's block, and DSA Art. 17 asks a statement for them.
-     The section says that those a measure affects are told, which the law asks; the code owes it for those two steps.
-   - **A private instance with the record on** shows an unset controller as a gap, but admin-web warns about an empty
-     identification and contact only in the organisation mode (ADR 0093 § 14). Owed: the warning whenever the record
-     is on.
+     The section says that those a measure affects are told, which the law asks; `cr-statement-legal-gaps` builds it.
    - **A member's own GDPR Art. 13 information** (the account, the acceptance history, the moderation log as far as it
-     names them) is in no text; the section covers only the guest-write record and a reporter's contact. A separate CR
-     writes the instance's privacy notice.
+     names them) is in no text; the section covers only the guest-write record and a reporter's contact.
+     `cr-instance-privacy-notice` writes the privacy notice (decision 8) and moves the record's passage there (its Q27),
+     leaving a pointer here.
    - **A space's own terms are not public before sign-in** (decision 5); whether DSA Art. 14(1) reaches them, as terms
      the provider's service runs under, is a question for the review.
 

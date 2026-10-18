@@ -32,10 +32,9 @@ data class RenderedSection(
  *
  * - A `full` passage renders only in [SectionVariant.FULL]; a `record` passage exactly while [recordOn], in either
  *   variant — the record's information follows its switch, never the mode.
- * - A line naming an empty value: dropped where it is optional; dropped in [SectionVariant.REDUCED] outside a record
- *   passage ("one left empty is simply absent"); otherwise the value renders as the visible gap ("not stated by this
- *   operator"). A record passage shows the gap in either variant: GDPR Art. 13 asks the controller and its contact of
- *   whoever records, whatever the mode, so an empty one is shown as missing rather than hidden.
+ * - A line naming an empty value: dropped where it is optional, and in [SectionVariant.REDUCED] ("one left empty is
+ *   simply absent", record passage included — the owner's rule for the private mode's privacy texts, Q26 of
+ *   cr-instance-privacy-notice); otherwise the value renders as the visible gap ("not stated by this operator").
  * - A newline inside a value renders as ", ", so a typed address cannot start a markdown heading or list.
  */
 object OperatorSectionRenderer {
@@ -64,7 +63,7 @@ object OperatorSectionRenderer {
     ): String {
         val lang = { t: SectionTexts -> if (en) t.en else t.de }
         val blocks = passages.map { p ->
-            p.lines.mapNotNull { line -> renderLine(text, lang(line.text), line.optional, p.part, variant, values, en) }
+            p.lines.mapNotNull { line -> renderLine(text, lang(line.text), line.optional, variant, values, en) }
                 .joinToString("\n").trim()
         }.filter { it.isNotEmpty() }
         val body = blocks.joinToString("\n\n")
@@ -72,13 +71,13 @@ object OperatorSectionRenderer {
     }
 
     private fun renderLine(
-        text: OperatorSectionText, line: String, optional: Boolean, part: SectionPart, variant: SectionVariant,
+        text: OperatorSectionText, line: String, optional: Boolean, variant: SectionVariant,
         values: SectionValues, en: Boolean,
     ): String? {
         val names = PLACEHOLDER.findAll(line).map { it.groupValues[1] }.toList()
         val filled = names.associateWith { value(it, values, text, en) }
         val missing = filled.values.any { it == null }
-        if (missing && (optional || (variant == SectionVariant.REDUCED && part != SectionPart.RECORD))) return null
+        if (missing && (optional || variant == SectionVariant.REDUCED)) return null
         val gap = if (en) text.gap.en else text.gap.de
         return PLACEHOLDER.replace(line) { m -> filled.getValue(m.groupValues[1]) ?: gap }
     }

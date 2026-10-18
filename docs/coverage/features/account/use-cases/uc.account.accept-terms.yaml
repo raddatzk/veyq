@@ -74,11 +74,12 @@ acceptanceCriteria:
     text: >-
       The guest-write record's GDPR Art. 13 information (controller, purpose, basis, N, recipients, rights) is in the
       section exactly while core.public-shares.guest-write-record is on, in either variant, with the right to object
-      set apart; an unset controller shows as a gap there in either variant.
+      set apart; an unset value is a visible gap there in the full variant and absent in the reduced one, as everywhere
+      in the section.
     coverage:
       backend:
         integration: [TenantTermsOperatorSectionSliceTest.theRecordPassageFollowsItsSwitchInBothVariants]
-        unit: [OperatorSectionRendererTest.theRecordFollowsItsSwitchNotTheVariant, OperatorSectionRendererTest.theRecordShowsAMissingControllerAsAGapEvenInTheReducedVariant, OperatorSectionRendererTest.theRetentionCarriesItsUnitPerLanguage]
+        unit: [OperatorSectionRendererTest.theRecordFollowsItsSwitchNotTheVariant, OperatorSectionRendererTest.theRecordShowsAMissingControllerAsAGapInTheFullVariantAndLeavesItOutInTheReducedOne, OperatorSectionRendererTest.theRetentionCarriesItsUnitPerLanguage]
       web:
         unit: [src/views/TermsAcceptView.test.ts]
 gaps:

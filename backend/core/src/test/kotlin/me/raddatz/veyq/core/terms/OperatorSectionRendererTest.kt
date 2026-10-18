@@ -120,10 +120,19 @@ class OperatorSectionRendererTest {
     }
 
     @Test
-    fun theRecordShowsAMissingControllerAsAGapEvenInTheReducedVariant() {
-        // GDPR Art. 13(1)(a) asks the controller of whoever records, whatever the mode: hidden it would read as complete.
-        val r = render(SectionVariant.REDUCED, all.copy(providerName = null, providerAddress = null), recordOn = true)
-        assertTrue(r.record!!.en.contains("the operator: not stated by this operator, not stated by this operator."), r.record!!.en)
+    fun theRecordShowsAMissingControllerAsAGapInTheFullVariantAndLeavesItOutInTheReducedOne() {
+        // The private mode's rule for its privacy texts (owner, Q26 of cr-instance-privacy-notice): an unset value is
+        // absent, record passage included; the full variant shows it as missing. Either way the rest of the passage, and
+        // the right to object, stay.
+        val unset = all.copy(providerName = null, providerAddress = null, privacyContact = null)
+        val full = render(SectionVariant.FULL, unset, recordOn = true)
+        assertTrue(full.record!!.en.contains("the operator: not stated by this operator, not stated by this operator."), full.record!!.en)
+        val reduced = render(SectionVariant.REDUCED, unset, recordOn = true)
+        assertFalse(reduced.record!!.en.contains("Responsible for this processing"), reduced.record!!.en)
+        assertFalse(reduced.record!!.en.contains("not stated"))
+        assertTrue(reduced.record!!.en.contains("This is the information of Art. 13 GDPR.") && reduced.record!!.en.contains("Art. 6(1)(f) GDPR"))
+        assertTrue(reduced.objection!!.en.contains("(Art. 21 GDPR)"), "the right to object stays without its address")
+        assertFalse(reduced.objection!!.en.contains("Write to"))
     }
 
     @Test

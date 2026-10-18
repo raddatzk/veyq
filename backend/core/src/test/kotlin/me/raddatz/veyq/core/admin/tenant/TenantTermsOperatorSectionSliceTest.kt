@@ -164,7 +164,7 @@ class TenantTermsOperatorSectionSliceTest {
         assertEquals("REDUCED", on.getString("operatorSection.variant"))
         assertTrue(on.getString("operatorSection.record.en").contains("Art. 6(1)(f) GDPR"), "private, record switched on by hand: the information is there")
         assertTrue(on.getString("operatorSection.objection.en").contains("Art. 21 GDPR"), "and the right to object, apart")
-        assertTrue(on.getString("operatorSection.record.en").contains("not stated by this operator"), "an unset controller shows as a gap, even reduced")
+        assertFalse(on.getString("operatorSection.record.en").contains("not stated by this operator"), "reduced: an unset controller is absent, as in the private mode's privacy texts")
     }
 
     // --- helpers ---
