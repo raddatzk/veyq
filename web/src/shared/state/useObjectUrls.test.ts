@@ -110,6 +110,16 @@ describe('useObjectUrls', () => {
     expect(revoked).toEqual(['blob:0', 'blob:1'])
   })
 
+  it('setMany mints every key in one map change and revokes each URL it replaces', () => {
+    const { api } = harness(useObjectUrls)
+    api.set('a', blob())
+    const before = api.urls.value
+    api.setMany([['a', blob()], ['b', blob()]])
+    expect(api.urls.value).not.toBe(before) // one churn, so a reader re-renders once
+    expect([...api.urls.value.keys()]).toEqual(['a', 'b'])
+    expect(revoked).toEqual(['blob:0'])
+  })
+
   it('adopt stores an externally-minted URL and takes over its lifecycle', () => {
     const { api, wrapper } = harness(useObjectUrls)
     api.adopt('a', 'blob:external')

@@ -41,6 +41,7 @@ export function useObjectUrls(): {
   urls: Ref<Map<string, string>>
   get: (key: string) => string | undefined
   set: (key: string, blob: Blob) => void
+  setMany: (entries: Iterable<[string, Blob]>) => void
   adopt: (key: string, url: string) => void
   drop: (key: string) => void
   clear: () => void
@@ -55,6 +56,17 @@ export function useObjectUrls(): {
     urls.value = new Map(urls.value)
   }
   const set = (key: string, blob: Blob) => put(key, URL.createObjectURL(blob))
+  /** `set` for many keys with ONE Map churn — one re-render of whatever reads the map, not one per key (a gallery
+   *  installing thousands of thumbnails, inbox #488). */
+  function setMany(entries: Iterable<[string, Blob]>) {
+    const next = new Map(urls.value)
+    for (const [key, blob] of entries) {
+      const prev = next.get(key)
+      if (prev) URL.revokeObjectURL(prev)
+      next.set(key, URL.createObjectURL(blob))
+    }
+    urls.value = next
+  }
   // Take ownership of an **externally-minted** URL (e.g. an optimistic-preview donation): same single-owner
   // lifecycle as `set` (revoke on replace/drop/clear/unmount), but for a URL the caller already created.
   const adopt = (key: string, url: string) => put(key, url)
@@ -68,5 +80,5 @@ export function useObjectUrls(): {
     urls.value = new Map()
   }
   revokeOnUnmount(clear)
-  return { urls, get, set, adopt, drop, clear }
+  return { urls, get, set, setMany, adopt, drop, clear }
 }

@@ -8,8 +8,15 @@
 // tile at once, in the order it is handed, and the scheduler batches the presigns and bounds what is in flight. What
 // the pipeline adds is the end of a read nobody wants any more — a reset aborts the reads still waiting — and the tile
 // a read that failed for good leaves behind: marked `failed`, so the grid shows it, never a shimmer that never ends.
+// And it installs the thumbnails that arrive together: every install re-renders the whole grid (one map, not virtualized
+// — inbox #489), so one install per arriving tile made 3,000 renders of 3,000 tiles and held each GET slot behind a
+// render (measured 2026-10-19: the last of 3,000 thumbnails after 161 s, the store answering 19 a second).
 import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
+
+/** How long decrypted thumbnails gather before they are installed together: at most ten grid renders a second while a
+ *  gallery fills, and the first tile at most this late. */
+export const INSTALL_EVERY_MS = 100
 
 /** The per-caller seams. `T` is the caller's item type (`MediaItem` internally, `ShareItem` on the share page). */
 export interface ThumbnailPipelineCtx<T> {
@@ -40,7 +47,37 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
   // The reads of the current generation; a reset (revokeAll) and the owner's end abort them, so a Chapter left while
   // its 3,000 tiles still wait does not keep the next one's tiles behind them.
   let reads = new AbortController()
-  if (getCurrentScope()) onScopeDispose(() => reads.abort())
+  // Decrypted thumbnails not yet installed, and the timer that installs them ([INSTALL_EVERY_MS]); a decrypt() also
+  // installs what it gathered when its last read settles, so nothing waits on the timer once the reads are done.
+  let gathered = new Map<string, Blob>()
+  let installTimer: ReturnType<typeof setTimeout> | null = null
+  function install() {
+    if (installTimer !== null) clearTimeout(installTimer)
+    installTimer = null
+    if (gathered.size === 0) return
+    const batch = gathered
+    gathered = new Map()
+    store.setMany(batch) // revokes each donated placeholder it supersedes (exactly once)
+    for (const id of batch.keys()) {
+      placeholders.delete(id)
+      setFailed(id, false)
+    }
+  }
+  function gather(id: string, blob: Blob) {
+    gathered.set(id, blob)
+    installTimer ??= setTimeout(install, INSTALL_EVERY_MS)
+  }
+  function discardGathered() {
+    if (installTimer !== null) clearTimeout(installTimer)
+    installTimer = null
+    gathered = new Map()
+  }
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      reads.abort()
+      discardGathered()
+    })
+  }
 
   /** Prune thumbs of no-longer-listed media, and donate a done upload's preview for each newly-listed media so its
    *  optimistic tile hands off with no gray gap (the real thumbnail replaces it once decrypted). No decrypt here. */
@@ -51,6 +88,9 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
         store.drop(id)
         placeholders.delete(id)
       }
+    }
+    for (const id of [...gathered.keys()]) {
+      if (!ids.has(id)) gathered.delete(id)
     }
     for (const id of failed.value) {
       if (!ids.has(id)) setFailed(id, false)
@@ -73,13 +113,11 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
       list.map(async (item) => {
         if (!ctx.isDerivable(item)) return // non-image/video → icon tile, no fetch
         const id = ctx.idOf(item)
-        if (store.get(id) && !placeholders.has(id)) return // a real thumbnail is already in place
+        if ((store.get(id) && !placeholders.has(id)) || gathered.has(id)) return // a real thumbnail is in place or on its way
         try {
           const bytes = await ctx.decryptTile(item, signal)
           if (!bytes || !isCurrent() || signal.aborted) return
-          store.set(id, new Blob([bytes as BlobPart])) // revokes the donated placeholder it supersedes (exactly once)
-          placeholders.delete(id)
-          setFailed(id, false)
+          gather(id, new Blob([bytes as BlobPart]))
         } catch {
           // a read dropped by a reset is nobody's failure; any other is this tile's error state (a donated preview
           // stays visible under it), and the rest of the grid is unaffected
@@ -87,6 +125,7 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
         }
       }),
     )
+    if (!signal.aborted) install()
   }
 
   /** Full refresh for a fresh list: prune + donate, then decrypt the missing tiles. */
@@ -97,6 +136,7 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
 
   /** Drop one media's thumbnail (optimistic delete / removal), revoking its url. */
   function dropThumb(id: string) {
+    gathered.delete(id)
     store.drop(id)
     placeholders.delete(id)
     setFailed(id, false)
@@ -107,6 +147,7 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
   function revokeAll() {
     reads.abort()
     reads = new AbortController()
+    discardGathered()
     store.clear()
     placeholders.clear()
     failed.value = new Set()

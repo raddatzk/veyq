@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, watch } from 'vue'
 import { mount } from '@vue/test-utils'
-import { useThumbnailPipeline, type ThumbnailPipelineCtx } from './useThumbnailPipeline'
+import { INSTALL_EVERY_MS, useThumbnailPipeline, type ThumbnailPipelineCtx } from './useThumbnailPipeline'
 
 let seq = 0
 let revoked: string[] = []
@@ -120,6 +120,47 @@ describe('useThumbnailPipeline', () => {
     void api.decrypt([item('a')])
     wrapper.unmount()
     expect(signals[0].aborted).toBe(true)
+  })
+
+  // inbox #488: every install re-renders the whole grid, so tiles arriving one by one must not each churn the map
+  it('tiles that arrive one by one, close together, are installed together: one map change, not one per tile', async () => {
+    const decryptTile = vi.fn((i: Item) =>
+      new Promise<Uint8Array>((resolve) => setTimeout(() => resolve(new Uint8Array([1])), Number(i.id.slice(1)))))
+    const { api } = harness({ decryptTile })
+    let changes = 0
+    watch(api.thumbs, () => void changes++, { flush: 'sync' })
+    await api.decrypt(Array.from({ length: 20 }, (_, i) => item(`t${i}`)))
+    expect(api.thumbs.value.size).toBe(20)
+    expect(changes).toBe(1)
+  })
+
+  it('tiles already decrypted are installed after INSTALL_EVERY_MS while slower reads still run', async () => {
+    let releaseSlow!: (b: Uint8Array) => void
+    const decryptTile = vi.fn((i: Item) =>
+      i.id === 'slow' ? new Promise<Uint8Array>((resolve) => (releaseSlow = resolve)) : Promise.resolve(new Uint8Array([1])))
+    const { api } = harness({ decryptTile })
+    const done = api.decrypt([item('fast'), item('slow')])
+    await new Promise((r) => setTimeout(r, INSTALL_EVERY_MS + 50))
+    expect(api.thumbs.value.has('fast')).toBe(true)
+    expect(api.thumbs.value.has('slow')).toBe(false)
+    releaseSlow(new Uint8Array([2]))
+    await done
+    expect(api.thumbs.value.has('slow')).toBe(true)
+  })
+
+  it('a reset drops the thumbnails gathered but not yet installed', async () => {
+    let releaseSlow!: (b: Uint8Array) => void
+    const decryptTile = vi.fn((i: Item) =>
+      i.id === 'slow' ? new Promise<Uint8Array>((resolve) => (releaseSlow = resolve)) : Promise.resolve(new Uint8Array([1])))
+    const { api } = harness({ decryptTile })
+    const done = api.decrypt([item('fast'), item('slow')])
+    await Promise.resolve()
+    await Promise.resolve()
+    api.revokeAll() // the gallery switched Memory before the timer installed 'fast'
+    releaseSlow(new Uint8Array([2]))
+    await done
+    await new Promise((r) => setTimeout(r, INSTALL_EVERY_MS + 50))
+    expect(api.thumbs.value.size).toBe(0)
   })
 
   it('dropThumb revokes one; revokeAll + unmount revoke the rest exactly once', async () => {
