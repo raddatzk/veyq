@@ -32,6 +32,8 @@ const memoryName = `Begründete Erinnerung ${stamp}`
 const photoName = `Gesperrtes Bild ${stamp}.jpg`
 const guestReason = `Das Bild zeigt eine fremde Adresse ${stamp}`
 const facts = `Auf dem Bild ist eine Wohnadresse neben einer Drohung zu lesen ${stamp}`
+// The provision is clear text by design (DSA Art. 17(3)(d)): the moderator's short reference, never a canary.
+const provision = '§ 241 StGB'
 const objection = `Das ist meine eigene Adresse, ich habe sie selbst geteilt ${stamp}`
 const reporterAddress = () => `reporter-${stamp}@${stack().domain}`
 const BLOCKED = 'Blocked by the operator'
@@ -153,6 +155,8 @@ test(
       '@uc.moderation.object-to-a-measure:the-statement-is-sent-with-the-measure',
       '@uc.moderation.object-to-a-measure:the-form-follows-the-operating-mode',
       '@uc.moderation.object-to-a-measure:the-reporter-is-told-the-decision',
+      '@uc.moderation.object-to-a-measure:the-statement-names-the-provision-and-where-it-applies',
+      '@uc.moderation.object-to-a-measure:the-reporter-is-told-their-redress',
     ],
   },
   async () => {
@@ -173,6 +177,10 @@ test(
     await expect(page.locator('.moderation-case-error')).toHaveText('Write what you found: on this instance a block’s statement must state the facts.')
     await expect(page.locator('#moderation-statement-ground')).toHaveValue('ILLEGAL_CONTENT')
     await page.locator('#moderation-statement-facts').fill(recordTyped(facts))
+    // ... and the law or the clause the ground relies on (DSA Art. 17(3)(d), (e)): without it the block is not sent either.
+    await page.locator('.moderation-block-content').click()
+    await expect(page.locator('.moderation-case-error')).toHaveText('Name the law or the clause the block relies on: on this instance a block’s statement must name it.')
+    await page.locator('#moderation-statement-provision').fill(provision)
     await page.locator('.moderation-block-content').click()
     await confirmDecision(page, 'Block the content')
     await expect(page.locator('.moderation-measure-statement')).toContainText('Statement of reasons sent', { timeout: 60_000 })
@@ -185,10 +193,17 @@ test(
     expect(mail.text).toContain('content was blocked')
     expect(mail.text).toContain('it is illegal under the law that applies')
     expect(mail.text).toContain('No automated means found or decided it')
+    expect(mail.text).toContain(`It relies on ${provision}.`)
+    expect(mail.text).toContain('It applies wherever this veyq instance is reached, and lasts until it is lifted.')
     expect(mail.text).toContain(`sign in at ${instance().tenantDomain}`)
     expect(mail.text, 'the facts stay out of the mail').not.toContain(stamp)
     const [decision] = await awaitMails(reporterAddress(), DECISION_MAIL)
     expect(decision!.text).toContain('took a measure')
+    // The reporter's redress (DSA Art. 16(5), Art. 53), in the organisation mode's full form.
+    expect(decision!.text).toContain('If you have more information, you can report it again.')
+    expect(decision!.text).toContain('You can also go to court.')
+    expect(decision!.text).toContain('Digital Services Coordinator of the Member State where you live or are established')
+    expect(decision!.text).toContain('Koordinator für digitale Dienste')
     expect(decision!.text).not.toContain(stamp)
   },
 )
@@ -213,6 +228,8 @@ test(
     await expect(notice).toContainText('content was blocked')
     await expect(notice).toContainText('You are told as the person who uploaded it and an owner of the space it lies in.')
     await expect(notice.locator('.statement-facts')).toHaveText(facts)
+    await expect(notice).toContainText(`It relies on ${provision}.`)
+    await expect(notice).toContainText('It applies wherever this veyq instance is reached')
     await expect(notice).toContainText('You can also go to court')
     await notice.locator('.statement-objection-text').fill(recordTyped(objection))
     await notice.getByRole('button', { name: 'Send the objection' }).click()
