@@ -1,7 +1,7 @@
 ---
 id: cr-statement-legal-gaps
 title: The statement's legal gaps — the reporter's redress, the Server Owner's own steps, the provision relied on, and a guest's notice of a removal order
-status: planned
+status: in-progress
 satisfies: ["uc.moderation.object-to-a-measure", "uc.moderation.take-a-measure", "uc.moderation.authority-order"]
 adrs: ["0093", "0099", "0066", "0101"]
 invariants:
@@ -129,7 +129,7 @@ the statement names — the Server Owner lifts with the existing unblock or reac
 
 ## Phases
 
-- [ ] **0 docs** — the three use-cases' flows: object-to-a-measure (step 7 the redress passage; A7 rewritten: the
+- [x] **0 docs** — the three use-cases' flows: object-to-a-measure (step 7 the redress passage; A7 rewritten: the
   Server Owner's steps over content carry a statement by mail, objection to the contact), take-a-measure (the
   provision; the Server Owner's statement), authority-order (step 5–6: the guest's notice, its deferral). Their new
   acceptance criteria join the coverage files in the phases that bring their refs (a built file holds no uncovered

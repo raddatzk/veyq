@@ -37,13 +37,20 @@
    for information after the days it names, else six months. That end is the hold's **floor**: no extension, lift or
    later decision ends it sooner (ADR 0093 § 4). An extension (an authority's further request) moves it later, as on
    any case.
-5. **The statement of reasons** (ADR 0093 § 7): every block the order took carries one with the basis `ORDER` and the
-   ground terrorist content, to the recipients a moderator's block would reach; the order is its facts.
+5. **The statement of reasons** (ADR 0093 § 7): every block the order took carries one with the basis `ORDER`, the
+   ground terrorist content and the provision *Regulation (EU) 2021/784, Art. 3 (removal order)*, to the recipients a
+   moderator's block would reach; the order is its facts. **A guest uploader is told too** (TCO Art. 11(1), ADR 0093
+   § 12): a guest identity whose upload the removal order blocked asks, on the link it came through and with the
+   contributor token its client holds, and is answered — even though the link itself is blocked — that it was removed
+   on an authority's order received on `<date>`, and that the reasons or a copy of the order are given on request
+   from the instance contact (Art. 11(2)). Nothing else is served to it; another identity's token, or an upload a
+   moderator's measure blocked, gets the link's ordinary unknown answer.
 6. **The deferral is the authority's switch** (TCO Art. 11(3)): entered with the removal order — an end at most six
    weeks ahead, the order's reference as its reason — the statement is held and the case shows when it goes out. Once
    the end has passed, the hourly cleanup sends it; a moderator may enter one renewal before then, at most six weeks
    from its entry, its reason sealed (`moderation-note`). A moderator's own measure can carry a deferral in the same
-   way when an authority asked for one. A deferred statement's hold counts from its sending.
+   way when an authority asked for one. A deferred statement's hold counts from its sending. While the deferral runs
+   the guest's notice is held back exactly as the statement is.
 7. **What comes out.** For a removal order, the text for the feedback form (TCO Annex II): the reference, the action
    taken and the block time in UTC to the second. One template, `contracts/moderation/authority-order-forms.json`,
    rendered by admin-web (and its CLI) and web/; a **draft** until a qualified legal review.
