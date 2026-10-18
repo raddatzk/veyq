@@ -323,6 +323,11 @@ externalDatabase:
 
 garage:
   image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
+  # The store's RUST_LOG. The image bakes in `garage=info`, which logs every S3 and admin request with the peer's
+  # address and port and the URI with its query (object keys, presign signatures); `warn` keeps warnings and errors
+  # and drops that request log (ADR 0092 § 5) — the compose recipe sets the same. Raise it to `garage=info` (or
+  # `garage=debug`) only to troubleshoot the store, and set it back: at `info` every reader's address is logged again.
+  logFilter: garage=warn
   # Three claims, mirroring the compose recipe's three volumes. Snapshots are separate from meta on purpose:
   # `garage meta snapshot` defaults to writing INSIDE metadata_dir, into the very volume a rollback would
   # copy (ADR 0056 §3).
