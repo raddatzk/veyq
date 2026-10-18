@@ -109,6 +109,16 @@
   lightbox show *Blocked by the operator* with no reason and load no bytes (each answers `451 blocked_by_operator`), for
   members and guests alike; its uploader may still delete it, and it cannot be restored from the trash while blocked.
   A Memory blocked as a whole shows as that placeholder in its level and does not open.
+- **E7 — a Memory or Chapter of thousands of photos** (inbox #488): the client asks for the thumbnails in grid order
+  and never all at once — their presigns travel in batches of up to the contract's 256 blobs per request, at most two
+  requests in flight, and at most sixteen store reads in flight across the page (`web/src/core/blob/readScheduler.ts`
+  holds the limits and why). What the user opens — a preview, a video, a download, a cover — goes before the grid's
+  thumbnails, and leaving the Memory drops the reads still waiting. Thumbnails that arrive within 100 ms of each other
+  appear together, so the grid is not redrawn once per photo. A read without an answer, or answered `5xx`, `408` or
+  `429`, is tried up to four times with a growing pause; a presigned URL that expired before it was used is presigned
+  again, twice at most. A thumbnail that still cannot be read shows *Could not load* on its tile, never a placeholder
+  that waits forever. Members and guests alike; the server sees the same blob ids and the same presigned reads, only
+  batched and fewer at once.
 
 ## Quality notes
 

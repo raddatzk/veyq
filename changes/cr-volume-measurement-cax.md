@@ -102,6 +102,8 @@ while a phone uploads — the CAX run should watch the app there first.
 **For this CR's run.**
 - *Phase 2's member axis* cannot reach 1,000 while #491 stands; its top stage is what the product reaches (445 on a
   fresh tenant). A fix of #491 first would let the axis run as planned — the owner's call.
+- *#488 is fixed* (2026-10-19): the 3,000 Chapter loaded completely, its last thumbnail after 20.7 s desktop and 120 s at 4x,
+  1,000 after 4.7 s and 23 s (this Mac at load 7–17, so indicative); the client rows of the table above predate it.
 - *The five-at-once scenario* ran five Chromiums in one container on this Mac, which drove the Mac's load to 30: its
   client numbers say nothing, its server numbers stand. On the CAX the five browsers run here and the server runs
   there, so the clients no longer compete with each other's host — but they still share this Mac; the scenario's
