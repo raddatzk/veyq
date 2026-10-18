@@ -43,7 +43,7 @@ export function openReview(review: CaseReview): OpenedReview {
   const address = addressOf(review)
   let keys: v1.ReportKey[] = []
   const reports = review.reports.map((r) => {
-    const body = openReportOf(r.epoch, r.sealedReport)
+    const body = openReportOf(r.epoch, r.sealedReport, r.sealedContact)
     if (body && keys.length === 0) {
       try {
         keys = v1.openReportShare(body.reportKey, address, fromB64std(r.sealedShare))

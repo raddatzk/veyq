@@ -94,7 +94,7 @@ async function load() {
 const openedReports = computed(() => {
   const opened = new Map<string, { reason: string; contact: string; context: string } | null>()
   for (const r of current.value?.reports ?? []) {
-    const body = openReportOf(r.epoch, r.sealedReport)
+    const body = openReportOf(r.epoch, r.sealedReport, r.sealedContact)
     if (body) body.reportKey.fill(0)
     opened.set(r.id, body ? { reason: body.reason, contact: body.contact, context: body.context } : null)
   }
@@ -343,7 +343,7 @@ onMounted(load)
           <span class="veyq-form-copy">{{ t('moderation.case.extendUntilHint') }}</span>
           <label for="moderation-extend-reason">{{ t('moderation.case.extendReason') }}</label>
           <textarea id="moderation-extend-reason" v-model="extendReason" class="moderation-extend-reason" rows="3" maxlength="2000" required :disabled="busy" />
-          <span class="veyq-form-copy">{{ t('moderation.case.extendReasonHint') }}</span>
+          <span class="veyq-form-copy">{{ t(csam ? 'moderation.case.extendReasonHintCsam' : 'moderation.case.extendReasonHint') }}</span>
           <Button type="submit" severity="secondary" class="moderation-extend-submit" icon="pi pi-clock" :label="t('moderation.case.extend')" :loading="busy" />
         </form>
       </template>

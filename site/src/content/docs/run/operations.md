@@ -8,6 +8,7 @@ sources:
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/features/admin/use-cases/uc.admin.learn-of-new-releases.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
+  - docs/decisions/0092-logs-are-operational-and-name-no-person.md
 ---
 
 ## Health
@@ -28,27 +29,54 @@ when the object store is not usable yet. There is no other health endpoint.
 
 ## Logs
 
-The application writes to standard output, at the default level:
+Every container writes to standard output; the application at the default level:
 
 ```sh
 ./veyqctl logs -f app                 # in /opt/veyq
 kubectl -n veyq logs -f deploy/veyq-app
 ```
 
-What it logs is operational: routing being written, the object store being set up (an access key's id at most,
-never a secret), the config-secret key being generated or unreadable, background jobs that give up, a mail that
-could not be sent. **What it does not log:** content, names, keys, tokens and the links that carry them. A tenant's
-invitation link and its secret, an SMTP password and the store's secrets are never written to the log.
+What the application logs is operational: routing being written, the object store being set up (an access key's id
+at most, never a secret), the config-secret key being generated or unreadable, background jobs that give up, a mail
+that could not be sent. **What it does not log:** content, names, email addresses, client addresses, keys, tokens and
+the links that carry them. A mail that could not be sent is logged by its kind and the mail server's reply code, not
+by its recipient; a new tenant's invitation that falls back to the copy link is logged by the tenant's id. An
+operator who needs to know whose mail it was looks the account or the tenant up by that id.
 
-Two personal facts **are** logged: the recipient address of a mail that could not be sent, and the owner's address
-when a new tenant's invitation falls back to the copy link.
+What each source holds:
+
+| Source | What it logs |
+|---|---|
+| Application | operational lines, with ids (account, tenant, scope, node, share), domains, key ids and counts |
+| Admin surface | an access log of the admin console: the client address, the time, the method, the path without its query, the status, the size, the user agent and the forwarded address — of whoever reached the console, which by default is only you |
+| Traefik (Compose) | its own errors; the recipe turns **no** access log on |
+| Garage | warnings and errors only — `RUST_LOG=garage=warn`, set by both recipes; no line per request |
+| MariaDB | startup and errors; no general, slow-query or binary log |
+| Your gateway (Kubernetes) | its own access log if you turn it on: every reader's address and path, kept as you configure it |
+
+**How long a log stays.** A log is bounded by size, never by time — no container log driver offers time on both
+targets, so veyq keeps people out of the logs instead.
+
+- **Docker Compose** sets `json-file` with `max-size: 10m` and `max-file: 3` on every service: at most 30 MB per
+  container, and the oldest file is deleted when a fourth would start. On a quiet instance that can span weeks; on a
+  busy one, days. Recreating a container (every upgrade does) deletes its log with it. Without that block a stock
+  Linux Docker keeps a container's log unrotated for as long as the container exists — keep it if you edit the recipe.
+- **Kubernetes** leaves rotation to the kubelet, which rotates every container's log by size — 10 MiB × 5 files by
+  default (`containerLogMaxSize`, `containerLogMaxFiles`), your cluster's setting — and drops it with the pod.
+- **A log shipper** you run (Loki, a journal, a cloud logging agent) keeps copies under its own retention, which is
+  yours to set and to name in your record of processing.
+
+**Raising Garage's level for troubleshooting.** A store problem the warnings do not explain may need the request log:
+on Compose add `services: garage: environment: RUST_LOG: garage=info` to `compose.override.yml` and run
+`./veyqctl start`; on Kubernetes `--set garage.logFilter=garage=info`. At `info` Garage logs **every** S3 and admin
+request with the peer's address and port and the object key — behind the proxy, every reader's — so set it back as
+soon as you are done.
 
 Every run of the end-to-end orchestrator searches every server and container log of the run for any value the client
 sealed and for every token it handled, and fails if one appears
 ([cc.security.wire-assertion](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.wire-assertion.md)).
-Traefik's access log is not enabled by either recipe; the admin surface's access log keeps the method, the path
-without its query, the status, the size, the user agent and the forwarded address. A cluster's gateway
-implementation keeps its own access log, which is yours to configure.
+The run raises Garage to `info` on purpose: the sweep's control is a key it sends to the bucket and then finds in that
+request log.
 
 ## No metrics
 
@@ -145,6 +173,10 @@ reads `<mirror>/releases.json` and `<mirror>/<tag>/manifest.json`, the layout `v
 
 The release check runs in the backend's tests against a source inside the test run — each kind of notice, each way a
 source fails, the switch, and that no request names a release; it has not run against GitHub.
+
+The log bounds and the store's level were measured on the pinned Garage image under the Compose recipe (2026-10-18):
+the container runs with `json-file`, 10m × 3, and at `garage=warn` three requests for a bucket key left no line naming
+it, where the same requests at `garage=info` left three, each with the peer's address and port.
 
 The health probe ran in the one live run of the hardened Compose recipe (2026-09-28). The log sweep runs with every
 end-to-end run, on the development stack. The Kubernetes probes have not run in a cluster.

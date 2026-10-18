@@ -11,9 +11,10 @@ import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
 
 /**
- * The moderation cleanup: key-proof challenges past their five minutes, moderation-log events past their retention
- * date (ADR 0093 § 11 — 31 December of the third year after the moderator's removal, [ModerationLog.retentionEnd]), and
- * holds past their end with their snapshot and pins (ADR 0093 § 4, [Holds.purgeExpired]); and the new-case mails a case
+ * The moderation cleanup: key-proof challenges past their five minutes, instance events of the moderation log past their
+ * retention date (ADR 0093 § 11 — 31 December of the third year after the moderator's removal, [ModerationLog.retentionEnd]),
+ * holds past their end with their snapshot and pins (ADR 0093 § 4, [Holds.purgeExpired]), and a case's records with its
+ * events and a reporter's contact past theirs ([ModerationRecordsPurge]); and the new-case mails a case
  * still owes ([CaseNotices]: an urgent one that could not go out, the day's bundle).
  * And the retry of a rotation-due mail and of a statement of reasons' mail that could not go out. Each step in its own short transaction, as `SessionPurge` does. `@Scheduled(every=…)` fires at its first trigger, so it
  * also runs soon after startup.
@@ -27,6 +28,7 @@ class ModerationPurge(
     private val decisions: CaseDecisions,
     private val statementMail: StatementMail,
     private val deferrals: StatementDeferrals,
+    private val records: ModerationRecordsPurge,
 ) {
 
     @Scheduled(every = "{veyq.moderation.purge.every}")
@@ -37,6 +39,8 @@ class ModerationPurge(
         QuarkusTransaction.requiringNew().run { log.purgeExpired(now) }
         // A hold past its end goes with its snapshot and pins; its case logs the end, and a decided one then closes.
         decisions.holdsEnded(holds.purgeExpired(now), now)
+        // A reporter's contact six months after the decision was told, and a case's records with its log (ADR 0093 § 11).
+        records.sweep(now)
         // The new-case mail (ADR 0093 § 2, owner decision Q7): an urgent one that could not go out, and the day's bundle.
         caseNotices.mailUrgent(now)
         caseNotices.mailBundle(now)

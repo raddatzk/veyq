@@ -8,6 +8,13 @@ title: Act on an authority's order
 # `veyq-admin order remove|preserve|inform` in admin-web. Lane L1's browser pass is
 # e2e/tests/features/takedown-orders-and-art18.spec.ts, tagged per criterion; `stack` and `admin-web` wait under gaps.
 acceptanceCriteria:
+  - id: an-order-goes-with-its-case
+    text: >-
+      An order's row goes with its case's records; one that found no share goes with its event on 31 December of the
+      third year after it was entered, its event dated from the order whoever entered it.
+    coverage:
+      backend:
+        integration: [ModerationRetentionSliceTest.anOrderThatFoundNoShareGoesWithItsEventAndAnOrdersCaseWithItsOrder]
   - id: a-removal-order-blocks-by-id-at-once
     text: >-
       A removal order entered by a moderator with the key proof, or by the Server Owner on the admin channel without a

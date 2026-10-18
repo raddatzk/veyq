@@ -181,7 +181,8 @@
     "garage": {
       "type": "object",
       "properties": {
-        "image": { "$ref": "#/$defs/nonEmpty" }
+        "image": { "$ref": "#/$defs/nonEmpty" },
+        "logFilter": { "type": "string", "pattern": "^[A-Za-z0-9_:=,.-]+$" }
       }
     }
   },

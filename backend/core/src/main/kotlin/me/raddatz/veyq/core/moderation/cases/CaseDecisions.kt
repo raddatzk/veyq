@@ -23,6 +23,7 @@ import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseState
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.moderation.report.ModerationReportEntity
+import me.raddatz.veyq.core.moderation.report.ReportCategory
 import me.raddatz.veyq.core.moderation.report.ReportItemKind
 import me.raddatz.veyq.core.moderation.report.ReportShareEntity
 import me.raddatz.veyq.core.moderation.report.ReportableItems
@@ -131,7 +132,9 @@ sealed interface DecisionOutcome {
  * **The hold's ends** (ADR 0093 § 4): a dismissal ends it at once; a measure moves it to six months after its
  * statement of reasons is sent — after the decision where nobody can be told (decision 4 of
  * cr-statement-of-reasons-and-objection); lifting the case's last measure in force ends it at once and closes the case;
- * an extension sets its own end, at most six months from now. A bar of a reporter is no step against the content: it
+ * an extension sets its own end, at most six months from now. A case of child sexual abuse is bounded: a measure or a
+ * statement moves its hold at most to 90 days after the report (`Holds.moveEnd`'s ceiling), and the handover ends it.
+ * A bar of a reporter is no step against the content: it
  * neither decides a case nor keeps or ends its hold. **A case closes** only when its last hold ended and no objection
  * waits (ADR 0093 § 11).
  *
@@ -492,17 +495,29 @@ class CaseDecisions(
     }
 
     /**
-     * Record a handover to an authority (ADR 0093 §§ 11-13): the case was reported to one, or information was given in
-     * answer to an order, with the reference sealed as [note]. It changes no hold — ending a child-sexual-abuse case's hold
-     * at the handover waits on counsel (ADR 0093 § Legal basis, Still open 1: § 184b(5) StGB).
+     * Record a handover to an authority (ADR 0093 §§ 11-13): the case was reported to one, or information was given to
+     * one, with the reference sealed as [note]. **On a case of child sexual abuse it ends the hold** (ADR 0093 § 4,
+     * § 184b(5) StGB: keeping the content is exempt only while it serves exclusively the report, and the handover
+     * fulfils it) — except to an authority order's floor, which runs on; a decided case left with nothing held and no
+     * objection waiting then closes. On every other case it changes no hold.
      */
     fun handover(moderatorId: String, caseId: String, kind: HandoverKind, note: SealedNote, now: Instant = Instant.now()): DecisionOutcome =
-        QuarkusTransaction.requiringNew().call {
-            val case = lock(caseId) ?: return@call refused(CaseFailures.caseNotFound)
-            noteRefusal(note)?.let { return@call refused(it) }
-            log.appendCase(kind.event, now, case.id, moderatorId = moderatorId, epoch = note.epoch, sealedText = note.sealed)
-            DecisionOutcome.Done
+        QuarkusTransaction.requiringNew().call { handoverIn(moderatorId, caseId, kind, note, now) }
+
+    /** [handover]'s writes, **in the caller's transaction** under the case's lock. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun handoverIn(moderatorId: String, caseId: String, kind: HandoverKind, note: SealedNote, now: Instant): DecisionOutcome {
+        val case = lock(caseId) ?: return refused(CaseFailures.caseNotFound)
+        noteRefusal(note)?.let { return refused(it) }
+        log.appendCase(kind.event, now, case.id, moderatorId = moderatorId, epoch = note.epoch, sealedText = note.sealed)
+        if (case.category == ReportCategory.CHILD_SEXUAL_ABUSE.name) {
+            if (holds.endNow(case.id, now)) log.appendCase(ModerationEvent.HOLD_ENDED, now, case.id, moderatorId = moderatorId)
+            if (case.state == CaseState.DECIDED.name && holds.aliveOf(case.id, now) == null && !ModerationObjectionEntity.openOn(case.id)) {
+                close(case, now)
+            }
         }
+        return DecisionOutcome.Done
+    }
 
     fun bar(moderatorId: String, caseId: String, reportId: String, note: SealedNote?, now: Instant = Instant.now()): DecisionOutcome =
         createOrConflict(conflict = { refused(CaseFailures.measureExists) }) {

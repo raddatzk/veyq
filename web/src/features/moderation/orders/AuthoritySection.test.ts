@@ -95,4 +95,22 @@ describe('AuthoritySection', () => {
     await flushPromises()
     expect(recordHandover).toHaveBeenCalledTimes(1)
   })
+
+  // ADR 0093 § 4: on a child-sexual-abuse case the handover ends the hold — the hint and the confirmation say so before
+  // it is recorded; on any other case they say it changes nothing else (the control).
+  it('says before a child-sexual-abuse case\'s handover that it ends the hold, and on another case that it does not', async () => {
+    vi.mocked(recordHandover).mockResolvedValue(caseOf())
+    const csam = mountSection(caseOf({ category: 'CHILD_SEXUAL_ABUSE', origin: 'REPORT', orders: [] }))
+    expect(csam.find('.moderation-authority').text()).toContain(t('moderation.authority.handoverHintCsam'))
+    await csam.find('.moderation-handover-reported').trigger('click')
+    await flushPromises()
+    expect(ask).toHaveBeenLastCalledWith(expect.objectContaining({ message: t('moderation.authority.handoverConfirmCsam') }))
+
+    const other = mountSection()
+    expect(other.find('.moderation-authority').text()).toContain(t('moderation.authority.handoverHint'))
+    expect(other.find('.moderation-authority').text()).not.toContain(t('moderation.authority.handoverHintCsam'))
+    await other.find('.moderation-handover-reported').trigger('click')
+    await flushPromises()
+    expect(ask).toHaveBeenLastCalledWith(expect.objectContaining({ message: t('moderation.authority.handoverConfirm') }))
+  })
 })

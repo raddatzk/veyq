@@ -35,11 +35,11 @@ acceptanceCriteria:
   - id: the-report-arrives-sealed
     text: >-
       The server stores the category, the epoch, the time, the items' kinds and ids and the reporter's account or link
-      in the clear; the reason, the address and K_report only sealed to the current epoch's key, and the report shares
-      only under K_report. A report sealed to an older epoch is refused.
+      in the clear; the reason and K_report only sealed to the current epoch's key, the address apart from them, and the
+      report shares only under K_report. A report sealed to an older epoch is refused.
     coverage:
       backend:
-        integration: [ReportCoreSliceTest.aMemberReportsANodeOfTheirSpaceAndTheServerKeepsOnlyTheClearFields, ReportCoreSliceTest.aReportSealedToAnotherEpochIsRefused]
+        integration: [ReportCoreSliceTest.aMemberReportsANodeOfTheirSpaceAndTheServerKeepsOnlyTheClearFields, ReportCoreSliceTest.aReportSealedToAnotherEpochIsRefused, ReportCoreSliceTest.theAddressIsStoredSealedApartOnlyWhenOneWasLeft]
       web:
         unit: [src/core/report/report.wire.test.ts]
   - id: a-hold-keeps-what-was-reported
@@ -73,8 +73,8 @@ acceptanceCriteria:
         integration: [ReportMailSliceTest.anUrgentReportMailsEveryConfirmedModeratorAtOnceWithTheCategoryAndNoIdOrLink, ReportMailSliceTest.aNonUrgentReportWaitsForTheDaysBundleAndABundleGoesAtMostOnceADay, ReportMailSliceTest.theInstanceContactsConfirmedNotificationAddressIsMailedTooAndAnUnconfirmedOneIsNot]
   - id: the-reporter-gets-a-receipt
     text: >-
-      The reporter sees a reference and the time; an address they gave is mailed a receipt once and stored only in the
-      sealed part.
+      The reporter sees a reference and the time; an address they gave is mailed a receipt once, logged as "receipt
+      sent" on the report's case, and stored only sealed apart.
     coverage:
       backend:
         integration: [ReportMailSliceTest.theReporterGetsAReceiptOncePerReportBoundedPerAddressAndTheAddressIsStoredNowhere]

@@ -34,10 +34,17 @@ object ReportTestKit {
     fun item(kind: String, id: String?, sealedShare: String = SEALED_SHARE): String =
         """{"kind":"$kind",${id?.let { """"id":"$it",""" } ?: ""}"sealedShare":"$sealedShare"}"""
 
-    /** A report body. */
-    fun body(items: List<String>, category: String = "ILLEGAL_CONTENT", epoch: Int = 1, receiptAddress: String? = null): String =
+    /** An opaque stand-in for a reporter's contact sealed apart (`moderation-report-contact`; the server never opens one). */
+    const val SEALED_CONTACT = "AWNvbnRhY3Q="
+
+    /** A report body; [sealedContact] the reporter's contact sealed apart, when they left one. */
+    fun body(
+        items: List<String>, category: String = "ILLEGAL_CONTENT", epoch: Int = 1, receiptAddress: String? = null,
+        sealedContact: String? = null,
+    ): String =
         """{"category":"$category","epoch":$epoch,"sealedReport":"$SEALED_REPORT","items":[${items.joinToString(",")}]""" +
-            (receiptAddress?.let { ""","receiptAddress":"$it"""" } ?: "") + "}"
+            (receiptAddress?.let { ""","receiptAddress":"$it"""" } ?: "") +
+            (sealedContact?.let { ""","sealedContact":"$it"""" } ?: "") + "}"
 
     /** A member's report of [items] in [scopeId]. */
     fun asMember(userId: String, scopeId: String, body: String): Response =
