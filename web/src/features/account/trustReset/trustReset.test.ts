@@ -61,8 +61,8 @@ function fakeServer(
   opts: { stale?: number; onStale?: (doc: Doc) => IdentityPins & DeviceRegister } = {},
 ) {
   const state: Stored = {
-    pins: { ...(served.pins ?? { blob: null, revision: 0 }) },
-    register: { ...(served.register ?? { blob: null, revision: 0 }) },
+    pins: { ...(served.pins ?? { revision: 0 }) },
+    register: { ...(served.register ?? { revision: 0 }) },
   }
   let staleLeft = opts.stale ?? 0
   /** The compare-and-set; a landed write answers with the stored document, as the endpoint does. */

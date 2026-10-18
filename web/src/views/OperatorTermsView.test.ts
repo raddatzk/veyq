@@ -22,8 +22,7 @@ const stubs = {
 }
 
 const NO_DETAILS = {
-  contactEmail: null, contactLanguages: [], statementEmail: null, providerName: null, providerAddress: null,
-  providerEmail: null, providerRepresentative: null, supervisoryAuthority: null,
+  contactLanguages: [],
 }
 
 const SECTION = {

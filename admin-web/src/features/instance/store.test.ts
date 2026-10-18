@@ -34,10 +34,10 @@ describe('the bundled choice and the readiness courtesy', () => {
     expect(BUNDLED_STORE_UPDATE).toEqual({ bundled: true })
   })
   it('is ready only after a passed check', () => {
-    const base = { bundledAvailable: false, blobsStored: false, setting: null, pending: null }
-    expect(storeReady({ ...base, lastCheck: null })).toBe(false)
+    const base = { bundledAvailable: false, blobsStored: false, setting: undefined, pending: undefined }
+    expect(storeReady({ ...base, lastCheck: undefined })).toBe(false)
     // only the setting in use counts: a pending one's check never opens tenant creation (ADR 0089 decision 5)
-    expect(storeReady({ ...base, lastCheck: null, pending: { setting: null!, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } } })).toBe(false)
+    expect(storeReady({ ...base, lastCheck: undefined, pending: { setting: null!, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } } })).toBe(false)
     expect(storeReady({ ...base, lastCheck: { passed: false, checkedAt: new Date(), steps: [] } })).toBe(false)
     expect(storeReady({ ...base, lastCheck: { passed: true, checkedAt: new Date(), steps: [] } })).toBe(true)
     expect(storeReady(null)).toBe(false)

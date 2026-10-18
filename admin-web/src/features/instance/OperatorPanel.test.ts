@@ -45,9 +45,9 @@ const stubs = {
 
 function operator(over: Partial<InstanceOperator> = {}): InstanceOperator {
   return {
-    operatingMode: 'ORGANISATION', contactEmail: null, contactLanguages: [], statementEmail: null, notificationEmail: null,
-    notificationConfirmation: 'NOT_SET', notificationConfirmedAt: null, instanceMailReady: true, providerName: null,
-    providerAddress: null, providerEmail: null, providerRepresentative: null, supervisoryAuthority: null, ...over,
+    operatingMode: 'ORGANISATION', contactEmail: undefined, contactLanguages: [], statementEmail: undefined, notificationEmail: undefined,
+    notificationConfirmation: 'NOT_SET', notificationConfirmedAt: undefined, instanceMailReady: true, providerName: undefined,
+    providerAddress: undefined, providerEmail: undefined, providerRepresentative: undefined, supervisoryAuthority: undefined, ...over,
   }
 }
 
@@ -96,7 +96,7 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
   })
 
   it('organisation: the identification warning goes once name, address and email are set, whatever the contact', async () => {
-    vi.mocked(getOperator).mockResolvedValue(operator({ ...identified, providerEmail: null }))
+    vi.mocked(getOperator).mockResolvedValue(operator({ ...identified, providerEmail: undefined }))
     vi.mocked(setOperator).mockResolvedValue(operator(identified))
     const w = await mountPanel()
     expect(w.find('.operator-warn-identification').exists()).toBe(true)

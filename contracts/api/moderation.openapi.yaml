@@ -184,6 +184,10 @@ paths:
       responses:
         "204":
           description: Stepped down.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -438,6 +442,10 @@ paths:
                   - accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                     identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
                     epochs: [1, 2]
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -535,6 +543,9 @@ paths:
       parameters:
         - name: state
           in: query
+          # An empty value (`?state=`) is this parameter's absence: Quarkus REST
+          # never converts it (cr-api-fuzzing).
+          allowEmptyValue: true
           required: false
           description: Only cases in this state; absent = `OPEN` and `DECIDED`.
           schema: { $ref: "#/components/schemas/ModerationCaseState" }
@@ -546,6 +557,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationQueue" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
         "403": { $ref: "#/components/responses/ProofInvalid" }
 
@@ -572,6 +587,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
         "403": { $ref: "#/components/responses/ProofInvalid" }
         "404": { $ref: "#/components/responses/CaseNotFound" }
@@ -818,11 +837,17 @@ paths:
         - $ref: "#/components/parameters/CaseId"
         - name: kind
           in: query
+          # An empty value (`?kind=`) is this parameter's absence: Quarkus REST
+          # never converts it (cr-api-fuzzing).
+          allowEmptyValue: true
           required: true
           description: The step, as `takeModerationMeasure` names it.
           schema: { type: string, enum: [SHARE, CONTENT, GUEST_IDENTITY] }
         - name: targetId
           in: query
+          # An empty value (`?targetId=`) is this parameter's absence: Quarkus REST
+          # never converts it (cr-api-fuzzing).
+          allowEmptyValue: true
           required: false
           description: For `CONTENT` and `GUEST_IDENTITY`, the target's id.
           schema: { type: string, format: uuid }
@@ -1068,6 +1093,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AuthorityOrders" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
         "403": { $ref: "#/components/responses/ProofInvalid" }
 
@@ -1183,6 +1212,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationCaseExport" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
         "403": { $ref: "#/components/responses/ProofInvalid" }
         "404": { $ref: "#/components/responses/CaseNotFound" }
@@ -1294,7 +1327,7 @@ components:
     ModeratorAppointment:
       type: object
       description: The caller's own appointment.
-      required: [state, appointedAt, acceptedAt, address, confirmation, awaitingKey]
+      required: [state, address, confirmation, awaitingKey]
       properties:
         state:
           x-veyq-visibility: enum
@@ -1304,13 +1337,13 @@ components:
           example: ACCEPTED
         appointedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the Server Owner appointed the caller; null for `NONE`.
           example: 2026-10-17T09:00:00Z
         acceptedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the caller accepted; null unless `ACCEPTED`.
           example: 2026-10-17T09:30:00Z
@@ -1372,7 +1405,7 @@ components:
     ModerationEpochGrant:
       type: object
       description: One live epoch's public bundle and the caller's grant of it.
-      required: [epoch, kemPublicKey, signPublicKey, sealedGrant]
+      required: [epoch, kemPublicKey, signPublicKey]
       properties:
         epoch:
           x-veyq-visibility: structure
@@ -1393,7 +1426,7 @@ components:
           maxLength: 64
           example: c2lnbi1wdWJsaWMta2V5
         sealedGrant:
-          type: [string, "null"]
+          type: string
           description: >
             `M_n` sealed to the caller's identity (`sealTo` purpose `moderation-grant` [epoch]); null while the caller
             waits for a holder to deliver it.
@@ -1517,7 +1550,8 @@ components:
     ModerationCaseSummary:
       type: object
       description: One case of the queue, in clear fields only.
-      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt, objectionOpen, origin, statementDeferredUntil, overdue]
+      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, objectionOpen, origin,
+        overdue]
       properties:
         origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
         overdue:
@@ -1529,7 +1563,7 @@ components:
           example: false
         statementDeferredUntil:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: The earliest end of a deferral that still holds one of the case's statements back — the surface reminds of it; null when none does.
           example: null
@@ -1562,7 +1596,7 @@ components:
           example: 2
         tenantDomain:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The domain of the tenant the item lies in — the host the review opens on (ADR 0099, decided with the owner
             3); the Server Owner's configuration, never user data. Null once the tenant is gone, and while it is suspended: its host then serves nothing (ADR 0066), so the review opens where the moderator is.
@@ -1570,7 +1604,7 @@ components:
           example: club.example.org
         holdEndsAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the case's hold ends; null when it holds none alive.
           example: 2027-01-15T09:00:00Z
@@ -1578,7 +1612,8 @@ components:
     ModerationCase:
       type: object
       description: One case as the moderation surface shows it (uc.moderation.review-a-case step 2).
-      required: [id, itemKind, itemId, scopeId, tenantId, tenantDomain, category, state, decidedAt, closedAt, hold, reports, measures, proposals, targets, events, statementForm, objections, origin, orders]
+      required: [id, itemKind, itemId, scopeId, category, state, reports, measures, proposals, targets, events,
+        statementForm, objections, origin, orders]
       properties:
         origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
         orders:
@@ -1602,13 +1637,13 @@ components:
         scopeId: { type: string, format: uuid, x-veyq-visibility: id, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
         tenantId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The tenant the item's space belongs to; null once it is gone.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         tenantDomain:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The tenant's domain, where the review opens; the Server Owner's configuration. Null once it is gone, and while it is suspended (its host serves nothing then; the review opens where the moderator is).
           maxLength: 253
           example: club.example.org
@@ -1616,20 +1651,18 @@ components:
         state: { $ref: "#/components/schemas/ModerationCaseState" }
         decidedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the first measure was taken; null while open or when dismissed.
           example: null
         closedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the case closed; null while it is not.
           example: null
         hold:
-          oneOf:
-            - $ref: "#/components/schemas/ModerationHold"
-            - type: "null"
+          $ref: "#/components/schemas/ModerationHold"
         reports:
           type: array
           maxItems: 10000
@@ -1651,11 +1684,11 @@ components:
     ModerationHold:
       type: object
       description: The case's hold that is alive.
-      required: [endsAt, trigger, floorUntil]
+      required: [endsAt, trigger]
       properties:
         floorUntil:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: The end an authority's order sets — no extension, lift or decision ends the hold before it (ADR 0093 § 4); null without an order.
           example: null
@@ -1730,12 +1763,10 @@ components:
     ModerationMeasure:
       type: object
       description: A measure of the case — a row that deletes nothing and holds until it is lifted.
-      required: [id, kind, targetId, takenBy, takenAt, liftedAt, liftedBy, statement]
+      required: [id, kind, targetId, takenBy, takenAt]
       properties:
         statement:
-          oneOf:
-            - $ref: "#/components/schemas/ModerationMeasureStatement"
-            - type: "null"
+          $ref: "#/components/schemas/ModerationMeasureStatement"
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
         kind: { $ref: "#/components/schemas/ModerationMeasureKind" }
         targetId:
@@ -1758,13 +1789,13 @@ components:
           example: 2026-10-17T12:00:00Z
         liftedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When it was lifted; null while it is in force.
           example: null
         liftedBy:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The moderator account that lifted it; null while it is in force.
           example: null
@@ -1779,7 +1810,7 @@ components:
     ModerationProposal:
       type: object
       description: A step proposed to the Server Owner, and what became of it.
-      required: [id, step, targetId, proposedBy, proposedAt, outcome, settledAt]
+      required: [id, step, targetId, proposedBy, proposedAt, outcome]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 2c1f2d3e-4a5b-4c7c-8f0e-2a9b1d4a6e8b }
         step: { $ref: "#/components/schemas/ModerationProposalStep" }
@@ -1804,7 +1835,7 @@ components:
           example: OPEN
         settledAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the Server Owner took or declined it; null while open.
           example: null
@@ -1855,7 +1886,7 @@ components:
 
     ModerationTargetUploader:
       type: object
-      required: [kind, id, shareId, blocked]
+      required: [kind, id, blocked]
       properties:
         kind:
           x-veyq-visibility: enum
@@ -1871,7 +1902,7 @@ components:
           example: 6e8b2c1f-2d3e-4a5b-8c7c-3f0e2a9b1d4a
         shareId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           description: A guest identity's link; null for a member.
           maxLength: 64
           example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
@@ -1884,7 +1915,7 @@ components:
     ModerationCaseEvent:
       type: object
       description: One event of the case's log (ADR 0093 § 11) — structured fields in the clear, free text sealed.
-      required: [event, at, moderatorId, sealedText, until]
+      required: [event, at]
       properties:
         event:
           x-veyq-visibility: enum
@@ -1900,7 +1931,7 @@ components:
           example: 2026-10-17T12:00:00Z
         moderatorId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The moderator (or Server Owner) who acted; null for a report and an objection.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
@@ -1917,7 +1948,7 @@ components:
           description: The epoch `sealedText` is sealed to.
           example: 2
         sealedText:
-          type: [string, "null"]
+          type: string
           description: >
             The event's free text (a note, an extension's or a deferral's reason, a handover's reference), sealed to the
             moderation key (`moderation-note` [epoch, caseId]) — an `ORDER_RECEIVED`'s is the order's reference
@@ -1927,7 +1958,7 @@ components:
           example: null
         until:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: An extension's new end, or a deferral's end (`STATEMENT_DEFERRED`); null for every other event.
           example: null
@@ -2194,12 +2225,12 @@ components:
     ModerationMeasureStatement:
       type: object
       description: A measure's statement of reasons as the moderators see it.
-      required: [id, ground, basis, sentAt, epoch, sealedFacts, recipients, guests, deferredUntil, renewed]
+      required: [id, ground, basis, recipients, guests, renewed]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
         deferredUntil:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: While an authority's deferral holds it back, when it ends — the statement goes out then unless renewed; null otherwise.
           example: null
@@ -2212,18 +2243,18 @@ components:
         basis: { $ref: "#/components/schemas/StatementBasis" }
         sentAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When it was sent; null when nobody could be told, or while a deferral holds it back.
           example: 2026-10-17T12:00:00Z
         epoch:
           x-veyq-visibility: structure
-          type: [integer, "null"]
+          type: integer
           format: int32
           description: The epoch `sealedFacts` is sealed to; null without facts.
           example: 2
         sealedFacts:
-          type: [string, "null"]
+          type: string
           description: The facts sealed to the moderation key (`moderation-note` [epoch, caseId]); null without facts.
           contentEncoding: base64
           maxLength: 12000
@@ -2244,7 +2275,7 @@ components:
     ModerationObjection:
       type: object
       description: An objection to one of the case's measures, as the moderators see it.
-      required: [id, statementId, measureId, receivedAt, epoch, sealedObjection, decidedAt, decidedBy, outcome, ownReview, mayDecide]
+      required: [id, statementId, measureId, receivedAt, epoch, sealedObjection, ownReview, mayDecide]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f }
         statementId: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
@@ -2269,21 +2300,19 @@ components:
           example: c2VhbGVkLW9iamVjdGlvbg==
         decidedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When it was decided; null while it waits.
           example: null
         decidedBy:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The moderator who decided it; null while it waits.
           example: null
         outcome:
           description: The decision; null while the objection waits.
-          oneOf:
-            - $ref: "#/components/schemas/ObjectionOutcome"
-            - type: "null"
+          $ref: "#/components/schemas/ObjectionOutcome"
         ownReview:
           x-veyq-visibility: flag
           type: boolean
@@ -2336,7 +2365,7 @@ components:
       description: >
         A statement of reasons as an affected member reads it (ADR 0093 § 7) — the clear fields the template is rendered
         from, and the facts sealed to the reader. It names the host, never the moderator.
-      required: [id, caseId, measureKind, targetId, shareId, scopeId, ground, provision, basis, form, sentAt, roles, sealedFacts, inForce, liftedAt, contactAddress, objection, canObject]
+      required: [id, caseId, measureKind, targetId, ground, basis, form, sentAt, roles, inForce, canObject]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
         caseId:
@@ -2359,13 +2388,13 @@ components:
           example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
         shareId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           description: The link a `SHARE` or `GUEST_IDENTITY` measure blocked; null for `CONTENT`.
           maxLength: 43
           example: null
         scopeId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The space a `CONTENT` measure's target lies in; null otherwise.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
@@ -2387,7 +2416,7 @@ components:
           items: { type: string, enum: [SHARE_CREATOR, UPLOADER, SCOPE_OWNER] }
           example: [UPLOADER, SCOPE_OWNER]
         sealedFacts:
-          type: [string, "null"]
+          type: string
           description: The facts sealed to the reader's identity (`moderation-facts` [caseId, accountId]); null without facts.
           contentEncoding: base64
           maxLength: 12000
@@ -2399,21 +2428,19 @@ components:
           example: true
         liftedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the measure was lifted; null while it stands.
           example: null
         contactAddress:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           format: email
           description: The address statements name (the instance contact's, ADR 0093 § 11); null where none is set.
           maxLength: 254
           example: abuse@example.org
         objection:
-          oneOf:
-            - $ref: "#/components/schemas/StatementObjection"
-            - type: "null"
+          $ref: "#/components/schemas/StatementObjection"
         canObject:
           x-veyq-visibility: flag
           type: boolean
@@ -2423,7 +2450,7 @@ components:
     StatementObjection:
       type: object
       description: The objection to a statement's measure, as an affected member sees it — its state and answer, not its text.
-      required: [receivedAt, mine, outcome, ownReview, decidedAt]
+      required: [receivedAt, mine, ownReview]
       properties:
         receivedAt:
           x-veyq-visibility: time
@@ -2438,9 +2465,7 @@ components:
           example: true
         outcome:
           description: The decision; null while the objection waits.
-          oneOf:
-            - $ref: "#/components/schemas/ObjectionOutcome"
-            - type: "null"
+          $ref: "#/components/schemas/ObjectionOutcome"
         ownReview:
           x-veyq-visibility: flag
           type: boolean
@@ -2448,7 +2473,7 @@ components:
           example: false
         decidedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When it was decided; null while it waits.
           example: null
@@ -2564,7 +2589,7 @@ components:
     ModerationExportMeasure:
       type: object
       description: A measure of the case, as the export names it.
-      required: [kind, targetId, takenAt, liftedAt]
+      required: [kind, targetId, takenAt]
       properties:
         kind: { $ref: "#/components/schemas/ModerationMeasureKind" }
         targetId:
@@ -2581,7 +2606,7 @@ components:
           example: 2026-10-17T12:00:00Z
         liftedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When it was lifted; null while in force.
           example: null
@@ -2589,7 +2614,7 @@ components:
     ModerationExportUploader:
       type: object
       description: An uploader the held rows name.
-      required: [kind, id, shareId]
+      required: [kind, id]
       properties:
         kind:
           x-veyq-visibility: enum
@@ -2605,7 +2630,7 @@ components:
           example: 6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f
         shareId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           description: A guest's link; null for a member.
           maxLength: 43
           example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
@@ -2613,7 +2638,7 @@ components:
     ModerationExportGuestWrite:
       type: object
       description: One held guest-write record (ADR 0093 § 10) — what a guest's write left as evidence.
-      required: [identityId, objectKind, objectId, address, port, observedAt]
+      required: [identityId, objectKind, objectId, address, observedAt]
       properties:
         identityId:
           x-veyq-visibility: id
@@ -2644,7 +2669,7 @@ components:
           example: 203.0.113.77
         port:
           x-veyq-visibility: measure
-          type: [integer, "null"]
+          type: integer
           format: int32
           description: The client's source port, as the record kept it; null where none was recorded.
           example: 51234

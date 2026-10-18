@@ -136,7 +136,7 @@ describe('no server response reaches a write of a refused document (ADR 0028 Dec
   it.each([
     ['trust_state_unreadable', 'both documents', { pins: 3, register: 3 }, () => ({ pins: { blob: garbage(), revision: 3 }, register: { blob: garbage(), revision: 3 } })],
     ['trust_state_rolled_back', 'both documents (older copy)', { pins: 7, register: 7 }, () => ({ pins: { blob: sealedAt('pins', 4), revision: 4 }, register: { blob: sealedAt('register', 4), revision: 4 } })],
-    ['trust_state_rolled_back', 'both documents (missing after a mark)', { pins: 2, register: 2 }, () => ({ pins: { blob: null, revision: 0 }, register: { blob: null, revision: 0 } })],
+    ['trust_state_rolled_back', 'both documents (missing after a mark)', { pins: 2, register: 2 }, () => ({ pins: { revision: 0 }, register: { revision: 0 } })],
   ] as const)('%s, %s: every path is refused, and nothing is written', async (_code, _what, marks, served) => {
     await raiseMarks(MK, marks)
     const srv = fakeServer(served())

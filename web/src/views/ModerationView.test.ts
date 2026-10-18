@@ -76,14 +76,14 @@ describe('ModerationView', () => {
   })
 
   it('an account that is not appointed is told so and offered nothing', async () => {
-    vi.mocked(myAppointment).mockResolvedValue(appointment({ state: 'NONE', appointedAt: null, acceptedAt: null }))
+    vi.mocked(myAppointment).mockResolvedValue(appointment({ state: 'NONE', appointedAt: undefined, acceptedAt: undefined }))
     const w = await mountView()
     expect(w.text()).toContain(t('moderation.notAppointed'))
     expect(w.find('.moderation-unlock').exists()).toBe(false)
   })
 
   it('a pending appointment says what accepting means before it is accepted', async () => {
-    vi.mocked(myAppointment).mockResolvedValue(appointment({ state: 'PENDING', acceptedAt: null }))
+    vi.mocked(myAppointment).mockResolvedValue(appointment({ state: 'PENDING', acceptedAt: undefined }))
     vi.mocked(acceptAppointment).mockResolvedValue(appointment({ confirmation: 'CODE_SENT' }))
     const w = await mountView()
     expect(w.text()).toContain(t('moderation.acceptCsam'))

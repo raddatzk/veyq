@@ -79,6 +79,12 @@
   holds it). A write that more than one account makes **and** that re-sends fields its writer did not edit is
   `revision`; the client re-applies only its own change on the conflict body, and never seals a blob it could not
   open.
+- **A response property with no value is omitted, never sent as `null`** (`quarkus.jackson.serialization-inclusion=non-null`,
+  core's `application.properties`; cr-api-fuzzing Q7). So a response schema never lists such a property as
+  `required` and never types it `[T, "null"]` — a description that says "`null` when …" means "absent when …" on
+  the wire — and a client reads a missing field as none (`?? null` where its own code wants `null`). Requests are
+  unchanged: a `null` a client sends still binds. The one property sent as an explicit `null` says so at its field
+  (`InstanceRelease.release`, `@JsonInclude(ALWAYS)`).
 - **A dev seeder or script that calls the API is a client like any other**: it goes through the generated client
   and is typechecked with the app (`web/scripts/`, `tsconfig.scripts.json`), and it never reaches past the API into
   the database. When `bootstrap:user` hand-wrote its bodies, login verify gained `nonce` and the seeder failed its
@@ -120,7 +126,10 @@
   generation (`buildSrc`'s `ModelCascade`, with the compiler flag `-Xemit-jvm-type-annotations`), because Hibernate
   Validator logs `HV000271` for a container-level `@Valid` and announces its removal (inbox #336). A generator bump
   that changes how a list type is written fails the build instead of dropping the cascade;
-  `GeneratedCascadeSweepTest` and `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` hold the result.
+  `GeneratedCascadeSweepTest` and `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` hold the result. A
+  nullable nested object (`oneOf` [a schema, `null`]) loses its `x-field-extra-annotation` in the generator; the build
+  writes it back (`buildSrc`'s `NullableObjectCascade`), and `MalformedRequestSliceTest.aNullableNestedObjectIsValidatedInto`
+  holds it.
 - **Stateful / cross-field / domain checks stay imperative** in the handler or a guard, close to the
   invariant, and small/named/fail-closed (e.g. crypto-suite allow-list, scope-grant checks, upload
   quota/path-traversal guards). Anything needing DB state does not belong in a field annotation.
@@ -152,8 +161,12 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 - **Backend:** return a stable **error code** (the client localizes). Never put content, keys or secrets
   in an error body — the operator-blind boundary applies to errors too.
 - **A request the boundary refuses for its shape answers `400 ErrorResponse{code: invalid_request}`** — whichever
-  layer refused it: Jackson while binding (an unknown enum value, a wrong type, a missing or null required field,
-  unparseable JSON) or bean validation after it (an empty field, a bound, a pattern, an element). Core's
+  layer refused it: Jackson while binding (an unknown enum value, a wrong type — no scalar is coerced into another,
+  `StrictJsonTypes`; a `null` list element, `NullElementsRefused` — a missing or null required field, unparseable
+  JSON), bean validation after it (an empty field, a bound, a pattern, an element), or a query parameter that does
+  not convert (`StrictParamConverters`: canonical UUIDs, `true`/`false`, plain integers, enum names). A path segment
+  that does not convert stays the `404` of an id that names nothing, with `ErrorResponse{code: not_found}`
+  (`EmptyNotFoundFilter`). Core's
   `core/http/RequestRejectionMappers.kt` holds one mapper per exception type plus one response filter for the empty
   400 Quarkus' body reader answers, so every generated resource — each application's too — answers alike with no
   code of its own; a new refusal path gets its mapper there, never a per-resource catch. **Never an

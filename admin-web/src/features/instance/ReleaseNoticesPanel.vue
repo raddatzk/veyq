@@ -58,7 +58,7 @@ async function save() {
 
 /** One notice in words: what was found and, for a dated one, the day. */
 function line(n: InstanceReleaseNotice): string {
-  const day = noticeDay(n.date) ?? ''
+  const day = noticeDay(n.date ?? null) ?? ''
   const major = n.release.split('.')[0]
   switch (n.kind) {
     case InstanceReleaseNoticeKindEnum.Release: return t('releaseCheck.kindRelease', { release: n.release })

@@ -37,8 +37,8 @@ const ADDRESS = 'owner@example.com'
 
 function settings(over: Partial<InstanceMailSettings> = {}): InstanceMailSettings {
   return {
-    host: null, port: null, from: null, username: null, tls: true, passwordSet: false, configSecretState: 'OK',
-    address: ADDRESS, confirmation: 'NOT_CONFIGURED', confirmedAt: null, ...over,
+    host: undefined, port: undefined, from: undefined, username: undefined, tls: true, passwordSet: false, configSecretState: 'OK',
+    address: ADDRESS, confirmation: 'NOT_CONFIGURED', confirmedAt: undefined, ...over,
   }
 }
 
@@ -109,7 +109,7 @@ describe('InstanceMailPanel (uc.admin.learn-of-new-releases, admin-web)', () => 
 
   it('says nothing about the key for a relay that does not log in', async () => {
     // Control for the case above: the same state, no username — the key is not asked for, so it is not a problem.
-    vi.mocked(getInstanceMail).mockResolvedValue({ ...configured, username: null, configSecretState: 'MISMATCH' })
+    vi.mocked(getInstanceMail).mockResolvedValue({ ...configured, username: undefined, configSecretState: 'MISMATCH' })
     const w = await mountPanel()
     expect(w.find('.mail-key').exists()).toBe(false)
   })

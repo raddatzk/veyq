@@ -49,7 +49,7 @@ const unsealPins = (blob: string, revision: number): Record<string, { key: strin
   JSON.parse(dec.decode(v1.open(pinsAt(revision), MK, fromB64std(blob)))).pins
 
 // A fake server store with REAL optimistic concurrency: a PUT whose revision != the stored revision is a 409.
-function fakeServer(initial: IdentityPins = { blob: null, revision: 0 }) {
+function fakeServer(initial: IdentityPins = { blob: undefined, revision: 0 }) {
   const state: IdentityPins = { ...initial }
   const stale = () => httpError(409, 'stale_revision')
   const getIdentityPins = vi.fn<PinsApi['getIdentityPins']>(async () => ({ blob: state.blob, revision: state.revision }))
@@ -422,13 +422,13 @@ describe('the pin store never goes backwards on this device (ADR 0028 Decision 7
   it('wipe: once this device opened v3, a missing store is refused — the changed key is not pinned as a first use', async () => {
     fakeServer({ blob: seal(pinOf(OLD), 3), revision: 3 })
     expect(await checkAndPin('u1', OLD)).toBe('match') // this device has now held v3
-    const wiped = fakeServer({ blob: null, revision: 0 })
+    const wiped = fakeServer({ blob: undefined, revision: 0 })
     await expect(checkAndPin('u1', NEW)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
     expect(wiped.putIdentityPins).not.toHaveBeenCalled()
   })
 
   it('control: a device with no mark reads a missing store as empty, and pins on first use', async () => {
-    const srv = fakeServer({ blob: null, revision: 0 })
+    const srv = fakeServer({ blob: undefined, revision: 0 })
     expect(await checkAndPin('u1', NEW)).toBe('firstUse')
     expect(srv.state.revision).toBe(1)
   })
@@ -453,10 +453,10 @@ describe('the pin store never goes backwards on this device (ADR 0028 Decision 7
   })
 
   it('a write raises the mark to the revision it stored — the next missing store is refused', async () => {
-    const srv = fakeServer({ blob: null, revision: 0 })
+    const srv = fakeServer({ blob: undefined, revision: 0 })
     expect(await checkAndPin('u1', NEW)).toBe('firstUse') // stored at v1 by this device
     expect(srv.state.revision).toBe(1)
-    fakeServer({ blob: null, revision: 0 })
+    fakeServer({ blob: undefined, revision: 0 })
     await expect(checkAndPin('u1', OLD)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
   })
 

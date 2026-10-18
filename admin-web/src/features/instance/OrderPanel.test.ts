@@ -29,7 +29,7 @@ function order(over: Partial<AuthorityOrder> = {}): AuthorityOrder {
   return {
     id: '3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b', kind: 'REMOVAL', shareId: SHARE, receivedAt: new Date('2026-10-18T07:12:00Z'),
     enteredAt: new Date('2026-10-18T07:20:11Z'), enteredBy: 'owner', found: true, blockedAt: new Date('2026-10-18T07:20:11.734Z'),
-    caseId: 'case', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: null, epoch: 1, sealedReference: 'c2VhbGVk',
+    caseId: 'case', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: undefined, epoch: 1, sealedReference: 'c2VhbGVk',
     providerName: 'Example e.V.', contactPoint: 'abuse@example.org', ...over,
   }
 }
@@ -93,7 +93,7 @@ describe('OrderPanel (uc.moderation.authority-order, admin-web)', () => {
 
   it('shows the Annex III draft when the share is not on this instance', async () => {
     ask.mockResolvedValue(true)
-    vi.mocked(enterOrder).mockResolvedValue(order({ found: false, blockedAt: null, caseId: null, holdUntil: null }))
+    vi.mocked(enterOrder).mockResolvedValue(order({ found: false, blockedAt: undefined, caseId: undefined, holdUntil: undefined }))
     const w = await mountPanel()
     await fillAndSubmit(w)
     expect(w.find('.order-not-found').exists()).toBe(true)

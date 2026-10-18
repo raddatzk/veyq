@@ -34,19 +34,19 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   caseId: CASE,
   measureKind: 'CONTENT',
   targetId: 'node-1',
-  shareId: null,
-  scopeId: null,
+  shareId: undefined,
+  scopeId: undefined,
   ground: 'TERMS_BREACH',
   provision: null,
   basis: 'REPORT',
   form: 'FULL',
   sentAt: new Date(),
   roles: ['UPLOADER'],
-  sealedFacts: null,
+  sealedFacts: undefined,
   inForce: true,
-  liftedAt: null,
-  contactAddress: null,
-  objection: null,
+  liftedAt: undefined,
+  contactAddress: undefined,
+  objection: undefined,
   canObject: true,
   ...over,
 })
@@ -83,7 +83,7 @@ describe('the statements of an affected member', () => {
     expect(openFacts(statement({ sealedFacts: sealed, caseId: STATEMENT }))).toBeNull()
     account.userId = STATEMENT
     expect(openFacts(statement({ sealedFacts: sealed }))).toBeNull()
-    expect(openFacts(statement({ sealedFacts: null }))).toBeNull()
+    expect(openFacts(statement({ sealedFacts: undefined }))).toBeNull()
     keys.identity = null
     expect(openFacts(statement({ sealedFacts: sealed }))).toBeNull()
   })

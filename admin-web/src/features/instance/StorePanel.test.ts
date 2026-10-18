@@ -52,21 +52,21 @@ const stubs = {
 }
 
 const own: InstanceStoreSetting = {
-  bundled: false, type: 'S3', endpoint: 'https://s3.example.com', publicEndpoint: null, bucket: 'b', region: 'eu', accessKey: 'AK',
-  garageAdminEndpoint: null, secretKeySet: true, garageAdminTokenSet: false, unreadable: [],
+  bundled: false, type: 'S3', endpoint: 'https://s3.example.com', publicEndpoint: undefined, bucket: 'b', region: 'eu', accessKey: 'AK',
+  garageAdminEndpoint: undefined, secretKeySet: true, garageAdminTokenSet: false, unreadable: [],
 }
 const read = (over: Partial<InstanceStore> = {}): InstanceStore => ({
-  bundledAvailable: false, blobsStored: false, setting: null, lastCheck: null, pending: null, ...over,
+  bundledAvailable: false, blobsStored: false, setting: undefined, lastCheck: undefined, pending: undefined, ...over,
 })
 const check = (passed: boolean): InstanceStoreCheck => ({
   passed,
   checkedAt: new Date('2026-10-15T12:00:00Z'),
   steps: passed
-    ? [{ step: 'CREDENTIALS', outcome: 'PASSED', detail: null }, { step: 'BUCKET', outcome: 'PASSED', detail: null }]
+    ? [{ step: 'CREDENTIALS', outcome: 'PASSED' }, { step: 'BUCKET', outcome: 'PASSED' }]
     : [
-        { step: 'CREDENTIALS', outcome: 'PASSED', detail: null },
+        { step: 'CREDENTIALS', outcome: 'PASSED' },
         { step: 'BUCKET', outcome: 'FAILED', detail: 'The bucket nope does not exist (HTTP 404).' },
-        { step: 'PROBE_PUT', outcome: 'SKIPPED', detail: null },
+        { step: 'PROBE_PUT', outcome: 'SKIPPED' },
       ],
 })
 
@@ -169,7 +169,7 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
 
   it('says a saved change is not in use yet, and edits it rather than the store in use', async () => {
     const changed = { ...own, endpoint: 'https://typo.example.com' }
-    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: undefined } }))
     expect(w.find('.store-pending').text()).toBe(t('store.pendingNote'))
     expect((w.find('input[name=endpoint]').element as HTMLInputElement).value).toBe('https://typo.example.com')
     expect(w.find('.store-unchecked').text()).toBe(t('store.pendingUnchecked'))
@@ -178,7 +178,7 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
   it('reads a failed check of the saved change as leaving the store in use unchanged', async () => {
     const changed = { ...own, endpoint: 'https://typo.example.com' }
     vi.mocked(checkInstanceStore).mockResolvedValue(check(false))
-    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: undefined } }))
     vi.mocked(getInstanceStore).mockResolvedValue(
       read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: check(false) } }),
     )
@@ -195,7 +195,7 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
   it('shows the store in use once a passing check put the saved change in use', async () => {
     const changed = { ...own, endpoint: 'https://new.example.com' }
     vi.mocked(checkInstanceStore).mockResolvedValue(check(true))
-    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: undefined } }))
     vi.mocked(getInstanceStore).mockResolvedValue(read({ setting: changed, lastCheck: check(true) }))
     await w.find('.store-check').trigger('click')
     await flushPromises()
@@ -206,7 +206,7 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
   it('discards a saved change and shows the store in use again', async () => {
     const changed = { ...own, endpoint: 'https://typo.example.com' }
     vi.mocked(discardPendingInstanceStore).mockResolvedValue(read({ setting: own, lastCheck: check(true) }))
-    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: null } }))
+    const w = await mountPanel(read({ setting: own, lastCheck: check(true), pending: { setting: changed, lastCheck: undefined } }))
     await w.find('.store-discard').trigger('click')
     await flushPromises()
     expect(discardPendingInstanceStore).toHaveBeenCalledOnce()

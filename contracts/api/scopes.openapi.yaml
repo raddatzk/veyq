@@ -949,6 +949,10 @@ paths:
       responses:
         "204": { description: "The proposal is gone (declined, or there was no open proposal of yours)." }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
+        "404":
+          description: A path id that is no UUID names nothing (`not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_found } }
 
 components:
   securitySchemes:

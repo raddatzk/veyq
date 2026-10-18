@@ -239,8 +239,8 @@ const ROTATION_REASONS: Record<string, RotationReason> = {
 function renderRoster(r: InstanceModeration): string {
   return renderResult({
     enabled: r.enabled,
-    currentEpoch: r.currentEpoch,
-    rotationDueSince: r.rotationDueSince,
+    currentEpoch: r.currentEpoch ?? null,
+    rotationDueSince: r.rotationDueSince ?? null,
     moderators: r.moderators.map((m) => ({ address: m.address, state: m.state, holdsKey: m.holdsCurrentEpoch })),
   })
 }
@@ -260,13 +260,13 @@ function renderSteps(s: ModerationSteps): string {
   return renderResult({
     proposals: s.proposals.map((p) => ({
       id: p.id,
-      caseId: p.caseId,
+      caseId: p.caseId ?? null,
       category: p.category,
       step: p.step,
-      ...(p.step === ProposalStep.TenantOffline ? { tenantId: p.tenantId, tenantDomain: p.tenantDomain } : { address: p.address }),
+      ...(p.step === ProposalStep.TenantOffline ? { tenantId: p.tenantId ?? null, tenantDomain: p.tenantDomain ?? null } : { address: p.address ?? null }),
       proposedAt: p.proposedAt,
     })),
-    signInBlocks: s.signInBlocks.map((b) => ({ address: b.address, caseId: b.caseId, blockedAt: b.blockedAt })),
+    signInBlocks: s.signInBlocks.map((b) => ({ address: b.address, caseId: b.caseId ?? null, blockedAt: b.blockedAt })),
   })
 }
 
@@ -411,7 +411,7 @@ export const COMMANDS: Record<string, Command> = {
     run: async (f) => {
       if (f.state !== 'on' && f.state !== 'off') throw new CliError(`release check takes on or off (got '${f.state}')`)
       const current = await getReleaseNotices()
-      return setReleaseCheck(f.state === 'on', current.source)
+      return setReleaseCheck(f.state === 'on', current.source ?? null)
     },
   },
   'config-secret': {

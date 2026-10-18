@@ -24,13 +24,13 @@ const SHARE = '3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i'
 const order: AuthorityOrder = {
   id: '3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b', kind: 'REMOVAL', shareId: SHARE, receivedAt: new Date('2026-10-18T07:12:00Z'),
   enteredAt: new Date('2026-10-18T07:20:11Z'), enteredBy: 'mod', found: true, blockedAt: new Date('2026-10-18T07:20:11Z'),
-  caseId: CASE, holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: null, epoch: 2, sealedReference: 'c2VhbGVk',
-  providerName: null, contactPoint: 'abuse@example.org',
+  caseId: CASE, holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: undefined, epoch: 2, sealedReference: 'c2VhbGVk',
+  providerName: undefined, contactPoint: 'abuse@example.org',
 }
 
 const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
-  id: CASE, itemKind: 'NODE', itemId: 'node', scopeId: 'scope', tenantId: null, tenantDomain: null, category: 'TERRORIST_CONTENT',
-  state: 'DECIDED', decidedAt: new Date(), closedAt: null, hold: null, reports: [], measures: [], proposals: [],
+  id: CASE, itemKind: 'NODE', itemId: 'node', scopeId: 'scope', tenantId: undefined, tenantDomain: undefined, category: 'TERRORIST_CONTENT',
+  state: 'DECIDED', decidedAt: new Date(), closedAt: undefined, hold: undefined, reports: [], measures: [], proposals: [],
   targets: { links: [], uploaders: [] }, events: [], statementForm: 'FULL', objections: [], origin: 'ORDER', orders: [order], ...over,
 })
 

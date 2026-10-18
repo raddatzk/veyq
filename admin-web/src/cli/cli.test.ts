@@ -149,18 +149,18 @@ const created: TenantCreated = {
 }
 const row: TenantSummary = {
   tenantId: 't1', name: 'Fam', domain: 'f.example.com', ownerEmail: 'k@example.com', status: 'PENDING',
-  storageUsedBytes: 5, storageQuotaBytes: null, ownerless: false, deletionDueAt: null,
+  storageUsedBytes: 5, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined,
 }
 const invite = (ownerEmail: string): TenantInviteState => ({
   ownerEmail, inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES, bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK',
 })
 
-const storeRead: InstanceStore = { bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null }
+const storeRead: InstanceStore = { bundledAvailable: true, blobsStored: false, setting: undefined, lastCheck: undefined, pending: undefined }
 const failedCheck: InstanceStoreCheck = {
   passed: false,
   checkedAt: EXPIRES,
   steps: [
-    { step: 'CREDENTIALS', outcome: 'PASSED', detail: null },
+    { step: 'CREDENTIALS', outcome: 'PASSED', detail: undefined },
     { step: 'BUCKET', outcome: 'FAILED', detail: 'The bucket nope does not exist (HTTP 404).' },
   ],
 }
@@ -184,8 +184,8 @@ const noticesRead: InstanceReleaseNotices = {
   source: 'https://mirror.example.com/veyq',
   lastSuccessAt: new Date('2026-10-16T04:00:00.000Z'),
   notices: [{
-    id: 'n1', kind: 'UNSCHEDULED_MAJOR', release: '2.0', date: null, daysAhead: null,
-    foundAt: new Date('2026-10-16T04:00:00.000Z'), mailedAt: null,
+    id: 'n1', kind: 'UNSCHEDULED_MAJOR', release: '2.0', date: undefined, daysAhead: undefined,
+    foundAt: new Date('2026-10-16T04:00:00.000Z'), mailedAt: undefined,
   }],
 }
 const register: InstanceCapability[] = [
@@ -214,7 +214,7 @@ beforeEach(() => {
   vi.mocked(tenants.reactivateTenant).mockResolvedValue(undefined)
   vi.mocked(getInstanceRelease).mockResolvedValue({ release: '1.4.0' })
   vi.mocked(getReleaseNotices).mockResolvedValue(noticesRead)
-  vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => ({ ...noticesRead, enabled, source }))
+  vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => ({ ...noticesRead, enabled, source: source ?? undefined }))
   vi.mocked(getInstanceConfigSecret).mockResolvedValue({ state: 'MISMATCH' })
 })
 
@@ -605,8 +605,8 @@ describe('veyq-admin — moderators and the moderation key (uc.moderation.appoin
   const roster = (over: Partial<InstanceModeration> = {}): InstanceModeration => ({
     enabled: true,
     currentEpoch: 2,
-    currentKemPublicKey: null,
-    rotationDueSince: null,
+    currentKemPublicKey: undefined,
+    rotationDueSince: undefined,
     serverOwner: { accountId: 'owner', identityPublicKey: 'AAAA' },
     moderators: [
       {
@@ -614,8 +614,8 @@ describe('veyq-admin — moderators and the moderation key (uc.moderation.appoin
         identityPublicKey: 'AAAA', holdsCurrentEpoch: true, addressConfirmed: true,
       },
       {
-        accountId: 'deputy-id', address: 'Deputy@Example.com', state: 'PENDING', appointedAt: EXPIRES, acceptedAt: null,
-        identityPublicKey: null, holdsCurrentEpoch: false, addressConfirmed: false,
+        accountId: 'deputy-id', address: 'Deputy@Example.com', state: 'PENDING', appointedAt: EXPIRES, acceptedAt: undefined,
+        identityPublicKey: undefined, holdsCurrentEpoch: false, addressConfirmed: false,
       },
     ],
     ...over,
@@ -698,16 +698,16 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
     proposals: [
       {
         id: 'p-member', caseId: 'case-1', category: 'ILLEGAL_CONTENT', step: 'MEMBER_SIGN_IN', accountId: 'acc-1',
-        address: 'member@example.com', tenantId: null, tenantDomain: null, proposedAt: EXPIRES,
+        address: 'member@example.com', tenantId: undefined, tenantDomain: undefined, proposedAt: EXPIRES,
       },
       {
-        id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', accountId: null,
-        address: null, tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: EXPIRES,
+        id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', accountId: undefined,
+        address: undefined, tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: EXPIRES,
       },
     ],
     signInBlocks: [
       { id: 'b-1', accountId: 'acc-2', address: 'Blocked@Example.com', caseId: 'case-3', blockedAt: EXPIRES },
-      { id: 'b-2', accountId: 'acc-3', address: 'ordered@example.com', caseId: null, blockedAt: EXPIRES },
+      { id: 'b-2', accountId: 'acc-3', address: 'ordered@example.com', caseId: undefined, blockedAt: EXPIRES },
     ],
     ...over,
   })
@@ -839,10 +839,10 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
   const modeRead = (over: Partial<InstanceOperatingMode> = {}): InstanceOperatingMode =>
     ({ mode: 'ORGANISATION', chosen: true, preset: [guestRecord], ...over })
   const op = (over: Partial<InstanceOperator> = {}): InstanceOperator => ({
-    operatingMode: 'ORGANISATION', contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: null,
+    operatingMode: 'ORGANISATION', contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: undefined,
     notificationEmail: 'alerts@example.org', notificationConfirmation: 'CONFIRMED', notificationConfirmedAt: EXPIRES,
-    instanceMailReady: true, providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: null,
-    providerRepresentative: null, supervisoryAuthority: null, ...over,
+    instanceMailReady: true, providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: undefined,
+    providerRepresentative: undefined, supervisoryAuthority: undefined, ...over,
   })
 
   it('mode show prints the mode, the notice in the locale, and what the other mode would switch', async () => {
@@ -905,7 +905,7 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
     const r = await invoke(['operator', 'set'])
     expect(r.code).toBe(1)
     expect(setOperator).not.toHaveBeenCalled()
-    vi.mocked(clearOperator).mockResolvedValueOnce(op({ contactEmail: null }))
+    vi.mocked(clearOperator).mockResolvedValueOnce(op({ contactEmail: undefined }))
     expect((await invoke(['operator', 'clear'])).code).toBe(0)
     expect(clearOperator).toHaveBeenCalledOnce()
   })
@@ -916,8 +916,8 @@ describe('veyq-admin — an authority’s order (uc.moderation.authority-order)'
   const recorded = (over: Partial<AuthorityOrder> = {}): AuthorityOrder => ({
     id: '3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b', kind: 'REMOVAL', shareId: SHARE, receivedAt: new Date('2026-10-18T07:12:00Z'),
     enteredAt: new Date('2026-10-18T07:20:11Z'), enteredBy: 'owner', found: true, blockedAt: new Date('2026-10-18T07:20:11.734Z'),
-    caseId: 'case', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: null, epoch: 1, sealedReference: 'c2VhbGVk',
-    providerName: null, contactPoint: 'abuse@example.org', ...over,
+    caseId: 'case', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: undefined, epoch: 1, sealedReference: 'c2VhbGVk',
+    providerName: undefined, contactPoint: 'abuse@example.org', ...over,
   })
 
   it('order remove passes the link, the reference and the times, and prints the block and the Annex II text', async () => {
@@ -937,10 +937,10 @@ describe('veyq-admin — an authority’s order (uc.moderation.authority-order)'
   })
 
   it('order inform passes the days; order preserve prints the Annex III draft when the link is not here', async () => {
-    vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'INFORMATION', blockedAt: null }))
+    vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'INFORMATION', blockedAt: undefined }))
     expect((await invoke(['order', 'inform', '--share', SHARE, '--reference', 'r', '--hold-days', '30'])).code).toBe(0)
     expect(enterOrder).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'INFORMATION', holdDays: 30 }))
-    vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'PRESERVATION', found: false, blockedAt: null, caseId: null, holdUntil: null }))
+    vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'PRESERVATION', found: false, blockedAt: undefined, caseId: undefined, holdUntil: undefined }))
     const r = await invoke(['order', 'preserve', '--share', SHARE, '--reference', 'r', '--lang', 'en'])
     expect(r.out).toContain('not found on this instance')
     expect(r.out).toContain('no shared link with this identifier exists')

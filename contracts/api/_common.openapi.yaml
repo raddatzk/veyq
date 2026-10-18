@@ -51,6 +51,9 @@ components:
     ItemsSinceDelete:
       name: sinceDelete
       in: query
+      # An empty value (`?sinceDelete=`) is this parameter's absence: Quarkus REST
+      # never converts it (cr-api-fuzzing).
+      allowEmptyValue: true
       required: false
       description: >
         The client's last-seen `deleteRevision`. The server includes the node's current item-id set (for
@@ -523,7 +526,7 @@ components:
     AuthorityOrder:
       type: object
       description: An authority's order as recorded — clear fields, and the reference sealed.
-      required: [id, kind, shareId, receivedAt, enteredAt, enteredBy, found, blockedAt, caseId, holdUntil, statementDeferredUntil, epoch, sealedReference, providerName, contactPoint]
+      required: [id, kind, shareId, receivedAt, enteredAt, enteredBy, found, epoch, sealedReference]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b }
         kind: { $ref: "#/components/schemas/AuthorityOrderKind" }
@@ -558,25 +561,25 @@ components:
           example: true
         blockedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: For a `REMOVAL` that found its share, when the share and its content were both blocked — to the second, for the Annex II text; a block already in force counts from its own time. Null otherwise.
           example: 2026-10-18T07:20:11Z
         caseId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The case the order opened; null when its share was not found.
           example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
         holdUntil:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: The end the order sets for its hold — no extension, lift or decision ends it sooner (ADR 0093 § 4). Null when nothing is held.
           example: 2027-04-19T07:20:11Z
         statementDeferredUntil:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: Until when the authority deferred the statement of reasons; null when it did not.
           example: null
@@ -594,13 +597,13 @@ components:
           example: c2VhbGVkLXJlZmVyZW5jZQ==
         providerName:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The provider's name from the operator details, for the forms; null when none is set.
           maxLength: 200
           example: Example e.V.
         contactPoint:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The instance contact — the TCO contact point (ADR 0093 § 11), for the forms; null when none is set.
           maxLength: 254
           example: abuse@example.org

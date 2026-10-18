@@ -94,21 +94,14 @@ components:
       description: >
         The operator's published values; every one may be null (none set). Never the notification address.
       required:
-        - contactEmail
         - contactLanguages
-        - statementEmail
-        - providerName
-        - providerAddress
-        - providerEmail
-        - providerRepresentative
-        - supervisoryAuthority
       properties:
         contactEmail:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
             The instance contact (DSA Art. 11–12, TCO Art. 15) must be published; the operator typed it for that
             purpose (ADR 0093 § 11).
-          type: [string, "null"]
+          type: string
           format: email
           description: The single point of contact for users and authorities, and the TCO contact point.
           maxLength: 254
@@ -127,7 +120,7 @@ components:
           x-veyq-rationale: >-
             The address statements and disclosures name (ADR 0093 § 11), published; the operator typed it for that
             purpose.
-          type: [string, "null"]
+          type: string
           format: email
           description: The address a statement of reasons and a disclosure name.
           maxLength: 254
@@ -137,7 +130,7 @@ components:
           x-veyq-rationale: >-
             The provider identification (ADR 0035 decision 7; § 5 DDG, § 18 MStV) names the operator in public; the
             operator typed it for that purpose.
-          type: [string, "null"]
+          type: string
           description: The provider's name.
           maxLength: 200
           example: Example e. V.
@@ -145,7 +138,7 @@ components:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
             The provider identification's address for service (ADR 0035 decision 7), published by law.
-          type: [string, "null"]
+          type: string
           description: The address for service; may span lines.
           maxLength: 500
           example: "Musterstraße 1\n12345 Musterstadt"
@@ -153,7 +146,7 @@ components:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
             The provider identification's email address (ADR 0035 decision 7), published by law.
-          type: [string, "null"]
+          type: string
           format: email
           description: The provider's email address.
           maxLength: 254
@@ -162,13 +155,13 @@ components:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
             Who represents a legal person (ADR 0035 decision 7), published by law.
-          type: [string, "null"]
+          type: string
           description: For a legal person, who represents it.
           maxLength: 200
           example: Erika Mustermann (Vorstand)
         supervisoryAuthority:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The competent data-protection supervisory authority.
           maxLength: 500
           example: "Landesbeauftragte für Datenschutz, Musterstadt"

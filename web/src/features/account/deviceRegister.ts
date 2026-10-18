@@ -30,7 +30,7 @@ import { accountDeviceRegisterApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey } from '../../app/vault'
-import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './trustMarks'
+import { openAccountDocument, raiseMarks, servedDocument, type AccountDocumentStore } from './trustMarks'
 
 /** The register's seal context at a stored `revision` (ADR 0072, vector `seal.sym.device-register`, domain-separate
  *  from the pins): bound to the revision the server stores it at, so a blob served under another does not open. */
@@ -134,7 +134,7 @@ async function loadRegister(): Promise<OpenedRegister> {
   if (!mk) throw new Error('device register requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-    return { revision: res.revision, ...(await openRegister(mk, res)) }
+    return { revision: res.revision, ...(await openRegister(mk, servedDocument(res))) }
   } finally {
     mk.fill(0)
   }
@@ -240,7 +240,7 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
  */
 export const registerDocument: AccountDocumentStore<RegisterPlain> = {
   document: 'register',
-  fetch: () => withRefresh(() => accountDeviceRegisterApi().getDeviceRegister()),
+  fetch: async () => servedDocument(await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())),
   open: openRegister,
   seal: sealRegister,
   empty,

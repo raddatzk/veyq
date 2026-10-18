@@ -51,7 +51,7 @@ const namesOf = (liveFamilyIds: ReadonlyArray<string>, thisDeviceId = 'nobody') 
   readRegisterView(liveFamilyIds, null, thisDeviceId).then((v) => v.names)
 
 /** A fake server with REAL optimistic concurrency: a PUT whose revision != the stored revision is a 409. */
-function fakeServer(initial: DeviceRegister = { blob: null, revision: 0 }) {
+function fakeServer(initial: DeviceRegister = { blob: undefined, revision: 0 }) {
   const state: DeviceRegister = { ...initial }
   const stale = () => httpError(409, 'stale_revision')
   const getDeviceRegister = vi.fn<RegisterApi['getDeviceRegister']>(async () => ({ blob: state.blob, revision: state.revision }))

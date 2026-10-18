@@ -496,7 +496,7 @@ class TenantsResource(
         }
 
     private fun TenantStorageOutcome.toResponse(): Response = when (this) {
-        is TenantStorageOutcome.Ok -> Response.ok(TenantStorage(storage.usedBytes, storage.quotaBytes, storage.shareLinkLimitBytes)).build()
+        is TenantStorageOutcome.Ok -> Response.ok(TenantStorage(usedBytes = storage.usedBytes, quotaBytes = storage.quotaBytes, shareLinkLimitBytes = storage.shareLinkLimitBytes)).build()
         is HttpFailure -> httpError(this)
     }
 

@@ -124,7 +124,7 @@ describe('unlockModeration', () => {
   })
 
   it('a moderator still waiting for the current epoch delivers nothing and holds no current key', async () => {
-    serve([epoch(1, m1), { ...epoch(2, m2), sealedGrant: null }], 2)
+    serve([epoch(1, m1), { ...epoch(2, m2), sealedGrant: undefined }], 2)
     const result = await unlockModeration('deputy@example.com', 'pw', 'sk')
     expect(result).toEqual({ holdsCurrent: false, delivered: 0, declined: 0 })
     expect(currentModerationKey()).toBeNull()

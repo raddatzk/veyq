@@ -373,6 +373,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "404":
+          description: A path id that is no UUID names nothing (`not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_found } }
 
   /api/recovery/request:
     post:
@@ -402,6 +406,10 @@ paths:
       responses:
         "202":
           description: Accepted. Says nothing about whether the address is registered.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "429":
           description: Too many recovery requests; retry after the indicated delay.
           content:
@@ -441,6 +449,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RecoveryMaterial" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "404":
           description: The token is unknown, expired or already spent. Deliberately indistinguishable.
           content:
@@ -471,6 +483,10 @@ paths:
       responses:
         "204":
           description: The password is reset; sign in with it. All device trust is gone.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
           description: >
             `secret_key_proof_failed` — the signature did not verify against the account's Secret-Key proof

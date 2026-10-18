@@ -62,6 +62,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareMediaListing" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
           description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
           content:
@@ -152,6 +156,10 @@ paths:
       responses:
         "204":
           description: Deleted (the contribution, its derivatives, and its blobs are gone).
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
           description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
           content:
@@ -185,6 +193,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareMediaListing" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:

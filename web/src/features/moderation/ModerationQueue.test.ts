@@ -32,7 +32,7 @@ const summary = (over: Partial<ModerationCaseSummary> = {}): ModerationCaseSumma
   objectionOpen: false,
   holdEndsAt: new Date('2027-01-15T09:00:00Z'),
   origin: 'REPORT',
-  statementDeferredUntil: null,
+  statementDeferredUntil: undefined,
   overdue: false,
   ...over,
 })
@@ -49,7 +49,7 @@ describe('ModerationQueue', () => {
   it('lists each case in clear fields, in the server’s order', async () => {
     vi.mocked(listCases).mockResolvedValue([
       summary(),
-      summary({ id: 'case-2', category: 'TERMS_BREACH', itemKind: 'LINK', state: 'DECIDED', reportCount: 1, tenantDomain: null, holdEndsAt: null }),
+      summary({ id: 'case-2', category: 'TERMS_BREACH', itemKind: 'LINK', state: 'DECIDED', reportCount: 1, tenantDomain: undefined, holdEndsAt: undefined }),
     ])
     const w = await mountQueue()
     expect(listCases).toHaveBeenCalledWith(undefined)

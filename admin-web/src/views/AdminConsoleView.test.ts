@@ -102,7 +102,7 @@ async function mountConsole() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(logout).mockResolvedValue(undefined)
-  vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: false, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] }, pending: null })
+  vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: false, blobsStored: false, setting: undefined, lastCheck: { passed: true, checkedAt: new Date(), steps: [] }, pending: undefined })
   resetServerRole()
 })
 
@@ -133,7 +133,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('renders the console for the Server Owner, listing the tenants it administers', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     const { w } = await mountConsole()
     expect(w.find('.admin-shell__nav').exists()).toBe(true)
@@ -144,8 +144,8 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
   // uc.admin.tenant-storage-quota: the list shows each tenant's usage beside its quota, or that it has none.
   it('shows each tenant’s storage usage beside its quota in the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3, ownerless: false, deletionDueAt: null },
-      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3, ownerless: false, deletionDueAt: undefined },
+      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     const { w } = await mountConsole()
     const lines = w.findAll('.admin-shell__storage').map((s) => s.text())
@@ -154,7 +154,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('opens a tenant’s detail page from the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     const { w } = await mountConsole()
     const item = w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!
@@ -164,7 +164,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
   })
 
   it('closes a revoked tenant’s panel and reads the list again', async () => {
-    const acme = { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' as const, storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null }
+    const acme = { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' as const, storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined }
     vi.mocked(listTenants).mockResolvedValue([acme])
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
@@ -178,7 +178,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('opens Server → Capabilities from the nav in place of the open tenant (uc.admin.switch-capabilities)', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
@@ -235,7 +235,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
     // an erasure left a last owner's tenant ownerless: the list is read again, and marks it
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-1', name: 'Orphan', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: true, deletionDueAt: null },
+      { tenantId: 'tn-1', name: 'Orphan', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: true, deletionDueAt: undefined },
     ])
     await w.find('.stub-accounts').trigger('click')
     await flushPromises()
@@ -246,8 +246,8 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
   // ADR 0101 decision 9: an ownerless tenant is marked in the list, so the Server Owner finds it without opening each.
   it('marks an ownerless tenant in the list, and only that one', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-1', name: 'Orphan', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: true, deletionDueAt: null },
-      { tenantId: 'tn-2', name: 'Owned', domain: 'w.example', ownerEmail: 'o@w.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-1', name: 'Orphan', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: true, deletionDueAt: undefined },
+      { tenantId: 'tn-2', name: 'Owned', domain: 'w.example', ownerEmail: 'o@w.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     const { w } = await mountConsole()
     const item = (name: string) => w.findAll('.admin-shell__nav button').find((b) => b.text().includes(name))!
@@ -257,7 +257,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('reads the tenant list again when the tenant page reports a change (a deletion, or its stop)', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!.trigger('click')
@@ -296,7 +296,7 @@ describe('AdminConsoleView — creating a tenant', () => {
     expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)
 
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null },
+      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined },
     ])
     w.findComponent({ name: 'CreateTenantDialog' }).vm.$emit('created')
     await flushPromises()
@@ -311,13 +311,13 @@ describe('AdminConsoleView — a tenant waits for a checked store (ADR 0089 deci
 
   it('closes tenant creation while the store has not passed its check, and opens it once it has', async () => {
     vi.mocked(listTenants).mockResolvedValue([])
-    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null })
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: undefined, lastCheck: undefined, pending: undefined })
     const blocked = await mountConsole()
     expect(dialog(blocked.w).props('storeBlocked')).toBe(true)
 
     // the paired case, same predicate: a passed check is the one thing that opens it
     resetServerRole()
-    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: { passed: true, checkedAt: new Date(), steps: [] }, pending: null })
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: undefined, lastCheck: { passed: true, checkedAt: new Date(), steps: [] }, pending: undefined })
     const open = await mountConsole()
     expect(dialog(open.w).props('storeBlocked')).toBe(false)
   })
@@ -331,7 +331,7 @@ describe('AdminConsoleView — a tenant waits for a checked store (ADR 0089 deci
 
   it('takes the owner to the store page when the dialog asks for it', async () => {
     vi.mocked(listTenants).mockResolvedValue([])
-    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: null, lastCheck: null, pending: null })
+    vi.mocked(getInstanceStore).mockResolvedValue({ bundledAvailable: true, blobsStored: false, setting: undefined, lastCheck: undefined, pending: undefined })
     const { w } = await mountConsole()
     await w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Create'))!.trigger('click')
     dialog(w).vm.$emit('openStore')

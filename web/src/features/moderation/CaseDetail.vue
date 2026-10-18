@@ -291,7 +291,7 @@ async function extend() {
 
 /** A full navigation to the reported tenant's host: the review unlocks there on its own. */
 function review() {
-  window.location.assign(reviewUrl(current.value!.id, current.value!.tenantDomain))
+  window.location.assign(reviewUrl(current.value!.id, current.value!.tenantDomain ?? null))
 }
 
 onMounted(load)

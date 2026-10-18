@@ -208,6 +208,12 @@ export async function openAccountDocument<T>(
 /** A served copy of a sealed account document: the opaque blob (null when never written) and its revision. */
 export type ServedDocument = { blob: string | null; revision: number }
 
+/** The served document as the trust marks read it: a store never written has no `blob` on the wire (the API omits
+ *  a field with no value), which is the `null` every check below means by "born empty". */
+export function servedDocument(doc: { blob?: string | null; revision: number }): ServedDocument {
+  return { blob: doc.blob ?? null, revision: doc.revision }
+}
+
 /**
  * One sealed account document as the two operations that act on it WHOLE need it — the rotation's re-seal under
  * a new Master Key (`rotation/rotateKeys.ts`) and the user's reset (`trustReset/trustReset.ts`). Each document

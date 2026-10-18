@@ -134,6 +134,10 @@ paths:
                 items: { $ref: "#/components/schemas/NodeSummary" }
         "304":
           description: Not Modified — the client's `If-None-Match` equals the scope's tree revision; nothing a level view shows has changed. No body, and no row was read.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
