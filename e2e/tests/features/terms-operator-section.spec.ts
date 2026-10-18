@@ -103,7 +103,7 @@ test(
     await edit.getByLabel('Markdown').fill(`## Our rules\n${spaceRule}`)
     await edit.getByRole('button', { name: 'Save', exact: true }).click()
     await page.getByRole('button', { name: 'Save terms' }).click()
-    await expect(page.getByText('Revision 1')).toBeVisible()
+    await expect(page.getByText('Revision 1', { exact: true })).toBeVisible()
 
     // Every member, the owner included, is asked now: the space's text first, the section after it.
     await page.goto(tenantOrigin())
