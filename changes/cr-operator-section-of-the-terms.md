@@ -1,7 +1,7 @@
 ---
 id: cr-operator-section-of-the-terms
 title: A fixed operator section beside every space's terms, filled with the instance's values
-status: planned
+status: done
 satisfies: ["uc.admin.tenant-terms", "uc.account.accept-terms", "uc.sharing.share-accept"]
 adrs: ["0035", "0093", "0099", "0092", "0087"]
 invariants:
@@ -84,13 +84,13 @@ what the other CRs build: written earlier, it would promise a report path that d
 
 ## Phases
 
-- [ ] **0 docs** — Q15's two sentences; the three use-cases gain the operator section in their flows (the gate's triple, the two variants,
+- [x] **0 docs** — Q15's two sentences; the three use-cases gain the operator section in their flows (the gate's triple, the two variants,
   the section without a gate at revision 0); coverage criteria added as planned gaps. · Done when: feature-format,
   coverage, doc-link, doc-citation, change guards green.
-- [ ] **1 contracts** — the section's text file; the terms responses gain the rendered section and its revision; the
+- [x] **1 contracts** — the section's text file; the terms responses gain the rendered section and its revision; the
   accept request names both revisions. · Done when: `npm run generate:api`; the contracts guards; `npm run check` in
   `web/` once to see the typed lines a reshaped accept request reddens (name them).
-- [ ] **2 backend** — render the mode's variant with the current values; the gate on the triple; the history row per triple. · Done when:
+- [x] **2 backend** — render the mode's variant with the current values; the gate on the triple; the history row per triple. · Done when:
   `./gradlew check` green. **Bites, with controls:** a value changed in admin-web → the served text changes and an
   accepted member is not gated (control: an operator-revision bump gates them); a space at revision 0 → the section
   served, no gate; *private* → the reduced variant: no authorities passage, no deferral passage, the notice path
@@ -98,10 +98,10 @@ what the other CRs build: written earlier, it would promise a report path that d
   (control: switching the guest-write record is not); the record's passage present exactly while its switch is on, in
   both variants. Bite: render the record passage by mode instead of by switch → the private-with-record-on test is
   red.
-- [ ] **3 web** — both gates render the section after the space's text, the right to object set apart; the guest's local
+- [x] **3 web** — both gates render the section after the space's text, the right to object set apart; the guest's local
   key on the triple; the template's clause 9 points to the section, clauses 2 and 7 trimmed (EN and DE). · Done when:
   `npm run check` green; a browser pass of the member gate and the share gate in DE and EN, in both modes.
-- [ ] **4 docs** — ADR 0035's status line (decisions 6 and 7 built); `site/src/content/docs/space-owners/terms.mdx`
+- [x] **4 docs** — ADR 0035's status line (decisions 6 and 7 built); `site/src/content/docs/space-owners/terms.mdx`
   and its DE twin (the operator section exists, the space owner cannot remove it), `sharing/what-guests-see.mdx` and
   its DE twin, `run/moderation.md` (what the section says in each mode and which values feed it); coverage refs. · Done when:
   coverage, wiki-sources and the site check green.
@@ -115,4 +115,24 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+- **The CR's surfaces came from the product, the law's from the duty.** It listed where a space's terms already show
+  (member gate, share gate, "the login page once it exists") and inherited ADR 0035's "once it exists"; DSA Art. 14(1)
+  asks the terms to be publicly available without an account, Art. 11–12 and TCO Art. 15 a public contact, § 5 DDG a
+  permanently available identification. The coordinator's legal audit added all three mid-implementation (a public
+  `GET /api/operator/terms` and `/operator-terms`, the contact in the footer, the footer in the signed-in shell).
+  Root cause: the refine grounded every sentence against the code and the ADRs, which is the rule, but a legal text has
+  a second authority the code cannot answer for. Next time: a CR that writes a legal text lists, per duty it serves,
+  the surface the law names for it, before the code's surfaces (harvested to `changes/README.md`).
+- **"Describe only what is built" and "legal duties win" pulled apart, and the CR had no rule for that.** Four
+  sentences the law asks are not fully backed by code: a backup period B, a statement for the Server Owner's own
+  steps, a private-mode warning for an unset controller while the record is on, and members' own Art. 13 information.
+  Each is now written as the law asks or as an honest criterion, and named as a gap in ADR 0035 decision 6 and on the
+  Run page, instead of a clause narrowed to the code. Next time: the refine lists such divergences as legal blockers
+  with an owner, so the implementer does not decide which side the sentence follows.
+- **The gate's history semantics needed a choice the CR left implicit.** "The member's accepted history keeps one row
+  per triple" plus "a mode change reopens the gate" does not say what switching back to an accepted variant does; the
+  build asks whether the current triple has a row (switching back to a text already accepted asks nothing), because
+  the alternative (the latest row decides) gated forever once a recorded triple came back. Stated in ADR 0035
+  decision 6; an owner who wants a re-ask on every switch says so.
+- Process: the host's load sat above 14 for over an hour while neighbours built; the backend check waited for it, as the
+  brief asked, which is what made this CR slow rather than any step of it.
