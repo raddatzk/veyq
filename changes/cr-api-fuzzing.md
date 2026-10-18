@@ -161,6 +161,8 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
 
 ## Owner questions (each with a recommendation)
 
+**Decided (Q1–Q3).** Owner 2026-10-18: all three as recommended; implementation has the owner's go.
+
 - **Q1 — A malformed *patterned* path segment (`shareId`, `capabilityId`, `requirement`): `400` or `404`?** A
   non-UUID path id is 404 by routing (settled, `IdBoundarySliceTest`); a patterned string segment reaches bean
   validation and most likely answers 400 today (not measured). **Recommendation: accept both for a path segment, 400
