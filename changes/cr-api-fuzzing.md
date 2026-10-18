@@ -177,7 +177,7 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
   writes, stateful link sequences, and `object_level_authorization` (a second identity) are one follow-up row
   (inbox #486 names it), because each needs a decision about what a run may change and which identity owns what.
 
-**Open (Q4–Q8) — raised by phase 3's triage, 2026-10-18.** The first run's list (§ Phases, phase 3's triage) is
+**Raised (Q4–Q8) by phase 3's triage, 2026-10-18** — decided below. The first run's list (§ Phases, phase 3's triage) is
 longer than this CR can carry under Q2: four of its mechanisms are decisions about the wire or about the check, not
 fixes. Phases 1 and 2 are done and the 5xx class is fixed; the CR stops here and asks (Q2's own rule).
 
@@ -224,6 +224,22 @@ fixes. Phases 1 and 2 are done and the 5xx class is fixed; the CR stops here and
   only the MIT tool runs. **Recommendation: keep the official image this way.** The alternative — an image of our own
   from the PyPI package, where TraceCov is no dependency — adds a Dockerfile, a pinned base image and a hash-pinned
   Python dependency set, which ADR 0091 decision 9 chose the image to avoid.
+
+**Decided (Q4–Q8).** Owner 2026-10-18:
+- **Q4** as recommended: 405/`Allow`/`OPTIONS` is deferred — baseline entries with a `reason` each and a new open inbox
+  row; no check is switched off.
+- **Q5** as recommended: fixed here — strict JSON type coercion (Jackson config), formats strict, one test per mechanism.
+- **Q6** as recommended: `401`/`403` is a correct refusal of a negated value of a parameter the contract marks as a
+  credential (an `x-veyq-*` extension); the check is narrowed by that marker, not muted.
+- **Q7 differs from the recommendation: the backend OMITS null fields** — Jackson `non_null` serialization inclusion,
+  chosen knowing it is global. Before switching, measure what relies on an explicit `null` in a response (web and
+  admin-web checks `=== null`/`!== null` on response fields, the generated TypeScript types, e2e and L1 specs, the admin
+  CLI's output) and adjust contracts (such a field becomes optional, not `[T, "null"]`) and clients so that nothing
+  changes behaviour. If the measurement finds a response where absent and `null` must mean different things, stop and
+  report it.
+- **Q8 differs: our OWN image** — a small Dockerfile under `infra/fuzz/` (a Python slim base pinned by digest,
+  Schemathesis from PyPI with hash-pinned requirements, MIT), no TraceCov; the official image's pin goes, the hook that
+  aborts if TraceCov is ever loaded stays. Recorded in ADR 0091 decision 9 and in the image-pin guard.
 
 ## Phases
 
