@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the rest is not (§ Consequences)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the rest is not (§ Consequences), the API fuzzing of decision 9 included (`cr-api-fuzzing`)
 - Date: 2026-10-16
 
 ## Context
@@ -15,6 +15,12 @@ There is no decision about testing as a whole — only single ones: what a cover
 into seven workflows nobody budgeted, and the owner wants three kinds of test on top: **an upgrade of a running
 instance with data**, **an old backup restored into a new version**, and **feature tests against a running
 instance**.
+
+Every one of those stages sends requests somebody wrote down; none asks the API what it does with the requests
+nobody wrote. `scripts/validate_request_bounds.py` proves a request body's bounds are *annotated*, and a few slice
+tests prove one per mechanism *takes effect* — but by that guard's own docstring nothing sees path, query or header
+**parameters** (no test sends an out-of-range one), nothing reads a **response** against its schema, and nothing
+looks for a **5xx** on malformed input (decision 9).
 
 What a run costs, measured on 2026-10-16 on the development Mac (14 cores, under a load of 20–55 from neighbour
 sessions, so high rather than low):
@@ -49,6 +55,7 @@ Three structural costs sit on top of those numbers:
    | **Surface checks** (`./gradlew check`, `npm run check` of crypto, web, admin-web; the chart check) | each surface's unit and integration tests | 15 min |
    | **Races on MariaDB** | ADR 0078 | 10 min |
    | **API end-to-end** (`run_web_e2e.py`) | real crypto against a live backend, fresh per file; backup and restore groups; the wire sweeps | 15 min |
+   | **API fuzzing** (decision 9) | every operation of `contracts/api` refuses what its contract does not allow, answers only what it declares, and never answers 5xx | 15 min |
    | **Image build** | every image of the release (app, admin, tools), both architectures, once per commit | 15 min |
    | **Stack lanes** (ADR 0090's harness, on the built image) | see 3 | 15 min each, in parallel |
    | **Mutation** (ADR 0045) | assertion strength of the scoped files | 30 min per gate, path-gated |
@@ -61,8 +68,8 @@ Three structural costs sit on top of those numbers:
    is where the values live.
 
 2. **One pipeline per commit, and nothing waits that need not.** `ci.yml` and `container.yml` become one workflow.
-   The guards, the surface checks, the races, the API end-to-end run **and the image build start together**; the
-   build does not wait for the tests, because nothing is published until every stage is green. The stack lanes need
+   The guards, the surface checks, the races, the API end-to-end run, the API fuzzing **and the image build start
+   together**; the build does not wait for the tests, because nothing is published until every stage is green. The stack lanes need
    the build. `container.yml`'s second copy of the surface checks goes; admin-web's check and the chart check, which
    only it ran, move into the surface checks. `trust-chain.yml` stays separate and unfiltered, because a docs-only
    commit is validated there and nowhere else.
@@ -141,6 +148,36 @@ Three structural costs sit on top of those numbers:
    an estimate, and until the repository has a remote it says that no stage has run in CI. A CR that adds, removes
    or moves a stage updates that page in the same change.
 
+9. **The API is fuzzed from its contracts, on every commit.** [Schemathesis](https://schemathesis.readthedocs.io/)
+   (MIT, maintained — the scanner [ADR 0100](0100-pentests-attack-a-reset-candidate-locally-and-publish-every-runs-record.md)
+   decision 2 chose for layer A) generates requests from `contracts/api/**/*.openapi.yaml` and sends them to a live
+   backend. It is a stage of its own (`api-fuzz`), beside the API end-to-end run, not inside it.
+   - **The target is the fast-jar under `%e2e`, booted by `run_web_e2e.py`'s own primitives** — a fresh database, the
+     bundled store, the e2e profile whose rate limits do not refuse a run's volume. Not lane L1: the candidate's
+     production limits answer 429 long before a run is through, its lane owns ports 80 and 443, and its budget is
+     spent on the browser. What Traefik and the image add is L1's and the pentests' (ADR 0100) to see.
+   - **It runs as an image pinned by digest**, like every other third-party tool here (ADR 0057 §6): Schemathesis
+     needs Python ≥ 3.11 and the scripts run on 3.9, and the image brings its own dependencies, so no Python
+     dependency enters the repository.
+   - **The spec files are read as they are**, one invocation per listener: the operations marked
+     `x-veyq-channel: admin` against the admin listener, the rest against the public one. Nothing is bundled.
+   - **It signs in the way the client does.** A seeding script births an instance with the real client crypto
+     (`@veyq/crypto`) and hands the run a bearer token and the ids it created; Schemathesis cannot do a sign-in that
+     is client-side cryptography, and is not asked to.
+   - **What it checks, first slice:** every operation in **negative** mode (requests the contract does not allow —
+     path, query and header parameters included), and every `GET` in **positive** mode with the seeded ids. A
+     malformed query or header parameter or body is refused with the contract's `400 invalid_request`; a malformed
+     path segment with `400` or `404` — a path id that is no UUID matches no route and answers `404`, as
+     `IdBoundarySliceTest` holds. Every answer is a status the operation declares, its body matches the declared
+     schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx. Writes in
+     positive mode and stateful sequences (links) come later, each with its own decision about what a run may change.
+   - **Deterministic.** A fixed seed lives in the runner; a red re-runs to the same request, and the
+     run's reports keep a `curl` line per failure. Changing the seed is a commit.
+   - **A finding is fixed with a test in the ordinary suite** that fails on the defect, as ADR 0100 decision 11 asks
+     of a pentest finding. A false positive, or a finding deferred to a CR of its own (named by its inbox row), is
+     recorded in Schemathesis' baseline file with a `reason` per entry, which a guard holds; a **5xx is never**
+     recorded there, and no entry expires by date — a gate turns red on a commit, never on a calendar day.
+
 ## Consequences
 
 - **The critical path per push**, estimated (no CI run exists): today `test` → `build` → (ADR 0090's `e2e`), 35–50
@@ -154,7 +191,8 @@ Three structural costs sit on top of those numbers:
   `cr-stack-e2e` (L1, built 2026-10-16: `ci.yml`'s `stack` job, per architecture after the build — a dispatch pulls the
   staged images by the digests the build hands over, a push or a pull request builds them in the job until a push
   publishes the snapshot); promotion and attestations (decision 5); L2 (inbox #453); the archive and
-  L3 (decision 6). None is provable in CI before the repository has a remote.
+  L3 (decision 6); the API fuzzing (decision 9, `cr-api-fuzzing`, inbox #486). None is provable in CI before the
+  repository has a remote.
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
   hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.
 - **The guard gaps run in CI on their own trigger** (2026-10-16, `cr-one-pipeline-per-commit` phase 4):
@@ -216,3 +254,13 @@ Three structural costs sit on top of those numbers:
 - **Guard gaps on every push.** 90 % of the trust-chain's time spent proving that guards no commit touched still bite.
 - **Keeping `ci.yml` and `container.yml` apart.** The second copy of the surface checks is a quarter of an hour on the
   critical path and proves nothing the first did not.
+- **The API fuzzing inside the API end-to-end job.** That job took 13.8 of its 15 minutes in its last local run (§
+  Consequences); a second workload in it would push it over, and a fuzz finding would read as a wire-sweep red.
+- **The API fuzzing on lane L1, or only in the pentests.** The candidate's production rate limits refuse a fuzzer's
+  volume, and a pentest runs by hand (ADR 0100 decision 1): a contract defect would be found weeks after its commit.
+  The pentests point the same harness at the candidate instead.
+- **Schemathesis as a Python library on the host.** It needs Python ≥ 3.11 (`requires_python` of 4.32.0); the scripts
+  run on 3.9, and the repository has no hash-pinned Python dependency to extend. The image is pinned the way every
+  other tool is, and `validate_image_pins.py` already holds it.
+- **A random seed per run.** It finds more over time and makes a red that the next run cannot reproduce; a gate has
+  to be deterministic. A seed is bumped by a commit when the owner wants a new sample.
