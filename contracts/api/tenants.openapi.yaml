@@ -793,6 +793,12 @@ paths:
         so a wrong tenant id deletes nothing (`409 tenant_domain_mismatch`). `409 tenant_not_deletable` for a `PENDING`
         tenant (revoke it) or one pending deletion already. Settles every open moderator proposal to take this tenant
         offline as taken, as a suspension does. Server-Owner only.
+
+        **Over content it carries a statement of reasons** to the tenant's owners (ADR 0093 § 7, DSA Art. 17(1)(c) — a
+        termination of the service): always when a moderator's proposal to take the tenant offline is open, and when
+        `overContent` says so. Then `statement` is required (`400 statement_required`); it is recorded with the deletion,
+        in its transaction, as a measure of kind `TENANT_DELETED` that `stopTenantDeletion` lifts, and mailed with the
+        facts to each owner once the deletion committed — exactly as `suspendTenant`'s statement.
       security:
         - bearerAuth: []
       parameters:
@@ -810,7 +816,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TenantDeletion" }
         "400":
-          description: The request was malformed (`invalid_request`).
+          description: >
+            `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
+            `statement_required` = the deletion is over content and carries no statement; `statement_facts_required` /
+            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2404,6 +2413,20 @@ components:
           maxLength: 253
           example: family.example.com
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253)'
+        overContent:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The Server Owner says the deletion is over content though no moderator's proposal names the tenant, so it
+            carries a statement. A deletion that takes an open proposal is over content regardless.
+          example: false
+        statement:
+          description: The statement of reasons the deletion carries when it is over content; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerStatementInput"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     TenantDeletion:
       type: object
