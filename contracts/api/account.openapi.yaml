@@ -69,6 +69,9 @@ tags:
     description: Change the address an account signs in with — uc.account.change-email (ADR 0074 Decision 8).
       Separate tag → its own resource interface.
 
+  - name: account-erasure
+    description: Erase the caller's own account — uc.account.erase-account (ADR 0101). Separate tag → its own resource
+      interface.
 paths:
   /api/account/key-material:
     get:
@@ -1009,6 +1012,104 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: password_change_unavailable }
 
+  /api/account/erasure:
+    get:
+      tags: [account-erasure]
+      operationId: getOwnAccountErasurePreview
+      summary: What erasing the caller's account would decide about the tenants it owns.
+      description: >
+        Read before the erase dialog (uc.account.erase-account A3, ADR 0101 decision 9): every tenant whose last OWNER
+        the caller is. One with other members needs the caller's choice — delete it along, or name one of its members
+        the new owner — and lists who those members are by id (the client names them from the tenant's directory). One
+        with no other member is deleted with the account, and the dialog names it. Session only: this is membership
+        metadata the caller already sees.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The tenants the erasure decides about.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountErasurePreview" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "409":
+          description: The caller is the Server Owner, whose account is never erased (`server_owner_account`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: server_owner_account }
+    post:
+      tags: [account-erasure]
+      operationId: eraseOwnAccount
+      summary: Erase the caller's own account — the member's door (GDPR Art. 17).
+      description: >
+        ADR 0101 decisions 1-3 and 9. The caller proves their password: `attestationSignature` is an Ed25519 signature
+        with the account's auth key over the statement `veyq/v1/auth-attestation/erase-account` binding the account id
+        and `nonce`, a login challenge the caller fetched for its own address (`POST /api/login/challenge`) — single-use,
+        spent here whether or not the proof verifies, so a captured proof erases nothing twice.
+
+        Then, in one transaction: for each tenant whose last OWNER the caller is and which has other members, the
+        caller's choice from `lastOwnerChoices` is carried out — `newOwnerId` set: that member becomes an OWNER;
+        `newOwnerId` null: the tenant is deleted along (`deleteTenant`'s pending deletion, the Server Owner can stop
+        it) — and a tenant with no other member is deleted along without a choice. Every session of the account ends,
+        sign-in is refused, its pending invites, pairings, recoveries and address changes go, the member removal runs in
+        every tenant, and it leaves the moderator roster. The account is purged after the scope trash's retention; until
+        then only the Server Owner can stop it. One mail goes to the account's address through the instance mail where
+        it is set up.
+
+        Checked in this order: the Server Owner's account (`409 server_owner_account`); the proof (`403
+        attestation_failed`); a last-owner tenant without a choice, or a choice naming no member of that tenant (`409
+        last_owner_choice_required`); the last holder of the moderation key, who must step down the way a moderator does
+        first (`409 moderation_last_holder`). A refusal writes nothing.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EraseOwnAccountRequest" }
+      responses:
+        "200":
+          description: The erasure is pending; every session of the account has ended, the caller's included.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnAccountErasure" }
+        "400":
+          description: The request was malformed (a missing, oversized or non-base64 field).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: >
+            `attestation_failed` — the proof did not verify against the account's auth key (the password), or its
+            challenge was unknown, expired or spent. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: attestation_failed }
+        "409":
+          description: >
+            `server_owner_account` — the Server Owner's own account is never erased; `last_owner_choice_required` — a
+            tenant whose last owner the caller is has other members and the request names no choice for it (or names a
+            new owner who is not its member); `moderation_last_holder` — the caller is the last holder of the moderation
+            key. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: last_owner_choice_required }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1017,6 +1118,98 @@ components:
       description: The opaque access token issued by login / refresh.
 
   schemas:
+    ErasureTenant:
+      type: object
+      description: A tenant whose last OWNER the caller is.
+      required: [tenantId, name, otherMemberIds]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        name:
+          x-veyq-visibility: public
+          type: string
+          maxLength: 100
+          example: Familie Raddatz
+        otherMemberIds:
+          x-veyq-visibility: id
+          type: array
+          maxItems: 100000
+          description: The tenant's other members, by account id — empty when the caller is its only member.
+          items:
+            x-veyq-visibility: id
+            type: string
+            format: uuid
+            example: 2b6e4c1a-8d3f-4e7a-9c2b-5f1e3d4a6b7c
+
+    AccountErasurePreview:
+      type: object
+      required: [tenants]
+      properties:
+        tenants:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ErasureTenant" }
+
+    LastOwnerChoice:
+      type: object
+      description: >
+        What happens to one tenant whose last OWNER the caller is: `newOwnerId` names a member who becomes an OWNER, or is
+        null to delete the tenant along.
+      required: [tenantId]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        newOwnerId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The member who becomes the tenant's owner; null deletes the tenant along.
+          example: 2b6e4c1a-8d3f-4e7a-9c2b-5f1e3d4a6b7c
+
+    EraseOwnAccountRequest:
+      type: object
+      required: [nonce, attestationSignature, lastOwnerChoices]
+      properties:
+        nonce:
+          type: string
+          description: A login challenge for the caller's own address, spent by this request (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: bm9uY2UtZXhhbXBsZS0zMmJ5dGVz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        attestationSignature:
+          type: string
+          description: >
+            Ed25519 signature with the account's auth private key over lp("veyq/v1/auth-attestation/erase-account") ||
+            lp(utf8(accountId)) || lp(nonce bytes) — the `auth_attestation.erase_account` vector.
+          contentEncoding: base64
+          maxLength: 256
+          example: YXR0ZXN0YXRpb24tc2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        lastOwnerChoices:
+          type: array
+          maxItems: 10000
+          description: One choice per tenant the preview lists with other members; an entry for any other tenant is ignored.
+          items: { $ref: "#/components/schemas/LastOwnerChoice" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 10000)'
+
+    OwnAccountErasure:
+      type: object
+      required: [dueAt]
+      properties:
+        dueAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the purge erases the account — the request plus the scope trash's retention.
+          example: 2026-11-17T10:00:00Z
+
     # MasterKeyWrap and ErrorResponse are single-sourced in _common.openapi.yaml (ADR 0038), aliased here by name
     # so the generator emits them under the names the operations use.
     MasterKeyWrap:

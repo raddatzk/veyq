@@ -131,8 +131,10 @@ components:
         Lifecycle state of a tenant. SUSPENDED is a reversible, availability-only lockout (ADR 0066): every
         operation acting on the tenant refuses its members `403 tenant_suspended`, on whatever domain the request
         arrived (uc.spaces.scope-access), and the tenant's own domain refuses every API request, sign-in included —
-        its content, keys and memberships are untouched.
-      enum: [PENDING, ACTIVE, SUSPENDED]
+        its content, keys and memberships are untouched. PENDING_DELETION is the same lockout for a tenant the Server
+        Owner deleted (ADR 0101 decision 10): it answers exactly as SUSPENDED until the purge erases it after the scope
+        trash's retention, or a stop returns it to SUSPENDED.
+      enum: [PENDING, ACTIVE, SUSPENDED, PENDING_DELETION]
       example: ACTIVE
 
     OperatingMode:
