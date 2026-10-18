@@ -364,8 +364,16 @@ server-blind token makes this work without the server ever seeing a name:
   on the admin channel, taken or declined from a moderator's proposal
   ([uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). Measures are clear
   metadata, since the server must refuse what they name; notes and reasons are sealed (`moderation-note` [epoch,
-  caseId]). Not built: the statement of reasons and the objection, so no second moderator reviews one yet (ADR 0093
-  § 7), and an authority's order (§§ 12–13). No moderation path has run on a deployed instance.
+  caseId]). A moderator's measure carries its **statement of reasons**: the ground in the clear, the facts sealed twice
+  in the moderator's browser — to the moderation key, and to each affected member's identity (`moderation-facts`
+  [caseId, accountId]) — so the affected read them on the placeholder and the server holds neither in the clear; the
+  instance mail tells them it is there, never the facts. An affected member **objects** once per measure, sealed to the
+  moderation key (`moderation-objection` [epoch, statementId]); the server refuses its decision from the moderator who
+  took the measure while another holds the key ([uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
+  The identity a moderator seals the facts to is the one the server serves, unpinned — the moderation surface holds no
+  Master Key to read a pin store — which costs nothing against the operator: the Server Owner holds the moderation key
+  and reads the log's copy of the same facts anyway. Not built: an authority's order (§§ 12–13) and the deferral of a
+  statement it may ask for. No moderation path has run on a deployed instance.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

@@ -4,6 +4,7 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
 ---
 
 Siehst du in einem Bereich oder über einen Link etwas, das rechtswidrig ist oder gegen die Nutzungsbedingungen
@@ -43,13 +44,15 @@ Fehlt **Melden**, hat der Server noch keinen Moderationsschlüssel, und es gibt 
 - **Die Moderation erfährt**, dass es einen neuen Fall gibt und in welcher Kategorie, nie, was es ist oder wo. Dringende
   Kategorien erreichen sie sofort.
 - **Deine Adresse** geht einmal an den Server, für die Bestätigung, die er dir schickt; er behält nur die Kopie, die
-  allein die Moderation lesen kann.
+  allein die Moderation lesen kann. Entscheidet die Moderation, schickt sie sie noch einmal, und du erfährst per E-Mail,
+  ob sie eine Maßnahme ergriffen hat oder keine — nichts darüber, welche.
 
 ## Von der Moderation gesperrt
 
 Entscheidet die Moderation, dass etwas nicht mehr gezeigt werden darf, sperrt sie es. An seiner Stelle siehst du dann
-**Von der Moderation gesperrt**, mit seinem Namen und ohne Begründung: in der Liste eines Ordners, als Kachel in einer
-Erinnerung und in der Großansicht. Mitglieder des Bereichs und Gäste eines Links sehen dasselbe.
+**Von der Moderation gesperrt**, mit seinem Namen: in der Liste eines Ordners, als Kachel in einer Erinnerung und in
+der Großansicht. Mitglieder des Bereichs und Gäste eines Links sehen dasselbe; nur wen es betrifft, erfährt auch,
+warum (unten).
 
 - **Es öffnet sich nicht.** Nichts davon wird angezeigt oder heruntergeladen, auch nichts in einem gesperrten Ordner
   oder einer gesperrten Erinnerung.
@@ -61,5 +64,24 @@ Erinnerung und in der Großansicht. Mitglieder des Bereichs und Gäste eines Lin
   nicht gibt. Die Person, die ihn erstellt hat, kann ihn weder reaktivieren noch erneuern, solange die Sperre besteht. Hat
   die Moderation einen Gast gesperrt, der über einen Link hochgeladen hat, funktioniert auch dieser Link nicht mehr, und
   die Person, die ihn erstellt hat, darf ihn erneuern: Der erneuerte Link hat eine neue Adresse.
+
+## Wenn etwas von dir gesperrt wurde
+
+Hast du den Link erstellt, das Gesperrte hochgeladen oder gehört dir der Bereich, in dem es liegt, sagt dir die
+Moderation, warum.
+
+1. Öffne, was gesperrt wurde — das Foto in der Großansicht, den Ordner oder die Erinnerung, oder den Link unter
+   **Teilen**. Unter **Von der Moderation gesperrt** findest du **Warum es gesperrt wurde**: was gesperrt wurde und was
+   das bedeutet, warum du es erfährst, was die Moderation festgestellt hat, den Grund und auf den meisten Servern, dass
+   eine Meldung dazu geführt hat, dass ein Mensch entschieden hat und dass du dich an ein Gericht wenden kannst.
+   Verschickt der Server E-Mails, bekommst du auch eine, die sagt, dass das da ist — nie, was festgestellt wurde.
+2. Bist du nicht einverstanden, schreib das unter **Dein Widerspruch** und wähle **Widerspruch senden**. Du kannst
+   einmal widersprechen. Nur die Moderation kann ihn lesen.
+3. Eine andere Person aus der Moderation als die, die gesperrt hat, prüft es noch einmal, sofern der Server eine hat;
+   sonst dieselbe, und die Antwort sagt das. Die Antwort liest du an derselben Stelle und bekommst eine E-Mail, dass sie
+   da ist. Bleibt die Maßnahme bestehen, steht dir der Rechtsweg weiter offen.
+
+Ein Gast, der über einen Link hochgeladen hat, erfährt in veyq nichts; frag die Leute, die den Server betreiben, unter
+der Adresse, die sie veröffentlichen.
 
 Wie sicher der Rest deiner Daten bleibt: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

@@ -46,6 +46,7 @@ import type { ChunkProvider } from '../../../sw/protocol'
 import { resolvePlaceName } from '../placeName'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
 import MemoryMap from './MemoryMap.vue'
+import StatementNotice from '../../moderation/statement/StatementNotice.vue'
 import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/register'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { formatBytes } from '../../../shared/formatBytes'
@@ -784,7 +785,11 @@ onBeforeUnmount(() => {
           @pointercancel="zoomable && zoom.onPointerUp($event)"
           @wheel="zoomable && zoom.onWheel($event)"
         >
-          <p v-if="item?.blocked" class="media-lightbox-error media-lightbox-blocked">{{ t('node.blockedByOperator') }}</p>
+          <template v-if="item?.blocked">
+            <p class="media-lightbox-error media-lightbox-blocked">{{ t('node.blockedByOperator') }}</p>
+            <!-- uc.moderation.object-to-a-measure: a member the statement of reasons names reads it here, and objects. -->
+            <StatementNotice class="media-lightbox-statement" :target-id="item.mediaId" />
+          </template>
           <p v-else-if="error" class="media-lightbox-error">{{ t('media.loadError') }}</p>
           <!-- Video playback (#104, ADR 0047): once the user clicks play, the video plays either from the SW range
                path (`videoSwUrl` = /__media/<handle>, Slice 2) or, as a fallback, a decrypted typed blob URL

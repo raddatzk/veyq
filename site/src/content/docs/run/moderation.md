@@ -4,6 +4,7 @@ description: What a Server Owner and the moderators can do about abuse on an ins
 sources:
   - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
@@ -93,7 +94,19 @@ moderators can read it ([uc.moderation.take-a-measure](https://github.com/raddat
   a reason, which is required and sealed like a note.
 - **Propose** one of your steps — blocking a member's sign-in, or taking the tenant offline (below).
 
-A measure decides the case, and its hold then ends six months after the decision. **Lift** on a measure — any
+**Every block goes with its statement of reasons** ([uc.moderation.object-to-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md),
+[ADR 0093 § 7](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)): the
+moderator picks the **Ground** — one of the report categories, the law or the terms — and writes **What you found**. The
+browser seals the facts twice: to the moderation key, for the log, and to each member the statement reaches, so the
+server stores neither in the clear. It reaches the creator of a blocked link (or of the link a blocked guest came
+through), the uploaders the held copy names, and on a content block every owner of the space: each reads it under
+**Blocked by the operator**, and the instance mail tells their account address that it is there — never the facts. A
+guest is told nothing, having no account. A reporter who left an address is told the decision, from that address, which
+the moderator's browser sends once and the server mails without keeping. The statement names the instance, never the
+moderator. Without instance mail ([Configuration](/veyq/run/configuration/)) the statements are in veyq all the same.
+
+A measure decides the case, and its hold then ends six months after its statement is sent (after the decision, where
+nobody could be told). **Lift** on a measure — any
 moderator's — serves its target again, unchanged; lifting the case's last measure in force ends its hold and closes
 the case. Blocking deletes nothing. A step on something the case does not know, or one already in force, is refused.
 A block reaches the reported item only: a copy a member made of it is a new item.
@@ -166,6 +179,19 @@ You can switch a feature off for the whole instance, for example public links, d
 without a password, in the admin console or with `veyq-admin capabilities`. What each switch does to new and to
 existing data, and how to switch it, is on [Capabilities](/veyq/run/capabilities/).
 
+## Objections
+
+A member a statement reaches can **object once** per measure, in veyq, while the measure stands: free text, sealed so
+that only moderators can read it. The objection reopens the case — a closed one is decided again and back in the queue
+— and the moderators are mailed that one arrived. In the case it shows under **Objections**, opened.
+
+**Another moderator decides it** ([ADR 0099 § 5](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)):
+**Uphold the measure** or **Lift the measure**. The server refuses the decision from the moderator who took the measure
+while another moderator holds the key, and the log records who decided. On an instance with **one moderator** — often
+you alone — the objection does not wait for a second one: you decide it, the log marks it as your own review, and the
+answer to the member says so. Either way the member reads the answer under the statement and is mailed that it is
+there; after an upheld measure, only the courts remain. This binds a team, not you: you own the server and the roster.
+
 ## The operating mode
 
 At first-run setup you choose how the instance is run, and you can change it under **Server → Operating mode** or
@@ -178,6 +204,11 @@ with `veyq-admin mode set` ([uc.admin.operator-details](https://github.com/radda
 - **Club, organisation or company** — the contact and the provider identification are expected: the console warns
   while public links are on and no contact is set, and while the identification lacks a name, an address for service
   or an email. An instance where no mode was ever chosen runs as this one.
+
+The mode also sets the **form of a statement of reasons**, read each time one is shown or mailed: in the second mode it
+is the full form, and a block needs its facts; in *private* it is reduced — the measure and its reach, the ground and
+the objection, the facts only where the moderator wrote them, and without whether a report or an order led to it, that
+no automated means decided, and the courts. Who receives it, the objection and its review do not change with the mode.
 
 **It is your own assessment, not veyq's, and not legal advice.** The choice comes with a notice that says so: the
 GDPR's household exemption covers only a purely personal or family activity and ends once a link is shared publicly
@@ -295,9 +326,10 @@ control against the operator.
 
 ## Not built
 
-- **The statement of reasons and the objection.** Nobody affected by a decision is told of it yet, nor can they object
-  to it, and the review of an objection by a second moderator does not exist
-  ([ADR 0093 § 7](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+- **A statement for your own steps.** A member's sign-in block and a tenant taken offline carry no statement of reasons
+  yet: you take them on the admin channel, without the moderation key, and a blocked member cannot sign in to read one.
+  Tell them through the instance contact.
+- **Deferring a statement on an authority's request** (ADR 0093 § 7): it comes with the order path below.
 - **An authority's order and the reports of child sexual abuse material** (ADR 0093 §§ 12–13): the steps above act on
   ids and are what an order will reuse, but no order can be entered yet, and the hold ends of those cases are not built.
 - **A report of a single field, or of everything by one uploader.**
@@ -307,5 +339,6 @@ These are on the security model's target, decided in
 and [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md);
 see the [Security roadmap](/veyq/security/roadmap/).
 
-**How far this is proven.** Suspension, reactivation, the feature switches, the review and every step above are covered
-by the backend's and the web app's tests of their use-cases. No moderation path has run on a deployed instance.
+**How far this is proven.** Suspension, reactivation, the feature switches, the review, every step above, the statement
+and the objection are covered by the backend's and the web app's tests of their use-cases, and lane L1 walks a block,
+its statement, an objection and another moderator's decision in a browser; no CI run has executed that lane yet.

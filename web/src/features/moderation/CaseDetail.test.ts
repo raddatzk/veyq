@@ -10,6 +10,9 @@ import { httpError } from '../../test/httpError'
 const ask = vi.hoisted(() => vi.fn())
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask }) }))
 vi.mock('./cases', () => ({
+  decideObjection: vi.fn(),
+  openObjectionOf: vi.fn(),
+  reporterNoticesOf: vi.fn(),
   getCase: vi.fn(),
   dismissCase: vi.fn(),
   takeMeasure: vi.fn(),
@@ -23,7 +26,21 @@ vi.mock('./cases', () => ({
 }))
 
 import CaseDetail from './CaseDetail.vue'
-import { barReporter, dismissCase, extendHold, getCase, liftMeasure, openNote, openReportOf, proposeStep, reviewUrl, takeMeasure } from './cases'
+import {
+  barReporter,
+  decideObjection,
+  dismissCase,
+  extendHold,
+  getCase,
+  liftMeasure,
+  openNote,
+  openObjectionOf,
+  openReportOf,
+  proposeStep,
+  reporterNoticesOf,
+  reviewUrl,
+  takeMeasure,
+} from './cases'
 import { realI18n, t } from '../../test/i18n'
 import type { ModerationCase } from '../../api/generated/moderation'
 
@@ -38,6 +55,9 @@ const MEMBER = '8e8b2c1f-2d3e-4a5b-8c7c-3f0e2a9b1d4a'
 const MODERATOR = '2c1f2d3e-4a5b-4c7c-8f0e-2a9b1d4a6e8b'
 const BLOCKED_LINK = 'blockedblockedblockedblockedblockedblocked1'
 const OPEN_LINK = 'reachesreachesreachesreachesreachesreache1'
+const STATEMENT = '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e'
+const OBJECTION = '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f'
+const FACTS = { ground: 'TERMS_BREACH', facts: 'the facts' }
 
 const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
   id: CASE,
@@ -55,7 +75,29 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
     { id: REPORT, epoch: 2, receivedAt: new Date('2026-10-17T09:00:00Z'), category: 'TERMS_BREACH', sealedReport: 'AQ==', reporter: 'LINK', barred: false },
     { id: REPORT_2, epoch: 1, receivedAt: new Date('2026-10-17T10:00:00Z'), category: 'ILLEGAL_CONTENT', sealedReport: 'Ag==', reporter: 'ACCOUNT', barred: true },
   ],
-  measures: [{ id: MEASURE, kind: 'SHARE', targetId: BLOCKED_LINK, takenBy: MODERATOR, takenAt: new Date('2026-10-17T12:00:00Z'), liftedAt: null, liftedBy: null }],
+  measures: [
+    {
+      id: MEASURE,
+      kind: 'SHARE',
+      targetId: BLOCKED_LINK,
+      takenBy: MODERATOR,
+      takenAt: new Date('2026-10-17T12:00:00Z'),
+      liftedAt: null,
+      liftedBy: null,
+      statement: {
+        id: STATEMENT,
+        ground: 'TERMS_BREACH',
+        basis: 'REPORT',
+        sentAt: new Date('2026-10-17T12:00:00Z'),
+        epoch: 2,
+        sealedFacts: 'ZmFjdHM=',
+        recipients: 2,
+        guests: 0,
+      },
+    },
+  ],
+  statementForm: 'FULL',
+  objections: [],
   proposals: [],
   targets: {
     links: [
@@ -104,6 +146,7 @@ describe('CaseDetail', () => {
       epoch === 2 ? { reportKey: new Uint8Array(32), reason: 'it breaks the terms', contact: '', context: 'seen through a link' } : null,
     )
     vi.mocked(openNote).mockReturnValue('an authority asked')
+    vi.mocked(reporterNoticesOf).mockReturnValue([])
   })
 
   it('reads the case and opens its reports and notes in the browser', async () => {
@@ -133,10 +176,10 @@ describe('CaseDetail', () => {
   })
 
   const decisions: [string, () => unknown, unknown[]][] = [
-    ['.moderation-dismiss', () => dismissCase, [CASE, 'a sealed note']],
-    ['.moderation-block-link', () => takeMeasure, [CASE, 'SHARE', { shareId: OPEN_LINK }, 'a sealed note']],
-    ['.moderation-block-content', () => takeMeasure, [CASE, 'CONTENT', { targetId: ITEM }, 'a sealed note']],
-    ['.moderation-block-guest', () => takeMeasure, [CASE, 'GUEST_IDENTITY', { targetId: GUEST }, 'a sealed note']],
+    ['.moderation-dismiss', () => dismissCase, [CASE, 'a sealed note', []]],
+    ['.moderation-block-link', () => takeMeasure, [CASE, 'SHARE', { shareId: OPEN_LINK }, 'a sealed note', FACTS, []]],
+    ['.moderation-block-content', () => takeMeasure, [CASE, 'CONTENT', { targetId: ITEM }, 'a sealed note', FACTS, []]],
+    ['.moderation-block-guest', () => takeMeasure, [CASE, 'GUEST_IDENTITY', { targetId: GUEST }, 'a sealed note', FACTS, []]],
     ['.moderation-propose-sign-in', () => proposeStep, [CASE, 'MEMBER_SIGN_IN', MEMBER, 'a sealed note']],
     ['.moderation-propose-offline', () => proposeStep, [CASE, 'TENANT_OFFLINE', null, 'a sealed note']],
     ['.moderation-lift', () => liftMeasure, [CASE, MEASURE, 'a sealed note']],
@@ -148,6 +191,7 @@ describe('CaseDetail', () => {
     vi.mocked(call).mockResolvedValue(caseOf({ state: 'DECIDED' }))
     const w = await mountCase()
     await w.find('.moderation-decision-note').setValue('a sealed note')
+    await w.find('.moderation-statement-facts').setValue('the facts')
     await click(w, selector)
     expect(ask).toHaveBeenCalledTimes(1)
     expect(call).toHaveBeenCalledWith(...args)
@@ -207,10 +251,13 @@ describe('CaseDetail', () => {
     [409, 'moderation_measure_exists', 'moderation.errors.measureExists'],
     [409, 'case_closed', 'moderation.errors.caseClosed'],
     [400, 'invalid_request', 'moderation.errors.invalidRequest'],
+    [400, 'statement_facts_required', 'moderation.errors.factsRequired'],
+    [409, 'statement_recipients_changed', 'moderation.errors.recipientsChanged'],
     [500, undefined, 'moderation.errors.failed'],
   ])('a step refused with %i %s says so', async (status, code, key) => {
     vi.mocked(takeMeasure).mockRejectedValue(httpError(status, code))
     const w = await mountCase()
+    await w.find('.moderation-statement-facts').setValue('the facts')
     await click(w, '.moderation-block-content')
     expect(w.find('.moderation-case-error').text()).toBe(t(key))
   })
@@ -225,6 +272,106 @@ describe('CaseDetail', () => {
     const w = await mountCase()
     await click(w, selector)
     expect(w.find('.moderation-case-error').text()).toBe(t(key))
+  })
+
+  describe('the statement of reasons', () => {
+    it('in the full form a block without facts is not sent, and says why', async () => {
+      const w = await mountCase()
+      expect(w.find('label[for="moderation-statement-facts"]').text()).toBe(t('moderation.decide.facts'))
+      await click(w, '.moderation-block-content')
+      expect(ask).not.toHaveBeenCalled()
+      expect(takeMeasure).not.toHaveBeenCalled()
+      expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.factsRequired'))
+    })
+
+    it('in the reduced form a block goes without facts, on the ground the moderator chose, telling the reporters', async () => {
+      vi.mocked(takeMeasure).mockResolvedValue(caseOf({ state: 'DECIDED', statementForm: 'REDUCED' }))
+      vi.mocked(reporterNoticesOf).mockReturnValue([{ reportId: REPORT, address: 'r@example.org' }])
+      const w = await mountCase(caseOf({ statementForm: 'REDUCED' }))
+      expect(w.find('label[for="moderation-statement-facts"]').text()).toBe(t('moderation.decide.factsOptional'))
+      expect((w.find('.moderation-statement-ground').element as HTMLSelectElement).value).toBe('TERMS_BREACH')
+      await w.find('.moderation-statement-ground').setValue('ILLEGAL_CONTENT')
+      await click(w, '.moderation-block-content')
+      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', facts: '' }, [
+        { reportId: REPORT, address: 'r@example.org' },
+      ])
+    })
+
+    it('a measure shows its statement: the ground, whom it reached, and the facts opened', async () => {
+      vi.mocked(openNote).mockImplementation((_e, _c, sealed) => (sealed === 'ZmFjdHM=' ? 'what was found' : 'an authority asked'))
+      const w = await mountCase()
+      const statement = w.find('.moderation-measure-statement').text()
+      expect(statement).toContain(t('moderation.case.statementGround', { ground: t('report.categories.TERMS_BREACH') }))
+      expect(w.find('.moderation-measure-facts').text()).toContain('what was found')
+      const nobody = caseOf()
+      nobody.measures[0].statement = { ...nobody.measures[0].statement!, sentAt: null, recipients: 0, sealedFacts: null, epoch: null }
+      const w2 = await mountCase(nobody)
+      expect(w2.find('.moderation-measure-statement').text()).toContain(t('moderation.case.statementNobody'))
+      expect(w2.find('.moderation-measure-facts').exists()).toBe(false)
+    })
+  })
+
+  describe('an objection', () => {
+    const objection = (over: Partial<ModerationCase['objections'][number]> = {}) => ({
+      id: OBJECTION,
+      statementId: STATEMENT,
+      measureId: MEASURE,
+      receivedAt: new Date('2026-10-18T09:00:00Z'),
+      epoch: 2,
+      sealedObjection: 'b2JqZWN0aW9u',
+      decidedAt: null,
+      decidedBy: null,
+      outcome: null,
+      ownReview: false,
+      mayDecide: true,
+      ...over,
+    })
+
+    it('is shown opened, and the moderator who may decide upholds it or lifts the measure', async () => {
+      vi.mocked(openObjectionOf).mockReturnValue('it is my own address')
+      vi.mocked(decideObjection).mockResolvedValue(caseOf({ objections: [objection({ outcome: 'UPHELD', decidedAt: new Date() })] }))
+      const w = await mountCase(caseOf({ state: 'DECIDED', objections: [objection()] }))
+      expect(openObjectionOf).toHaveBeenCalledWith(2, STATEMENT, 'b2JqZWN0aW9u')
+      expect(w.find('.moderation-objection-text').text()).toBe('it is my own address')
+      await w.find('.moderation-decision-note').setValue('a sealed note')
+      await click(w, '.moderation-objection-uphold')
+      expect(decideObjection).toHaveBeenCalledWith(CASE, OBJECTION, 'UPHOLD', 'a sealed note')
+      expect(w.find('.moderation-objection').text()).toContain(t('moderation.case.objectionOutcomes.UPHELD'))
+      expect(w.find('.moderation-objection-uphold').exists()).toBe(false)
+    })
+
+    it('lifts the measure on request', async () => {
+      vi.mocked(decideObjection).mockResolvedValue(caseOf())
+      const w = await mountCase(caseOf({ state: 'DECIDED', objections: [objection()] }))
+      await click(w, '.moderation-objection-lift')
+      expect(decideObjection).toHaveBeenCalledWith(CASE, OBJECTION, 'LIFT', '')
+    })
+
+    it('is not offered to the moderator who took the measure while another one may decide it', async () => {
+      vi.mocked(openObjectionOf).mockReturnValue(null)
+      const w = await mountCase(caseOf({ state: 'DECIDED', objections: [objection({ mayDecide: false })] }))
+      expect(w.find('.moderation-objection-text').text()).toBe(t('moderation.case.objectionSealed'))
+      expect(w.find('.moderation-objection-another').text()).toBe(t('moderation.case.anotherDecides'))
+      expect(w.find('.moderation-objection-uphold').exists()).toBe(false)
+      expect(w.find('.moderation-objection-lift').exists()).toBe(false)
+    })
+
+    it('a decision by the only moderator says so', async () => {
+      const w = await mountCase(caseOf({ objections: [objection({ outcome: 'LIFTED', ownReview: true, decidedAt: new Date(), mayDecide: false })] }))
+      expect(w.find('.moderation-objection').text()).toContain(t('moderation.case.ownReview'))
+      expect(w.find('.moderation-objection-another').exists()).toBe(false)
+    })
+
+    it.each([
+      [409, 'objection_needs_another_moderator', 'moderation.errors.needsAnotherModerator'],
+      [409, 'objection_decided', 'moderation.errors.objectionDecided'],
+      [404, 'objection_not_found', 'moderation.errors.objectionNotFound'],
+    ])('refused with %i %s says so', async (status, code, key) => {
+      vi.mocked(decideObjection).mockRejectedValue(httpError(status, code))
+      const w = await mountCase(caseOf({ state: 'DECIDED', objections: [objection()] }))
+      await click(w, '.moderation-objection-uphold')
+      expect(w.find('.moderation-case-error').text()).toBe(t(key))
+    })
   })
 
   it('a decided case is not dismissed; an upload link offers no content block', async () => {

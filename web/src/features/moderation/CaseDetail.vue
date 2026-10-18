@@ -3,7 +3,10 @@
 // their epoch's key, the hold, the measures, the proposals and the log — whose sealed notes open the same way — and the
 // decision panel, each step with its reach stated. Every decision is confirmed, carries the optional note sealed to the
 // moderation key, and answers with the case as it now stands, which replaces the one shown. "Review" leaves this page
-// for the reported tenant's host, where the share viewer's moderation mode renders the held snapshot.
+// for the reported tenant's host, where the share viewer's moderation mode renders the held snapshot. A block carries its
+// statement of reasons (uc.moderation.object-to-a-measure): the ground and the facts, required by the instance's full form
+// and optional in the reduced one; a reporter who left an address is told the decision. An objection is shown opened, and
+// decided here by a moderator other than the one who took the measure while there is one (ADR 0099 § 5).
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -11,6 +14,7 @@ import DatePicker from 'primevue/datepicker'
 import Message from 'primevue/message'
 import type {
   ModerationCase,
+  ModerationGround,
   ModerationProposalStep,
   ModerationTargetLink,
   ModerationTargetUploader,
@@ -18,15 +22,19 @@ import type {
 import { useConfirm } from '../../shared/state/useConfirm'
 import {
   barReporter,
+  decideObjection,
   dismissCase,
   extendHold,
   getCase,
   liftMeasure,
   openNote,
+  openObjectionOf,
   openReportOf,
   proposeStep,
+  reporterNoticesOf,
   reviewUrl,
   takeMeasure,
+  type MeasureKind,
 } from './cases'
 import { caseFailureKey } from './caseFailure'
 
@@ -44,6 +52,9 @@ const notice = ref('')
 const note = ref('')
 const extendUntil = ref<Date | null>(null)
 const extendReason = ref('')
+const GROUNDS: ModerationGround[] = ['CHILD_SEXUAL_ABUSE', 'TERRORIST_CONTENT', 'THREAT_TO_LIFE', 'ILLEGAL_CONTENT', 'TERMS_BREACH']
+const ground = ref<ModerationGround | ''>('')
+const facts = ref('')
 
 const when = (d: Date) => d.toLocaleString(locale.value)
 const short = (id: string) => id.slice(0, 8)
@@ -54,6 +65,7 @@ async function load() {
   error.value = ''
   try {
     current.value = await getCase(props.caseId)
+    if (ground.value === '') ground.value = current.value.category
   } catch (e) {
     error.value = t(await caseFailureKey(e, 'moderation.case.loadFailed'))
   } finally {
@@ -80,6 +92,24 @@ const openedNotes = computed(() =>
     return e.epoch == null ? null : openNote(e.epoch, current.value!.id, e.sealedText)
   }),
 )
+
+/** The objections, opened: the text, or null where this page holds no key that opens it. */
+const openedObjections = computed(() =>
+  new Map((current.value?.objections ?? []).map((o) => [o.id, openObjectionOf(o.epoch, o.statementId, o.sealedObjection)])),
+)
+
+/** A measure's statement facts, opened from the moderation key's copy: undefined without facts, null where it does not open. */
+const openedFacts = computed(() =>
+  new Map(
+    (current.value?.measures ?? []).map((m) => {
+      const s = m.statement
+      if (!s || s.sealedFacts == null || s.epoch == null) return [m.id, undefined] as const
+      return [m.id, openNote(s.epoch, current.value!.id, s.sealedFacts)] as const
+    }),
+  ),
+)
+
+const fullForm = computed(() => current.value?.statementForm !== 'REDUCED')
 
 const open = computed(() => current.value?.state === 'OPEN')
 const closed = computed(() => current.value?.state === 'CLOSED')
@@ -120,21 +150,43 @@ async function decide(label: string, reach: string, icon: string, action: (note:
 
 const id = () => current.value!.id
 
-const dismiss = () => decide(t('moderation.decide.dismiss'), t('moderation.decide.dismissReach'), 'pi pi-check', (n) => dismissCase(id(), n))
+const dismiss = () =>
+  decide(t('moderation.decide.dismiss'), t('moderation.decide.dismissReach'), 'pi pi-check', (n) =>
+    dismissCase(id(), n, reporterNoticesOf(current.value!)),
+  )
+
+/**
+ * Take a block with its statement: refused here already when the full form lacks the facts, as the server would; the
+ * ground defaults to the case's category, and the facts field empties once the block is taken.
+ */
+function block(label: string, reach: string, kind: MeasureKind, target: { shareId?: string; targetId?: string }) {
+  if (fullForm.value && facts.value.trim() === '') {
+    error.value = t('moderation.errors.factsRequired')
+    return
+  }
+  const statement = { ground: (ground.value || current.value!.category) as ModerationGround, facts: facts.value }
+  return decide(label, reach, 'pi pi-ban', async (n) => {
+    const answered = await takeMeasure(id(), kind, target, n, statement, reporterNoticesOf(current.value!))
+    facts.value = ''
+    return answered
+  })
+}
 
 const blockLink = (l: ModerationTargetLink) =>
-  decide(t('moderation.decide.blockLink', { id: short(l.shareId) }), t('moderation.decide.blockLinkReach'), 'pi pi-ban', (n) =>
-    takeMeasure(id(), 'SHARE', { shareId: l.shareId }, n),
-  )
+  block(t('moderation.decide.blockLink', { id: short(l.shareId) }), t('moderation.decide.blockLinkReach'), 'SHARE', { shareId: l.shareId })
 
 const blockContent = () =>
-  decide(t('moderation.decide.blockContent'), t('moderation.decide.blockContentReach'), 'pi pi-ban', (n) =>
-    takeMeasure(id(), 'CONTENT', { targetId: current.value!.itemId }, n),
-  )
+  block(t('moderation.decide.blockContent'), t('moderation.decide.blockContentReach'), 'CONTENT', { targetId: current.value!.itemId })
 
 const blockGuest = (u: ModerationTargetUploader) =>
-  decide(t('moderation.decide.blockUploader', { id: short(u.id) }), t('moderation.decide.blockUploaderReach'), 'pi pi-ban', (n) =>
-    takeMeasure(id(), 'GUEST_IDENTITY', { targetId: u.id }, n),
+  block(t('moderation.decide.blockUploader', { id: short(u.id) }), t('moderation.decide.blockUploaderReach'), 'GUEST_IDENTITY', { targetId: u.id })
+
+const uphold = (objectionId: string) =>
+  decide(t('moderation.case.uphold'), t('moderation.case.upholdReach'), 'pi pi-check', (n) => decideObjection(id(), objectionId, 'UPHOLD', n))
+
+const liftOnObjection = (objectionId: string) =>
+  decide(t('moderation.case.liftOnObjection'), t('moderation.case.liftOnObjectionReach'), 'pi pi-undo', (n) =>
+    decideObjection(id(), objectionId, 'LIFT', n),
   )
 
 const proposeSignIn = (u: ModerationTargetUploader) =>
@@ -259,10 +311,45 @@ onMounted(load)
               <span v-if="m.liftedAt" class="veyq-badge muted">{{ t('moderation.case.liftedAt', { time: when(m.liftedAt) }) }}</span>
               <span v-else class="veyq-badge warning">{{ t('moderation.case.inForce') }}</span>
             </div>
+            <template v-if="m.statement">
+              <p class="veyq-form-copy moderation-measure-statement">
+                {{ t('moderation.case.statementGround', { ground: t(`report.categories.${m.statement.ground}`) }) }}
+                <template v-if="m.statement.sentAt">{{ t('moderation.case.statementSent', { time: when(m.statement.sentAt), count: m.statement.recipients }, m.statement.recipients) }}</template>
+                <template v-else>{{ t('moderation.case.statementNobody') }}</template>
+              </p>
+              <p v-if="openedFacts.get(m.id) !== undefined" class="veyq-form-copy moderation-measure-facts">
+                {{ t('moderation.case.statementFacts') }}: {{ openedFacts.get(m.id) ?? t('moderation.case.noteSealed') }}
+              </p>
+            </template>
           </div>
           <Button v-if="!m.liftedAt" severity="secondary" class="moderation-lift" icon="pi pi-undo" :label="t('moderation.case.lift')" :disabled="busy" @click="lift(m.id)" />
         </div>
       </div>
+
+      <!-- The objections (ADR 0093 § 7, ADR 0099 § 5): opened here, decided by another moderator while there is one. -->
+      <template v-if="current.objections.length > 0">
+        <h4>{{ t('moderation.case.objections') }}</h4>
+        <div class="veyq-list">
+          <div v-for="o in current.objections" :key="o.id" class="veyq-list-row moderation-objection">
+            <div class="veyq-row-main">
+              <strong class="veyq-row-title">{{ t('moderation.case.objectionReceived', { time: when(o.receivedAt) }) }}</strong>
+              <p class="veyq-form-copy moderation-objection-text">{{ openedObjections.get(o.id) ?? t('moderation.case.objectionSealed') }}</p>
+              <div class="veyq-row-meta">
+                <span v-if="o.outcome" class="veyq-badge" :class="{ success: o.outcome === 'LIFTED', muted: o.outcome === 'UPHELD' }">
+                  {{ t(`moderation.case.objectionOutcomes.${o.outcome}`) }}
+                </span>
+                <span v-else class="veyq-badge warning">{{ t('moderation.case.objectionOpen') }}</span>
+              </div>
+              <p v-if="o.outcome && o.ownReview" class="veyq-form-copy">{{ t('moderation.case.ownReview') }}</p>
+              <p v-if="!o.outcome && !o.mayDecide" class="veyq-form-copy moderation-objection-another">{{ t('moderation.case.anotherDecides') }}</p>
+            </div>
+            <template v-if="!o.outcome && o.mayDecide">
+              <Button severity="secondary" class="moderation-objection-uphold" icon="pi pi-check" :label="t('moderation.case.uphold')" :disabled="busy" @click="uphold(o.id)" />
+              <Button severity="danger" outlined class="moderation-objection-lift" icon="pi pi-undo" :label="t('moderation.case.liftOnObjection')" :disabled="busy" @click="liftOnObjection(o.id)" />
+            </template>
+          </div>
+        </div>
+      </template>
 
       <!-- The proposals, as such: the Server Owner takes or declines them. -->
       <h4>{{ t('moderation.case.proposals') }}</h4>
@@ -288,6 +375,16 @@ onMounted(load)
         <label for="moderation-decision-note">{{ t('moderation.decide.note') }}</label>
         <textarea id="moderation-decision-note" v-model="note" class="moderation-decision-note" rows="3" maxlength="2000" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.decide.noteHint') }}</span>
+
+        <strong>{{ t('moderation.decide.statement') }}</strong>
+        <p class="veyq-form-copy">{{ t('moderation.decide.statementCopy') }}</p>
+        <label for="moderation-statement-ground">{{ t('moderation.decide.ground') }}</label>
+        <select id="moderation-statement-ground" v-model="ground" class="moderation-statement-ground" :disabled="busy">
+          <option v-for="g in GROUNDS" :key="g" :value="g">{{ t(`report.categories.${g}`) }}</option>
+        </select>
+        <label for="moderation-statement-facts">{{ fullForm ? t('moderation.decide.facts') : t('moderation.decide.factsOptional') }}</label>
+        <textarea id="moderation-statement-facts" v-model="facts" class="moderation-statement-facts" rows="4" maxlength="2000" :disabled="busy" />
+        <span class="veyq-form-copy">{{ fullForm ? t('moderation.decide.factsHint') : t('moderation.decide.factsHintReduced') }}</span>
 
         <div class="veyq-list">
           <div v-if="open" class="veyq-list-row">

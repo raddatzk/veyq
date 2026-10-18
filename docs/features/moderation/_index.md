@@ -33,7 +33,9 @@ the log that keeps them accountable. A **core** feature
 - ★ [Take a measure](use-cases/uc.moderation.take-a-measure.md) — **built (backend + web + admin-web)** (ADR 0093 § 6,
   ADR 0099 § 6): block the share, the content or a guest uploader; propose the Server Owner's steps, which they take or
   decline in admin-web or `veyq-admin`; lift.
-- The statement of reasons and the objection — planned (ADR 0093 § 7).
+- ★ [Object to a measure](use-cases/uc.moderation.object-to-a-measure.md) — **built (backend + web)** (ADR 0093 §§ 4, 7, 14, ADR 0099
+  § 5): the statement of reasons reaches the affected in veyq and by mail, an affected member objects once, another
+  moderator decides; a reporter is told the decision.
 
 ## Enablers
 

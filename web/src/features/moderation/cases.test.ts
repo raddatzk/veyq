@@ -15,14 +15,17 @@ import { stubApi } from '../../test/apiMock'
 import type { ModerationCase } from '../../api/generated/moderation'
 import {
   barReporter,
+  decideObjection,
   dismissCase,
   extendHold,
   getCase,
   liftMeasure,
   listCases,
   openNote,
+  openObjectionOf,
   openReportOf,
   proposeStep,
+  reporterNoticesOf,
   reviewUrl,
   sealNote,
   takeMeasure,
@@ -56,7 +59,12 @@ const aCase: ModerationCase = {
   proposals: [],
   targets: { links: [], uploaders: [] },
   events: [],
+  statementForm: 'FULL',
+  objections: [],
 }
+
+const NO_FACTS = { ground: 'TERMS_BREACH' as const, facts: '' }
+const STATEMENT_NONE = { ground: 'TERMS_BREACH', facts: null, factsFor: [] }
 
 const stub = () =>
   stubApi(moderationApi, {
@@ -68,6 +76,8 @@ const stub = () =>
     proposeModerationStep: aCase,
     extendModerationHold: aCase,
     barModerationReporter: aCase,
+    decideModerationObjection: aCase,
+    getModerationStatementRecipients: { accounts: [], guests: 0 },
   })
 
 let api: ReturnType<typeof stub>
@@ -92,21 +102,26 @@ afterEach(clearModerationKeys)
 type Decision = [operationId: keyof typeof api, call: () => Promise<unknown>, request: Record<string, unknown>]
 
 const decisions: Decision[] = [
-  ['dismissModerationCase', () => dismissCase(CASE, ''), { moderationDecisionNote: { note: null } }],
+  ['dismissModerationCase', () => dismissCase(CASE, ''), { moderationDismissal: { note: null, reporterNotices: [] } }],
   [
     'takeModerationMeasure',
-    () => takeMeasure(CASE, 'SHARE', { shareId: SHARE }, ''),
-    { moderationMeasureRequest: { kind: 'SHARE', shareId: SHARE, targetId: null, note: null } },
+    () => takeMeasure(CASE, 'SHARE', { shareId: SHARE }, '', NO_FACTS),
+    { moderationMeasureRequest: { kind: 'SHARE', shareId: SHARE, targetId: null, note: null, statement: STATEMENT_NONE, reporterNotices: [] } },
   ],
   [
     'takeModerationMeasure',
-    () => takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, ''),
-    { moderationMeasureRequest: { kind: 'CONTENT', shareId: null, targetId: ITEM, note: null } },
+    () => takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', NO_FACTS),
+    { moderationMeasureRequest: { kind: 'CONTENT', shareId: null, targetId: ITEM, note: null, statement: STATEMENT_NONE, reporterNotices: [] } },
   ],
   [
     'takeModerationMeasure',
-    () => takeMeasure(CASE, 'GUEST_IDENTITY', { targetId: ACCOUNT }, ''),
-    { moderationMeasureRequest: { kind: 'GUEST_IDENTITY', shareId: null, targetId: ACCOUNT, note: null } },
+    () => takeMeasure(CASE, 'GUEST_IDENTITY', { targetId: ACCOUNT }, '', NO_FACTS),
+    { moderationMeasureRequest: { kind: 'GUEST_IDENTITY', shareId: null, targetId: ACCOUNT, note: null, statement: STATEMENT_NONE, reporterNotices: [] } },
+  ],
+  [
+    'decideModerationObjection',
+    () => decideObjection(CASE, REPORT, 'UPHOLD', ''),
+    { objectionId: REPORT, moderationObjectionDecision: { outcome: 'UPHOLD', note: null } },
   ],
   ['liftModerationMeasure', () => liftMeasure(CASE, MEASURE, ''), { measureId: MEASURE, moderationDecisionNote: { note: null } }],
   [
@@ -164,7 +179,7 @@ describe('a decision carries a fresh proof over its own operation and its case',
 describe('the sealed texts', () => {
   it('a decision note is sealed to the current epoch, bound to its case, and opens with that epoch', async () => {
     await dismissCase(CASE, 'unfounded: a holiday photo')
-    const note = api.dismissModerationCase.mock.calls[0][0].moderationDecisionNote.note!
+    const note = api.dismissModerationCase.mock.calls[0][0].moderationDismissal.note!
     expect(note.epoch).toBe(EPOCH)
     expect(note.sealedNote).not.toContain('holiday')
     expect(openNote(EPOCH, CASE, note.sealedNote)).toBe('unfounded: a holiday photo')
@@ -201,6 +216,56 @@ describe('the sealed texts', () => {
     expect(opened.contact).toBe('r@example.org')
     expect(opened.context).toBe('a guest')
     expect(openReportOf(EPOCH + 1, sealed)).toBeNull()
+  })
+})
+
+describe('the statement of reasons', () => {
+  const recipient = () => {
+    const k = v1.generateModerationKey()
+    return { secret: v1.moderationKemSecret(k), kem: v1.moderationBundle(k).kem }
+  }
+
+  it('seals the facts to the moderation key and to every member the server lists, each under a proof of its own', async () => {
+    const a = recipient()
+    const identity = (kem: Uint8Array) => b64std(v1.serializeIdentityPublic({ kem, sign: new Uint8Array(32) }))
+    api.getModerationStatementRecipients.mockResolvedValueOnce({ accounts: [{ accountId: ACCOUNT, identityPublicKey: identity(a.kem) }], guests: 1 })
+    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', facts: 'the photo shows a threat' })
+    expect(proofFor).toHaveBeenNthCalledWith(1, 'getModerationStatementRecipients', CASE)
+    expect(proofFor).toHaveBeenNthCalledWith(2, 'takeModerationMeasure', CASE)
+    expect(api.getModerationStatementRecipients).toHaveBeenCalledWith(expect.objectContaining({ caseId: CASE, kind: 'CONTENT', targetId: ITEM }))
+    const { statement } = api.takeModerationMeasure.mock.calls[0][0].moderationMeasureRequest
+    expect(statement.ground).toBe('ILLEGAL_CONTENT')
+    expect(openNote(statement.facts!.epoch, CASE, statement.facts!.sealedNote)).toBe('the photo shows a threat')
+    expect(statement.factsFor).toHaveLength(1)
+    expect(statement.factsFor![0].accountId).toBe(ACCOUNT)
+    const sealed = statement.factsFor![0].sealedFacts
+    expect(sealed).not.toContain('threat')
+    expect(v1.openModerationFacts(CASE, ACCOUNT, a.secret, Uint8Array.from(atob(sealed), (c) => c.charCodeAt(0)))).toBe('the photo shows a threat')
+  })
+
+  it('without facts reads no recipients and seals nothing', async () => {
+    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', NO_FACTS)
+    expect(api.getModerationStatementRecipients).not.toHaveBeenCalled()
+    expect(api.takeModerationMeasure.mock.calls[0][0].moderationMeasureRequest.statement).toEqual(STATEMENT_NONE)
+  })
+
+  it('tells only the reporters whose contact is an address, and a report it cannot open tells nobody', () => {
+    const kem = v1.moderationBundle(key).kem
+    const sealed = (contact: string) => b64std(v1.sealReport(EPOCH, kem, { reportKey: new Uint8Array(32), reason: 'r', contact, context: '' }))
+    const report = (id: string, sealedReport: string, epoch = EPOCH) =>
+      ({ id, epoch, receivedAt: UNTIL, category: 'TERMS_BREACH', sealedReport, reporter: 'LINK', barred: false }) as const
+    const notices = reporterNoticesOf({
+      ...aCase,
+      reports: [report(REPORT, sealed(' reporter@example.org ')), report(ITEM, sealed('call me on Tuesdays')), report(MEASURE, sealed('x@y.z'), EPOCH + 1)],
+    })
+    expect(notices).toEqual([{ reportId: REPORT, address: 'reporter@example.org' }])
+  })
+
+  it('an objection opens with its epoch’s key at its statement, and nowhere else', () => {
+    const sealed = b64std(v1.sealObjection(EPOCH, MEASURE, v1.moderationBundle(key).kem, 'it is my own address'))
+    expect(openObjectionOf(EPOCH, MEASURE, sealed)).toBe('it is my own address')
+    expect(openObjectionOf(EPOCH, REPORT, sealed)).toBeNull()
+    expect(openObjectionOf(EPOCH + 1, MEASURE, sealed)).toBeNull()
   })
 })
 

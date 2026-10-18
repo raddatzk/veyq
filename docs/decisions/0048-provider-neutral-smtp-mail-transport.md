@@ -47,8 +47,9 @@ keeps the copy-link (§5).**
 4. **Per-tenant, no server-level default.** A tenant's mail settings exist only at tenant scope (the owner's
    choice), so there is no instance-wide secret for tenant mail. The instance's own mail settings
    ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3) are the one other
-   SMTP configuration: they send only instance notices, only to the Server Owner, and are never a tenant's default or
-   fallback — the two share the wire (`core/mail/SmtpDelivery`) and nothing else. The `LoggingTenantInviteMailer` copy-link fallback
+   SMTP configuration: they send only instance notices, only to the recipients that decision names (the Server Owner, the
+   moderators, and moderation's statements to the affected and its decisions to reporters), and are never a tenant's
+   default or fallback — the two share the wire (`core/mail/SmtpDelivery`) and nothing else. The `LoggingTenantInviteMailer` copy-link fallback
    that a tenant without settings once fell back to now serves **only the owner-bootstrap invite** of §5 —
    [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) made a working mailer a precondition for every
    other mail-bound action, so a tenant with no sendable settings is refused rather than degraded.

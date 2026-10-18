@@ -58,6 +58,7 @@ import { registry, type NodeShareOffer } from '../core/applications/registry'
 import { favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { memberAccess, memberTreeSource } from '../core/access'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
+import StatementNotice from '../features/moderation/statement/StatementNotice.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -382,8 +383,12 @@ async function onDeleteDone() {
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </Message>
       <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
-      <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason. -->
-      <p v-else-if="currentNode?.blockedByOperator" class="home-state-unsupported node-blocked">{{ t('node.blockedByOperator') }}</p>
+      <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason; a member
+           the statement of reasons names reads it below (uc.moderation.object-to-a-measure). -->
+      <template v-else-if="currentNode?.blockedByOperator">
+        <p class="home-state-unsupported node-blocked">{{ t('node.blockedByOperator') }}</p>
+        <StatementNotice :target-id="currentNode.id" />
+      </template>
       <component
         :is="kindDetail"
         v-else-if="kindDetail && currentNode && activeSpace.scopeId"

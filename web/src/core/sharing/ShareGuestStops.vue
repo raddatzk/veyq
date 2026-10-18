@@ -9,8 +9,13 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import type { ShareGuestStop } from '../../api/generated/sharing'
 import { guestStopLines, type GuestStopFix, type GuestStopLine } from './guestStops'
+import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
+import { ShareGuestStopReasonEnum } from '../../api/generated/sharing'
 
-const props = defineProps<{ stops: ShareGuestStop[]; createdAt: Date; canEdit: boolean; canRenew: boolean }>()
+/** A link a moderator blocked: its creator reads the statement of reasons below the stop (uc.moderation.object-to-a-measure). */
+const operatorBlocked = computed(() => props.stops.some((s) => s.reason === ShareGuestStopReasonEnum.OperatorBlocked))
+
+const props = defineProps<{ stops: ShareGuestStop[]; createdAt: Date; canEdit: boolean; canRenew: boolean; shareId?: string }>()
 const emit = defineEmits<{ edit: []; renew: [] }>()
 const { t } = useI18n()
 
@@ -49,6 +54,7 @@ const fixes = computed(() => {
       size="small"
       @click="f.fix === 'edit' ? emit('edit') : emit('renew')"
     />
+    <StatementNotice v-if="shareId && operatorBlocked" class="share-guest-stops-statement" :share-id="shareId" />
   </span>
 </template>
 

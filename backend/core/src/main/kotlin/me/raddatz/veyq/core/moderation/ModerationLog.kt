@@ -13,12 +13,16 @@ import java.util.UUID
  * report opens it, [REPORT_ATTACHED] when a further report attaches to it, [OPENED] when the review served its report
  * shares, and every decision (uc.moderation.review-a-case, uc.moderation.take-a-measure). [MEASURE_TAKEN] and
  * [MEASURE_LIFTED] name the measure's kind in `reason` and its target in `target_id`; a member's sign-in block taken on no
- * case is the one of them written with no case id.
+ * case is the one of them written with no case id. The statement of reasons and the objection (ADR 0093 § 7,
+ * uc.moderation.object-to-a-measure): [STATEMENT_SENT] (the ground, the statement), [DECISION_SENT] (a reporter told —
+ * DISMISSED or DECIDED, the report), [OBJECTION_RECEIVED] (the objector, the objection), and [OBJECTION_DECIDED] or —
+ * the decider alone — [OBJECTION_SELF_REVIEWED] (the outcome, the objection).
  */
 enum class ModerationEvent {
     APPOINTED, ACCEPTED, DELIVERED, REMOVED, STEPPED_DOWN, IDENTITY_ROTATED, EPOCH_MINTED,
     RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN,
-    PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED,
+    PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED,
+    OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED,
 }
 
 /**
@@ -93,6 +97,11 @@ class ModerationLog {
             this.holdUntil = holdUntil
             expiresAt = closedAt?.let { retentionEnd(maxOf(it, at)) }
         }.persist()
+    }
+
+    /** The case [caseId] was reopened by an objection: its events are undated again, as an open case's are. */
+    fun reopenCase(caseId: String) {
+        ModerationEventEntity.update("expiresAt = null where caseId = ?1", caseId)
     }
 
     /** The case [caseId] closed at [closedAt]: every event of it is kept to 31 December of the third year after. */

@@ -115,6 +115,12 @@ vi.mock('../core/report/moderationKey', () => ({
   readModerationKey: () => Promise.reject(new Error('no moderation key in a unit test (src/test/setup.ts)')),
 }))
 
+// Every blocked placeholder reads the caller's statements of reasons when it mounts (uc.moderation.object-to-a-measure).
+// A unit test sees none — no statement, no request — unless it tests the notice and takes the real module back.
+vi.mock('../features/moderation/statement/statementsRead', () => ({
+  readMyStatements: () => Promise.resolve([]),
+}))
+
 afterEach(() => {
   if (!attempted.length) return
   const calls = attempted.splice(0).join('\n  - ')

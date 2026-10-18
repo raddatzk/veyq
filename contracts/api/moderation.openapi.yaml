@@ -26,6 +26,11 @@ tags:
       A moderator's own appointment, their grants of the instance moderation key and their delivery to a newcomer,
       the key proof's challenge, and the published key a reporter seals to. One tag = one resource interface owning
       the `/api/moderation` subtree.
+  - name: statements
+    description: >
+      The affected member's side of a measure (ADR 0093 § 7, uc.moderation.object-to-a-measure): the statements of
+      reasons addressed to the caller and their one objection per measure. No role and no key proof — the caller is
+      told only what names them as a recipient. Its own tag so its resource owns the `/api/statements` subtree.
   - name: reports
     description: >
       A member's report of what their space holds (ADR 0093 §§ 1-2, uc.moderation.report) — the reporter's side, not
@@ -580,8 +585,10 @@ paths:
         ADR 0093 §§ 4–5: the case closes, its hold ends at once (the snapshot and the pins go, so the reclaim sweep
         catches up on whatever was deleted meanwhile), and the case's events are dated to 31 December of the third year
         after the close. An optional note, sealed in the browser to the moderation key (`moderation-note` [epoch,
-        caseId]). Only an `OPEN` case (`409 case_not_open`): a decided one is closed by lifting its measures. Key-proved
-        over this case; logged.
+        caseId]). Only an `OPEN` case (`409 case_not_open`): a decided one is closed by lifting its measures. A reporter
+        who left a contact is told the dismissal: the browser opened their sealed contact and sends it in
+        `reporterNotices`; the server mails it once from memory (instance mail, ADR 0097 decision 3), never stores it,
+        and logs `DECISION_SENT`. Key-proved over this case; logged.
       security:
         - bearerAuth: []
       parameters:
@@ -592,8 +599,8 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ModerationDecisionNote" }
-            example: { note: { epoch: 2, sealedNote: c2VhbGVkLW5vdGU= } }
+            schema: { $ref: "#/components/schemas/ModerationDismissal" }
+            example: { note: { epoch: 2, sealedNote: c2VhbGVkLW5vdGU= }, reporterNotices: [{ reportId: 4e5f9a8b-1c2d-4e4f-8a6b-4f2c9a1e7b3d, address: reporter@example.com }] }
       responses:
         "200":
           description: Dismissed; the case as it now stands.
@@ -620,9 +627,17 @@ paths:
         link; neither a reactivation nor a re-issue passes while it stands); `CONTENT` blocks the reported node or medium
         (every byte read answers `451 blocked_by_operator`, every listing marks it); `GUEST_IDENTITY` blocks a guest
         uploader's identity and the link it came through. The target must be one the case knows (`getModerationCase`'s
-        `targets`, the reported item for `CONTENT`) — else `404 moderation_target_unknown`. The case is then `DECIDED`
-        and its hold ends six months after this decision. A step already in force on the target is refused
-        (`409 moderation_measure_exists`). Key-proved over this case; logged.
+        `targets`, the reported item for `CONTENT`) — else `404 moderation_target_unknown`. A step already in force on
+        the target is refused (`409 moderation_measure_exists`).
+
+        **Its statement of reasons is sent with it** (ADR 0093 § 7, uc.moderation.object-to-a-measure): the ground, and
+        the facts sealed to the moderation key and once more to each affected member's identity
+        (`getModerationStatementRecipients` lists them for this step and target). In the *club, organisation or company*
+        operating mode the facts are required (`400 statement_facts_required`); in *private* they are optional. Facts
+        sealed for other members than the server would tell are refused (`409 statement_recipients_changed`: read the
+        recipients again). The case is then `DECIDED` and its hold ends six months after the statement is sent — from
+        the decision where nobody can be told. The reporters in `reporterNotices` are told the decision, as on a
+        dismissal. Key-proved over this case; logged.
       security:
         - bearerAuth: []
       parameters:
@@ -634,14 +649,17 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ModerationMeasureRequest" }
-            example: { kind: CONTENT, targetId: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b }
+            example: { kind: CONTENT, targetId: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b, statement: { ground: TERMS_BREACH, facts: { epoch: 2, sealedNote: c2VhbGVkLWZhY3Rz }, factsFor: [{ accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, sealedFacts: c2VhbGVkLWZhY3Rz }] } }
       responses:
         "201":
           description: Taken; the case as it now stands.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationCase" }
-        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "400":
+          description: "`invalid_request`, or `statement_facts_required` = the operating mode asks for the facts and none were given."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_facts_required } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
         "403": { $ref: "#/components/responses/ProofInvalid" }
         "404":
@@ -651,7 +669,8 @@ paths:
         "409":
           description: >
             `moderation_measure_exists` = this step is already in force on the target; `case_closed` = the case is
-            closed; `moderation_epoch_changed` = the note is not sealed to the current epoch.
+            closed; `moderation_epoch_changed` = the note or the facts are not sealed to the current epoch;
+            `statement_recipients_changed` = `factsFor` does not name exactly the members the statement goes to.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
 
@@ -776,6 +795,170 @@ paths:
           description: "`nothing_held` = the case holds no hold alive; `moderation_epoch_changed` = the reason is not sealed to the current epoch."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+
+  /api/moderation/cases/{caseId}/statement-recipients:
+    get:
+      tags: [moderation]
+      operationId: getModerationStatementRecipients
+      summary: Who a step's statement of reasons would reach — the members to seal its facts to.
+      description: >
+        ADR 0093 § 7 (uc.moderation.object-to-a-measure step 2): for the step `kind` on its target, the members the
+        statement goes to — the creator of a blocked link or of the link a blocked guest came through, the uploaders the
+        held rows name, every owner of the space on a content block — each with the identity public bundle to seal the
+        facts to (`moderation-facts` [caseId, accountId]), and how many guests it names (they are told nothing in veyq).
+        The same target rules as `takeModerationMeasure` (`404 moderation_target_unknown`). Key-proved over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - name: kind
+          in: query
+          required: true
+          description: The step, as `takeModerationMeasure` names it.
+          schema: { type: string, enum: [SHARE, CONTENT, GUEST_IDENTITY] }
+        - name: targetId
+          in: query
+          required: false
+          description: For `CONTENT` and `GUEST_IDENTITY`, the target's id.
+          schema: { type: string, format: uuid }
+        - name: shareId
+          in: query
+          required: false
+          description: For `SHARE`, the link.
+          schema: { type: string, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$" }
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The recipients.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationStatementRecipients" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `moderation_target_unknown`."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_target_unknown } }
+
+  /api/moderation/cases/{caseId}/objections/{objectionId}/decision:
+    post:
+      tags: [moderation]
+      operationId: decideModerationObjection
+      summary: Decide an objection — uphold the measure, or lift it.
+      description: >
+        ADR 0093 § 7, ADR 0099 § 5 (uc.moderation.object-to-a-measure step 9): `LIFT` lifts the measure the objection
+        answers (as `liftModerationMeasure` does, the case closing with its last one), `UPHOLD` keeps it. **Another
+        moderator decides:** the account that took the measure is refused (`409 objection_needs_another_moderator`)
+        while another accepted moderator holds the current epoch; with no other, its decision is accepted and logged as
+        its own review (`OBJECTION_SELF_REVIEWED`), and the answer to the objector says so. An objection is decided
+        once (`409 objection_decided`). The objector is mailed that the answer is in veyq. Key-proved over this case;
+        logged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - name: objectionId
+          in: path
+          required: true
+          description: The objection's id.
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationObjectionDecision" }
+            example: { outcome: UPHOLD }
+      responses:
+        "200":
+          description: Decided; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `objection_not_found` = no objection of this case has that id."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: objection_not_found } }
+        "409":
+          description: >
+            `objection_needs_another_moderator` = the caller took the measure and another accepted moderator holds the
+            key; `objection_decided` = it was decided already; `moderation_epoch_changed` = the note is not sealed to
+            the current epoch.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: objection_needs_another_moderator } }
+
+  /api/statements:
+    get:
+      tags: [statements]
+      operationId: listMyStatements
+      summary: The statements of reasons addressed to the caller.
+      description: >
+        ADR 0093 § 7 (uc.moderation.object-to-a-measure step 5): every statement that names the caller as a recipient,
+        newest first — the measure, its target, the ground, how it came about, its form by the operating mode now (`FULL`
+        or `REDUCED`, ADR 0093 § 14), the facts sealed to the caller's identity, whether the measure is in force, the
+        contact address statements name, and the objection's state and answer. Never the moderator.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's statements.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyModerationStatements" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+
+  /api/statements/{statementId}/objection:
+    post:
+      tags: [statements]
+      operationId: objectToStatement
+      summary: Object to the measure a statement names — once, in free text sealed to the moderation key.
+      description: >
+        ADR 0093 § 7 (uc.moderation.object-to-a-measure step 8): the objection is sealed in the browser to the
+        moderation key's current epoch (`moderation-objection` [epoch, statementId]). It reopens the case and the
+        moderators are mailed. One objection per measure (`409 objection_exists`), and only while the measure is in
+        force (`409 measure_not_in_force`). A caller the statement does not name answers as an unknown statement.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: statementId
+          in: path
+          required: true
+          description: The statement's id.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ObjectionSubmission" }
+            example: { epoch: 2, sealedObjection: c2VhbGVkLW9iamVjdGlvbg== }
+      responses:
+        "201":
+          description: Received; the statement as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationStatement" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "404":
+          description: "`statement_not_found` = no statement names the caller with that id."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_not_found } }
+        "409":
+          description: >
+            `objection_exists` = the measure has its objection already; `measure_not_in_force` = the measure was lifted;
+            `moderation_epoch_changed` = the objection is not sealed to the current epoch: read the key again.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: objection_exists } }
+        "429":
+          description: Too many objections from this account (`rate_limited`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
   /api/moderation/cases/{caseId}/reports/{reportId}/bar:
     post:
@@ -1143,8 +1326,13 @@ components:
     ModerationCaseSummary:
       type: object
       description: One case of the queue, in clear fields only.
-      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt]
+      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt, objectionOpen]
       properties:
+        objectionOpen:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether an objection of this case waits for its decision.
+          example: false
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
         itemKind: { $ref: "#/components/schemas/ModerationItemKind" }
         category: { $ref: "#/components/schemas/ReportCategory" }
@@ -1185,8 +1373,13 @@ components:
     ModerationCase:
       type: object
       description: One case as the moderation surface shows it (uc.moderation.review-a-case step 2).
-      required: [id, itemKind, itemId, scopeId, tenantId, tenantDomain, category, state, decidedAt, closedAt, hold, reports, measures, proposals, targets, events]
+      required: [id, itemKind, itemId, scopeId, tenantId, tenantDomain, category, state, decidedAt, closedAt, hold, reports, measures, proposals, targets, events, statementForm, objections]
       properties:
+        statementForm: { $ref: "#/components/schemas/StatementForm" }
+        objections:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationObjection" }
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
         itemKind: { $ref: "#/components/schemas/ModerationItemKind" }
         itemId:
@@ -1258,7 +1451,7 @@ components:
         trigger:
           x-veyq-visibility: enum
           type: string
-          description: "`CASE_OPEN` = taken by the report (90 days); `MEASURE` = a measure moved it to six months after the decision; `EXTENDED` = a logged extension set it."
+          description: "`CASE_OPEN` = taken by the report (90 days); `MEASURE` = a measure moved it to six months after its statement was sent (after the decision where nobody can be told); `EXTENDED` = a logged extension set it."
           enum: [CASE_OPEN, MEASURE, EXTENDED]
           example: CASE_OPEN
 
@@ -1311,8 +1504,12 @@ components:
     ModerationMeasure:
       type: object
       description: A measure of the case — a row that deletes nothing and holds until it is lifted.
-      required: [id, kind, targetId, takenBy, takenAt, liftedAt, liftedBy]
+      required: [id, kind, targetId, takenBy, takenAt, liftedAt, liftedBy, statement]
       properties:
+        statement:
+          oneOf:
+            - $ref: "#/components/schemas/ModerationMeasureStatement"
+            - type: "null"
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
         kind: { $ref: "#/components/schemas/ModerationMeasureKind" }
         targetId:
@@ -1467,7 +1664,7 @@ components:
           x-veyq-visibility: enum
           type: string
           description: The event.
-          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED]
+          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED]
           example: OPENED
         at:
           x-veyq-visibility: time
@@ -1479,7 +1676,7 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: The moderator (or Server Owner) who acted; null for a report.
+          description: The moderator (or Server Owner) who acted; null for a report and an objection.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         detail:
           x-veyq-visibility: public
@@ -1539,8 +1736,8 @@ components:
 
     ModerationMeasureRequest:
       type: object
-      description: A moderator's step on one target.
-      required: [kind]
+      description: A moderator's step on one target, with its statement of reasons.
+      required: [kind, statement]
       properties:
         kind:
           x-veyq-visibility: enum
@@ -1567,6 +1764,15 @@ components:
             - $ref: "#/components/schemas/SealedModerationNote"
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        statement:
+          $ref: "#/components/schemas/ModerationStatementInput"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        reporterNotices:
+          type: array
+          maxItems: 100
+          description: The reporters to tell the decision, each with the address their sealed report carried.
+          items: { $ref: "#/components/schemas/ReporterNotice" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 100)'
 
     ModerationProposalRequest:
       type: object
@@ -1600,6 +1806,416 @@ components:
         reason:
           $ref: "#/components/schemas/SealedModerationNote"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ModerationDismissal:
+      type: object
+      description: A dismissal's optional note, and the reporters to tell.
+      properties:
+        note:
+          oneOf:
+            - $ref: "#/components/schemas/SealedModerationNote"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        reporterNotices:
+          type: array
+          maxItems: 100
+          description: The reporters to tell the dismissal, each with the address their sealed report carried.
+          items: { $ref: "#/components/schemas/ReporterNotice" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 100)'
+
+    ReporterNotice:
+      type: object
+      description: One reporter to tell a decision (ADR 0093 § 2, ADR 0097 decision 3).
+      required: [reportId, address]
+      properties:
+        reportId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: A report of this case.
+          example: 4e5f9a8b-1c2d-4e4f-8a6b-4f2c9a1e7b3d
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >
+            The reporter's own address, opened by the deciding moderator's browser from the sealed report (owner
+            decision Q11 of cr-statement-of-reasons-and-objection, ADR 0097 decision 3): the server mails the decision
+            once from memory and stores it nowhere; a mail cannot be sent to an address the sender does not see.
+          type: string
+          format: email
+          description: Where the decision goes. Not stored.
+          maxLength: 254
+          example: reporter@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    ModerationGround:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        The ground a measure rests on (ADR 0093 § 7): the law — child sexual abuse material, terrorist content, a threat
+        to life or safety, other illegal content — or the terms of use (`TERMS_BREACH`). The report categories' values.
+      enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
+      example: TERMS_BREACH
+
+    StatementForm:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        The form a statement of reasons takes, by the instance's operating mode now (ADR 0093 § 14): `FULL` (club,
+        organisation or company) or `REDUCED` (private). The template in `contracts/moderation/statement-of-reasons.json`
+        marks what only `FULL` carries.
+      enum: [FULL, REDUCED]
+      example: FULL
+
+    StatementBasis:
+      x-veyq-visibility: enum
+      type: string
+      description: What led to the measure — a report, or an authority's order (ADR 0093 § 12, not built yet).
+      enum: [REPORT, ORDER]
+      example: REPORT
+
+    ModerationStatementInput:
+      type: object
+      description: >
+        A measure's statement of reasons as the moderator gives it: the ground, and the facts sealed to the moderation
+        key (`moderation-note` [epoch, caseId]) and to each affected member (`moderation-facts` [caseId, accountId]).
+      required: [ground]
+      properties:
+        ground: { $ref: "#/components/schemas/ModerationGround" }
+        facts:
+          oneOf:
+            - $ref: "#/components/schemas/SealedModerationNote"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        factsFor:
+          type: array
+          maxItems: 1000
+          description: The facts sealed to each member `getModerationStatementRecipients` lists; empty without facts.
+          items: { $ref: "#/components/schemas/SealedFactsFor" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 1000)'
+
+    SealedFactsFor:
+      type: object
+      description: The facts sealed to one affected member's identity.
+      required: [accountId, sealedFacts]
+      properties:
+        accountId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        sealedFacts:
+          type: string
+          description: The facts, sealed to that member's identity (`moderation-facts` [caseId, accountId]).
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLWZhY3Rz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ModerationStatementRecipients:
+      type: object
+      description: Who a step's statement would reach.
+      required: [accounts, guests]
+      properties:
+        accounts:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/StatementRecipient" }
+        guests:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: How many guest identities it names — told nothing in veyq, they have no account.
+          example: 0
+
+    StatementRecipient:
+      type: object
+      description: One affected member, with the identity to seal the facts to.
+      required: [accountId, identityPublicKey]
+      properties:
+        accountId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member's account (what the pin store keys by).
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        identityPublicKey:
+          type: string
+          description: The member's identity public bundle as the directory serves it; pin-check it before sealing.
+          contentEncoding: base64
+          maxLength: 2048
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+
+    ModerationMeasureStatement:
+      type: object
+      description: A measure's statement of reasons as the moderators see it.
+      required: [id, ground, basis, sentAt, epoch, sealedFacts, recipients, guests]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
+        ground: { $ref: "#/components/schemas/ModerationGround" }
+        basis: { $ref: "#/components/schemas/StatementBasis" }
+        sentAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When it was sent; null when nobody could be told.
+          example: 2026-10-17T12:00:00Z
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int32
+          description: The epoch `sealedFacts` is sealed to; null without facts.
+          example: 2
+        sealedFacts:
+          type: [string, "null"]
+          description: The facts sealed to the moderation key (`moderation-note` [epoch, caseId]); null without facts.
+          contentEncoding: base64
+          maxLength: 12000
+          example: null
+        recipients:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: How many members it was sent to.
+          example: 2
+        guests:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: How many guest identities it names — told nothing in veyq.
+          example: 0
+
+    ModerationObjection:
+      type: object
+      description: An objection to one of the case's measures, as the moderators see it.
+      required: [id, statementId, measureId, receivedAt, epoch, sealedObjection, decidedAt, decidedBy, outcome, ownReview, mayDecide]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f }
+        statementId: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
+        measureId: { type: string, format: uuid, x-veyq-visibility: id, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was received.
+          example: 2026-10-18T09:00:00Z
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The epoch `sealedObjection` is sealed to.
+          example: 2
+        sealedObjection:
+          type: string
+          description: The objection, sealed to the moderation key (`moderation-objection` [epoch, statementId]).
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLW9iamVjdGlvbg==
+        decidedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When it was decided; null while it waits.
+          example: null
+        decidedBy:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The moderator who decided it; null while it waits.
+          example: null
+        outcome:
+          description: The decision; null while the objection waits.
+          oneOf:
+            - $ref: "#/components/schemas/ObjectionOutcome"
+            - type: "null"
+        ownReview:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the moderator who took the measure decided it, there being no other (ADR 0099 § 5).
+          example: false
+        mayDecide:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the caller may decide it now: false once decided, and for the account that took the measure while
+            another accepted moderator holds the key.
+          example: true
+
+    ObjectionOutcome:
+      x-veyq-visibility: enum
+      type: string
+      description: "`UPHELD` = the measure stands; `LIFTED` = it was lifted."
+      enum: [UPHELD, LIFTED]
+      example: UPHELD
+
+    ModerationObjectionDecision:
+      type: object
+      description: A decision on an objection.
+      required: [outcome]
+      properties:
+        outcome:
+          x-veyq-visibility: enum
+          type: string
+          description: "`UPHOLD` keeps the measure; `LIFT` lifts it."
+          enum: [UPHOLD, LIFT]
+          example: UPHOLD
+        note:
+          oneOf:
+            - $ref: "#/components/schemas/SealedModerationNote"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    MyModerationStatements:
+      type: object
+      description: The statements of reasons addressed to the caller, newest first.
+      required: [statements]
+      properties:
+        statements:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationStatement" }
+
+    ModerationStatement:
+      type: object
+      description: >
+        A statement of reasons as an affected member reads it (ADR 0093 § 7) — the clear fields the template is rendered
+        from, and the facts sealed to the reader. It names the host, never the moderator.
+      required: [id, caseId, measureKind, targetId, shareId, scopeId, ground, basis, form, sentAt, roles, sealedFacts, inForce, liftedAt, contactAddress, objection, canObject]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
+        caseId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The case — the facts' seal is bound to it.
+          example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
+        measureKind:
+          x-veyq-visibility: enum
+          type: string
+          description: "`SHARE` = a link blocked; `CONTENT` = a node or an item blocked; `GUEST_IDENTITY` = a guest uploader blocked with the link it came through."
+          enum: [SHARE, CONTENT, GUEST_IDENTITY]
+          example: CONTENT
+        targetId:
+          x-veyq-visibility: id
+          type: string
+          description: The blocked id — a share id, a node's or item's id, a guest identity's id.
+          maxLength: 64
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        shareId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: The link a `SHARE` or `GUEST_IDENTITY` measure blocked; null for `CONTENT`.
+          maxLength: 43
+          example: null
+        scopeId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The space a `CONTENT` measure's target lies in; null otherwise.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        ground: { $ref: "#/components/schemas/ModerationGround" }
+        basis: { $ref: "#/components/schemas/StatementBasis" }
+        form: { $ref: "#/components/schemas/StatementForm" }
+        sentAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was sent.
+          example: 2026-10-17T12:00:00Z
+        roles:
+          x-veyq-visibility: enum
+          type: array
+          maxItems: 3
+          description: Why the reader gets it — `SHARE_CREATOR`, `UPLOADER`, `SCOPE_OWNER`.
+          items: { type: string, enum: [SHARE_CREATOR, UPLOADER, SCOPE_OWNER] }
+          example: [UPLOADER, SCOPE_OWNER]
+        sealedFacts:
+          type: [string, "null"]
+          description: The facts sealed to the reader's identity (`moderation-facts` [caseId, accountId]); null without facts.
+          contentEncoding: base64
+          maxLength: 12000
+          example: null
+        inForce:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the measure stands.
+          example: true
+        liftedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the measure was lifted; null while it stands.
+          example: null
+        contactAddress:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          format: email
+          description: The address statements name (the instance contact's, ADR 0093 § 11); null where none is set.
+          maxLength: 254
+          example: abuse@example.org
+        objection:
+          oneOf:
+            - $ref: "#/components/schemas/StatementObjection"
+            - type: "null"
+        canObject:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the reader may object now — the measure stands and has no objection yet.
+          example: true
+
+    StatementObjection:
+      type: object
+      description: The objection to a statement's measure, as an affected member sees it — its state and answer, not its text.
+      required: [receivedAt, mine, outcome, ownReview, decidedAt]
+      properties:
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was received.
+          example: 2026-10-18T09:00:00Z
+        mine:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the reader made it.
+          example: true
+        outcome:
+          description: The decision; null while the objection waits.
+          oneOf:
+            - $ref: "#/components/schemas/ObjectionOutcome"
+            - type: "null"
+        ownReview:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the moderator who took the measure decided it alone, there being no other.
+          example: false
+        decidedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When it was decided; null while it waits.
+          example: null
+
+    ObjectionSubmission:
+      type: object
+      description: An objection, sealed in the browser.
+      required: [epoch, sealedObjection]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch it is sealed to — the current one.
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedObjection:
+          type: string
+          description: The objection (`moderation-objection` [epoch, statementId]).
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLW9iamVjdGlvbg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:

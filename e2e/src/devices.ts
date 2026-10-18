@@ -1,7 +1,7 @@
 // A device of the scenarios: one browser context, confined to the instance (egress.ts), and the tenant owner the
 // round trip activated (instance.json in the run directory) signing in on it with both secrets, as a new device must.
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { recordTyped } from './canaries'
 import { confineToInstance, type Confinement } from './egress'
 import { stack } from './stack'
@@ -22,6 +22,22 @@ export function instance(): Instance {
 }
 
 export const tenantOrigin = () => `https://${instance().tenantDomain}`
+
+/** A second moderator: the account moderation.spec.ts appointed, which holds the key from then on (`deputy.json`). */
+export interface Deputy {
+  email: string
+  password: string
+  secretKey: string
+  tenantDomain: string
+}
+
+export function deputy(): Deputy {
+  return JSON.parse(readFileSync(`${stack().outDir}/deputy.json`, 'utf8')) as Deputy
+}
+
+export function saveDeputy(d: Deputy): void {
+  writeFileSync(`${stack().outDir}/deputy.json`, JSON.stringify(d, null, 2))
+}
 
 export async function newDevice(browser: Browser): Promise<Device> {
   const context = await browser.newContext()

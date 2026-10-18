@@ -31,6 +31,7 @@ const photoName = `Strittiges Bild ${stamp}.jpg`
 const guestReason = `Dieses Bild verletzt die Regeln ${stamp}`
 const BLOCKED = 'Blocked by the operator'
 const BLOCK_CONTENT = 'Block the content'
+const facts = `Das Bild verletzt die Nutzungsbedingungen ${stamp}`
 
 let owner: Device
 let guest: Device
@@ -207,6 +208,8 @@ test(
   async () => {
     const { page } = moderator
     await openCase(page)
+    // The organisation mode (first-run setup's) asks for the statement's facts (uc.moderation.object-to-a-measure).
+    await page.locator('#moderation-statement-facts').fill(recordTyped(facts))
     await page.locator('.moderation-block-content').click()
     await confirmDecision(page, BLOCK_CONTENT)
     await expect(page.locator('.moderation-lift')).toHaveCount(1, { timeout: 60_000 })

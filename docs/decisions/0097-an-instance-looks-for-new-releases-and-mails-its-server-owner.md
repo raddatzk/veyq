@@ -3,9 +3,9 @@
 - Status: Accepted 2026-10-16; built: decisions 1–6 for release notices to the Server Owner (`core/admin/instance/`,
   `core/mail/`, admin-web's Server → Release and Server → Mail). The GitHub source reads each candidate major's
   `manifest.json` release asset, which exists once `veyqctl`'s publish uploads it; until then a new major on GitHub
-  is a failed check, a mirror is not. Not built: moderation notices to the moderators, which decisions 3, 5 and 6
-  carry for [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7; the
-  code confirmations they wait on — a moderator's and the instance contact's notification address — are built.
+  is a failed check, a mirror is not. Moderation notices are built too: the new-case mail to the moderators and the
+  instance contact and a reporter's receipt (cr-report-and-hold), and the statements of reasons, an objection's
+  notices and a reporter's decision (cr-statement-of-reasons-and-objection), with the code confirmations they wait on.
 - Date: 2026-10-16
 
 ## Context
@@ -49,7 +49,7 @@ release list can at worst produce a false notice. admin-web shows, and the mail 
 The release manifest (ADR 0096 decision 3) marks an unscheduled major; the window end follows ADR 0085 decision 5
 from the release dates the check already reads.
 
-**3. The instance gets its own mail settings, for the Server Owner and the moderators only.** A narrow exception to
+**3. The instance gets its own mail settings, for the Server Owner, the moderators and moderation's statements only.** A narrow exception to
 ADR 0048 §4: admin-web holds one instance-level SMTP configuration (the same fields as a tenant's), its password
 sealed under the config-secret key exactly as a tenant's is ([ADR 0050](0050-operator-config-secret-encryption.md)).
 It sends **only** instance notices, and **only** to the Server Owner's account address and — for moderation notices
@@ -58,8 +58,13 @@ alone — to the account address of each accepted moderator and the instance con
 [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 2 and 11) — and,
 for a reporter, the receipt of their report (ADR 0093 § 2, DSA Art. 16(4); owner decision Q6 of cr-report-and-hold,
 2026-10-17): the reporter's client sends the address once in the clear beside the sealed copy, the server mails the
-receipt from memory and stores only the sealed copy, bounded per address. It is
-never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own identity —
+receipt from memory and stores only the sealed copy, bounded per address — and, **for moderation statements**
+(ADR 0093 § 7; owner decision Q11 of cr-statement-of-reasons-and-objection, 2026-10-17), to the affected and to
+reporters: each affected member's account address gets the statement of reasons after a measure and the answer to
+their objection, and a reporter who left a contact gets the decision on their report, the address sent once in the
+clear by the deciding moderator's client (which opened the sealed copy) and mailed from memory as the receipt is. The
+duty is the host's, so the host's channel: a tenant's mail would speak in the tenant's name for the host's decision.
+It is never a default or fallback for a tenant's mail, so ADR 0048's reason — each tenant sends from its own identity —
 still holds.
 
 **4. Each notice is mailed once, and a dated one carries its date as a calendar entry.** When the check first finds a

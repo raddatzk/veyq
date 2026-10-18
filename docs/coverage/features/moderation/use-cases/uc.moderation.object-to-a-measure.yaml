@@ -1,0 +1,80 @@
+useCase: uc.moderation.object-to-a-measure
+feature: moderation
+title: Object to a measure
+# Built by cr-statement-of-reasons-and-objection: core/moderation/statement (the statement, its recipients, the objection,
+# the mails, the template pinned from contracts/moderation/statement-of-reasons.json) and CaseDecisions' measure and
+# objection decision on the backend; features/moderation's decision panel and features/moderation/statement (the notice
+# on the lightbox, a blocked node's page and the share lists) on web; the moderation-facts and moderation-objection seals
+# in packages/crypto. Lane L1's browser pass is e2e/tests/features/statement-and-objection.spec.ts, tagged per criterion;
+# `stack` waits under gaps until a run admits it.
+acceptanceCriteria:
+  - id: the-statement-is-sent-with-the-measure
+    text: >-
+      A moderator's measure carries its statement — the ground, and the facts sealed to the moderation key and to each
+      affected member's identity key — recorded in its transaction; sealed copies that do not name exactly the members
+      it tells are refused.
+    coverage:
+      backend:
+        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused]
+      web:
+        unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts]
+  - id: the-form-follows-the-operating-mode
+    text: >-
+      Organisation mode renders the full form and refuses a measure without facts; private renders the reduced form,
+      without the report-or-order line, the automation line and the courts, and takes a measure without facts.
+    coverage:
+      backend:
+        integration: [StatementsSliceTest.theFormFollowsTheOperatingModeReadWhenTheStatementIsRendered]
+        unit: [StatementTemplateConformanceTest.theReducedFormLeavesOutWhatOnlyTheFullFormCarriesAndTheMailNeverTheFacts, StatementTemplateConformanceTest.everyTextEqualsTheContract]
+      web:
+        unit: [src/features/moderation/statement/template.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/CaseDetail.test.ts]
+  - id: the-affected-read-it-in-veyq-and-are-mailed
+    text: >-
+      The affected member reads the statement on the blocked item or link with the facts opened by their identity key,
+      and instance mail tells their account address it is there, carrying no facts.
+    coverage:
+      backend:
+        integration: [StatementMailSliceTest.theAffectedMemberIsMailedThatTheStatementIsInVeyqAndTheMailCarriesNoFacts, StatementMailSliceTest.aStatementMailThatDidNotGoOutIsRetriedOnce]
+      web:
+        unit: [src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/statement/statements.test.ts]
+  - id: one-objection-per-measure-reopens-the-case
+    text: >-
+      An affected member objects once per measure, sealed to the moderation key; a second objection and one on a lifted
+      measure are refused; the objection reopens the case and the moderators are mailed.
+    coverage:
+      backend:
+        integration: [StatementsSliceTest.anAffectedMemberObjectsOnceWhileTheMeasureStandsAndTheObjectionReopensTheCase, StatementsSliceTest.anObjectionReopensAClosedCaseWhichClosesAgainOnceItIsDecided, StatementMailSliceTest.theModeratorsLearnOfAnObjectionAndTheObjectorOfItsAnswer]
+      web:
+        unit: [src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/statement/statements.test.ts, src/features/moderation/ModerationQueue.test.ts]
+  - id: another-moderator-decides-the-objection
+    text: >-
+      The account that took the measure is refused the decision while another accepted moderator holds the key; the
+      other decides; a single moderator decides it as their own review, and the answer says so.
+    coverage:
+      backend:
+        integration: [StatementsSliceTest.theDeciderIsRefusedWhileAnotherModeratorHoldsTheKeyAndTheOtherDecides, StatementsSliceTest.aSingleModeratorReviewsTheObjectionAsTheirOwnAndTheAnswerSaysSo, ObjectionRacesSliceTest.aSecondModeratorDecidingTheSameObjectionAtOnceIsRefused]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/statement/StatementNotice.test.ts]
+  - id: the-reporter-is-told-the-decision
+    text: >-
+      A reporter who left a contact is mailed the dismissal or the decision once, from an address the deciding
+      moderator's browser sent; the server keeps no copy.
+    coverage:
+      backend:
+        integration: [StatementMailSliceTest.aReporterIsToldTheDecisionOnceAndTheAddressIsStoredNowhere]
+      web:
+        unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts]
+  - id: the-hold-counts-from-the-statement
+    text: >-
+      A measure's hold ends six months after its statement is sent, and from the decision where nobody can be told.
+    coverage:
+      backend:
+        integration: [StatementsSliceTest.theHoldCountsFromTheStatementAndFromTheDecisionWhereNobodyCanBeTold]
+gaps:
+  crypto: >-
+    The moderation-facts and moderation-objection seals are pinned by their vectors and the purposes' tests
+    (packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).
+  stack: >-
+    e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,
+    the affected member's reading and objection, and the other moderator's decision; stack refs are admitted only once a
+    CI run executed lane L1 (ADR 0040).

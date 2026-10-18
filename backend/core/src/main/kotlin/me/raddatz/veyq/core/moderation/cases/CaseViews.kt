@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.cases
 
+import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.generated.model.ModerationCase
 import me.raddatz.veyq.core.generated.model.ModerationCaseEvent
 import me.raddatz.veyq.core.generated.model.ModerationCaseState
@@ -8,6 +9,12 @@ import me.raddatz.veyq.core.generated.model.ModerationHold
 import me.raddatz.veyq.core.generated.model.ModerationItemKind
 import me.raddatz.veyq.core.generated.model.ModerationMeasure
 import me.raddatz.veyq.core.generated.model.ModerationMeasureKind
+import me.raddatz.veyq.core.generated.model.ModerationMeasureStatement
+import me.raddatz.veyq.core.generated.model.ModerationObjection
+import me.raddatz.veyq.core.generated.model.ModerationGround
+import me.raddatz.veyq.core.generated.model.ObjectionOutcome
+import me.raddatz.veyq.core.generated.model.StatementBasis
+import me.raddatz.veyq.core.generated.model.StatementForm
 import me.raddatz.veyq.core.generated.model.ModerationProposal
 import me.raddatz.veyq.core.generated.model.ModerationProposalStep
 import me.raddatz.veyq.core.generated.model.ModerationReport
@@ -26,6 +33,11 @@ import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.moderation.report.ModerationReportEntity
 import me.raddatz.veyq.core.moderation.report.ReportCategory
 import me.raddatz.veyq.core.moderation.report.ReportShareEntity
+import me.raddatz.veyq.core.moderation.statement.ModerationObjectionEntity
+import me.raddatz.veyq.core.moderation.statement.ModerationStatementEntity
+import me.raddatz.veyq.core.moderation.statement.RecipientKind
+import me.raddatz.veyq.core.moderation.statement.StatementMail
+import me.raddatz.veyq.core.moderation.statement.StatementRecipientEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -37,14 +49,17 @@ import java.util.UUID
 
 /**
  * The moderation surface's reads (uc.moderation.review-a-case steps 1-2): the instance-wide queue in clear fields, and one
- * case with its sealed reports, measures, proposals, hold, targets and log. Nothing here opens anything: the reports and
- * the notes stay sealed, the browser opens them with the epoch's key.
+ * case with its sealed reports, measures and their statements, objections, proposals, hold, targets and log. Nothing here
+ * opens anything: the reports, the notes, the facts and the objections stay sealed, the browser opens them with the
+ * epoch's key. The statement's form is the operating mode's now (ADR 0093 § 14), and whether the caller may decide an
+ * objection is the separation of duties' answer for that caller (ADR 0099 § 5).
  */
 @ApplicationScoped
 class CaseViews(
     private val holds: Holds,
     private val blocks: ModerationBlocks,
     private val targets: CaseTargets,
+    private val operatingMode: OperatingModeHandler,
 ) {
 
     /** The queue: [state]'s cases, or the open and decided ones; the urgent categories first, then the oldest. */
@@ -69,19 +84,43 @@ class CaseViews(
                 reportCount = times.size,
                 tenantDomain = tenantOf(case.scopeId)?.takeIf { it.status == TenantEntity.ACTIVE }?.domain,
                 holdEndsAt = holds.aliveOf(case.id, now)?.expiresAt?.utc(),
+                objectionOpen = ModerationObjectionEntity.openOn(case.id),
             )
         }
     }
 
-    /** One case, or null. */
-    fun case(caseId: String, now: Instant = Instant.now()): ModerationCase? = QuarkusTransaction.requiringNew().call {
+    /** One case as [callerId] sees it, or null. */
+    fun case(caseId: String, callerId: String, now: Instant = Instant.now()): ModerationCase? = QuarkusTransaction.requiringNew().call {
         val case = ModerationCaseEntity.findById(caseId) ?: return@call null
         val shares = ReportShareEntity.list("caseId", case.id)
         val reports = ModerationReportEntity.list("id in ?1", shares.map { it.reportId }.ifEmpty { listOf("") }).sortedBy { it.receivedAt }
         val tenant = tenantOf(case.scopeId)
         val hold = holds.aliveOf(case.id, now)
         val known = targets.of(case, now)
+        val statements = ModerationStatementEntity.list("caseId", case.id).associateBy { it.measureId }
+        val recipients = if (statements.isEmpty()) emptyMap()
+        else StatementRecipientEntity.list("statementId in ?1", statements.values.map { it.id }).groupBy { it.statementId }
+        val measureRows = ModerationBlockEntity.list("caseId = ?1 order by takenAt", case.id)
+        val holders = currentEpochHolders()
         ModerationCase(
+            statementForm = StatementForm.valueOf(StatementMail.formNow(operatingMode).name),
+            objections = ModerationObjectionEntity.list("caseId = ?1 order by receivedAt", case.id).mapNotNull { o ->
+                val statement = statements.values.firstOrNull { it.id == o.statementId } ?: return@mapNotNull null
+                val takenBy = measureRows.firstOrNull { it.id == statement.measureId }?.takenBy
+                ModerationObjection(
+                    id = UUID.fromString(o.id),
+                    statementId = UUID.fromString(o.statementId),
+                    measureId = UUID.fromString(statement.measureId),
+                    receivedAt = o.receivedAt.utc(),
+                    epoch = o.epoch,
+                    sealedObjection = o.sealedObjection,
+                    decidedAt = o.decidedAt?.utc(),
+                    decidedBy = o.decidedBy?.let(UUID::fromString),
+                    outcome = o.outcome?.let { ObjectionOutcome.valueOf(it) },
+                    ownReview = o.ownReview,
+                    mayDecide = o.open && !(takenBy == callerId && (holders - callerId).isNotEmpty()),
+                )
+            },
             id = UUID.fromString(case.id),
             itemKind = ModerationItemKind.valueOf(case.itemKind),
             itemId = case.itemId,
@@ -104,8 +143,10 @@ class CaseViews(
                     barred = blocks.reporterBarred(r.reporterAccount, r.reporterShare),
                 )
             },
-            measures = ModerationBlockEntity.list("caseId = ?1 order by takenAt", case.id).mapNotNull { m ->
+            measures = measureRows.mapNotNull { m ->
                 val kind = m.blockKind.wire ?: return@mapNotNull null
+                val st = statements[m.id]
+                val told = st?.let { recipients[it.id] }.orEmpty()
                 ModerationMeasure(
                     id = UUID.fromString(m.id),
                     kind = ModerationMeasureKind.valueOf(kind),
@@ -114,6 +155,18 @@ class CaseViews(
                     takenAt = m.takenAt.utc(),
                     liftedAt = m.liftedAt?.utc(),
                     liftedBy = m.liftedBy?.let(UUID::fromString),
+                    statement = st?.let {
+                        ModerationMeasureStatement(
+                            id = UUID.fromString(it.id),
+                            ground = ModerationGround.valueOf(it.ground),
+                            basis = StatementBasis.valueOf(it.basis),
+                            sentAt = it.sentAt?.utc(),
+                            epoch = it.epoch,
+                            sealedFacts = it.sealedFacts,
+                            recipients = told.count { r -> r.recipientKind == RecipientKind.ACCOUNT.name },
+                            guests = told.count { r -> r.recipientKind == RecipientKind.GUEST.name },
+                        )
+                    },
                 )
             },
             proposals = ModerationProposalEntity.list("caseId = ?1 order by proposedAt", case.id).map { p ->

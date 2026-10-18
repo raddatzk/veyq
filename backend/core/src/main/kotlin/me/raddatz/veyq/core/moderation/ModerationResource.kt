@@ -4,6 +4,11 @@ import me.raddatz.veyq.core.generated.api.ModerationApi
 import me.raddatz.veyq.core.generated.model.ModerationCaseState
 import me.raddatz.veyq.core.generated.model.ModerationChallenge
 import me.raddatz.veyq.core.generated.model.ModerationDecisionNote
+import me.raddatz.veyq.core.generated.model.ModerationDismissal
+import me.raddatz.veyq.core.generated.model.ModerationObjectionDecision
+import me.raddatz.veyq.core.generated.model.ModerationStatementRecipients
+import me.raddatz.veyq.core.generated.model.ReporterNotice as WireReporterNotice
+import me.raddatz.veyq.core.generated.model.StatementRecipient
 import me.raddatz.veyq.core.generated.model.ModerationHoldExtension
 import me.raddatz.veyq.core.generated.model.ModerationMeasureRequest
 import me.raddatz.veyq.core.generated.model.ModerationProposalRequest
@@ -16,6 +21,10 @@ import me.raddatz.veyq.core.moderation.cases.CaseViews
 import me.raddatz.veyq.core.moderation.cases.DecisionOutcome
 import me.raddatz.veyq.core.moderation.cases.MeasureStep
 import me.raddatz.veyq.core.moderation.cases.SealedNote
+import me.raddatz.veyq.core.moderation.cases.StatementInput
+import me.raddatz.veyq.core.moderation.statement.RecipientKind
+import me.raddatz.veyq.core.moderation.statement.ReporterNotice
+import me.raddatz.veyq.core.moderation.statement.StatementGround
 import me.raddatz.veyq.core.moderation.report.CaseState
 import me.raddatz.veyq.core.generated.model.ModerationDeliveries
 import me.raddatz.veyq.core.generated.model.ModerationDelivery
@@ -148,16 +157,57 @@ class ModerationResource(
         caseResponse(caseId)
 
     override fun dismissModerationCase(
-        caseId: UUID, moderationDecisionNote: ModerationDecisionNote, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
-    ): Response = decided(caseId, decisions.dismiss(caller(), caseId.toString(), moderationDecisionNote.note.sealed()))
+        caseId: UUID, moderationDismissal: ModerationDismissal, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
+    ): Response = decided(
+        caseId,
+        decisions.dismiss(caller(), caseId.toString(), moderationDismissal.note.sealed(), moderationDismissal.reporterNotices.notices()),
+    )
 
     override fun takeModerationMeasure(
         caseId: UUID, moderationMeasureRequest: ModerationMeasureRequest, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
     ): Response = with(moderationMeasureRequest) {
+        val factsFor = statement.factsFor.orEmpty()
+        if (factsFor.map { it.accountId }.toSet().size != factsFor.size) return httpError(CaseFailures.invalid)
+        val input = StatementInput(
+            ground = StatementGround.valueOf(statement.ground.name),
+            facts = statement.facts.sealed(),
+            factsFor = factsFor.associate { it.accountId.toString() to it.sealedFacts },
+        )
         decided(
             caseId,
-            decisions.take(caller(), caseId.toString(), MeasureStep.valueOf(kind.name), shareId, targetId?.toString(), note.sealed()),
+            decisions.take(
+                caller(), caseId.toString(), MeasureStep.valueOf(kind.name), shareId, targetId?.toString(), note.sealed(), input,
+                reporterNotices.notices(),
+            ),
             Response.Status.CREATED,
+        )
+    }
+
+    override fun getModerationStatementRecipients(
+        caseId: UUID, kind: String, targetId: UUID?, shareId: String?, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
+    ): Response {
+        val step = MeasureStep.entries.firstOrNull { it.name == kind } ?: return httpError(CaseFailures.invalid)
+        val (found, refusal) = decisions.recipientsOf(caseId.toString(), step, shareId, targetId?.toString())
+        if (found == null) return httpError(refusal!!)
+        return Response.ok(
+            ModerationStatementRecipients(
+                accounts = found.mapNotNull { (r, key) ->
+                    if (r.kind != RecipientKind.ACCOUNT || key == null) null else StatementRecipient(UUID.fromString(r.id), key)
+                },
+                guests = found.count { (r, _) -> r.kind == RecipientKind.GUEST },
+            ),
+        ).build()
+    }
+
+    override fun decideModerationObjection(
+        caseId: UUID, objectionId: UUID, moderationObjectionDecision: ModerationObjectionDecision, xVeyqModerationChallenge: String?,
+        xVeyqModerationSignature: String?,
+    ): Response = with(moderationObjectionDecision) {
+        decided(
+            caseId,
+            decisions.decideObjection(
+                caller(), caseId.toString(), objectionId.toString(), outcome == ModerationObjectionDecision.Outcome.LIFT, note.sealed(),
+            ),
         )
     }
 
@@ -191,15 +241,18 @@ class ModerationResource(
 
     private fun SealedModerationNote?.sealed(): SealedNote? = this?.let { SealedNote(it.epoch, it.sealedNote) }
 
+    private fun List<WireReporterNotice>?.notices(): List<ReporterNotice> =
+        orEmpty().map { ReporterNotice(it.reportId.toString(), it.address) }
+
     /** A decision's answer: the case as it now stands (with [status]), or its refusal. */
     private fun decided(caseId: UUID, outcome: DecisionOutcome, status: Response.Status = Response.Status.OK): Response = when (outcome) {
-        DecisionOutcome.Done -> cases.case(caseId.toString())?.let { Response.status(status).entity(it).build() }
+        DecisionOutcome.Done -> cases.case(caseId.toString(), caller())?.let { Response.status(status).entity(it).build() }
             ?: httpError(CaseFailures.caseNotFound)
         is DecisionOutcome.Refused -> httpError(outcome)
     }
 
     private fun caseResponse(caseId: UUID): Response =
-        cases.case(caseId.toString())?.let { Response.ok(it).build() } ?: httpError(CaseFailures.caseNotFound)
+        cases.case(caseId.toString(), caller())?.let { Response.ok(it).build() } ?: httpError(CaseFailures.caseNotFound)
 
     private fun caller(): String = identity.principal.name
 

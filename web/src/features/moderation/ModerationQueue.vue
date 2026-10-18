@@ -80,6 +80,7 @@ onMounted(load)
             <div class="veyq-row-meta">
               <span class="veyq-badge" :class="{ warning: c.state === 'OPEN', muted: c.state === 'CLOSED' }">{{ t(`moderation.states.${c.state}`) }}</span>
               <span class="veyq-badge muted">{{ t('moderation.caseRow.reports', { count: c.reportCount }, c.reportCount) }}</span>
+              <span v-if="c.objectionOpen" class="veyq-badge warning moderation-objection-badge">{{ t('moderation.caseRow.objection') }}</span>
               <span class="veyq-badge muted">
                 {{ c.holdEndsAt ? t('moderation.caseRow.heldUntil', { time: when(c.holdEndsAt) }) : t('moderation.caseRow.notHeld') }}
               </span>

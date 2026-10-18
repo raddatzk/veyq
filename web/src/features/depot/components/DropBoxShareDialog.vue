@@ -196,6 +196,7 @@ async function copy(text: string, id: string) {
             <!-- inbox #457: why a guest gets no link, and for a missed requirement the fix on this same link. No renew:
                  a link older than the lifetime is replaced by a new one from the form below. -->
             <ShareGuestStops
+              :share-id="row.share.shareId"
               :stops="row.share.guestStops"
               :created-at="row.share.createdAt"
               :can-edit="canFix(row.share)"

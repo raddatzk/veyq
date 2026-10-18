@@ -5,6 +5,7 @@ sources:
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
 ---
 
 The person who runs a veyq server can ask you to **moderate** it: to look at what people report, in every space on
@@ -77,9 +78,21 @@ read it — and choose a step. Each says what it reaches before you confirm it.
   now, and give a **Reason**, such as an authority's request or a lawsuit. The reason is required, and sealed like a
   note.
 
+A block goes with a **Statement of reasons** to the people it affects. Choose the **Ground** and write **What you
+found**: on most servers it is required; on a private one it is optional. It reaches each of them sealed, so only they
+can read it — and the moderation log, sealed like a note — never a mail. The statement names the server, never you. A
+reporter who left an address is told the decision.
+
 A block decides the case, and what was kept for it is then kept for six months. **Lift** on a measure — yours or
 another moderator's — serves what it blocked again, unchanged. Lifting the last measure in force releases what was kept
 and closes the case.
+
+## Objections
+
+Someone affected by a block can object once. The case then shows the objection under **Objections**, opened for you,
+and is back in the list of cases, marked **Objection waiting**. Choose **Uphold the measure** or **Lift the measure**.
+If you took the measure yourself and another moderator holds the key, the case says that another moderator must
+decide; if you are the only moderator, you decide it yourself, and the answer says so.
 
 ## What is logged, and for how long
 

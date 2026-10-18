@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.moderation
 import me.raddatz.veyq.core.moderation.cases.CaseDecisions
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseNotices
+import me.raddatz.veyq.core.moderation.statement.StatementMail
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
@@ -13,7 +14,7 @@ import java.time.Instant
  * date (ADR 0093 § 11 — 31 December of the third year after the moderator's removal, [ModerationLog.retentionEnd]), and
  * holds past their end with their snapshot and pins (ADR 0093 § 4, [Holds.purgeExpired]); and the new-case mails a case
  * still owes ([CaseNotices]: an urgent one that could not go out, the day's bundle).
- * And the retry of a rotation-due mail that could not go out. Each step in its own short transaction, as `SessionPurge` does. `@Scheduled(every=…)` fires at its first trigger, so it
+ * And the retry of a rotation-due mail and of a statement of reasons' mail that could not go out. Each step in its own short transaction, as `SessionPurge` does. `@Scheduled(every=…)` fires at its first trigger, so it
  * also runs soon after startup.
  */
 @ApplicationScoped
@@ -23,6 +24,7 @@ class ModerationPurge(
     private val holds: Holds,
     private val caseNotices: CaseNotices,
     private val decisions: CaseDecisions,
+    private val statementMail: StatementMail,
 ) {
 
     @Scheduled(every = "{veyq.moderation.purge.every}")
@@ -38,5 +40,7 @@ class ModerationPurge(
         caseNotices.mailBundle(now)
         // A rotation-due mail that could not go out when it became due is retried here (RotationDueNotice).
         rotationDue.mailIfDue(now)
+        // A statement of reasons whose mail to a member did not go out, for seven days after it was sent (StatementMail).
+        statementMail.retryDue(now)
     }
 }
