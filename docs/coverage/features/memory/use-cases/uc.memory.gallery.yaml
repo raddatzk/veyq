@@ -333,12 +333,12 @@ acceptanceCriteria:
       backend:
         integration: [ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationMemoriesSliceTest.aBlockedMediumIsDeletedButNeverRestored, ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
       web:
-        unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts]
+        unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts, src/features/memory/useMediaTrash.test.ts, src/views/MemoryHomeView.registry.test.ts]
     gaps:
       - surface: web
         reason: >-
-          The tile, the lightbox and a blocked node's level row are held (LevelView.blocked.test.ts with a stub kind, not
-          the Memory kind itself); the trash's "can be deleted, not restored" refusal (mediaRefusal.ts) has no test.
+          A blocked node's level row is held with a stub kind (LevelView.blocked.test.ts), and its page opened by its
+          address with a stub detail (MemoryHomeView.registry.test.ts), not with the Memory kind itself.
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040

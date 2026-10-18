@@ -46,6 +46,11 @@ vi.mock('../core/node/treeStore', async () => {
   const { reactive } = await import('vue')
   return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}) }
 })
+// A blocked node's page mounts the statement notice, which loads the member's statements: none here, so it renders nothing.
+vi.mock('../features/moderation/statement/statements', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/moderation/statement/statements')>()),
+  loadStatements: vi.fn(async () => {}),
+}))
 vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
   nodeContentKey: () => new Uint8Array(32).fill(9),
@@ -162,6 +167,23 @@ describe('MemoryHomeView fail-closed rules', () => {
       expect(f.find('button').exists(), 'not clickable').toBe(false)
     }
     expect(unsupported[0].find('.pi-images').exists(), 'a registered kind keeps its icon').toBe(true)
+  })
+
+  // uc.moderation.take-a-measure: a node a moderator blocked does not open for a member — its page is the bare placeholder,
+  // with no reason, and neither its kind's detail nor its level is drawn.
+  it('a blocked node opened by its address is the placeholder alone, not its detail', async () => {
+    const open = await mountAt('#~me/mem/chap')
+    expect(open.find('.detail').text(), 'control: the unblocked chapter opens its detail').toBe('Chap|true')
+
+    treeStore.nodes = [
+      node({ id: 'mem', kind: MEMORY_KIND, name: 'Mem' }),
+      node({ id: 'chap', kind: CHAPTER_KIND, name: 'Chap', parentId: 'mem', blockedByOperator: true }),
+    ]
+    const w = await mountAt('#~me/mem/chap')
+    expect(w.find('.node-blocked').text()).toBe(t('node.blockedByOperator'))
+    expect(w.find('.detail').exists()).toBe(false)
+    expect(w.find('.veyq-level-view').exists()).toBe(false)
+    expect(w.find('.statement-notice').exists(), 'a member no statement names reads no reason').toBe(false)
   })
 
   it('shareable comes from the descriptor AND the right: a descriptor that says no wins over the right', async () => {
