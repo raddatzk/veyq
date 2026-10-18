@@ -22,7 +22,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 - **All docs in English.**
 
 ## Repository shape
-- `contracts/` — OpenAPI + crypto vectors: the source of truth code is generated from.
+- `contracts/` — OpenAPI + crypto vectors, and the fixed texts the server renders (moderation templates, the
+  operator section of the terms): the source of truth code is generated from or pinned to.
 - `backend/` + `web/` — the two user-facing surfaces. A CR's phase order is
   **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
