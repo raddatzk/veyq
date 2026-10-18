@@ -49,6 +49,9 @@ seals its name under a field key derived from the folder's key instead of from `
   lazy virtual primary + one-level sub-buckets, names sealed under a field key derived from `K_node`, media linked via a nullable `bucket_id`
   + denormalized `created_by`; reparent-on-delete + member-gated sub-bucket authz (cr-0123);
   [ADR 0034](../../decisions/0034-media-uploader-buckets.md))
+- [en.memory.playback-derivative](enablers/en.memory.playback-derivative.md) — **planned** (a small playable copy of a video
+  — H.264, long edge 1280 — made on the device through WebCodecs, never on the server; the banner's video plays it, the
+  gallery still plays the original, [ADR 0047](../../decisions/0047-inline-video-playback-range-streaming.md); `cr-memory-banner`)
 
 ## Use-cases (on the tree + media enablers)
 
@@ -78,6 +81,11 @@ seals its name under a field key derived from the folder's key instead of from `
   image — plus a crop, on the same `wrappedMeta`), shown on the browse card, the detail header and the map pin
   — one decrypt per Memory per scope, shared by all three (the sidebar's Favorites entry showed it too until core took the
   Favorites section over, inbox #409; a cover for any node is inbox #411)
+- [uc.memory.banner](use-cases/uc.memory.banner.md) — **planned** (`cr-memory-banner`,
+  [ADR 0102](../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md), proposed): one image
+  or video above the Memory's menu bar, independent of the cover — from its gallery (copied from the original) or uploaded
+  for it alone, the Memory's own attachment (`BANNER`, `BANNER_POSTER`), framed by a sealed focal point (fill) or fit with
+  blurred sides; a video is a poster, never autoplays, and plays a small copy made on the device
 - [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **built**
   ([ADR 0077](../../decisions/0077-a-write-carries-the-version-it-read.md)): two members curate one Memory at once —
   every write of a sealed meta blob (a Memory's date/place/cover, a photo's date/place name/type) states the
