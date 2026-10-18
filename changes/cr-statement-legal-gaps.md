@@ -40,7 +40,7 @@ moderator's measure the DSA Art. 17(2) reasoning stands and a guest is still tol
   reading of the primary text.
 - **No entry condition.** Independent of the other three CRs of this audit. `cr-account-erasure` adds the tenant
   deletion: whichever of the two lands second wires the statement into it (both CRs say so).
-- Sibling: `changes/cr-operator-section-of-the-terms.md` (in implementation as this is written) describes the
+- Sibling: cr-operator-section-of-the-terms (done 2026-10-18, its text in `contracts/terms/operator-section.json`) describes the
   statement in the operator section; this CR's phase 4 re-reads it on main and adds the provision and the Server
   Owner's statement to that text only if it already describes the statement's content — the two CRs split the text
   by passage, never edit the same sentence.
