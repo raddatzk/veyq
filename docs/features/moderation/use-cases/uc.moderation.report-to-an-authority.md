@@ -60,4 +60,6 @@ without ever making a copy of it.
   [uc.moderation.authority-order](uc.moderation.authority-order.md),
   [en.moderation.guest-write-record](../enablers/en.moderation.guest-write-record.md),
   [en.moderation.log](../enablers/en.moderation.log.md)
-- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md)
+- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
+  [Security roadmap](../../../../site/src/content/docs/security/roadmap.md)

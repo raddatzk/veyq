@@ -7,7 +7,8 @@
 - **Status:** **built** — the instance events (cr-moderators-and-the-moderation-key, 2026-10-17: `ModerationLog`,
   `ModerationPurge`), a report's (cr-report-and-hold), the review's and every decision's
   (cr-moderation-review-and-measures: `CaseDecisions`, `SignInBlocks`, `CaseReviewResource`) and the statement's and the
-  objection's (cr-statement-of-reasons-and-objection: `CaseDecisions`, `Statements`, `StatementMail`) — decided in
+  objection's (cr-statement-of-reasons-and-objection: `CaseDecisions`, `Statements`, `StatementMail`) and an
+  authority's (cr-authority-orders-and-art18-reports: `AuthorityOrderHandler`, `StatementDeferrals`, `CaseDecisions`) — decided in
   [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 11 and [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4.
 - **Provides:** accountability within a team and to the affected: who did what, when, kept as long as it can be
@@ -58,6 +59,12 @@ operational log names a case id at most, never an account, an address or a seale
 | `DECISION_SENT` | a reporter was mailed the decision on their report | the moderator; `DISMISSED` or `DECIDED`, the report in `target_id` |
 | `OBJECTION_RECEIVED` | an affected member objected (it reopens a closed case) | the objector; the measure's kind, the objection in `target_id` |
 | `OBJECTION_DECIDED` / `OBJECTION_SELF_REVIEWED` | another moderator decided the objection / the one who took the measure did, being the only one | the decider; `UPHELD` or `LIFTED`, the objection in `target_id`; the note sealed |
+| `ORDER_RECEIVED` | an authority's order was entered and opened this case | who entered it (a moderator or the Server Owner); the kind in `reason`, the order in `target_id` — its reference is sealed on the order's row (`veyq_authority_order`, `moderation-order` [epoch, orderId]) |
+| `STATEMENT_DEFERRED` | an authority's deferral held a statement back, or was renewed | who entered it; the statement in `target_id`, the end in `hold_until`; the authority's request sealed — none where it came with an order, whose reference it is |
+| `HANDED_OVER` / `INFORMATION_GIVEN` | the case was reported to an authority / information was given to one | the moderator; the reference sealed. It changes no hold |
+
+An order whose share the server does not know opens no case: its `ORDER_RECEIVED` is written with no case id, dated as
+the event of the one who entered it.
 
 A member's sign-in block taken on no case is `MEASURE_TAKEN` / `MEASURE_LIFTED` with no case id, dated as the Server
 Owner's instance events are. Every sealed text is sealed in the moderator's browser to the current epoch, bound to the

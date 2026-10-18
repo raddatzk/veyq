@@ -372,8 +372,14 @@ server-blind token makes this work without the server ever seeing a name:
   took the measure while another holds the key ([uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
   The identity a moderator seals the facts to is the one the server serves, unpinned — the moderation surface holds no
   Master Key to read a pin store — which costs nothing against the operator: the Server Owner holds the moderation key
-  and reads the log's copy of the same facts anyway. Not built: an authority's order (§§ 12–13) and the deferral of a
-  statement it may ask for. No moderation path has run on a deployed instance.
+  and reads the log's copy of the same facts anyway. An **authority's order** acts on ids without a key: entered by a
+  moderator with the key proof or by the Server Owner on the admin channel, its reference sealed by the entering client
+  to the moderation key's public half (`moderation-order` [epoch, orderId]), it blocks a link and its content and holds
+  them to the end it sets; an **Art. 18 export** carries only the clear fields the server holds — held metadata and the
+  guest-write record — never content ([uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
+  [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)).
+  Not built, both open legally: a child-sexual-abuse hold ending at the handover, and an authority's link to a held
+  copy. No moderation path has run on a deployed instance.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

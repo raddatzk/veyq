@@ -84,4 +84,6 @@ anyone opening the content.
   [uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md),
   [uc.moderation.report-to-an-authority](uc.moderation.report-to-an-authority.md),
   [en.moderation.hold](../enablers/en.moderation.hold.md), [en.moderation.log](../enablers/en.moderation.log.md)
-- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md)
+- Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
+  [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
+  [Security roadmap](../../../../site/src/content/docs/security/roadmap.md)

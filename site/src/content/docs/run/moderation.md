@@ -5,6 +5,8 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.review-a-case.md
   - docs/features/moderation/use-cases/uc.moderation.take-a-measure.md
   - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
+  - docs/features/moderation/use-cases/uc.moderation.authority-order.md
+  - docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
@@ -192,6 +194,90 @@ you alone — the objection does not wait for a second one: you decide it, the l
 answer to the member says so. Either way the member reads the answer under the statement and is mailed that it is
 there; after an upheld measure, only the courts remain. This binds a team, not you: you own the server and the roster.
 
+## An authority's order
+
+An authority's order acts on ids, needs no key and opens nothing ([uc.moderation.authority-order](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.authority-order.md),
+[ADR 0093 § 12](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+A moderator enters it on the moderation page (**Enter an authority's order**, above the queue); you enter it under
+**Server → Moderation**, or over SSH:
+
+```sh
+veyq-admin order remove   --share '<the link as the order names it>' --reference '<the authority’s reference>' [--received-at <ISO time>] [--defer-until <ISO time>]
+veyq-admin order preserve --share '<link or id>' --reference '<reference>' [--received-at <ISO time>]
+veyq-admin order inform   --share '<link or id>' --reference '<reference>' [--received-at <ISO time>] [--hold-days <days>]
+```
+
+- **What goes in.** The kind, the link (or its id), the authority's reference and when the order reached your contact
+  point. Paste the link as the order names it: only its id leaves your browser or shell — the part after `#` is the
+  link's key, and an order needs none. The reference is sealed to the moderation key before it is sent, so the server
+  cannot read it; enter it again when you copy a form.
+- **A removal order** (terrorist content, TCO Regulation Art. 3) blocks the link and everything it gives access to, for
+  everyone, members included, **at once** and without a review of its own: the authority has reviewed. A block already
+  in force counts. Out comes the text for the authority's feedback form (Annex II) — the time of the block in UTC to the
+  second — to copy. A link this instance does not know is recorded all the same, nothing is blocked, and you get a
+  draft of the obstacle form (Annex III).
+- **A preservation order** or **a request for information** blocks nothing; what the link gives access to is kept.
+- **How long it is kept.** Each order opens a case of its own, with no report, holding what the link reaches: six
+  months after the block for a removal order, 60 days after receipt for a preservation order, the days a request names
+  (six months when it names none). No extension, lift or later decision ends it sooner; an extension with the
+  authority's further request makes it longer.
+- **The affected are told**, as after any block, with a statement of reasons that names an order as its cause. An
+  authority may forbid that for up to six weeks (TCO Art. 11(3)): enter the date with the order, and the statement is
+  held until then. A moderator may enter the authority's renewal once, for at most six more weeks; at the end it goes
+  out on its own, and the queue reminds of it until then. Deferring is the authority's decision, never a moderator's.
+- **Information handed over** in answer to an order is recorded in the case's log with its reference (below).
+
+**The hour is yours to keep.** A removal order has to be acted on within one hour of reaching your contact point, with
+no exemption for a small host. veyq cannot make you read your mail: forward the instance contact to a phone. If you
+cannot keep the hour, turn public links off (`veyq-admin capabilities off core.public-shares`, or **Server →
+Capabilities**).
+
+## Report to an authority
+
+A suspicion of an offence against life or safety — child sexual abuse included — is reported to an authority
+(DSA Art. 18; [uc.moderation.report-to-an-authority](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md),
+[ADR 0093 § 13](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+In a case, **Prepare the fields for the report** lays out what the instance holds in the clear: the case, its category,
+every time in UTC, the measures, the uploaders the held copy names — a member's account id, a guest's identity id — and
+every guest-write record it held, with the address, the source port where one was kept, and the time. It is a text
+block to copy into the authority's form: never a file, never content. **Record that it was reported to an authority**
+(or that information was given) writes the handover into the case's log with the reference, sealed.
+
+**Child sexual abuse material.** Before such a case opens, the moderation page shows a full-page warning, and its
+decision panel proposes **Block the content** first. A human still decides.
+
+## In an emergency
+
+> **Draft — not legal advice.** This section, the order forms and the warning above are drafts until a qualified legal
+> review ([ADR 0093 § Legal basis](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#legal-basis)).
+
+- **Acute danger to someone's life or safety: call 110** (the police; 112 for an ambulance or the fire service).
+- **Register with the BKA's reporting portal before you need it** (`u-entrance.bka.de`, registration by mail): it is
+  where Art. 18 reports go in Germany. Without a registration, file a criminal complaint with the police.
+- **Removal orders** come from the BKA; its TCO contact is `TCO@bka.bund.de`. A terrorist-content report you made under
+  TCO Art. 14(5) needs no second report.
+- **Never download, forward or screenshot reported content, and never mail a file of it** — not to an authority, not to
+  a hotline. Copy only the fields above.
+- **Child sexual abuse material: contact the police at once, and keep nothing beyond the hold.** Whether keeping a hold
+  until the handover is covered for a non-commercial operator (§ 184b(5) StGB) is open; a handover recorded in veyq
+  changes no hold, and no link for the police to a held copy exists.
+- **Forward the instance contact to a phone**, and turn public links off if you cannot act within the hour.
+
+### Which law reaches your instance
+
+> **Draft — your own assessment, not legal advice** (ADR 0093 § Legal basis, 1).
+
+| Who runs it | GDPR | DSA Art. 16–18 (notice, statement, reports) | TCO Regulation (removal orders) |
+|---|---|---|---|
+| A family or circle of friends, no link posted publicly | the household exemption may cover it; uncertain for the one who provides the means for others (recital 18) | uncertain for an unpaid service | uncertain: it reaches dissemination to the public |
+| The same, with a link posted publicly | probably reached (*Lindqvist*, *Buivids*) | uncertain | probably reached |
+| A club or an association | reached | likely, where members pay fees | reached for public links |
+| A company, or a paid host | reached | reached | reached |
+
+Criminal law and the hosting privilege's "once known, act" reach every operator in either case
+([§ 7 DDG](https://www.gesetze-im-internet.de/ddg/__7.html)). The operating mode below is how you record your own
+answer.
+
 ## The operating mode
 
 At first-run setup you choose how the instance is run, and you can change it under **Server → Operating mode** or
@@ -329,9 +415,10 @@ control against the operator.
 - **A statement for your own steps.** A member's sign-in block and a tenant taken offline carry no statement of reasons
   yet: you take them on the admin channel, without the moderation key, and a blocked member cannot sign in to read one.
   Tell them through the instance contact.
-- **Deferring a statement on an authority's request** (ADR 0093 § 7): it comes with the order path below.
-- **An authority's order and the reports of child sexual abuse material** (ADR 0093 §§ 12–13): the steps above act on
-  ids and are what an order will reuse, but no order can be entered yet, and the hold ends of those cases are not built.
+- **A child-sexual-abuse case's hold ending at the handover** (ADR 0093 § 4): it waits on counsel (§ 184b(5) StGB, see
+  [In an emergency](#in-an-emergency)); until then such a hold ends as any other case's, and a handover changes none.
+- **A time-bound link for the police to a held copy** — not built, and not to be built without the police's or a
+  specialist's answer: it would be a making-available.
 - **A report of a single field, or of everything by one uploader.**
 
 These are on the security model's target, decided in
@@ -340,5 +427,7 @@ and [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-mo
 see the [Security roadmap](/veyq/security/roadmap/).
 
 **How far this is proven.** Suspension, reactivation, the feature switches, the review, every step above, the statement
-and the objection are covered by the backend's and the web app's tests of their use-cases, and lane L1 walks a block,
-its statement, an objection and another moderator's decision in a browser; no CI run has executed that lane yet.
+and the objection, an authority's order, its deferral and the report to an authority are covered by the backend's, the
+web app's and the console's tests of their use-cases, and lane L1 walks a block, its statement, an objection, another
+moderator's decision, a removal order from each door and the report's fields in a browser; no CI run has executed that
+lane yet.

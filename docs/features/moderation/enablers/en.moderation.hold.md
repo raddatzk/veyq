@@ -9,12 +9,13 @@
   Memories' `MediaHoldSnapshot`, `StoreReclaimStore.due`'s skip; the reconcile's claim query and the backup's blob index
   read the pins too. The ends of a dismissed, decided, lifted or extended case and the review's reads of the snapshot
   (`CaseSnapshots`, `CaseReviewResource`, Memories' `CaseMediaResource`, Depot's `CaseFilesResource`) by
-  cr-moderation-review-and-measures; an authority's order's ends are not built.
+  cr-moderation-review-and-measures; an authority's order's ends and the floor by cr-authority-orders-and-art18-reports (`AuthorityOrderHandler`).
 - **Provides:** a copy of what was reported, taken when it was reported, that no delete, overwrite or revoke reaches —
   the evidence a moderator opens with the keys a report hands over.
 - **Serves (use-cases):** [uc.moderation.report](../use-cases/uc.moderation.report.md),
   [uc.moderation.review-a-case](../use-cases/uc.moderation.review-a-case.md),
-  [uc.moderation.take-a-measure](../use-cases/uc.moderation.take-a-measure.md); later an authority's order (ADR 0093
+  [uc.moderation.take-a-measure](../use-cases/uc.moderation.take-a-measure.md),
+  [uc.moderation.authority-order](../use-cases/uc.moderation.authority-order.md) (ADR 0093
   § 12).
 - **Depends on:** [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md) (every store object
   passes `StoreReclaimSweep`), [en.moderation.moderation-key](en.moderation.moderation-key.md).
@@ -83,7 +84,13 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 | Measure taken | six months (`Holds.SIX_MONTHS`, 183 days) after the measure's statement of reasons was sent; after the decision where nobody could be told (no member among its recipients) | cr-moderation-review-and-measures; cr-statement-of-reasons-and-objection (`CaseDecisions.decide`) |
 | The case's last measure lifted | at once, and the case closes | cr-moderation-review-and-measures |
 | Extended by a moderator | the end the extension names: after the current end, at most six months from now, with a sealed reason | cr-moderation-review-and-measures |
-| Child sexual abuse material, an authority's order | ADR 0093 § 4's table | cr-authority-orders-and-art18-reports |
+| An authority's order (its own case, no report) | six months after the block (removal), 60 days after receipt (preservation), the days named or else six months after receipt (information) — and that end is the hold's **floor** (`veyq_hold.floor_until`): `Holds.moveEnd` and `Holds.endNow` never end it sooner, so a lift or a decision leaves it to its floor and the case closes only then | cr-authority-orders-and-art18-reports (`AuthorityOrderHandler`, `Holds`) |
+| A statement an authority deferred | six months past the deferral's end while it holds; six months after the sending once it went out | cr-authority-orders-and-art18-reports (`StatementDeferrals`) |
+| Child sexual abuse material | as any case's: ADR 0093 § 4's "at the confirmed handover" is not built — whether keeping it until then is covered for a non-commercial operator is open (§ 184b(5) StGB, ADR 0093 § Legal basis, Still open 1), so a recorded handover changes no hold | — |
+
+A hold's rows are copied as the database returns them, but a time column as the instant it is (ISO-8601, UTC,
+`HoldSnapshot.text`): a `TIMESTAMP` holds the wall clock of the zone its writer ran in, and the Art. 18 export read a
+guest's write two hours off on a machine in Berlin until a time was kept as an instant.
 
 The moderation cleanup (`ModerationPurge`, hourly, which also runs at its first trigger after startup) deletes a hold
 past its end with its snapshot and pins (`Holds.purgeExpired`); the sweep catches up on its own — already from the pin's
