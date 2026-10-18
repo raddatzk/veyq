@@ -138,6 +138,11 @@ render, asserts — deriving every anchor from the source rather than listing it
        (`--set backup.enabled=…`) flips the gate: every file is rendered both ways.
   xxvi. **The schema refuses an install that makes neither backup choice, naming `/backup`** (the gate on with no
        claim), and accepts each of the two (a claim named; `enabled: false`) — ADR 0098's explicit choice (owner 2b).
+  xxvii.**The bundled store keeps no request log.** Every container whose image repository is `garage` sets
+       `RUST_LOG`, and no directive in it is `info`, `debug` or `trace` (ADR 0092 § 5): unset, the image's own
+       `garage=info` logs every S3 and admin request with the peer's address and the URI with its query. The compose
+       recipe's half is `validate_compose_posture.py` assertion 6. The positive control: every render has such a
+       container, or the level is checked by nobody.
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -173,7 +178,9 @@ gate (cr-kubernetes-backup-gate, ADR 0098) — no incident: they pin, on the ren
 mounts the KEK's claim and judges the app's own release, and that an install chooses; each was bitten by injection
 (the config-secret mount, a hard-coded target, the schema's `anyOf` removed). The trap they record: give the gate
 `QUARKUS_DATASOURCE_JDBC_URL` and the app-container recognition below takes it for the app and demands the KEK's
-claim of it — the gate carries `VEYQ_BACKUP_DB_*` instead.
+claim of it — the gate carries `VEYQ_BACKUP_DB_*` instead. (xxvii) came with a legal audit (2026-10-18), live when
+written: the chart set no `RUST_LOG`, so the store ran at its image's `garage=info`; run against that chart it was red in
+every render, and it was bitten by injection (the env removed from the template, `garage.logFilter=garage=info`).
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -202,7 +209,9 @@ digest exists or is the one `site/src/content/docs/run/verify-a-release.md` veri
 `scripts/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
 pod and that the gate captures cold were measured once, on a kind cluster (cr-kubernetes-backup-gate), not here. And
 it recognises the config-secret claim only through the app container's KEK path; a key the app reads from elsewhere
-is out of its reach. And it says nothing about the compose recipe, which
+is out of its reach. (xxvii) reads what the container is told, not what Garage does with it (that `warn` drops the
+request line was measured on the pinned image), and the kubelet's log rotation, which bounds every container's log on
+this target, is the cluster's and not in any manifest. And it says nothing about the compose recipe, which
 its sibling guards own (`validate_compose_posture.py` holds that target's half of ADR 0071).
 
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm`, which is not a repository artifact,
@@ -258,6 +267,9 @@ APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
 TOOLS_IMAGE = re.compile(r"(?:^|/)veyq-tools(?::|$)")
+# (xxvii) the bundled store, by its image repository, and the RUST_LOG levels that log every request.
+STORE_IMAGE = re.compile(r"(?:^|/)garage(?::|@|$)")
+VERBOSE_LEVELS = {"info", "debug", "trace"}
 # (xxiv)–(xxvi) the backup gate (ADR 0098): its container name and the variable its target release travels in.
 GATE_NAME = "backup-gate"
 GATE_TARGET_ENV = "VEYQ_BACKUP_TARGET_RELEASE"
@@ -535,6 +547,23 @@ def check_client_port(tag: str, values: dict, rendered: list[dict]) -> None:
                         f"app.clientPort.source {source!r} — under the PROXY protocol a probe must poll the admin listener "
                         f"(the public port closes a connection with no PROXY header unanswered), and otherwise the public one"
                     )
+
+
+def check_store_log(tag: str, rendered: list[dict]) -> None:
+    """(xxvii) the bundled store's container sets RUST_LOG, at no level that logs every request."""
+    stores = [c for obj in rendered for c in every_container(pod_spec(obj)) if STORE_IMAGE.search(str(c.get("image") or ""))]
+    if not stores:
+        errors.append(f"(xxvii) {tag}: no container runs the store's image — its log level is checked by nobody")
+    for container in stores:
+        env = {e.get("name"): str(e.get("value")) for e in container.get("env") or [] if "value" in e}
+        rust_log = env.get("RUST_LOG")
+        levels = {d.rpartition("=")[2].strip().lower() for d in (rust_log or "").split(",") if d.strip()}
+        if not levels:
+            errors.append(f"(xxvii) {tag}: the store container sets no RUST_LOG — the image's own `garage=info` logs every "
+                          f"request with the peer's address and the URI with its query (ADR 0092 § 5)")
+        elif levels & VERBOSE_LEVELS:
+            errors.append(f"(xxvii) {tag}: the store container sets RUST_LOG={rust_log} — {sorted(levels & VERBOSE_LEVELS)} "
+                          f"logs every request with the peer's address (ADR 0092 § 5)")
 
 
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
@@ -972,6 +1001,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
         elif has_gate == enabled:
             errors.append(f"(xxv) {tag}: flipping backup.enabled did not flip the gate — the switch renders nothing different")
     check_client_port(tag, values, rendered)
+    check_store_log(tag, rendered)
 
     if not first:
         return rendered
@@ -1135,5 +1165,6 @@ print(
     f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
     f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "
     f"listener, in {', '.join(sorted(proxy_rendered))}, and a port source outside the enum refused; the backup gate on the tools image where on — the named claim, "
-    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice"
+    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice; "
+    f"the store's RUST_LOG below info"
 )

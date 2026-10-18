@@ -78,6 +78,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: garageAdminToken
+            # Below `info`, so the store keeps no per-request log with every reader's address (ADR 0092 § 5,
+            # values.yaml says when to raise it). Unset, the image's own `garage=info` applies — so it is always set.
+            - name: RUST_LOG
+              value: {{ .Values.garage.logFilter | default "garage=warn" | quote }}
           # The compose recipe gives Garage no healthcheck, so these are the chart's own decision. The admin
           # API's /health answers WITHOUT a token (measured on v2.0.0: 200 on a fresh node with no layout yet,
           # which is the state the app's provisioning has to reach it in) — so readiness cannot deadlock on

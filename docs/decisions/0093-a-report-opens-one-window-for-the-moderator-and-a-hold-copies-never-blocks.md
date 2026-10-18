@@ -506,12 +506,18 @@ responsibility, and switching back to the second mode turns it on again.
   provider identification. The operating mode (§ 14) adds one instance setting, a step in first-run setup, a
   reduced variant of the operator section and of the statement, and a second state every mode-dependent text is
   tested in.
-- **Not built:** a transparency report, which only some operators owe — DSA Art. 15(2) exempts micro and small
-  enterprises under Recommendation 2003/361, so a medium or large operator owes one (whether a non-economic club is an
-  enterprise is Still open 8), and TCO Art. 7(2) asks for one in every year the host acted on terrorist content, by
-  1 March; the Run docs say who reports and by when. **Not required, not built:** an internal complaint system
-  (Art. 20, online platforms only). The in-app objection of § 7 is voluntary. A TCO report could later be derived
-  from the moderation log.
+- **Transparency reports: the operator's duty, not built** (§ Legal basis, 8). An operator may owe three, and veyq
+  compiles none: a yearly DSA Art. 15 report unless they are a micro or small enterprise (Recommendation 2003/361/EC;
+  whether a non-economic club is an enterprise at all is Still open 8);
+  a TCO Art. 7(2) report, whatever their size, for any calendar year they acted against terrorist content or were
+  required to, before 1 March; and, under German jurisdiction, the yearly § 3(2) TerrOIBG figures to the
+  Bundesnetzagentur by 1 March. The [Run area](../../site/src/content/docs/run/moderation.md#transparency-reports) says
+  who owes what; the moderation log and the case list hold what such a report counts, and an export from them could be
+  built later. The operator's other duties as controller — a breach, the record of processing with what the guest-write
+  record, the reports and the holds keep, processors, an access request — are the Run area's
+  [Data protection](../../site/src/content/docs/run/data-protection.md).
+  **Not required, not built:** an internal complaint system (Art. 20, online platforms only); the in-app
+  objection of § 7 is voluntary.
 - A moderator acts from any tenant host they can sign in on; an operator away from admin-web acts over SSH with
   `veyq-admin`, and the Run docs show how to reach admin-web remotely (an SSH tunnel or a VPN).
 - **Limits stated in the docs:** a copy escapes a block; held data and the moderation log live in backups beyond
@@ -635,8 +641,33 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
    for data it already has (§§ 100j–100k StPO-E, the e-Evidence Regulation).
    [BT-Drs. 21/6581](https://dserver.bundestag.de/btd/21/065/2106581.pdf) ·
    [BVerwG press release 66/2023](https://www.bverwg.de/de/pm/2023/66)
+8. **Transparency reports** (research of 2026-10-18). DSA Art. 15(1) asks every provider of an intermediary service
+   for a public, machine-readable report at least once a year — orders from authorities (Art. 9, 10), notices
+   (Art. 16) and the action taken, moderation on its own initiative, automated means — and Art. 15(2) exempts only a
+   micro or small enterprise in the sense of Recommendation 2003/361/EC (fewer than 50 staff, and turnover or balance
+   sheet of at most EUR 10 million, linked and partner enterprises counted in) that is not a very large platform. The
+   templates and the period are Implementing Regulation (EU) 2024/2835: the calendar year, published within two months
+   of its end. A company or a larger association running an instance for its people is therefore reached, where the
+   DSA reaches the instance at all (point 1). TCO Art. 7(2) asks a host that took action, or was required to, under the
+   Regulation in a calendar year for a public report on it before 1 March of the next, with Art. 7(3)'s contents; size
+   is no exemption. § 3(2) TerrOIBG has every host under German jurisdiction send the Bundesnetzagentur, per calendar
+   year and by 1 March, the figures of TCO Art. 21(1)(c): how many access requests competent authorities made for
+   content it preserved under Art. 6. Whether a year with nothing to count still needs a report is not settled by the
+   text. Hence the Run area's table, and no export.
+   [DSA](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2065) ·
+   [Implementing Regulation 2024/2835](https://eur-lex.europa.eu/eli/reg_impl/2024/2835/oj) ·
+   [Recommendation 2003/361/EC](https://eur-lex.europa.eu/eli/reco/2003/361/oj) ·
+   [TCO](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32021R0784) ·
+   [§ 3 TerrOIBG](https://www.gesetze-im-internet.de/terroibg/__3.html)
 
 ### Still open
+
+**How these items are treated until veyq is offered as a service** (owner 2026-10-18): while the owner does not
+operate veyq as SaaS — instances run by their operators for a household, a club or a company — the items below are
+taken to be met by what is built and decided, so none of them holds back a CR or a release. Nothing they name is built
+on that assumption (no hold past 90 days, no authority link), and every legal text stays a draft. **Before veyq is
+offered as a service, each item is answered by counsel**, and an answer that differs is a legal duty that wins over
+what is built (`CLAUDE.md`).
 
 1. **§ 184b(5) StGB beyond the 90 days, and for a non-commercial operator.** Built is the bound the law supports
    for a host bound by Art. 18: the hold ends at the handover, at the latest 90 days after the report (§ 4). Whether a

@@ -1,7 +1,8 @@
 # The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
 # Encrypt, the DNS name and CA trust the public internet would give the instance, the mail relay its provider would,
 # the release stamp and the stub release mirror that let the release check find something (below, at `app` and
-# `release-mirror`), and the browser that drives it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py
+# `release-mirror`), the store's request log the wire sweep's control reads (at `garage`), and the browser that drives
+# it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py
 # installs the candidate with `veyqctl install` and makes this file the instance's operator override
 # (`<home>/compose.override.yml`), so it is laid OVER the release's own recipe (never over this checkout's copy) on
 # every command veyqctl runs, interpolated from the `.env` veyqctl writes (the run's own `${VEYQ_E2E_*}` values go in
@@ -88,6 +89,14 @@ services:
       # Public DNS for the bootstrap domain, as seen from the app on `edge` (the header says why).
       edge:
         aliases: ["${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}"]
+
+  # The store's request log back on, for the run only: the recipe sets `garage=warn`, which drops it (ADR 0092 § 5), and
+  # the container sweep's per-run control is a run-unique key sent to the bucket that Garage's log must then carry
+  # (cc.security.wire-assertion; the `window` stage of scripts/run_stack_e2e.py). The one place this file raises what an
+  # operator's instance logs, and only on a stack that serves no real reader.
+  garage:
+    environment:
+      RUST_LOG: garage=info
 
   app:
     environment:

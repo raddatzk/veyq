@@ -11,7 +11,8 @@
   instance backup's schema-only dump, admin-web's Server → Moderation and `veyq-admin guest-write-record`, and web's
   `GuestWriteRecordNotice`, whose link to the record passage of the operator section of the terms
   ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6) is built (cr-operator-section-of-the-terms,
-  2026-10-18). Open: the notice's wording (counsel).
+  2026-10-18); a guest's objection (one identity's rows deleted on the admin channel and in the CLI) came with a legal
+  audit (2026-10-18). Open: the notice's wording (counsel).
 - **Provides:** for every write a link's guest makes that enters it as the last editor of something
   ([en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md)), the client address and source port
   the server saw and the time, kept for N days, so a hold can copy them as evidence when the written item is reported.
@@ -83,6 +84,11 @@ go at boot) and then on `veyq.moderation.guest-write-record.purge.every`.
 - **A hold is taken on its object:** the hold copies it (`GuestWriteRecordHoldSnapshot`, phase 900, after every
   contributor: every row whose object is a copied row or a named identity — UUIDs only, a share row's id is none — and
   for a reported link every row its guests wrote), and the copy follows the hold's end, not N.
+- **Its guest objects** (GDPR Art. 21(1)): the Server Owner deletes every live row of one share identity on the admin
+  channel (`eraseGuestWriteRecordsOfIdentity`, `veyq-admin guest-write-record forget <identity-id>`;
+  `GuestWriteRecords.eraseIdentity`). What a hold copied stays until the hold ends, and the answer counts it so the
+  guest can be told; a later write of the identity is recorded again. The guest page does not show a guest its
+  identity id, so the id comes from a moderation case.
 - **The instance backup** dumps the table's schema and leaves out its rows (ADR 0093 § 10): what is lost is at most
   30 days old and expiring anyway, and what was reported lives in the hold tables, which are backed up.
 
