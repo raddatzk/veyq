@@ -15,7 +15,7 @@
 // real `createShare` round-trip with only the network mocked.
 //
 // Its limit: it covers the *mint* path, which is where the fault was and where a headless suite starts. It does
-// not sweep `share.ts` for other browser globals — `acceptedTermsRevision` / `recordTermsAccepted` still use
+// not sweep `share.ts` for other browser globals — `acceptedTermsKeys` / `recordTermsAccepted` still use
 // `localStorage`, deliberately and documented (uc.sharing.share-accept is browser-only by design), so a future
 // headless caller of those is out of this guard's reach and needs its own decision.
 import { describe, it, expect, vi } from 'vitest'

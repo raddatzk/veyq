@@ -37,7 +37,7 @@ import {
   derivePasswordToken,
   fetchShareTerms,
   pickShareTerms,
-  acceptedTermsKey,
+  acceptedTermsKeys,
   recordTermsAccepted,
   pickLocaleText,
   SharePasswordRequiredError,
@@ -99,21 +99,25 @@ const head = shallowRef<PublicShareHead | null>(null)
 //
 // After the space's text comes the fixed operator section (ADR 0035 decision 6), and what is accepted is the TRIPLE —
 // the space's revision, the section's revision and its variant — so a release that changed the section or a switched
-// operating mode asks again, and a changed operator value or the guest-write record switched does not.
+// operating mode asks again, and a changed operator value or the guest-write record switched does not. The device keeps
+// the triples it accepted (the last four), so a mode switched back to a variant accepted before asks nobody again, as
+// for a member.
 const termsTenantId = ref('')
 const termsRevision = ref(0) // 0 = no gate (also the fail-open value on a fetch error)
 const operatorSection = ref<OperatorSection | null>(null)
-const acceptedKey = ref('') // the locally-recorded accepted triple; set in-memory on accept so the gate clears
+const acceptedKeys = ref<string[]>([]) // the locally-recorded accepted triples; extended in-memory on accept so the gate clears
 const termsMarkdown = ref('')
 const renderedTerms = computed(() => (termsMarkdown.value ? renderMarkdown(termsMarkdown.value) : ''))
 const currentKey = computed(() =>
   operatorSection.value ? tripleKey(tripleOf(termsRevision.value, operatorSection.value)) : '',
 )
 // The gate fires once the share is resolved (post-password), the tenant has published terms, and the locally-stored
-// triple is not the current one. Sits BETWEEN the password shell and the display-name pre-screen in the template.
-const needsTerms = computed(() => status.value === 'ready' && termsRevision.value > 0 && acceptedKey.value !== currentKey.value)
+// triples do not include the current one. Sits BETWEEN the password shell and the display-name pre-screen in the template.
+const needsTerms = computed(
+  () => status.value === 'ready' && termsRevision.value > 0 && !acceptedKeys.value.includes(currentKey.value),
+)
 
-/** Fetch the owning tenant's terms + read the locally-stored accepted revision. FAILS OPEN (uc.sharing.share-accept):
+/** Fetch the owning tenant's terms + read the locally-stored accepted triples. FAILS OPEN (uc.sharing.share-accept):
  *  a transient error is treated as "no terms" (revision 0) so the visitor is never locked out by a network blip. */
 async function loadTerms() {
   try {
@@ -122,11 +126,11 @@ async function loadTerms() {
     termsRevision.value = terms.termsRevision
     operatorSection.value = terms.operatorSection
     termsMarkdown.value = pickShareTerms(terms, locale.value)
-    acceptedKey.value = acceptedTermsKey(terms.tenantId)
+    acceptedKeys.value = acceptedTermsKeys(terms.tenantId)
   } catch {
     termsRevision.value = 0
     operatorSection.value = null
-    acceptedKey.value = ''
+    acceptedKeys.value = []
   }
 }
 
@@ -137,7 +141,7 @@ function acceptTerms() {
   if (!section) return
   const triple = tripleOf(termsRevision.value, section)
   recordTermsAccepted(termsTenantId.value, triple)
-  acceptedKey.value = tripleKey(triple)
+  acceptedKeys.value = [...acceptedKeys.value, tripleKey(triple)]
 }
 
 // --- the note's acceptance gate (uc.sharing.share-note, ADR 0036 point 2) ----------------------------------------
