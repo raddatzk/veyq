@@ -36,6 +36,11 @@ the log that keeps them accountable. A **core** feature
 - ★ [Object to a measure](use-cases/uc.moderation.object-to-a-measure.md) — **built (backend + web)** (ADR 0093 §§ 4, 7, 14, ADR 0099
   § 5): the statement of reasons reaches the affected in veyq and by mail, an affected member objects once, another
   moderator decides; a reporter is told the decision.
+- ★ [Act on an authority's order](use-cases/uc.moderation.authority-order.md) — **planned** (ADR 0093 §§ 4, 7, 12,
+  ADR 0099 § 6): a removal order blocks the share and its content by id at once, an order opens a case with a hold and
+  no report, the Annex texts come out to copy, and the authority may defer the statement.
+- ★ [Report to an authority](use-cases/uc.moderation.report-to-an-authority.md) — **planned** (ADR 0093 §§ 11, 13): the
+  export of clear fields for an Art. 18 report, the handover as a log event, and the child-sexual-abuse warning.
 
 ## Enablers
 

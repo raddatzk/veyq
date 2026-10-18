@@ -1,0 +1,31 @@
+useCase: uc.moderation.authority-order
+feature: moderation
+title: Act on an authority's order
+status: planned
+# Written by cr-authority-orders-and-art18-reports' phase 0; its later phases turn each gap into refs.
+acceptanceCriteria:
+  - id: a-removal-order-blocks-by-id-at-once
+    text: >-
+      A removal order entered by a moderator with the key proof, or by the Server Owner on the admin channel without a
+      key, blocks the share and the node it is rooted at by id at once — the guest gets 404, the member 451 — and the
+      Server Owner's operation answers 404 on the public listener.
+  - id: an-order-opens-a-case-with-a-hold-and-no-report
+    text: >-
+      An order opens a decided case with a hold and no report, ending six months after the block for a removal order,
+      60 days after receipt for a preservation order, and after the named days (else six months) for a request for
+      information; no extension, lift or decision ends it sooner.
+  - id: an-unknown-share-is-recorded
+    text: >-
+      An order naming a share the server does not know is recorded with no case and no block, and its Annex III draft
+      says the content was not found.
+  - id: the-forms-come-out-to-copy
+    text: >-
+      A removal order answers the Annex II text with the block time in UTC to the second, from one template every
+      surface renders; a pasted URL's fragment never leaves the client.
+  - id: the-authority-defers-the-statement
+    text: >-
+      An authority's deferral holds an order's or a measure's statement back until its end (at most six weeks, one
+      renewal), when the statement goes out; the hold counts from its sending.
+gaps:
+  backend: "Planned: cr-authority-orders-and-art18-reports' phase 2."
+  web: "Planned: cr-authority-orders-and-art18-reports' phase 4."

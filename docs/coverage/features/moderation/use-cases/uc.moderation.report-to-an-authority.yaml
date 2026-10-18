@@ -1,0 +1,22 @@
+useCase: uc.moderation.report-to-an-authority
+feature: moderation
+title: Report to an authority
+status: planned
+# Written by cr-authority-orders-and-art18-reports' phase 0; its later phases turn each gap into refs.
+acceptanceCriteria:
+  - id: the-export-carries-clear-fields-only
+    text: >-
+      The export answers, behind the key proof, the case id, the category, the times in UTC, the uploaders the held rows
+      name and the held guest-write records with their address, port and time and the time zone stated — never content
+      — and the surface renders it as a text block to copy.
+  - id: the-handover-is-logged
+    text: >-
+      A report to an authority and information given to one are events of the case with the reference sealed; a
+      handover changes no hold.
+  - id: child-sexual-abuse-material-warns-first
+    text: >-
+      Before a case of the child-sexual-abuse category opens, a full-page warning is shown, and the decision panel
+      preselects "Block the content".
+gaps:
+  backend: "Planned: cr-authority-orders-and-art18-reports' phase 2."
+  web: "Planned: cr-authority-orders-and-art18-reports' phase 4."

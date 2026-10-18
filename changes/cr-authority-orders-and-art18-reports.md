@@ -1,8 +1,8 @@
 ---
 id: cr-authority-orders-and-art18-reports
 title: An authority's order blocks by id within the hour; Art. 18 reports and the child-sexual-abuse-material flow
-status: planned
-satisfies: []            # phase 0 writes the use-cases; see § Use-cases
+status: in-progress
+satisfies: [uc.moderation.authority-order, uc.moderation.report-to-an-authority]
 adrs: ["0093", "0099", "0065", "0088"]
 invariants:
   - operator-blind E2EE (an order needs no key; the export carries clear fields only, never a content file)
@@ -80,7 +80,7 @@ Phase 0 writes `uc.moderation.authority-order` (removal, preservation, informati
 
 ## Phases
 
-- [ ] **0 docs** — the two use-cases, planned coverage. · Done when: feature-format, coverage, doc-link, change guards
+- [x] **0 docs** — the two use-cases, planned coverage. · Done when: feature-format, coverage, doc-link, change guards
   green.
 - [ ] **1 contracts** — the order operations on both channels, the deferral, the export read, the handover event;
   classified in `OperatorBlindProbeTest`; the admin-channel sweep sees the Server Owner's twin marked. · Done when:
