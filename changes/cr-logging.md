@@ -96,6 +96,8 @@ ADR 0092 § Measurement ledger holds M1–M17; this table holds the locators the
 
 ## Open questions (owner)
 
+**Decided (Q29–Q33).** Owner 2026-10-18: ADR 0092 accepted, all five as recommended; implementation has the owner's go.
+
 Each has a recommendation; acceptance of ADR 0092 takes the recommendation unless the owner answers otherwise, and an
 answer that differs is edited into the ADR's § 4 or § 5 and the decision above.
 
