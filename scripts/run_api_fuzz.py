@@ -31,11 +31,12 @@ printed — names per invocation the operations tested, every failure by check a
 **the GET operations that never answered 2xx** in the positive invocations: information, not a verdict — there the
 response schema went unchecked, because no seeded id reaches them (a node, a medium, a share, a moderation case).
 
-**The image is the official one, with its bundled TraceCov switched off.** `schemathesis/schemathesis` is MIT, but its
-Dockerfile also installs TraceCov — a coverage plugin under a proprietary licence (the "TraceCov Community License",
-binary-only) — and loads it on every run through `SCHEMATHESIS_HOOKS=/app/hooks.py` unless `SCHEMATHESIS_COVERAGE=false`.
-This runner sets both (`SCHEMATHESIS_HOOKS` to veyq's own hooks), so nothing but the MIT tool runs; `hooks.py` refuses
-to load when the plugin was imported anyway.
+**The image is our own** (`infra/fuzz/Dockerfile`, owner decision Q8 of cr-api-fuzzing): a Python base pinned by
+digest, Schemathesis from PyPI with every package hash-pinned (`infra/fuzz/requirements.txt`, written by
+`infra/fuzz/lock.py`). The official `schemathesis/schemathesis` image also installs TraceCov, a proprietary,
+binary-only coverage plugin, and loads it on every run; ours carries only the MIT tool, and `hooks.py` refuses to load
+if TraceCov is ever imported. The runner builds it before the first invocation, tagged by the hash of the directory's
+build inputs ([IMAGE_INPUTS]), so a changed pin is a new image and an unchanged one a cache hit.
 
 **Networking — the one step that differs between Docker Desktop and a Linux runner**, made the same command on both:
 the container reaches the host's listeners through `--add-host <name>:host-gateway`, as `veyq.localhost` (the tenant's
@@ -75,6 +76,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import shutil
@@ -101,10 +103,9 @@ FUZZ = REPO / "infra" / "fuzz"
 CONFIG = FUZZ / "schemathesis.toml"
 BASELINE = FUZZ / "baseline.json"
 
-# The official image (MIT; github.com/schemathesis/schemathesis, `.github/workflows/release.yml` publishes it), the
-# multi-arch INDEX digest of `4.32.0` (linux/amd64 + linux/arm64), resolved 2026-10-18 with
-# `docker buildx imagetools inspect schemathesis/schemathesis:4.32.0`. A bump is a commit that resolves it again.
-SCHEMATHESIS_IMAGE = "schemathesis/schemathesis:4.32.0@sha256:c4935c2c27489923b0091246aa831c92166fa169fb8f35ebdeefd408a7a935f5"
+# What the image is built from; their hash is its tag (`veyq-fuzz-schemathesis:<hash>`), so the tag names the pins.
+IMAGE_INPUTS = ("Dockerfile", "requirements.txt")
+IMAGE_REPO = "veyq-fuzz-schemathesis"
 # Fixed, so a red re-runs to the same request (ADR 0091 decision 9). Changing it is a commit.
 SEED = 20261018
 # Test cases per operation and phase — the sampling knob that fits the job's 15 minutes (ADR 0091 decision 1).
@@ -142,6 +143,22 @@ INVOCATIONS = (
     Invocation("admin-negative", "admin", "negative"),
     Invocation("admin-positive", "admin", "positive"),
 )
+
+
+def image_tag() -> str:
+    digest = hashlib.sha256()
+    for name in IMAGE_INPUTS:
+        digest.update(name.encode() + b"\0" + (FUZZ / name).read_bytes() + b"\0")
+    return f"{IMAGE_REPO}:{digest.hexdigest()[:16]}"
+
+
+def build_image() -> str:
+    """Our Schemathesis image (`infra/fuzz/Dockerfile`), built unless this very set of pins is built already."""
+    tag = image_tag()
+    if subprocess.run(["docker", "image", "inspect", tag], capture_output=True).returncode != 0:
+        log(f"building {tag} from infra/fuzz/")
+        e2e.run(["docker", "build", "--quiet", "-t", tag, str(FUZZ)])
+    return tag
 
 
 def operations(spec: Path, inv: Invocation) -> list[str]:
@@ -270,7 +287,7 @@ class Result(NamedTuple):
     seconds: float
 
 
-def run_one(inv: Invocation, spec: Path, workdir: Path, config: Path, baseline: Path, update: bool,
+def run_one(image: str, inv: Invocation, spec: Path, workdir: Path, config: Path, baseline: Path, update: bool,
             expected: list[str]) -> Result:
     key = contract_specs.key(spec)
     rel = f"{inv.name}/{key.replace('/', '__').removesuffix('.openapi.yaml')}"
@@ -289,9 +306,7 @@ def run_one(inv: Invocation, spec: Path, workdir: Path, config: Path, baseline: 
         "-v", f"{REPO}:/repo:ro", "-v", f"{reports}:/out", "-w", "/repo",
         # The token by NAME only: its value travels in this process' environment, never on a command line.
         "-e", "VEYQ_FUZZ_TOKEN",
-        # Nothing but the MIT tool runs (the module docstring: the image's TraceCov is switched off).
-        "-e", "SCHEMATHESIS_COVERAGE=false", "-e", "SCHEMATHESIS_HOOKS=infra/fuzz/hooks.py",
-        SCHEMATHESIS_IMAGE,
+        image,
         "--config-file", container_config, "--no-color",
         "run", f"contracts/api/{key}", "--url", url,
         "--mode", inv.mode, "--phases", PHASES,
@@ -437,9 +452,7 @@ def main(argv: list[str]) -> int:
     log(f"run directory {workdir}")
     started = time.time()
 
-    if subprocess.run(["docker", "image", "inspect", SCHEMATHESIS_IMAGE], capture_output=True).returncode != 0:
-        log(f"pulling {SCHEMATHESIS_IMAGE}")
-        e2e.run(["docker", "pull", SCHEMATHESIS_IMAGE])
+    image = build_image()
 
     stack_up()
     provision_store(workdir)
@@ -468,7 +481,7 @@ def main(argv: list[str]) -> int:
                 if not expected:
                     continue
                 fresh_token(workdir)
-                r = run_one(inv, spec, workdir, configs[inv.mode], baseline, args.baseline_update, expected)
+                r = run_one(image, inv, spec, workdir, configs[inv.mode], baseline, args.baseline_update, expected)
                 ops = (r.report or {}).get("operations") or {}
                 log(f"{inv.name} {r.spec}: exit {r.exit_code}, tested {ops.get('tested')}/{len(expected)}, "
                     f"{r.seconds:.0f} s")

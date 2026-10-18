@@ -26,10 +26,10 @@ import schemathesis
 from schemathesis.core.parameters import ParameterLocation
 from schemathesis.specs.openapi.checks import negative_data_rejection
 
-# The image's bundled TraceCov is a proprietary plugin; the runner switches it off (`SCHEMATHESIS_COVERAGE=false`, and
-# `SCHEMATHESIS_HOOKS` naming this file instead of the image's), and this makes "it is off" a fact rather than a hope.
+# TraceCov — the proprietary coverage plugin the official Schemathesis image loads on every run — is not in our image
+# (`infra/fuzz/Dockerfile`); this makes "it never runs" a fact rather than a hope, whatever image runs this file.
 if "tracecov" in sys.modules:
-    raise RuntimeError("TraceCov was loaded — run the image with SCHEMATHESIS_COVERAGE=false (scripts/run_api_fuzz.py)")
+    raise RuntimeError("TraceCov was loaded — the API fuzzing runs only the MIT tool (infra/fuzz/Dockerfile)")
 
 # Headers the transport or the run sets on every request; their values are no generated input.
 TRANSPORT_HEADERS = {"content-type", "accept", "accept-encoding", "user-agent", "connection", "content-length",
