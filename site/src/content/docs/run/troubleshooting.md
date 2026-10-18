@@ -87,8 +87,8 @@ affected ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key
   application cannot open (the config-secret key, above). Member invitations and password resets are refused until
   the tenant's owner sets it up.
 - **`mail_send_failed`** — the relay is set up but did not accept the mail within 10 seconds. The invitation is
-  withdrawn and can be sent again. The log names the recipient and the relay's error; check that the application may
-  reach the relay's host and port.
+  withdrawn and can be sent again. The log names the mail's kind and the relay's reply code — or the error's class when
+  the relay never answered —, never the recipient; check that the application may reach the relay's host and port.
 
 ## How far this is proven
 
