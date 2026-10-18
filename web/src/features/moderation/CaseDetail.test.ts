@@ -70,7 +70,7 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
   state: 'OPEN',
   decidedAt: null,
   closedAt: null,
-  hold: { endsAt: new Date('2027-01-15T09:00:00Z'), trigger: 'CASE_OPEN' },
+  hold: { endsAt: new Date('2027-01-15T09:00:00Z'), trigger: 'CASE_OPEN', floorUntil: null },
   reports: [
     { id: REPORT, epoch: 2, receivedAt: new Date('2026-10-17T09:00:00Z'), category: 'TERMS_BREACH', sealedReport: 'AQ==', reporter: 'LINK', barred: false },
     { id: REPORT_2, epoch: 1, receivedAt: new Date('2026-10-17T10:00:00Z'), category: 'ILLEGAL_CONTENT', sealedReport: 'Ag==', reporter: 'ACCOUNT', barred: true },
@@ -93,10 +93,14 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
         sealedFacts: 'ZmFjdHM=',
         recipients: 2,
         guests: 0,
+        deferredUntil: null,
+        renewed: false,
       },
     },
   ],
   statementForm: 'FULL',
+  origin: 'REPORT',
+  orders: [],
   objections: [],
   proposals: [],
   targets: {
@@ -209,7 +213,7 @@ describe('CaseDetail', () => {
 
   it('extends the hold with a new end and a reason', async () => {
     const until = new Date('2027-03-01T00:00:00Z')
-    vi.mocked(extendHold).mockResolvedValue(caseOf({ hold: { endsAt: until, trigger: 'EXTENDED' } }))
+    vi.mocked(extendHold).mockResolvedValue(caseOf({ hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: null } }))
     const w = await mountCase()
     w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', until)
     await w.find('.moderation-extend-reason').setValue('an authority asked')

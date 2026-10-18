@@ -82,7 +82,7 @@ Phase 0 writes `uc.moderation.authority-order` (removal, preservation, informati
 
 - [x] **0 docs** — the two use-cases, planned coverage. · Done when: feature-format, coverage, doc-link, change guards
   green.
-- [ ] **1 contracts** — the order operations on both channels, the deferral, the export read, the handover event;
+- [x] **1 contracts** — the order operations on both channels, the deferral, the export read, the handover event;
   classified in `OperatorBlindProbeTest`; the admin-channel sweep sees the Server Owner's twin marked. · Done when:
   `npm run generate:api` (web, admin-web), the contracts guards, `./gradlew check` (predicted red named).
 - [ ] **2 backend** — decisions 1–4; the hold ends of § 4's order rows (six months after the block for TCO, never

@@ -318,3 +318,27 @@ describe('statement facts and objections', () => {
     expect(() => v1.sealObjection(2, ID, kem, '')).toThrow(new ReportInvalid('note'))
   })
 })
+
+describe("an authority's order reference", () => {
+  const sk = unhex(vectors.xwing.vectors[0].sk)
+  const order = vectors.seal.asym['moderation-order']
+
+  it('opens its vector with the epoch key, as the note encoding', () => {
+    const r = v1.openOrderReference(order.context.epoch, order.context.orderId, sk, unhex(order.blob))
+    expect(r).toBe('BKA removal order ST-2026-0417, received at the contact point 09:12 CET.')
+    expect(hex(v1.encodeModerationNote(r))).toBe(order.plaintext)
+  })
+
+  it('a reference sealed for one order and epoch opens for no other, and never as a note or an objection', () => {
+    const m = key(6)
+    const kem = v1.moderationBundle(m).kem
+    const secret = v1.moderationKemSecret(m)
+    const sealed = v1.sealOrderReference(3, ID, kem, 'TCO order 17')
+    expect(v1.openOrderReference(3, ID, secret, sealed)).toBe('TCO order 17')
+    expect(() => v1.openOrderReference(4, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-order'))
+    expect(() => v1.openOrderReference(3, ID.replace(/1$/, '2'), secret, sealed)).toThrow(new v1.OpenRefused('moderation-order'))
+    expect(() => v1.openModerationNote(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-note'))
+    expect(() => v1.openObjection(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-objection'))
+    expect(() => v1.sealOrderReference(3, ID, kem, ' ')).toThrow(new ReportInvalid('note'))
+  })
+})

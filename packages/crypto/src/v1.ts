@@ -64,6 +64,8 @@ export {
   openModerationFacts,
   sealObjection,
   openObjection,
+  sealOrderReference,
+  openOrderReference,
   ReportInvalid,
   type ReportKey,
   type ReportBody,

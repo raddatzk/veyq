@@ -1596,6 +1596,57 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: sign_in_block_not_found }
 
+  /api/instance/moderation/orders:
+    post:
+      tags: [instance-moderation]
+      operationId: enterInstanceModerationOrder
+      x-veyq-channel: admin
+      summary: Enter an authority's order as the Server Owner — without a key; a removal order blocks at once.
+      description: >
+        ADR 0093 § 12, ADR 0099 § 6 (uc.moderation.authority-order): the Server Owner's door, in admin-web and
+        `veyq-admin order remove|preserve|inform`, so an operator away from the moderation surface keeps the hour. The
+        twin of the moderator's `enterModerationOrder` (moderation.openapi.yaml), whose description is the behaviour —
+        both run one handler. No key proof: an order acts on ids and needs no key, and the reference is sealed by the
+        client to the moderation key's public half. Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthorityOrderRequest" }
+            example: { id: 3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b, kind: REMOVAL, shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i, receivedAt: 2026-10-18T07:12:00Z, reference: { epoch: 2, sealedReference: c2VhbGVkLXJlZmVyZW5jZQ== } }
+      responses:
+        "201":
+          description: Recorded (and, for a removal order that found its share, blocked).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorityOrder" }
+        "400":
+          description: "`invalid_request`, or `deferral_out_of_bounds` = the deferral ends in the past or more than six weeks from now."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: deferral_out_of_bounds }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "409":
+          description: "`order_exists` = an order with this id is recorded; `moderation_epoch_changed` = the reference is not sealed to the current epoch; `moderation_off` = moderation is off, so nothing can be sealed."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: order_exists }
+
   /api/instance/operator:
     get:
       tags: [instance-operator]
@@ -3650,6 +3701,16 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(30)'
     OperatingMode:
       $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
+
+    # An authority's order is single-sourced with the moderator's door (moderation.openapi.yaml, enterModerationOrder).
+    AuthorityOrderKind:
+      $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrderKind'
+    SealedOrderReference:
+      $ref: '_common.openapi.yaml#/components/schemas/SealedOrderReference'
+    AuthorityOrderRequest:
+      $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrderRequest'
+    AuthorityOrder:
+      $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrder'
 
     StoreReconcile:
       type: object

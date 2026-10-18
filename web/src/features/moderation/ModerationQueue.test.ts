@@ -30,6 +30,8 @@ const summary = (over: Partial<ModerationCaseSummary> = {}): ModerationCaseSumma
   tenantDomain: 'club.example.org',
   objectionOpen: false,
   holdEndsAt: new Date('2027-01-15T09:00:00Z'),
+  origin: 'REPORT',
+  statementDeferredUntil: null,
   ...over,
 })
 

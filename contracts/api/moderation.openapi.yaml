@@ -1002,6 +1002,184 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
 
+  /api/moderation/orders:
+    post:
+      tags: [moderation]
+      operationId: enterModerationOrder
+      summary: Enter an authority's order — a removal order blocks the share and its content by id at once.
+      description: >
+        ADR 0093 § 12, ADR 0099 § 6 (uc.moderation.authority-order): the moderator's door; the Server Owner's twin is
+        `enterInstanceModerationOrder` on the admin channel, and both run one handler. With no review of its own (the
+        authority has reviewed), a `REMOVAL` blocks the share and the node it is rooted at with everything below it — a
+        block already in force on either stays and counts — and writes each new block's statement of reasons (basis
+        `ORDER`, ground terrorist content), sent at once unless `deferStatementUntil` holds it. Every kind opens a
+        decided case with a hold and no report, ending six months after the block (`REMOVAL`), 60 days after receipt
+        (`PRESERVATION`) or after `holdDays`, else six months (`INFORMATION`); no extension, lift or decision ends it
+        sooner. A share the server does not know is recorded with no case and no block (`found: false`, the Annex III
+        draft). Logged (`ORDER_RECEIVED`, the reference sealed). Key-proved, with no case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthorityOrderRequest" }
+            example: { id: 3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b, kind: REMOVAL, shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i, receivedAt: 2026-10-18T07:12:00Z, reference: { epoch: 2, sealedReference: c2VhbGVkLXJlZmVyZW5jZQ== } }
+      responses:
+        "201":
+          description: Recorded (and, for a removal order that found its share, blocked).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorityOrder" }
+        "400":
+          description: "`invalid_request` (e.g. `holdDays` on another kind than `INFORMATION`, `deferStatementUntil` on another than `REMOVAL`, a receipt in the future), or `deferral_out_of_bounds` = the deferral ends in the past or more than six weeks from now."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: deferral_out_of_bounds } }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "409":
+          description: "`order_exists` = an order with this id is recorded; `moderation_epoch_changed` = the reference is not sealed to the current epoch."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: order_exists } }
+    get:
+      tags: [moderation]
+      operationId: listModerationOrders
+      summary: The authority's orders recorded on this instance, newest first.
+      description: >
+        Every order as recorded (uc.moderation.authority-order) — the ones that found no share among them, which no case
+        shows — with its reference sealed for the moderator's browser to open. At most the newest 500. Key-proved, with
+        no case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The orders.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorityOrders" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+
+  /api/moderation/cases/{caseId}/statements/{statementId}/deferral:
+    post:
+      tags: [moderation]
+      operationId: deferModerationStatement
+      summary: Renew an authority's deferral of a statement of reasons — once, at most six weeks.
+      description: >
+        ADR 0093 § 7 (TCO Art. 11(3)): deferring the statement is the authority's switch, never the moderator's. A
+        deferral is entered with the order (`deferStatementUntil`) or with a moderator's measure
+        (`ModerationStatementInput.deferral`); this renews it, once, while the statement is still held: `until` lies
+        after the current end and at most six weeks (42 days) from now, and the reason — the authority's renewed request
+        — is sealed (`moderation-note` [epoch, caseId]). At the end the hourly cleanup sends the statement, and the
+        measure's hold counts from then. Logged (`STATEMENT_DEFERRED`). Key-proved over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/StatementId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationStatementDeferral" }
+            example: { until: 2026-12-20T00:00:00Z, reason: { epoch: 2, sealedNote: c2VhbGVkLXJlYXNvbg== } }
+      responses:
+        "200":
+          description: Renewed; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400":
+          description: "`invalid_request`, or `deferral_out_of_bounds` = `until` is not after the current end, or more than six weeks from now."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: deferral_out_of_bounds } }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404":
+          description: "`case_not_found`, or `statement_not_found` = no statement of this case has that id."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_not_found } }
+        "409":
+          description: >
+            `statement_not_deferred` = the statement is not held by a deferral (sent, or never deferred);
+            `deferral_renewed` = it was renewed once already; `moderation_epoch_changed` = the reason is not sealed to
+            the current epoch.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: deferral_renewed } }
+
+  /api/moderation/cases/{caseId}/handovers:
+    post:
+      tags: [moderation]
+      operationId: recordModerationHandover
+      summary: Record that the case was reported to an authority, or that information was given to one.
+      description: >
+        ADR 0093 §§ 11-13 (uc.moderation.report-to-an-authority): `REPORTED` = the case was reported to an authority
+        (an Art. 18 report to the BKA, a criminal complaint); `INFORMATION_GIVEN` = information was handed over in
+        answer to an order. The reference is sealed (`moderation-note` [epoch, caseId]). The event changes no hold —
+        ending a hold at the handover waits on counsel (§ 184b(5) StGB, ADR 0093 § Legal basis, Still open 1). Logged
+        (`HANDED_OVER`, `INFORMATION_GIVEN`). Key-proved over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationHandover" }
+            example: { kind: REPORTED, note: { epoch: 2, sealedNote: c2VhbGVkLXJlZmVyZW5jZQ== } }
+      responses:
+        "201":
+          description: Recorded; the case as it now stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCase" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+        "409":
+          description: "`moderation_epoch_changed` = the note is not sealed to the current epoch."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+
+  /api/moderation/cases/{caseId}/export:
+    get:
+      tags: [moderation]
+      operationId: getModerationCaseExport
+      summary: The clear fields an Art. 18 report asks for — never a content file.
+      description: >
+        ADR 0093 § 13 (uc.moderation.report-to-an-authority): what the server holds in the clear and nothing it would
+        have to open — the case id and category, every time in UTC, the measures, the uploaders the held rows name (a
+        member's account id, a guest's share identity id), and every held guest-write record (address, source port where
+        one was recorded, the time it was observed). The surface renders a text block to copy; it never downloads
+        content. Key-proved over this case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The export's fields.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModerationCaseExport" }
+        "401": { $ref: "#/components/responses/AuthenticationFailed" }
+        "403": { $ref: "#/components/responses/ProofInvalid" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+
 components:
   responses:
     AuthenticationFailed:
@@ -1043,6 +1221,12 @@ components:
       required: true
       description: A report's id.
       schema: { type: string, format: uuid, example: 4e5f9a8b-1c2d-4e4f-8a6b-4f2c9a1e7b3d }
+    StatementId:
+      name: statementId
+      in: path
+      required: true
+      description: A statement of reasons' id.
+      schema: { type: string, format: uuid, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
     ScopeId:
       name: scopeId
       in: path
@@ -1326,8 +1510,15 @@ components:
     ModerationCaseSummary:
       type: object
       description: One case of the queue, in clear fields only.
-      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt, objectionOpen]
+      required: [id, itemKind, category, state, firstReportedAt, lastReportedAt, reportCount, tenantDomain, holdEndsAt, objectionOpen, origin, statementDeferredUntil]
       properties:
+        origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
+        statementDeferredUntil:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: The earliest end of a deferral that still holds one of the case's statements back — the surface reminds of it; null when none does.
+          example: null
         objectionOpen:
           x-veyq-visibility: flag
           type: boolean
@@ -1341,13 +1532,13 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the first report of this case was received.
+          description: When the first report of this case was received — for an order's case, when the order was entered.
           example: 2026-10-17T09:00:00Z
         lastReportedAt:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the latest report of this case was received.
+          description: When the latest report of this case was received — for an order's case, when the order was entered.
           example: 2026-10-17T11:00:00Z
         reportCount:
           x-veyq-visibility: measure
@@ -1373,8 +1564,14 @@ components:
     ModerationCase:
       type: object
       description: One case as the moderation surface shows it (uc.moderation.review-a-case step 2).
-      required: [id, itemKind, itemId, scopeId, tenantId, tenantDomain, category, state, decidedAt, closedAt, hold, reports, measures, proposals, targets, events, statementForm, objections]
+      required: [id, itemKind, itemId, scopeId, tenantId, tenantDomain, category, state, decidedAt, closedAt, hold, reports, measures, proposals, targets, events, statementForm, objections, origin, orders]
       properties:
+        origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
+        orders:
+          type: array
+          maxItems: 100
+          description: The authority's orders that opened this case (an `ORDER` case's); empty for a report's.
+          items: { $ref: "#/components/schemas/AuthorityOrder" }
         statementForm: { $ref: "#/components/schemas/StatementForm" }
         objections:
           type: array
@@ -1440,8 +1637,14 @@ components:
     ModerationHold:
       type: object
       description: The case's hold that is alive.
-      required: [endsAt, trigger]
+      required: [endsAt, trigger, floorUntil]
       properties:
+        floorUntil:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: The end an authority's order sets — no extension, lift or decision ends the hold before it (ADR 0093 § 4); null without an order.
+          example: null
         endsAt:
           x-veyq-visibility: time
           type: string
@@ -1451,8 +1654,8 @@ components:
         trigger:
           x-veyq-visibility: enum
           type: string
-          description: "`CASE_OPEN` = taken by the report (90 days); `MEASURE` = a measure moved it to six months after its statement was sent (after the decision where nobody can be told); `EXTENDED` = a logged extension set it."
-          enum: [CASE_OPEN, MEASURE, EXTENDED]
+          description: "`CASE_OPEN` = taken by the report (90 days); `MEASURE` = a measure moved it to six months after its statement was sent (after the decision where nobody can be told, after a deferral's end while one holds it); `EXTENDED` = a logged extension set it; `ORDER` = an authority's order set it (`floorUntil`)."
+          enum: [CASE_OPEN, MEASURE, EXTENDED, ORDER]
           example: CASE_OPEN
 
     ModerationReport:
@@ -1664,7 +1867,7 @@ components:
           x-veyq-visibility: enum
           type: string
           description: The event.
-          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED]
+          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN]
           example: OPENED
         at:
           x-veyq-visibility: time
@@ -1692,7 +1895,10 @@ components:
           example: 2
         sealedText:
           type: [string, "null"]
-          description: The event's free text (a note, an extension's reason), sealed to the moderation key (`moderation-note` [epoch, caseId]); null when none.
+          description: >
+            The event's free text (a note, an extension's or a deferral's reason, a handover's reference), sealed to the
+            moderation key (`moderation-note` [epoch, caseId]) — an `ORDER_RECEIVED`'s is the order's reference
+            (`moderation-order` [epoch, orderId], the order's id in `detail`); null when none.
           contentEncoding: base64
           maxLength: 12000
           example: null
@@ -1869,7 +2075,7 @@ components:
     StatementBasis:
       x-veyq-visibility: enum
       type: string
-      description: What led to the measure — a report, or an authority's order (ADR 0093 § 12, not built yet).
+      description: What led to the measure — a report, or an authority's order (ADR 0093 § 12).
       enum: [REPORT, ORDER]
       example: REPORT
 
@@ -1892,6 +2098,15 @@ components:
           description: The facts sealed to each member `getModerationStatementRecipients` lists; empty without facts.
           items: { $ref: "#/components/schemas/SealedFactsFor" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 1000)'
+        deferral:
+          description: >
+            An authority asked that the affected not be told yet (TCO Art. 11(3); ADR 0093 § 7 — the authority's switch,
+            never the moderator's): the statement is held until `until`, at most six weeks (42 days) from now
+            (`400 deferral_out_of_bounds`), with the authority's request sealed as the reason. Null = sent with the measure.
+          oneOf:
+            - $ref: "#/components/schemas/ModerationStatementDeferral"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     SealedFactsFor:
       type: object
@@ -1949,16 +2164,27 @@ components:
     ModerationMeasureStatement:
       type: object
       description: A measure's statement of reasons as the moderators see it.
-      required: [id, ground, basis, sentAt, epoch, sealedFacts, recipients, guests]
+      required: [id, ground, basis, sentAt, epoch, sealedFacts, recipients, guests, deferredUntil, renewed]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
+        deferredUntil:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: While an authority's deferral holds it back, when it ends — the statement goes out then unless renewed; null otherwise.
+          example: null
+        renewed:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether its deferral was renewed once — no further renewal is taken.
+          example: false
         ground: { $ref: "#/components/schemas/ModerationGround" }
         basis: { $ref: "#/components/schemas/StatementBasis" }
         sentAt:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: When it was sent; null when nobody could be told.
+          description: When it was sent; null when nobody could be told, or while a deferral holds it back.
           example: 2026-10-17T12:00:00Z
         epoch:
           x-veyq-visibility: structure
@@ -2217,6 +2443,187 @@ components:
           example: c2VhbGVkLW9iamVjdGlvbg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
+    ModerationCaseOrigin:
+      x-veyq-visibility: enum
+      type: string
+      description: "`REPORT` = a report opened the case; `ORDER` = an authority's order did (ADR 0093 § 12) — decided from the start, with no report."
+      enum: [REPORT, ORDER]
+      example: REPORT
+
+    AuthorityOrders:
+      type: object
+      description: The orders recorded on this instance, newest first.
+      required: [orders]
+      properties:
+        orders:
+          type: array
+          maxItems: 500
+          items: { $ref: "#/components/schemas/AuthorityOrder" }
+
+    ModerationStatementDeferral:
+      type: object
+      description: An authority's deferral of a statement of reasons (TCO Art. 11(3)).
+      required: [until, reason]
+      properties:
+        until:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the statement goes out — at most six weeks from now.
+          example: 2026-11-29T00:00:00Z
+        reason:
+          $ref: "#/components/schemas/SealedModerationNote"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ModerationHandover:
+      type: object
+      description: A handover to an authority, with its reference.
+      required: [kind, note]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: "`REPORTED` = reported to an authority; `INFORMATION_GIVEN` = information given in answer to an order."
+          enum: [REPORTED, INFORMATION_GIVEN]
+          example: REPORTED
+        note:
+          $ref: "#/components/schemas/SealedModerationNote"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ModerationCaseExport:
+      type: object
+      description: >
+        The clear fields an Art. 18 report asks for (ADR 0093 § 13) — what the server holds in the clear, never content.
+        Every time is UTC (`timeZone`).
+      required: [caseId, category, origin, timeZone, reportedAt, measures, uploaders, guestWrites, held]
+      properties:
+        caseId: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+        category: { $ref: "#/components/schemas/ReportCategory" }
+        origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
+        timeZone:
+          x-veyq-visibility: enum
+          type: string
+          description: The time zone of every time here — always `UTC`.
+          enum: [UTC]
+          example: UTC
+        reportedAt:
+          x-veyq-visibility: time
+          type: array
+          maxItems: 10000
+          description: When each report of the case was received, oldest first; empty for an order's case.
+          items: { type: string, format: date-time, example: 2026-10-17T09:00:00Z }
+        measures:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationExportMeasure" }
+        uploaders:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ModerationExportUploader" }
+        guestWrites:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ModerationExportGuestWrite" }
+        held:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the case holds a hold alive — without one the held parts are empty.
+          example: true
+
+    ModerationExportMeasure:
+      type: object
+      description: A measure of the case, as the export names it.
+      required: [kind, targetId, takenAt, liftedAt]
+      properties:
+        kind: { $ref: "#/components/schemas/ModerationMeasureKind" }
+        targetId:
+          x-veyq-visibility: id
+          type: string
+          description: The blocked id.
+          maxLength: 64
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        takenAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it was taken.
+          example: 2026-10-17T12:00:00Z
+        liftedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When it was lifted; null while in force.
+          example: null
+
+    ModerationExportUploader:
+      type: object
+      description: An uploader the held rows name.
+      required: [kind, id, shareId]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          description: "`ACCOUNT` = a member's account id; `GUEST` = a guest's share identity id."
+          enum: [ACCOUNT, GUEST]
+          example: GUEST
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The account's or the share identity's id.
+          example: 6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f
+        shareId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: A guest's link; null for a member.
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+
+    ModerationExportGuestWrite:
+      type: object
+      description: One held guest-write record (ADR 0093 § 10) — what a guest's write left as evidence.
+      required: [identityId, objectKind, objectId, address, port, observedAt]
+      properties:
+        identityId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The share identity that wrote.
+          example: 6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f
+        objectKind:
+          x-veyq-visibility: public
+          type: string
+          description: The kind of object written, as the record names it (the server's own word).
+          maxLength: 16
+          example: MEDIA
+        objectId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The object written.
+          example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
+        address:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >
+            The client address the guest-write record kept as evidence (ADR 0093 § 10, ADR 0094), served only from a
+            hold behind the moderation role and key proof, for the Art. 18 report ADR 0093 § 13 asks for.
+          type: string
+          description: The client's address, as the record kept it.
+          maxLength: 45
+          example: 203.0.113.77
+        port:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          format: int32
+          description: The client's source port, as the record kept it; null where none was recorded.
+          example: 51234
+        observedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the server observed the write, to the millisecond.
+          example: 2026-10-17T08:59:12.345Z
+
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:
       $ref: '_common.openapi.yaml#/components/schemas/ReportSubmission'
@@ -2226,6 +2633,16 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/ReportCategory'
     ReportReceipt:
       $ref: '_common.openapi.yaml#/components/schemas/ReportReceipt'
+
+    # An authority's order is single-sourced with the Server Owner's twin on the admin channel (instance.openapi.yaml).
+    AuthorityOrderKind:
+      $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrderKind'
+    SealedOrderReference:
+      $ref: '_common.openapi.yaml#/components/schemas/SealedOrderReference'
+    AuthorityOrderRequest:
+      $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrderRequest'
+    AuthorityOrder:
+      $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrder'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

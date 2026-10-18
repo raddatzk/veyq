@@ -226,3 +226,14 @@ export const sealObjection = (epoch: number, statementId: string, kem: HybridPub
 /** Open an objection with the epoch's decapsulation key, at the statement and epoch the server stored it with. */
 export const openObjection = (epoch: number, statementId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
   decodeModerationNote(openAs({ purpose: 'moderation-objection', epoch, statementId }, kemSecret, blob))
+
+/**
+ * An authority's reference for an order (ADR 0093 § 12), sealed to the epoch's public half (`moderation-order` [epoch,
+ * orderId]) — sealing needs only the public half, so the Server Owner's admin-web and CLI seal it without the key.
+ */
+export const sealOrderReference = (epoch: number, orderId: string, kem: HybridPublic, reference: string): Uint8Array =>
+  sealTo({ purpose: 'moderation-order', epoch, orderId }, kem, encodeModerationNote(reference))
+
+/** Open an order's reference with the epoch's decapsulation key, at the order and epoch the server stored it with. */
+export const openOrderReference = (epoch: number, orderId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
+  decodeModerationNote(openAs({ purpose: 'moderation-order', epoch, orderId }, kemSecret, blob))

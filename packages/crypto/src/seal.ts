@@ -153,6 +153,10 @@ export const SEAL_TO_PURPOSES = {
   // An affected member's objection to a measure (ADR 0093 § 7), to the epoch's public half, bound to the statement it
   // answers so an objection moved onto another statement does not open there.
   'moderation-objection': [['epoch', 'uint'], ['statementId', 'id']],
+  // An authority's reference for an order (ADR 0093 § 12), sealed to the epoch's public half by the client that enters
+  // the order — a moderator's browser, admin-web or veyq-admin, which needs no private half for it — and bound to the
+  // order id that client mints, so a reference moved onto another order does not open there.
+  'moderation-order': [['epoch', 'uint'], ['orderId', 'id']],
 } as const satisfies Schema
 
 type KindValue<K extends FieldKind> = K extends 'uint'

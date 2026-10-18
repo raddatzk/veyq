@@ -332,6 +332,179 @@ components:
           description: When the server received it.
           example: 2026-10-17T12:00:00Z
 
+    # An authority's order (ADR 0093 § 12, uc.moderation.authority-order) — single-sourced: a moderator enters it on the
+    # public listener (moderation.openapi.yaml) and the Server Owner on the admin channel (instance.openapi.yaml).
+    AuthorityOrderKind:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        `REMOVAL` = a terrorist-content removal order (TCO Art. 3): the share and the content it reaches are blocked at
+        once; `PRESERVATION` = a European Preservation Order (Regulation 2023/1543): a hold, no block; `INFORMATION` = a
+        request for information (§§ 100j–100k StPO): a hold, no block.
+      enum: [REMOVAL, PRESERVATION, INFORMATION]
+      example: REMOVAL
+
+    SealedOrderReference:
+      type: object
+      description: >
+        The authority's reference, sealed by the client that enters the order to the moderation key's current public
+        half, bound to the order's id (`sealTo` purpose `moderation-order` [epoch, orderId]). Sealing needs only the
+        public half, so the Server Owner's admin-web and CLI seal it without the key.
+      required: [epoch, sealedReference]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch it is sealed to — the current one, or `409 moderation_epoch_changed`.
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedReference:
+          type: string
+          description: The sealed reference.
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLXJlZmVyZW5jZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    AuthorityOrderRequest:
+      type: object
+      description: >
+        An authority's order as it is entered. The client keeps only the share's id from a pasted URL — its fragment,
+        which carries the share's key, never leaves the client — and mints the order's id, so a retry within the hour is
+        the same order (`409 order_exists`).
+      required: [id, kind, shareId, receivedAt, reference]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The order's id, minted by the client; the reference is sealed bound to it.
+          example: 3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b
+        kind: { $ref: "#/components/schemas/AuthorityOrderKind" }
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The share the order names — its id, never its key.
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 43, max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "^[A-Za-z0-9_-]{43}$")'
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the order reached the contact point, as entered — the hour's clock is the operator's, and this record is its proof.
+          example: 2026-10-18T07:12:00Z
+        reference:
+          $ref: "#/components/schemas/SealedOrderReference"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        holdDays:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          format: int32
+          minimum: 1
+          maximum: 3650
+          description: For `INFORMATION` only, the days the order names to keep the data; null = six months. `invalid_request` for another kind.
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(3650)'
+        deferStatementUntil:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            For `REMOVAL` only: the authority forbids telling the affected until then (TCO Art. 11(3)) — at most six
+            weeks (42 days) from now (`400 deferral_out_of_bounds`); the order's reference is the deferral's. Null = the
+            statement goes out with the block.
+          example: null
+
+    AuthorityOrder:
+      type: object
+      description: An authority's order as recorded — clear fields, and the reference sealed.
+      required: [id, kind, shareId, receivedAt, enteredAt, enteredBy, found, blockedAt, caseId, holdUntil, statementDeferredUntil, epoch, sealedReference, providerName, contactPoint]
+      properties:
+        id: { type: string, format: uuid, x-veyq-visibility: id, example: 3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b }
+        kind: { $ref: "#/components/schemas/AuthorityOrderKind" }
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The share the order names.
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        receivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When it reached the contact point, as entered.
+          example: 2026-10-18T07:12:00Z
+        enteredAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the server recorded it.
+          example: 2026-10-18T07:20:11Z
+        enteredBy:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The moderator or Server Owner account that entered it.
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+        found:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the share exists on this instance; false = recorded only, nothing blocked or held (the Annex III draft).
+          example: true
+        blockedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: For a `REMOVAL` that found its share, when the share and its content were both blocked — to the second, for the Annex II text; a block already in force counts from its own time. Null otherwise.
+          example: 2026-10-18T07:20:11Z
+        caseId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The case the order opened; null when its share was not found.
+          example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
+        holdUntil:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: The end the order sets for its hold — no extension, lift or decision ends it sooner (ADR 0093 § 4). Null when nothing is held.
+          example: 2027-04-19T07:20:11Z
+        statementDeferredUntil:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: Until when the authority deferred the statement of reasons; null when it did not.
+          example: null
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The epoch `sealedReference` is sealed to.
+          example: 2
+        sealedReference:
+          type: string
+          description: The authority's reference, sealed (`moderation-order` [epoch, orderId]).
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLXJlZmVyZW5jZQ==
+        providerName:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The provider's name from the operator details, for the forms; null when none is set.
+          maxLength: 200
+          example: Example e.V.
+        contactPoint:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The instance contact — the TCO contact point (ADR 0093 § 11), for the forms; null when none is set.
+          maxLength: 254
+          example: abuse@example.org
+
     ErrorResponse:
       type: object
       required: [code]

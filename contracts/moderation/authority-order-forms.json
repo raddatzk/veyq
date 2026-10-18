@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "draft": true,
+  "note": "The answers to an authority's removal order (ADR 0093 § 12, TCO Regulation (EU) 2021/784 Art. 3(6)-(8); uc.moderation.authority-order): ONE template, rendered by admin-web and its CLI (src/features/instance/orderForms.ts) and by web/'s moderation surface (src/features/moderation/orders/orderForms.ts); each pins these texts and a conformance test in each compares them with this file, so the copies cannot drift. 'draft' is true until a qualified legal review (ADR 0093 § Legal basis: every answer needs one before anything ships); while it is true every rendering starts with the 'draftBanner' line. 'annexII' is the text for the feedback form after a block (TCO Annex II), 'annexIII' the draft for the form that reports an obstacle (TCO Annex III), here: the share could not be found. Lines are joined by a newline; a line is rendered only when every placeholder in it has a value. Placeholders: {reference} (the authority's reference, as the person entering the order typed it — never sent to or stored in the clear by the server), {orderId}, {shareId}, {receivedAt} and {blockedAt} (UTC to the second, 'YYYY-MM-DD HH:MM:SS UTC'), {provider} and {contact} (the operator's provider name and the instance contact, where set). Each takes a clear field or the typed reference, never content.",
+  "en": {
+    "draftBanner": "DRAFT — not yet reviewed by a lawyer. Check every line before you send it.",
+    "annexII": [
+      "Feedback following the removal of or disabling of access to terrorist content (Regulation (EU) 2021/784, Article 3(6), Annex II)",
+      "Reference of the removal order: {reference}",
+      "Hosting service provider: {provider}",
+      "Contact point: {contact}",
+      "Content concerned: the shared link with the identifier {shareId} and the content it gives access to",
+      "Action taken: access to the content was disabled in all Member States; nothing was deleted, and the content is preserved for six months (Article 6)",
+      "Removal order received at the contact point: {receivedAt}",
+      "Access disabled at: {blockedAt}",
+      "Our record of this order: {orderId}"
+    ],
+    "annexIII": [
+      "Information on the impossibility to execute the removal order (Regulation (EU) 2021/784, Article 3(7) and (8), Annex III)",
+      "Reference of the removal order: {reference}",
+      "Hosting service provider: {provider}",
+      "Contact point: {contact}",
+      "Removal order received at the contact point: {receivedAt}",
+      "Reason: the removal order names the identifier {shareId}, and no shared link with this identifier exists on this service. Please check the address the order names; we will act at once on a corrected order.",
+      "Our record of this order: {orderId}"
+    ]
+  },
+  "de": {
+    "draftBanner": "ENTWURF – noch nicht anwaltlich geprüft. Prüfe jede Zeile, bevor du sie sendest.",
+    "annexII": [
+      "Rückmeldung nach Entfernung terroristischer Inhalte oder Sperrung des Zugangs zu ihnen (Verordnung (EU) 2021/784, Artikel 3 Absatz 6, Anhang II)",
+      "Aktenzeichen der Entfernungsanordnung: {reference}",
+      "Hostingdiensteanbieter: {provider}",
+      "Kontaktstelle: {contact}",
+      "Betroffene Inhalte: der geteilte Link mit der Kennung {shareId} und die Inhalte, zu denen er Zugang gibt",
+      "Ergriffene Maßnahme: der Zugang zu den Inhalten wurde in allen Mitgliedstaaten gesperrt; gelöscht wurde nichts, und die Inhalte werden sechs Monate lang aufbewahrt (Artikel 6)",
+      "Eingang der Entfernungsanordnung bei der Kontaktstelle: {receivedAt}",
+      "Zugang gesperrt um: {blockedAt}",
+      "Unser Vorgang zu dieser Anordnung: {orderId}"
+    ],
+    "annexIII": [
+      "Angaben zur Unmöglichkeit, der Entfernungsanordnung nachzukommen (Verordnung (EU) 2021/784, Artikel 3 Absätze 7 und 8, Anhang III)",
+      "Aktenzeichen der Entfernungsanordnung: {reference}",
+      "Hostingdiensteanbieter: {provider}",
+      "Kontaktstelle: {contact}",
+      "Eingang der Entfernungsanordnung bei der Kontaktstelle: {receivedAt}",
+      "Grund: Die Entfernungsanordnung nennt die Kennung {shareId}, und auf diesem Dienst gibt es keinen geteilten Link mit dieser Kennung. Bitte prüfen Sie die Adresse, die die Anordnung nennt; auf eine berichtigte Anordnung handeln wir sofort.",
+      "Unser Vorgang zu dieser Anordnung: {orderId}"
+    ]
+  }
+}
