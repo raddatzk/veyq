@@ -1,18 +1,59 @@
 useCase: uc.admin.delete-tenant
 feature: admin
 title: Delete a tenant
-status: planned
-# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 17); the work order is cr-account-erasure.
+# Built by cr-account-erasure. The deletion, its stop and its purge are the admin channel's, so the refs are the
+# backend's slice; the web's part is the offline space a deleted tenant shows as. admin-web's suites (the tenant panel's
+# typed delete, the stop, the ownerless notice and owner invite, the CLI verbs) and lane L1's browser pass wait under
+# `gaps` until their CI jobs have executed (ADR 0040), as every admin use-case's do.
 acceptanceCriteria:
   - id: an-active-tenant-goes-offline-at-once
     text: Deleting an ACTIVE or SUSPENDED tenant takes it offline at once, exactly as a suspension does, and marks it pending deletion.
+    coverage:
+      backend:
+        integration:
+          - TenantDeletionSliceTest.aDeletedTenantIsOfflineAtOnceAndAStopReturnsItSuspended
+          - TenantDeletionSliceTest.aPendingTenantIsRevokedNotDeleted
+      web: { unit: [src/components/app/AppSidebar.test.ts] }
   - id: the-purge-erases-the-tenant-and-everything-in-it
     text: After the retention one purge erases every scope through the scope erasure and every other row keyed on the tenant, and a guard derived from the migrations holds every such table erased or cascading.
+    coverage:
+      backend:
+        integration: [TenantDeletionSliceTest.thePurgeErasesTheTenantAndLeavesItsAccountsAndItsLiveHolds]
+    gaps:
+      - surface: backend
+        reason: >-
+          The guard half is `scripts/validate_account_erasure_arity.py` (the tenant closure, the scope erasure's part
+          delegated), which the trust-chain glob runs; no coverage ref can name a script.
   - id: holds-and-moderation-records-survive
     text: Holds and moderation records of the tenant's content survive its deletion to their own ends.
+    coverage:
+      backend:
+        integration: [TenantDeletionSliceTest.thePurgeErasesTheTenantAndLeavesItsAccountsAndItsLiveHolds]
   - id: members-keep-their-accounts
     text: Every member is told by mail that the tenant is being deleted, and every account stays, also one the deletion leaves in no tenant.
+    coverage:
+      backend:
+        integration:
+          - TenantDeletionSliceTest.thePurgeErasesTheTenantAndLeavesItsAccountsAndItsLiveHolds
+          - AccountErasureSliceTest.theErasureMailIsRetriedUntilItGoesOutAndADeletionMailsEveryMember
+  - id: an-ownerless-tenant-has-two-ways-on
+    text: A tenant owner makes a member an owner, the last owner cannot be demoted, and the Server Owner's owner invite to a member of an ownerless tenant makes them its owner once they accept it; an address that is no member's is refused.
+    coverage:
+      backend:
+        integration:
+          - TenantDeletionSliceTest.anOwnerMakesAMemberAnOwnerAndTheLastOwnerCannotBeDemoted
+          - TenantDeletionSliceTest.theServerOwnerInvitesAMemberToOwnAnOwnerlessTenant
+      web:
+        unit:
+          - src/features/spaces/TenantMembersPanel.test.ts
+          - src/views/TenantJoinView.handover.test.ts
 gaps:
-  backend: "Not built: only a PENDING tenant can be revoked (TenantHandler.kt:243-252); cr-account-erasure builds the deletion."
-  web: "No part here beyond the statement of reasons a deletion over content carries (cr-statement-legal-gaps); the Server Owner acts in admin-web."
-  admin-web: "Not built: admin-web and veyq-admin offer revoke for PENDING tenants only; cr-account-erasure builds the deletion."
+  admin-web: >-
+    Built and passing locally: `src/features/tenants/TenantDetailPanel.test.ts` (the typed delete refused until the
+    domain matches, the stop, the ownerless notice and the owner invite), `tenants.test.ts`,
+    `src/views/AdminConsoleView.test.ts` (the ownerless marker) and `src/cli/cli.test.ts` (`tenant delete`,
+    `stop-deletion`, `invite-owner`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
+  stack: >-
+    Lane L1's browser pass (`e2e/tests/features/tenant-and-account-erasure.spec.ts`) deletes a tenant in the console with its typed
+    domain and stops the deletion, against the release candidate's two images. Green only in local runs of
+    `scripts/run_stack_e2e.py`; the lane's CI job awaits its first run.

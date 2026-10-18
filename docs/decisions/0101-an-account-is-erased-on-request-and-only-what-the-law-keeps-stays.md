@@ -1,6 +1,7 @@
 # ADR 0101 — An account is erased on request, a tenant can be deleted while active, and only what the law keeps stays
 
-- Status: Accepted 2026-10-18 for its duty, **decided, not built**. That an account and an active tenant can be erased is
+- Status: Accepted 2026-10-18 for its duty, **built** (the erasure ledger of decision 8 is the open part: until
+  `cr-backup-erasure-and-retention` lands, a restore does not re-apply an erasure). That an account and an active tenant can be erased is
   not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a legal duty and what veyq decided or built disagree,
   the duty decides (owner rule, `CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** were owner
   questions in `cr-account-erasure`, answered 2026-10-18 (Q16, Q17, Q19 as recommended; Q18 and Q20 as decisions 9
@@ -38,7 +39,10 @@ Provenance: **(M)** measured in this worktree with the command or line named; **
 
 ### 1. Two doors, one erasure
 
-A member erases their own account in the settings, proving their password the way a password change does. The Server
+A member erases their own account in the settings, proving their password the way a password change does: a
+signature with the account's auth key over the account and a login challenge minted for its address, spent by the
+request (`AuthAttestation.eraseAccountStatement`, the `auth_attestation.erase_account` vector) — the password, not the
+Secret Key, since erasing mints no credential. The Server
 Owner erases an account by its address on the admin channel — admin-web and `veyq-admin account erase` — for a request
 that reached them another way (a mail, a letter, a person who lost their password). Both doors start the same erasure.
 
@@ -60,7 +64,8 @@ it, for a mistaken or coerced request; the person cannot sign in to do so. Thirt
 
 ### 4. What goes
 
-The `veyq_user` row (address, keys, wraps), master key wraps, session families and their tokens, identity pins,
+The `veyq_user` row (address, keys, wraps) and the address wherever it was copied (the invites sent to it, a login
+challenge, a tenant's record of whom its owner invite named), master key wraps, session families and their tokens, identity pins,
 recovery, device register and pairings, address confirmations and changes, the tenant profile in every tenant,
 every membership, the favorites (core's and Memories'), the moderator row and its grants, and the terms acceptance
 rows except as decision 6 keeps them. The browser that erased clears its own records for the address (session vault,
@@ -104,7 +109,14 @@ instance serves ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.
   along** (decision 10, its window) **or name a new owner** from its members first; the erasure proceeds after either. A
   tenant with no other member is deleted with the account (decision 10), and the dialog names it. **The Server Owner's door does not refuse**: an erasure cannot wait on a third person
   (Art. 12(2)). The tenant then has no owner; admin-web shows it so, and the Server Owner invites a new owner into the
-  active tenant (an owner invite, as setup mints one) or deletes it.
+  active tenant (an owner invite, as setup mints one) or deletes it. The owner invite goes to **one of the tenant's
+  members**: the operator can admit nobody into a tenant's key ([ADR 0020](0020-grant-distribution-invite-wrap.md) move
+  6), so an owner it brought in from outside would wait forever for a key no member could vouch for; the member accepts
+  it and becomes an owner, nothing is born and no key moves.
+- **The last holder of the moderation key** is refused at both doors (`moderation_last_holder`), as a step-down and a
+  removal are ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 5): with them
+  the key would be lost, and with it every report and hold sealed to it — the very records decision 7 keeps. Another
+  moderator holds it first.
 
 ### 10. A tenant is deleted while active
 
@@ -133,6 +145,13 @@ user id without a foreign key classified in the eraser's code as erased or kept,
   what stays.
 - **Limit:** an opaque id stays in content attribution and in kept moderation records; with the account row gone it
   names someone only through those records, which the law keeps.
+- **A stop restores the account, not its memberships.** The member removal runs at the request (decision 2), so a
+  stopped erasure gives back an account that can sign in, keeps its own scopes in the scope trash until their retention
+  ends, and needs a new invite to the shared scopes and tenants it was cut from; a tenant deleted along is stopped on its
+  own (`stopTenantDeletion`).
+- **Open:** the statement of reasons a deletion over content carries (decision 10, ADR 0093 § 7) waits for
+  `cr-statement-legal-gaps`, and the erasure ledger (decision 8) for `cr-backup-erasure-and-retention`; each purge
+  marks the one place its entry is written (`AccountPurge.eraseRows`, `TenantPurge.eraseTenant`).
 
 ## Rejected alternatives
 

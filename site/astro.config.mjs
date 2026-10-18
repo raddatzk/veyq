@@ -55,6 +55,7 @@ export default defineConfig({
                 'account/appearance-and-language',
                 'account/verify-a-person',
                 'account/moderate',
+                'account/erase-your-account',
               ],
             },
             {

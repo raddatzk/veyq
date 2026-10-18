@@ -17,7 +17,7 @@
 
 1. **The request.** The member opens the settings' account section, chooses to erase the account, reads what goes and
    what stays (decision 7 of the ADR), deletes from shared scopes whatever they want gone first, and confirms with their
-   password. Or the Server Owner enters the account's address in admin-web (or `veyq-admin account erase --address`)
+   password (a signature with the auth key over the account and a login challenge, spent by the request). Or the Server Owner enters the account's address in admin-web (or `veyq-admin account erase --address`)
    and confirms by typing it again.
 2. **The account stops.** In one transaction the server ends every session, refuses sign-in, drops pending invites,
    pairings, recoveries and address changes, runs the member removal in every tenant (own scopes into the scope trash,
@@ -48,7 +48,11 @@
   own scopes are still in the scope trash, restorable by it as before. The shared scopes and tenants it was cut from
   need a new invite, and a tenant deleted along stays pending deletion until the Server Owner stops that too.
 - **A6 — No instance mail:** the erasure runs all the same; admin-web already warns that mail is missing.
-- **A7 — Restored from a backup:** the instance re-applies the ledger before it serves, and the account is erased again.
+- **A7 — Restored from a backup:** the instance re-applies the ledger before it serves, and the account is erased again
+  — once the erasure ledger is built (`cr-backup-erasure-and-retention`); until then a restore brings back an account
+  erased after its capture.
+- **A8 — The last holder of the moderation key** is refused at both doors (`moderation_last_holder`), as a step-down
+  is: the key, and every report and hold sealed to it, would be lost with them. Another moderator holds it first.
 
 ## Quality notes
 
@@ -66,4 +70,6 @@ stay and why.
 [ADR 0101](../../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md),
 [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) decision 8 (the ledger),
 [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-§§ 4, 11 (what moderation keeps), [uc.admin.delete-tenant](../../admin/use-cases/uc.admin.delete-tenant.md).
+§§ 4, 11 (what moderation keeps), [uc.admin.delete-tenant](../../admin/use-cases/uc.admin.delete-tenant.md). Published:
+[Erase your account](../../../../site/src/content/docs/account/erase-your-account.mdx),
+[First-run setup and the admin console](../../../../site/src/content/docs/run/first-run.mdx) § Accounts.

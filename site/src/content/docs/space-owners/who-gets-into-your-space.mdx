@@ -4,6 +4,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.add-member.md
   - docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md
   - docs/features/spaces/use-cases/uc.spaces.remove-tenant-member.md
+  - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
   - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
 ---
@@ -55,8 +56,16 @@ Each group they shared with others also gets a new lock. One of its owners' devi
 that owner opens veyq. The server shuts them out at once, but until the new lock is in, their old key would still open
 what is new in that group.
 
-You cannot make another member an owner of the shared space here; that is possible only for a
-[group](/veyq/spaces/group-members/).
+## Share the ownership
+
+Choose **Make co-owner** on a member's row: they own the shared space with you from then on, and can invite and remove
+members too. **Remove co-owner** makes an owner a member again; the last owner cannot step back. Nothing about the
+space's lock changes: every member already holds its key.
+
+A second owner is also what keeps the space going if you leave: when you
+[erase your account](/veyq/account/erase-your-account/) as its last owner, you choose to make one of its members the
+owner or to delete the space along with your account. A space whose last owner's account was erased by whoever runs
+your server has no owner until they invite one of its members to own it.
 
 ## Give the space an icon
 

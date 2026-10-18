@@ -9,6 +9,7 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
+  - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
   - docs/decisions/0066-tenant-suspension.md
   - docs/crosscutting/security-model.md
@@ -165,6 +166,10 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
 - It applies to an active tenant only, and it locks out your own membership in that tenant too.
 
 You still cannot read anything private, which is the design working as intended.
+
+To close a tenant for good, **Delete tenant** takes it offline the same way and erases it 30 days later
+([First-run setup and the admin console](/veyq/run/first-run/#tenants)); a deletion settles the tenant's open proposals
+as taken, as a suspension does. Its holds and this page's records stay: they hang on cases, not tenants.
 
 ## What else you have
 
@@ -412,8 +417,8 @@ control against the operator.
 
 ## Not built
 
-- **A statement for your own steps.** A member's sign-in block and a tenant taken offline carry no statement of reasons
-  yet: you take them on the admin channel, without the moderation key, and a blocked member cannot sign in to read one.
+- **A statement for your own steps.** A member's sign-in block and a tenant taken offline or deleted carry no statement
+  of reasons yet: you take them on the admin channel, without the moderation key, and a blocked member cannot sign in to read one.
   Tell them through the instance contact.
 - **A child-sexual-abuse case's hold ending at the handover** (ADR 0093 § 4): it waits on counsel (§ 184b(5) StGB, see
   [In an emergency](#in-an-emergency)); until then such a hold ends as any other case's, and a handover changes none.
