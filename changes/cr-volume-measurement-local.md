@@ -1,7 +1,7 @@
 ---
 id: cr-volume-measurement-local
 title: Does a small ARM host carry an instance? The harness and the local pre-check on a pinned 2-core instance
-status: planned
+status: in-progress
 satisfies: ["uc.memory.gallery", "uc.memory.browse", "uc.spaces.add-member"]
 adrs: ["0057", "0093"]
 invariants:
@@ -69,6 +69,12 @@ Out of scope: any fix. Each hotspot whose numbers matter becomes an inbox row an
   harness outlives this CR only until `cr-volume-measurement-cax` has used it; that CR deletes it.
 
 ### Measured substrate (worktree `load-testing-data-server-4b2e42` at `c9e4310a`)
+
+**Re-grounded at implement time on `a1898747`** (25 commits later: the moderation CRs). Measured: `git diff --stat
+c9e4310a..a1898747` over every file the tables below cite changes three contracts only (`_common`, `instance`,
+`moderation`), none of them a cited operation; every web, backend, script and site locator is byte-identical, so the
+tables hold as written. Two line numbers were already off by a line or two (`bootstrap-user.mts:250` is the comment
+above `onboardUser2`); the symbols are what the harness follows.
 
 **Host and recipe**
 
@@ -185,40 +191,123 @@ judging rule for this CR and the CAX one; Q2's throwaway instance replaces the e
 
 ## Phases
 
-- [ ] **0 boot path**: a fresh production-recipe instance on this host, through `scripts/run_stack_e2e.py`'s install
+- [x] **0 boot path**: a fresh production-recipe instance on this host, through `scripts/run_stack_e2e.py`'s install
   stages and `--keep`, or through `veyqctl install` directly if the lane cannot stop before its own first run. The
   harness performs first-run setup itself (`birthInstance`'s path), so it holds the owner's credentials. Pin the
   recipe's containers to 2 cores and 4 GB. Find out how the instance's environment overrides the invite limit
   (decision 9). · Done when: `birthInstance` succeeds against the instance; `docker inspect` shows the cpuset and
   the limits; the steps are written into this CR. **Bite:** a second `birthInstance` against the same instance is
   refused (`setupRequired` false), so the harness can never set up an instance it did not start fresh.
-- [ ] **1 photo seeder**: `web/scripts/seed-volume.mts photos --target N` (decision 2). It prints photos per minute
+  - *As built.* The lane cannot stop before its browser suite (`run_stack_e2e.main` has no such switch), so
+    `measure_volume.py boot` imports the module and calls its stages itself: `ports_free`, `browser_pins`,
+    `browser_image`, `assets`, `release_mirror`, `pebble`, `install`, `certificate` — the instance is installed by the
+    release's own `veyqctl --unsigned-local`, as L1's is, and nobody sets it up. The steps:
+    1. images from this tree, bare `name:tag`: `docker build -f Dockerfile -t veyq-vol:local .` and
+       `docker build -f admin-web/Dockerfile -t veyq-admin-vol:local .` (on this Mac with a `DOCKER_CONFIG` that
+       has no keychain credential helper);
+    2. `python3 scripts/measure_volume.py --instance DIR fixtures` (ImageMagick), then `… boot --app veyq-vol:local
+       --admin veyq-admin-vol:local` (ports 80, 443 and 18081 must be free: one such stack per host);
+    3. `… seed birth` — `birthInstance` itself, under tsx, then the tenant's mail pointed at the overlay's relay as
+       the app reaches it (`mail.relay.test:1025`); the generated owner credentials land in `DIR/accounts.json`.
+  - *The pin* is the overlay's `cpuset` (`2,3` for app, MariaDB, Garage, Traefik and admin; `6-13` for Pebble,
+    Mailpit, the release mirror and the browser), not `docker update`: it survives the app's recreation by
+    `veyqctl start`. *Memory is not held to 4 GB as a whole* — Compose has no group limit; a cgroup parent would need
+    a privileged container in the Docker VM — so the 4 GB is a **judged** budget: the recipe's containers' summed
+    memory against Q1's 80 %. A stage that passes it never reaches the real box's ceiling, so the rule loses nothing;
+    the app keeps the recipe's own `mem_limit` (1 GiB). The overlay also drops L1's `RUST_LOG: garage=info` (main
+    gained it on 2026-10-18 for the wire sweep's control): the measured store logs as an operator's does, `warn`.
+    The phase 0–7 numbers below were taken before that recipe change, with Garage's image default (`info`).
+  - *The invite limit (decision 9)*: Quarkus reads `VEYQ_RATELIMIT_INVITE_PER_TENANT_MAX_REQUESTS`; `… invite-limit N`
+    adds it to the app's `environment` in the instance's `compose.override.yml` and runs `veyqctl start`, which
+    recreates the app; `… invite-limit default` removes it again. Proven: with 100000 the seeder passed the 21st
+    invite, without it the 21st was a 429.
+  - Measured: `birthInstance` succeeded (20 s); `measure_volume.py status` showed `cpuset 2,3` and the app's
+    `memory 1073741824`; the second `birth` failed on `run against a FRESH instance (setupRequired=true): expected
+    false to be true` and wrote nothing.
+  - *Re-seed time*, this Mac under load 15–35 (not a reading): boot about 1 min with the images present, birth 20 s,
+    photos about 2,400 a minute, tree nodes about 3,800 a minute, members about 9.5 a minute end to end (16.7 joined,
+    22 profiled; Argon2id dominates). `teardown` moves the instance's files to `DIR/torn-<project>/`; `boot` refuses a
+    directory that still holds any.
+- [x] **1 photo seeder**: `web/scripts/seed-volume.mts photos --target N` (decision 2). It prints photos per minute
   every 500. · Done when: `npm run check` in `web/` green; seeded to 1,000; the Chapter opens with real thumbnails.
   **Bites:** a second run with the same target adds nothing; a run stopped midway reaches the target exactly.
-- [ ] **2 server leg and host sampler**: `web/scripts/measure-volume.mts` plus `scripts/measure_volume.py`
+  - *As built.* The seeders run the app's own modules under tsx (`volumePrelude.mts` gives them Vite's one define;
+    `volumeHarness.mts` the instance, the sign-in and the files), through a pinned HTTPS `fetch` in `apiTransport.mts`
+    (the domain to `127.0.0.1:443`, the run's Pebble root, the refresh cookie kept). Placement: the photos in the
+    tenant space, Memory 'Volume photos', Chapter 'All photos' (the five members of decision 7 can open it); the
+    bite's Chapter 'No derivatives' beside it. Fixtures: thumbnail 512 px ≈ 39 KB, preview 2,048 px ≈ 730 KB,
+    original 1,024 px ≈ 190 KB, phone original 12 MP ≈ 4.0 MB.
+  - Measured: killed at 25 s (857 of 1,000), the next run added 143 and held exactly 1,000; the run after printed
+    `nothing to add`. The browser leg then decrypted 1,000 of 1,000 thumbnails (`blob:` sources). `npm run check` in
+    `web/` green (383 test files passed, 27 skipped; no bench file collected).
+- [x] **2 server leg and host sampler**: `web/scripts/measure-volume.mts` plus `scripts/measure_volume.py`
   (decision 5). Readings go to `.run/measurements/` (`.gitignore` gains it). · Done when: one photo stage measured
   end to end with the sampler running. **Bites, with controls:** the 304 call shows almost no queries (control: the
   full call's count grows with N); at 1,000 the count matches the `toRow` shape (≈ 1 + 4N) or the difference is
   explained; with a browser left open on the Chapter, the script notices the count drifting and refuses the
   reading. Under a deliberately tiny `mem_limit`, the sampler reports the OOM kill instead of a quiet gap.
-- [ ] **3 browser leg**: `e2e/measure/volume.ts` (outside `e2e/tests`, so lane L1 does not collect it), one entry
+  - *As built.* A seeder may not shell out (lint `veyq/seeders-use-the-generated-client`), so `measure-volume.mts` is
+    a child of `measure_volume.py` speaking a line protocol, and the driver reads `Com_select` around each call. The
+    cold calls each follow a `docker restart` of the app; the sampler tells those apart from an unbidden end (an
+    `oom`, or a `die` with any exit but 143). The drift windows are 60 s, the tolerance the idle baseline's worst
+    window plus 10: with 30 s windows an open Chapter's live poll slipped through one of the two.
+  - Measured (under load, not readings): at 1,000 the full call made 4,011 SELECTs every time, cold and warm — the
+    `toRow` shape 1 + 4N plus ten for the request's own checks; the 304 call 9. Idle baseline 36–37 per minute; with a
+    browser held open on the Chapter the windows read 110 and 87 against a tolerance of 47 and the reading was
+    refused (exit 3); without it 37 and 37, accepted. `docker update --memory 64m` on the app: the sampler reported
+    `oom` and `die 137`, the limit was restored and the app came back healthy. The answer is 2.34 MB, sent without
+    `Content-Encoding`; gzip would make it 1.33 MB.
+- [x] **3 browser leg**: `e2e/measure/volume.ts` (outside `e2e/tests`, so lane L1 does not collect it), one entry
   per axis (decision 6). · Done when: one photo stage measured, 3 runs × 2 throttle settings. **Bite:** pointed at a
   Chapter whose photos have no derivatives, the "every thumbnail decrypted" wait reports 0 of N and stops, rather
   than hanging or passing. **Control:** its list-response time and the server leg's differ by no more than network
   overhead.
-- [ ] **4 tree seeder**: `seed-volume.mts tree --target N`, and `tree --wide 2000` (decision 3). · Done when: seeded
+  - *As built.* It runs in the overlay's Playwright image (`docker compose run browser -c measure/playwright.config.ts`)
+    on the run's networks and the outside cores, the Pebble root trusted in its NSS db as in L1; spec and result are
+    `DIR/browser-spec.json` / `browser-result.json`. Each run signs in at the tenant root, then opens the target by
+    its fragment in the same document, so the clock starts at the open. Failed requests count from the open on (a
+    fresh device's boot answers `token/refresh` 400 by design). `e2e/tsconfig.json` includes `measure`.
+  - Measured (under load): 1,000 photos, 3 runs × {1, 4}: list 227–359 ms (request 198–331 ms) unthrottled, last
+    thumbnail 17.8–23.1 s; ×4 last thumbnail 95–112 s. The warm server leg read 171–345 ms total: the control holds.
+    One open requests the list once, 1,000 presigns (`blob-downloads-batch`, one blob each) and 1,000 store GETs
+    (≈ 40 MB). 'No derivatives' with 50 photos: `0 of 50 thumbnails decrypted (50 tiles); nothing moved for 20s`.
+    `npm run check` in `e2e/` green; `playwright test --list` names no `measure/` file.
+- [x] **4 tree seeder**: `seed-volume.mts tree --target N`, and `tree --wide 2000` (decision 3). · Done when: seeded
   to 500; the sidebar shows the folder and a deep Chapter opens. **Bite:** the server leg's tree count equals the
   seeded count plus the nodes there before (counted first).
-- [ ] **5 crypto benches**: decision 8. · Done when: `npx vitest bench` prints per-operation and total times;
+  - *Adapted:* the sidebar lists spaces, not folders (`AppSidebar.vue`), so the leg waits for the folder at the
+    space's root view (`main`). The realistic tree lives in the group 'Volume tree', the wide one in 'Volume wide',
+    so neither counts into the other or into the tenant's tree.
+  - Measured: seeded 500 into an empty group; the server leg listed 500 items with 10 SELECTs whatever N (one rows
+    query plus one `IN`, as the substrate says); the root view showed 'Folder 000' 136 ms after the open, the deepest
+    Chapter's heading 148 ms.
+- [x] **5 crypto benches**: decision 8. · Done when: `npx vitest bench` prints per-operation and total times;
   `npm run check` unchanged. **Control:** the tree bench at 500 and at 5,000 rows in the realistic shape; if the time
   grows by about 10×, the quadratic terms do not matter yet at this size, and if it grows by much more, they do.
-- [ ] **6 member seeder**: `seed-volume.mts members --target N` (decisions 4, 9). · Done when: seeded to 20; the
+  - *Adapted:* the tree bench seals every row as a FOLDER — `openTree` reads no kind, and core may not name an
+    application's (`validate_web_core_imports_no_applications.py`); the shape is the seeder's.
+  - Measured (`npx vitest bench --run` on the three files, under load): openFrame of a 40 KB frame 0.47 ms, unsealMeta
+    0.020 ms, unwrapBlobKey 0.012 ms; 10,000 × all three 5.06 s. openTree 14.4 ms at 500, 153.9 ms at 5,000 (10.7×:
+    the quadratic terms do not matter yet), 58.7 ms wide 2,000. Names: 0.36 / 3.5 / 17.5 ms for 20 / 200 / 1,000.
+- [x] **6 member seeder**: `seed-volume.mts members --target N` (decisions 4, 9). · Done when: seeded to 20; the
   members page names all 20 and shows their avatars; accounts per minute recorded (Argon2id included). **Bite:**
   with the default invite limit, the seeder stops at the 21st invite with a message naming the limit, rather than
   reporting a short count as done.
-- [ ] **7 scenarios**: decision 7, as `measure_volume.py scenario <name>`. · Done when: each scenario has run once
+  - *As built.* Each member: a cold birth, the owner's `inviteMember`, the mail read from the overlay's Mailpit,
+    `registerAndAccept`, the app's own `runGrantDeliveryWorker` as the owner; then, signed in as the member, a sealed
+    name and every fifth a picture. The owner is named too, so "every row named" covers the list.
+  - Measured: 19 joined in 1.1 min (16.7 a minute), profiled at 22 a minute; then `--target 25` with the default limit
+    stopped with exit 3: `invite 2 of this run (member 22 of 25) was refused with 429: invites are limited per tenant
+    per hour (veyq.ratelimit.invite.per-tenant-max-requests, default 20) … The tenant holds 21 members, NOT the
+    target 25.` With the limit raised it reached 25; the members page showed 25 rows named and 5 pictures.
+- [x] **7 scenarios**: decision 7, as `measure_volume.py scenario <name>`. · Done when: each scenario has run once
   locally with the sampler. **Control:** the idle scenario's memory is flat after its first five minutes; if it
   climbs, that is a finding, not noise.
+  - Measured, each once and under load (not readings): idle 30 min — the app's memory went from 266 MB after five
+    minutes to 300 MB at the end (+13 %): a lead for phase 8, which repeats it quietly. Five at once on the 1,000
+    Chapter: each device's list at ≈ 1.55 s, its last thumbnail at 27.6–30.3 s, no failed request, the recipe's peak
+    1.15 GB. Upload of 50 phone photos one at a time: 435 a minute, ≈ 35 MB/s of plaintext. All three judged
+    "carries" with the load note.
 - [ ] **8 local run**: every stage of every axis and every scenario on the pinned local instance; the readings judged
   against Q1's rule. · Done when: the local verdict is written into this CR with the hotspots it found. A stage that
   already fails locally is a finding on its own; the CAX run still goes ahead, because the owner's question is
