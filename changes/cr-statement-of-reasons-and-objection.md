@@ -1,7 +1,7 @@
 ---
 id: cr-statement-of-reasons-and-objection
 title: The affected are told why, and object in the app; another moderator reviews the objection
-status: in-progress
+status: done
 satisfies: [uc.moderation.object-to-a-measure, uc.moderation.take-a-measure]
 adrs: ["0093", "0099", "0097", "0048", "0049"]
 invariants:
@@ -91,11 +91,11 @@ answer), with planned coverage, and adds the statement's flow to `uc.moderation.
 
 - [x] **0 docs** — the use-case, the flow added, planned coverage; ADR 0097 decision 3 per Q11. · Done when: the
   feature-format, coverage, doc-link and change guards green.
-- [ ] **1 contracts + crypto** — the statement template; the objection (submit: an affected member with a bearer; a
+- [x] **1 contracts + crypto** — the statement template; the objection (submit: an affected member with a bearer; a
   guest has no in-app objection, ADR 0093 § 7), its decision on the moderation spec; the facts' seal per Q12 (a new
   `sealTo` purpose with its vector if (recommended)). · Done when: `npm run generate:api`, the contracts guards,
   `npm run check` and the mutation gate in `packages/crypto/` for any new purpose.
-- [ ] **2 backend** — statements recorded and sent; objection rules of decision 2; the form of decision 3; hold ends of decision 4; log
+- [x] **2 backend** — statements recorded and sent; objection rules of decision 2; the form of decision 3; hold ends of decision 4; log
   events (statement sent, objection received, objection decided with the reviewer). · Done when: `./gradlew check` and
   `run_backend_races_on_mariadb.py` green (two moderators decide one objection). **Bites, with controls:** the decider
   decides the objection while a second accepted moderator exists → refused, the second → accepted; the decider alone
@@ -103,13 +103,13 @@ answer), with planned coverage, and adds the statement's flow to `uc.moderation.
   *private* → a measure without facts is accepted and its statement carries neither the report-or-order line nor the
   courts (control: *organisation* → the same measure without facts is refused, and both lines are there). Bite: read
   the form from a constant instead of the mode → one of the two is red.
-- [ ] **3 web** — the statement on the placeholder, the objection form there (once), the objection in the moderation
+- [x] **3 web** — the statement on the placeholder, the objection form there (once), the objection in the moderation
   surface with who may decide it, the answer; EN+DE; the decision panel's facts field optional in *private*. ·
   Done when: `npm run check` green; a browser pass with two moderators and with one, and of a statement in each
   mode.
-- [ ] **4 mail** — per Q11; the mail carries no user data beyond the recipient's own address (ADR 0049). · Done when:
+- [x] **4 mail** — per Q11; the mail carries no user data beyond the recipient's own address (ADR 0049). · Done when:
   `./gradlew check` green; a test that the mail body carries no case facts (bite: interpolate the facts → red).
-- [ ] **5 docs + coverage** — `run/moderation.md` (statements, their form per mode, objection, a one-person instance), a Use page section
+- [x] **5 docs + coverage** — `run/moderation.md` (statements, their form per mode, objection, a one-person instance), a Use page section
   "If something of yours was blocked" (EN+DE), coverage refs. · Done when: coverage, wiki-sources and the site check
   green.
 
@@ -122,4 +122,21 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
 
 ## Retrospective
 
-_Filled at implementation._
+- **Planning: who is told through which channel was half written.** The CR named recipients but not, per kind, the
+  channel that reaches them: a guest has no account (no mail, no statement list), and its context ("a guest objects
+  through the contact … the statement does not offer one") and ADR 0093 § 4 ("a guest uploader with no contact" =
+  nobody to tell) read two ways; the reporter's decision needs an address the server holds only sealed. Built: guests
+  are told nothing in the app and count as nobody to tell; the reporter's address is re-sent once by the deciding
+  moderator's browser (the receipt's pattern, now in ADR 0097 decision 3). Root cause: the recipients were decided as
+  roles, not as rows with a channel. Harvested as a rule in `changes/README.md`.
+- **Planning: Q12's seal to "each affected member's identity" assumed a pin check the moderation surface cannot do** —
+  it drops the Master Key before any report opens (ADR 0099 § 6), so no pin store is readable. Sealed to the identity
+  the server serves; the residual is nil against the operator, who holds the moderation key and the log's copy of the
+  same facts. Stated in the security model and at the seal (`web/src/features/moderation/cases.ts`).
+- **Execution: decision 4 has no lever yet.** The statement is sent with the measure, so "six months after sending"
+  equals "six months after the decision" until a deferral exists (cr-authority-orders-and-art18-reports); the test
+  pins `sentAt + 183 d` and the nobody-to-tell branch, but no bite can separate the two today. The CR's measured
+  substrate predated the review CR: the decision panel lives in `/moderation` (CaseDetail), not the review page, and
+  recipients come from the hold's rows — locators only, no decision changed.
+- **Next time:** a refine that sends something to people writes a recipient × channel table (member / guest /
+  reporter / Server Owner × app screen / mail address the server holds in the clear / none) before the open questions.
