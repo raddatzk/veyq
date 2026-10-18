@@ -131,13 +131,18 @@ class TenantsResource(
     // Delete an ACTIVE or SUSPENDED tenant and stop it (uc.admin.delete-tenant, ADR 0101 decision 10): Server-Owner-gated
     // like suspend, and like it offline at once; the purge erases it after the scope trash's retention.
     override fun deleteTenant(tenantId: UUID, deleteTenantRequest: DeleteTenantRequest): Response =
-        when (val o = handler.delete(tenantId.toString(), deleteTenantRequest.domain, identity.principal.name)) {
+        when (
+            val o = handler.delete(
+                tenantId.toString(), deleteTenantRequest.domain, identity.principal.name, deleteTenantRequest.overContent ?: false,
+                deleteTenantRequest.statement?.toStepInput(),
+            )
+        ) {
             is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc())).build()
             is HttpFailure -> httpError(o)
         }
 
     override fun stopTenantDeletion(tenantId: UUID): Response =
-        when (val o = handler.stopDeletion(tenantId.toString())) {
+        when (val o = handler.stopDeletion(tenantId.toString(), identity.principal.name)) {
             StopTenantDeletionOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }

@@ -24,7 +24,6 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.tenant.TenantIngressProjector
-import me.raddatz.veyq.core.moderation.block.ProposalStep
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import me.raddatz.veyq.core.moderation.statement.StepStatementInput
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -94,6 +93,8 @@ sealed interface DeleteTenantOutcome {
     data object NotFound : DeleteTenantOutcome, HttpFailure by Failures.tenantNotFound
     data object DomainMismatch : DeleteTenantOutcome, HttpFailure by httpFailure("tenant_domain_mismatch", FailureStatus.CONFLICT)
     data object NotDeletable : DeleteTenantOutcome, HttpFailure by httpFailure("tenant_not_deletable", FailureStatus.CONFLICT)
+    /** Over content without the statement it must carry (ADR 0093 § 7), or a statement the operating mode refuses. */
+    data class Refused(val failure: HttpFailure) : DeleteTenantOutcome, HttpFailure by failure
 }
 
 /** Result of stopping a pending tenant deletion — the tenant returns SUSPENDED. */
@@ -377,27 +378,40 @@ class TenantHandler(
      * take the tenant offline is taken by the deletion, as by a suspension. Every member is mailed after the commit;
      * every account stays (owner, Q20).
      */
-    fun delete(tenantId: String, domain: String, serverOwnerId: String): DeleteTenantOutcome {
-        val dueAt = Instant.now().plus(deletionRetention)
+    fun delete(
+        tenantId: String, domain: String, serverOwnerId: String, overContent: Boolean = false, statement: StepStatementInput? = null,
+        now: Instant = Instant.now(),
+    ): DeleteTenantOutcome {
+        val dueAt = now.plus(deletionRetention)
         val outcome = QuarkusTransaction.requiringNew().call {
             val tenant = store.findTenant(tenantId) ?: return@call DeleteTenantOutcome.NotFound
             if (tenant.domain != domain.trim().lowercase()) return@call DeleteTenantOutcome.DomainMismatch
+            if (tenant.status != TenantEntity.ACTIVE && tenant.status != TenantEntity.SUSPENDED) return@call DeleteTenantOutcome.NotDeletable
+            // Over content, the deletion carries its statement of reasons to the tenant's owners (ADR 0093 § 7, DSA Art.
+            // 17(1)(c)): refused before anything flips, as a suspension's is.
+            moderationSteps.offlineRefusal(tenantId, overContent, statement)?.let { return@call DeleteTenantOutcome.Refused(it) }
             if (!store.markForDeletion(tenantId, dueAt)) return@call DeleteTenantOutcome.NotDeletable
-            moderationSteps.settle(ProposalStep.TENANT_OFFLINE, tenantId, serverOwnerId)
+            // A moderator's proposal to take the tenant offline is taken by the deletion; over content it is recorded as a
+            // TENANT_DELETED measure with its statement, which a stop lifts.
+            moderationSteps.deleted(tenantId, serverOwnerId, statement, now)
             DeleteTenantOutcome.Deleted(dueAt)
         }
         if (outcome is DeleteTenantOutcome.Deleted) {
             reproject()
             deletionMail.tenantDeleted(tenantId, dueAt)
+            statement?.let { moderationSteps.mailStatement(it) }
         }
         return outcome
     }
 
     /** Stop a pending deletion (ADR 0101 decision 10): the tenant returns SUSPENDED and is reactivated as one is. */
-    fun stopDeletion(tenantId: String): StopTenantDeletionOutcome {
+    fun stopDeletion(tenantId: String, serverOwnerId: String, now: Instant = Instant.now()): StopTenantDeletionOutcome {
         val outcome = QuarkusTransaction.requiringNew().call {
             store.findTenant(tenantId) ?: return@call StopTenantDeletionOutcome.NotFound
-            if (store.stopDeletion(tenantId)) StopTenantDeletionOutcome.Done else StopTenantDeletionOutcome.NotPendingDeletion
+            if (!store.stopDeletion(tenantId)) return@call StopTenantDeletionOutcome.NotPendingDeletion
+            // A deletion over content is lifted with the stop; a suspension's measure, if one stands, stays until reactivated.
+            moderationSteps.deletionStopped(tenantId, serverOwnerId, now)
+            StopTenantDeletionOutcome.Done
         }
         if (outcome is StopTenantDeletionOutcome.Done) reproject()
         return outcome

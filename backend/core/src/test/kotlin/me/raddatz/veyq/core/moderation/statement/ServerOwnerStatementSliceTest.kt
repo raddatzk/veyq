@@ -5,6 +5,8 @@ import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsHandler
 import me.raddatz.veyq.core.admin.instance.InstanceMailUpdateOutcome
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsStore
+import me.raddatz.veyq.core.admin.tenant.TenantPurge
+import me.raddatz.veyq.core.account.erasure.AccountPurge
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
@@ -73,6 +75,12 @@ class ServerOwnerStatementSliceTest {
 
     @Inject
     lateinit var statementMail: StatementMail
+
+    @Inject
+    lateinit var tenantPurge: TenantPurge
+
+    @Inject
+    lateinit var accountPurge: AccountPurge
 
     private lateinit var mailbox: GreenMail
     private lateinit var mod: CaseTestKit.Moderator
@@ -218,6 +226,74 @@ class ServerOwnerStatementSliceTest {
         ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/suspend").then().statusCode(204)
         assertEquals(1L, QuarkusTransaction.requiringNew().call { ModerationBlockEntity.count("kind = ?1 and targetId = ?2", BlockKind.TENANT_OFFLINE.name, m.tenantId) })
         ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/reactivate").then().statusCode(204)
+    }
+
+    /**
+     * A tenant deleted over content (ADR 0101 decision 10, DSA Art. 17(1)(c)) carries its statement as a suspension does:
+     * refused without one, the tenant untouched; with one, a `TENANT_DELETED` measure, its owners mailed the deletion with
+     * the facts and the member nothing; a stop lifts the record.
+     */
+    @Test
+    fun aTenantDeletedOverContentTellsItsOwnersOnlyAndAStopLiftsTheRecord() {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val owner = seedUser()
+        QuarkusTransaction.requiringNew().run { TenantRoots.join(owner, m.tenantId, MembershipEntity.OWNER) }
+        val domain = QuarkusTransaction.requiringNew().call { TenantEntity.findById(m.tenantId)!!.domain }
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"$domain","overContent":true}""").post("/api/tenants/${m.tenantId}/deletion")
+            .then().statusCode(400).body("code", equalTo("statement_required"))
+        assertEquals(TenantEntity.ACTIVE, QuarkusTransaction.requiringNew().call { TenantEntity.findById(m.tenantId)!!.status })
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"$domain","overContent":true,"statement":${statement()}}""")
+            .post("/api/tenants/${m.tenantId}/deletion").then().statusCode(200)
+        assertEquals(TenantEntity.PENDING_DELETION, QuarkusTransaction.requiringNew().call { TenantEntity.findById(m.tenantId)!!.status })
+        val text = textOf(mailsTo(emailOf(owner)).single { textOf(it).contains("was deleted") })
+        assertTrue(text.contains("a space you own, $domain, was deleted"), text)
+        assertTrue(text.contains("What they found: $FACTS"), text)
+        assertTrue(mailsTo(emailOf(m.userId), wait = false).none { textOf(it).contains("What they found") }, "a member who owns nothing is told")
+        val record = QuarkusTransaction.requiringNew().call {
+            ModerationBlockEntity.find("kind = ?1 and targetId = ?2", BlockKind.TENANT_DELETED.name, m.tenantId).firstResult()!!
+        }
+        assertNotNull(record.activeKey)
+        ModerationTestKit.asOwner(mod.id).delete("/api/tenants/${m.tenantId}/deletion").then().statusCode(204)
+        QuarkusTransaction.requiringNew().run { assertNull(ModerationBlockEntity.findById(record.id)!!.activeKey) }
+        // Control: a deletion for another reason (not over content, no proposal) carries none and records none.
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"$domain"}""").post("/api/tenants/${m.tenantId}/deletion").then().statusCode(200)
+        assertEquals(1L, QuarkusTransaction.requiringNew().call { ModerationBlockEntity.count("kind = ?1 and targetId = ?2", BlockKind.TENANT_DELETED.name, m.tenantId) })
+        ModerationTestKit.asOwner(mod.id).delete("/api/tenants/${m.tenantId}/deletion").then().statusCode(204)
+    }
+
+    /**
+     * A measure on what is erased ends with it (GDPR Art. 5(1)(e)): the tenant's purge lifts its record over content and
+     * an account's purge its sign-in block, so their statements go at their date instead of standing on nothing forever.
+     */
+    @Test
+    fun aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate() {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val domain = QuarkusTransaction.requiringNew().call { TenantEntity.findById(m.tenantId)!!.domain }
+        val tenantStatement = UUID.randomUUID().toString()
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"$domain","overContent":true,"statement":${statement(tenantStatement)}}""")
+            .post("/api/tenants/${m.tenantId}/deletion").then().statusCode(200)
+        val member = seedUser()
+        val memberStatement = UUID.randomUUID().toString()
+        block(emailOf(member), ""","overContent":true,"statement":${statement(memberStatement)}""").then().statusCode(200)
+        ModerationTestKit.asOwner(mod.id).body("""{"address":"${emailOf(member)}"}""").post("/api/instance/accounts/erasures")
+            .then().statusCode(200)
+        val measures = QuarkusTransaction.requiringNew().call {
+            listOf(tenantStatement, memberStatement).map { ModerationStatementEntity.findById(it)!!.measureId }
+        }
+        // Control: while the two stand, nothing of them goes, however late.
+        purge.sweep(Instant.now().plus(Duration.ofDays(5 * 366)))
+        QuarkusTransaction.requiringNew().run { measures.forEach { assertNotNull(ModerationBlockEntity.findById(it)!!.activeKey) } }
+
+        tenantPurge.purge(m.tenantId)
+        accountPurge.purge(member)
+        val lifted = QuarkusTransaction.requiringNew().call {
+            measures.map { id -> ModerationBlockEntity.findById(id)!!.also { assertNull(it.activeKey); assertNull(it.liftedBy) }.liftedAt!! }
+        }
+        purge.sweep(ModerationLog.retentionEnd(lifted.maxOf { it }).plusSeconds(60))
+        QuarkusTransaction.requiringNew().run {
+            listOf(tenantStatement, memberStatement).forEach { assertNull(ModerationStatementEntity.findById(it)) }
+            measures.forEach { assertNull(ModerationBlockEntity.findById(it)) }
+        }
     }
 
     @Test

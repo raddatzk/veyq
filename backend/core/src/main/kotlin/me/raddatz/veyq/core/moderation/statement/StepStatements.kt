@@ -79,7 +79,7 @@ class StepStatements(private val operatingMode: OperatingModeHandler, private va
     /** Who [measure] tells: the blocked account, or every owner of the tenant taken offline — accounts that still exist. */
     fun recipientsOf(measure: ModerationBlockEntity): List<Recipient> = when (measure.blockKind) {
         BlockKind.MEMBER_SIGN_IN -> listOf(Recipient(RecipientKind.ACCOUNT, measure.targetId, setOf(StatementRole.ACCOUNT_HOLDER)))
-        BlockKind.TENANT_OFFLINE -> MembershipEntity.list("scopeId = ?1 and role = ?2", measure.targetId, MembershipEntity.OWNER)
+        BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED -> MembershipEntity.list("scopeId = ?1 and role = ?2", measure.targetId, MembershipEntity.OWNER)
             .map { Recipient(RecipientKind.ACCOUNT, it.userId, setOf(StatementRole.TENANT_OWNER)) }
         else -> error("not a Server Owner's step: ${measure.kind}")
     }.let { found ->

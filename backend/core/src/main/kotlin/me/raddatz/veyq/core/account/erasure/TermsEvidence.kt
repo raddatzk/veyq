@@ -12,7 +12,10 @@ import java.time.Instant
  * Whether a moderation case names an account, so that its terms acceptance rows outlive its erasure as the evidence
  * of which terms a breach was measured against (ADR 0101 decision 6, ADR 0035 decision 4, GDPR Art. 17(3)(e)). A case
  * names an account through a measure on it (a block whose target is the account) or through a statement over its
- * content (the account is one of the statement's recipients). No new period: the case's log retention date.
+ * content (the account is one of the statement's recipients). No new period: the case's log retention date — or, for the
+ * Server Owner's step on no case, the step's own (31 December of the third year after its lift): the account's purge
+ * ends a measure on it ([me.raddatz.veyq.core.moderation.cases.SignInBlocks.targetErased]), so the record, not its
+ * standing, is what keeps the rows.
  */
 object TermsEvidence {
 
@@ -22,11 +25,14 @@ object TermsEvidence {
             casesAbout(accountId).any { it.closedAt == null }
 
     /**
-     * Later, for a row an erasure kept: a measure still in force, or a case naming the account that is open or inside its
-     * log retention ([ModerationLog.retentionEnd] of its close).
+     * Later, for a row an erasure kept: a measure still in force, a step on no case inside its own retention
+     * ([ModerationLog.retentionEnd] of its lift), or a case naming the account that is open or inside its log retention
+     * ([ModerationLog.retentionEnd] of its close).
      */
     fun namesUntil(accountId: String, now: Instant): Boolean =
         ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", accountId) > 0 ||
+            ModerationBlockEntity.list("targetId = ?1 and caseId is null", accountId)
+                .any { step -> step.liftedAt?.let { ModerationLog.retentionEnd(it).isAfter(now) } ?: true } ||
             (blockCases(accountId) + casesAbout(accountId)).any { c ->
                 val closed = c.closedAt
                 closed == null || ModerationLog.retentionEnd(closed).isAfter(now)

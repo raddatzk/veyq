@@ -29,6 +29,8 @@ import me.raddatz.veyq.core.identity.kept
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.ModerationChallengeEntity
 import me.raddatz.veyq.core.moderation.ModerationGrantEntity
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import me.raddatz.veyq.core.tasks.JobDeclineEntity
@@ -66,6 +68,7 @@ class AccountPurge(
     private val tenants: TenantStore,
     private val reclaim: StoreReclaimStore,
     private val mail: AccountErasureMail,
+    private val steps: SignInBlocks,
     @All erasers: MutableList<AccountEraser>,
 ) {
     private val erasers: List<AccountEraser> = erasers.toList()
@@ -154,6 +157,8 @@ class AccountPurge(
         UploadSessionEntity.delete("openerUserId", accountId)
         // The terms acceptance history (ADR 0101 decision 6): kept under the opaque id while a case names the account.
         if (!TermsEvidence.namesAtErasure(accountId)) TenantTermsAcceptanceEntity.delete("userId", accountId)
+        // After the terms question, which asks whether one stands: a measure on the account ends with it.
+        steps.targetErased(accountId, listOf(BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT), Instant.now())
         AccountErasureEntity.deleteById(accountId)
         // ERASURE LEDGER — the one hook for the ACCOUNT kind: cr-backup-erasure-and-retention writes its outbox entry
         // (kind ACCOUNT, this id, [requestedAt]'s erasure completing now) here, in this transaction, before the row goes.

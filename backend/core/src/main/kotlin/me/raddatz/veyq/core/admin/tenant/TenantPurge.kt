@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.identity.TenantProfileEntity
+import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import me.raddatz.veyq.core.tenant.TenantEntity
@@ -25,7 +27,7 @@ import org.jboss.logging.Logger
  * Operator-blind: nothing is decrypted; store objects go only through the reclaim list (ADR 0062).
  */
 @ApplicationScoped
-class TenantPurge(private val scopePurge: ScopePurge, private val store: TenantStore) {
+class TenantPurge(private val scopePurge: ScopePurge, private val store: TenantStore, private val steps: SignInBlocks) {
     private val log = Logger.getLogger(TenantPurge::class.java)
 
     @Scheduled(every = "{veyq.tenant.deletion.purge.every}")
@@ -57,6 +59,8 @@ class TenantPurge(private val scopePurge: ScopePurge, private val store: TenantS
         if (ScopeEntity.findById(tenantId) != null) scopePurge.purge(tenantId)
         TenantProfileEntity.delete("tenantId", tenantId)
         TenantInviteEntity.delete("tenantId", tenantId)
+        // A suspension's or this deletion's record over content ends with the tenant, so its records run to their date.
+        steps.targetErased(tenantId, listOf(BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED), Instant.now())
         // ERASURE LEDGER — the one hook for the TENANT kind: cr-backup-erasure-and-retention writes its outbox entry
         // (kind TENANT, this id) here, in this transaction, before the row goes.
         TenantEntity.deleteById(tenantId)

@@ -104,7 +104,7 @@ class StatementMail(
         // The host a moderator's statement sends the reader to, and the tenant a suspension names; a sign-in block needs none.
         val domain = when (measure.blockKind) {
             BlockKind.MEMBER_SIGN_IN -> ""
-            BlockKind.TENANT_OFFLINE -> TenantEntity.findById(measure.targetId)?.domain ?: return emptyList()
+            BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED -> TenantEntity.findById(measure.targetId)?.domain ?: return emptyList()
             else -> statement.caseId?.let { ModerationCaseEntity.findById(it) }
                 ?.let { ScopeEntity.findById(it.scopeId) }?.tenantId?.let { TenantEntity.findById(it) }?.domain ?: return emptyList()
         }

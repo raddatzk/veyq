@@ -144,7 +144,7 @@ class ModerationRecordsPurge {
     fun purgeCaselessSteps(now: Instant) = QuarkusTransaction.requiringNew().run {
         ModerationBlockEntity.list(
             "caseId is null and kind in ?1 and activeKey is null and liftedAt < ?2",
-            listOf(BlockKind.MEMBER_SIGN_IN.name, BlockKind.TENANT_OFFLINE.name), now.minus(THREE_YEARS),
+            listOf(BlockKind.MEMBER_SIGN_IN.name, BlockKind.TENANT_OFFLINE.name, BlockKind.TENANT_DELETED.name), now.minus(THREE_YEARS),
         ).filter { step -> step.liftedAt?.let { ModerationLog.retentionEnd(it).isBefore(now) } == true }
             .forEach { step ->
                 val statementIds = ModerationStatementEntity.list("measureId", step.id).map { it.id }

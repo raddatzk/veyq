@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.moderation.ModerationEpochEntity
 import me.raddatz.veyq.core.moderation.ModerationGrantEntity
+import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
@@ -150,14 +151,14 @@ class AccountErasureSliceTest {
             assertEquals(1L, TenantTermsAcceptanceEntity.count("userId", named), "a measure in force keeps the evidence")
             assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", control), "control: no case, no rows")
         }
-        // Still in force: the sweep keeps them.
-        QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(Instant.now()) }
-        tx { assertEquals(1L, TenantTermsAcceptanceEntity.count("userId", named)) }
-        // Lifted, with no case behind it: nothing names the account any more, and the sweep deletes them.
-        QuarkusTransaction.requiringNew().run {
-            ModerationBlockEntity.findById(blockId)!!.apply { activeKey = null; liftedAt = Instant.now() }
+        // The purge ended the measure with the account; its record, a step on no case, keeps the rows to its own date.
+        val lifted = QuarkusTransaction.requiringNew().call {
+            ModerationBlockEntity.findById(blockId)!!.also { assertNull(it.activeKey) }.liftedAt!!
         }
-        QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(Instant.now()) }
+        QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).minusSeconds(60)) }
+        tx { assertEquals(1L, TenantTermsAcceptanceEntity.count("userId", named)) }
+        // Past that date nothing names the account any more, and the sweep deletes them.
+        QuarkusTransaction.requiringNew().run { purge.sweepKeptTerms(ModerationLog.retentionEnd(lifted).plusSeconds(60)) }
         tx { assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", named)) }
     }
 

@@ -71,6 +71,10 @@ object StatementTemplate {
             measure = Texts("a space you own, {domain}, was taken offline", "ein Bereich, der dir gehört, {domain}, wurde offline genommen"),
             reach = Texts("Nobody can open it or anything in it, its members included, and its links answer as if they did not exist; nothing was deleted.", "Niemand kann ihn oder etwas darin öffnen, auch seine Mitglieder nicht, und seine Links antworten, als gäbe es sie nicht; gelöscht wurde nichts."),
         ),
+        "TENANT_DELETED" to MeasureTexts(
+            measure = Texts("a space you own, {domain}, was deleted", "ein Bereich, der dir gehört, {domain}, wurde gelöscht"),
+            reach = Texts("Nobody can open it or anything in it from now on, its members included, and its links answer as if they did not exist. Everything in it is erased after a waiting period unless the deletion is stopped before; the accounts of its members stay.", "Ab jetzt kann niemand ihn oder etwas darin öffnen, auch seine Mitglieder nicht, und seine Links antworten, als gäbe es sie nicht. Alles darin wird nach einer Wartezeit gelöscht, wenn die Löschung nicht vorher gestoppt wird; die Konten seiner Mitglieder bleiben."),
+        ),
     )
     val ROLES: Map<String, Texts> = linkedMapOf(
         "SHARE_CREATOR" to Texts("the person who created the link", "Person, die den Link erstellt hat"),
