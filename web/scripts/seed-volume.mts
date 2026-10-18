@@ -25,7 +25,7 @@
 //   seed-volume.mts upload --count N          scenario: the first member uploads N phone-sized photos, one at a time
 //
 // Every seeder is told a target, counts what is there and fills the gap, so a stopped run resumes and the next stage
-// only adds (decision 1).
+// only adds.
 import './volumePrelude.mts'
 import 'fake-indexeddb/auto'
 import { readFileSync, existsSync } from 'node:fs'
@@ -165,7 +165,7 @@ const CAPTURE_FROM = Date.UTC(2019, 0, 1)
 const captureAt = (i: number): number => CAPTURE_FROM + ((i * 7_919_993_011) % (6 * 365 * 86_400_000))
 
 /** One photo as `addCopiedMedia` takes it: the fixture's bytes (re-sealed under a fresh K_blob per photo by the upload),
- *  a tenth of them portrait, with the listed tier carrying geometry and a capture time (decision 2). */
+ *  a tenth of them portrait, with the listed tier carrying geometry and a capture time. */
 function photo(i: number, s: { landscape: Shape; portrait: Shape }, derivatives: boolean): CopiedMediaSource {
   const shape = i % 10 === 9 ? s.portrait : s.landscape
   const jpeg = (bytes: Uint8Array) => new Blob([bytes as BlobPart], { type: 'image/jpeg' })
@@ -243,7 +243,7 @@ async function ensureGroup(name: string): Promise<OpenedScope> {
 type Spec = { kind: string; name: string; parent: string | null }
 const pad = (n: number) => String(n).padStart(3, '0')
 
-/** The realistic shape (decision 3): Folders holding Memories holding Chapters, 1 : 5 : 20 — in creation order, so a
+/** The realistic shape: Folders holding Memories holding Chapters, 1 : 5 : 20 — in creation order, so a
  *  stopped run has created a prefix of it. */
 function* realistic(): Generator<Spec> {
   for (let f = 0; ; f++) {
@@ -355,7 +355,7 @@ async function members(target: number): Promise<void> {
       if (httpStatus(e) === 429) {
         die(`invite ${invites + 1} of this run (member ${count + 1} of ${target}) was refused with 429: invites are ` +
           `limited per tenant per hour (veyq.ratelimit.invite.per-tenant-max-requests, default 20) — raise it while ` +
-          `seeding members (decision 9). The tenant holds ${count} members, NOT the target ${target}.`, 3)
+          `seeding members. The tenant holds ${count} members, NOT the target ${target}.`, 3)
       }
       throw e
     }
@@ -373,7 +373,7 @@ async function members(target: number): Promise<void> {
     joinRate.tick()
   }
   console.log(`members: joined ${joinRate.end()}`)
-  // 2 — each member's own half: its sealed name, and every fifth a picture (decision 4).
+  // 2 — each member's own half: its sealed name, and every fifth a picture.
   const pending = accounts().members.filter((m) => m.stage === 'joined' || m.stage === 'granted')
   if (pending.some((m) => m.stage === 'joined')) {
     await signIn(a.owner)

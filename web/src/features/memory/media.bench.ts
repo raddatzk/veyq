@@ -1,4 +1,4 @@
-// The gallery's client crypto at volume (cr-volume-measurement-local, decision 8): per photo, what opening a 10,000-photo
+// The gallery's client crypto at volume (cr-volume-measurement-local): per photo, what opening a 10,000-photo
 // Chapter costs on the device before any pixel is decoded — the listed tier (`unsealMeta`), the thumbnail's `K_blob`
 // (`unwrapBlobKey`) and its one frame (`openFrame`, a thumbnail-sized frame). The single-operation benches give the
 // per-operation time; the 10,000 ones the total. `npx vitest bench src/features/memory/media.bench.ts`; `vitest run`

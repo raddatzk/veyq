@@ -1,4 +1,4 @@
-// The browser leg (cr-volume-measurement-local, decision 6): what a big list costs the device that opens it. It waits
+// The browser leg (cr-volume-measurement-local): what a big list costs the device that opens it. It waits
 // on STATES, never on durations — a wait ends when the state is reached or when nothing has moved for `stallSecs`,
 // and a stall is reported as "k of N", never as a pass or a hang. TEMPORARY, see playwright.config.ts beside it.
 //
@@ -135,6 +135,13 @@ async function device(browser: Browser, a: Account, throttle: number): Promise<D
   return { context, page, failed, cdp, signInMs, throttle, email: a.email }
 }
 
+/** `p`, or null when it has not settled within `ms` (the page's main thread may be too busy to answer). */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms) })
+  return Promise.race([p.catch(() => null), late]).finally(() => clearTimeout(timer))
+}
+
 const stateOf = (page: Page) => page.evaluate(() => (window as unknown as { __vol: { state: State } }).__vol.state)
 
 /** Open the target on a signed-in device and wait for its end state, or for a stall; then read the device's numbers. */
@@ -155,9 +162,18 @@ async function open(d: Device, run: number): Promise<Run> {
   } else {
     await page.evaluate((h) => { location.hash = h }, spec.hash)
   }
+  // Two stalls end a wait: the page reports no progress for `stallSecs` (its own clock), or the page does not answer a
+  // read for `stallSecs` of this process's clock — a main thread so busy it cannot run the read is a stall as well (the
+  // 10,000 Chapter under a 4x throttle held one for over 30 minutes).
   let stopped: string | null = null
+  let state: State | null = null
   for (;;) {
-    const s = await stateOf(page)
+    const s = await within(stateOf(page), spec.stallSecs * 1000)
+    if (s === null) {
+      stopped = `the page did not answer for ${spec.stallSecs}s` + (state ? ` (last seen: ${state.thumbs} of ${spec.items} thumbnails, ${state.tiles} tiles)` : '')
+      break
+    }
+    state = s
     if (s.doneMs !== null) break
     if ((s.now - s.progressAt) / 1000 > spec.stallSecs) {
       stopped = spec.axis === 'members'
@@ -169,13 +185,14 @@ async function open(d: Device, run: number): Promise<Run> {
     }
     await page.waitForTimeout(500)
   }
-  const state = await stateOf(page)
+  if (!stopped) state = (await within(stateOf(page), spec.stallSecs * 1000)) ?? state
   if (spec.holdSecs) {
     console.log(JSON.stringify({ holding: spec.holdSecs }))
     await page.waitForTimeout(spec.holdSecs * 1000)
   }
-  const metrics = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map((m) => [m.name, m.value]))
-  const seen = await page.evaluate(() => {
+  const got = await within(cdp.send('Performance.getMetrics'), spec.stallSecs * 1000)
+  const metrics: Record<string, number> = got ? Object.fromEntries(got.metrics.map((m) => [m.name, m.value])) : {}
+  const seen = await within(page.evaluate(() => {
     const w = window as unknown as { __vol: { longtasks: number[] } }
     const kinds: Record<string, { count: number; bytes: number }> = {}
     for (const e of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) {
@@ -191,23 +208,23 @@ async function open(d: Device, run: number): Promise<Run> {
     }
     const lt = w.__vol.longtasks
     return { requests: kinds, longtasks: { count: lt.length, totalMs: Math.round(lt.reduce((a, b) => a + b, 0)), maxMs: Math.round(Math.max(0, ...lt)) } }
-  })
-  await d.context.close()
+  }), spec.stallSecs * 1000) ?? { requests: {}, longtasks: null }
+  await d.context.close().catch(() => {})
   const gallery = spec.axis === 'photos' || spec.axis === 'five' || spec.axis === 'bare'
   return {
     run, throttle: d.throttle, signInMs: d.signInMs,
-    listMs: state.listMs, listRequestMs: state.listRequestMs, firstTileMs: state.firstTileMs,
-    lastThumbnailMs: gallery ? state.doneMs : null,
-    doneMs: state.doneMs, tiles: state.tiles, thumbs: state.thumbs, rows: state.rows, named: state.named,
-    pictures: state.pictures, stopped, failedRequests: d.failed,
-    jsHeapUsedBytes: metrics.JSHeapUsedSize, domNodes: metrics.Nodes, ...seen,
+    listMs: state?.listMs ?? null, listRequestMs: state?.listRequestMs ?? null, firstTileMs: state?.firstTileMs ?? null,
+    lastThumbnailMs: gallery ? state?.doneMs ?? null : null,
+    doneMs: state?.doneMs ?? null, tiles: state?.tiles ?? 0, thumbs: state?.thumbs ?? 0, rows: state?.rows ?? 0,
+    named: state?.named ?? 0, pictures: state?.pictures ?? 0, stopped, failedRequests: d.failed,
+    jsHeapUsedBytes: metrics.JSHeapUsedSize ?? null, domNodes: metrics.Nodes ?? null, ...seen,
   }
 }
 
 test(`volume: ${spec.label}`, async ({ browser }) => {
   const runs: Run[] = []
   if (spec.axis === 'five') {
-    // Five members open the same Chapter together, each its own device (decision 7): all signed in first, then opened at once.
+    // Five members open the same Chapter together, each its own device: all signed in first, then opened at once.
     const devices = await Promise.all(spec.accounts.slice(0, 5).map((a) => device(browser, a, 1)))
     const together = await Promise.all(devices.map((d, i) => open(d, i + 1)))
     runs.push(...together.map((r, i) => ({ ...r, member: i + 1 })))

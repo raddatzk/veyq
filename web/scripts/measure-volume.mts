@@ -1,4 +1,4 @@
-// The server leg's client (cr-volume-measurement-local, decision 5): one list call at a time against the throwaway
+// The server leg's client (cr-volume-measurement-local): one list call at a time against the throwaway
 // instance, timed from this process. TEMPORARY: `cr-volume-measurement-cax` deletes it with the rest of the harness.
 //
 //   measure-volume.mts <photos|bare|tree|wide|members>

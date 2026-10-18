@@ -1,10 +1,10 @@
-// The tree's client cost at volume (cr-volume-measurement-local, decision 8): `openTree` over synthetic sealed rows in
+// The tree's client cost at volume (cr-volume-measurement-local): `openTree` over synthetic sealed rows in
 // the two shapes the volume harness seeds — the realistic one (Folders : Memories : Chapters ≈ 1 : 5 : 20) at 500 and
 // at 5,000, and the wide one (2,000 Chapters under one Memory), the worst case for the per-sibling list building.
 // `npx vitest bench src/core/node/tree.bench.ts`; `vitest run` does not collect bench files, so `npm run check` is
 // unchanged. TEMPORARY: `cr-volume-measurement-cax` deletes it with the rest of the harness.
 //
-// The control (the CR's phase 5): if the realistic shape costs about 10x as much at 5,000 as at 500, the quadratic terms
+// The control: if the realistic shape costs about 10x as much at 5,000 as at 500, the quadratic terms
 // in `openEntries` (the child lists copied per row, the queue taken from the front) do not matter yet at this size.
 import { bench, describe, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'

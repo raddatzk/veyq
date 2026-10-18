@@ -19,10 +19,10 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
     measure_volume.py --instance DIR fixtures                      the JPEG/WebP fixtures the seeders upload
     measure_volume.py --instance DIR boot --app IMG --admin IMG    a fresh instance (ports 80/443 must be free)
     measure_volume.py --instance DIR seed <seed-volume args>       web/scripts/seed-volume.mts against it
-    measure_volume.py --instance DIR invite-limit <N|default>      decision 9: the per-tenant invite limit, app recreated
-    measure_volume.py --instance DIR server <axis>                 the server leg, with the sampler (decision 5)
-    measure_volume.py --instance DIR browser <axis> [...]          the browser leg (decision 6), e2e/measure/volume.ts
-    measure_volume.py --instance DIR scenario <idle|five|upload>   a household scenario (decision 7), with the sampler
+    measure_volume.py --instance DIR invite-limit <N|default>      the per-tenant invite limit while seeding members, app recreated
+    measure_volume.py --instance DIR server <axis>                 the server leg, with the sampler
+    measure_volume.py --instance DIR browser <axis> [...]          the browser leg, e2e/measure/volume.ts
+    measure_volume.py --instance DIR scenario <idle|five|upload>   a household scenario, with the sampler
     measure_volume.py --instance DIR stage <axis> <N>              seed to N, then the server and the browser leg
     measure_volume.py --instance DIR sample --seconds S            the sampler alone
     measure_volume.py --instance DIR oom-bite                      the sampler's bite: a tiny memory limit, live
@@ -32,7 +32,7 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
 Axes: `photos` (the 'All photos' Chapter), `bare` (the 'No derivatives' Chapter, a bite's target), `tree` (the
 realistic group), `wide` (one Memory holding every Chapter), `members` (the tenant).
 
-**The sampler** (decision 5) runs its commands through `--prefix` (empty here, `ssh <host>` on the CAX): `docker stats`
+**The sampler** runs its commands through `--prefix` (empty here, `ssh <host>` on the CAX): `docker stats`
 streamed for the project's containers (about one frame a second: CPU %, memory), `docker events` for the project (an
 OOM kill, a die, a restart is an event, never a quiet gap), and a host probe — locally a busybox container on the
 outside cores reading the Docker VM's `/proc` (load, MemAvailable), remotely the host's own. Locally it also records
@@ -201,7 +201,7 @@ class Instance:
 
 
 def fixtures(directory: Path) -> None:
-    """The bytes every seeded photo carries (decision 2), made with ImageMagick: a plasma picture is photo-like enough
+    """The bytes every seeded photo carries, made with ImageMagick: a plasma picture is photo-like enough
     for JPEG to compress it the way it compresses a photo. A tenth of the photos are portrait."""
     out = directory / "fixtures"
     out.mkdir(parents=True, exist_ok=True)
@@ -221,8 +221,8 @@ def fixtures(directory: Path) -> None:
     for orientation, (w, h) in (("landscape", (4, 3)), ("portrait", (3, 4))):
         jpeg(f"thumb-{orientation}", 128 * w, 128 * h, 80)  # TIER_SPECS.THUMBNAIL: 512 long edge, quality 0.8
         jpeg(f"preview-{orientation}", 512 * w, 512 * h, 85)  # TIER_SPECS.PREVIEW: 2048 long edge, quality 0.85
-        jpeg(f"original-{orientation}", 256 * w, 256 * h, 85)  # a small original (decision 2)
-        # The upload scenario's phone original: 12 MP, about 4 MB (decision 7) — the highest quality that stays under 4.4 MB.
+        jpeg(f"original-{orientation}", 256 * w, 256 * h, 85)  # a small original
+        # The upload scenario's phone original: 12 MP, about 4 MB — the highest quality that stays under 4.4 MB.
         for quality in (98, 96, 94, 92, 90, 88, 85, 80):
             if jpeg(f"phone-{orientation}", 1008 * w, 1008 * h, quality, noise=0.9) <= 4_400_000:
                 break
@@ -370,7 +370,7 @@ def parse_bytes(text: str) -> int:
 
 
 class Sampler:
-    """docker stats, docker events and a host probe, each a stream into a JSONL file of `out` (decision 5)."""
+    """docker stats, docker events and a host probe, each a stream into a JSONL file of `out`."""
 
     def __init__(self, inst: Instance, out: Path, local: bool = True):
         self.inst, self.out, self.local = inst, out, local
@@ -725,7 +725,7 @@ def specs(inst: Instance, axis: str, items: int, runs: int, throttles: list[int]
     raise Refused(f"no browser leg for {axis}")
 
 
-# ---------------------------------------------------------------- scenarios and stages (decision 7, phase 8)
+# ---------------------------------------------------------------- scenarios and stages
 
 
 def wait_quiet(max_load: float, patience_min: float) -> float:
@@ -798,7 +798,7 @@ def stage(inst: Instance, axis: str, n: int, max_load: float, patience: float, b
             if seed(inst, ["members", "--target", str(n)]) != 0:
                 raise Refused("the member seeder did not reach its target")
         finally:
-            invite_limit(inst, "default")  # restarted with the defaults before anything is measured (decision 9)
+            invite_limit(inst, "default")  # restarted with the defaults before anything is measured
     else:
         args = {"photos": ["photos", "--target", str(n)], "bare": ["photos", "--bare", "--target", str(n)],
                 "tree": ["tree", "--target", str(n)], "wide": ["tree", "--wide", str(n)]}[axis]
@@ -855,8 +855,12 @@ def judge(directory: Path) -> dict:
         if s["recipePeakMem"] is not None and s["recipePeakMem"] > s["recipeBudget"]:
             findings.append(f"{sampler.parent.name}: the recipe's memory peaked at {s['recipePeakMem'] / GIB:.2f} GiB, "
                             f"above 80 % of {s['ram'] / GIB:.0f} GiB")
-        if s["macLoad1"]["max"] is not None and s["macLoad1"]["max"] > 3:
-            notes.append(f"{sampler.parent.name}: taken under load {s['macLoad1']['max']} — not a reading")
+        # The quiet gate is the load BEFORE the readings start: during them the measurement's own browsers and seeders
+        # load this host too, which says nothing about the neighbours.
+        start = sampler.parent / "quiet-start.json"
+        load = json.loads(start.read_text(encoding="utf-8"))["load1"] if start.is_file() else s["macLoad1"]["max"]
+        if load is not None and load > 3:
+            notes.append(f"{sampler.parent.name}: started under load {load:.1f} — not a reading")
     for server in directory.glob("**/server-*.json"):
         r = json.loads(server.read_text(encoding="utf-8"))
         if r["failedStatuses"]:

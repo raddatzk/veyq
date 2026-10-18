@@ -1,4 +1,4 @@
-// The volume harness's browser leg (cr-volume-measurement-local, decision 6) — NOT lane L1: it lives outside `tests/`
+// The volume harness's browser leg (cr-volume-measurement-local) — NOT lane L1: it lives outside `tests/`
 // and has its own config, so L1's run never collects it. `scripts/measure_volume.py` starts it in the Playwright image
 // the overlay pins, on the measured instance's own networks and on cores outside the instance's (the overlay's
 // `cpuset`), with `-c measure/playwright.config.ts`. TEMPORARY: `cr-volume-measurement-cax` deletes `e2e/measure/`.
