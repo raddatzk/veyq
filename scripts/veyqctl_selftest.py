@@ -148,8 +148,10 @@ class FakeHost(vc.Host):
 
     def __init__(self, *, local_images=(), signed=(), cosign=True, project="veyq", answers=None, ps=HEALTHY,
                  fail_tool: str = "", cosign_version: str = "v3.1.3", watch: pathlib.Path | None = None,
-                 store_in_use: str | None = "bundled") -> None:
+                 store_in_use: str | None = "bundled", ledger: str | None = None, fresh: bool | None = True) -> None:
         self.store_in_use = store_in_use    # what the tool's `store-in-use` prints; None: it fails
+        self.ledger = ledger                # what `erasures.log` in the app's volume holds; None: there is none
+        self.fresh = fresh                  # the tool's `retention`: a capture younger than B; None: it fails
         self.commands: list[list[str]] = []
         self.blobs: list[bytes] = []        # what `cosign verify-blob` was handed as the blob, at the moment it ran
         self.watch = watch                  # a path whose existence is recorded per command (the home, say)
@@ -176,9 +178,15 @@ class FakeHost(vc.Host):
             rc = 1 if cmd[2] == self.fail_tool else 0
             if cmd[2] == "store-in-use":
                 rc, out = (1, "") if self.store_in_use is None else (rc, self.store_in_use + "\n")
+            if cmd[2] == "retention":
+                rc, out = (1, "") if self.fresh is None else (rc, json.dumps(
+                    {"days": 30, "source": "the default, none set", "youngest": "20261001T000000Z" if self.fresh else
+                     None, "youngestAt": None, "fresh": self.fresh}) + "\n")
             if cmd[2] == "restore" and not rc:  # the tool places leg (c) where veyqctl told it to
                 key = cmd[cmd.index("--config-secret-file") + 1]
                 pathlib.Path(key).write_bytes(b"restored-key")
+        elif "read-ledger" in cmd:  # the erasure ledger read out of the app's volume by a one-off container
+            rc, out = (3, "") if self.ledger is None else (0, self.ledger)
         elif cmd[:2] == ["docker", "cp"]:
             pathlib.Path(cmd[3]).write_bytes(b"the-instance-key")
         elif cmd[:3] == ["docker", "ps", "-aq"]:
@@ -768,7 +776,7 @@ def test_backup_restore(tmp: pathlib.Path) -> None:
                       "--key-from", str(tmp / "b.key")], host)
     first = first_of(host)
     ran = host.commands[first("restore")] if host.ran("restore") else []
-    place = host.commands[first("run", "--rm", "app")] if host.ran("run", "--rm", "app") else []
+    place = host.commands[first("run", "--rm", "app", "place-key")] if host.ran("run", "--rm", "app", "place-key") else []
     check("restore: the running release's tool, onto the tenant domain given, with the key it was given",
           rc == 0 and ran[1] == str(tool) and ran[ran.index("--domain") + 1] == "family.veyq.test"
           and ran[ran.index("--key-from") + 1] == str((tmp / "b.key").absolute()), str(ran))
@@ -776,7 +784,7 @@ def test_backup_restore(tmp: pathlib.Path) -> None:
           place[:3] == ["docker", "compose", "-p"] and "--no-deps" in place
           and place[-1] == "/var/lib/veyq/config-secret.key" and host.stdins == [b"restored-key"]
           and not any("restored-key" in arg for arg in place), str(place))
-    steps = [first("stop", "app"), first("restore"), first("run", "--rm", "app"), first("up")]
+    steps = [first("stop", "app"), first("restore"), first("run", "--rm", "app", "place-key"), first("up")]
     check("restore: stop the app, restore, place the key, up — in that order", steps == sorted(steps), str(steps))
     check("restore: the key's copy in the home is gone afterwards",
           not any(p.name.startswith(".key-") for p in home.iterdir()))
@@ -785,7 +793,7 @@ def test_backup_restore(tmp: pathlib.Path) -> None:
         rc = vc.main(["--home", str(home), "restore", str(capture_dir), "--domain", "family.veyq.test",
                       "--key-from", str(tmp / "b.key")], host)
     check("restore: a failed restore leaves the app STOPPED — no up on a half-restored instance",
-          rc == 1 and not host.ran("up") and not host.ran("run", "--rm", "app"))
+          rc == 1 and not host.ran("up") and not host.ran("run", "--rm", "app", "place-key"))
 
 
 def with_env(home: pathlib.Path, **values: str) -> None:
@@ -951,7 +959,7 @@ def test_rollback(tmp: pathlib.Path) -> None:
              first("up", str(home / "releases/1.3" / vc.COMPOSE_ASSET))]
     restore_at = first("restore")
     order += [max(i for i in host.ran("stop", "app") if i < restore_at) if host.ran("stop", "app") else 10 ** 6,
-              restore_at, first("run", "--rm", "app"), host.ran("up")[-1] if host.ran("up") else 10 ** 6]
+              restore_at, first("run", "--rm", "app", "place-key"), host.ran("up")[-1] if host.ran("up") else 10 ** 6]
     restore = host.commands[restore_at] if host.ran("restore") else []
     check("rollback: verify against the live store, stop, empty the database, start the capture's release once, "
           "stop, restore with the check only, place the key, start — in that order",
@@ -979,6 +987,101 @@ def test_rollback(tmp: pathlib.Path) -> None:
               rc == 1 and said in out and not host.ran("stop") and not host.ran("empty-database")
               and ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes()) == before
               and not (home / ".env.rollback").exists(), out[-300:])
+
+
+LEDGER = '{"at":"2026-10-18T12:00:00Z","kind":"STORAGE_KEY","id":"k1"}\n'
+
+
+def test_retention_and_ledger(tmp: pathlib.Path) -> None:
+    """ADR 0056 decision 8 on Compose: every capture past B pruned at `backup`, `upgrade` and `start` and by `backup
+    prune`; `status` warning while none is younger than B; the erasure ledger handed to `restore` and `rollback`."""
+    mirror = upgrade_mirror(tmp / "mirror-b")
+    home = installed(tmp, "home-b", mirror, "1.3", "1.3")
+    backups = str((home / vc.BACKUPS_DIR).absolute())
+
+    def prunes(host: FakeHost) -> list:
+        return [c for c in host.commands if len(c) > 2 and c[1].endswith(vc.BACKUP_ASSET) and c[2] == "prune"]
+
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "b-ret.key")], host)
+    first = first_of(host)
+    ran = prunes(host)
+    check("backup: the captures past B are pruned after the capture and its check, before the stack is up again",
+          rc == 0 and len(ran) == 1 and ran[0][ran[0].index("--captures") + 1] == backups
+          and first("verify", "--key-from") < first("prune") < first("up"), out[-300:])
+    check("backup: the prune runs with the tool's database credentials in its environment, never an argv",
+          host.envs[first("prune")].get("VEYQ_BACKUP_DB_PASSWORD") == DB_ROOT
+          and not any(DB_ROOT in a for a in host.commands[first("prune")]))
+
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(home), "backup", "prune"], host)
+    check("backup prune: only the prune — nothing stops, no key is asked for, no capture",
+          rc == 0 and len(prunes(host)) == 1 and not host.ran("stop") and not host.ran("capture"), out[-300:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="prune")
+    rc, out = run_quiet(["--home", str(home), "backup", "prune"], host)
+    check("backup prune: a prune that fails is the command's failure", rc == 1, out[-300:])
+
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = run_quiet(["--home", str(home), "start"], host)
+    first = first_of(host)
+    check("start: the stack up, then the prune", rc == 0 and first("up") < first("prune") < 10 ** 6, out[-300:])
+    host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="prune")
+    rc, out = run_quiet(["--home", str(home), "start"], host)
+    check("start: a failed prune is said and the start stands", rc == 0 and "were not pruned" in out, out[-300:])
+
+    up_home = installed(tmp, "home-b-up", mirror, "1.3", "1.12")
+    host = FakeHost(local_images=all_images(), project="veyq-proof")
+    rc, out = upgrade(up_home, host, "--unsigned-local", "--key-into", str(tmp / "b-up.key"))
+    first = first_of(host)
+    check("upgrade: the running release's tool prunes after the backup, before the switch's up",
+          rc == 0 and first("capture") < first("prune") < host.ran("up")[-1]
+          and host.commands[first("prune")][1] == str(up_home / "releases/1.3" / vc.BACKUP_ASSET), out[-300:])
+
+    for label, fresh, warns in (("no capture younger than B: the warning", False, True),
+                                ("a capture younger than B: no warning", True, False),
+                                ("B unreadable: says so, no warning", None, False)):
+        rc, out = run_quiet(["--home", str(home), "status"], FakeHost(project="veyq-proof", fresh=fresh))
+        check(f"status: {label}, exit code the health verdict",
+              rc == 0 and ("is younger than B" in out) == warns and (fresh is not None or "could not be read" in out),
+              out[-400:])
+
+    capture_dir = tmp / "a-capture-b"
+    for label, ledger in (("the ledger the app's volume holds", LEDGER), ("no ledger in the volume", None)):
+        host = FakeHost(local_images=all_images(), project="veyq-proof", ledger=ledger)
+        rc, out = run_quiet(["--home", str(home), "restore", str(capture_dir), "--domain", "family.veyq.test",
+                             "--key-from", str(tmp / "b-ret.key")], host)
+        first = first_of(host)
+        restore = host.commands[first("restore")] if host.ran("restore") else []
+        read = host.commands[first("read-ledger")] if host.ran("read-ledger") else []
+        handed = restore[restore.index("--erasures") + 1] if "--erasures" in restore else None
+        check(f"restore: {label} — read from beside the key through a one-off app container, before the restore",
+              rc == 0 and read[-1] == "/var/lib/veyq/erasures.log" and "--no-deps" in read
+              and first("stop", "app") < first("read-ledger") < first("restore"), str(read))
+        check(f"restore: {label} — " + ("handed to the tool as --erasures" if ledger else "no --erasures, the tool "
+                                        "checks as before"),
+              (handed is not None) == (ledger is not None), str(restore))
+
+    def upgraded(name: str) -> tuple:
+        rb = installed(tmp, name, mirror, "1.3", "1.12")
+        rc, _ = upgrade(rb, FakeHost(local_images=all_images(), project="veyq-proof"), "--unsigned-local",
+                        "--key-into", str(tmp / f"{name}.key"))
+        assert rc == 0
+        cap = rb / vc.BACKUPS_DIR / "20261017T000000Z-before-1.12"
+        cap.mkdir(parents=True, exist_ok=True)
+        (cap / "manifest.json").write_text(json.dumps({"app": {"version": "1.3"}, "domains": ["family.veyq.test"]}))
+        if not (tmp / f"{name}.key").exists():  # the stand-in capture wrote no key; the operator kept one
+            (tmp / f"{name}.key").write_bytes(b"k")
+        return rb, cap, tmp / f"{name}.key"
+    rb, cap, key = upgraded("home-b-rb")
+    host = FakeHost(local_images=all_images(), project="veyq-proof", ledger=LEDGER)
+    rc, out = run_quiet(["--home", str(rb), "rollback", str(cap), "--key-from", str(key), "--yes"], host)
+    first = first_of(host)
+    verify = host.commands[first("verify", "--against-store")] if host.ran("verify", "--against-store") else []
+    restore = host.commands[first("restore")] if host.ran("restore") else []
+    check("rollback: the ledger read before anything stops, handed to the verify against the live store and the restore",
+          rc == 0 and first("read-ledger") < first("verify", "--against-store") < first("stop", "app")
+          and "--erasures" in verify and "--erasures" in restore
+          and not any(p.name.startswith(".ledger-") for p in rb.iterdir()), out[-400:])
 
 
 def test_self_update(tmp: pathlib.Path) -> None:
@@ -1250,6 +1353,7 @@ def main() -> int:
         test_backup_restore(tmp)
         test_pool(tmp)
         test_rollback(tmp)
+        test_retention_and_ledger(tmp)
         test_self_update(tmp)
         test_manifest_signature(tmp)
     if failures:

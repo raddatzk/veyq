@@ -78,7 +78,9 @@ provisioning went — the public origin answers no Server-Owner operation, so th
 
 Backups: the init container `backup-gate` captures the database and an index of the store onto the claim
 {{ .Values.backup.existingClaim }} whenever the pod starts a different release (or a new backup.request), BEFORE the
-app migrates, and keeps the newest {{ .Values.backup.keep }}. The app is down while it runs, and a failed or refused
+app migrates, and keeps the newest {{ .Values.backup.keep }}, none older than B — the days the Server Owner sets in the
+admin console (30 until set); the gate and the daily CronJob veyq-backup-prune delete every capture past B, the newest
+too, so a copy you need longer is one you move off the claim, and delete yourself by B. The app is down while it runs, and a failed or refused
 gate keeps it down with its data untouched. So upgrade with a timeout above the capture time, and watch the pod:
     helm upgrade --wait --timeout 15m …            (without --wait, helm reports success before the gate ran)
     under Flux: spec.timeout above the capture time; under Argo CD the Deployment reports ProgressDeadlineExceeded

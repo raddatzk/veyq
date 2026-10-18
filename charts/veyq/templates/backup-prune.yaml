@@ -1,0 +1,77 @@
+{{- if .Values.backup.enabled }}
+# The daily prune (ADR 0056 decision 8): every capture on the backup claim older than B, the newest too — the same
+# prune the gate runs at every start (scripts/instance_backup.py `prune`), so an instance that starts rarely still
+# keeps no capture past B. What it reaches and writes, asked again for a pod of its own (changes/README.md): the
+# database, to read B — by the app's own URL and user, admitted by its own NetworkPolicy (networkpolicy.yaml) — and
+# the backup claim, which it writes only by deleting; never the config-secret claim, so it can never hold the KEK
+# (scripts/chart_meta_check.py (xxviii)). The claim is ReadWriteOnce and the gate's pod holds it, so this pod runs on
+# that pod's node; with the app pod unscheduled it waits, and the next day's run tries again.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: veyq-backup-prune
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-prune
+spec:
+  schedule: {{ .Values.backup.prune.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "veyq.labels" . | nindent 12 }}
+            app.kubernetes.io/component: backup-prune
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 22 }}
+          containers:
+            - name: prune
+              image: {{ include "veyq.toolsImage" . | quote }}
+              imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+              args: ["prune", "--captures", "/backup/captures"]
+              securityContext:
+                {{- include "veyq.containerSecurityContext" . | nindent 16 }}
+              env:
+                - name: VEYQ_BACKUP_KEEP
+                  value: {{ .Values.backup.keep | quote }}
+                - name: VEYQ_BACKUP_DB_URL
+                  value: {{ include "veyq.jdbcUrl" . | quote }}
+                - name: VEYQ_BACKUP_DB_USER
+                  value: {{ include "veyq.dbUser" . | quote }}
+                - name: VEYQ_BACKUP_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "veyq.secretName" . }}
+                      key: mariadbPassword
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ .Values.backup.existingClaim | quote }}
+            - name: tmp
+              emptyDir: {}
+{{- end }}

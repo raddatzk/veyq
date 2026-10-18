@@ -10,6 +10,7 @@
     check [--release SEL]                            which release `upgrade` would take, and a newer major beyond it
     upgrade --key-into FILE [--objects-to P] [--unsigned-local]   toward what VEYQ_RELEASE selects (decision 5's order)
     backup --key-into FILE [--objects-to P]          the three legs, by the running release's `instance_backup.py`
+    backup prune                                     every capture under backups/ older than B (a daily timer's)
     restore DIR --domain D (--key-from F | --without-key) [--objects-from P]   onto this instance, which holds no data
     rollback DIR --key-from F [--yes]                back to the release a capture was taken under, in place
     self-update                                      this file, replaced by the installed release's `veyqctl`
@@ -114,6 +115,19 @@ require in the live store and writes none — the way back from an upgrade; with
 yet — and no pool is named: Garage keeps no object versions, so a lost store volume loses every object whatever
 `backups/` holds. The warning never changes an exit code.
 
+**Every capture is kept at most B days** (ADR 0056 decision 8): B is the instance setting the Server Owner sets in
+admin-web or with `veyq-admin backup-retention set` (30 until set), and the running release's tool reads it from the
+database (`instance_backup.py prune`, 30 when it cannot). `backup`, `upgrade` and `start` prune every capture under
+`backups/` older than B, the newest included; `backup prune` does only that, for the daily timer the Run page gives; and
+`status` warns while no capture younger than B is there (the tool's `retention`), never changing its exit code. A copy
+moved off the host is the operator's to delete by B.
+
+**The erasure ledger travels with leg (c)** (ADR 0056 decision 8): `erasures.log`, beside the key in the app's volume,
+which no restore touches. `restore` and `rollback` read it out of that volume through a one-off container of the `app`
+service — as they put the key in — and hand it to the tool (`--erasures`, `verify --against-store` too), so an object
+erased after the capture reads as erased, not missing; with none there the check runs as before and the tool says so. The
+application re-applies the ledger itself at its next start, before it serves.
+
 **`rollback` is in place** (ADR 0096, the owner's O1 (a) of 2026-10-17): after a failed upgrade, the capture it began
 with holds the database and the index, and its objects are still in this instance's store, which an upgrade never
 rewrites. So `rollback <capture> --key-from F` refuses unless the capture's release is still in `releases/` and the
@@ -205,6 +219,7 @@ OVERRIDE_FILE = "compose.override.yml"
 STATE_FILE = "state.json"
 RELEASES_DIR = "releases"
 BACKUPS_DIR = "backups"
+LEDGER_FILE = "erasures.log"  # the erasure ledger beside the key (ADR 0056 decision 8; `instance_backup.py` LEDGER_FILE)
 
 WAIT_SECS = int(os.environ.get("VEYQ_WAIT_SECS", "600"))
 
@@ -1036,6 +1051,10 @@ def cmd_start(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     state = read_state(home)
     up(host, compose(home, state.release, state.project), state.project)
+    try:
+        prune(host, home, state, backup_tool(host, home, state), required=False)
+    except Refused as e:  # the tool itself could not be settled: said, the start stands
+        say(f"WARNING: the captures older than B were not pruned ({str(e).splitlines()[0][:200]})")
     return 0
 
 
@@ -1052,6 +1071,7 @@ def cmd_status(args: argparse.Namespace, host: Host) -> int:
     say(f"release {state.release}" + (" (installed --unsigned-local: NOT VERIFIED)" if state.unsigned_local else ""))
     healthy = report(host, state.project)
     pool_warning(host, home, state)
+    retention_warning(host, home, state)
     return 0 if healthy else 1
 
 
@@ -1328,6 +1348,56 @@ def utc_stamp() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def prune(host: Host, home: Path, state: State, tool: BackupTool, *, required: bool) -> None:
+    """Every capture under `backups/` older than B, by the running release's tool (ADR 0056 decision 8): B from the
+    database, which runs. At `backup`, `upgrade` and `start` a failure is said and changes nothing else (`required`
+    False); `backup prune` exists only for this, so there it is the command's failure."""
+    argv = [sys.executable, str(tool.path), "prune", "--captures", str((home / BACKUPS_DIR).absolute()),
+            "--compose-file", str(release_dir(home, state.release) / COMPOSE_ASSET)]
+    try:
+        host.run(argv, env=tool.env, stream=True)
+    except Refused as e:
+        if required:
+            raise
+        say(f"WARNING: the captures older than B were not pruned ({str(e).splitlines()[0][:200]}); the next `backup`, "
+            f"`upgrade`, `start` or `backup prune` tries again")
+
+
+def retention_warning(host: Host, home: Path, state: State) -> None:
+    """`status` (ADR 0056 decision 8): say it while no capture under `backups/` is younger than B — admin-web cannot see
+    the captures. Never changes an exit code."""
+    try:
+        tool = backup_tool(host, home, state)
+        raw = host.run([sys.executable, str(tool.path), "retention", "--captures", str((home / BACKUPS_DIR).absolute()),
+                        "--compose-file", str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env).stdout
+        answer = json.loads(raw.strip().splitlines()[-1])
+    except (Refused, ValueError, IndexError) as e:
+        say(f"B and the captures could not be read ({str(e).splitlines()[0][:200] if str(e) else type(e).__name__})")
+        return
+    if not answer.get("fresh"):
+        newest = answer.get("youngest")
+        say(f"WARNING: no capture under {home / BACKUPS_DIR} is younger than B ({answer.get('days')} days"
+            + (f"; the newest, {newest}, is from {answer.get('youngestAt')}" if newest else "; there is none")
+            + "). Every capture is deleted at B, so this instance has no backup to restore: run `veyqctl backup` — the "
+              "Run page gives a daily timer for it (https://raddatzk.github.io/veyq/run/backup-and-restore/)")
+
+
+def read_ledger(host: Host, home: Path, state: State, key_path: str, into: Path) -> Path | None:
+    """The erasure ledger out of the app's volume — `erasures.log` beside the key, which no restore touches — through a
+    one-off container of the `app` service, as `place_key` writes the key in. The file at [into], or None when the
+    volume holds none (an instance older than the ledger, or none written yet): the tool then checks as before."""
+    ledger = str(Path(key_path).parent / LEDGER_FILE)
+    script = 'test -f "$1" || exit 3; cat "$1"'
+    result = host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", "--entrypoint",
+                       "/bin/sh", "app", "-c", script, "read-ledger", ledger], check=False)
+    if result.returncode != 0:
+        say(f"no erasure ledger at {ledger} in the app's volume: the restore's object check runs without it")
+        return None
+    into.write_text(result.stdout or "")
+    os.chmod(into, 0o600)
+    return into
+
+
 # ---- upgrade (ADR 0096 decision 5) ------------------------------------------------------------------------------
 
 def upgrade_values(template: str, manifest: Manifest, old: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -1424,6 +1494,7 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
         say(f"the backup failed — nothing was switched; starting release {state.release} again")
         up(host, compose(home, state.release, state.project), state.project)
         raise
+    prune(host, home, state, tool, required=False)
     os.replace(staged, home / ENV_FILE)
     write_state(home, state._replace(release=manifest.release, source=spec, unsigned_local=args.unsigned_local))
     say(f"step 4: backed up to {backup}; switched {home / ENV_FILE} and the recipe to release {manifest.release}")
@@ -1445,6 +1516,11 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
 
 def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
+    if args.action == "prune":
+        # ADR 0056 decision 8: only the age prune, for a daily timer — nothing stops, no key is needed.
+        state = read_state(home)
+        prune(host, home, state, backup_tool(host, home, state), required=True)
+        return 0
     key_into = key_destination(home, args.key_into, "`backup`")
     state = read_state(home)
     tool = backup_tool(host, home, state)
@@ -1455,6 +1531,7 @@ def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     stop_app(host, home, state)
     try:
         capture(host, home, state, tool, key_into, utc_stamp(), pool)
+        prune(host, home, state, tool, required=False)
     finally:
         up(host, compose(home, state.release, state.project), state.project)
         say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping the app to every service healthy again")
@@ -1477,10 +1554,12 @@ def cmd_restore(args: argparse.Namespace, host: Host) -> int:
     stop_app(host, home, state)
     with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
         key = Path(tmp) / "config-secret.key"
+        ledger = read_ledger(host, home, state, tool.facts.key_path, Path(tmp) / LEDGER_FILE)
+        erasures = ["--erasures", str(ledger)] if ledger else []
         try:
             host.run([sys.executable, str(tool.path), "restore", str(backup), "--domain", args.domain, "--compose-file",
                       str(release_dir(home, state.release) / COMPOSE_ASSET), "--docker-network", tool.facts.network,
-                      "--config-secret-file", str(key), *key_args, *source], env={**tool.env, **pool.env},
+                      "--config-secret-file", str(key), *key_args, *source, *erasures], env={**tool.env, **pool.env},
                      stream=True)
         except Refused:
             say("the restore did not finish; the app stays STOPPED — the tool above says whether anything was written "
@@ -1537,11 +1616,16 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
         raise Refused(f"release {target}'s template requires {', '.join(missing)}, which .env lacks. Nothing was stopped.")
     staged = home / f"{ENV_FILE}.rollback"
     write_private(staged, render_env(template, values))
+    # The erasure ledger, read once while the running release's app volume is there: an object erased after the capture
+    # is erased, not missing, for the verify below and the restore after the stop.
+    ledger_dir = Path(tempfile.mkdtemp(prefix=".ledger-", dir=home))
+    ledger = read_ledger(host, home, state, facts.key_path, ledger_dir / LEDGER_FILE)
+    erasures = ["--erasures", str(ledger)] if ledger else []
     try:
         host.run(["docker", "compose", "-p", state.project, *compose_files(home, target), "--env-file", str(staged),
                   "config", "--quiet"])
         host.run([sys.executable, str(tool.path), "verify", str(capture_dir), "--key-from", str(key_from),
-                  "--against-store", "--docker-network", facts.network], env=tool.env, stream=True)
+                  "--against-store", "--docker-network", facts.network, *erasures], env=tool.env, stream=True)
         say(f"the capture verifies against the live store: every object its rows require is there")
         sure = True if args.yes else host.confirm(
             f"EMPTY the database of project {state.project} (release {state.release}) and restore {capture_dir.name} "
@@ -1553,6 +1637,7 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
             raise Refused("not confirmed. Nothing was stopped.")
     except Refused:
         staged.unlink()
+        shutil.rmtree(ledger_dir, ignore_errors=True)
         raise
 
     stop_app(host, home, state)
@@ -1571,7 +1656,8 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
         try:
             host.run([sys.executable, str(tool.path), "restore", str(capture_dir), "--domain", domain, "--compose-file",
                       str(release_dir(home, target) / COMPOSE_ASSET), "--docker-network", facts.network,
-                      "--config-secret-file", str(key), "--key-from", str(key_from)], env=tool.env, stream=True)
+                      "--config-secret-file", str(key), "--key-from", str(key_from), *erasures], env=tool.env,
+                     stream=True)
         except Refused:
             say(f"the restore did not finish; release {target} runs on an EMPTY database, its app STOPPED — the tool "
                 f"above says why. Fix it and run `veyqctl restore {capture_dir} --domain {domain} --key-from "
@@ -1579,6 +1665,7 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
             raise
         if key.is_file():
             place_key(host, home, back, key, facts.key_path)
+    shutil.rmtree(ledger_dir, ignore_errors=True)
     up(host, base, state.project)
     say(f"rolled back to release {target} from {capture_dir.name}; release {state.release} stays in "
         f"{release_dir(home, state.release)}. .env keeps VEYQ_RELEASE as it was, so the next `upgrade` moves forward "
@@ -1674,7 +1761,11 @@ def parser() -> argparse.ArgumentParser:
                                                                f".env's {POOL_TARGET_KEY}")
     upgrade.set_defaults(func=cmd_upgrade)
 
-    backup = sub.add_parser("backup", help="capture the three legs with the running release's backup tool")
+    backup = sub.add_parser("backup", help="capture the three legs with the running release's backup tool; `backup "
+                                           "prune` only deletes the captures older than B")
+    backup.add_argument("action", nargs="?", choices=["prune"],
+                        help="prune: delete every capture under backups/ older than B, the newest too, and nothing "
+                             "else — the daily timer's command (ADR 0056 decision 8)")
     backup.add_argument("--key-into", metavar="FILE", help="where leg (c) goes — required, its own medium")
     backup.add_argument("--objects-to", metavar="POOL", help=f"the object pool for this run, instead of .env's "
                                                               f"{POOL_TARGET_KEY}: an absolute directory or s3:<bucket>")

@@ -20,14 +20,17 @@ captured is structurally impossible, and there is no ordering to get right. This
 app is stopped** (it would have to know what "the app" is on this host) and does not pretend to; it is the one
 precondition the operator owns.
 
-Seven subcommands, one file, because they share the layout, the manifest and the credential plumbing:
+Nine subcommands, one file, because they share the layout, the manifest and the credential plumbing:
 
     python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump | --key-kept-apart)
                                                 [--objects-to POOL [--pool-keep N]] [--app-version R]
     python3 scripts/instance_backup.py copy-objects --objects-to POOL   (the hot early copy, app running)
-    python3 scripts/instance_backup.py verify   DIR [--key-from FILE] [--against-store]
+    python3 scripts/instance_backup.py verify   DIR [--key-from FILE] [--against-store [--erasures FILE]]
     python3 scripts/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
                                                 [--objects-from POOL] [--accept-missing-objects] [--record DIR]
+                                                [--erasures FILE]
+    python3 scripts/instance_backup.py prune    (--captures DIR | --dir DIR) [--keep N]   (every capture older than B)
+    python3 scripts/instance_backup.py retention (--captures DIR | --dir DIR)            (B and the newest, as JSON)
     python3 scripts/instance_backup.py store-in-use                      (bundled | own | none, for `veyqctl status`)
     python3 scripts/instance_backup.py empty-database --yes              (the in-place rollback's first write)
     python3 scripts/instance_backup.py gate     (in the app pod; every input from its environment)
@@ -89,8 +92,25 @@ empties the database); the target and request the record's pass; then the refusa
 downgrade, more than one major, a major entered from any release but the one this image bakes as tested (`majorEntry`
 in `/opt/veyq/release.json`), a target that is no release or not this image's own, an unreadable record; otherwise an
 index capture into `captures/<UTC>.partial/`, verified and renamed, the record moved, and the complete captures beyond
-`--keep` pruned with every `.partial`. **It never reads the key**: leg (c) is recorded as `separate`, unread, so a
+`--keep` pruned with every `.partial`, and — at every start, a refusal aside — every capture older than B. **It never reads the key**: leg (c) is recorded as `separate`, unread, so a
 capture on the volume cannot hold the KEK. A capture `capture` writes for Compose is untouched by all of this.
+
+**Every capture is kept at most B days** (ADR 0056 decision 8). B is the instance setting the Server Owner sets
+(`veyq_backup_retention`, 7 to 365 days); this tool reads it over the connection it dumps through, and assumes 30 when
+there is no row or the database cannot be read ([Database.retention_days]) — a prune that refused there would keep
+every capture forever. `prune` deletes every capture under a folder older than B, **the newest included** — complete,
+failed (a dump and no manifest) or interrupted (`.partial`, unless younger than B: it may be in flight) — and never
+anything that is no capture (a directory pool `veyqctl` allows beside them); `--keep` adds the count bound. The gate
+prunes at every start (never on a refusal), `veyqctl` at every `backup`, `upgrade` and `start` and with `backup prune`,
+and the chart's daily CronJob runs `prune` on the gate's claim. A pool's ledger drops its entries older than B whatever
+`--pool-keep` says, and its objects follow ([prune_pool]). `retention` prints B and the newest capture, for `veyqctl
+status`'s warning.
+
+**The erasure ledger** (ADR 0056 decision 8): the application keeps `erasures.log` beside leg (c)'s key, outside the
+three legs, and re-applies it itself at every start. This tool reads only its `STORAGE_KEY` lines: given the file
+(`--erasures`), `restore` and `verify --against-store` report an object whose storage key it lists as **erased** after
+the capture, never as missing, and do not refuse for it; without it the check runs as before, and the restore says
+that no ledger was given.
 
 **Leg (c) is captured, but never beside legs (a) and (b)** (ADR 0056 §1). ADR 0050's key file defends a leaked
 database backup only while the key is somewhere else: the dump plus the key opens every tenant's SMTP password.
@@ -166,7 +186,8 @@ Environment:
     VEYQ_BACKUP_DB_URL              The in-pod mode's database, the app's JDBC URL, and its user (default root).
     VEYQ_BACKUP_DB_USER
     VEYQ_BACKUP_DIR, VEYQ_BACKUP_TARGET_RELEASE, VEYQ_BACKUP_REQUEST, VEYQ_BACKUP_KEEP
-                                    The gate's volume, target, request and retention — the chart renders them.
+                                    The gate's volume, target, request and count bound — the chart renders them (the
+                                    daily prune reads VEYQ_BACKUP_DIR's layout and VEYQ_BACKUP_KEEP too).
     VEYQ_BUNDLED_STORE_ENDPOINT     The bundled store's S3 endpoint the *rclone container* must reach — an internal
     VEYQ_BUNDLED_STORE_ADMIN_TOKEN  name such as `http://garage:3900`, not a host-published port — and its admin
                                     token (environment only, never a flag).
@@ -193,7 +214,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NamedTuple
 
@@ -268,6 +289,16 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def parse_time(text: object) -> datetime | None:
+    """An ISO 8601 time as this tool and the backend write them (`…Z`, with or without a fraction), or None."""
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        return datetime.fromisoformat(re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00")))
+    except ValueError:
+        return None
+
+
 # --------------------------------------------------------------------------------------------------------
 # The database leg
 # --------------------------------------------------------------------------------------------------------
@@ -287,6 +318,7 @@ NOT_DATA = (
     "veyq_release_notice",
     "veyq_store_reconcile",
     "veyq_store_orphan",
+    "veyq_backup_retention",
 )
 NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
 # The tables a dump carries the SCHEMA of and none of the rows (ADR 0093 § 10): the guest-write record keeps a guest's
@@ -298,6 +330,15 @@ DUMP_SCHEMA_ONLY = ("veyq_guest_write_record",)
 # The bucket reconcile's state and its first-seen clocks (ADR 0062 § Consequences): every restore empties them after the
 # load ([Database.reset_reconcile]), so a dump's clocks never come back and no deletion stays armed across a restore.
 RECONCILE_TABLES = ("veyq_store_orphan", "veyq_store_reconcile")
+# B, the days a capture is kept (ADR 0056 decision 8): one row, id 1, once the Server Owner set it in admin-web or with
+# `veyq-admin backup-retention set`; no row, or a database this tool cannot read, means the default.
+RETENTION_TABLE = "veyq_backup_retention"
+RETENTION_DEFAULT_DAYS = 30
+# The erasure ledger (ADR 0056 decision 8): `erasures.log` beside leg (c)'s key, one JSON object per line. This tool reads
+# only the `STORAGE_KEY` lines — a key the store reclaimed after the capture, so a restore counts its absence as an
+# erasure, never as a missing object — and passes every other kind by, since re-applying them is the application's.
+LEDGER_FILE = "erasures.log"
+LEDGER_STORAGE_KEY = "STORAGE_KEY"
 
 
 class DbUrl(NamedTuple):
@@ -488,6 +529,9 @@ class Database:
             release that `veyqctl rollback` makes on an emptied database, which sees every object of the store as
             unclaimed. Counts and opaque storage keys, nobody's data; and the restore empties both after its load
             ([reset_reconcile]), so neither the target's nor the dump's rows survive it.
+          - `veyq_backup_retention` is B, the days a capture is kept (ADR 0056 decision 8): one row once the Server Owner
+            set it, instance configuration and nobody's data. A B set on the new install before the restore must not
+            refuse it; the dump replaces the table, so the restored instance's B wins.
 
         The table set is read out of `information_schema` rather than listed here, so a table a future migration
         adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set
@@ -596,6 +640,18 @@ class Database:
 
     def open_upload_sessions(self) -> int:
         return int(self.query("SELECT COUNT(*) FROM veyq_upload_session;")[0][0])
+
+    def retention_days(self) -> tuple[int, str]:
+        """B and where it came from (ADR 0056 decision 8): the Server Owner's value, else the default — also when the
+        database cannot be read or holds no such table (an instance older than the setting), since a prune that
+        refused for an unreadable value would keep every capture forever, which is the very thing B bounds."""
+        try:
+            rows = self.query(f"SELECT retention_days FROM {RETENTION_TABLE} WHERE id = 1;")
+        except BackupError as e:
+            return RETENTION_DEFAULT_DAYS, f"the default, the database being unreadable ({str(e)[:160]})"
+        if not rows or not rows[0] or not rows[0][0].isdigit() or int(rows[0][0]) < 1:
+            return RETENTION_DEFAULT_DAYS, "the default, none set"
+        return int(rows[0][0]), "set by the Server Owner"
 
     def store_setting(self) -> StoreRow | None:
         """The store in use, as far as its PLAINTEXT says (ADR 0089): the active row (`id = 1`) or None when no store was
@@ -936,16 +992,25 @@ class Pruned(NamedTuple):
     bytes: int
 
 
-def prune_pool(pool: Pool, newest: str, keep: int) -> Pruned:
-    """Keep the newest `keep` ledger entries and exactly the objects they name (owner 2026-10-17, ADR 0056 §3).
+def prune_pool(pool: Pool, newest: str, keep: int, days: int | None = None,
+               now: datetime | None = None) -> Pruned:
+    """Keep the newest `keep` ledger entries no older than B (`days`) and exactly the objects they name (owner
+    2026-10-17, ADR 0056 §§ 3 and 8).
 
     Runs only after `newest` — the capture just taken — is in the ledger, and refuses unless the ledger it reads
     holds it among the kept: a ledger read that came back empty or short would otherwise name nothing, and every
-    object would go. An object a kept entry names is never deleted; that is the whole contract."""
+    object would go. An object a kept entry names is never deleted; that is the whole contract. An entry older than B
+    goes whatever `keep` says — its capture is past B and pruned where veyq's tooling wrote it, so nothing may restore
+    from it, and a purged object it alone names leaves the pool with it."""
     if keep < 1:
         raise BackupError(f"--pool-keep {keep} keeps no capture; the newest is the way back, so at least 1")
     entries = pool.ledger()
     kept, dropped = entries[-keep:], entries[:-keep]
+    if days is not None:
+        cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
+        old = [e for e in kept if e.get("entry") != newest and (parse_time(e.get("recordedAt")) or cutoff) < cutoff]
+        kept = [e for e in kept if e not in old]
+        dropped = dropped + old
     if newest not in [e.get("entry") for e in kept]:
         raise BackupError(f"the pool's ledger does not hold this capture's entry {newest} among its newest {keep} — "
                           f"refusing to prune a pool whose ledger does not match what was just written")
@@ -1428,6 +1493,77 @@ def cmd_store_in_use(args: argparse.Namespace) -> int:
     return 0
 
 
+def captures_folder(args: argparse.Namespace) -> Path:
+    """`--captures DIR`, or the cluster's layout: `--dir`'s `captures/` (the gate's claim, VEYQ_BACKUP_DIR)."""
+    if getattr(args, "captures", None):
+        return Path(args.captures)
+    return Path(args.dir) / CAPTURES_DIR
+
+
+def cmd_prune(args: argparse.Namespace) -> int:
+    """ADR 0056 decision 8: every capture under the folder older than B — read from the database it captures, 30 when
+    it cannot be read — the newest included, then, with `--keep`, the complete ones beyond it. `veyqctl` runs it at every
+    `backup`, `upgrade` and `start` and as `veyqctl backup prune`; the chart's daily CronJob runs it on the gate's claim.
+    Reads the database and nothing else; writes nothing but deletions under the folder."""
+    folder = captures_folder(args)
+    days, source = Database(args, require_db_password()).retention_days()
+    gone = prune_older_than(folder, days)
+    if args.keep:
+        gone += prune_beyond_keep(folder, args.keep)
+    left = sorted(p.name for p in folder.iterdir() if is_capture(p)) if folder.is_dir() else []
+    log(f"B is {days} days ({source}); pruned {len(gone)} capture(s) under {folder}"
+        + (f": {', '.join(gone)}" if gone else "") + f"; {len(left)} kept")
+    return 0
+
+
+def cmd_retention(args: argparse.Namespace) -> int:
+    """B and the newest capture under the folder, as one JSON object — for `veyqctl status`, which warns while no capture
+    is younger than B (admin-web cannot see the captures)."""
+    folder = captures_folder(args)
+    days, source = Database(args, require_db_password()).retention_days()
+    youngest = youngest_capture(folder)
+    at = youngest[1] if youngest else None
+    fresh = at is not None and at >= datetime.now(timezone.utc) - timedelta(days=days)
+    print(json.dumps({"days": days, "source": source, "youngest": youngest[0] if youngest else None,
+                      "youngestAt": at.isoformat().replace("+00:00", "Z") if at else None, "fresh": fresh}))
+    return 0
+
+
+def read_erasures(path: Path | None) -> set[str] | None:
+    """The storage keys the erasure ledger lists as reclaimed (`STORAGE_KEY` lines, ADR 0056 decision 8), or None when no
+    ledger was given. A line this cannot read is skipped and counted aloud: the ledger is the application's file, and a
+    torn last line is what a crash leaves."""
+    if path is None:
+        return None
+    if not path.is_file():
+        raise BackupError(f"--erasures {path} is not a file — the erasure ledger lives beside the config-secret key "
+                          f"({LEDGER_FILE}); without one, leave the flag out and the object check runs as before")
+    keys: set[str] = set()
+    torn = 0
+    for line in path.read_text(errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            torn += 1
+            continue
+        if isinstance(entry, dict) and entry.get("kind") == LEDGER_STORAGE_KEY and isinstance(entry.get("id"), str):
+            keys.add(entry["id"])
+    log(f"the erasure ledger {path} lists {len(keys)} reclaimed storage key(s)"
+        + (f"; {torn} line(s) unreadable, skipped" if torn else ""))
+    return keys
+
+
+def split_erased(keys: list[str], erased: set[str] | None) -> tuple[list[str], list[str]]:
+    """`(still missing, erased)`: an object key is `<storage key>/<chunk>`, and a key whose storage key the ledger lists
+    was erased after the capture — reclaimed by the store sweep — not lost (ADR 0056 decision 8)."""
+    if not erased:
+        return keys, []
+    gone = [k for k in keys if k.rsplit("/", 1)[0] in erased]
+    return [k for k in keys if k.rsplit("/", 1)[0] not in erased], gone
+
+
 def take_capture(backup: Path, db: Database, store: Store | None, *, release_of, pool: Pool | None = None,
                  pool_keep: int = POOL_KEEP_DEFAULT, kept_apart: bool = False, key_source: Path | None = None,
                  key_present: bool = False, key_dest: Path | None = None, key_beside_dump: bool = False,
@@ -1530,9 +1666,11 @@ def take_capture(backup: Path, db: Database, store: Store | None, *, release_of,
         pool_objects: int | None = None
         pool_bytes: int | None = None
         try:
-            pruned = prune_pool(pool, entry, pool_keep)
+            days, days_source = db.retention_days()
+            pruned = prune_pool(pool, entry, pool_keep, days)
             pool_objects, pool_bytes = pruned.objects, pruned.bytes
-            log(f"the pool keeps the objects of its newest {pool_keep} capture(s): {pruned.objects} object(s) / "
+            log(f"the pool keeps the objects of its newest {pool_keep} capture(s) younger than {days} days (B, "
+                f"{days_source}): {pruned.objects} object(s) / "
                 f"{pruned.bytes} B; pruned {len(pruned.gone)} object(s) no kept capture's index names"
                 + (f" and the ledger entries {', '.join(pruned.dropped)}" if pruned.dropped else ""))
         except BackupError as e:
@@ -1637,6 +1775,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if indexed and getattr(args, "against_store", False):
         store = Store(args)
         found = compare_index(required, manifest["store"]["index"], store.index())
+        erased = read_erasures(Path(args.erasures)) if getattr(args, "erasures", None) else None
+        missing, erased_keys = split_erased(found.missing, erased)
+        found = found._replace(missing=missing)
         if found.missing:
             problems.append(f"{len(found.missing)} object(s) the rows require are missing from the live store, "
                             f"{store.describe()} (A4):")
@@ -1645,7 +1786,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
             problems.append(f"{len(found.changed)} object(s) the rows require differ in the live store from what "
                             f"the capture indexed (A4):")
             listed(problems, found.changed, "changed object")
-        live_note = (f"all {len(required)} required present in {store.describe()}"
+        live_note = (f"all {len(required) - len(erased_keys)} required present in {store.describe()}"
+                     + (f", {len(erased_keys)} erased after the capture (the erasure ledger)" if erased_keys else "")
+                     + ("" if erased is not None else ", no erasure ledger given")
                      + (f", {found.by_size_only} compared by key and size only (no MD5 on one side)"
                         if found.by_size_only else ""))
 
@@ -1791,6 +1934,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
     if not indexed and not (backup / OBJECTS_DIR).is_dir():
         raise BackupError(f"{backup / OBJECTS_DIR} is missing — leg (b) of this backupFormat {MIRROR_FORMAT} capture "
                           f"is not here")
+    # The erasure ledger (ADR 0056 decision 8), read at the gates too: a key it lists was erased after the capture.
+    erased = read_erasures(Path(args.erasures)) if getattr(args, "erasures", None) else None
     record_dir = Path(args.record) if getattr(args, "record", None) else None
     if record_dir is not None and not record_dir.is_dir():
         raise BackupError(f"--record {record_dir} is not a directory — on a cluster it is the backup claim's mount")
@@ -1831,6 +1976,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
         # an upgrade. An object the store holds and the index does not is tolerated: an upload after the capture.
         listing = store.index()
         found = compare_index(required, manifest["store"]["index"], listing)
+        missing, erased_keys = split_erased(found.missing, erased)
+        found = found._replace(missing=missing)
         where = store.describe()
         if (found.missing or found.changed) and not accept_missing \
                 and not [key for key, _, _ in listing if key != PROBE_KEY]:
@@ -1859,6 +2006,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
             # A format-2 capture records no per-object size or MD5: its files ARE its index.
             indexed_entries = listing = local_listing(backup / OBJECTS_DIR)
         found = compare_index(required, indexed_entries, listing)
+        missing, erased_keys = split_erased(found.missing, erased)
+        found = found._replace(missing=missing)
         where = f"the source {source.describe()}"
         bad = set(found.missing) | set(found.changed_keys)
         have = {key for key, _, _ in listing}
@@ -1880,6 +2029,14 @@ def cmd_restore(args: argparse.Namespace) -> int:
             "restore without them, knowingly. Nothing was written.")
     if found.by_size_only:
         log(f"{found.by_size_only} object(s) compared by key and size only (no MD5 on one side)")
+    if erased is None:
+        log("no erasure ledger was given (--erasures): an object erased after this capture reads as missing, and the "
+            "check runs as before")
+    elif erased_keys:
+        log(f"{len(erased_keys)} object(s) the rows require were ERASED after this capture (the erasure ledger lists "
+            f"their storage keys), not lost: the application erases the rows naming them again at its next start")
+        for key in erased_keys[:50]:
+            log(f"    erased, not missing  {key}")
 
     # ADR 0056 §7 — the backup's schema against the target's, in Flyway's order, before the first write. A newer
     # backup raises here; the same or an older one is loaded over a target emptied of every table, because the
@@ -2053,6 +2210,62 @@ def prune(root: Path, keep: int) -> list[str]:
     return sorted(p.name for p in gone)
 
 
+def is_capture(path: Path) -> bool:
+    """A directory this tool wrote as a capture: one holding a manifest or a dump, or an interrupted `.partial` — never
+    anything else a captures folder may hold (`veyqctl` allows a directory pool inside its `backups/`, ADR 0096)."""
+    return path.is_dir() and not path.is_symlink() and (
+        path.name.endswith(PARTIAL) or (path / MANIFEST_NAME).is_file() or (path / DUMP_NAME).is_file())
+
+
+def capture_time(path: Path) -> datetime:
+    """When a capture was taken: its manifest's `capture.finishedAt`, else — an interrupted or failed one has no
+    manifest — its directory's last change."""
+    try:
+        finished = parse_time((json.loads((path / MANIFEST_NAME).read_text()).get("capture") or {}).get("finishedAt"))
+    except (OSError, ValueError, AttributeError):
+        finished = None
+    return finished or datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+
+
+def prune_older_than(folder: Path, days: int, now: datetime | None = None) -> list[str]:
+    """ADR 0056 decision 8 — the one age prune both targets run: every capture under `folder` older than B (`days`) is
+    deleted, **the newest included** (owner Q22: a capture kept "until a newer one exists" has no bound when none is
+    taken), complete or interrupted. A `.partial` younger than B stays: it may be a capture in flight (the cluster's
+    daily prune runs beside the gate). Never refuses for an empty folder; answers the names it deleted, oldest first."""
+    if days < 1:
+        raise BackupError(f"a retention of {days} days keeps nothing; B is at least 1")
+    if not folder.is_dir():
+        return []
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
+    gone = [p for p in folder.iterdir() if is_capture(p) and capture_time(p) < cutoff]
+    gone.sort(key=capture_time)
+    for path in gone:
+        shutil.rmtree(path)
+    return [p.name for p in gone]
+
+
+def prune_beyond_keep(folder: Path, keep: int) -> list[str]:
+    """`keep`, the second bound (the cluster's `backup.keep`): the complete captures beyond the newest `keep`, by when
+    they were taken. Never a `.partial` — that is the gate's own prune's, after its capture succeeded."""
+    if keep < 1:
+        raise BackupError(f"keep {keep} keeps no capture; at least 1")
+    complete = sorted((p for p in folder.iterdir() if is_capture(p) and not p.name.endswith(PARTIAL)),
+                      key=capture_time) if folder.is_dir() else []
+    gone = complete[:-keep]
+    for path in gone:
+        shutil.rmtree(path)
+    return [p.name for p in gone]
+
+
+def youngest_capture(folder: Path) -> tuple[str, datetime] | None:
+    """The newest complete capture under `folder` and when it was taken, or None (`veyqctl status`'s warning)."""
+    complete = [p for p in folder.iterdir() if is_capture(p) and (p / MANIFEST_NAME).is_file()] if folder.is_dir() else []
+    if not complete:
+        return None
+    newest = max(complete, key=capture_time)
+    return newest.name, capture_time(newest)
+
+
 def gate_refusal(record: dict | None, target: str, major_entry: str | None, root: Path) -> str | None:
     """ADR 0098 decision 3 — the upgrades no tested path covers. None when the move is one the release was proven on.
     No record, or a record whose release does not parse, orders nothing: the running release is unknown."""
@@ -2158,11 +2371,23 @@ def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int
 
     record = read_record(root)                                                          # (1)
     db = Database(args, require_db_password())
+
+    def prune_by_age() -> list[str]:
+        # ADR 0056 decision 8: at every start, every capture older than B, the newest included — never on a refusal
+        # below, which writes nothing.
+        days, source = db.retention_days()
+        gone = prune_older_than(root / CAPTURES_DIR, days)
+        if gone:
+            log(f"pruned {len(gone)} capture(s) older than {days} days (B, {source}): {', '.join(gone)}")
+        return gone
+
     if not db.populated_tables():                                                       # (2)
         write_record(root, target, request, None)
+        prune_by_age()
         log(f"the database holds no data: nothing to capture. The record names release {target}.")
         return 0
     if record is not None and record.get("release") == target and record.get("request", "") == request:  # (3)
+        prune_by_age()
         log(f"release {target} already holds this database and no new request is pending: nothing to capture")
         return 0
     refusal = gate_refusal(record, target, major_entry, root)                          # (4)
@@ -2199,7 +2424,7 @@ def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int
         raise BackupError(f"the capture {partial} failed its own verify; it stays as it is, the record is unmoved")
     os.replace(partial, final)
     write_record(root, target, request, stamp)                                          # (6)
-    gone = prune(root, args.keep)                                                       # (7)
+    gone = prune(root, args.keep) + prune_by_age()                                      # (7)
     log(f"captured {final}; the record names release {target}"
         + (f"; pruned {', '.join(gone)}" if gone else ""))
     return 0
@@ -2347,6 +2572,10 @@ def main(argv: list[str]) -> int:
     verify.add_argument("--against-store", action="store_true",
                         help="an index capture: also list the live store and check every object the rows require "
                              "is there, as indexed (A4)")
+    verify.add_argument("--erasures", default=None, metavar="FILE",
+                        help=f"the instance's erasure ledger ({LEDGER_FILE}, beside the config-secret key): with "
+                             f"--against-store, an object whose storage key it lists was erased after the capture, "
+                             f"not lost (ADR 0056 decision 8)")
     add_store(verify)
     verify.add_argument("--docker-network", default=None, help="docker network the rclone container joins")
     verify.set_defaults(func=cmd_verify, needs_store=False)
@@ -2371,11 +2600,31 @@ def main(argv: list[str]) -> int:
                          help="this restore runs as the application's own uid (a Kubernetes Job's runAsUser): the "
                               "key is born to it, whoever owns the claim's directory (fsGroup gives it a group, "
                               "never an owner)")
+    restore.add_argument("--erasures", default=None, metavar="FILE",
+                         help=f"the instance's erasure ledger ({LEDGER_FILE}, beside the config-secret key, which no "
+                              f"restore touches): an object whose storage key it lists was erased after the capture, "
+                              f"so it is reported as erased and never refuses the restore (ADR 0056 decision 8)")
     restore.add_argument("--record", default=None, metavar="DIR",
                          help="the cluster's backup volume: as the last step, write its state.json naming the "
                               "backup's release, so that release's next start passes the gate (ADR 0098 decision 9)")
     add_common(restore)
     restore.set_defaults(func=cmd_restore, needs_store=True)
+
+    for name, func, text in (
+            ("prune", cmd_prune, "delete every capture under a folder older than B, the days the database names (30 "
+                                 "when it cannot be read) — the newest too (ADR 0056 decision 8)"),
+            ("retention", cmd_retention, "print B and the newest capture under a folder, as JSON (veyqctl status)")):
+        cmd = sub.add_parser(name, help=text)
+        cmd.add_argument("--captures", default=None, metavar="DIR",
+                         help="the folder the captures are in (default: the cluster's layout, --dir's captures/)")
+        cmd.add_argument("--dir", default=os.environ.get("VEYQ_BACKUP_DIR") or "/backup",
+                         help="the cluster's backup volume (env VEYQ_BACKUP_DIR; default /backup)")
+        if name == "prune":
+            cmd.add_argument("--keep", type=int, default=int(os.environ.get("VEYQ_BACKUP_KEEP") or 0),
+                             help="also keep at most this many complete captures (env VEYQ_BACKUP_KEEP; 0: no count "
+                                  "bound, B alone)")
+        add_common(cmd)
+        cmd.set_defaults(func=func, needs_store=False)
 
     gate = sub.add_parser("gate", help="in the app pod, before the container that migrates: capture when the pod "
                                        "starts a different release or a new request (ADR 0098)")
