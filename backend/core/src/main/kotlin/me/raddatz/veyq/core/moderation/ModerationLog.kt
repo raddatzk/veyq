@@ -123,7 +123,15 @@ class ModerationLog {
      * dated as the Server Owner's other events are — open while they are on the roster.
      */
     fun appendSignInBlock(event: ModerationEvent, at: Instant, serverOwnerId: String, accountId: String) =
-        append(event, at, moderatorId = serverOwnerId, actorId = serverOwnerId, reason = "MEMBER_SIGN_IN", targetId = accountId)
+        appendCaselessStep(event, at, serverOwnerId, accountId, "MEMBER_SIGN_IN")
+
+    /**
+     * A Server Owner's step on no case — a sign-in block, a tenant taken offline over content, their lifts, the statement
+     * such a step carries (ADR 0093 § 7): an event with no case id, [reason] the step's kind or the statement's ground,
+     * [targetId] the account, the tenant or the statement, dated as the Server Owner's other events are.
+     */
+    fun appendCaselessStep(event: ModerationEvent, at: Instant, serverOwnerId: String, targetId: String, reason: String) =
+        append(event, at, moderatorId = serverOwnerId, actorId = serverOwnerId, reason = reason, targetId = targetId)
 
     /** The moderator [moderatorId] left the roster at [removedAt]: every event about them still open gets its date. */
     fun closeFor(moderatorId: String, removedAt: Instant) {

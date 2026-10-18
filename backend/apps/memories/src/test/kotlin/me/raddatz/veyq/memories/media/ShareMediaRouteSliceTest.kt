@@ -128,6 +128,12 @@ class ShareMediaRouteSliceTest {
             given().header("X-Contributor-Token", w.token).`when`().delete("/api/shares/${w.shareId}/nodes/${w.memory}")
                 .then().statusCode(422).body("code", equalTo("illegal_structure"))
         },
+        "getShareOrderNotice" to Probe("GET", "/api/shares/{shareId}/order-notice") { w ->
+            // The real link and its guest's own token, with no removal order: only the notice's handler answers a token
+            // it knows with the link's ordinary unknown answer.
+            given().header("X-Contributor-Token", w.token).`when`().get("/api/shares/${w.shareId}/order-notice")
+                .then().statusCode(404).body("code", equalTo("share_not_found"))
+        },
         "reportInShare" to Probe("POST", "/api/shares/{shareId}/reports") { w ->
             // A real link holding its write proof, a report sealed to an epoch that is not the current one: only the
             // report handler answers `moderation_epoch_changed`.
@@ -154,7 +160,7 @@ class ShareMediaRouteSliceTest {
     @Test
     fun theTableIsEveryShareRouteOfBothGeneratedApis() {
         val generated = shareOperations()
-        assertEquals(21, generated.size, "the /api/shares operations of both specs: $generated")
+        assertEquals(22, generated.size, "the /api/shares operations of both specs: $generated")
         assertEquals(generated, probes.mapValues { (_, p) -> "${p.method} ${p.path}" }, "a route without a row, or a row without a route")
     }
 

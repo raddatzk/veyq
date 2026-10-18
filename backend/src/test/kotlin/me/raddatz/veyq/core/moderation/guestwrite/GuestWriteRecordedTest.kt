@@ -39,6 +39,7 @@ class GuestWriteRecordedTest {
         "abandonShareNode" to "erases the guest's own empty placeholder: it enters no editor, and the node's records go with it",
         "deleteShareMedia" to "purges the guest's own medium: it enters no editor, and the medium's record goes with it",
         "reportInShare" to "a report (ADR 0093 § 1): it edits nothing, and a report keeps its own rows",
+        "getShareOrderNotice" to "a read (TCO Art. 11, ADR 0093 § 12): a guest uploader's notice of a removal order; it writes nothing",
     )
 
     /** The writes known to record today — the scan must see each, or it is reading the wrong sources. */

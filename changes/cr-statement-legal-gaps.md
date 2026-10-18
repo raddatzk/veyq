@@ -140,7 +140,7 @@ the statement names — the Server Owner lifts with the existing unblock or reac
   operation; classify it in `OperatorBlindProbeTest`). · Done when: `npm run generate:api`; the contracts guards;
   `npm run check` in `web/` and `admin-web/` once, naming the typed lines the reshaped requests redden — find them by
   a field the reshaped requests already carry, across the whole tree (`grep -rln 'sealedFacts' web/src admin-web/src backend/core/src/test e2e`; for the admin requests `grep -rln 'blockAccountSignIn\|suspendTenant' admin-web/src backend/core/src/test e2e`), not by the operation's name alone.
-- [ ] **2 backend** — the reporter's passage per mode; the provision stored, required in the full form, set by the
+- [x] **2 backend** — the reporter's passage per mode; the provision stored, required in the full form, set by the
   order handler; the territorial passage; a statement, recipients, log events and the mail for a Server Owner's step
   over content; the notice read. · Done when: `./gradlew check` green. **Bites, with controls:** a dismissal's mail in
   *organisation* holds the courts and the coordinator lines, in *private* neither (control: both hold "report again");

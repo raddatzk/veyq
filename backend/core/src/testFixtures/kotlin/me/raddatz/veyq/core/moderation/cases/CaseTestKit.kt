@@ -81,6 +81,9 @@ object CaseTestKit {
     /** An opaque stand-in for the facts sealed to one member's identity (the server never opens one). */
     const val SEALED_FACTS = "c2VhbGVkLWZhY3Rz"
 
+    /** The clause a test statement relies on (DSA Art. 17(3)(e)) — the organisation mode requires one. */
+    const val PROVISION = "Space terms, clause 4"
+
     /** The recipients a step's statement would reach (`getModerationStatementRecipients`). */
     fun Moderator.recipients(caseId: String, kind: String, targetId: String? = null, shareId: String? = null): Response =
         call(
@@ -93,11 +96,12 @@ object CaseTestKit {
      * Take a step with its statement of reasons: by default with facts — sealed (opaquely) for every member the server
      * lists as a recipient, as the decision panel does in the organisation mode — or, [facts] false, without any.
      * [factsFor] overrides the members the facts are sealed for (a stale list); [reporters] are `reportId to address`.
+     * [provision] is the clause relied on — by default with the facts, as the organisation mode asks; null for none.
      */
     fun Moderator.take(
         caseId: String, kind: String, targetId: String? = null, shareId: String? = null, facts: Boolean = true,
         ground: String = "TERMS_BREACH", factsFor: List<String>? = null, reporters: List<Pair<String, String>> = emptyList(),
-        deferUntil: String? = null,
+        deferUntil: String? = null, provision: String? = if (facts) PROVISION else null,
     ): Response {
         val members = when {
             !facts -> emptyList()
@@ -106,8 +110,9 @@ object CaseTestKit {
             else -> recipients(caseId, kind, targetId, shareId).let { if (it.statusCode == 200) it.path<List<String>>("accounts.accountId") else emptyList() }
         }
         val deferral = deferUntil?.let { ""","deferral":{"until":"$it","reason":{"epoch":1,"sealedNote":"$SEALED_NOTE"}}""" } ?: ""
-        val statement = if (!facts) """{"ground":"$ground"$deferral}""" else
-            """{"ground":"$ground","facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"factsFor":[""" +
+        val named = provision?.let { ""","provision":"$it"""" } ?: ""
+        val statement = if (!facts) """{"ground":"$ground"$named$deferral}""" else
+            """{"ground":"$ground"$named,"facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"factsFor":[""" +
                 members.joinToString(",") { """{"accountId":"$it","sealedFacts":"$SEALED_FACTS"}""" } + "]$deferral}"
         val notices = reporters.joinToString(",") { (r, a) -> """{"reportId":"$r","address":"$a"}""" }
         return call(

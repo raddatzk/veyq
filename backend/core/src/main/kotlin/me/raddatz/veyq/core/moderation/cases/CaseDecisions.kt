@@ -60,14 +60,16 @@ enum class MeasureStep { SHARE, CONTENT, GUEST_IDENTITY }
 data class ResolvedStep(val kind: BlockKind, val targetId: String, val shareId: String?)
 
 /**
- * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the [ground], the [facts] sealed to the
- * moderation key, and [factsFor] — the facts sealed to each affected member's identity, by account id.
+ * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the [ground], the [provision] of the law or
+ * clause of the terms it relies on (in the clear, DSA Art. 17(3)(d), (e)), the [facts] sealed to the moderation key, and
+ * [factsFor] — the facts sealed to each affected member's identity, by account id.
  */
 data class StatementInput(
     val ground: StatementGround,
     val facts: SealedNote?,
     val factsFor: Map<String, String>,
     val deferral: DeferralInput? = null,
+    val provision: String? = null,
 )
 
 /** An authority's deferral as the moderator enters it (ADR 0093 § 7): its end, and the authority's request sealed. */
@@ -92,6 +94,7 @@ object CaseFailures {
     val epochChanged = httpFailure("moderation_epoch_changed", FailureStatus.CONFLICT)
     val invalid = httpFailure("invalid_request", FailureStatus.BAD_REQUEST)
     val factsRequired = httpFailure("statement_facts_required", FailureStatus.BAD_REQUEST)
+    val provisionRequired = httpFailure("statement_provision_required", FailureStatus.BAD_REQUEST)
     val recipientsChanged = httpFailure("statement_recipients_changed", FailureStatus.CONFLICT)
     val objectionNotFound = httpFailure("objection_not_found", FailureStatus.NOT_FOUND)
     val objectionDecided = httpFailure("objection_decided", FailureStatus.CONFLICT)
@@ -260,10 +263,11 @@ class CaseDecisions(
         val known = targets.of(case, held)
         val (resolved, refusal) = resolve(case, step, shareId, targetId, known)
         if (resolved == null) return@createOrConflict refused(refusal!!)
-        // The statement's form follows the operating mode, read now (ADR 0093 § 14): the full form requires the facts.
-        if (statement.facts == null && operatingMode.read().mode == OperatingMode.ORGANISATION) {
-            return@createOrConflict refused(CaseFailures.factsRequired)
-        }
+        // The statement's form follows the operating mode, read now (ADR 0093 § 14): the full form requires the facts and
+        // the provision or clause the ground relies on (DSA Art. 17(3)(d), (e)).
+        val full = operatingMode.read().mode == OperatingMode.ORGANISATION
+        if (statement.facts == null && full) return@createOrConflict refused(CaseFailures.factsRequired)
+        if (statement.provision.isNullOrBlank() && full) return@createOrConflict refused(CaseFailures.provisionRequired)
         noteRefusal(statement.facts)?.let { return@createOrConflict refused(it) }
         statement.deferral?.let { d ->
             if (!deferrals.inBounds(d.until, now)) return@createOrConflict refused(CaseFailures.deferralOutOfBounds)
@@ -291,6 +295,7 @@ class CaseDecisions(
             measureId = row.id
             this.caseId = case.id
             ground = statement.ground.name
+            provision = statement.provision?.trim()?.takeIf { it.isNotEmpty() }
             basis = StatementBasis.REPORT.name
             epoch = statement.facts?.epoch
             sealedFacts = statement.facts?.sealed

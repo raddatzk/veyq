@@ -73,9 +73,9 @@ class StatementDeferrals(private val holds: Holds, private val log: ModerationLo
         return due.mapNotNull { id ->
             QuarkusTransaction.requiringNew().call {
                 val statement = ModerationStatementEntity.findById(id) ?: return@call null
-                ModerationCaseEntity.findById(
-                    statement.caseId, LockModeType.PESSIMISTIC_WRITE,
-                ) ?: return@call null
+                // Only a case's statement is ever deferred (an order's, a moderator's measure's).
+                val caseId = statement.caseId ?: return@call null
+                ModerationCaseEntity.findById(caseId, LockModeType.PESSIMISTIC_WRITE) ?: return@call null
                 // Re-read under the lock: a renewal committed meanwhile moved the end.
                 ModerationStatementEntity.getEntityManager().refresh(statement)
                 val until = statement.deferredUntil ?: return@call null
@@ -86,11 +86,11 @@ class StatementDeferrals(private val holds: Holds, private val log: ModerationLo
                 ) > 0
                 if (!members) return@call null
                 statement.sentAt = now
-                holds.aliveOf(statement.caseId, now)?.let { hold ->
+                holds.aliveOf(caseId, now)?.let { hold ->
                     val end = now.plus(Holds.SIX_MONTHS)
                     if (end.isAfter(hold.expiresAt)) holds.moveEnd(hold, end, HoldTrigger.MEASURE)
                 }
-                log.appendCase(ModerationEvent.STATEMENT_SENT, now, statement.caseId, reason = statement.ground, targetId = statement.id)
+                log.appendCase(ModerationEvent.STATEMENT_SENT, now, caseId, reason = statement.ground, targetId = statement.id)
                 statement.id
             }
         }

@@ -762,7 +762,8 @@ paths:
         and when `overContent` says so. Then `statement` is required (`400 statement_required`); it is recorded with the
         suspension, in its transaction, as a measure of kind `TENANT_OFFLINE` that `reactivateTenant` lifts, and mailed
         with the facts to each owner of the tenant once the suspension committed (owner decision Q25). A suspension for
-        any other reason (unpaid, maintenance) sends no body, or `overContent` false, and carries none.
+        any other reason (unpaid, maintenance) sends no body, or `overContent` false, and carries none. The request is
+        JSON either way (`Content-Type: application/json`, with or without a body).
       security:
         - bearerAuth: []
       parameters:

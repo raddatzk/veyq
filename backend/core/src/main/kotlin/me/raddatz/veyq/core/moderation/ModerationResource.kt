@@ -185,6 +185,7 @@ class ModerationResource(
             facts = statement.facts.sealed(),
             factsFor = factsFor.associate { it.accountId.toString() to it.sealedFacts },
             deferral = statement.deferral?.let { DeferralInput(it.until.toInstant(), SealedNote(it.reason.epoch, it.reason.sealedNote)) },
+            provision = statement.provision,
         )
         decided(
             caseId,
