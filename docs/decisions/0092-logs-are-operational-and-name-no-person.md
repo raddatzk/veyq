@@ -7,7 +7,8 @@
   § 5's bounds — every service of the Compose recipe logs `json-file` at 10m × 3, and the store runs at
   `RUST_LOG=garage=warn` on both targets (the e2e overlay raises it back for the sweep's control), held by
   `validate_compose_posture.py` assertion 6 and `chart_meta_check.py` (xxvii) (#478). The rest is not built. Published:
-  [Operations § Logs](../../site/src/content/docs/run/operations.md#logs) (what each source logs, how long). The guest-write record, the hold, the
+  [Operations § Logs](../../site/src/content/docs/run/operations.md#logs) (what each source logs, how long) and
+  [Data protection](../../site/src/content/docs/run/data-protection.md) (logs in the record of processing). The guest-write record, the hold, the
   report path and the moderation log belong to the moderation ADR,
   [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md); which client
   address a request has belongs to [ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md). This

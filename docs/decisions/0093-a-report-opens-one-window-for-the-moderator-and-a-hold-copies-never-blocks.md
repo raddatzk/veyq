@@ -459,7 +459,10 @@ responsibility, and switching back to the second mode turns it on again.
   required to, before 1 March; and, under German jurisdiction, the yearly § 3(2) TerrOIBG figures to the
   Bundesnetzagentur by 1 March. The [Run area](../../site/src/content/docs/run/moderation.md#transparency-reports) says
   who owes what; the moderation log and the case list hold what such a report counts, and an export from them could be
-  built later. **Not required, not built:** an internal complaint system (Art. 20, online platforms only); the in-app
+  built later. The operator's other duties as controller — a breach, the record of processing with what the guest-write
+  record, the reports and the holds keep, processors, an access request — are the Run area's
+  [Data protection](../../site/src/content/docs/run/data-protection.md).
+  **Not required, not built:** an internal complaint system (Art. 20, online platforms only); the in-app
   objection of § 7 is voluntary.
 - A moderator acts from any tenant host they can sign in on; an operator away from admin-web acts over SSH with
   `veyq-admin`, and the Run docs show how to reach admin-web remotely (an SSH tunnel or a VPN).
