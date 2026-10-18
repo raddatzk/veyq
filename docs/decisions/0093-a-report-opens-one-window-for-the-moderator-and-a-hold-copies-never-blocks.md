@@ -634,6 +634,13 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
 
 ### Still open
 
+**How these items are treated until veyq is offered as a service** (owner 2026-10-18): while the owner does not
+operate veyq as SaaS — instances run by their operators for a household, a club or a company — the items below are
+taken to be met by what is built and decided, so none of them holds back a CR or a release. Nothing they name is built
+on that assumption (no hold past 90 days, no authority link), and every legal text stays a draft. **Before veyq is
+offered as a service, each item is answered by counsel**, and an answer that differs is a legal duty that wins over
+what is built (`CLAUDE.md`).
+
 1. **§ 184b(5) StGB beyond the 90 days, and for a non-commercial operator.** Built is the bound the law supports
    for a host bound by Art. 18: the hold ends at the handover, at the latest 90 days after the report (§ 4). Whether a
    hold may run *until* the handover past those 90 days is not decided and not built; and a household operator has no
