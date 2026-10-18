@@ -351,9 +351,13 @@ gaps:
     and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
     executed, the suite goes back under that criterion and this gap goes.
   stack: >-
-    Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`, `e2e/tests/features/depot-download.spec.ts`)
+    Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`, `e2e/tests/features/depot-download.spec.ts`,
+    `e2e/tests/features/video-playback.spec.ts`)
     drives `thumbnail-grid`, `download-stable-name` (the lightbox saves the original under its sealed name, byte for
-    byte, through the Service Worker's download route, after a reload) in Chromium
+    byte, through the Service Worker's download route, after a reload), `lightbox-video-playback` and
+    `sw-range-streaming` (a WebM uploaded, reloaded, played from `/__media/<handle>`: every answer the Service Worker's
+    206 with the original's exact size in Content-Range, a window past the first chunk served, a seek near the end
+    lands and plays on) in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
     criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits
     the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.
