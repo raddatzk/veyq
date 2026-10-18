@@ -1890,7 +1890,7 @@ components:
           x-veyq-visibility: enum
           type: string
           description: The event.
-          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, RECEIPT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN]
+          enum: [RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN, PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, RECEIPT_SENT, DECISION_SENT, OBJECTION_RECEIVED, OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN, RESTORED]
           example: OPENED
         at:
           x-veyq-visibility: time
@@ -2477,8 +2477,8 @@ components:
     ModerationCaseOrigin:
       x-veyq-visibility: enum
       type: string
-      description: "`REPORT` = a report opened the case; `ORDER` = an authority's order did (ADR 0093 § 12) — decided from the start, with no report."
-      enum: [REPORT, ORDER]
+      description: "`REPORT` = a report opened the case; `ORDER` = an authority's order did (ADR 0093 § 12) — decided from the start, with no report; `RESTORED` = a restore lacked the case and the erasure ledger brought it back as a stub (ADR 0056 decision 8) — no report, no sealed content, its retention date kept."
+      enum: [REPORT, ORDER, RESTORED]
       example: REPORT
 
     AuthorityOrders:
