@@ -181,7 +181,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/media.test.ts
   - id: lightbox-video-playback
-    text: Opening a video (sealed mediaType video/*) shows its poster (the PREVIEW tier) with a play affordance; clicking play fetches + decrypts the pristine original on device and plays it from a typed blob URL in a <video> element (Slice 1 interim, ADR 0047 — no service-worker range layer yet, no size cap). An image shows no play affordance. Operator-blind — the original is fetched as ciphertext via presigned GET and decrypted under K_node. cr-inline-video-playback (#104).
+    text: Opening a video (sealed mediaType video/*) shows its poster (the PREVIEW tier) with a play affordance; clicking play plays the pristine original in a <video> element from a synthetic /__media/<handle> URL that the controlling Service Worker answers range by range (sw-range-streaming, ADR 0047), and only where no usable Service Worker controls the page (none, a stale or mismatched one, a failed registration) fetches + decrypts the whole original on device into a typed blob URL (no size cap). An image shows no play affordance. Operator-blind — the original is fetched as ciphertext via presigned GET and decrypted under K_node. cr-inline-video-playback (#104).
     coverage:
       web:
         unit:
