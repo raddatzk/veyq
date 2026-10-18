@@ -125,9 +125,11 @@ Implementation has the owner's go (2026-10-17), in the order of inbox #462; a le
   the surface the law names for it, before the code's surfaces (harvested to `changes/README.md`).
 - **"Describe only what is built" and "legal duties win" pulled apart, and the CR had no rule for that.** Four
   sentences the law asks are not fully backed by code: a backup period B, a statement for the Server Owner's own
-  steps, a private-mode warning for an unset controller while the record is on, and members' own Art. 13 information.
-  Each is now written as the law asks or as an honest criterion, and named as a gap in ADR 0035 decision 6 and on the
-  Run page, instead of a clause narrowed to the code. Next time: the refine lists such divergences as legal blockers
+  steps, and members' own Art. 13 information. Each is written as the law asks or as an honest criterion, and named
+  as a gap in ADR 0035 decision 6 and on the Run page with the CR the legal audit opened for it, instead of a clause
+  narrowed to the code. A fourth (the record passage showing an unset controller as a gap even in *private*) was
+  undone at the closing merge: the owner had meanwhile decided for the private mode's privacy texts that an unset
+  value is absent (Q26 of `cr-instance-privacy-notice`), and the section follows that one rule. Next time: the refine lists such divergences as legal blockers
   with an owner, so the implementer does not decide which side the sentence follows.
 - **The gate's history semantics needed a choice the CR left implicit.** "The member's accepted history keeps one row
   per triple" plus "a mode change reopens the gate" does not say what switching back to an accepted variant does; the
