@@ -3,10 +3,10 @@
 - Status: Proposed 2026-10-16 (draft for refinement); not accepted. Two minimal parts are built ahead of it because a
   legal audit (2026-10-18) named them duties: the backend's log sites name no person — the failed-mail line
   (`SmtpDelivery`, which the table's `TenantMailSender.kt:81` became), the invite fallback and the recovery worker log
-  ids, kinds and reply codes, each pinned by a log-capture test (§ 4's second bullet, [inbox](../inbox.md) #477); and
+  ids, kinds and reply codes, each pinned by a log-capture test (§ 4's second bullet, [inbox](../inbox.md) #481); and
   § 5's bounds — every service of the Compose recipe logs `json-file` at 10m × 3, and the store runs at
   `RUST_LOG=garage=warn` on both targets (the e2e overlay raises it back for the sweep's control), held by
-  `validate_compose_posture.py` assertion 6 and `chart_meta_check.py` (xxvii) (#478). The rest is not built. Published:
+  `validate_compose_posture.py` assertion 6 and `chart_meta_check.py` (xxvii) (#482). The rest is not built. Published:
   [Operations § Logs](../../site/src/content/docs/run/operations.md#logs) (what each source logs, how long) and
   [Data protection](../../site/src/content/docs/run/data-protection.md) (logs in the record of processing). The guest-write record, the hold, the
   report path and the moderation log belong to the moderation ADR,

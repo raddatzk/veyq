@@ -13,6 +13,9 @@ sources:
 
 You, the Server Owner, are the **controller** of what your instance processes: you decide to run it, for whom and
 with which providers ([ADR 0093 § 10](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+On an instance with several space-groups, whether each group's owner is a joint controller with you for its
+members' accounts (Art. 26) is open
+([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#still-open), Still open 6); veyq treats you as the controller until it is answered.
 What members keep — photos, names, notes — is end-to-end encrypted: the server stores it as ciphertext it cannot open,
 and so do you. What follows is the rest: what the server needs in the clear to run, and what leaves it.
 

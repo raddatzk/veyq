@@ -57,6 +57,10 @@ holds only **public** keys and ciphertext, never the password and never a conten
   invite, a completed reset, or a confirmation link opened while signed in. It is shown to the holder in the
   Security settings and gates nothing. It exists for the tenant's first owner, the one account whose address
   nothing proves ([ADR 0074](../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)).
+- [Erase an account](use-cases/uc.account.erase-account.md) — **planned** (cr-account-erasure;
+  [ADR 0101](../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), GDPR Art. 17):
+  self-service and on the Server Owner's door, pending for the scope trash's retention, then erased with only what the
+  law keeps staying.
 - [Rotate my keys after a compromise](use-cases/uc.account.rotate-keys.md) — **built (backend + web)**
   (`cr-account-key-rotation-after-compromise`; end a compromise: the Master Key **and** the identity are replaced together and every scope re-keyed; gated
   on the Secret Key, because that is the one thing a phished device never received; forward secrecy, **not**
