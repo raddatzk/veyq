@@ -20,6 +20,11 @@ const byCode: Record<string, string> = {
   nothing_held: 'moderation.errors.nothingHeld',
   report_not_found: 'moderation.errors.reportNotFound',
   invalid_request: 'moderation.errors.invalidRequest',
+  statement_facts_required: 'moderation.errors.factsRequired',
+  statement_recipients_changed: 'moderation.errors.recipientsChanged',
+  objection_not_found: 'moderation.errors.objectionNotFound',
+  objection_decided: 'moderation.errors.objectionDecided',
+  objection_needs_another_moderator: 'moderation.errors.needsAnotherModerator',
 }
 
 /** The i18n key for [e], or [fallback] when the failure names no code this surface knows. */

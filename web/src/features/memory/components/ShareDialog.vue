@@ -259,6 +259,7 @@ function fmtDate(d: Date): string {
               </div>
               <!-- inbox #457: the guest gate's own answer why a guest gets no link, with the edit or renew that fixes it. -->
               <ShareGuestStops
+                :share-id="share.shareId"
                 :stops="share.guestStops"
                 :created-at="share.createdAt"
                 :can-edit="canEdit(share)"

@@ -57,6 +57,7 @@ import ExportSubtreeDialog from '../export/ExportSubtreeDialog.vue'
 import { nodeMover } from '../node/move'
 import { useLevelLive } from '../node/useLevelLive'
 import type { TreeNode } from '../node/tree'
+import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
 
 // The props are the shell's, the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the
 // SFC compiler reads them statically.
@@ -211,8 +212,12 @@ function createError(e: unknown): string {
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div v-if="renderedNote" class="veyq-surface markdown-body" v-html="renderedNote"></div>
 
-    <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — a guest sees what a member sees. -->
-    <p v-if="current?.blockedByOperator" class="veyq-empty node-blocked">{{ t('node.blockedByOperator') }}</p>
+    <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — a guest sees what a member sees; a member
+         the statement of reasons names reads it below (uc.moderation.object-to-a-measure). -->
+    <template v-if="current?.blockedByOperator">
+      <p class="veyq-empty node-blocked">{{ t('node.blockedByOperator') }}</p>
+      <StatementNotice :target-id="current.id" />
+    </template>
     <LevelView
       v-else-if="atFolder && current"
       :folder="current"

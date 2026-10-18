@@ -28,6 +28,7 @@ const summary = (over: Partial<ModerationCaseSummary> = {}): ModerationCaseSumma
   lastReportedAt: new Date('2026-10-17T11:00:00Z'),
   reportCount: 2,
   tenantDomain: 'club.example.org',
+  objectionOpen: false,
   holdEndsAt: new Date('2027-01-15T09:00:00Z'),
   ...over,
 })
@@ -59,6 +60,14 @@ describe('ModerationQueue', () => {
     expect(rows[1].text()).toContain(t('moderation.caseRow.noDomain'))
     expect(rows[1].text()).toContain(t('moderation.caseRow.notHeld'))
     expect(rows[1].text()).toContain(t('moderation.states.DECIDED'))
+  })
+
+  it('marks a case whose objection waits for a decision, and only that one', async () => {
+    vi.mocked(listCases).mockResolvedValue([summary({ objectionOpen: true }), summary({ id: 'case-2' })])
+    const w = await mountQueue()
+    const rows = w.findAll('.moderation-case-row')
+    expect(rows[0].find('.moderation-objection-badge').text()).toBe(t('moderation.caseRow.objection'))
+    expect(rows[1].find('.moderation-objection-badge').exists()).toBe(false)
   })
 
   it('an empty queue says nothing was reported', async () => {
