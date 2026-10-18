@@ -11,6 +11,8 @@ import me.raddatz.veyq.core.account.pairing.DevicePairingEntity
 import me.raddatz.veyq.core.account.recovery.AccountRecoveryEntity
 import me.raddatz.veyq.core.account.login.LoginChallengeEntity
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.admin.tenant.TenantTermsAcceptanceEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
@@ -69,6 +71,7 @@ class AccountPurge(
     private val reclaim: StoreReclaimStore,
     private val mail: AccountErasureMail,
     private val steps: SignInBlocks,
+    private val ledger: ErasureLedger,
     @All erasers: MutableList<AccountEraser>,
 ) {
     private val erasers: List<AccountEraser> = erasers.toList()
@@ -100,6 +103,27 @@ class AccountPurge(
     /** Erase one pending account now, due or not (tests, a forced run) — transactional. */
     @Transactional
     fun purge(accountId: String) = eraseAccount(accountId, null)
+
+    /**
+     * The erasure ledger's re-application (ADR 0056 decision 8): the account [accountId] was erased at [requestedAt]'s
+     * request's end, and a restore brought its row back — live, if the capture predates the request, so no pending row
+     * names it. Its pending row is made again, due now, and the one purge erases it as it did then: its own scopes (each
+     * also a line of its own), every row keyed on it, its address wherever it was copied. Nothing is mailed — the person
+     * was told when it happened. False when no account row exists: nothing came back. In the caller's transaction.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun reapply(accountId: String, requestedAt: Instant): Boolean {
+        val user = VeyqUser.findById(accountId, LockModeType.PESSIMISTIC_WRITE) ?: return false
+        val pending = AccountErasureEntity.findById(accountId) ?: AccountErasureEntity().apply {
+            this.accountId = user.id
+            this.requestedAt = requestedAt
+            requestedBy = AccountErasureEntity.SERVER_OWNER
+            dueAt = Instant.now()
+        }.also { it.persist() }
+        pending.dueAt = Instant.now()
+        eraseAccount(accountId, null)
+        return true
+    }
 
     private fun eraseAccount(accountId: String, cutoff: Instant?) {
         // The account row's lock first — the lock every sign-in, stop and request takes — and the work list's predicate
@@ -160,8 +184,9 @@ class AccountPurge(
         // After the terms question, which asks whether one stands: a measure on the account ends with it.
         steps.targetErased(accountId, listOf(BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT), Instant.now())
         AccountErasureEntity.deleteById(accountId)
-        // ERASURE LEDGER — the one hook for the ACCOUNT kind: cr-backup-erasure-and-retention writes its outbox entry
-        // (kind ACCOUNT, this id, [requestedAt]'s erasure completing now) here, in this transaction, before the row goes.
+        // The erasure ledger's line (ADR 0056 decision 8, ADR 0101 decision 8), in this transaction, before the row goes:
+        // a restore of a capture older than this brings the account back, and the start erases it again ([reapply]).
+        ledger.erased(ErasureKind.ACCOUNT, accountId)
         VeyqUser.deleteById(accountId)
         log.infof("an account was erased (requested %s)", requestedAt)
     }

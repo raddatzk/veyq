@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.moderation.cases
 
+import me.raddatz.veyq.core.backup.BlockBasis
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.generated.model.AccountSignInBlock
 import me.raddatz.veyq.core.generated.model.ModerationSteps
@@ -62,6 +64,7 @@ class SignInBlocks(
     private val log: ModerationLog,
     private val statements: StepStatements,
     private val mail: StatementMail,
+    private val ledger: ErasureLedger,
 ) {
 
     /** The open proposals and the sign-in blocks in force. */
@@ -140,6 +143,7 @@ class SignInBlocks(
             activeKey = key
         }
         row.persist()
+        ledger.blockTaken(row, BlockBasis.MEASURE)
         sessions.revokeAllForUser(user.id)
         if (onCase != null) {
             log.appendCase(ModerationEvent.MEASURE_TAKEN, now, onCase, moderatorId = serverOwnerId, reason = BlockKind.MEMBER_SIGN_IN.name, targetId = user.id)
@@ -189,6 +193,7 @@ class SignInBlocks(
                 activeKey = ModerationBlockEntity.activeKeyOf(kind, tenantId)
             }
             row.persist()
+            ledger.blockTaken(row, BlockBasis.MEASURE)
             if (onCase != null) {
                 log.appendCase(ModerationEvent.MEASURE_TAKEN, now, onCase, moderatorId = serverOwnerId, reason = row.kind, targetId = tenantId)
             } else {
@@ -219,6 +224,7 @@ class SignInBlocks(
             .forEach { row ->
                 row.liftedAt = now
                 row.activeKey = null
+                ledger.blockLifted(row)
                 val caseId = row.caseId
                 if (caseId != null) {
                     log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = targetId)
@@ -234,6 +240,7 @@ class SignInBlocks(
         row.liftedAt = now
         row.liftedBy = serverOwnerId
         row.activeKey = null
+        ledger.blockLifted(row)
         val caseId = row.caseId
         if (caseId != null) {
             log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, moderatorId = serverOwnerId, reason = row.kind, targetId = tenantId)
@@ -262,6 +269,7 @@ class SignInBlocks(
         row.liftedAt = now
         row.liftedBy = serverOwnerId
         row.activeKey = null
+        ledger.blockLifted(row)
         val caseId = row.caseId
         if (caseId != null) {
             log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, moderatorId = serverOwnerId, reason = row.kind, targetId = row.targetId)

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
@@ -78,6 +80,7 @@ class SharingStore(
     /** What still names a guest identity (today: core's attachments, Memories' media + buckets). Combined with "any". */
     private val identityUsages: Instance<GuestIdentityUsage>,
     private val tree: NodesStore,
+    private val ledger: ErasureLedger,
 ) {
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
@@ -352,6 +355,9 @@ class SharingStore(
         share.sealedPassword = null
         share.writeVerifier = null
         share.expiresAt = null
+        // The erasure ledger's line (ADR 0056 decision 8): a restore of a capture older than this brings the link back
+        // live, its keys and password with it, and nothing in its row would delete it again.
+        ledger.erased(ErasureKind.SHARE, share.id, share.scopeId)
         dropDeadIdentities(ShareIdentityEntity.find("shareId", share.id).list().map { it.id })
     }
 

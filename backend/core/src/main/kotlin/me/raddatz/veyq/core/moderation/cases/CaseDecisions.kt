@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.moderation.cases
 
+import me.raddatz.veyq.core.backup.BlockBasis
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.admin.operator.OperatingMode
 import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.content.NodesStore
@@ -161,6 +163,7 @@ class CaseDecisions(
     private val operatingMode: OperatingModeHandler,
     private val mail: StatementMail,
     private val deferrals: StatementDeferrals,
+    private val ledger: ErasureLedger,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
 ) {
@@ -287,6 +290,7 @@ class CaseDecisions(
         }
         if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return@createOrConflict refused(CaseFailures.measureExists)
         row.persist()
+        ledger.blockTaken(row, BlockBasis.MEASURE)
         log.appendCase(
             ModerationEvent.MEASURE_TAKEN, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
             epoch = note?.epoch, sealedText = note?.sealed,
@@ -361,6 +365,7 @@ class CaseDecisions(
         row.liftedAt = now
         row.liftedBy = moderatorId
         row.activeKey = null
+        ledger.blockLifted(row)
         ModerationBlockEntity.getEntityManager().flush()
         log.appendCase(
             ModerationEvent.MEASURE_LIFTED, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
@@ -551,6 +556,7 @@ class CaseDecisions(
                 ?: return@createOrConflict refused(CaseFailures.reportNotFound)
             if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return@createOrConflict refused(CaseFailures.measureExists)
             row.persist()
+            ledger.blockTaken(row, BlockBasis.MEASURE)
             log.appendCase(
                 ModerationEvent.REPORTER_BARRED, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
                 epoch = note?.epoch, sealedText = note?.sealed,

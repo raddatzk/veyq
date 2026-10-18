@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
@@ -27,7 +29,12 @@ import org.jboss.logging.Logger
  * Operator-blind: nothing is decrypted; store objects go only through the reclaim list (ADR 0062).
  */
 @ApplicationScoped
-class TenantPurge(private val scopePurge: ScopePurge, private val store: TenantStore, private val steps: SignInBlocks) {
+class TenantPurge(
+    private val scopePurge: ScopePurge,
+    private val store: TenantStore,
+    private val steps: SignInBlocks,
+    private val ledger: ErasureLedger,
+) {
     private val log = Logger.getLogger(TenantPurge::class.java)
 
     @Scheduled(every = "{veyq.tenant.deletion.purge.every}")
@@ -47,6 +54,25 @@ class TenantPurge(private val scopePurge: ScopePurge, private val store: TenantS
     @Transactional
     fun purge(tenantId: String) = eraseTenant(tenantId, null)
 
+    /**
+     * The erasure ledger's re-application (ADR 0056 decision 8): the tenant [tenantId] was erased, and a restore brought
+     * its row back. One never accepted (`PENDING`) goes as its revoke took it ([TenantStore.deleteTenant]); any other is
+     * put back into `PENDING_DELETION`, due now, and the one purge erases it as it did then. False when no tenant row
+     * exists. In the caller's transaction; the start's routing projection runs after it (`TenantIngressProjector`).
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun reapply(tenantId: String): Boolean {
+        val tenant = TenantEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE) ?: return false
+        if (tenant.status == TenantEntity.PENDING) {
+            store.deleteTenant(tenantId)
+            return true
+        }
+        tenant.status = TenantEntity.PENDING_DELETION
+        tenant.deletionDueAt = Instant.now()
+        eraseTenant(tenantId, null)
+        return true
+    }
+
     private fun eraseTenant(tenantId: String, cutoff: Instant?) {
         // The tenant row's lock, and the work list's predicate again under it: a stop that landed in between wins.
         val tenant = TenantEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE) ?: return
@@ -61,8 +87,8 @@ class TenantPurge(private val scopePurge: ScopePurge, private val store: TenantS
         TenantInviteEntity.delete("tenantId", tenantId)
         // A suspension's or this deletion's record over content ends with the tenant, so its records run to their date.
         steps.targetErased(tenantId, listOf(BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED), Instant.now())
-        // ERASURE LEDGER — the one hook for the TENANT kind: cr-backup-erasure-and-retention writes its outbox entry
-        // (kind TENANT, this id) here, in this transaction, before the row goes.
+        // The erasure ledger's line (ADR 0056 decision 8, ADR 0101 decision 8), in this transaction, before the row goes.
+        ledger.erased(ErasureKind.TENANT, tenantId)
         TenantEntity.deleteById(tenantId)
         log.infof("tenant %s was erased", tenantId)
     }

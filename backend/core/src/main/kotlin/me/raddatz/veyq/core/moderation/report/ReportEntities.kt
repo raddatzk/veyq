@@ -28,8 +28,12 @@ enum class ReportCategory(val urgent: Boolean) {
 /** What a reported item is (the wire's `kind`). A LINK's id is its share id. */
 enum class ReportItemKind { NODE, ITEM, LINK }
 
-/** What opened a case: a report, or an authority's order (ADR 0093 § 12) — decided from the start, with no report. */
-enum class CaseOrigin { REPORT, ORDER }
+/**
+ * What opened a case: a report, or an authority's order (ADR 0093 § 12) — decided from the start, with no report — or,
+ * [RESTORED], a restore that lacked it: the erasure ledger's stub (ADR 0056 decision 8), with no report and no sealed
+ * content, kept to the retention date it had.
+ */
+enum class CaseOrigin { REPORT, ORDER, RESTORED }
 
 /** A case's state: [OPEN] until a decision, [DECIDED] once a measure was taken, [CLOSED] when dismissed or when its last hold ended after a decision (uc.moderation.review-a-case). */
 enum class CaseState { OPEN, DECIDED, CLOSED }

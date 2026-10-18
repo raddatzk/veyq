@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.blobstore
 
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
@@ -98,11 +100,14 @@ class StoreReclaimEntity : PanacheEntityBase {
  */
 @ApplicationScoped
 class StoreReclaimStore {
-
     /** Field-injected, not a constructor parameter: a test `@Alternative` subclasses this bean, and ArC can give
      *  that normal-scoped subclass its proxy's no-args constructor only if this class keeps one. */
     @Inject
     lateinit var config: VeyqConfig
+
+    /** The erasure ledger, which a settled row's key enters (ADR 0056 decision 8) — field-injected, as [config] is. */
+    @Inject
+    lateinit var ledger: ErasureLedger
 
     /**
      * How long a recorded key waits before the sweep may delete its objects: `veyq.blob.upload.retention`, the
@@ -169,7 +174,10 @@ class StoreReclaimStore {
      */
     @Transactional
     fun settle(id: String) {
-        StoreReclaimEntity.delete("id", id)
+        // The erasure ledger's line (ADR 0056 decision 8), only when this call settled the row — a second instance that
+        // settled it first wrote it: the key is erased, not lost, and a restore's object check must say so.
+        val key = StoreReclaimEntity.findById(id)?.storageKey ?: return
+        if (StoreReclaimEntity.delete("id", id) > 0) ledger.erased(ErasureKind.STORAGE_KEY, key)
     }
 
     /**

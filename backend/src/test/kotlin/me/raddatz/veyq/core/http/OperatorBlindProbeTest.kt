@@ -296,6 +296,8 @@ class OperatorBlindProbeTest {
             "getInstanceOperator", "setInstanceOperator", "clearInstanceOperator", "confirmOperatorNotification",
             "getInstanceOperatingMode", "setInstanceOperatingMode",
             "getInstanceGuestWriteRecord", "setInstanceGuestWriteRecord", "eraseGuestWriteRecordsOfIdentity",
+            // the backups' retention, B (ADR 0056 decision 8): one instance-wide value
+            "getInstanceBackupRetention", "setInstanceBackupRetention",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

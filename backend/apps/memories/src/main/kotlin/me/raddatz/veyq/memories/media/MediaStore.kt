@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
@@ -95,6 +96,8 @@ class MediaStore(
     private val items: NodeItemsRevisions,
     /** Core's guest-write record: a medium's rows go with the medium (ADR 0093 § 10), from [purgeMediaRows]. */
     private val guestWriteRecords: GuestWriteRecords,
+    /** Core's erasure ledger: a hard-deleted medium enters it as Memories' `MEDIA` (ADR 0056 decision 8, [MemoriesErasures]). */
+    private val ledger: ErasureLedger,
 ) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
@@ -264,6 +267,9 @@ class MediaStore(
         MediaEntity.deleteById(media.id)
         blobIds.forEach { blobs.deleteBlobRow(it) }
         guestWriteRecords.forget(listOf(media.id)) // a guest's upload record names the medium: it goes with it
+        // The erasure ledger's line (ADR 0056 decision 8): a guest's delete of its own upload leaves no trash to re-fire,
+        // and a capture older than any of these brings the medium back.
+        ledger.erasedByApplication(MemoriesErasures.Kind.MEDIA.name, media.id, media.scopeId)
     }
 
     /**

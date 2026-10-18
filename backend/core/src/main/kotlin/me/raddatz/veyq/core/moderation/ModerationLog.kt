@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation
 
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.ModeratorEntity
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import jakarta.enterprise.context.ApplicationScoped
@@ -27,6 +28,8 @@ enum class ModerationEvent {
     RECEIVED, REPORT_ATTACHED, OPENED, DISMISSED, MEASURE_TAKEN, MEASURE_LIFTED, PROPOSED, PROPOSAL_TAKEN,
     PROPOSAL_DECLINED, HOLD_EXTENDED, HOLD_ENDED, REPORTER_BARRED, STATEMENT_SENT, RECEIPT_SENT, DECISION_SENT, OBJECTION_RECEIVED,
     OBJECTION_DECIDED, OBJECTION_SELF_REVIEWED, ORDER_RECEIVED, STATEMENT_DEFERRED, HANDED_OVER, INFORMATION_GIVEN,
+    /** A case the erasure ledger brought back as a stub after a restore (ADR 0056 decision 8): dated as it opened. */
+    RESTORED,
 }
 
 /**
@@ -43,7 +46,7 @@ enum class ModerationEvent {
  * at once, by [ModerationRecordsPurge] — one date, one path, and never while a measure of the case is in force.
  */
 @ApplicationScoped
-class ModerationLog {
+class ModerationLog(private val ledger: ErasureLedger) {
 
     fun append(
         event: ModerationEvent,
@@ -106,16 +109,20 @@ class ModerationLog {
             this.holdUntil = holdUntil
             expiresAt = closedAt?.let { retentionEnd(maxOf(it, at)) }
         }.persist()
+        // The case's line in the erasure ledger (ADR 0056 decision 8): every event can move its state or its date.
+        ledger.caseChanged(caseId)
     }
 
     /** The case [caseId] was reopened by an objection: its events are undated again, as an open case's are. */
     fun reopenCase(caseId: String) {
         ModerationEventEntity.update("expiresAt = null where caseId = ?1", caseId)
+        ledger.caseChanged(caseId)
     }
 
     /** The case [caseId] closed at [closedAt]: every event of it is kept to 31 December of the third year after. */
     fun closeCase(caseId: String, closedAt: Instant) {
         ModerationEventEntity.list("caseId", caseId).forEach { it.expiresAt = retentionEnd(maxOf(it.occurredAt, closedAt)) }
+        ledger.caseChanged(caseId)
     }
 
     /**

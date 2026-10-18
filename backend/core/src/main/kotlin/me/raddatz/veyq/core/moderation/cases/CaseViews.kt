@@ -83,8 +83,12 @@ class CaseViews(
         val entered = AuthorityOrderEntity.list("caseId in ?1", ids).groupBy({ it.caseId!! }, { it.enteredAt })
         val deferred = ModerationStatementEntity.list("caseId in ?1 and sentAt is null and deferredUntil is not null", ids)
             .groupBy({ it.caseId }, { it.deferredUntil!! })
+        // A restored stub (ADR 0056 decision 8) has neither reports nor orders: it is dated by when it opened.
+        val restored = ModerationEventEntity.list("caseId in ?1 and event = ?2", ids, ModerationEvent.RESTORED.name)
+            .groupBy({ it.caseId!! }, { it.occurredAt })
         cases.mapNotNull { case ->
-            val times = shares[case.id].orEmpty().mapNotNull { reports[it.reportId]?.receivedAt } + entered[case.id].orEmpty()
+            val times = shares[case.id].orEmpty().mapNotNull { reports[it.reportId]?.receivedAt } + entered[case.id].orEmpty() +
+                restored[case.id].orEmpty()
             if (times.isEmpty()) return@mapNotNull null
             case to times
         }.sortedWith(compareBy({ ReportCategory.valueOf(it.first.category).ordinal }, { it.second.min() })).map { (case, times) ->

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.sharing.SharingStore
@@ -47,6 +49,7 @@ import org.jboss.logging.Logger
 class NodeSubtreePurge(
     private val sharing: SharingStore,
     private val nodes: NodesStore,
+    private val ledger: ErasureLedger,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All erasers: MutableList<NodeSubtreeEraser>,
@@ -94,6 +97,27 @@ class NodeSubtreePurge(
     }
 
     /**
+     * The erasure ledger's re-application (ADR 0056 decision 8): erase the nodes [nodeIds] of [scopeId] that a restore
+     * brought back, each with every descendant the restored tree hangs under it — a node is erased with its subtree, or
+     * not at all. Takes the scope row's lock, as [eraseExpiredIn] does; joins the caller's transaction. Answers how many
+     * node rows went (0 when none of them exists).
+     */
+    fun eraseNodes(scopeId: String, nodeIds: List<String>): Int {
+        ScopeEntity.lockRow(scopeId) ?: return 0
+        val all = NodeEntity.find("scopeId", scopeId).list()
+        val byParent = all.groupBy { it.parentId }
+        val doomed = LinkedHashSet<String>()
+        val stack = ArrayDeque(nodeIds.filter { id -> all.any { it.id == id } })
+        while (stack.isNotEmpty()) {
+            val cur = stack.removeLast()
+            if (doomed.add(cur)) byParent[cur]?.forEach { stack.addLast(it.id) }
+        }
+        val erased = all.filter { it.id in doomed }
+        erase(scopeId, erased)
+        return erased.size
+    }
+
+    /**
      * Erase [erased] — node rows of [scopeId] that are complete subtrees (every descendant among them) — for good,
      * recording every store object it drops: the expired trash ([eraseExpiredIn]) and a guest's empty upload
      * placeholder (`ShareNodesHandler.abandon`, which checked it has no child). Joins its caller's transaction, which
@@ -120,6 +144,9 @@ class NodeSubtreePurge(
         //    named as its editor (ADR 0093 § 8) — `NodeGuestIdentityUsage` keeps an identity while a row names it either
         //    way, so the rows go first and every identity they named joins the ones the step below may drop.
         guests += erased.flatMap { listOfNotNull(it.shareIdentityId, it.nameEditorIdentityId, it.metaEditorIdentityId) }
+        // The erasure ledger's lines (ADR 0056 decision 8): a guest's abandoned placeholder has no trash to re-fire, and
+        // a capture older than the trash brings the node back live.
+        erased.forEach { ledger.erased(ErasureKind.NODE, it.id, scopeId) }
         erased.forEach { NodeEntity.deleteById(it.id) }
 
         // The guests of ANY deleted link whose last attachment, identity folder, field or application row naming them went above — a link
