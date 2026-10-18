@@ -656,3 +656,8 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
     sentence plus a link meets Art. 13 on a page a guest reaches without an account (§ 10), and what Art. 14 GDPR
     (and § 33 BDSG's exceptions) asks of the host towards a third party a reporter names in a report's sealed text,
     which the host cannot read until a moderator opens it (audit 2026-10-18, C5).
+11. **Reported content inside a backup capture.** A capture holds the ciphertext of everything stored when it was
+    taken, including content later reported, blocked or confirmed as child sexual abuse material. Whether keeping such
+    a capture until it expires at B is possession under § 184b(3) StGB, or covered as it is unreadable to the operator
+    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block or loses a case
+    (`cr-backup-erasure-and-retention` decision 7); this item is only about the capture's own existence.

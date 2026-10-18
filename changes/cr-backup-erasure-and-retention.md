@@ -66,7 +66,7 @@ before it serves. By the owner rule that a legal duty wins over what was decided
    every start; a chart `CronJob` (daily, the gate's image and claim) runs the same prune. The pool's ledger drops
    entries older than B, and its prune follows.
 3. **The ledger's kinds are a sealed set** — `ACCOUNT`, `TENANT`, `SCOPE`, `NODE`, an application's kinds (Memories:
-   `MEDIA`), `SHARE`, `STORAGE_KEY` — and the re-applier is a `when` over it, so a kind without a re-applier does not
+   `MEDIA`), `SHARE`, `STORAGE_KEY`, and decision 7's `BLOCK`, `LIFT`, `CASE` — and the re-applier is a `when` over it, so a kind without a re-applier does not
    compile (a format that cannot break quietly, rather than a guard). An application contributes its kinds and their
    erasers through a core interface, as it does a `ScopeEraser`.
 4. **An entry is written in the erasure's transaction to an outbox table**; a sweep (every minute and at start) appends
@@ -80,6 +80,19 @@ before it serves. By the owner rule that a legal duty wins over what was decided
 6. **The restore reads the ledger**: `veyqctl restore` and `rollback` hand it the file from the state volume (the way
    it already places the key as the runtime user), the gate mounts the state claim read-only for it; with no ledger the
    object check runs as today and says so.
+7. **Moderation survives a restore too** (owner 2026-10-18, by the legal-duty rule: TCO Art. 3 and a DSA Art. 17 measure
+   must not be undone by a restore). Cases, measures, orders and holds live in the database, so a capture taken before a
+   report or a block would bring a blocked item back unblocked and lose the case. The ledger therefore also carries,
+   from the same outbox: `BLOCK` and `LIFT` (item kind and id, the basis — measure or authority order — and the time),
+   the moderation's erasures as ordinary erasure lines, and a `CASE` stub (case id, category, opened at, its retention
+   date). At start, per item the **last** `BLOCK`/`LIFT` line wins: an item whose last line is a block and that the
+   restored database does not block is blocked again, with its basis; a lift is never re-blocked. A `CASE` stub whose
+   case the restored database lacks is recreated as a stub (`origin = RESTORED`, no reports, no sealed content) so the
+   queue shows that a case existed and the log's retention still holds; `veyqctl status` and the start's log line count
+   such stubs, and the Run page says that the case's sealed parts are lost with a capture older than them. Dropping
+   lines older than B stays correct here: every restorable capture is younger than B, so anything older is in it.
+   Whether CSAM ciphertext kept in a capture is possession under § 184b StGB is a legal question (ADR 0093 Still open),
+   not decided here; captures expire at B either way.
 
 ## Open questions (owner) and legal items
 
