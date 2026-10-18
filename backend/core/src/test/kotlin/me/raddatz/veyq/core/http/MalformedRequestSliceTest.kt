@@ -1,9 +1,13 @@
 package me.raddatz.veyq.core.http
 
 import me.raddatz.veyq.core.generated.model.AuthorityOrderRequest
+import me.raddatz.veyq.core.generated.model.BlockAccountSignInRequest
 import me.raddatz.veyq.core.generated.model.ClaimRequest
 import me.raddatz.veyq.core.generated.model.CreateNodeRequest
+import me.raddatz.veyq.core.generated.model.CreateTenantRequest
 import me.raddatz.veyq.core.generated.model.ErrorResponse
+import me.raddatz.veyq.core.generated.model.ServerOwnerStatementInput
+import me.raddatz.veyq.core.generated.model.ServerOwnerStatementInputFactsForLog
 import me.raddatz.veyq.core.generated.model.TenantMailSettingsUpdate
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -136,6 +140,10 @@ class MalformedRequestSliceTest {
             "a string for an integer" to ("""{$node,"orderIndex":"0"}""" to CreateNodeRequest::class.java),
             "a fraction for an integer" to ("""{$node,"orderIndex":1.5}""" to CreateNodeRequest::class.java),
             "a number for a date-time" to ("""{$order,"deferStatementUntil":0}""" to AuthorityOrderRequest::class.java),
+            "an empty string for a uuid" to ("""{$node,"parentId":""}""" to CreateNodeRequest::class.java),
+            // A field trimmed by `TrimmingStringDeserializer` read any scalar as its text and an object as "".
+            "a boolean for a trimmed string" to ("""{"tenantName":false,"domain":"a.example","ownerEmail":"a@b.example"}""" to CreateTenantRequest::class.java),
+            "an object for a trimmed string" to ("""{"tenantName":{},"domain":"a.example","ownerEmail":"a@b.example"}""" to CreateTenantRequest::class.java),
         )
         for ((what, case) in coerced) {
             assertThrows<MismatchedInputException>(what) { mapper.readValue(case.first, case.second) }
@@ -144,6 +152,33 @@ class MalformedRequestSliceTest {
         mapper.readValue("""{"tls":true,"enabled":true}""", TenantMailSettingsUpdate::class.java)
         mapper.readValue("""{$node,"orderIndex":0}""", CreateNodeRequest::class.java)
         mapper.readValue("""{$order,"deferStatementUntil":"2026-10-20T00:00:00Z"}""", AuthorityOrderRequest::class.java)
+        assertEquals("Fuzz", mapper.readValue("""{"tenantName":" Fuzz ","domain":"a.example","ownerEmail":"a@b.example"}""", CreateTenantRequest::class.java).tenantName)
+    }
+
+    /** A JSON `null` binds only where the contract allows one (NullRefused): `orderIndex` is an optional integer with
+     *  no `null` in its type, `parentId` an optional `[uuid, null]` — the scope root. */
+    @Test
+    fun aNullWhereTheContractAllowsNoneIsInvalidRequest() {
+        val node = """"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"a2V5""""
+        assertThrows<MismatchedInputException> { mapper.readValue("""{$node,"orderIndex":null}""", CreateNodeRequest::class.java) }
+        // The controls: a null the contract allows binds, and an absent property stays absent.
+        assertEquals(null, mapper.readValue("""{$node,"parentId":null}""", CreateNodeRequest::class.java).parentId)
+        mapper.readValue("""{$node}""", CreateNodeRequest::class.java)
+    }
+
+    /** A nullable nested object (`oneOf` [a schema, `null`]) is validated into: the generator dropped its `@Valid`, so a
+     *  Server Owner's statement passed any bound of its sealed facts (NullableObjectCascade, the API fuzzing's first run). */
+    @Test
+    fun aNullableNestedObjectIsValidatedInto() {
+        val facts = { sealed: String -> ServerOwnerStatementInputFactsForLog(epoch = 1, sealedFacts = sealed) }
+        val request = { sealed: String ->
+            BlockAccountSignInRequest(
+                address = "member@example.com",
+                statement = ServerOwnerStatementInput(UUID.randomUUID(), ServerOwnerStatementInput.Ground.TERMS_BREACH, factsForLog = facts(sealed)),
+            )
+        }
+        assertTrue(validator.validate(request("A".repeat(12001))).isNotEmpty(), "sealed facts past 12000 characters")
+        assertTrue(validator.validate(request("c2VhbGVk")).isEmpty(), "the control: within its bounds")
     }
 
     // --- a query parameter of the wrong type or format (StrictParamConverters) ------------------------------------

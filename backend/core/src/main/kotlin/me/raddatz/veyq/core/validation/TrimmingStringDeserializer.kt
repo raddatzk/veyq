@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.validation
 
 import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.core.JsonToken
 import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 
@@ -15,7 +16,11 @@ import com.fasterxml.jackson.databind.JsonDeserializer
  * Only for server-visible metadata (display names etc.) — never for content, which is ciphertext the
  * server must not touch.
  */
-class TrimmingStringDeserializer : JsonDeserializer<String>() {
+open class TrimmingStringDeserializer : JsonDeserializer<String>() {
+    /** A JSON string only: anything else is a value of the wrong type, refused as one (`MismatchedInputException`,
+     *  `400 invalid_request`). It used to read any scalar as its text and an object or array as `""` — so `false` became
+     *  the user name "false" and `{}` an empty one (the API fuzzing's first run, cr-api-fuzzing Q5). */
     override fun deserialize(parser: JsonParser, context: DeserializationContext): String =
-        parser.valueAsString?.trim() ?: ""
+        if (parser.hasToken(JsonToken.VALUE_STRING)) parser.text.trim()
+        else context.handleUnexpectedToken(String::class.java, parser) as String
 }

@@ -98,6 +98,16 @@ abstract class OpenApiGenerate : DefaultTask() {
                 library = "quarkus",
             )
         }
+        // A JSON `null` binds only where the contract allows one — see NullRefused.
+        NullRefused.apply(
+            modelsDir.get().asFile.resolve("src/main/kotlin"),
+            SpecSets.nonNullableOptionals(set.specs + commonSpec.get().asFile, commonSpec.get().asFile),
+        )
+        // The cascade the generator drops on a nullable nested object comes back — see NullableObjectCascade.
+        NullableObjectCascade.apply(
+            modelsDir.get().asFile.resolve("src/main/kotlin"),
+            SpecSets.nullableObjectAnnotations(set.specs + commonSpec.get().asFile),
+        )
         // The cascade of a generated list moves onto its element type (HV000271) — see ModelCascade.
         ModelCascade.apply(modelsDir.get().asFile.resolve("src/main/kotlin"))
         if (set.owner == SpecSets.coreOwner) return

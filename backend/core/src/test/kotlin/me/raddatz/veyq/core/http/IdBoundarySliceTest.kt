@@ -79,8 +79,8 @@ class IdBoundarySliceTest {
         val path = "/api/scopes/${space.scopeId}/nodes"
         for (bad in listOf("not-a-uuid", "", "12345", "0123456789abcdef0123456789abcdef0123")) {
             assertEquals(400, send("POST", path, folder(bad)).statusCode, "nodeId `$bad`")
-            // An empty parentId is Jackson's null (the scope root), the one spelling that is no refusal.
-            if (bad.isNotEmpty()) assertEquals(400, send("POST", path, folder(UUID.randomUUID().toString(), parentId = bad)).statusCode, "parentId `$bad`")
+            // An empty parentId is no UUID either: it bound as Jackson's null (the scope root) until StrictJsonTypes.
+            assertEquals(400, send("POST", path, folder(UUID.randomUUID().toString(), parentId = bad)).statusCode, "parentId `$bad`")
         }
         assertEquals(201, send("POST", path, folder(UUID.randomUUID().toString())).statusCode, "the control: a UUID creates")
     }

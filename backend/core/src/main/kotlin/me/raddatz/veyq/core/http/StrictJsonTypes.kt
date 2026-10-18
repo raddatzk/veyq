@@ -25,7 +25,7 @@ import java.time.OffsetDateTime
  *
  * Jackson's default coerces a scalar into the declared type: a number into a string field (`12345678` became the
  * capability tag `"12345678"`), `0` into a date-time (1970-01-01, then a domain refusal), an integer into a boolean or an
- * enum, a string into a number. Every one is a request the contract forbids, answered past the boundary — the API
+ * enum, a string into a number, `""` into an absent id. Every one is a request the contract forbids, answered past the boundary — the API
  * fuzzing's first run found about fifty (cr-api-fuzzing, owner decision Q5). The generated clients never send one, so
  * refusing them changes nothing a client does. `MalformedRequestSliceTest` holds each mechanism.
  *
@@ -60,6 +60,11 @@ class StrictJsonTypes : ObjectMapperCustomizer {
         mapper.coercionConfigFor(LogicalType.DateTime)
             .setCoercion(CoercionInputShape.Integer, fail)
             .setCoercion(CoercionInputShape.Float, fail)
+            .setCoercion(CoercionInputShape.EmptyString, fail)
+        // `""` for a UUID (or another scalar read from a string) bound as null — an absent id where the contract says
+        // `format: uuid`.
+        mapper.coercionConfigFor(LogicalType.OtherScalar)
+            .setCoercion(CoercionInputShape.EmptyString, fail)
         // The date-times read a number as an epoch timestamp on a path of their own, past the coercion config and
         // their leniency (measured: `0` still bound as 1970 with both set): they take a string only.
         mapper.registerModule(SimpleModule("veyq-date-times-are-strings").setDeserializerModifier(DateTimesAreStrings))
