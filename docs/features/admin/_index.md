@@ -27,6 +27,9 @@ handling of reported shares.
   purpose and effect-when-off, stored in the database and acting without a restart; a device switch withholds its
   wraps at once, and the web client keeps the device and asks for the password and the Secret Key.
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **built (backend + admin-web; the owner accepts in web)**
+- [Delete a tenant](use-cases/uc.admin.delete-tenant.md) — **planned** (cr-account-erasure;
+  [ADR 0101](../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 10):
+  an active or suspended tenant, offline at once and erased after the retention; today only a pending one is revoked.
 - ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built**: both transitions,
   the `Host` filter on the tenant's own domain, step 4's routing withdrawal, which
   [tenant-reachability](use-cases/uc.admin.tenant-reachability.md) owns and this transition triggers, and the
@@ -91,6 +94,9 @@ handling of reported shares.
   §§ 11 and 14, [ADR 0035](../../decisions/0035-server-terms-of-service.md) decisions 6–7; the mode a preset over
   the register's switches, the contact and the provider identification published, admin-web warning only in the
   *club, organisation or company* mode)
+- [Read the instance's privacy notice](use-cases/uc.admin.privacy-notice.md) — **planned**
+  (cr-instance-privacy-notice; [ADR 0035](../../decisions/0035-server-terms-of-service.md) decision 8, GDPR Art. 13):
+  fixed text with the instance's values, public on every tenant host.
 - Act on a reported public share — planned, under [Moderation](../moderation/_index.md): who moderates and the key a
   report is sealed to are [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md)
   (the Server Owner's side, on admin-web)

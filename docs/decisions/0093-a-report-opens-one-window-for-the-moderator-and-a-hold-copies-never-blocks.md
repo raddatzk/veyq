@@ -14,8 +14,12 @@
   [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)): a
   moderator's measure carries its statement in the form the operating mode sets, to its recipients in the app and by
   instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
-  measure's hold counts from the statement (§ 4); a guest is told nothing in the app (it has no account, so a guest
-  uploader counts as nobody to tell), and the Server Owner's own steps carry no statement yet. §§ 12 and 13, § 7's
+  measure's hold counts from the statement (§ 4); a guest is told nothing in the app for a moderator's measure (it
+  has no account, so a guest uploader counts as nobody to tell, DSA Art. 17(2)). Four legal gaps the audit of
+  2026-10-18 found in § 7 and § 12 are **decided, not built** (`cr-statement-legal-gaps`): the reporter's redress
+  information (DSA Art. 16(5)), a statement for the Server Owner's own steps (Art. 17(1)(c), (d)), the clause or
+  provision a ground relies on and the measure's territorial scope (Art. 17(3)(a), (d), (e)), and a guest uploader's
+  notice of a removal on an authority's order (TCO Art. 11(1)). §§ 12 and 13, § 7's
   deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
   [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):
@@ -243,11 +247,27 @@ a block reaches only the reported copy.
 
 - **After a measure** the statement (DSA Art. 17) goes to the share's creator and the uploader, and to the scope
   owner on a content block. It names the measure and its reach, the facts and whether a report or an order led to
-  it, that no automated means decided, the ground (the law or the clause of the terms), and the objection and the
-  courts (Art. 17(3), L). A dismissed report is told only to the reporter. In the *private* mode (§ 14) the
+  it, that no automated means decided, the ground — its category **and the provision of the law or the clause of
+  the terms relied on**, required in the full form, with the facts explaining why the content falls under it
+  (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
+  (Art. 17(3)(a)), and the objection and the courts (Art. 17(3), L). A dismissed report is told only to the reporter. In the *private* mode (§ 14) the
   statement is **reduced**: it names the measure and its reach, the ground and the objection, and leaves out the
   rest of Art. 17(3)'s list — the facts as a required part (the moderator may still write them), whether a report
-  or an order led to it, that no automated means decided, and the courts. Who receives it does not change.
+  or an order led to it, that no automated means decided, the courts, the territorial sentence, and the provision
+  or clause as a required part (the moderator may still name it). Who receives it does not change.
+- **The Server Owner's own steps carry a statement too** where they are taken over content — a member's sign-in
+  block (Art. 17(1)(d)), a tenant taken offline or deleted (Art. 17(1)(c)) — in the same template and form, entered
+  with the step in admin-web or `veyq-admin` (a step from a case's proposal always; a step without a case, when the
+  Server Owner says it is over content). Its recipients are the blocked member, and the tenant's owners for a tenant;
+  a blocked member cannot sign in and a tenant offline cannot be entered, so it goes **by mail at the account
+  address, facts included** — the Server Owner's own words, which the server sees as it sends them, sealed to the
+  moderation key for the log — and the objection goes to the instance contact (owner questions in
+  `cr-statement-legal-gaps`).
+- **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
+  report again with more information, the instance contact, that they may go to court, and that they may complain to
+  the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
+  Bundesnetzagentur, the authority § 12(1) DDG names under DSA Art. 49(1)). In the *private* mode the passage keeps
+  the first two only, as the reduced statement drops the courts.
 - **Deferring the statement is an authority's switch, never the moderator's discretion** (L: Art. 17 DSA has no
   exception of its own; TCO Art. 11(3) lets the authority forbid the notice for six weeks, renewable once by six).
   It needs the authority's reference (sealed) and an end date, at most six weeks per request; at that date the
@@ -340,7 +360,8 @@ range and its no-extension rule (§ 2 there).
   operator backs up otherwise (volume snapshots, their own dumps), the Run docs give the deletion concept the
   EDPB's erasure report asks for (L): a backup retention B, at most 30 days recommended for a backup holding the
   table; access to a backup only to restore it; the startup purge after every restore; and **N + B** in the
-  disclosure.
+  disclosure. B is the instance setting every capture veyq writes is pruned by
+  ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8, decided, not built).
 - **Disclosure (GDPR Art. 13, at collection), from the Server Owner, never from a tenant's terms.** Every guest
   write page carries one first-layer sentence with the value current at the write — "your IP address and source
   port and the time are kept for N days, longer only if a report or an authority's order concerns this content" —
@@ -408,7 +429,14 @@ range and its no-extension rule (§ 2 there).
 - **A preservation order or a request for information** (the e-Evidence Regulation, §§ 100j–100k StPO) opens the
   same hold without a block. Information handed over is an event in the moderation log with the reference sealed.
 - **The notice to the uploader** (TCO Art. 11, DSA Art. 17) follows § 7, including its deferral on the authority's
-  request.
+  request. **A guest uploader is told too, on a removal order** (TCO Art. 11(1) asks the host to make the information
+  available to the content provider, with no condition of a known contact, unlike DSA Art. 17(2)): an identity whose
+  upload a removal order blocked — whose client still holds that identity — is answered, on the link it came through,
+  even while that link is blocked: removed on an authority's order of `<date>`; the reasons or a copy of the order on
+  request from `<instance contact>` (Art. 11(2)). Nothing else is served to it. A running deferral (Art. 11(3))
+  holds this back exactly as it holds the statement. This overrides the earlier owner answer that a guest is told
+  nothing, for an authority's removal order only, by the rule that a legal duty wins; for a moderator's measure the
+  DSA Art. 17(2) reasoning stands.
 
 ### 13. Art. 18 reports, and child sexual abuse material
 
@@ -476,8 +504,10 @@ responsibility, and switching back to the second mode turns it on again.
   provider identification. The operating mode (§ 14) adds one instance setting, a step in first-run setup, a
   reduced variant of the operator section and of the statement, and a second state every mode-dependent text is
   tested in.
-- **Not required, not built:** a transparency report (DSA Art. 15 exempts micro and small enterprises; TCO Art. 7(2)
-  asks for one only in a year the host acted on terrorist content, by 1 March) and an internal complaint system
+- **Not built:** a transparency report, which only some operators owe — DSA Art. 15(2) exempts micro and small
+  enterprises under Recommendation 2003/361, so a medium or large operator owes one (whether a non-economic club is an
+  enterprise is Still open 8), and TCO Art. 7(2) asks for one in every year the host acted on terrorist content, by
+  1 March; the Run docs say who reports and by when. **Not required, not built:** an internal complaint system
   (Art. 20, online platforms only). The in-app objection of § 7 is voluntary. A TCO report could later be derived
   from the moderation log.
 - A moderator acts from any tenant host they can sign in on; an operator away from admin-web acts over SSH with
@@ -623,3 +653,36 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
    operator's edge saw, so behind a further NAT of the operator's own it is not the subscriber's, and whether the
    disclosure must say which edge an instance runs before the record is handed over needs counsel before the
    moderation CR.
+5. **§ 184b(5) StGB for a club's volunteer moderators.** A moderator a club appoints (ADR 0099 § 1) acts unpaid; whether
+   reviewing and holding a child-sexual-abuse case until the handover is covered by "official or professional duties"
+   (*dienstliche oder berufliche Pflichten*) for a volunteer is unsettled, as Still open 1 is for a household operator
+   (audit 2026-10-18, C3). Until counsel answers, the Run docs give a volunteer the advice item 1 gives a household
+   operator.
+6. **Who is the controller of a member's account data** on an instance with several tenants: the Server Owner alone,
+   or the Server Owner jointly with each tenant owner (GDPR Art. 26). It decides who owes the Art. 13 information of
+   the instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8) and who answers an erasure
+   request ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)); veyq builds
+   both from the Server Owner, and the notice says so, until counsel answers (audit 2026-10-18, C6).
+7. **The breached-password check on by default.** `core.breached-password` sends a 5-hex prefix from the browser
+   without consent, and with it the browser's address and an `Origin` naming the instance
+   ([security model](../crosscutting/security-model.md) § third-party services). Whether that rests on Art. 6(1)(f),
+   whether a transfer to a third country is involved (the API and its CDN), and whether on-by-default meets Art. 25(2)
+   is open (audit 2026-10-18, C7). Until it is answered the privacy notice names the check, its recipient and its
+   switch, and the default stays as decided (owner 2026-10-14).
+8. **Whether a non-economic club is an "enterprise"** under Recommendation 2003/361 for the DSA Art. 15(2)
+   exemption from the transparency report (audit 2026-10-18, C8). A micro or small *enterprise* is exempt; a club
+   that is no enterprise is either outside the DSA (item 1) or not covered by the exemption's wording. The Run docs
+   name the question instead of the answer.
+9. **Whether TCO Art. 3(7) excuses a private operator who cannot be reached** within the hour (audit 2026-10-18, C9;
+   the audit's own reading: rather not). Art. 3(7) names "objectively justifiable technical or operational reasons";
+   whether an unattended household instance is one is open. § 12's advice stands: an operator who cannot keep the
+   hour turns public links off.
+10. **The layered Art. 13 information on a guest page, and Art. 14 for people a report names.** Whether a first-layer
+    sentence plus a link meets Art. 13 on a page a guest reaches without an account (§ 10), and what Art. 14 GDPR
+    (and § 33 BDSG's exceptions) asks of the host towards a third party a reporter names in a report's sealed text,
+    which the host cannot read until a moderator opens it (audit 2026-10-18, C5).
+11. **Reported content inside a backup capture.** A capture holds the ciphertext of everything stored when it was
+    taken, including content later reported, blocked or confirmed as child sexual abuse material. Whether keeping such
+    a capture until it expires at B is possession under § 184b(3) StGB, or covered as it is unreadable to the operator
+    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block or loses a case
+    (`cr-backup-erasure-and-retention` decision 7); this item is only about the capture's own existence.

@@ -1,0 +1,18 @@
+useCase: uc.admin.delete-tenant
+feature: admin
+title: Delete a tenant
+status: planned
+# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 17); the work order is cr-account-erasure.
+acceptanceCriteria:
+  - id: an-active-tenant-goes-offline-at-once
+    text: Deleting an ACTIVE or SUSPENDED tenant takes it offline at once, exactly as a suspension does, and marks it pending deletion.
+  - id: the-purge-erases-the-tenant-and-everything-in-it
+    text: After the retention one purge erases every scope through the scope erasure and every other row keyed on the tenant, and a guard derived from the migrations holds every such table erased or cascading.
+  - id: holds-and-moderation-records-survive
+    text: Holds and moderation records of the tenant's content survive its deletion to their own ends.
+  - id: accounts-left-in-no-tenant-go-with-it
+    text: An account the deletion leaves in no tenant, holding no server role, is told by mail and erased with the tenant.
+gaps:
+  backend: "Not built: only a PENDING tenant can be revoked (TenantHandler.kt:243-252); cr-account-erasure builds the deletion."
+  web: "No part here beyond the statement of reasons a deletion over content carries (cr-statement-legal-gaps); the Server Owner acts in admin-web."
+  admin-web: "Not built: admin-web and veyq-admin offer revoke for PENDING tenants only; cr-account-erasure builds the deletion."
