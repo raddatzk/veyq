@@ -431,7 +431,8 @@ BANNER_MIGRATION = "backend/core/src/main/resources/db/migration/V209912312359__
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
 TRASH_PURGE = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaTrashPurge.kt"
 TENANT_HANDLER = "backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/TenantHandler.kt"
-TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
+# The suspend arm re-projects inside its `Done` block, before mailing a statement of reasons (cr-statement-legal-gaps).
+TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) {\n            reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
 # `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
@@ -1157,7 +1158,7 @@ def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
     src = f.read_text()
     if TENANT_REPROJECT_CALL not in src:
         raise ForgeError("the suspend arm's reproject() call drifted — re-anchor this forgery")
-    f.write_text(_sub(src, TENANT_REPROJECT_CALL, ""))
+    f.write_text(_sub(src, TENANT_REPROJECT_CALL, "        if (outcome is SuspendOutcome.Done) {\n"))
     return "a tenant suspend that never re-projects the routing (must be REJECTED — the domain keeps resolving)"
 
 
