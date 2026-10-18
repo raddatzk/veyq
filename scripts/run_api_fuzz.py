@@ -125,6 +125,11 @@ RUN_ROOT = Path(os.environ.get("VEYQ_FUZZ_OUT", REPO / ".fuzz-out"))
 ADMIN = '/x-veyq-channel == "admin"'
 NOT_GET = "^(?!GET$)"  # every method but GET
 METHODS = ("get", "put", "post", "delete", "patch", "head", "options")
+# Operations that end the very session they are called with — run after the rest of their spec file, alone, so the
+# operations after them are not all answered `401` for a token the run itself signed out (measured: the first runs'
+# `pairing/delegate` and `pairing/seal` "refused" a missing body with 401 because `logout` had run before them).
+SESSION_ENDING = ("logout",)
+CREDENTIAL = "token"  # the contract's `x-veyq-visibility` class of a credential (validate_field_visibility.py)
 
 
 def log(msg: str) -> None:
@@ -161,8 +166,9 @@ def build_image() -> str:
     return tag
 
 
-def operations(spec: Path, inv: Invocation) -> list[str]:
-    """The operations of one spec file this invocation selects — `METHOD /path`, Schemathesis' own label."""
+def operations(spec: Path, inv: Invocation, ending: bool = False) -> list[str]:
+    """The operations of one spec file this invocation selects — `METHOD /path`, Schemathesis' own label — either the
+    ones that end the run's session ([SESSION_ENDING], `ending=True`) or all the others."""
     doc = contract_specs.load(contract_specs.key(spec))
     out = []
     for path, item in (doc.get("paths") or {}).items():
@@ -174,8 +180,52 @@ def operations(spec: Path, inv: Invocation) -> list[str]:
                 continue
             if inv.mode == "positive" and method != "get":
                 continue
+            if (op.get("operationId") in SESSION_ENDING) != ending:
+                continue
             out.append(f"{method.upper()} {path}")
     return sorted(out)
+
+
+def _resolve(key: str, node: object) -> tuple[str, object]:
+    while isinstance(node, dict) and isinstance(node.get("$ref"), str):
+        target, _, pointer = node["$ref"].partition("#")
+        key = contract_specs.ref_key(key, target) if target else key
+        node = contract_specs.load(key)
+        for part in pointer.strip("/").split("/"):
+            node = node[part]
+    return key, node
+
+
+def _carries_credential(key: str, node: object, depth: int = 0) -> bool:
+    """Whether a schema holds a property the contract marks `x-veyq-visibility: token`, at any depth."""
+    key, node = _resolve(key, node)
+    if depth > 12 or not isinstance(node, dict):
+        return False
+    if node.get("x-veyq-visibility") == CREDENTIAL:
+        return True
+    children = list((node.get("properties") or {}).values()) + [node.get("items")] + \
+        list(node.get("oneOf") or []) + list(node.get("anyOf") or []) + list(node.get("allOf") or [])
+    return any(_carries_credential(key, c, depth + 1) for c in children if c is not None)
+
+
+def credential_operations() -> list[str]:
+    """Every operation that takes a credential — a parameter or a request-body property the contract marks
+    `x-veyq-visibility: token` (a capability secret, a signature, a refresh token, a code) — as Schemathesis' label.
+    Derived from the contracts, never listed: `hooks.py` accepts the operation's declared 401/403 for any negative
+    case of these (owner decision Q6), because every request the run sends them carries a credential it cannot forge."""
+    found = []
+    for spec in contract_specs.specs():
+        key = contract_specs.key(spec)
+        for path, item in (contract_specs.load(key).get("paths") or {}).items():
+            for method, op in item.items():
+                if method not in METHODS:
+                    continue
+                params = [_resolve(key, p)[1] for p in item.get("parameters", []) + op.get("parameters", [])]
+                body = ((op.get("requestBody") or {}).get("content") or {}).get("application/json", {}).get("schema")
+                if any(isinstance(p, dict) and p.get("x-veyq-visibility") == CREDENTIAL for p in params) or \
+                        (body is not None and _carries_credential(key, body)):
+                    found.append(f"{method.upper()} {path}")
+    return sorted(found)
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -288,9 +338,9 @@ class Result(NamedTuple):
 
 
 def run_one(image: str, inv: Invocation, spec: Path, workdir: Path, config: Path, baseline: Path, update: bool,
-            expected: list[str]) -> Result:
+            expected: list[str], ending: bool = False) -> Result:
     key = contract_specs.key(spec)
-    rel = f"{inv.name}/{key.replace('/', '__').removesuffix('.openapi.yaml')}"
+    rel = f"{inv.name}/{key.replace('/', '__').removesuffix('.openapi.yaml')}" + ("-session-ending" if ending else "")
     out = workdir / "reports" / rel
     out.mkdir(parents=True, exist_ok=True)
     reports = workdir / "reports"
@@ -305,7 +355,7 @@ def run_one(image: str, inv: Invocation, spec: Path, workdir: Path, config: Path
         "--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp",
         "-v", f"{REPO}:/repo:ro", "-v", f"{reports}:/out", "-w", "/repo",
         # The token by NAME only: its value travels in this process' environment, never on a command line.
-        "-e", "VEYQ_FUZZ_TOKEN",
+        "-e", "VEYQ_FUZZ_TOKEN", "-e", "VEYQ_FUZZ_CREDENTIALS=/out/credential-operations.json",
         image,
         "--config-file", container_config, "--no-color",
         "run", f"contracts/api/{key}", "--url", url,
@@ -322,6 +372,8 @@ def run_one(image: str, inv: Invocation, spec: Path, workdir: Path, config: Path
         # `--include-by` an inclusion would select every admin operation (measured: the first run's admin-positive
         # invocation tested 59 operations where 15 are GETs). Exclusions are ANDed.
         cmd += ["--exclude-method-regex", NOT_GET]
+    for operation_id in SESSION_ENDING:
+        cmd += ["--include-operation-id" if ending else "--exclude-operation-id", operation_id]
     if os.environ.get("VEYQ_FUZZ_INCLUDE_BY"):
         cmd += ["--include-by", os.environ["VEYQ_FUZZ_INCLUDE_BY"]]
     if update:
@@ -471,21 +523,24 @@ def main(argv: list[str]) -> int:
         seed(workdir)
         ids = json.loads((workdir / "seed.json").read_text())["ids"]
         configs = {"negative": CONFIG, "positive": positive_config(workdir, ids)}
+        (workdir / "reports" / "credential-operations.json").write_text(json.dumps(credential_operations(), indent=1))
         baseline = BASELINE
         if args.baseline_update:
             baseline = workdir / "reports" / "baseline.json"
             shutil.copyfile(BASELINE, baseline)
         for inv in INVOCATIONS:
             for spec in specs:
-                expected = operations(spec, inv)
-                if not expected:
-                    continue
-                fresh_token(workdir)
-                r = run_one(image, inv, spec, workdir, configs[inv.mode], baseline, args.baseline_update, expected)
-                ops = (r.report or {}).get("operations") or {}
-                log(f"{inv.name} {r.spec}: exit {r.exit_code}, tested {ops.get('tested')}/{len(expected)}, "
-                    f"{r.seconds:.0f} s")
-                results.append(r)
+                for ending in (False, True):
+                    expected = operations(spec, inv, ending)
+                    if not expected:
+                        continue
+                    fresh_token(workdir)
+                    r = run_one(image, inv, spec, workdir, configs[inv.mode], baseline, args.baseline_update,
+                                expected, ending)
+                    ops = (r.report or {}).get("operations") or {}
+                    log(f"{inv.name} {r.spec}{' (session-ending)' if ending else ''}: exit {r.exit_code}, "
+                        f"tested {ops.get('tested')}/{len(expected)}, {r.seconds:.0f} s")
+                    results.append(r)
         if args.baseline_update:
             shutil.copyfile(baseline, BASELINE)
             log(f"baseline merged into {BASELINE.relative_to(REPO)} — give every new entry its `reason`")

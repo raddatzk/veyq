@@ -9,6 +9,14 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
   negated is Schemathesis' own record (`case.meta.components`). The status half reuses the built-in
   `negative_data_rejection` with that per-location status set, so its exclusions — a "negation" that is valid once
   serialized, an additional property on a parameter — are the tool's, not a second copy here.
+  **A credential is refused as a credential** (owner decision Q6): on an operation that takes a credential — a
+  parameter or a request-body property the contract marks `x-veyq-visibility: token` (`X-Share-Password`,
+  `X-Contributor-Token`, the moderation proof headers, a login signature, a refresh token, a mailed code) — the
+  operation's own declared `401` or `403` is a correct refusal of any negative case: every request the run sends it
+  carries a credential the run cannot forge, authentication runs before shape, and the refusal tells an
+  unauthenticated caller nothing about the request's shape. The
+  marker is the contract's own (the class `validate_field_visibility.py` holds and the e2e token sweep reads), so the
+  rule narrows by what the contract says, never by an operation list kept here.
 - **`refusal_echoes_nothing`** — no 4xx body carries a path, query or header value the request sent (six characters or
   more): the refused value is often ciphertext or an opaque id, and the operator-blind boundary applies to errors too
   (developer styleguide §7; `MalformedRequestSliceTest.assertRefused` holds the same rule for its cases).
@@ -19,6 +27,7 @@ Python 3.9 (`from __future__ import annotations`), because the repository's tool
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 
@@ -70,11 +79,35 @@ def _negated(case: object, location: ParameterLocation) -> bool:
     return info is not None and info.mode.is_negative
 
 
+def _credential_operations() -> frozenset:
+    """The operations that take a credential, as the runner derived them from the contracts (`x-veyq-visibility:
+    token` on a parameter or a request-body property; `run_api_fuzz.credential_operations`)."""
+    path = os.environ.get("VEYQ_FUZZ_CREDENTIALS")
+    if not path:
+        return frozenset()
+    with open(path, encoding="utf-8") as f:
+        return frozenset(json.load(f))
+
+
+CREDENTIAL_OPERATIONS = _credential_operations()
+
+
+def _credential_refusal(case: object, response: object) -> bool:
+    """The declared 401/403 of an operation that takes a credential (Q6): every request the run sends it carries a
+    credential the run cannot forge — a moderation proof is a signature by a key the run does not hold, a refresh token
+    or a mailed code one it never saw — so whatever a case negates, an auth-first server refuses the credential first."""
+    status = str(response.status_code)  # type: ignore[attr-defined]
+    declared = {str(k) for k in (case.operation.definition.raw.get("responses") or {})}  # type: ignore[attr-defined]
+    return status in ("401", "403") and status in declared and case.operation.label in CREDENTIAL_OPERATIONS  # type: ignore[attr-defined]
+
+
 @schemathesis.check
 def refusal_by_location(ctx, response, case):
     """A negated query, header or body answers 400 `invalid_request`; a negated path segment 400 or 404."""
     meta = case.meta
     if meta is None or not meta.generation.mode.is_negative:
+        return None
+    if _credential_refusal(case, response):
         return None
     statuses = ["400", "404"] if _negated(case, ParameterLocation.PATH) else ["400"]
     negative_data_rejection(_Context(ctx, statuses), response, case)
