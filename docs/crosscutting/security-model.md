@@ -630,7 +630,13 @@ re-key — the same posture 1Password takes for shared vaults.
 ## Deletion & erasure
 
 One mechanism serves both data-loss protection and erasure: **soft-delete → trash → retention window →
-scheduled hard-purge**, propagated to backups within a documented rotation window. The two steps carry
+scheduled hard-purge**. In backups the target is a capture kept at most B days and an erasure ledger a restore
+re-applies before it serves ([ADR 0056](../decisions/0056-instance-durable-state-and-cold-logical-backup.md)
+decision 8) — **decided, not built**: today only the cluster's gate and the object pool rotate, by count, Compose's
+captures are kept until the operator deletes them, and a restore brings back what was erased after its capture. An
+account is erased on request and an active tenant can be deleted
+([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), decided, not
+built; today no path deletes an account). The two steps carry
 different authority. **Trashing is reversible** — an item moves to a trash and is restorable for the retention
 window — so it may be done by **any member of the scope** (recovery, not destruction), and it is **audited**:
 the trashed record carries **who** trashed it and **when**, so the action is accountable rather than anonymous.

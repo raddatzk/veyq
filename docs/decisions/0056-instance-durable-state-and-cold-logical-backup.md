@@ -4,7 +4,10 @@
   2026-10-17): built for every capture — the cluster's backup gate
   ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)), Compose and `veyqctl` — and held by
   `scripts/instance_backup_selftest.py` (groups P and G); proven live on a throwaway Compose project
-  (cr-backup-store-leg-is-an-index).
+  (cr-backup-store-leg-is-an-index). §8 — every capture kept at most B days, and the erasure ledger a restore
+  re-applies — is **decided, not built** (2026-10-18, GDPR Art. 5(1)(e) and 17 and the EDPB's erasure report; the
+  owner rule that a legal duty wins over what was decided; `cr-backup-erasure-and-retention`). Until it is, only the
+  cluster's gate and the object pool rotate, by count, and a restore brings back what was erased after its capture.
 - Date: 2026-08-06
 
 ## Context
@@ -140,8 +143,8 @@ included, reaches the pool within the backup rotation window [security-model](..
 promises, and an object an earlier, still-retained capture needs is never deleted. The retained captures are the
 pool's own: every capture that named the pool writes its index's keys into the pool's ledger (`veyq-pool/captures/`)
 once every one of them is in the pool, and the ledger keeps the newest `keep` (`--pool-keep`, default 3, as the
-gate's `backup.keep`) — not the capture directories, which an operator moves, encrypts or keeps off the host, and
-which nothing deletes. The prune is the pool's one delete (`delete --files-from` the computed list), runs only after
+gate's `backup.keep`) and none older than B (§8) — not the capture directories, which an operator moves, encrypts or
+keeps off the host, and which §8 prunes only where veyq's own tooling wrote them. The prune is the pool's one delete (`delete --files-from` the computed list), runs only after
 the new capture's entry is written, and refuses when the ledger it reads lacks that entry, since a ledger read that
 came back empty would otherwise name nothing and delete everything. A capture outside the newest `keep` still
 restores without a source, its objects being in the store; from the pool it refuses by name whatever the pool no
@@ -245,6 +248,36 @@ wrong image, and it buys nothing that the forward migration does not already hav
 *Required* means what the dump's blob rows name, not every key the index lists: the index also holds orphans
 pending reclaim and the chunks of open upload sessions (Context 2), which the instance that resumes would reclaim
 anyway, so their absence is reported and never refused.
+
+**8. A capture is kept at most B days, and an erasure made after a capture is re-applied when it is restored.**
+Backups are not exempt from erasure (GDPR Art. 17; Art. 5(1)(e) bounds how long anything is kept), and the EDPB's
+erasure report asks a controller to track erasures and apply them again on a restored system (CEF 2025 § 4.2.6). Two
+halves, on both targets in step:
+
+- **B is an instance setting**, set in admin-web and `veyq-admin` like the guest-write record's N
+  ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)): days, 30 by default (the
+  most the moderation Run page already recommends for a backup holding guest addresses). The capture tooling reads it
+  from the database it captures, so it has one home; an unreadable value means 30. Every capture veyq's tooling
+  wrote — Compose's `veyqctl` captures under its home, the cluster gate's under its claim, an object pool's ledger
+  entries — is deleted once it is older than B, **the newest included** (owner question in
+  `cr-backup-erasure-and-retention`): `veyqctl` prunes at every `backup`, `upgrade` and `start` and offers
+  `veyqctl backup prune` for a daily timer, the gate prunes at every start and the chart runs the same prune daily;
+  `veyqctl status` warns while no capture younger than B exists (admin-web cannot see the captures). `backup.keep`
+  stays as the bound on space. A copy the operator moved off the host is theirs to delete by B; the Run docs say so, with access only to
+  restore it.
+- **The erasure ledger** lives outside the three legs, in the directory leg (c)'s key file lives in — persisted by
+  Compose's named volume and by the cluster's kept claim (Consequences, below) — so neither a restore nor a rollback
+  touches it. It holds one line per hard erasure that no restored row would trigger again by itself — an erased
+  account or tenant, a purged scope, node or medium, a deleted link, a reclaimed storage key: kind, opaque id, time.
+  A purge that re-fires on its own restored row (an expired hold, a trash past its retention, a guest-write record)
+  needs none. An erasure writes its line in its own transaction to a table, and a sweep appends it to the file after
+  the commit — at least once, which is harmless because re-applying is idempotent. **At every start, before the
+  instance serves,** the application reads the file and erases, through that kind's own eraser, every listed object
+  whose row exists; no restore needs to be detected. A line older than B goes, since no retained capture predates it.
+  The restore's object check (§7) counts a key the ledger lists as erased, never as missing.
+- **Limit, stated:** a restore onto a new host re-applies only the ledger it is given; the Run docs put the file
+  beside leg (c)'s key on the list of what to carry. Erasures made in the last sweep interval before a crash that
+  also lost the file are not re-applied.
 
 ## Consequences
 
