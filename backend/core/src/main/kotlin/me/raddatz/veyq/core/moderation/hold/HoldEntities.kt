@@ -9,8 +9,12 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
-/** Why a hold ends when it does (ADR 0093 § 4's table): taken with the case ([CASE_OPEN], 90 days), moved by a decision ([MEASURE], six months after it), or set by a logged extension ([EXTENDED]). The order path adds its own. */
-enum class HoldTrigger { CASE_OPEN, MEASURE, EXTENDED }
+/**
+ * Why a hold ends when it does (ADR 0093 § 4's table): taken with the case ([CASE_OPEN], 90 days), moved by a decision
+ * ([MEASURE], six months after its statement), set by a logged extension ([EXTENDED]), or by an authority's order
+ * ([ORDER], which also sets the hold's floor).
+ */
+enum class HoldTrigger { CASE_OPEN, MEASURE, EXTENDED, ORDER }
 
 /** A hold (`veyq_hold`, en.moderation.hold): its trigger and its end. */
 @Entity
@@ -29,6 +33,10 @@ class HoldEntity : PanacheEntityBase {
 
     @Column(name = "expires_at", nullable = false)
     lateinit var expiresAt: Instant
+
+    /** The end an authority's order sets: no extension, lift or decision ends the hold before it; null without an order. */
+    @Column(name = "floor_until")
+    var floorUntil: Instant? = null
 
     companion object : PanacheCompanionBase<HoldEntity, String>
 }

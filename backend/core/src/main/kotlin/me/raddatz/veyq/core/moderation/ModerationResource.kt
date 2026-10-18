@@ -15,7 +15,17 @@ import me.raddatz.veyq.core.generated.model.ModerationProposalRequest
 import me.raddatz.veyq.core.generated.model.ModerationQueue
 import me.raddatz.veyq.core.generated.model.SealedModerationNote
 import me.raddatz.veyq.core.moderation.block.ProposalStep
+import me.raddatz.veyq.core.generated.model.AuthorityOrderRequest
+import me.raddatz.veyq.core.generated.model.AuthorityOrders
+import me.raddatz.veyq.core.generated.model.ModerationHandover
+import me.raddatz.veyq.core.generated.model.ModerationStatementDeferral
 import me.raddatz.veyq.core.moderation.cases.CaseDecisions
+import me.raddatz.veyq.core.moderation.cases.CaseExports
+import me.raddatz.veyq.core.moderation.cases.DeferralInput
+import me.raddatz.veyq.core.moderation.cases.HandoverKind
+import me.raddatz.veyq.core.moderation.order.AuthorityOrderHandler
+import me.raddatz.veyq.core.moderation.order.ordered
+import me.raddatz.veyq.core.moderation.order.toOrderIn
 import me.raddatz.veyq.core.moderation.cases.CaseFailures
 import me.raddatz.veyq.core.moderation.cases.CaseViews
 import me.raddatz.veyq.core.moderation.cases.DecisionOutcome
@@ -67,6 +77,8 @@ class ModerationResource(
     private val rotationDue: RotationDueNotice,
     private val cases: CaseViews,
     private val decisions: CaseDecisions,
+    private val orders: AuthorityOrderHandler,
+    private val exports: CaseExports,
     private val identity: SecurityIdentity,
 ) : ModerationApi {
 
@@ -172,6 +184,7 @@ class ModerationResource(
             ground = StatementGround.valueOf(statement.ground.name),
             facts = statement.facts.sealed(),
             factsFor = factsFor.associate { it.accountId.toString() to it.sealedFacts },
+            deferral = statement.deferral?.let { DeferralInput(it.until.toInstant(), SealedNote(it.reason.epoch, it.reason.sealedNote)) },
         )
         decided(
             caseId,
@@ -238,6 +251,37 @@ class ModerationResource(
     ): Response = decided(
         caseId, decisions.bar(caller(), caseId.toString(), reportId.toString(), moderationDecisionNote.note.sealed()), Response.Status.CREATED,
     )
+
+    @RateLimit(key = RateLimitKey.USER) // each order mails its statements and the new-case notice
+    override fun enterModerationOrder(
+        authorityOrderRequest: AuthorityOrderRequest, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
+    ): Response = ordered(orders.enter(caller(), authorityOrderRequest.toOrderIn()))
+
+    override fun listModerationOrders(xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?): Response =
+        Response.ok(AuthorityOrders(orders.list())).build()
+
+    override fun deferModerationStatement(
+        caseId: UUID, statementId: UUID, moderationStatementDeferral: ModerationStatementDeferral, xVeyqModerationChallenge: String?,
+        xVeyqModerationSignature: String?,
+    ): Response = with(moderationStatementDeferral) {
+        decided(
+            caseId,
+            decisions.renewDeferral(caller(), caseId.toString(), statementId.toString(), until.toInstant(), SealedNote(reason.epoch, reason.sealedNote)),
+        )
+    }
+
+    override fun recordModerationHandover(
+        caseId: UUID, moderationHandover: ModerationHandover, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
+    ): Response = with(moderationHandover) {
+        decided(
+            caseId,
+            decisions.handover(caller(), caseId.toString(), HandoverKind.valueOf(kind.name), SealedNote(note.epoch, note.sealedNote)),
+            Response.Status.CREATED,
+        )
+    }
+
+    override fun getModerationCaseExport(caseId: UUID, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?): Response =
+        exports.export(caseId.toString())?.let { Response.ok(it).build() } ?: httpError(CaseFailures.caseNotFound)
 
     private fun SealedModerationNote?.sealed(): SealedNote? = this?.let { SealedNote(it.epoch, it.sealedNote) }
 

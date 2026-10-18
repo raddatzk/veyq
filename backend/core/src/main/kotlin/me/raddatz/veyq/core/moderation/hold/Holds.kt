@@ -28,15 +28,17 @@ class Holds(
      * Take a hold on [target] for [caseId], ending at [expiresAt], **in the caller's transaction** (the report's, under
      * the reported space's lock): the contributors copy their rows in phase order, then core copies the blob rows they
      * named and pins each one's storage key, the guest identities they named, and the space's epoch rows (the wraps a
-     * held key chain needs). Answers the hold's id.
+     * held key chain needs). Answers the hold's id. [floorUntil] is the end an authority's order sets (ADR 0093 § 4): no
+     * later move or [endNow] ends the hold before it.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun take(caseId: String?, target: HoldTarget, trigger: HoldTrigger, expiresAt: Instant): String {
+    fun take(caseId: String?, target: HoldTarget, trigger: HoldTrigger, expiresAt: Instant, floorUntil: Instant? = null): String {
         val hold = HoldEntity().apply {
             id = UUID.randomUUID().toString()
             this.caseId = caseId
             this.trigger = trigger.name
             this.expiresAt = expiresAt
+            this.floorUntil = floorUntil
         }
         hold.persist()
         val snapshot = HoldSnapshot(hold.id, em)
@@ -61,26 +63,31 @@ class Holds(
 
     /**
      * Move [hold]'s end to [until] for [trigger], with its pins, **in the caller's transaction** (a decision's, under the
-     * case's row lock): a measure sets six months after the decision, an extension the end it names (ADR 0093 § 4).
+     * case's row lock): a measure sets six months after the decision, an extension the end it names (ADR 0093 § 4). Never
+     * before the hold's floor — an authority's order's end — which the move keeps.
      */
     @Transactional(Transactional.TxType.MANDATORY)
     fun moveEnd(hold: HoldEntity, until: Instant, trigger: HoldTrigger) {
-        hold.expiresAt = until
+        val end = hold.floorUntil?.let { maxOf(it, until) } ?: until
+        hold.expiresAt = end
         hold.trigger = trigger.name
-        HoldPinEntity.update("expiresAt = ?1 where holdId = ?2", until, hold.id)
+        HoldPinEntity.update("expiresAt = ?1 where holdId = ?2", end, hold.id)
     }
 
     /**
      * End every hold of [caseId] at once (a dismissal, a lift of the case's last measure), **in the caller's
      * transaction**: the snapshot and the pins go now, so the reclaim sweep catches up on whatever was deleted meanwhile.
-     * Answers whether one was alive.
+     * A hold whose floor — an authority's order's end — lies ahead is not ended: it runs to its floor (ADR 0093 § 4: no
+     * decision ends a hold before the duration an order sets). Answers whether a hold alive was ended.
      */
     @Transactional(Transactional.TxType.MANDATORY)
     fun endNow(caseId: String, now: Instant): Boolean {
-        val ids = HoldEntity.list("caseId", caseId).map { it.id }
-        if (ids.isEmpty()) return false
-        val alive = HoldEntity.count("caseId = ?1 and expiresAt > ?2", caseId, now) > 0
-        drop(ids)
+        val holds = HoldEntity.list("caseId", caseId)
+        if (holds.isEmpty()) return false
+        val (floored, ending) = holds.partition { h -> h.floorUntil?.isAfter(now) == true && h.expiresAt.isAfter(now) }
+        floored.forEach { h -> moveEnd(h, h.floorUntil!!, HoldTrigger.ORDER) }
+        val alive = ending.any { it.expiresAt.isAfter(now) }
+        if (ending.isNotEmpty()) drop(ending.map { it.id })
         return alive
     }
 
@@ -108,5 +115,8 @@ class Holds(
 
         /** A measure's hold, and an extension's longest step (ADR 0093 § 4: six months), in days. */
         val SIX_MONTHS: Duration = Duration.ofDays(183)
+
+        /** A European Preservation Order's hold (ADR 0093 § 4, Regulation 2023/1543 Art. 11): 60 days from receipt. */
+        val PRESERVATION: Duration = Duration.ofDays(60)
     }
 }

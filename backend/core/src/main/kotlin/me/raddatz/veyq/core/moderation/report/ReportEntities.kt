@@ -28,6 +28,9 @@ enum class ReportCategory(val urgent: Boolean) {
 /** What a reported item is (the wire's `kind`). A LINK's id is its share id. */
 enum class ReportItemKind { NODE, ITEM, LINK }
 
+/** What opened a case: a report, or an authority's order (ADR 0093 § 12) — decided from the start, with no report. */
+enum class CaseOrigin { REPORT, ORDER }
+
 /** A case's state: [OPEN] until a decision, [DECIDED] once a measure was taken, [CLOSED] when dismissed or when its last hold ended after a decision (uc.moderation.review-a-case). */
 enum class CaseState { OPEN, DECIDED, CLOSED }
 
@@ -110,11 +113,18 @@ class ModerationCaseEntity : PanacheEntityBase {
     @Column(name = "closed_at")
     var closedAt: Instant? = null
 
+    /** What opened it ([CaseOrigin]): a report, or an authority's order. */
+    @Column(name = "origin", nullable = false, length = 8)
+    var origin: String = CaseOrigin.REPORT.name
+
     companion object : PanacheCompanionBase<ModerationCaseEntity, String> {
         const val NOTICE_URGENT = "URGENT"
         const val NOTICE_BUNDLE = "BUNDLE"
 
         fun openKeyOf(kind: ReportItemKind, itemId: String) = "${kind.name}:$itemId"
+
+        /** An order's case: keyed by the order, so it never takes a report's place as its item's one open case. */
+        fun orderKeyOf(orderId: String) = "ORDER:$orderId"
     }
 }
 

@@ -1906,7 +1906,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: An extension's new end; null for every other event.
+          description: An extension's new end, or a deferral's end (`STATEMENT_DEFERRED`); null for every other event.
           example: null
 
     SealedModerationNote:

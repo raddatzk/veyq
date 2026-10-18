@@ -1230,6 +1230,7 @@ paths:
               example:
                 enabled: true
                 currentEpoch: 2
+                currentKemPublicKey: a2VtLXB1YmxpYy1rZXk=
                 rotationDueSince: null
                 serverOwner:
                   accountId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
@@ -3185,13 +3186,22 @@ components:
     InstanceModeration:
       type: object
       description: The moderation roster and the state of the instance moderation key (ADR 0099).
-      required: [enabled, currentEpoch, rotationDueSince, serverOwner, moderators]
+      required: [enabled, currentEpoch, currentKemPublicKey, rotationDueSince, serverOwner, moderators]
       properties:
         enabled:
           x-veyq-visibility: flag
           type: boolean
           description: Whether an epoch exists. False = moderation is off, and the report action is off with it.
           example: true
+        currentKemPublicKey:
+          type: [string, "null"]
+          description: >
+            The current epoch's X-Wing public half — what a reporter seals to, and what admin-web and `veyq-admin` seal an
+            authority's reference to when the Server Owner enters an order (`moderation-order` [epoch, orderId], ADR 0093
+            § 12); sealing needs no private half. Null while moderation is off.
+          contentEncoding: base64
+          maxLength: 2048
+          example: a2VtLXB1YmxpYy1rZXk=
         currentEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]

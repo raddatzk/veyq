@@ -85,7 +85,7 @@ Phase 0 writes `uc.moderation.authority-order` (removal, preservation, informati
 - [x] **1 contracts** — the order operations on both channels, the deferral, the export read, the handover event;
   classified in `OperatorBlindProbeTest`; the admin-channel sweep sees the Server Owner's twin marked. · Done when:
   `npm run generate:api` (web, admin-web), the contracts guards, `./gradlew check` (predicted red named).
-- [ ] **2 backend** — decisions 1–4; the hold ends of § 4's order rows (six months after the block for TCO, never
+- [x] **2 backend** — decisions 1–4; the hold ends of § 4's order rows (six months after the block for TCO, never
   shorter; 60 + 30 days for a preservation order; the named duration, else six months); the deferral's reminder.
   · Done when: `./gradlew check` and `run_backend_races_on_mariadb.py` green. **Bites, with controls:** a removal order
   by the Server Owner on the admin port blocks the share and its content (the guest gets `404`, the member `451`) with no
