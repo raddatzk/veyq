@@ -1,7 +1,7 @@
 ---
 id: cr-api-fuzzing
 title: The API is fuzzed from its contracts on every commit — Schemathesis against the e2e fast-jar
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0091", "0100", "0090", "0057", "0042"]
 invariants:
@@ -161,6 +161,8 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
 
 ## Owner questions (each with a recommendation)
 
+**Decided (Q1–Q3).** Owner 2026-10-18: all three as recommended; implementation has the owner's go.
+
 - **Q1 — A malformed *patterned* path segment (`shareId`, `capabilityId`, `requirement`): `400` or `404`?** A
   non-UUID path id is 404 by routing (settled, `IdBoundarySliceTest`); a patterned string segment reaches bean
   validation and most likely answers 400 today (not measured). **Recommendation: accept both for a path segment, 400
@@ -175,9 +177,57 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
   writes, stateful link sequences, and `object_level_authorization` (a second identity) are one follow-up row
   (inbox #486 names it), because each needs a decision about what a run may change and which identity owns what.
 
+**Open (Q4–Q8) — raised by phase 3's triage, 2026-10-18.** The first run's list (§ Phases, phase 3's triage) is
+longer than this CR can carry under Q2: four of its mechanisms are decisions about the wire or about the check, not
+fixes. Phases 1 and 2 are done and the 5xx class is fixed; the CR stops here and asks (Q2's own rule).
+
+- **Q4 — `405` and `OPTIONS` (mechanism C, 321 of the run's failures).** Every path answers `TRACE` with a bare `405`
+  and no `Allow` header (RFC 9110 requires one), an undeclared method on four paths answers `404` or `400` instead of
+  `405`, and `OPTIONS` answers `200` with an `Allow` listing the resource class's methods rather than the path's.
+  Making every path answer `405 ErrorResponse` with its own `Allow`, and `OPTIONS` with the declared methods, needs a
+  per-path method index the backend does not have today (Quarkus REST builds one; nothing exposes it) — feature-sized.
+  **Recommendation: defer to a new inbox row, recorded as baseline entries** (one per operation and check, written by
+  `--baseline-update`, each `reason` naming the row): the guard holds them, `--baseline-prune` empties them the day the
+  row lands, and every other check stays live on those operations. The alternative — `unsupported_method` and
+  `allow_header_conformance` switched off in `schemathesis.toml` with the row in a comment — is a two-line diff, but no
+  guard sees it and someone has to remember to switch them back on.
+- **Q5 — Request bodies and parameters of the wrong JSON type are accepted (mechanisms F and FMT, ~50 cases).**
+  Jackson coerces a scalar of the wrong type into the declared one (a number into a string field, `0` into an
+  `Instant` — 1970, then a domain refusal —, an integer into a boolean); a `format: uuid` or `date-time` body field
+  typed `String` is never checked; JAX-RS converts a query `boolean` leniently (`revokeLinks=5` is `false`). Each is a
+  request the contract forbids, answered past the boundary (200, 204, 404, 409 …). **Recommendation: fix here** — one
+  strict coercion config beside `NullElementsRefused` (every scalar coercion fails; the generated clients never send
+  one), the uuid/date-time fields typed or patterned, strict parameter converters — each mechanism with its case in
+  `MalformedRequestSliceTest`, plus a `run_pipeline.py --job web-e2e` run, because the e2e harness' hand-built calls are
+  the one caller that could lean on a coercion.
+- **Q6 — A malformed credential is refused as a credential, before its shape (mechanism G1, ~32 cases).** The
+  moderation proof headers (`X-Veyq-Moderation-Challenge`/`-Signature`) answer `403 moderation_proof_invalid` for a
+  malformed value or for extra headers, the confirmation codes `403 …_code_invalid`, a body-less pairing call or a
+  refresh token of the wrong type `401`, `DELETE /api/sessions/{id}` with a non-UUID id `401`: authentication runs
+  before shape validation, and the check demands `400`/`404`. **Recommendation: keep the check and name the credential
+  inputs** — a negated *credential* (a parameter or body field the contract marks as one) may be refused with the
+  operation's declared `401`/`403`: an auth-first refusal leaks nothing, and moving shape validation in front of
+  authentication would answer an unauthenticated caller about the request's shape. A narrowing of
+  `refusal_by_location` the contract drives, not a mute; the marker (an `x-veyq-*` extension on those parameters and
+  fields) is part of the decision.
+- **Q7 — `null` where the schema says absent (mechanism D, 4 positive `GET`s).** `GET /api/setup`, `GET
+  /api/tenants/{tenantId}/capabilities`, `GET /api/scopes` and `GET /api/scopes/my-tenants` serialize an optional,
+  non-nullable property (`Capability.addConsent`/`linkPassword`/`linkMaxDays`, `CompromiseRotation`) as `null`.
+  **Recommendation: the contract follows the wire** — those properties become `[T, "null"]`, so the generated
+  TypeScript type says what the client already receives, rather than a global "omit nulls", which would also drop the
+  required-nullable fields (`parentId: null` is the scope root). Only the schemas the positive run reached are known:
+  the 18 `GET`s that never answered 2xx went unread.
+- **Q8 — TraceCov in the official image (information; a decision only if the answer is no).** The
+  `schemathesis/schemathesis` image is MIT Schemathesis plus **TraceCov**, a proprietary, binary-only coverage plugin
+  ("TraceCov Community License", Schemathesis.io s.r.o.) its Dockerfile loads on every run unless
+  `SCHEMATHESIS_COVERAGE=false`. The runner switches it off and `hooks.py` refuses to load if it was imported anyway, so
+  only the MIT tool runs. **Recommendation: keep the official image this way.** The alternative — an image of our own
+  from the PyPI package, where TraceCov is no dependency — adds a Dockerfile, a pinned base image and a hash-pinned
+  Python dependency set, which ADR 0091 decision 9 chose the image to avoid.
+
 ## Phases
 
-- [ ] **1 harness — the run exists, measures itself, and can go red.**
+- [x] **1 harness — the run exists, measures itself, and can go red.**
   - `infra/fuzz/schemathesis.toml` — the checks (below), `negative_data_rejection.expected-statuses = ["400", "404"]`
     (the per-location rule is the custom check's), `generation.database = "none"`; `[parameters]` for the seeded ids
     only in a profile/section the positive invocation uses. `infra/fuzz/hooks.py` — custom checks, loaded by `hooks`:
@@ -236,7 +286,27 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
     227 across them minus the three negative-less operations in the negative half (count from the reports); the four
     bites went red by name and green again after restore; the measured times are in the docstring.
 
-- [ ] **2 guard — the baseline is held.** `scripts/validate_api_fuzz_baseline.py` (Python 3.9, `json` only, docstring
+  - **Built (2026-10-18)**, as planned, with what implementation measured. The image is pinned at the index digest
+    the refine resolved (`sha256:c4935c2c…a7a935f5`, both architectures, re-resolved with `docker buildx imagetools
+    inspect`; upstream's `.github/workflows/release.yml` publishes it); its bundled TraceCov is switched off (Q8). A
+    negative case that only drops the bearer token is not generated (`with-security-parameters = false`):
+    `ignored_auth` holds the `401`. Schemathesis ORs its inclusions, so the positive invocations exclude every method
+    but `GET` (`--exclude-method-regex`): an `--include-method GET` beside the admin channel's `--include-by` selected
+    all 59 admin-spec operations in the first run. The seeded tenant mails through Mailpit, or the three operations
+    that mail answer `503 mail_unavailable`. The seed has no node, medium, share or moderation case, so the 18 `GET`s
+    below one are listed as "never answered 2xx" (information). Counts, read from the reports: negative 175 public + 53
+    admin = **228** operations tested (the three parameter-less ones included — the coverage phase's undeclared-method
+    probes reach them), positive 50 + 15 = **65** `GET`s. 236 s for all four invocations at `MAX_EXAMPLES` 10 (the
+    runner's docstring).
+  - **Bites, each red by name** (1–3 on detached worktrees of `HEAD` with their own jar, compared with the untouched
+    run, which is the restored state and carries none of these failures): (1) `useBeanValidation=false` →
+    `negative_data_rejection` on `X-Share-Password`'s pattern (`GET /api/shares/{shareId}/blobs/{blobId}`, `POST
+    /api/shares/{shareId}/identities`, …) and on `If-None-Match`'s `maxLength` (`GET /api/scopes/{scopeId}/nodes`); (2)
+    `throw IllegalStateException("bite")` in `listMyTenants` → `not_a_server_error` on `GET /api/scopes/my-tenants`;
+    (3) the bean-validation mapper writing the invalid value into `message` → `refusal_echoes_nothing` on 17 operations
+    (`GET /api/shares/{shareId}`, `PATCH /api/shares/{shareId}`, …); (4) a `VEYQ_FUZZ_INCLUDE_BY` matching nothing →
+    "tested no operation (selected 0, expected 1)" for each invocation.
+- [x] **2 guard — the baseline is held.** `scripts/validate_api_fuzz_baseline.py` (Python 3.9, `json` only, docstring
   per `changes/README.md` § trust-chain guards): every entry of `infra/fuzz/baseline.json` has a non-empty `reason`;
   its `check` is never `not_a_server_error`; it carries no `expires`; its `operation` (`METHOD /path`) is an
   operation of `contract_specs.specs()`; a `reason` that defers (Q2) names an inbox row `#<n>` that exists in
@@ -247,6 +317,10 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
   'def case_\|CASES' scripts/validate_guard_gaps.py` for the shape). · Done when: the five bites red by name, the
   glob green.
 
+  - **Built (2026-10-18).** A deferral is a `reason` with the word "defer", and it names an open row; "open" is a
+    status cell whose first word is no closed marker (`done`, `dissolved`, `closed`, `dropped`, `superseded`). The five
+    bites went red naming the entry, the empty baseline green; `validate_guard_gaps.py` case 84 pins the limit open (a
+    `500` recorded under `status_code_conformance` passes — the same response is `not_a_server_error` in that run).
 - [ ] **3 triage and fix — the first run's list goes to zero.** For each failure of phase 1's list, one of three,
   recorded in the commit body of its fix:
   - **contract gap** (a status the server deliberately answers, a schema that is wrong) → fix the spec;
@@ -264,6 +338,23 @@ ids. Positive writes, stateful sequences and the second-identity check (`object_
   out of range, answers `400` (query, header) or `400`/`404` (path) — never 2xx, never 5xx** — read from the
   negative invocations' reports.
 
+  - **Triage (2026-10-18) — stopped here under Q2; Q4–Q7 open.** The first run (untouched backend, seed 20261018,
+    `MAX_EXAMPLES` 10) failed on every spec file. By mechanism, as the run after the 5xx fix reads it
+    (`python3 scripts/run_api_fuzz.py`, then the run directory's `summary.txt` and each invocation's `report.json`):
+
+    | Mechanism | Where it shows | Class | State |
+    |---|---|---|---|
+    | E — a `null` element in a list of objects reaches the handler | `not_a_server_error` on 4 operations (`blob-uploads-batch`, the moderation epoch, `setup/owner`, `tenants/accept/register`) | backend defect | **fixed**: `NullElementsRefused` refuses it while binding (`400 invalid_request`); `MalformedRequestSliceTest.aNullElementInAListOfObjectsIsInvalidRequest` red before (a `500`, the handler's NPE), green after |
+    | H — the seeded tenant could not mail | `not_a_server_error` (`503 mail_unavailable`) on 3 operations | harness | **fixed**: the seed points the tenant at Mailpit |
+    | B — a route miss under `/api` (a non-UUID path id) answers `404` with no body and no content type | content type and JSON on 86 operations; an undeclared `404` on 3 | backend defect + contract gap | open, no decision needed: `ErrorResponse{not_found}` for an unmatched `/api` path without breaking the app shell's fallback or the admin channel's unknown-route refusal (`RequestRejectionMappers.kt` says why a `NotFoundException` mapper did), and `404` declared where a path id is |
+    | J — a `400 invalid_request` the operation does not declare | `status_code_conformance` on 21 operations (the share routes, `recovery/*`, `tasks/{jobId}/*`, `capability-switches`, …) | contract gap | open, no decision needed: declare the `400` |
+    | C — `TRACE` → bare `405`; an undeclared method → `404`/`400`; `OPTIONS` → a class-wide `Allow` | `unsupported_method` 165, `allow_header_conformance` 156 | feature-sized | **Q4** |
+    | F, FMT — scalar coercion, unchecked `uuid`/`date-time` formats, lenient query booleans | `negative_data_rejection` ~50, `refusal_by_location` 1 (`0` as `deferStatementUntil` → `deferral_out_of_bounds`) | backend defect, global | **Q5** |
+    | G1 — a malformed credential refused `401`/`403` before its shape | `negative_data_rejection` ~32 | rule | **Q6** |
+    | D — `null` for an absent optional property | `response_schema_conformance` on 4 `GET`s | contract vs wire | **Q7** |
+
+    No `refusal_echoes_nothing` failure in either run. Phase 4's `ci.yml` job was written and held back: a stage that
+    is red on every commit would hold back every publish (`publish.needs`), so it lands when the list is at zero.
 - [ ] **4 pipeline and published docs — it gates.**
   - `ci.yml`: job `api-fuzz`, `timeout-minutes: 15`, the `web-e2e` job's setup steps (Java, the fast-jar, Node, the
     gated `npm ci`), then `python3 scripts/run_api_fuzz.py`, then `upload-artifact` of `.fuzz-out/` (`if: always()`,

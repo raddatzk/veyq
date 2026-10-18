@@ -466,7 +466,7 @@ server-blind token makes this work without the server ever seeing a name:
 - **The accountless-visitor terms acceptance is client-only** ([ADR 0035](../decisions/0035-server-terms-of-service.md)
   §3, [uc.sharing.share-accept](../features/sharing/use-cases/uc.sharing.share-accept.md)): before viewing, an
   account-less share visitor accepts the space's terms, but the acceptance lives in **localStorage** (per
-  tenant, holding the accepted revision with the operator section's revision and variant) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
+  tenant, holding the last four triples accepted: the revision with the operator section's revision and variant) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
   terms are **public operational content** (no blindness cost), served from the *share* via a guest
   `GET /api/shares/{shareId}/terms` keyed on the non-enumerable `shareId` (no `tenantId` existence oracle). It is an
   **operational gate, not enforcement** — bypassable by an accountless visitor and no legal-non-repudiation record;

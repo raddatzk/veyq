@@ -194,10 +194,20 @@ export async function pollPublicShare(
 // not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /
 // resolving the share directly), so it records + surfaces consent — it does not *prevent* access. The
 // legally-meaningful protection is the terms' content + the decryptable-on-report path, not this prompt.
-// What is stored per tenant is the accepted TRIPLE (ADR 0035 decision 6): the space's revision, the operator section's
-// revision and its variant, as `tripleKey` spells it. A value an older client stored (a bare revision) equals no triple,
-// so that visitor is asked once more — rightly, since the operator section was not part of what they accepted.
+// What is stored per tenant is every accepted TRIPLE (ADR 0035 decision 6): the space's revision, the operator section's
+// revision and its variant, each as `tripleKey` spells it, space-separated, the latest last. The gate asks whether the
+// current triple is among them — as a member's gate asks whether a row exists for it — so a Server Owner switching the
+// operating mode back to a variant this device already accepted asks nobody again.
+// The list is bounded to TERMS_ACCEPTED_KEEP: a triple only comes back while its revisions are current or one step
+// back (both only grow; a rolled-back release is the step back), so four holds both variants at the current revisions
+// and both at the previous ones, and anything older is dead weight.
+// Migration needs no rewrite: the value a client stored before this list (one triple) already reads as a list of one,
+// so that acceptance holds. A value an older client still stored (a bare revision) equals no triple, so that visitor is
+// asked once more — rightly, since the operator section was not part of what they accepted — and the next record drops
+// it, keeping only triple-shaped entries.
 const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
+const TERMS_ACCEPTED_KEEP = 4
+const TRIPLE_SHAPE = /^\d+:\d+:[A-Z]+$/
 
 /**
  * The owning tenant's public terms for a share (a guest read keyed on the non-enumerable `shareId`, so unknown/
@@ -217,22 +227,26 @@ export function pickShareTerms(terms: ShareTerms, locale: string): string {
   return pickLocaleText(map, locale)
 }
 
-/** The locally-recorded accepted triple for a tenant, as `tripleKey` spells it ('' if never accepted or the store is
- *  unreadable). */
-export function acceptedTermsKey(tenantId: string): string {
+/** Every triple this device accepted for a tenant, as `tripleKey` spells each, the latest last ([] if never accepted or
+ *  the store is unreadable). */
+export function acceptedTermsKeys(tenantId: string): string[] {
   try {
-    return localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`) ?? ''
+    const stored = localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`) ?? ''
+    return stored.split(' ').filter((key) => key !== '')
   } catch {
-    return ''
+    return []
   }
 }
 
 /** Record acceptance of [triple] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on one
- *  share of a tenant clears the gate on **every** share of that tenant. A storage failure is swallowed: the gate is
- *  operational, not enforcement, so it must never throw and block a visitor from viewing. */
+ *  share of a tenant clears the gate on **every** share of that tenant. The triple joins those accepted before (moved
+ *  to the end if it was among them), the oldest beyond TERMS_ACCEPTED_KEEP dropped. A storage failure is swallowed:
+ *  the gate is operational, not enforcement, so it must never throw and block a visitor from viewing. */
 export function recordTermsAccepted(tenantId: string, triple: TermsTriple): void {
+  const key = tripleKey(triple)
+  const kept = acceptedTermsKeys(tenantId).filter((k) => k !== key && TRIPLE_SHAPE.test(k))
   try {
-    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, tripleKey(triple))
+    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, [...kept, key].slice(-TERMS_ACCEPTED_KEEP).join(' '))
   } catch {
     /* private-mode / quota — an unrecordable acceptance still clears the in-memory gate for this session */
   }
