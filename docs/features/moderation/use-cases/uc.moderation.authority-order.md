@@ -94,4 +94,5 @@ anyone opening the content.
   [en.moderation.hold](../enablers/en.moderation.hold.md), [en.moderation.log](../enablers/en.moderation.log.md)
 - Docs site: [Moderation (Run)](../../../../site/src/content/docs/run/moderation.md),
   [Moderate an instance](../../../../site/src/content/docs/account/moderate.md),
+  [What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx),
   [Security roadmap](../../../../site/src/content/docs/security/roadmap.md)

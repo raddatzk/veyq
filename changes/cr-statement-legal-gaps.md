@@ -156,7 +156,7 @@ the statement names — the Server Owner lifts with the existing unblock or reac
   identity for the link and something answers blocked, and show it. · Done when: `npm run check` green in both; a
   browser pass of a moderator's full-form decision, a Server Owner's sign-in block with its mail (in the dev mail
   catcher), and a guest's notice on a blocked link in DE and EN.
-- [ ] **4 docs** — ADR 0093's status line (the four gaps built); `site/src/content/docs/run/moderation.md` (the "not
+- [x] **4 docs** — ADR 0093's status line (the four gaps built); `site/src/content/docs/run/moderation.md` (the "not
   built" note on the Server Owner's statement goes; the statement's provision; **who owes a transparency report and by
   when**: DSA Art. 15 for a medium or large enterprise, TCO Art. 7(2) after acting on terrorist content, by 1 March —
   ADR 0093 § Consequences); `site/src/content/docs/account/moderate.md` and its DE twin (the provision field);
