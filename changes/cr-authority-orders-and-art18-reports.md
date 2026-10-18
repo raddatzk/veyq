@@ -91,7 +91,7 @@ Phase 0 writes `uc.moderation.authority-order` (removal, preservation, informati
   by the Server Owner on the admin port blocks the share and its content (the guest gets `404`, the member `451`) with no
   key in the request, while the same operation on the public port is `404`; an extension shorter than the order's
   duration is refused; the statement of a deferred case does not go out before its end and does after it.
-- [ ] **3 admin-web + CLI** — the order form (share URL or id, reference, time of receipt) with the Annex II text and
+- [x] **3 admin-web + CLI** — the order form (share URL or id, reference, time of receipt) with the Annex II text and
   the Annex III draft to copy; `veyq-admin order remove|preserve|inform`. · Done when: `npm run check` in `admin-web/`
   green; a test that a pasted URL's fragment is dropped before the request leaves (bite: send it → red).
 - [ ] **4 web: moderation surface** — the same order form for a moderator; the deferral entry and reminder; the export

@@ -115,6 +115,8 @@ import {
   type InstanceGuestWriteRecord,
 } from '../features/instance/guestWriteRecord'
 import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
+import { enterOrder, OrderInvalid, type AuthorityOrder, type OrderKind } from '../features/instance/orders'
+import { formTime, renderOrderForm } from '../features/instance/orderForms'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
 export type Flag = {
@@ -196,6 +198,14 @@ function renderCapabilities(entries: InstanceCapability[], locale: CapabilityLoc
 function renderSwitched(entry: InstanceCapability, locale: CapabilityLocale): string {
   const state = entry.off ? 'off' : entry.effective ? 'on' : 'off through a parent'
   return `${entry.id}  ${state}  ${inLocale(entry.title, locale)}`
+}
+
+/** The flags every `order …` command takes (uc.moderation.authority-order). */
+const ORDER_FLAGS: Record<string, Flag> = {
+  share: { describe: 'the link the order names, or its id', required: true },
+  reference: { describe: 'the authority’s reference — sealed here, never sent readable', required: true },
+  'received-at': { describe: 'when the order reached the contact point, ISO 8601 (default: now)', required: false },
+  lang,
 }
 
 /** `--reason` as typed → the reason category the moderation log records. */
@@ -676,6 +686,80 @@ export const COMMANDS: Record<string, Command> = {
     run: async (f) => liftSignInBlock(await signInBlockByAddress(f.address)),
     render: (r) => renderSteps(r as ModerationSteps),
   },
+  'order remove': {
+    usage: 'order remove --share <link|id> --reference <text> [--received-at <ISO time>] [--defer-until <ISO time>] [--lang en|de]',
+    summary: 'Enter a terrorist-content removal order: the link and everything it gives access to are blocked at once, by id, for everyone. Prints the block time and the text for the authority’s feedback form (TCO Annex II), a draft until a lawyer has reviewed it. Only the link’s id is sent — never the key after #.',
+    flags: {
+      ...ORDER_FLAGS,
+      'defer-until': { describe: 'the authority forbids telling the affected until then — at most six weeks ahead', required: false },
+    },
+    run: (f) => order('REMOVAL', f),
+    render: renderOrder,
+  },
+  'order preserve': {
+    usage: 'order preserve --share <link|id> --reference <text> [--received-at <ISO time>] [--lang en|de]',
+    summary: 'Enter a European Preservation Order: what the link gives access to is kept for 60 days from receipt, without a block.',
+    flags: ORDER_FLAGS,
+    run: (f) => order('PRESERVATION', f),
+    render: renderOrder,
+  },
+  'order inform': {
+    usage: 'order inform --share <link|id> --reference <text> [--received-at <ISO time>] [--hold-days <days>] [--lang en|de]',
+    summary: 'Enter a request for information: what the link gives access to is kept for the days it names (six months when it names none), without a block. Record the handover in the moderation surface.',
+    flags: { ...ORDER_FLAGS, 'hold-days': { describe: 'the days the request names', required: false } },
+    run: (f) => order('INFORMATION', f),
+    render: renderOrder,
+  },
+}
+
+/** An ISO 8601 time as typed, or a refusal naming its flag. */
+function instant(text: string, flag: string): Date {
+  const d = new Date(text)
+  if (Number.isNaN(d.getTime())) throw new CliError(`--${flag} must be an ISO 8601 time, such as 2026-10-18T09:12:00+02:00`)
+  return d
+}
+
+/** Enter an order of [kind] from the flags; this client's refusals as words, before anything is sent. */
+async function order(kind: OrderKind, f: Record<string, string>): Promise<AuthorityOrder> {
+  const holdDays = f['hold-days'] ? Number(f['hold-days']) : null
+  if (holdDays !== null && (!Number.isInteger(holdDays) || holdDays < 1)) throw new CliError('--hold-days must be a whole number of days')
+  try {
+    return await enterOrder({
+      kind,
+      share: f.share,
+      reference: f.reference,
+      receivedAt: f['received-at'] ? instant(f['received-at'], 'received-at') : new Date(),
+      holdDays,
+      deferStatementUntil: f['defer-until'] ? instant(f['defer-until'], 'defer-until') : null,
+    })
+  } catch (e) {
+    if (e instanceof OrderInvalid) {
+      throw new CliError(
+        e.reason === 'share' ? '--share is neither a link of this instance nor a link id'
+        : e.reason === 'reference' ? '--reference is empty'
+        : 'moderation is off, so nothing can be sealed to its key — turn it on first',
+      )
+    }
+    throw e
+  }
+}
+
+/** The order as recorded, in words, then the form text to copy (Annex II after a block, the Annex III draft when the
+ *  link is not on this instance) with the reference as typed — the server holds it sealed. */
+function renderOrder(r: unknown, flags: Record<string, string>, env: Record<string, string | undefined>): string {
+  const o = r as AuthorityOrder
+  const lines = [`order ${o.id}  ${o.kind}  ${o.found ? 'found' : 'not found on this instance'}`]
+  if (o.blockedAt) lines.push(`blocked at ${formTime(o.blockedAt)}`)
+  if (o.holdUntil) lines.push(`kept until ${formTime(o.holdUntil)}`)
+  if (o.statementDeferredUntil) lines.push(`the affected are told on ${formTime(o.statementDeferredUntil)}, unless renewed`)
+  const form = !o.found ? 'annexIII' : o.blockedAt ? 'annexII' : null
+  if (form) {
+    lines.push('', renderOrderForm(form, cliLocale(flags, env), {
+      reference: flags.reference, orderId: o.id, shareId: o.shareId, receivedAt: o.receivedAt, blockedAt: o.blockedAt,
+      provider: o.providerName, contact: o.contactPoint,
+    }))
+  }
+  return lines.join('\n')
 }
 
 /** The retention in words, with the reason owed above seven days (ADR 0093 § 10) — the console's warning, here. */
