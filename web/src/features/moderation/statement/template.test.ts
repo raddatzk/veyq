@@ -28,8 +28,13 @@ describe('the statement template', () => {
   })
 
   it('renders every passage of the full form, in order, with the clear fields filled in', () => {
-    const full = renderStatement('en', fields)
-    expect(full.map((p) => p.id)).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'objection', 'contact', 'courts'])
+    const full = renderStatement('en', { ...fields, provision: '§ 86a StGB' })
+    expect(full.map((p) => p.id)).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objection', 'contact', 'courts'])
+    // The provision follows the ground; the territorial sentence (DSA Art. 17(3)(a)) is the full form's.
+    expect(full.find((p) => p.id === 'provision')!.text).toBe('It relies on § 86a StGB.')
+    expect(full.find((p) => p.id === 'scope')!.text).toBe('It applies wherever this veyq instance is reached, and lasts until it is lifted.')
+    // A moderator's measure is objected to in veyq; the contact objection is a Server Owner's step's, by mail alone.
+    expect(full.map((p) => p.id)).not.toContain('objectionByContact')
     expect(full[0].text).toBe(
       'On 18 October 2026, the people who run this veyq instance took a measure: content was blocked. ' +
         TEMPLATE.measures.CONTENT.en.reach,
@@ -42,6 +47,9 @@ describe('the statement template', () => {
   it('the reduced form leaves out what only the full form carries, and a passage whose value is not there', () => {
     const reduced = renderStatement('de', { ...fields, form: 'REDUCED', hasFacts: false, contact: null, roles: ['SHARE_CREATOR'], measureKind: 'SHARE' })
     expect(reduced.map((p) => p.id)).toEqual(['measure', 'roles', 'ground', 'objection'])
+    // A provision the moderator named stays in the reduced form; a blank one is none.
+    expect(renderStatement('en', { ...fields, form: 'REDUCED', provision: 'Space terms, clause 4' }).map((p) => p.id)).toContain('provision')
+    expect(renderStatement('en', { ...fields, provision: '  ' }).map((p) => p.id)).not.toContain('provision')
     expect(reduced[1].text).toBe('Du erhältst diese Begründung als Person, die den Link erstellt hat.')
     // The facts stay in the reduced form when the moderator wrote them.
     expect(renderStatement('en', { ...fields, form: 'REDUCED' }).map((p) => p.id)).toContain('facts')

@@ -1,36 +1,119 @@
 {
   "version": 1,
-  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. A passage is rendered in order when its 'full' is false, or when the form is FULL (ADR 0093 § 14: the private mode's REDUCED form leaves out every passage marked full: true). A passage with 'when' is rendered only when that value is there: 'facts' when the moderator wrote them (the full form requires them), 'contact' when the instance names an address. The mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place. Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground} and {contact}, and in the mail {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field, never user data. It names the host, never the moderator.",
+  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 16(5), 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. A passage is rendered in order when its 'full' is false, or when the form is FULL (ADR 0093 § 14: the private mode's REDUCED form leaves out every passage marked full: true). A passage with 'when' is rendered only when that value is there: 'facts' when facts were written (the full form requires them), 'provision' when the provision or clause relied on was named (the full form requires it), 'contact' when the instance names an address, 'inApp' for a moderator's measure (the objection is made in veyq), 'byContact' for a Server Owner's step when the instance names an address (the objection goes to it). A moderator's measure's mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place; a Server Owner's step's mail carries them after the facts passage, the Server Owner's own words (ADR 0093 § 7, ADR 0049 decision 2). Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground}, {provision} and {contact}, and {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field or the clear value named, never content. 'reporterDecision' is the redress a reporter's decision mail carries after its outcome (DSA Art. 16(5), Art. 53), in the same form. Every text is a draft until a qualified legal review (ADR 0093 § Legal basis). It names the host, never the moderator.",
   "measures": {
     "SHARE": {
-      "en": { "measure": "a link you created was blocked", "reach": "Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands." },
-      "de": { "measure": "ein von dir erstellter Link wurde gesperrt", "reach": "Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht." }
+      "en": {
+        "measure": "a link you created was blocked",
+        "reach": "Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands."
+      },
+      "de": {
+        "measure": "ein von dir erstellter Link wurde gesperrt",
+        "reach": "Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts, und der Link kann nicht wieder aktiviert oder neu ausgestellt werden, solange die Sperre besteht."
+      }
     },
     "CONTENT": {
-      "en": { "measure": "content was blocked", "reach": "It is no longer shown to anyone, members included, and appears as \"Blocked by the operator\"; nothing was deleted. It can still be deleted, but not replaced or restored." },
-      "de": { "measure": "Inhalte wurden gesperrt", "reach": "Sie werden niemandem mehr angezeigt, auch Mitgliedern nicht, und erscheinen als „Von der Moderation gesperrt“; gelöscht wurde nichts. Sie können weiterhin gelöscht, aber nicht ersetzt oder wiederhergestellt werden." }
+      "en": {
+        "measure": "content was blocked",
+        "reach": "It is no longer shown to anyone, members included, and appears as \"Blocked by the operator\"; nothing was deleted. It can still be deleted, but not replaced or restored."
+      },
+      "de": {
+        "measure": "Inhalte wurden gesperrt",
+        "reach": "Sie werden niemandem mehr angezeigt, auch Mitgliedern nicht, und erscheinen als „Von der Moderation gesperrt“; gelöscht wurde nichts. Sie können weiterhin gelöscht, aber nicht ersetzt oder wiederhergestellt werden."
+      }
     },
     "GUEST_IDENTITY": {
-      "en": { "measure": "a guest who uploaded through your link was blocked, together with the link", "reach": "The guest can no longer add anything, and the link answers as if it did not exist; nothing was deleted. You can issue a new link." },
-      "de": { "measure": "ein Gast, der über deinen Link hochgeladen hat, wurde gesperrt, zusammen mit dem Link", "reach": "Der Gast kann nichts mehr hinzufügen, und der Link antwortet, als gäbe es ihn nicht; gelöscht wurde nichts. Du kannst einen neuen Link ausstellen." }
+      "en": {
+        "measure": "a guest who uploaded through your link was blocked, together with the link",
+        "reach": "The guest can no longer add anything, and the link answers as if it did not exist; nothing was deleted. You can issue a new link."
+      },
+      "de": {
+        "measure": "ein Gast, der über deinen Link hochgeladen hat, wurde gesperrt, zusammen mit dem Link",
+        "reach": "Der Gast kann nichts mehr hinzufügen, und der Link antwortet, als gäbe es ihn nicht; gelöscht wurde nichts. Du kannst einen neuen Link ausstellen."
+      }
+    },
+    "MEMBER_SIGN_IN": {
+      "en": {
+        "measure": "your account was blocked from signing in",
+        "reach": "You cannot sign in to this veyq instance, and every session of your account was ended; nothing was deleted."
+      },
+      "de": {
+        "measure": "dein Konto wurde für die Anmeldung gesperrt",
+        "reach": "Du kannst dich auf dieser veyq-Instanz nicht anmelden, und jede Sitzung deines Kontos wurde beendet; gelöscht wurde nichts."
+      }
+    },
+    "TENANT_OFFLINE": {
+      "en": {
+        "measure": "a space you own, {domain}, was taken offline",
+        "reach": "Nobody can open it or anything in it, its members included, and its links answer as if they did not exist; nothing was deleted."
+      },
+      "de": {
+        "measure": "ein Bereich, der dir gehört, {domain}, wurde offline genommen",
+        "reach": "Niemand kann ihn oder etwas darin öffnen, auch seine Mitglieder nicht, und seine Links antworten, als gäbe es sie nicht; gelöscht wurde nichts."
+      }
     }
   },
   "roles": {
-    "SHARE_CREATOR": { "en": "the person who created the link", "de": "Person, die den Link erstellt hat" },
-    "UPLOADER": { "en": "the person who uploaded it", "de": "Person, die es hochgeladen hat" },
-    "SCOPE_OWNER": { "en": "an owner of the space it lies in", "de": "Person, der der Bereich gehört, in dem es liegt" }
+    "SHARE_CREATOR": {
+      "en": "the person who created the link",
+      "de": "Person, die den Link erstellt hat"
+    },
+    "UPLOADER": {
+      "en": "the person who uploaded it",
+      "de": "Person, die es hochgeladen hat"
+    },
+    "SCOPE_OWNER": {
+      "en": "an owner of the space it lies in",
+      "de": "Person, der der Bereich gehört, in dem es liegt"
+    },
+    "ACCOUNT_HOLDER": {
+      "en": "the holder of the account",
+      "de": "Person, der das Konto gehört"
+    },
+    "TENANT_OWNER": {
+      "en": "an owner of the space",
+      "de": "Person, der der Bereich gehört"
+    }
   },
-  "rolesJoiner": { "en": " and ", "de": " und " },
+  "rolesJoiner": {
+    "en": " and ",
+    "de": " und "
+  },
   "basis": {
-    "REPORT": { "en": "a report by someone who could see it", "de": "eine Meldung von jemandem, der es sehen konnte" },
-    "ORDER": { "en": "an order of an authority", "de": "eine Anordnung einer Behörde" }
+    "REPORT": {
+      "en": "a report by someone who could see it",
+      "de": "eine Meldung von jemandem, der es sehen konnte"
+    },
+    "ORDER": {
+      "en": "an order of an authority",
+      "de": "eine Anordnung einer Behörde"
+    },
+    "OWN_FINDING": {
+      "en": "their own finding",
+      "de": "eigener Feststellung"
+    }
   },
   "grounds": {
-    "CHILD_SEXUAL_ABUSE": { "en": "it is illegal: child sexual abuse material", "de": "es ist rechtswidrig: Darstellung sexuellen Missbrauchs von Kindern" },
-    "TERRORIST_CONTENT": { "en": "it is illegal: terrorist content", "de": "es ist rechtswidrig: terroristische Inhalte" },
-    "THREAT_TO_LIFE": { "en": "it is illegal: a threat to life or safety", "de": "es ist rechtswidrig: eine Gefahr für Leben oder Sicherheit" },
-    "ILLEGAL_CONTENT": { "en": "it is illegal under the law that applies", "de": "es ist nach geltendem Recht rechtswidrig" },
-    "TERMS_BREACH": { "en": "it breaches the terms of use that apply here", "de": "es verstößt gegen die hier geltenden Nutzungsbedingungen" }
+    "CHILD_SEXUAL_ABUSE": {
+      "en": "it is illegal: child sexual abuse material",
+      "de": "es ist rechtswidrig: Darstellung sexuellen Missbrauchs von Kindern"
+    },
+    "TERRORIST_CONTENT": {
+      "en": "it is illegal: terrorist content",
+      "de": "es ist rechtswidrig: terroristische Inhalte"
+    },
+    "THREAT_TO_LIFE": {
+      "en": "it is illegal: a threat to life or safety",
+      "de": "es ist rechtswidrig: eine Gefahr für Leben oder Sicherheit"
+    },
+    "ILLEGAL_CONTENT": {
+      "en": "it is illegal under the law that applies",
+      "de": "es ist nach geltendem Recht rechtswidrig"
+    },
+    "TERMS_BREACH": {
+      "en": "it breaches the terms of use that apply here",
+      "de": "es verstößt gegen die hier geltenden Nutzungsbedingungen"
+    }
   },
   "passages": [
     {
@@ -71,10 +154,31 @@
       "de": "Der Grund: {ground}."
     },
     {
+      "id": "provision",
+      "full": false,
+      "when": "provision",
+      "en": "It relies on {provision}.",
+      "de": "Sie stützt sich auf {provision}."
+    },
+    {
+      "id": "scope",
+      "full": true,
+      "en": "It applies wherever this veyq instance is reached, and lasts until it is lifted.",
+      "de": "Sie gilt überall, wo diese veyq-Instanz erreichbar ist, und dauert an, bis sie aufgehoben wird."
+    },
+    {
       "id": "objection",
       "full": false,
+      "when": "inApp",
       "en": "If you disagree, you can object once, in veyq, where you see this statement. Another moderator reviews your objection where there is one.",
       "de": "Wenn du nicht einverstanden bist, kannst du einmal widersprechen, in veyq, dort, wo du diese Begründung siehst. Eine andere Person aus der Moderation prüft deinen Widerspruch, sofern es eine gibt."
+    },
+    {
+      "id": "objectionByContact",
+      "full": false,
+      "when": "byContact",
+      "en": "If you disagree, write to {contact}: the people who run this instance look at it again.",
+      "de": "Wenn du nicht einverstanden bist, schreib an {contact}: Wer diese Instanz betreibt, prüft es erneut."
     },
     {
       "id": "contact",
@@ -90,8 +194,43 @@
       "de": "Du kannst dich auch an ein Gericht wenden; ein Widerspruch vorher ist dafür nicht nötig."
     }
   ],
+  "reporterDecision": {
+    "passages": [
+      {
+        "id": "again",
+        "full": false,
+        "en": "If you have more information, you can report it again.",
+        "de": "Wenn du weitere Informationen hast, kannst du es erneut melden."
+      },
+      {
+        "id": "contact",
+        "full": false,
+        "when": "contact",
+        "en": "Questions go to {contact}.",
+        "de": "Fragen gehen an {contact}."
+      },
+      {
+        "id": "courts",
+        "full": true,
+        "en": "You can also go to court.",
+        "de": "Du kannst dich auch an ein Gericht wenden."
+      },
+      {
+        "id": "coordinator",
+        "full": true,
+        "en": "You can also complain to the Digital Services Coordinator of the Member State where you live or are established.",
+        "de": "Du kannst dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist."
+      }
+    ]
+  },
   "mail": {
-    "subject": { "en": "veyq: a moderation decision concerns you", "de": "veyq: eine Moderationsentscheidung betrifft dich" },
-    "factsInVeyq": { "en": "What they found is in veyq: sign in at {domain} to read it.", "de": "Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen." }
+    "subject": {
+      "en": "veyq: a moderation decision concerns you",
+      "de": "veyq: eine Moderationsentscheidung betrifft dich"
+    },
+    "factsInVeyq": {
+      "en": "What they found is in veyq: sign in at {domain} to read it.",
+      "de": "Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen."
+    }
   }
 }

@@ -10,7 +10,8 @@
 //     stands, and then shows as a due rotation);
 //   - each step that changes who holds the key asks first.
 // uc.moderation.take-a-measure step 5 adds the Server Owner's steps below the roster: the moderators' open proposals
-// — a member's sign-in block, taken here after a confirm, or the tenant's suspension, taken on the tenant's own page
+// — a member's sign-in block, taken here with its statement of reasons (a proposal is over content, ADR 0093 § 7) after
+// a confirm, or the tenant's suspension, taken on the tenant's own page
 // (the console opens it; suspending settles the proposal) — each of which may be declined instead, and every sign-in
 // block in force, which is lifted here.
 import { computed, ref } from 'vue'
@@ -26,6 +27,8 @@ import {
   type AccountSignInBlock, type InstanceModeration, type InstanceModerator, type ModerationSteps,
   type OpenModerationProposal,
 } from './moderation'
+import StepStatementFields from './StepStatementFields.vue'
+import { stepStatement, StepStatementInvalid, type StepStatementDraft } from './stepStatement'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
@@ -143,6 +146,11 @@ const STEP_REFUSALS: Record<string, string> = {
   proposal_not_found: 'moderation.steps.errors.proposalNotFound',
   sign_in_block_not_found: 'moderation.steps.errors.blockNotFound',
   invalid_request: 'moderation.steps.errors.invalidRequest',
+  statement_required: 'moderation.steps.errors.statementRequired',
+  statement_facts_required: 'moderation.steps.errors.factsRequired',
+  statement_provision_required: 'moderation.steps.errors.provisionRequired',
+  moderation_epoch_changed: 'moderation.steps.errors.epochChanged',
+  moderation_off: 'moderation.steps.errors.moderationOff',
 }
 
 /** Run one step; show the steps as they now stand, or the refusal in words and the steps read again. */
@@ -152,6 +160,10 @@ async function actOnSteps(change: () => Promise<ModerationSteps>): Promise<void>
   try {
     steps.value = await change()
   } catch (e) {
+    if (e instanceof StepStatementInvalid) {
+      error.value = t('moderation.steps.errors.moderationOff')
+      return
+    }
     on401(e)
     if (isUnauthorized(e)) return
     const { status, code } = await decodeHttpError(e)
@@ -167,6 +179,16 @@ async function actOnSteps(change: () => Promise<ModerationSteps>): Promise<void>
   }
 }
 
+// The proposal whose block is being written, and its statement (ADR 0093 § 7): a block from a proposal is over content.
+const blocking = ref<string | null>(null)
+const draft = ref<StepStatementDraft>({ ground: 'TERMS_BREACH', provision: '', facts: '' })
+
+/** Open the statement for [p]'s block, its ground the case's category. */
+function startBlock(p: OpenModerationProposal) {
+  blocking.value = p.id
+  draft.value = { ground: p.category, provision: '', facts: '' }
+}
+
 async function block(p: OpenModerationProposal) {
   if (!p.address) return
   const accepted = await ask({
@@ -176,7 +198,9 @@ async function block(p: OpenModerationProposal) {
     acceptIcon: 'pi pi-ban',
   })
   const address = p.address
-  if (accepted) await actOnSteps(() => blockSignIn(address, p.caseId))
+  if (!accepted) return
+  await actOnSteps(async () => blockSignIn(address, p.caseId, await stepStatement(draft.value)))
+  if (!error.value) blocking.value = null
 }
 
 async function decline(p: OpenModerationProposal) {
@@ -313,8 +337,8 @@ const at = (d: Date) => d.toLocaleString(locale.value)
                     outlined
                     icon="pi pi-ban"
                     :label="t('moderation.steps.block')"
-                    :disabled="busy"
-                    @click="block(p)"
+                    :disabled="busy || blocking === p.id"
+                    @click="startBlock(p)"
                   />
                   <Button
                     v-else-if="p.step === ProposalStep.TenantOffline && p.tenantId"
@@ -337,6 +361,21 @@ const at = (d: Date) => d.toLocaleString(locale.value)
                     @click="decline(p)"
                   />
                 </div>
+                <template v-if="blocking === p.id">
+                  <StepStatementFields v-model="draft" :id-prefix="`mod-statement-${p.id}`" :disabled="busy" />
+                  <div class="veyq-dialog-action-row">
+                    <Button
+                      type="button"
+                      class="mod-proposal__send"
+                      severity="danger"
+                      icon="pi pi-ban"
+                      :label="t('moderation.steps.statement.send')"
+                      :loading="busy"
+                      @click="block(p)"
+                    />
+                    <Button type="button" severity="secondary" text :label="t('moderation.steps.statement.cancel')" :disabled="busy" @click="blocking = null" />
+                  </div>
+                </template>
               </li>
             </ul>
           </div>

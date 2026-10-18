@@ -59,7 +59,7 @@ const BLOCKED_LINK = 'blockedblockedblockedblockedblockedblocked1'
 const OPEN_LINK = 'reachesreachesreachesreachesreachesreache1'
 const STATEMENT = '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e'
 const OBJECTION = '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f'
-const FACTS = { ground: 'TERMS_BREACH', facts: 'the facts', deferral: null }
+const FACTS = { ground: 'TERMS_BREACH', provision: 'Space terms, clause 4', facts: 'the facts', deferral: null }
 
 const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
   id: CASE,
@@ -199,6 +199,7 @@ describe('CaseDetail', () => {
     const w = await mountCase()
     await w.find('.moderation-decision-note').setValue('a sealed note')
     await w.find('.moderation-statement-facts').setValue('the facts')
+    await w.find('.moderation-statement-provision').setValue('Space terms, clause 4')
     await click(w, selector)
     expect(ask).toHaveBeenCalledTimes(1)
     expect(call).toHaveBeenCalledWith(...args)
@@ -222,8 +223,33 @@ describe('CaseDetail', () => {
     await w.find('.moderation-extend-reason').setValue('an authority asked')
     await w.find('.moderation-extend').trigger('submit')
     await flushPromises()
-    expect(extendHold).toHaveBeenCalledWith(CASE, until, 'an authority asked')
+    expect(extendHold).toHaveBeenCalledWith(CASE, until, 'an authority asked', null)
     expect(w.text()).toContain(t('moderation.case.holdTriggers.EXTENDED'))
+  })
+
+  it('on a child-sexual-abuse case the extension names an authority or an Art. 18 report, and nothing else is offered', async () => {
+    const until = new Date('2027-03-01T00:00:00Z')
+    vi.mocked(extendHold).mockResolvedValue(caseOf({ category: 'CHILD_SEXUAL_ABUSE', hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: null } }))
+    const w = await mountCase(caseOf({ category: 'CHILD_SEXUAL_ABUSE' }))
+    const offered = w.findAll('.moderation-extend-type option').map((o) => o.attributes('value')).filter((v) => v)
+    expect(offered).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS'])
+    w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', until)
+    await w.find('.moderation-extend-reason').setValue('BKA asked to keep it')
+    // Without the kind it is not sent, and says why.
+    await w.find('.moderation-extend').trigger('submit')
+    await flushPromises()
+    expect(extendHold).not.toHaveBeenCalled()
+    expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.extendTypeRequired'))
+    await w.find('.moderation-extend-type').setValue('AUTHORITY_REFERENCE')
+    await w.find('.moderation-extend').trigger('submit')
+    await flushPromises()
+    expect(extendHold).toHaveBeenCalledWith(CASE, until, 'BKA asked to keep it', 'AUTHORITY_REFERENCE')
+  })
+
+  it('on another case every kind of reason is offered, and the kind is optional', async () => {
+    const w = await mountCase()
+    const offered = w.findAll('.moderation-extend-type option').map((o) => o.attributes('value')).filter((v) => v)
+    expect(offered).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS', 'OBJECTION', 'LAWYERS_LETTER', 'LAWSUIT'])
   })
 
   it('an extension without a reason is not sent', async () => {
@@ -239,6 +265,7 @@ describe('CaseDetail', () => {
     [400, 'extension_out_of_bounds', 'moderation.errors.extensionOutOfBounds'],
     [409, 'nothing_held', 'moderation.errors.nothingHeld'],
     [409, 'moderation_epoch_changed', 'moderation.errors.reload'],
+    [409, 'extension_reason_not_allowed', 'moderation.errors.extendTypeNotAllowed'],
   ])('an extension refused with %i %s says so', async (status, code, key) => {
     vi.mocked(extendHold).mockRejectedValue(httpError(status, code))
     const w = await mountCase()
@@ -259,12 +286,14 @@ describe('CaseDetail', () => {
     [409, 'case_closed', 'moderation.errors.caseClosed'],
     [400, 'invalid_request', 'moderation.errors.invalidRequest'],
     [400, 'statement_facts_required', 'moderation.errors.factsRequired'],
+    [400, 'statement_provision_required', 'moderation.errors.provisionRequired'],
     [409, 'statement_recipients_changed', 'moderation.errors.recipientsChanged'],
     [500, undefined, 'moderation.errors.failed'],
   ])('a step refused with %i %s says so', async (status, code, key) => {
     vi.mocked(takeMeasure).mockRejectedValue(httpError(status, code))
     const w = await mountCase()
     await w.find('.moderation-statement-facts').setValue('the facts')
+    await w.find('.moderation-statement-provision').setValue('Space terms, clause 4')
     await click(w, '.moderation-block-content')
     expect(w.find('.moderation-case-error').text()).toBe(t(key))
   })
@@ -291,6 +320,16 @@ describe('CaseDetail', () => {
       expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.factsRequired'))
     })
 
+    it('in the full form a block without the provision it relies on is not sent, and says why', async () => {
+      const w = await mountCase()
+      expect(w.find('label[for="moderation-statement-provision"]').text()).toBe(t('moderation.decide.provision'))
+      await w.find('.moderation-statement-facts').setValue('the facts')
+      await click(w, '.moderation-block-content')
+      expect(ask).not.toHaveBeenCalled()
+      expect(takeMeasure).not.toHaveBeenCalled()
+      expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.provisionRequired'))
+    })
+
     it('in the reduced form a block goes without facts, on the ground the moderator chose, telling the reporters', async () => {
       vi.mocked(takeMeasure).mockResolvedValue(caseOf({ state: 'DECIDED', statementForm: 'REDUCED' }))
       vi.mocked(reporterNoticesOf).mockReturnValue([{ reportId: REPORT, address: 'r@example.org' }])
@@ -299,7 +338,7 @@ describe('CaseDetail', () => {
       expect((w.find('.moderation-statement-ground').element as HTMLSelectElement).value).toBe('TERMS_BREACH')
       await w.find('.moderation-statement-ground').setValue('ILLEGAL_CONTENT')
       await click(w, '.moderation-block-content')
-      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', facts: '', deferral: null }, [
+      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', provision: '', facts: '', deferral: null }, [
         { reportId: REPORT, address: 'r@example.org' },
       ])
     })
@@ -440,6 +479,7 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     const until = new Date('2026-11-20T00:00:00Z')
     const w = await mountCase()
     await w.find('.moderation-statement-facts').setValue('the facts')
+    await w.find('.moderation-statement-provision').setValue('Space terms, clause 4')
     await w.find('.moderation-defer-toggle').setValue(true)
     // Asked for but incomplete: refused here, nothing sent.
     await click(w, '.moderation-block-content')
@@ -449,7 +489,7 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     await w.find('.moderation-defer-reason').setValue('BKA: not before 20 November')
     await click(w, '.moderation-block-content')
     expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', {
-      ground: 'TERMS_BREACH', facts: 'the facts', deferral: { until, reason: 'BKA: not before 20 November' },
+      ground: 'TERMS_BREACH', provision: 'Space terms, clause 4', facts: 'the facts', deferral: { until, reason: 'BKA: not before 20 November' },
     }, [])
   })
 

@@ -23,6 +23,10 @@ vi.mock('./moderation', async () => {
     liftSignInBlock: vi.fn(),
   }
 })
+vi.mock('./stepStatement', async () => ({
+  ...(await vi.importActual<typeof import('./stepStatement')>('./stepStatement')),
+  stepStatement: vi.fn(),
+}))
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
@@ -33,6 +37,7 @@ import {
   type AccountSignInBlock, type InstanceModeration, type InstanceModerator, type ModerationSteps,
   type OpenModerationProposal,
 } from './moderation'
+import { stepStatement } from './stepStatement'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
@@ -265,17 +270,26 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
     expect(blockRow(w, 'blocked@example.com').find('.mod-block__lift').exists()).toBe(true)
   })
 
-  it('blocks a member’s sign-in with the address and the case, after a confirm that says what it does', async () => {
+  it('blocks a member’s sign-in with the address, the case and its statement of reasons, after a confirm that says what it does', async () => {
     vi.mocked(blockSignIn).mockResolvedValue({ proposals: [tenantProposal()], signInBlocks: [signInBlock({ address: 'member@example.com' })] })
+    const statement = { statementId: 's-1', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValue(statement)
     const w = await mountPanel(on(), open)
-    confirmAsk.mockResolvedValueOnce(true)
+    // A block from a proposal is over content (ADR 0093 § 7): it opens the statement first, its ground the case's category.
     await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
     await flushPromises()
+    expect(blockSignIn).not.toHaveBeenCalled()
+    await proposal(w, 'p-member').find('.step-statement__provision').setValue('Space terms, clause 4')
+    await proposal(w, 'p-member').find('.step-statement__facts').setValue('what was found')
+    confirmAsk.mockResolvedValueOnce(true)
+    await proposal(w, 'p-member').find('.mod-proposal__send').trigger('click')
+    await flushPromises()
+    expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: 'Space terms, clause 4', facts: 'what was found' })
     expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({
       header: t('moderation.steps.blockTitle', { address: 'member@example.com' }),
       message: t('moderation.steps.blockBody'),
     }))
-    expect(blockSignIn).toHaveBeenCalledWith('member@example.com', 'case-1')
+    expect(blockSignIn).toHaveBeenCalledWith('member@example.com', 'case-1', statement)
     // the answer is what is shown: the proposal is settled, the block is in force
     expect(proposal(w, 'p-member').exists()).toBe(false)
     expect(blockRow(w, 'member@example.com').exists()).toBe(true)
@@ -283,10 +297,29 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
 
   it('blocks nothing when the block is not confirmed', async () => {
     const w = await mountPanel(on(), open)
-    confirmAsk.mockResolvedValueOnce(false)
     await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
     await flushPromises()
+    confirmAsk.mockResolvedValueOnce(false)
+    await proposal(w, 'p-member').find('.mod-proposal__send').trigger('click')
+    await flushPromises()
     expect(blockSignIn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [400, 'statement_required', 'moderation.steps.errors.statementRequired'],
+    [400, 'statement_facts_required', 'moderation.steps.errors.factsRequired'],
+    [400, 'statement_provision_required', 'moderation.steps.errors.provisionRequired'],
+    [409, 'moderation_epoch_changed', 'moderation.steps.errors.epochChanged'],
+  ])('a block whose statement is refused with %i %s says so', async (status, code, key) => {
+    vi.mocked(stepStatement).mockResolvedValue({ statementId: 's-1', ground: 'TERMS_BREACH', provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } })
+    vi.mocked(blockSignIn).mockRejectedValueOnce(httpError(status, code))
+    const w = await mountPanel(on(), open)
+    await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    await flushPromises()
+    confirmAsk.mockResolvedValueOnce(true)
+    await proposal(w, 'p-member').find('.mod-proposal__send').trigger('click')
+    await flushPromises()
+    expect(w.find('.mod-error').exists() ? w.find('.mod-error').text() : w.text()).toContain(t(key))
   })
 
   it('offers no block for a proposal whose account is gone, and still lets it be declined', async () => {
@@ -355,7 +388,11 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
     const w = await mountPanel(on(), open)
     vi.mocked(getModerationSteps).mockResolvedValue(noSteps)
     confirmAsk.mockResolvedValueOnce(true)
-    if (action === 'block') await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    if (action === 'block') {
+      await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+      await flushPromises()
+      await proposal(w, 'p-member').find('.mod-proposal__send').trigger('click')
+    }
     if (action === 'decline') await proposal(w, 'p-member').find('.mod-proposal__decline').trigger('click')
     if (action === 'lift') await blockRow(w, 'blocked@example.com').find('.mod-block__lift').trigger('click')
     await flushPromises()

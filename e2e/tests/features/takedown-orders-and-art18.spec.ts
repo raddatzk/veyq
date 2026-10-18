@@ -1,10 +1,12 @@
 // An authority's order and the report to an authority, in a browser (cr-authority-orders-and-art18-reports phase 4's
 // browser pass; uc.moderation.authority-order, uc.moderation.report-to-an-authority; ADR 0093 §§ 12-13, ADR 0099 § 6).
-// The tenant owner keeps two Memories, each shared by a link; then
+// The tenant owner keeps two Memories, each shared by a link — the first one a contribute link, through which a guest
+// names itself and adds a photo; then
 //
 //   1. the deputy — a moderator — enters a removal order on the moderation surface with the first link as the authority
 //      sent it (key in its fragment): the guest's next read of the link is `404`, timed from the submit, and the Annex II
-//      text comes out to copy with the reference as typed and the block time in UTC;
+//      text comes out to copy with the reference as typed and the block time in UTC; the guest's own browser is told on
+//      the link that what it uploaded was removed on an authority's order (TCO Art. 11), which nobody else is;
 //   2. the Server Owner enters one in admin-web, without a key, on the second link: the same, timed the same way;
 //   3. the deputy opens the case the first order opened and prepares the fields for an Art. 18 report: a text block with
 //      the case id and the time zone stated — never a file — and records the report's handover in the log.
@@ -15,6 +17,8 @@
 // admin-web's own (each package's i18n, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { deputy as deputyAccount, instance, newDevice, passwordField, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 import { stack } from '../../src/stack'
@@ -26,6 +30,9 @@ const memories = [`Angeordnete Erinnerung ${stamp}`, `Zweite angeordnete Erinner
 const moderatorReference = `BKA TCO-${stamp}-1`
 const ownerReference = `BKA TCO-${stamp}-2`
 const handoverReference = `BKA Vorgang ${stamp}`
+const guestName = `Gast der Anordnung ${stamp}`
+const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url))
+const ORDER_NOTICE = /Something you uploaded through this link was removed on an order of an authority, received on /
 
 let owner: Device
 let guest: Device
@@ -104,6 +111,11 @@ test(
       const manage = page.getByRole('dialog', { name: 'Share this Memory' })
       await manage.getByRole('button', { name: 'New share' }).click()
       const createShare = page.getByRole('dialog', { name: 'New share' })
+      // The first link takes a guest's photo: the guest a removal order then tells (TCO Art. 11).
+      if (links.length === 0) {
+        await createShare.getByRole('button', { name: 'View + add photos' }).click()
+        await expect(createShare.getByRole('button', { name: 'View + add photos' })).toHaveAttribute('aria-pressed', 'true')
+      }
       await createShare.getByRole('button', { name: 'Create link' }).click()
       links.push(await createShare.getByRole('textbox', { name: 'Public link' }).inputValue())
       await createShare.getByRole('button', { name: 'Done' }).click()
@@ -115,6 +127,22 @@ test(
       await expect(guest.page.getByRole('heading', { level: 1, name: memories[i] })).toBeVisible({ timeout: 60_000 })
       expect(await guestStatus(guest.page, link)).toBe(200)
     }
+    // Through the first link the guest names itself and adds a photo; its device keeps the identity.
+    const g = guest.page
+    await g.goto(links[0])
+    await expect(g.getByText('Shared with you · you can contribute')).toBeVisible({ timeout: 60_000 })
+    await g.getByRole('button', { name: 'Upload', exact: true }).click()
+    const naming = g.getByRole('dialog', { name: 'What is your name?' })
+    await naming.getByLabel('Your name').fill(recordTyped(guestName))
+    await naming.getByRole('button', { name: 'Continue' }).click()
+    await expect(naming).toBeHidden()
+    const chooser = g.waitForEvent('filechooser')
+    await g.getByRole('button', { name: 'Upload', exact: true }).click()
+    await (await chooser).setFiles({ name: recordTyped(`Angeordnetes Bild ${stamp}.jpg`), mimeType: 'image/jpeg', buffer: readFileSync(PHOTO) })
+    await expect(g.getByRole('button', { name: 'Open item 1' })).toBeVisible({ timeout: 60_000 })
+    await g.reload()
+    await expect(g.getByText(`You are here as ${guestName}.`)).toBeVisible({ timeout: 60_000 })
+    await expect(g.getByText(ORDER_NOTICE)).toHaveCount(0)
   },
 )
 
@@ -152,6 +180,33 @@ test(
     orderCase = await page.evaluate(() => document.querySelector('.moderation-case')?.getAttribute('data-case-id') ?? '')
     // The other link still serves: the order blocked by id, not more.
     expect(await guestStatus(guest.page, links[1])).toBe(200)
+  },
+)
+
+test(
+  'the guest who uploaded through the blocked link is told on it that an authority ordered the removal; nobody else is',
+  { tag: '@uc.moderation.authority-order:a-guest-uploader-is-told-of-a-removal-order' },
+  async ({ browser }) => {
+    const g = guest.page
+    // The guest's page is already on this link (the 404 poll read from it): the same address with its fragment is no
+    // navigation, so load it afresh, as a guest coming back does.
+    await g.goto(links[0])
+    await g.reload()
+    await expect(g.getByRole('heading', { level: 1, name: 'This link isn’t available' })).toBeVisible({ timeout: 60_000 })
+    const notice = g.locator('[data-testid="order-notice"]')
+    await expect(notice).toBeVisible({ timeout: 60_000 })
+    await expect(notice).toContainText(ORDER_NOTICE)
+    await expect(notice).toContainText(/For the reasons, or a copy of the order, (write to|ask the people who run this veyq instance)/)
+    // A browser that holds no identity for the link — any other visitor — sees the unavailable page and nothing more.
+    const stranger = await newDevice(browser)
+    try {
+      await stranger.page.goto(links[0])
+      await expect(stranger.page.getByRole('heading', { level: 1, name: 'This link isn’t available' })).toBeVisible({ timeout: 60_000 })
+      await expect(stranger.page.locator('[data-testid="order-notice"]')).toHaveCount(0)
+      stranger.confinement.assertConfined()
+    } finally {
+      await stranger.context.close()
+    }
   },
 )
 

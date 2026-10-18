@@ -124,6 +124,10 @@ class ModerationCaseEntity : PanacheEntityBase {
     @Column(name = "origin", nullable = false, length = 8)
     var origin: String = CaseOrigin.REPORT.name
 
+    /** How many of the undecided case's reminders went out (0 to 3, [CaseReminders]); a case never closes itself. */
+    @Column(name = "reminders_sent", nullable = false)
+    var remindersSent: Int = 0
+
     companion object : PanacheCompanionBase<ModerationCaseEntity, String> {
         const val NOTICE_URGENT = "URGENT"
         const val NOTICE_BUNDLE = "BUNDLE"

@@ -119,6 +119,7 @@ import {
 } from '../features/instance/guestWriteRecord'
 import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 import { enterOrder, OrderInvalid, type AuthorityOrder, type OrderKind } from '../features/instance/orders'
+import { GROUNDS, stepStatement, StepStatementInvalid, type ServerOwnerStatementInput, type StepStatementDraft } from '../features/instance/stepStatement'
 import { formTime, renderOrderForm } from '../features/instance/orderForms'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
@@ -150,6 +151,13 @@ export type Command = {
 }
 
 const tenantId: Flag = { describe: 'tenant id', required: true }
+/** A Server Owner's step's statement of reasons over content (ADR 0093 § 7, `statementOf`). */
+const STATEMENT_FLAGS: Record<string, Flag> = {
+  'over-content': { describe: 'the step is over content though no case or proposal names it — it then carries a statement', required: false, switch: true },
+  ground: { describe: 'the ground the statement rests on', required: false, oneOf: GROUNDS },
+  provision: { describe: 'the law or the clause it relies on, e.g. "§ 86a StGB" or "Space terms, clause 4"', required: false },
+  facts: { describe: 'what you found, in your words — mailed to the affected; the server keeps it only sealed', required: false },
+}
 const domain: Flag = { describe: 'domain the tenant is reached at', required: true }
 const ownerEmail: Flag = { describe: "owner's email address", required: true }
 const lang: Flag = { describe: 'the language of the entry texts (default: from LC_ALL, then LANG)', required: false, oneOf: ['en', 'de'] }
@@ -340,10 +348,10 @@ export const COMMANDS: Record<string, Command> = {
     run: (f) => revokeTenant(f['tenant-id']),
   },
   'tenant suspend': {
-    usage: 'tenant suspend --tenant-id <id>',
-    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content).',
-    flags: { 'tenant-id': tenantId },
-    run: (f) => suspendTenant(f['tenant-id']),
+    usage: 'tenant suspend --tenant-id <id> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
+    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it.',
+    flags: { 'tenant-id': tenantId, ...STATEMENT_FLAGS },
+    run: async (f) => suspendTenant(f['tenant-id'], await statementOf(f)),
   },
   'tenant reactivate': {
     usage: 'tenant reactivate --tenant-id <id>',
@@ -686,13 +694,14 @@ export const COMMANDS: Record<string, Command> = {
     render: (r) => renderSteps(r as ModerationSteps),
   },
   'account block': {
-    usage: 'account block --address <address> [--case <caseId>]',
-    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing.',
+    usage: 'account block --address <address> [--case <caseId>] [--over-content] [--ground <ground> [--provision <text>] [--facts <text>]]',
+    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it.',
     flags: {
       address: { describe: 'the account’s address', required: true },
       case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
+      ...STATEMENT_FLAGS,
     },
-    run: (f) => blockSignIn(f.address, f.case ?? null),
+    run: async (f) => blockSignIn(f.address, f.case ?? null, await statementOf(f), f['over-content'] === 'true'),
     render: (r) => renderSteps(r as ModerationSteps),
   },
   'account unblock': {
@@ -726,6 +735,25 @@ export const COMMANDS: Record<string, Command> = {
     run: (f) => order('INFORMATION', f),
     render: renderOrder,
   },
+}
+
+/**
+ * The statement of reasons a Server Owner's step carries over content (ADR 0093 § 7), from the flags: none without
+ * --ground (the server refuses a step over content without one, `statement_required`); the facts sealed for the log
+ * to the moderation key's public half (`stepStatement.ts`).
+ */
+async function statementOf(f: Record<string, string>): Promise<ServerOwnerStatementInput | null> {
+  if (!f.ground) {
+    if (f.provision || f.facts) throw new CliError('--ground names the ground the statement rests on; give it with --provision and --facts')
+    if (f['over-content'] === 'true') throw new CliError('a step over content carries a statement of reasons: give --ground, and --provision and --facts')
+    return null
+  }
+  try {
+    return await stepStatement({ ground: f.ground as StepStatementDraft['ground'], provision: f.provision ?? '', facts: f.facts ?? '' })
+  } catch (e) {
+    if (e instanceof StepStatementInvalid) throw new CliError('moderation is off, so the facts cannot be sealed to its key — turn it on first')
+    throw e
+  }
 }
 
 /** An ISO 8601 time as typed, or a refusal naming its flag. */

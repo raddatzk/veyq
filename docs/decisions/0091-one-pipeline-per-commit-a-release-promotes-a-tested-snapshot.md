@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the rest is not (§ Consequences), the API fuzzing of decision 9 included (`cr-api-fuzzing`)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the rest is not (§ Consequences), the API fuzzing of decision 9 included — its harness runs locally (`scripts/run_api_fuzz.py`), not yet as a stage (`cr-api-fuzzing`)
 - Date: 2026-10-16
 
 ## Context

@@ -27,6 +27,7 @@ import {
 } from '../dropBox'
 import { guestFileUploadJob } from '../shareUpload'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
+import OrderNotice from '../../../core/sharing/OrderNotice.vue'
 import { FileUploadError } from '../uploadFile'
 
 const props = defineProps<ShareBodyProps>()
@@ -203,6 +204,8 @@ async function notYou() {
         :record-days="head.share.guestWriteRecordDays"
       />
       <Message v-if="linkGone" severity="error" :closable="false">{{ t('depot.dropBox.guestGone') }}</Message>
+      <!-- TCO Art. 11: when the link went away under an upload, an authority's removal order may be why. -->
+      <OrderNotice v-if="linkGone" :share-id="shareId" />
       <template v-else>
         <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
         <div>

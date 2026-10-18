@@ -80,7 +80,48 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [StatementsSliceTest.theHoldCountsFromTheStatementAndFromTheDecisionWhereNobodyCanBeTold]
+  - id: the-statement-names-the-provision-and-where-it-applies
+    text: >-
+      The ground names the provision of the law or the clause of the terms relied on, required in the full form and
+      optional in the reduced, and the full form says the measure applies wherever the instance is reached and lasts until
+      it is lifted (DSA Art. 17(3)(a), (d), (e)); an authority's removal order names its own provision.
+    coverage:
+      backend:
+        integration: [StatementsSliceTest.aFullFormMeasureNamesTheProvisionItReliesOnAndAReducedOneMayLeaveItOut, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
+        unit: [StatementTemplateConformanceTest.theReducedFormLeavesOutWhatOnlyTheFullFormCarriesAndTheMailNeverTheFacts]
+      web:
+        unit: [src/features/moderation/statement/template.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
+  - id: the-reporter-is-told-their-redress
+    text: >-
+      A reporter's decision mail carries their redress (DSA Art. 16(5)): that they may report again with more information
+      and the instance contact, and in the full form that they may go to court and complain to the Digital Services
+      Coordinator of the Member State where they live or are established (Art. 53).
+    coverage:
+      backend:
+        integration: [StatementMailSliceTest.aReportersDecisionCarriesTheirRedressInTheFormTheModeSets]
+        unit: [StatementTemplateConformanceTest.aReportersRedressFollowsTheForm, StatementTemplateConformanceTest.everyTextEqualsTheContract]
+      web:
+        unit: [src/features/moderation/statement/template.test.ts]
+  - id: a-server-owners-step-over-content-carries-a-statement-by-mail
+    text: >-
+      A member's sign-in block or a tenant taken offline over content — from a case or a proposal always, otherwise when
+      the Server Owner says so — carries a statement in the same template, refused without one; it is mailed with the
+      facts to the blocked member or each owner of the tenant, the objection going to the instance contact, and the
+      database keeps the facts only sealed; a step with neither case, proposal nor the flag goes without one, and a
+      case-less step's statement goes with the step.
+    coverage:
+      backend:
+        integration: [ServerOwnerStatementSliceTest.aSignInBlockFromAProposalCarriesAStatementAndOneWithNoCaseNoProposalAndNoFlagGoesWithout, ServerOwnerStatementSliceTest.theBlockedMemberIsMailedTheStatementWithTheFactsWhichTheDatabaseHoldsOnlySealed, ServerOwnerStatementSliceTest.aTenantTakenOfflineOverContentTellsItsOwnersOnlyAndReactivatingLiftsTheRecord, ServerOwnerStatementSliceTest.aCaselessStepsStatementGoesWithTheStepAfterItsLiftAndNeverWhileItStands]
+        unit: [StatementTemplateConformanceTest.aServerOwnersStepCarriesItsFactsAndSendsTheObjectionToTheContact]
+      web:
+        unit: [src/features/moderation/statement/template.test.ts]
 gaps:
+  admin-web: >-
+    The Server Owner's statement — the fields on a proposal's block and on the tenant's suspension, `veyq-admin account
+    block` and `tenant suspend` with --over-content, --ground, --provision and --facts, the facts sealed for the log —
+    is covered by admin-web/src/features/instance/stepStatement.test.ts (the real crypto opens what was sealed),
+    ModerationPanel.test.ts, src/features/tenants/TenantDetailPanel.test.ts and src/cli/cli.test.ts, but admin-web's
+    refs wait until its job is admitted (ADR 0040).
   crypto: >-
     The moderation-facts and moderation-objection seals are pinned by their vectors and the purposes' tests
     (packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).

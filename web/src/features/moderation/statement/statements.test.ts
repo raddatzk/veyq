@@ -37,6 +37,7 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   shareId: null,
   scopeId: null,
   ground: 'TERMS_BREACH',
+  provision: null,
   basis: 'REPORT',
   form: 'FULL',
   sentAt: new Date(),

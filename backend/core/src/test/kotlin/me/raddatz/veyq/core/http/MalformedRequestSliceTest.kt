@@ -91,6 +91,14 @@ class MalformedRequestSliceTest {
         assertRefused(claim("""{"capabilityTags":["02f271ff""""), "02f271ff")
     }
 
+    /** A `null` where a list of objects holds its elements: no contract declares a nullable element, and before
+     *  `NullElementsRefused` Jackson bound it, bean validation's `@Valid` cascade skips a null, and the handler's first
+     *  read of it answered `500` (the API fuzzing's first run, cr-api-fuzzing: four operations). */
+    @Test
+    fun aNullElementInAListOfObjectsIsInvalidRequest() {
+        assertRefused(post("/api/scopes/${UUID.randomUUID()}/blob-uploads-batch", """{"items":[null]}"""), "items")
+    }
+
     // --- refused by bean validation after binding (inbox #355, #354) -----------------------------------------
 
     @Test

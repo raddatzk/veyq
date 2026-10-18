@@ -287,7 +287,7 @@ class TenantIngressProjectorTest {
         QuarkusTransaction.requiringNew().run {
             TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
         }
-        givenAdminChannel().header("Authorization", "Bearer $token")
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
             .`when`().post("/api/tenants/$tenantId/suspend").then().statusCode(204)
         assertFalse(projectedHosts().contains(moved), "suspend must reproject without the tenant")
 
@@ -316,7 +316,7 @@ class TenantIngressProjectorTest {
             .`when`().post("/api/tenants").then().statusCode(201).extract().path<String>("tenantId")
 
         // PENDING cannot be suspended (409) — and the tenant must still route afterwards.
-        givenAdminChannel().header("Authorization", "Bearer $token")
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
             .`when`().post("/api/tenants/$tenantId/suspend").then().statusCode(409)
             .body("code", equalTo("tenant_not_active"))
         assertTrue(projectedHosts().contains(domain))

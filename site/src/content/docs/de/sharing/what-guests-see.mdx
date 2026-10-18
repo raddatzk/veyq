@@ -5,6 +5,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-note.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
+  - docs/features/moderation/use-cases/uc.moderation.authority-order.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -44,6 +45,12 @@ Abschnitt der Person, die den Server betreibt, lesbar ohne Konto. Gäste
 sehen nie, wer sonst in deinem Bereich ist, wer bei einer Erinnerung dabei war, oder jemandes Bild.
 
 Wurde der Link abgeschaltet, ist er abgelaufen oder unvollständig, sagt die Seite **Dieser Link ist nicht verfügbar**.
+
+Hat eine Behörde angeordnet, etwas zu entfernen, das ein Gast über den Link hochgeladen hat, erfährt es der Browser,
+in dem sich der Gast einen Namen gegeben hat, auf dem Link, auch wenn der Link allen
+anderen als nicht verfügbar antwortet: dass es auf Anordnung einer Behörde entfernt wurde, die an diesem Tag eingegangen
+ist, und wo man die Gründe oder eine Kopie der Anordnung erfragen kann. Niemand sonst sieht das, und nichts davon wird
+gezeigt, solange die Behörde den Server gebeten hat zu warten.
 
 Alles, was ein Gast sieht, wird in seinem eigenen Browser mit dem Schlüssel aus dem Link geöffnet:
 [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

@@ -78,13 +78,20 @@ read it — and choose a step. Each says what it reaches before you confirm it.
 - **Propose** blocking a member's sign-in, or taking everything on the reported address offline. Only the person who runs the
   server takes these steps; the case shows your proposal and what became of it.
 - **Extend the hold**, while something is kept: choose a **New end**, after the current one and at most six months from
-  now, and give a **Reason**, such as an authority's request or a lawsuit. The reason is required, and sealed like a
-  note.
+  now, the **Kind of reason** — an authority's request or order, a report to an authority in progress, an objection, a
+  lawyer's letter or a lawsuit — and give a **Reason**. The reason is required, and sealed like a note; its kind is
+  not.
 
-A block goes with a **Statement of reasons** to the people it affects. Choose the **Ground** and write **What you
-found**: on most servers it is required; on a private one it is optional. It reaches each of them sealed, so only they
-can read it — and the moderation log, sealed like a note — never a mail. The statement names the server, never you. A
-reporter who left an address is told the decision.
+A case nobody decides never closes on its own: 30, 75 and 90 days after its first report every moderator is mailed a
+reminder that names only its category and age, and after 90 days the list of cases marks it **Undecided for over 90
+days**.
+
+A block goes with a **Statement of reasons** to the people it affects. Choose the **Ground**, name **The law or the
+clause it relies on** — a short reference such as "§ 86a StGB" or "Space terms, clause 4", shown as you write it — and
+write **What you found**, which says why the content falls under it: on most servers both are required; on a private one
+they are optional. What you found reaches each of them sealed, so only they can read it — and the moderation log, sealed
+like a note — never a mail. The statement names the server, never you, and says the block applies wherever the server is
+reached until it is lifted. A reporter who left an address is told the decision, and what they can do next.
 
 A block decides the case, and what was kept for it is then kept for six months. **Lift** on a measure — yours or
 another moderator's — serves what it blocked again, unchanged. Lifting the last measure in force releases what was kept
@@ -122,7 +129,8 @@ copy the fields first: for child sexual abuse material it also ends what is kept
 **Back to the queue** leaves it closed; **I understand — open the case** opens it, with **Block the content** offered
 as the first step. Such content is kept only until you record that it was reported to an authority, and never more than
 90 days after the report — blocking it does not keep it longer. Extend it only while your report to the authority is
-still in progress, or because the authority asks.
+still in progress, or because the authority asks: only those two kinds of reason are offered, and the server refuses any
+other.
 
 ## What is logged, and for how long
 

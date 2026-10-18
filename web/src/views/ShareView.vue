@@ -57,6 +57,7 @@ import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
+import OrderNotice from '../core/sharing/OrderNotice.vue'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
@@ -346,6 +347,9 @@ onMounted(() => {
       <span class="pi pi-lock" />
       <h1>{{ t('share.unavailable') }}</h1>
       <p>{{ t('share.unavailableHint') }}</p>
+      <!-- TCO Art. 11: a guest uploader whose upload an authority's removal order took down is told so here, on its own
+           link, though the link answers everyone else as unknown (asked only when this device holds its session). -->
+      <OrderNotice :share-id="shareId" />
     </div>
 
     <!-- cr-0118: a password-protected share resolves to a LOCKED shell (nothing else crossed the wire) — prompt for

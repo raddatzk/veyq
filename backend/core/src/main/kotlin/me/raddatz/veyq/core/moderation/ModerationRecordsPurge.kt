@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation
 
+import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.block.ProposalOutcome
@@ -34,6 +35,10 @@ import java.time.Instant
  *    nor while a proposal of it waits for the Server Owner.
  *  - **An order that opened no case** (its share was not found) goes with its `ORDER_RECEIVED` event at 31 December of
  *    the third year after it was entered — there was nothing to hold, so it closes as it is recorded.
+ *  - **A Server Owner's step on no case** (a sign-in block, or a tenant taken offline over content, on their own
+ *    finding — ADR 0093 § 7) goes with its statement of reasons and that statement's recipients at 31 December of the
+ *    third year after its lift — never while it stands, for the reason a case waits for its measures. Its events are
+ *    instance events, dated and purged by the log ([ModerationLog.purgeExpired]). A step on a case goes with the case.
  *  - **A reporter's sealed contact** goes on its own **six months after the decision on the report was told to them**
  *    (DSA Art. 16(5), GDPR Art. 5(1)(e)): the `DECISION_SENT` event stays as the proof. Where no decision could be told on
  *    a case of the report (no mail, no address that could be mailed), six months after that case's decision instead —
@@ -47,11 +52,12 @@ import java.time.Instant
 @ApplicationScoped
 class ModerationRecordsPurge {
 
-    /** Every case and case-less order past its date, and every reporter's contact past its six months. */
+    /** Every case, case-less order and case-less step past its date, and every reporter's contact past its six months. */
     fun sweep(now: Instant) {
         purgeContacts(now)
         purgeCases(now)
         purgeCaselessOrders(now)
+        purgeCaselessSteps(now)
     }
 
     /** Null each reporter's contact six months after the decision on its report was told (or, where none could be, made). */
@@ -131,6 +137,20 @@ class ModerationRecordsPurge {
             .forEach { order ->
                 ModerationEventEntity.delete("caseId is null and event = ?1 and targetId = ?2", ModerationEvent.ORDER_RECEIVED.name, order.id)
                 order.delete()
+            }
+    }
+
+    /** Delete every lifted Server Owner's step on no case, with its statement and recipients, past its date. */
+    fun purgeCaselessSteps(now: Instant) = QuarkusTransaction.requiringNew().run {
+        ModerationBlockEntity.list(
+            "caseId is null and kind in ?1 and activeKey is null and liftedAt < ?2",
+            listOf(BlockKind.MEMBER_SIGN_IN.name, BlockKind.TENANT_OFFLINE.name), now.minus(THREE_YEARS),
+        ).filter { step -> step.liftedAt?.let { ModerationLog.retentionEnd(it).isBefore(now) } == true }
+            .forEach { step ->
+                val statementIds = ModerationStatementEntity.list("measureId", step.id).map { it.id }
+                if (statementIds.isNotEmpty()) StatementRecipientEntity.delete("statementId in ?1", statementIds)
+                ModerationStatementEntity.delete("measureId", step.id)
+                step.delete()
             }
     }
 

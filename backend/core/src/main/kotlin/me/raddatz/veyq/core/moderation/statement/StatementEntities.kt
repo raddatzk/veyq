@@ -9,14 +9,20 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
-/** Why a recipient is told (ADR 0093 § 7) — the wire's `ModerationStatement.roles`. */
-enum class StatementRole { SHARE_CREATOR, UPLOADER, SCOPE_OWNER }
+/**
+ * Why a recipient is told (ADR 0093 § 7) — the wire's `ModerationStatement.roles` for a moderator's measure;
+ * [ACCOUNT_HOLDER] and [TENANT_OWNER] name the recipients of a Server Owner's own step, which only a mail reaches.
+ */
+enum class StatementRole { SHARE_CREATOR, UPLOADER, SCOPE_OWNER, ACCOUNT_HOLDER, TENANT_OWNER }
 
 /** Whom a recipient row names: a member's account, or a guest identity (told nothing in veyq, it has no account). */
 enum class RecipientKind { ACCOUNT, GUEST }
 
-/** What led to a measure: a report, or an authority's order (ADR 0093 § 12, which no path takes yet). */
-enum class StatementBasis { REPORT, ORDER }
+/**
+ * What led to a measure: a report, an authority's order (ADR 0093 § 12), or — for a Server Owner's step on no case —
+ * their own finding ([OWN_FINDING], DSA Art. 17(3)(b)'s own-initiative investigation).
+ */
+enum class StatementBasis { REPORT, ORDER, OWN_FINDING }
 
 /** The ground a measure rests on: a report category's value — the law, or the terms (`TERMS_BREACH`). */
 enum class StatementGround { CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH }
@@ -36,20 +42,28 @@ class ModerationStatementEntity : PanacheEntityBase {
     @Column(name = "measure_id", nullable = false, columnDefinition = "uuid")
     lateinit var measureId: String
 
-    @Column(name = "case_id", nullable = false, columnDefinition = "uuid")
-    lateinit var caseId: String
+    /** The case; null for a Server Owner's step over content that answers none (ADR 0093 § 7). */
+    @Column(name = "case_id", columnDefinition = "uuid")
+    var caseId: String? = null
 
     @Column(name = "ground", nullable = false, length = 24)
     lateinit var ground: String
 
-    @Column(name = "basis", nullable = false, length = 8)
+    /** The provision of the law or the clause of the terms the ground relies on (DSA Art. 17(3)(d), (e)); null for none. */
+    @Column(name = "provision", length = 200)
+    var provision: String? = null
+
+    @Column(name = "basis", nullable = false, length = 16)
     lateinit var basis: String
 
     /** The epoch [sealedFacts] is sealed to; null without facts. */
     @Column(name = "epoch")
     var epoch: Int? = null
 
-    /** The facts sealed to the moderation key (`moderation-note` [epoch, caseId]); null without facts. */
+    /**
+     * The facts sealed to the moderation key — a moderator's (`moderation-note` [epoch, caseId]) or, for a Server Owner's
+     * step, theirs (`moderation-step-facts` [epoch, id]); null without facts.
+     */
     @Column(name = "sealed_facts", columnDefinition = "TEXT")
     var sealedFacts: String? = null
 

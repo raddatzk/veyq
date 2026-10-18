@@ -95,18 +95,25 @@ moderators can read it ([uc.moderation.take-a-measure](https://github.com/raddat
 - **Bar this reporter** — further reports from that member, or through that link, are refused until the bar is lifted.
   The reports already made stay. A bar decides nothing about the content.
 - **Extend the hold** — while something is held: a new end after the current one and at most six months from now, with
-  a reason, which is required and sealed like a note.
+  a reason, which is required and sealed like a note, and its kind in the clear. On a child-sexual-abuse case only an
+  authority's request or a report to an authority in progress extends it; the server refuses any other kind.
 - **Propose** one of your steps — blocking a member's sign-in, or taking the tenant offline (below).
 
 **Every block goes with its statement of reasons** ([uc.moderation.object-to-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md),
 [ADR 0093 § 7](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)): the
-moderator picks the **Ground** — one of the report categories, the law or the terms — and writes **What you found**. The
+moderator picks the **Ground** — one of the report categories, the law or the terms —, names **The law or the clause it
+relies on** (a short reference in the clear, such as "§ 86a StGB" or "Space terms, clause 4") and writes **What you
+found**, which explains why the content falls under it. In the second operating mode both are required. The statement
+also says that the measure applies wherever the instance is reached and lasts until it is lifted. The
 browser seals the facts twice: to the moderation key, for the log, and to each member the statement reaches, so the
 server stores neither in the clear. It reaches the creator of a blocked link (or of the link a blocked guest came
 through), the uploaders the held copy names, and on a content block every owner of the space: each reads it under
 **Blocked by the operator**, and the instance mail tells their account address that it is there — never the facts. A
-guest is told nothing, having no account. A reporter who left an address is told the decision, from that address, which
-the moderator's browser sends once and the server mails without keeping; the sealed address itself is deleted six months
+guest is told nothing of a moderator's block, having no account (an authority's removal order is different, below). A
+reporter who left an address is told the decision, from that address, which
+the moderator's browser sends once and the server mails without keeping, with what they may do next: report again with
+more information, write to the instance contact and — in the second operating mode — go to court or complain to the
+Digital Services Coordinator of the country they live in (DSA Art. 16(5), Art. 53); the sealed address itself is deleted six months
 later — or six months after the decision, where it could not be told — and the log keeps that the decision was sent. The statement names the instance, never the
 moderator. Without instance mail ([Configuration](/veyq/run/configuration/)) the statements are in veyq all the same.
 
@@ -146,6 +153,25 @@ tenant's id and address) and every sign-in block in force. Then, in the same `ex
 - `veyq-admin moderation decline --proposal <id>` declines a proposal;
 - `veyq-admin tenant suspend --tenant-id <id>` takes a tenant offline (below).
 
+**A step over content carries a statement of reasons** (DSA Art. 17(1)(c), (d)), in the same template as a moderator's
+block: always when you take a moderator's proposal, and otherwise when you say the step is over content. **Block
+sign-in** on a proposal opens its **Statement of reasons** — the ground (the case's category to start with), the law or
+the clause it relies on, and what you found — and **Block and send the statement** takes it. In the CLI the same
+statement goes with `--ground <ground> [--provision <text>] [--facts <text>]`, and `--over-content` marks a block with no
+case or proposal as one:
+
+```sh
+veyq-admin account block --address <address> --over-content --ground TERMS_BREACH \
+  --provision "Space terms, clause 4" --facts "<what you found>"
+```
+
+A blocked member cannot sign in to read a statement, so it goes **by the instance mail to the account's address, with
+what you found** in your words; the server keeps those words only sealed to the moderation key, for the log. Their
+objection goes to the instance contact the statement names, and you lift with **Lift** or `account unblock`. The mail
+goes once: a send that fails is not retried, since the server keeps no copy of your words to send again — without
+instance mail, nobody is told, and you tell them through the contact yourself. A step without a case on your own finding
+says so in the statement. The wording is a draft until a lawyer has reviewed it.
+
 ## Take a tenant offline
 
 **Take offline** in the admin console, or the CLI:
@@ -166,6 +192,12 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
 - Nothing inside is changed or deleted: no key, grant, content or session. **Bring back online** (or
   `veyq-admin tenant reactivate --tenant-id <id>`) restores everything as it was.
 - It applies to an active tenant only, and it locks out your own membership in that tenant too.
+- **Over content**, it carries a statement of reasons to **each owner of the tenant**, by the instance mail with what you
+  found, as a sign-in block does ([above](#a-members-sign-in-and-a-tenant-your-steps)) — its other members are told
+  nothing beyond the space being offline. Tick **Over content** and fill in the statement before **Take offline and send
+  the statement**, or add `--over-content --ground <ground> [--provision <text>] [--facts <text>]` to `tenant
+  suspend`. A moderator's open proposal makes the suspension over content: without a statement it is refused. A
+  suspension for any other reason — unpaid, maintenance — carries none. Bringing the tenant back lifts the record.
 
 You still cannot read anything private, which is the design working as intended.
 
@@ -228,6 +260,11 @@ veyq-admin order inform   --share '<link or id>' --reference '<reference>' [--re
   authority may forbid that for up to six weeks (TCO Art. 11(3)): enter the date with the order, and the statement is
   held until then. A moderator may enter the authority's renewal once, for at most six more weeks; at the end it goes
   out on its own, and the queue reminds of it until then. Deferring is the authority's decision, never a moderator's.
+- **A guest who uploaded what a removal order took down is told too** (TCO Art. 11): on the link it came through, from
+  the browser that holds its guest identity, even though the link answers everyone else as unknown — when the order
+  was received, and that the reasons or a copy of the order are given on request from your instance contact. Answer such
+  a request from the order you hold. Nothing is told while the authority's deferral runs, and nothing for a moderator's
+  block.
 - **Information handed over** in answer to an order is recorded in the case's log with its reference (below).
 
 **The hour is yours to keep.** A removal order has to be acted on within one hour of reaching your contact point, with
@@ -441,7 +478,9 @@ receipt and the decision sent to a reporter, a handover: who and when, a measure
 reasons only sealed. A case closes when nothing of it is held any more and no objection is open. **The case goes
 whole** — its log, its reports with what the reporter wrote and the keys they handed over, its measures, statements,
 objections and orders — on 31 December of the third year after it closed, but **never while one of its blocks is in
-force**: lifting it later counts from the lift. An undecided case stays open until a moderator decides it. The
+force**: lifting it later counts from the lift. An undecided case stays open until a moderator decides it — no case
+closes on its own: 30, 75 and 90 days after its first report the moderators and your confirmed notification address get
+a reminder naming only its category and age, and the queue marks it overdue after 90 days. The
 reporter's address goes earlier, six months after they were told the decision.
 
 **What this does not protect against.** You own the server and the roster. A server that hands out a key of its own
@@ -465,7 +504,7 @@ What it says depends on the operating mode:
 | Who runs the instance (your identification) | where set | always; an empty field reads *not stated by this operator* |
 | How to report, who reviews, that a report blocks nothing, what is kept and for how long | yes | yes |
 | The measures, that those affected are told why and can object once | yes | yes |
-| The statement's further content (facts, report or order, that a person decided, the courts) | no | yes |
+| The statement's further content (facts, report or order, that a person decided, the ground with the law or clause, where and how long it applies, the courts) | no | yes |
 | That an authority can defer the statement | no | yes |
 | Authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your contact with its languages | no | yes |
 | The guest-write record's information (controller, purpose, legal basis, N, recipients, rights, the supervisory authority) and the right to object apart | while *Record guests' writes* is on | while it is on |
@@ -480,16 +519,11 @@ N or the record switch asks nobody.
 
 **It is a draft.** No lawyer has reviewed the text yet, and every rendering starts by saying so. Before you publish an
 instance, have it checked. Known gaps against the law, also named in ADR 0035 decision 6: it states no backup period B
-for backups you make another way (it says such a backup holds the record until it is deleted); your own steps — a
-member's sign-in block, a tenant taken offline — carry no statement yet although the section says those affected are
-told; and your members' own privacy information (their account, their acceptances) is in no text yet. Each has a
-change of its own planned.
+for backups you make another way (it says such a backup holds the record until it is deleted); and your members' own
+privacy information (their account, their acceptances) is in no text yet. Each has a change of its own planned.
 
 ## Not built
 
-- **A statement for your own steps.** A member's sign-in block and a tenant taken offline carry no statement of reasons
-  yet: you take them on the admin channel, without the moderation key, and a blocked member cannot sign in to read one.
-  Tell them through the instance contact.
 - **A child-sexual-abuse case's hold running until the handover past 90 days**: it waits on counsel (§ 184b(5) StGB,
   see [In an emergency](#in-an-emergency)); such a hold ends at the handover or after 90 days, whichever comes first.
 - **Keeping a case's records longer while proceedings are pending**: there is no extension for the records yet, only
