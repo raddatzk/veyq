@@ -63,6 +63,13 @@ class ModerationReportEntity : PanacheEntityBase {
     @Column(name = "reporter_share", length = 64)
     var reporterShare: String? = null
 
+    /**
+     * The reporter's contact, sealed on its own to [epoch] (`moderation-report-contact` [epoch]); null when none was left,
+     * and from six months after the decision was told (ADR 0093 § 11, `ModerationRecordsPurge`).
+     */
+    @Column(name = "sealed_contact", columnDefinition = "TEXT")
+    var sealedContact: String? = null
+
     companion object : PanacheCompanionBase<ModerationReportEntity, String>
 }
 

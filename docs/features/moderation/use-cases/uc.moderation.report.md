@@ -28,9 +28,10 @@
 3. The client draws a fresh `K_report` and, per item, seals the keys that open it under `K_report` (a **report share**,
    [en.moderation.hold](../enablers/en.moderation.hold.md) § What a report hands over): a node's `K_node` with its
    name's and meta's `K_field`; a medium's `K_blob`s with its `media-meta` and `media-exif` `K_field`s; an upload link's
-   `K_share` with its name's and note's `K_field`s. It seals `K_report`, the reason, the address and the context to the
-   epoch's public half (`moderation-report` [epoch]).
-4. It sends the category, the epoch, the items (kind, id, report share) and the sealed part — a member with their
+   `K_share` with its name's and note's `K_field`s. It seals `K_report`, the reason and the context to the epoch's
+   public half (`moderation-report` [epoch]), and the address apart (`moderation-report-contact` [epoch]), so that it
+   can go alone (ADR 0093 § 11).
+4. It sends the category, the epoch, the items (kind, id, report share), the sealed part and the sealed address — a member with their
    session to their space's report route, a guest with the link and its password token to the link's — and, when an
    address was given, that address once in the clear for the receipt.
 5. The server checks the epoch is the current one and that every item lies inside what the reporter reaches: a
@@ -38,12 +39,14 @@
    only the link itself.
 6. In one transaction it stores the report, and per item opens a case — or attaches the report to the item's open case,
    raising the case's category to the more urgent of the two — and takes the item's **hold** where the case holds none
-   alive: a snapshot of its rows and a pin on its store objects, ending 90 days after the report. It logs "received" or
-   "report attached" per case.
+   alive: a snapshot of its rows and a pin on its store objects, ending 90 days after the report (a case of child
+   sexual abuse is bounded there for good, en.moderation.hold § The ends). It logs "received" or "report attached" per
+   case.
 7. After the commit it mails every accepted moderator with a confirmed address, and the instance contact's confirmed
    notification address: the category and "new case", nothing else — at once for the first three categories, in the
-   day's bundle for the last two. It mails the receipt to the address it was given, keeps no copy of it, and answers
-   the reference and the time, which the dialog shows.
+   day's bundle for the last two. It mails the receipt to the address it was given, keeps no copy of it, logs
+   "receipt sent" on each case of the report once it went out, and answers the reference and the time, which the
+   dialog shows.
 
 ## Alternate / exception flows
 
@@ -66,13 +69,15 @@
 ## Quality notes
 
 - **Operator-blind.** In the clear: the category, the epoch, the time, each item's kind and id, and the reporter's
-  account or link. Sealed: `K_report`, the reason, the address and the context; the report shares are opaque under
-  `K_report`. A dump opens no report.
+  account or link. Sealed: `K_report`, the reason and the context; the address apart; the report shares are opaque
+  under `K_report`. A dump opens no report.
 - **Invisible and inert.** A report share is a row of its own table: in no listing, revocable by nobody, outliving the
-  original share and the tenant's suspension; it is never served to the client that minted it. Nobody but the
+  original share and the tenant's suspension — until its case's records go with the case's log
+  ([en.moderation.log](../enablers/en.moderation.log.md) § Retention); it is never served to the client that minted it. Nobody but the
   moderators learns of a report: not the creator, the uploader, the space's owner or a member.
 - **The receipt address** reaches the server once, in the clear, for one send (owner decision Q6), as every recipient of
-  every mail does; it is bounded per address, and only its sealed copy is stored.
+  every mail does; it is bounded per address, and only its sealed copy is stored — which goes six months after the
+  decision was told to the reporter (ADR 0093 § 11).
 - **What is not built here:** a field reported on its own (a bucket's name): none of step 1's entry points reports a
   field without its object; and "everything by this uploader" (a guest's identity key): no entry point offers it. A
   guest's upload is reported as a medium, by its `K_blob`s; the drop key never leaves the client.

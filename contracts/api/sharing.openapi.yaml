@@ -2063,10 +2063,18 @@ components:
           example: 2026-10-17T09:00:00Z
         sealedReport:
           type: string
-          description: "`K_report`, the reason, the contact and the context, sealed to the epoch's key (`moderation-report` [epoch])."
+          description: "`K_report`, the reason and the context, sealed to the epoch's key (`moderation-report` [epoch])."
           contentEncoding: base64
           maxLength: 24000
           example: AXJlcG9ydA==
+        sealedContact:
+          type: [string, "null"]
+          description: >
+            The reporter's contact, sealed apart to the epoch's key (`moderation-report-contact` [epoch]); null when
+            they left none, and from six months after the decision on the report was told (ADR 0093 § 11).
+          contentEncoding: base64
+          maxLength: 2300
+          example: AWNvbnRhY3Q=
         sealedShare:
           type: string
           description: The report share — the item's keys sealed under `K_report` (`report-share` [itemKind, itemId] or `report-link` [shareId]).

@@ -78,7 +78,7 @@ describe('a report on the wire', () => {
     expect(post.url).toMatch(new RegExp(`/api/scopes/${SCOPE}/reports$`))
     expect(post.headers.get('authorization')).toBe('Bearer member-token')
     const body = JSON.parse(post.body!) as Record<string, unknown>
-    expect(Object.keys(body).sort()).toEqual(['category', 'epoch', 'items', 'receiptAddress', 'sealedReport'])
+    expect(Object.keys(body).sort()).toEqual(['category', 'epoch', 'items', 'receiptAddress', 'sealedContact', 'sealedReport'])
     expect(body.category).toBe('THREAT_TO_LIFE')
     expect(body.epoch).toBe(1)
     expect(body.receiptAddress).toBe(CONTACT)
@@ -92,18 +92,21 @@ describe('a report on the wire', () => {
 
     // The moderator's side: the epoch's key opens the sealed part, and its K_report opens the report share.
     const opened = v1.openReport(1, v1.moderationKemSecret(M), fromB64std(body.sealedReport as string))
-    expect(opened).toMatchObject({ reason: REASON, contact: CONTACT, context: '' })
+    expect(opened).toEqual({ reportKey: opened.reportKey, reason: REASON, context: '' })
+    // The contact is sealed apart (ADR 0093 § 11: it goes alone, six months after the decision was told).
+    expect(v1.openReportContact(1, v1.moderationKemSecret(M), fromB64std(body.sealedContact as string))).toBe(CONTACT)
     expect(v1.openReportShare(opened.reportKey, { kind: 'NODE', id: NODE }, fromB64std(items[0].sealedShare))).toEqual([
       { role: 'NODE', ref: null, key: K_NODE },
     ])
     expect(() => v1.openReport(1, v1.moderationKemSecret(M2), fromB64std(body.sealedReport as string))).toThrow(v1.OpenRefused)
   })
 
-  it('without an address no receiptAddress goes, and the sealed part carries an empty contact', async () => {
+  it('without an address neither a receiptAddress nor a sealed contact goes', async () => {
     await submitReport(request(member), [nodeTarget], { category: ReportCategory.TermsBreach, reason: REASON, contact: '  ' })
     const body = JSON.parse(posts()[0].body!) as Record<string, unknown>
     expect('receiptAddress' in body).toBe(false)
-    expect(v1.openReport(1, v1.moderationKemSecret(M), fromB64std(body.sealedReport as string)).contact).toBe('')
+    expect('sealedContact' in body).toBe(false)
+    expect(v1.openReport(1, v1.moderationKemSecret(M), fromB64std(body.sealedReport as string)).reason).toBe(REASON)
   })
 
   it('a guest reports through the link: its write proof and password token, no Authorization header', async () => {

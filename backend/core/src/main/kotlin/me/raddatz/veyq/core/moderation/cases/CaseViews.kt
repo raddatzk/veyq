@@ -160,7 +160,8 @@ class CaseViews(
                     receivedAt = r.receivedAt.utc(),
                     category = ModerationReport.Category.valueOf(r.category),
                     sealedReport = r.sealedReport,
-                    reporter = if (r.reporterAccount != null) ModerationReport.Reporter.ACCOUNT else ModerationReport.Reporter.LINK,
+                    sealedContact = r.sealedContact,
+                    reporter =if (r.reporterAccount != null) ModerationReport.Reporter.ACCOUNT else ModerationReport.Reporter.LINK,
                     barred = blocks.reporterBarred(r.reporterAccount, r.reporterShare),
                 )
             },

@@ -34,19 +34,19 @@ Anyone who sees something — a member of a space or a guest of a link — can c
 ([Report something](/veyq/help/report-something/)). What happens on your server
 ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
 
-- **It arrives sealed.** The reporter's device seals their text, their address and the keys to exactly what they
-  reported to the current moderation key. The database holds the category, the time, the reported items' ids and who
+- **It arrives sealed.** The reporter's device seals their text, their address — on its own, so it can be deleted
+  alone — and the keys to exactly what they reported to the current moderation key. The database holds the category, the time, the reported items' ids and who
   reported (an account, or the link a guest came through) — nothing it can open.
 - **One case per item.** A further report of the same item joins its open case and raises its category if it is more
   urgent.
 - **It is kept.** The rows of what was reported are copied, and its stored objects are pinned: the reclaim sweep leaves
   them alone, so a delete after the report takes the item away from everyone but not from the moderators — for 90
-  days after the report ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)).
+  days after the report, and for child sexual abuse material never longer than that unless extended (below) ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)).
   You store those bytes, and a backup includes them; the tenant's quota falls as its members expect. A space's erasure
   leaves the report and the copy.
 - **Moderators are mailed** the category and "new case", with no id and no link: child sexual abuse material, terrorist
   content and a threat to life at once, the rest in one mail a day. The instance contact's notification address is
-  mailed too once confirmed. A reporter who left an address gets a receipt.
+  mailed too once confirmed. A reporter who left an address gets a receipt, and the case's log records that it went.
 - **Nothing is blocked.** The item stays where it was until a person decides.
 
 A report a member sends counts against a cap of open reports per account (`veyq.moderation.report.open-cap`, 100); a
@@ -65,7 +65,8 @@ none of it.
   closed) and when its hold ends. The urgent categories come first, then the oldest. **Show closed cases** lists the
   closed ones.
 - **A case** shows each report's reason, contact and context — opened in the moderator's browser with the moderation
-  key — and the case's measures, proposals, hold and log.
+  key; the contact is deleted six months after the decision was told — and the case's measures, proposals, hold and
+  log.
 - **Review what was reported** opens `https://<tenant address>/s/<case id>#moderation`, on the reported tenant's
   address; when that tenant is gone or offline, on the address the moderator is on. The page unlocks the moderation key
   again and keeps nothing else of the moderator's account open, fetches the held copy and shows it the way a guest of a
@@ -104,7 +105,8 @@ server stores neither in the clear. It reaches the creator of a blocked link (or
 through), the uploaders the held copy names, and on a content block every owner of the space: each reads it under
 **Blocked by the operator**, and the instance mail tells their account address that it is there — never the facts. A
 guest is told nothing, having no account. A reporter who left an address is told the decision, from that address, which
-the moderator's browser sends once and the server mails without keeping. The statement names the instance, never the
+the moderator's browser sends once and the server mails without keeping; the sealed address itself is deleted six months
+later — or six months after the decision, where it could not be told — and the log keeps that the decision was sent. The statement names the instance, never the
 moderator. Without instance mail ([Configuration](/veyq/run/configuration/)) the statements are in veyq all the same.
 
 A measure decides the case, and its hold then ends six months after its statement is sent (after the decision, where
@@ -214,8 +216,8 @@ veyq-admin order inform   --share '<link or id>' --reference '<reference>' [--re
 - **A removal order** (terrorist content, TCO Regulation Art. 3) blocks the link and everything it gives access to, for
   everyone, members included, **at once** and without a review of its own: the authority has reviewed. A block already
   in force counts. Out comes the text for the authority's feedback form (Annex II) — the time of the block in UTC to the
-  second — to copy. A link this instance does not know is recorded all the same, nothing is blocked, and you get a
-  draft of the obstacle form (Annex III).
+  second — to copy. A link this instance does not know is recorded all the same (kept until 31 December of the third
+  year after), nothing is blocked, and you get a draft of the obstacle form (Annex III).
 - **A preservation order** or **a request for information** blocks nothing; what the link gives access to is kept.
 - **How long it is kept.** Each order opens a case of its own, with no report, holding what the link reaches: six
   months after the block for a removal order, 60 days after receipt for a preservation order, the days a request names
@@ -241,10 +243,16 @@ In a case, **Prepare the fields for the report** lays out what the instance hold
 every time in UTC, the measures, the uploaders the held copy names — a member's account id, a guest's identity id — and
 every guest-write record it held, with the address, the source port where one was kept, and the time. It is a text
 block to copy into the authority's form: never a file, never content. **Record that it was reported to an authority**
-(or that information was given) writes the handover into the case's log with the reference, sealed.
+(or that information was given) writes the handover into the case's log with the reference, sealed. So copy the fields
+**before** you record it: on a child-sexual-abuse case recording the handover ends the hold (below), and the fields then
+name no uploader and no address.
 
 **Child sexual abuse material.** Before such a case opens, the moderation page shows a full-page warning, and its
-decision panel proposes **Block the content** first. A human still decides.
+decision panel proposes **Block the content** first. A human still decides. Keeping such content is allowed only while
+it serves the report to the authority (§ 184b(5) StGB), so its hold ends **when you record the handover**, and at the
+latest **90 days after the report** — blocking it or sending the statement of reasons never keeps it longer. Extend it
+only while your report to the authority is still in progress or because the authority asks, with that as the reason;
+the handover still ends it. What an authority's order holds stays held for as long as the order says.
 
 ## In an emergency
 
@@ -258,9 +266,10 @@ decision panel proposes **Block the content** first. A human still decides.
   TCO Art. 14(5) needs no second report.
 - **Never download, forward or screenshot reported content, and never mail a file of it** — not to an authority, not to
   a hotline. Copy only the fields above.
-- **Child sexual abuse material: contact the police at once, and keep nothing beyond the hold.** Whether keeping a hold
-  until the handover is covered for a non-commercial operator (§ 184b(5) StGB) is open; a handover recorded in veyq
-  changes no hold, and no link for the police to a held copy exists.
+- **Child sexual abuse material: contact the police at once, and keep nothing beyond the hold.** Recording the
+  handover in veyq ends the hold; without one it ends 90 days after the report. Whether keeping it longer, until the
+  handover, is covered — and for a non-commercial operator whether even that bounded hold is (§ 184b(5) StGB) — is
+  open, and no link for the police to a held copy exists.
 - **Forward the instance contact to a phone**, and turn public links off if you cannot act within the hour.
 
 ### Which law reaches your instance
@@ -401,9 +410,13 @@ happens when a moderator replaces their account keys; they get the key again fro
 **What is logged.** Every appointment, acceptance, handing on of the key, removal, step-down and new key is an entry
 in the moderation log: who, when and for whom, never a key. Entries are kept until 31 December of the third year after
 the moderator concerned left the roster, then deleted. A case's log holds each report's arrival, each opening for
-review, each step and each lift, each proposal and what became of it, an extension and the end of the hold: who and
-when, a measure's kind and target, and the notes and reasons only sealed. It is kept until 31 December of the third
-year after the case closed.
+review, each step and each lift, each proposal and what became of it, an extension and the end of the hold, the
+receipt and the decision sent to a reporter, a handover: who and when, a measure's kind and target, and the notes and
+reasons only sealed. A case closes when nothing of it is held any more and no objection is open. **The case goes
+whole** — its log, its reports with what the reporter wrote and the keys they handed over, its measures, statements,
+objections and orders — on 31 December of the third year after it closed, but **never while one of its blocks is in
+force**: lifting it later counts from the lift. An undecided case stays open until a moderator decides it. The
+reporter's address goes earlier, six months after they were told the decision.
 
 **What this does not protect against.** You own the server and the roster. A server that hands out a key of its own
 choosing could read later reports; moderators' pages compare the key the server publishes with the one they hold and
@@ -415,8 +428,10 @@ control against the operator.
 - **A statement for your own steps.** A member's sign-in block and a tenant taken offline carry no statement of reasons
   yet: you take them on the admin channel, without the moderation key, and a blocked member cannot sign in to read one.
   Tell them through the instance contact.
-- **A child-sexual-abuse case's hold ending at the handover** (ADR 0093 § 4): it waits on counsel (§ 184b(5) StGB, see
-  [In an emergency](#in-an-emergency)); until then such a hold ends as any other case's, and a handover changes none.
+- **A child-sexual-abuse case's hold running until the handover past 90 days**: it waits on counsel (§ 184b(5) StGB,
+  see [In an emergency](#in-an-emergency)); such a hold ends at the handover or after 90 days, whichever comes first.
+- **Keeping a case's records longer while proceedings are pending**: there is no extension for the records yet, only
+  for a hold.
 - **A time-bound link for the police to a held copy** — not built, and not to be built without the police's or a
   specialist's answer: it would be a making-available.
 - **A report of a single field, or of everything by one uploader.**

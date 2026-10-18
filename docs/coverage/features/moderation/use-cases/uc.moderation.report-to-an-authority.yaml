@@ -4,8 +4,9 @@ title: Report to an authority
 # Built by cr-authority-orders-and-art18-reports: core/moderation/cases (CaseExports, CaseDecisions.handover) and the
 # hold's instants (HoldSnapshot) on the backend; features/moderation/orders (AuthoritySection, art18Export) and
 # CsamWarning on web. Lane L1's browser pass is e2e/tests/features/takedown-orders-and-art18.spec.ts; `stack` waits
-# under gaps. Not built, both waiting on counsel (ADR 0093 § Legal basis, Still open 1 and 2): a child-sexual-abuse
-# hold ending at the handover, and an authority's link to a held copy.
+# under gaps. A child-sexual-abuse case's hold bounded to 90 days and ended by the handover: Holds, ReportHandler and
+# CaseDecisions.handoverIn (the moderation-retention follow-up of #462). Not built, waiting on counsel (ADR 0093 § Legal
+# basis, Still open 1 and 2): a hold until the handover past 90 days, and an authority's link to a held copy.
 acceptanceCriteria:
   - id: the-export-carries-clear-fields-only
     text: >-
@@ -19,13 +20,23 @@ acceptanceCriteria:
         unit: [src/features/moderation/orders/art18Export.test.ts, src/features/moderation/orders/AuthoritySection.test.ts]
   - id: the-handover-is-logged
     text: >-
-      A report to an authority and information given to one are events of the case with the reference sealed; a
-      handover changes no hold.
+      A report to an authority and information given to one are events of the case with the reference sealed; on a
+      child-sexual-abuse case either ends the case's hold (but an authority order's floor) and the export then says
+      nothing is held, and the surface says so before it is recorded; on any other case a handover changes no hold.
     coverage:
       backend:
-        integration: [AuthorityOrdersSliceTest.theExportCarriesTheClearFieldsAndTheHeldGuestWriteRecordAndAHandoverChangesNoHold]
+        integration: [AuthorityOrdersSliceTest.theExportCarriesTheClearFieldsAndTheHeldGuestWriteRecordAndAHandoverChangesNoHold, ChildAbuseHoldSliceTest.theHandoverEndsTheHoldAndTheExportSaysNothingIsHeldThen, ChildAbuseHoldSliceTest.anAuthorityOrdersFloorOutlivesTheHandover]
       web:
         unit: [src/features/moderation/orders/AuthoritySection.test.ts, src/features/moderation/cases.test.ts]
+  - id: a-child-sexual-abuse-hold-is-bounded
+    text: >-
+      A child-sexual-abuse case's hold ends at the latest 90 days after the report that took it or made the case one of
+      that category: a measure or an authority's deferral of its statement never moves it further, a report that makes a
+      decided case one brings a later end back to it, and only a logged extension passes it — which the handover still
+      ends.
+    coverage:
+      backend:
+        integration: [ChildAbuseHoldSliceTest.aMeasureNeverMovesTheHoldPastNinetyDaysAndTheHoldEndsThere, ChildAbuseHoldSliceTest.anAuthoritysDeferralOfTheStatementDoesNotMoveItEither, ChildAbuseHoldSliceTest.aReportThatMakesADecidedCaseOneOfChildSexualAbuseBringsItsHoldBackToNinetyDays, ChildAbuseHoldSliceTest.aLoggedExtensionMayPassTheBoundAndTheHandoverStillEndsIt]
   - id: child-sexual-abuse-material-warns-first
     text: >-
       Before a case of the child-sexual-abuse category opens, a full-page warning is shown, and the decision panel

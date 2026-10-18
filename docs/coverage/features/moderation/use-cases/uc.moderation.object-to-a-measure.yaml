@@ -55,6 +55,16 @@ acceptanceCriteria:
         integration: [StatementsSliceTest.theDeciderIsRefusedWhileAnotherModeratorHoldsTheKeyAndTheOtherDecides, StatementsSliceTest.aSingleModeratorReviewsTheObjectionAsTheirOwnAndTheAnswerSaysSo, ObjectionRacesSliceTest.aSecondModeratorDecidingTheSameObjectionAtOnceIsRefused]
       web:
         unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/statement/StatementNotice.test.ts]
+  - id: the-reporters-contact-goes-six-months-after-the-decision
+    text: >-
+      A reporter's sealed contact goes six months after the decision on the report was told — or, where it could not
+      be told, six months after the case's decision — never while a case of the report is open; the report and the
+      "decision sent" event stay.
+    coverage:
+      backend:
+        integration: [ModerationRetentionSliceTest.aReportersContactGoesSixMonthsAfterTheDecisionWasToldAndNeverWhileACaseIsOpen]
+      web:
+        unit: [src/features/moderation/cases.test.ts]
   - id: the-reporter-is-told-the-decision
     text: >-
       A reporter who left a contact is mailed the dismissal or the decision once, from an address the deciding

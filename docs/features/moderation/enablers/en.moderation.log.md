@@ -8,7 +8,9 @@
   `ModerationPurge`), a report's (cr-report-and-hold), the review's and every decision's
   (cr-moderation-review-and-measures: `CaseDecisions`, `SignInBlocks`, `CaseReviewResource`) and the statement's and the
   objection's (cr-statement-of-reasons-and-objection: `CaseDecisions`, `Statements`, `StatementMail`) and an
-  authority's (cr-authority-orders-and-art18-reports: `AuthorityOrderHandler`, `StatementDeferrals`, `CaseDecisions`) — decided in
+  authority's (cr-authority-orders-and-art18-reports: `AuthorityOrderHandler`, `StatementDeferrals`, `CaseDecisions`), and
+  the retention of every case's records with it (the moderation-retention follow-up of inbox #462, 2026-10-18:
+  `ModerationRecordsPurge`) — decided in
   [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 11 and [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 4.
 - **Provides:** accountability within a team and to the affected: who did what, when, kept as long as it can be
@@ -56,15 +58,16 @@ operational log names a case id at most, never an account, an address or a seale
 | `HOLD_ENDED` | a dismissal, the last lift or the cleanup ended the hold | — |
 | `REPORTER_BARRED` | a moderator barred a reporter | the moderator; the bar's kind and target (the account or the link); the note sealed |
 | `STATEMENT_SENT` | a measure's statement of reasons reached a member | the moderator; the ground in `reason`, the statement in `target_id` |
+| `RECEIPT_SENT` | a reporter's receipt went out (one event on each case of the report) | the report in `target_id` |
 | `DECISION_SENT` | a reporter was mailed the decision on their report | the moderator; `DISMISSED` or `DECIDED`, the report in `target_id` |
 | `OBJECTION_RECEIVED` | an affected member objected (it reopens a closed case) | the objector; the measure's kind, the objection in `target_id` |
 | `OBJECTION_DECIDED` / `OBJECTION_SELF_REVIEWED` | another moderator decided the objection / the one who took the measure did, being the only one | the decider; `UPHELD` or `LIFTED`, the objection in `target_id`; the note sealed |
 | `ORDER_RECEIVED` | an authority's order was entered and opened this case | who entered it (a moderator or the Server Owner); the kind in `reason`, the order in `target_id` — its reference is sealed on the order's row (`veyq_authority_order`, `moderation-order` [epoch, orderId]) |
 | `STATEMENT_DEFERRED` | an authority's deferral held a statement back, or was renewed | who entered it; the statement in `target_id`, the end in `hold_until`; the authority's request sealed — none where it came with an order, whose reference it is |
-| `HANDED_OVER` / `INFORMATION_GIVEN` | the case was reported to an authority / information was given to one | the moderator; the reference sealed. It changes no hold |
+| `HANDED_OVER` / `INFORMATION_GIVEN` | the case was reported to an authority / information was given to one | the moderator; the reference sealed. On a child-sexual-abuse case it ends the hold (a `HOLD_ENDED` follows); on any other it changes no hold |
 
-An order whose share the server does not know opens no case: its `ORDER_RECEIVED` is written with no case id, dated as
-the event of the one who entered it.
+An order whose share the server does not know opens no case: its `ORDER_RECEIVED` is written with no case id, dated
+from its entry like the order's row (31 December of the third year after), whoever entered it.
 
 A member's sign-in block taken on no case is `MEASURE_TAKEN` / `MEASURE_LIFTED` with no case id, dated as the Server
 Owner's instance events are. Every sealed text is sealed in the moderator's browser to the current epoch, bound to the
@@ -80,7 +83,23 @@ expired; it is the log's reader for `EveryStoredTimeHasAReaderTest`. A case's ev
 and get **31 December of the third year after the later of the event and the case's close** when it closes (a
 dismissal, the lift of its last measure, or a decided case whose hold the cleanup ended — never while an objection
 waits); an event about a case already closed is dated as it is written (`ModerationLog.closeCase`, `appendCase`), and an
-objection that reopens a closed case undates its events again (`ModerationLog.reopenCase`).
+objection that reopens a closed case undates its events again (`ModerationLog.reopenCase`). An undecided case stays
+open — a moderator still owes its decision — so its events stay undated.
+
+**One purge path for a case** (`ModerationRecordsPurge`, run by `ModerationPurge`; ADR 0093 § 11): the log's own purge
+deletes only instance events; a case's events go **with the case**, once every one of them is past its date, together
+with every record of it — the case row, its reports' sealed parts and reporter fields and its report shares (they wrap
+`K_report`; a report spanning several cases goes with the last), its measures and proposals, statements and their
+recipients, deferrals, objections and the orders that opened it. **Never while a measure of it is in force** (deleting
+the row would lift a block nobody lifted, and a standing measure needs its statement while it can be contested), nor
+while a proposal of it waits; a lift is an event of its own date, which moves the case's. An order that opened no case
+goes with its `ORDER_RECEIVED` on that event's date. The purge takes the case row first, as every decision does
+(`ModerationRecordsRaceSliceTest`).
+
+**The reporter's contact** is sealed apart from the report (`veyq_moderation_report.sealed_contact`,
+`moderation-report-contact` [epoch]) and is nulled six months after the decision on the report was told
+(`DECISION_SENT`) — where it could not be told, six months after the case's decision — and never while a case of the
+report is open; `RECEIPT_SENT` and `DECISION_SENT` stay as the proof (DSA Art. 16(4)–(5)).
 
 ## Related
 

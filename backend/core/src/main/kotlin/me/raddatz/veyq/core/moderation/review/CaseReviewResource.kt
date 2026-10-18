@@ -66,7 +66,10 @@ class CaseReviewResource(
             val held = snapshots.rowsOf(case.id, now) ?: return@call CaseFailures.nothingHeldRead
             val reports = ReportShareEntity.list("caseId", case.id).mapNotNull { share ->
                 ModerationReportEntity.findById(share.reportId)?.let { r ->
-                    CaseReviewReport(UUID.fromString(r.id), r.epoch, r.receivedAt.atOffset(ZoneOffset.UTC), r.sealedReport, share.sealedKeys)
+                    CaseReviewReport(
+                        reportId = UUID.fromString(r.id), epoch = r.epoch, receivedAt = r.receivedAt.atOffset(ZoneOffset.UTC),
+                        sealedReport = r.sealedReport, sealedShare = share.sealedKeys, sealedContact = r.sealedContact,
+                    )
                 }
             }.sortedBy { it.receivedAt }
             log.appendCase(ModerationEvent.OPENED, now, case.id, moderatorId = identity.principal.name)

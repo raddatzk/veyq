@@ -58,7 +58,8 @@ alone — to the account address of each accepted moderator and the instance con
 [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 2 and 11) — and,
 for a reporter, the receipt of their report (ADR 0093 § 2, DSA Art. 16(4); owner decision Q6 of cr-report-and-hold,
 2026-10-17): the reporter's client sends the address once in the clear beside the sealed copy, the server mails the
-receipt from memory and stores only the sealed copy, bounded per address — and, **for moderation statements**
+receipt from memory and stores only the sealed copy (sealed apart from the report, it goes six months after the
+decision was told, ADR 0093 § 11), bounded per address — and, **for moderation statements**
 (ADR 0093 § 7; owner decision Q11 of cr-statement-of-reasons-and-objection, 2026-10-17), to the affected and to
 reporters: each affected member's account address gets the statement of reasons after a measure and the answer to
 their objection, and a reporter who left a contact gets the decision on their report, the address sent once in the
