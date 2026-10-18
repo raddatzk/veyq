@@ -356,6 +356,13 @@ Everything else expires.
   keep such a backup at most 30 days (call it B), open it only to restore it, and let the restored instance start once
   (its cleanup then deletes what is past N at boot). A guest's data can then live N + B days, and what you tell guests
   has to say so.
+- **A guest objects** (GDPR Art. 21(1)): unless you have compelling reasons to keep what was kept, delete it —
+  `veyq-admin guest-write-record forget <identity-id>`. It deletes every kept write of that guest identity at once and
+  prints how many went and how many a hold keeps: rows a report's or an authority's hold copied **stay until that hold
+  ends**, because a report or an order concerns them — tell the guest so. Answer within a month (Art. 12(3)). A later
+  write by the same identity is recorded again; a guest who does not want that can view the link but not add to it.
+  The command takes the identity's id, as a moderation case names it; the guest page does not show a guest its own id
+  yet, so a guest who objects cannot name it themselves.
 
 ## Who runs the instance
 
