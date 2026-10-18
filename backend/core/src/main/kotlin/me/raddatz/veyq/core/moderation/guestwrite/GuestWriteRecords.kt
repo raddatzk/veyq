@@ -1,7 +1,10 @@
 package me.raddatz.veyq.core.moderation.guestwrite
 
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import me.raddatz.veyq.core.http.ClientSeen
 import me.raddatz.veyq.core.instance.VeyqInstance
+import me.raddatz.veyq.core.moderation.hold.HoldRowEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -96,6 +99,20 @@ class GuestWriteRecords(private val capabilities: CapabilityRegistry) {
     }
 
     /**
+     * A guest's objection (GDPR Art. 21(1)): delete every live row [identityId] wrote, and count — never touch — the rows
+     * a hold copied of it, which stay until their hold ends (ADR 0093 § 4). The Server Owner's decision, on the admin
+     * channel; the next write of the same identity is recorded again, as the guest page says.
+     */
+    @Transactional
+    fun eraseIdentity(identityId: String): GuestWriteErasure {
+        val erased = GuestWriteRecordEntity.delete("shareIdentityId", identityId)
+        val kept = HoldRowEntity.list("sourceTable", TABLE).count { row ->
+            HOLD_JSON.readValue(row.payload, HOLD_COLUMNS)[IDENTITY_COLUMN].equals(identityId, ignoreCase = true)
+        }
+        return GuestWriteErasure(erased, kept)
+    }
+
+    /**
      * The purge (ADR 0093 § 10, ADR 0092 § 2): while the switch is off at the instance level, every live row; otherwise
      * every row past its own end or older than N as it stands now — so a shortening reaches every row at once and a
      * lengthening only new ones. Answers how many rows went. Hold copies are not here: they follow the hold's end.
@@ -121,5 +138,14 @@ class GuestWriteRecords(private val capabilities: CapabilityRegistry) {
         const val NAME = "name"
 
         private const val BATCH = 500
+
+        /** The table a hold row names as its source, and the column of a copied row that names the identity. */
+        private const val TABLE = "veyq_guest_write_record"
+        private const val IDENTITY_COLUMN = "share_identity_id"
+        private val HOLD_JSON = ObjectMapper()
+        private val HOLD_COLUMNS = object : TypeReference<Map<String, String?>>() {}
     }
 }
+
+/** What [GuestWriteRecords.eraseIdentity] did: the live rows it deleted, and the held copies it left. */
+data class GuestWriteErasure(val erased: Long, val keptInHolds: Int)

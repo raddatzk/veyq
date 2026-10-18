@@ -106,12 +106,15 @@ import {
   type InstanceOperatorUpdate,
 } from '../features/instance/operator'
 import {
+  eraseGuestWriteRecordsOfIdentity,
   getGuestWriteRecord,
+  isIdentityId,
   MAX_DAYS,
   MIN_DAYS,
   needsReason,
   parseRetentionDays,
   setGuestWriteRecord,
+  type GuestWriteRecordErasure,
   type InstanceGuestWriteRecord,
 } from '../features/instance/guestWriteRecord'
 import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
@@ -626,6 +629,19 @@ export const COMMANDS: Record<string, Command> = {
     },
     render: (r) => renderGuestWriteRecord(r as InstanceGuestWriteRecord),
   },
+  'guest-write-record forget': {
+    usage: 'guest-write-record forget <identity-id>',
+    summary:
+      'A guest objects to the record (GDPR Art. 21): delete every kept write of one share identity — its IP address, source port and time. What a hold copied for a report or an authority’s order stays until the hold ends; the output says how much.',
+    flags: {},
+    operand: { name: 'identity-id', describe: 'the share identity’s id, as a moderation case names it' },
+    run: (f) => {
+      const id = f['identity-id'] ?? ''
+      if (!isIdentityId(id)) throw new CliError(`guest-write-record forget takes a share identity's id, a UUID (got '${id}'); nothing was deleted`)
+      return eraseGuestWriteRecordsOfIdentity(id.trim())
+    },
+    render: (r, f) => renderErasure(r as GuestWriteRecordErasure, (f['identity-id'] ?? '').trim()),
+  },
   'operator show': {
     usage: 'operator show',
     summary: 'Print the instance contact, the provider identification, the supervisory authority and the notification address with its confirmation.',
@@ -794,5 +810,17 @@ function renderOrder(r: unknown, flags: Record<string, string>, env: Record<stri
 function renderGuestWriteRecord(r: InstanceGuestWriteRecord): string {
   const lines = [`guest-write-record ${r.retentionDays} days${r.chosen ? '' : ' (the default)'}`]
   if (needsReason(r.retentionDays)) lines.push('More than 7 days needs a reason, which you write into your record of processing.')
+  return lines.join('\n')
+}
+
+/** What an objection deleted, and what a hold keeps — said, so the Server Owner can tell the guest (GDPR Art. 12(3)). */
+function renderErasure(r: GuestWriteRecordErasure, identityId: string): string {
+  const lines = [`guest-write-record forget ${identityId}: ${r.erased} kept write(s) deleted`]
+  lines.push(
+    r.keptInHolds > 0
+      ? `${r.keptInHolds} copied into a hold stay until the hold ends — a report or an authority's order concerns them.`
+      : 'No hold keeps a copy.',
+  )
+  lines.push('A later write by the same identity is recorded again.')
   return lines.join('\n')
 }

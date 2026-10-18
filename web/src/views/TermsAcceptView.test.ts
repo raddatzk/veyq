@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // uc.account.accept-terms's way out, as a uc.account.sign-out entry point. Declining the terms signs out, and it
 // is the one sign-out sequence rather than this screen's own: this view carried a copy of it once, which reset
-// less than the real one did.
+// less than the real one did. And the member gate's operator section (ADR 0035 decision 6): after the space's text,
+// the record's passage at its anchor and the right to object apart, and the accept naming the whole triple.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -44,7 +45,15 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
     vi.mocked(signOut).mockResolvedValue(undefined)
     vi.mocked(getTenantTerms).mockResolvedValue({
       termsRevision: 3,
+      accepted: false,
       terms: { en: 'Be kind.', de: 'Sei nett.' },
+      operatorSection: {
+        revision: 2,
+        variant: 'REDUCED',
+        text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz\nMeldungen prüft ein Mensch.' },
+        record: { en: '### Your IP address\nKept 7 days.', de: '### Deine IP-Adresse\n7 Tage.' },
+        objection: { en: '### Your right to object\nWrite to us.', de: '### Dein Widerspruchsrecht\nSchreib uns.' },
+      },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
   })
 
@@ -63,14 +72,55 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
 
   it('does not sign out when the member accepts instead', async () => {
     // The control for the one above: the same screen, the other button.
-    vi.mocked(acceptTenantTerms).mockResolvedValue({ acceptedRevision: 3 } as Awaited<ReturnType<typeof acceptTenantTerms>>)
+    vi.mocked(acceptTenantTerms).mockResolvedValue({ accepted: true } as Awaited<ReturnType<typeof acceptTenantTerms>>)
     const wrapper = await mountReady()
     const accept = wrapper.findAll('button').find((b) => b.text() === t('terms.accept'))!
 
     await accept.trigger('click')
     await flushPromises()
 
-    expect(acceptTenantTerms).toHaveBeenCalledWith('tenant-1', 3)
+    expect(acceptTenantTerms).toHaveBeenCalledWith('tenant-1', { revision: 3, operatorRevision: 2, variant: 'REDUCED' })
     expect(signOut).not.toHaveBeenCalled()
+  })
+})
+
+describe('TermsAcceptView — the operator section after the space’s terms (ADR 0035 decision 6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function served(record: boolean) {
+    vi.mocked(getTenantTerms).mockResolvedValue({
+      termsRevision: 3,
+      accepted: false,
+      terms: { en: 'Be kind.', de: 'Sei nett.' },
+      operatorSection: {
+        revision: 1,
+        variant: 'FULL',
+        text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz' },
+        record: record ? { en: '### Your IP address\nKept 7 days.', de: '### Deine IP-Adresse' } : null,
+        objection: record ? { en: '### Your right to object\nWrite to us.', de: '### Dein Widerspruchsrecht' } : null,
+      },
+    } as Awaited<ReturnType<typeof getTenantTerms>>)
+  }
+
+  it('shows the space’s text first, then the section, the record at its anchor and the objection apart', async () => {
+    served(true)
+    const w = await mountReady()
+    const body = w.find('.terms-body').text()
+    expect(body.indexOf('Be kind.')).toBeGreaterThanOrEqual(0)
+    expect(body.indexOf('On this instance')).toBeGreaterThan(body.indexOf('Be kind.'))
+    expect(w.find('#guest-write-record').text()).toContain('Kept 7 days.')
+    const objection = w.find('aside#right-to-object')
+    expect(objection.text()).toContain('Your right to object')
+    expect(w.find('#guest-write-record').text()).not.toContain('right to object') // apart, not inside the record
+  })
+
+  it('shows no record passage while the record is off (control: the section itself stays)', async () => {
+    served(false)
+    const w = await mountReady()
+    expect(w.find('#guest-write-record').exists()).toBe(false)
+    expect(w.find('#right-to-object').exists()).toBe(false)
+    expect(w.find('[data-testid="operator-section"]').text()).toContain('On this instance')
   })
 })

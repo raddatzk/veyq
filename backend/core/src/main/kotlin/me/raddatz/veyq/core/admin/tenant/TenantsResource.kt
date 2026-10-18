@@ -40,6 +40,8 @@ import me.raddatz.veyq.core.generated.model.TenantStorageUpdate
 import me.raddatz.veyq.core.generated.model.TenantSummary
 import me.raddatz.veyq.core.generated.model.TenantTerms
 import me.raddatz.veyq.core.generated.model.TenantTermsUpdate
+import me.raddatz.veyq.core.terms.toSection
+import me.raddatz.veyq.core.terms.toWire
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
 import me.raddatz.veyq.core.http.Failures
@@ -286,7 +288,7 @@ class TenantsResource(
     @Authenticated
     override fun getTenantTerms(tenantId: UUID): Response =
         when (val o = termsHandler.read(identity.principal.name, tenantId.toString())) {
-            is TermsReadOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
+            is TermsReadOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -295,14 +297,17 @@ class TenantsResource(
         when (val o = termsHandler.update(
             identity.principal.name, tenantId.toString(), tenantTermsUpdate.terms.de, tenantTermsUpdate.terms.en,
         )) {
-            is TermsUpdateOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
+            is TermsUpdateOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 
     @Authenticated
     override fun acceptTenantTerms(tenantId: UUID, acceptTermsRequest: AcceptTermsRequest): Response =
-        when (val o = termsHandler.accept(identity.principal.name, tenantId.toString(), acceptTermsRequest.revision)) {
-            is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.acceptedRevision, o.terms?.toDto())).build()
+        when (val o = termsHandler.accept(
+            identity.principal.name, tenantId.toString(), acceptTermsRequest.revision, acceptTermsRequest.operatorRevision,
+            acceptTermsRequest.variant.toSection(),
+        )) {
+            is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)
         }
 

@@ -147,6 +147,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `externalDatabase.jdbcUrl` | — | `jdbc:mariadb://…` of your own database; the password is still `secrets.mariadbPassword` |
 | `externalDatabase.username` | `veyq` | |
 | `garage.image` | `dxflrs/garage:v2.0.0@sha256:…` | Pinned by digest |
+| `garage.logFilter` | `garage=warn` | The store's `RUST_LOG`. At `info` it logs every request with the reader's address; raise it only to troubleshoot ([Operations](/veyq/run/operations/#logs)) |
 | `garage.persistence.storageClass` | — | |
 | `garage.persistence.meta.size` | `1Gi` | |
 | `garage.persistence.data.size` | `50Gi` | The stored media |

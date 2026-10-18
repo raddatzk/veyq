@@ -19,6 +19,7 @@ import type { LocaleMap } from '../../shared/ui/localeMap'
 import { decodeShareNote, hasLocaleText, noteDigest, type ShareNote } from './shareNote'
 import type { NodeKind } from '../node/kind'
 import type { ShareRole, PublicShare, ShareTerms } from '../../api/generated/sharing'
+import { tripleKey, type TermsTriple } from '../terms/operatorSection'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
 // key is the binding. These two are the ones the platform half opens (and the application's curator side seals).
@@ -193,6 +194,9 @@ export async function pollPublicShare(
 // not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /
 // resolving the share directly), so it records + surfaces consent — it does not *prevent* access. The
 // legally-meaningful protection is the terms' content + the decryptable-on-report path, not this prompt.
+// What is stored per tenant is the accepted TRIPLE (ADR 0035 decision 6): the space's revision, the operator section's
+// revision and its variant, as `tripleKey` spells it. A value an older client stored (a bare revision) equals no triple,
+// so that visitor is asked once more — rightly, since the operator section was not part of what they accepted.
 const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
 
 /**
@@ -213,23 +217,22 @@ export function pickShareTerms(terms: ShareTerms, locale: string): string {
   return pickLocaleText(map, locale)
 }
 
-/** The locally-recorded accepted terms revision for a tenant (0 if never accepted or the store is unreadable). */
-export function acceptedTermsRevision(tenantId: string): number {
+/** The locally-recorded accepted triple for a tenant, as `tripleKey` spells it ('' if never accepted or the store is
+ *  unreadable). */
+export function acceptedTermsKey(tenantId: string): string {
   try {
-    const raw = localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`)
-    const n = raw ? Number.parseInt(raw, 10) : 0
-    return Number.isFinite(n) ? n : 0
+    return localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`) ?? ''
   } catch {
-    return 0
+    return ''
   }
 }
 
-/** Record acceptance of [revision] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on
- *  one share of a tenant clears the gate on **every** share of that tenant. A storage failure is swallowed: the
- *  gate is operational, not enforcement, so it must never throw and block a visitor from viewing. */
-export function recordTermsAccepted(tenantId: string, revision: number): void {
+/** Record acceptance of [triple] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on one
+ *  share of a tenant clears the gate on **every** share of that tenant. A storage failure is swallowed: the gate is
+ *  operational, not enforcement, so it must never throw and block a visitor from viewing. */
+export function recordTermsAccepted(tenantId: string, triple: TermsTriple): void {
   try {
-    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, String(revision))
+    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, tripleKey(triple))
   } catch {
     /* private-mode / quota — an unrecordable acceptance still clears the in-memory gate for this session */
   }

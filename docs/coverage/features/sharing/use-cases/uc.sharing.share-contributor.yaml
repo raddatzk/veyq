@@ -231,6 +231,15 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [GuestWriteRecordCoreSliceTest.aShorteningReachesAnOldRowAtTheNextPurgeAndALengtheningDoesNotExtendIt, GuestWriteRecordCoreSliceTest.theServerOwnerSetsNWithinOneToThirty, GuestWriteRecordCoreSliceTest.switchedOffNothingIsRecordedAndThePurgeEmptiesTheTableWhileAHoldCopyStays, GuestWriteRecordCoreSliceTest.theParentOffSwitchesTheRecordOff, GuestWriteRecordCoreSliceTest.privateSwitchesTheRecordOffAndOrganisationOn, GuestWriteRecordCoreSliceTest.aPrivateInstanceThatSwitchesTheRecordOnByHandRecords, GuestWriteRecordCoreSliceTest.theMigrationWritesTheOffRowOnAPrivateInstanceOnly, GuestWriteRecordCoreSliceTest.aHoldOnALinkCopiesEveryRecordItsGuestsWrote, SetupServerSliceTest.createsOwner]
+  - id: a-guest-who-objects-has-its-record-deleted-except-what-a-hold-copied
+    text: >-
+      A guest's objection (GDPR Art. 21): the Server Owner, on the admin channel or with `veyq-admin guest-write-record
+      forget <identity-id>`, deletes every live row of one share identity and no other identity's; rows a hold copied
+      stay until the hold ends, and the answer counts both, so the guest can be told; a second deletion answers zeros
+      for the live rows; a non-owner is refused, and an id that is no UUID matches no route.
+    coverage:
+      backend:
+        integration: [GuestWriteRecordCoreSliceTest.anObjectionDeletesTheIdentitysLiveRowsAndLeavesWhatAHoldCopied, GuestWriteRecordCoreSliceTest.anIdentityIdThatIsNoUuidMatchesNoRoute]
   - id: a-writing-guest-is-told-before-its-first-write
     text: >-
       While the switch is on, the resolve of a link whose guest writes (READ_WRITE, WRITE_ONLY, unlocked) serves N as it
@@ -244,6 +253,12 @@ acceptanceCriteria:
       web:
         unit: [src/views/ShareView.guestWriteRecord.test.ts, src/core/sharing/GuestWriteRecordNotice.test.ts]
 gaps:
+  admin-web: >-
+    `veyq-admin guest-write-record forget <identity-id>` (a guest's objection): `src/cli/cli.test.ts` pins that the
+    command sends the identity, prints what was deleted and what a hold keeps, and refuses an id that is no UUID before
+    signing in. It passes locally, but `admin-web`'s job has never executed, so ADR 0040 admits none of it; on the first
+    run whose log shows admin-web's suites, it becomes a ref on
+    `a-guest-who-objects-has-its-record-deleted-except-what-a-hold-copied` and this gap goes.
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/field-seal.spec.ts`) drives `sealed-name-anonymous-identity` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with

@@ -37,7 +37,7 @@ import {
   derivePasswordToken,
   fetchShareTerms,
   pickShareTerms,
-  acceptedTermsRevision,
+  acceptedTermsKey,
   recordTermsAccepted,
   pickLocaleText,
   SharePasswordRequiredError,
@@ -61,6 +61,8 @@ import OrderNotice from '../core/sharing/OrderNotice.vue'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
+import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
+import { tripleKey, tripleOf, type OperatorSection } from '../core/terms/operatorSection'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -95,14 +97,22 @@ const head = shallowRef<PublicShareHead | null>(null)
 // FAILS OPEN: a transient terms-fetch error is treated as "no terms" (revision 0) so a network blip never locks a
 // visitor out. The terms come from the share (GET /api/shares/{shareId}/terms) — a public share is Host-independent,
 // so the tenant can't come from the Host, and the member terms endpoint is auth+membership-gated.
+//
+// After the space's text comes the fixed operator section (ADR 0035 decision 6), and what is accepted is the TRIPLE —
+// the space's revision, the section's revision and its variant — so a release that changed the section or a switched
+// operating mode asks again, and a changed operator value or the guest-write record switched does not.
 const termsTenantId = ref('')
 const termsRevision = ref(0) // 0 = no gate (also the fail-open value on a fetch error)
-const acceptedRevision = ref(0) // the locally-recorded accepted revision; bumped in-memory on accept so the gate clears
+const operatorSection = ref<OperatorSection | null>(null)
+const acceptedKey = ref('') // the locally-recorded accepted triple; set in-memory on accept so the gate clears
 const termsMarkdown = ref('')
 const renderedTerms = computed(() => (termsMarkdown.value ? renderMarkdown(termsMarkdown.value) : ''))
+const currentKey = computed(() =>
+  operatorSection.value ? tripleKey(tripleOf(termsRevision.value, operatorSection.value)) : '',
+)
 // The gate fires once the share is resolved (post-password), the tenant has published terms, and the locally-stored
-// accepted revision is below current. Sits BETWEEN the password shell and the display-name pre-screen in the template.
-const needsTerms = computed(() => status.value === 'ready' && termsRevision.value > 0 && acceptedRevision.value < termsRevision.value)
+// triple is not the current one. Sits BETWEEN the password shell and the display-name pre-screen in the template.
+const needsTerms = computed(() => status.value === 'ready' && termsRevision.value > 0 && acceptedKey.value !== currentKey.value)
 
 /** Fetch the owning tenant's terms + read the locally-stored accepted revision. FAILS OPEN (uc.sharing.share-accept):
  *  a transient error is treated as "no terms" (revision 0) so the visitor is never locked out by a network blip. */
@@ -111,19 +121,24 @@ async function loadTerms() {
     const terms = await fetchShareTerms(shareId)
     termsTenantId.value = terms.tenantId
     termsRevision.value = terms.termsRevision
+    operatorSection.value = terms.operatorSection
     termsMarkdown.value = pickShareTerms(terms, locale.value)
-    acceptedRevision.value = acceptedTermsRevision(terms.tenantId)
+    acceptedKey.value = acceptedTermsKey(terms.tenantId)
   } catch {
     termsRevision.value = 0
-    acceptedRevision.value = 0
+    operatorSection.value = null
+    acceptedKey.value = ''
   }
 }
 
 /** Record acceptance client-side (localStorage, per tenant) + clear the gate in-memory. No server call — the
  *  accountless visitor's acceptance is client-only, so the server keeps no record (anonymity preserved). */
 function acceptTerms() {
-  recordTermsAccepted(termsTenantId.value, termsRevision.value)
-  acceptedRevision.value = termsRevision.value
+  const section = operatorSection.value
+  if (!section) return
+  const triple = tripleOf(termsRevision.value, section)
+  recordTermsAccepted(termsTenantId.value, triple)
+  acceptedKey.value = tripleKey(triple)
 }
 
 // --- the note's acceptance gate (uc.sharing.share-note, ADR 0036 point 2) ----------------------------------------
@@ -366,8 +381,11 @@ onMounted(() => {
         <span class="pi pi-file-check share-terms-icon" />
         <h1>{{ t('share.termsTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.termsIntro') }}</p>
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="share-terms-body markdown-body" v-html="renderedTerms"></div>
+        <div class="share-terms-body">
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div class="markdown-body" v-html="renderedTerms"></div>
+          <OperatorSectionView v-if="operatorSection" :section="operatorSection" />
+        </div>
         <button class="share-name-submit" type="button" @click="acceptTerms">{{ t('share.termsAccept') }}</button>
       </div>
     </div>

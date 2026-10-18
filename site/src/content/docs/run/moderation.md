@@ -18,6 +18,7 @@ sources:
   - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
   - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
+  - docs/decisions/0035-server-terms-of-service.md
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
@@ -324,6 +325,23 @@ Criminal law and the hosting privilege's "once known, act" reach every operator 
 ([§ 7 DDG](https://www.gesetze-im-internet.de/ddg/__7.html)). The operating mode below is how you record your own
 answer.
 
+## Transparency reports
+
+> **Research, not legal advice** ([ADR 0093 § Legal basis, 8](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#legal-basis)).
+
+Three reports may fall on you as the instance's provider. **veyq compiles none of them:** you count from the cases on
+the moderation page, their log and the orders you entered, and publish or send the result yourself.
+
+| Report | Who owes it | What | By when |
+|---|---|---|---|
+| [DSA Art. 15](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2065) | Every provider the DSA reaches ([which law](#which-law-reaches-your-instance)) **unless it is a micro or small enterprise**: fewer than 50 staff and a turnover or balance sheet of at most EUR 10 million, counting the enterprises it is linked to ([Recommendation 2003/361/EC](https://eur-lex.europa.eu/eli/reco/2003/361/oj)). A company or a large association running veyq for its people is likely reached. Whether a club or a household with no economic activity is an enterprise at all, and so covered by the exemption, is open ([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#still-open), Still open 8). | A public, machine-readable report on the orders authorities sent you, the notices (reports) you received and what you did, the moderation you did on your own initiative, and any automated means — on the templates of [Implementing Regulation 2024/2835](https://eur-lex.europa.eu/eli/reg_impl/2024/2835/oj) | Each calendar year, published within two months of its end (by the end of February) |
+| [TCO Art. 7(2)](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32021R0784) | Every host, **whatever its size**, for a calendar year in which it took action against terrorist content or was required to — a removal order is enough | A public report: your measures, how many items you removed or blocked after orders, orders you could not carry out and why, complaints, reviews and reinstatements (Art. 7(3)) | Before 1 March of the following year |
+| [§ 3(2) TerrOIBG](https://www.gesetze-im-internet.de/terroibg/__3.html) | Every host under German jurisdiction | To the Bundesnetzagentur, not published: how many requests from authorities for access to content you preserved after a removal (TCO Art. 21(1)(c), Art. 6) | Each calendar year, by 1 March of the following year |
+
+Whether a year with nothing to count still needs a report is not settled by the text; the Bundesnetzagentur answers
+that for § 3(2). Each order you [enter](#an-authoritys-order) opens a case of its own that keeps its kind, when it
+reached you and when it blocked — what the TCO counts ask for; its reference is sealed to the moderation key.
+
 ## The operating mode
 
 At first-run setup you choose how the instance is run, and you can change it under **Server → Operating mode** or
@@ -372,8 +390,8 @@ Everything else expires.
   shorter N reaches every kept row at the next cleanup, a longer one only rows written from then on, so no guest is
   kept longer than the page told them.
 - **Guests are told** before their first write, on the page itself, with the N in effect and the right to object as a
-  sentence of its own. You are the controller, not a space's owner; the full information belongs in the operator
-  section of the terms, which comes with a later change.
+  sentence of its own, and a link to the full information in [the terms of the instance](#the-terms-of-the-instance).
+  You are the controller, not a space's owner.
 - **The address is the one the network vouches for**, never one the client wrote ([Networking](/veyq/run/networking/)).
   On Compose it is strong by construction; on Kubernetes it is only as strong as an enforced NetworkPolicy. The source
   port is known where your edge states it (on Compose, the recipe's Traefik always does); otherwise only the address is
@@ -385,6 +403,13 @@ Everything else expires.
   keep such a backup at most 30 days (call it B), open it only to restore it, and let the restored instance start once
   (its cleanup then deletes what is past N at boot). A guest's data can then live N + B days, and what you tell guests
   has to say so.
+- **A guest objects** (GDPR Art. 21(1)): unless you have compelling reasons to keep what was kept, delete it —
+  `veyq-admin guest-write-record forget <identity-id>`. It deletes every kept write of that guest identity at once and
+  prints how many went and how many a hold keeps: rows a report's or an authority's hold copied **stay until that hold
+  ends**, because a report or an order concerns them — tell the guest so. Answer within a month (Art. 12(3)). A later
+  write by the same identity is recorded again; a guest who does not want that can view the link but not add to it.
+  The command takes the identity's id, as a moderation case names it; the guest page does not show a guest its own id
+  yet, so a guest who objects cannot name it themselves.
 
 ## Who runs the instance
 
@@ -398,8 +423,9 @@ empty:
   represents it;
 - **the data-protection supervisory authority**.
 
-These are public: the app reads them before sign-in on every address of the instance, and shows the identification,
-where it is set, behind **Legal notice** on the sign-in and share pages. The **notification address** is not public:
+These are public: the app reads them before sign-in on every address of the instance, and shows the identification
+and the contact with its languages, where they are set, behind **Legal notice** on the sign-in and share pages and at
+the bottom of the signed-in app, beside **Terms of this instance**. The **notification address** is not public:
 new moderation cases will be mailed there. Saving it mails a code to it through the instance mail, once Server → Mail
 is set up and confirmed (the panel says so until then); you type the code into the same panel, and nothing is mailed
 to the address before. A changed address asks again. **Clear all** removes every value and keeps the mode.
@@ -462,18 +488,39 @@ choosing could read later reports; moderators' pages compare the key the server 
 stop when it differs, but a reporter cannot check it. Moderation keeps a team accountable to each other; it is not a
 control against the operator.
 
-## Transparency reports
+## The terms of the instance
 
-veyq does not write them; whether you owe one depends on who runs the instance:
+veyq ships a fixed **operator section** of the terms and puts it after every space's own terms
+([ADR 0035](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0035-server-terms-of-service.md) decision 6):
+members read it at the terms gate, guests at a link's terms gate, and anyone, without an account, under **Terms of this
+instance** (`/operator-terms`, served by `GET /api/operator/terms`). Nobody edits its text, you included: it is yours in
+law (you are the host), so a space's owner cannot delete it, and its wording is fixed so nothing a supervisor checks can
+be dropped. You fill it in under **Server → Operator** above, and a changed value shows at once.
 
-- **DSA Art. 15**: a report on your content moderation at least once a year — unless you are a micro or small
-  enterprise (fewer than 50 people and at most €10 million turnover or balance sheet, Recommendation 2003/361/EC).
-  Whether a non-economic club counts as an enterprise is open.
-- **TCO Regulation Art. 7(2)**: in any calendar year in which you acted on terrorist content, or were required to — a
-  removal order —, a report on those actions, published **before 1 March** of the following year, whatever your size.
+What it says depends on the operating mode:
 
-The moderation log holds what such a report counts: the orders, the blocks and their lifts, the objections and their
-outcome. This is research, not legal advice.
+| Part | Private | Club, organisation or company |
+|---|---|---|
+| Who runs the instance (your identification) | where set | always; an empty field reads *not stated by this operator* |
+| How to report, who reviews, that a report blocks nothing, what is kept and for how long | yes | yes |
+| The measures, that those affected are told why and can object once | yes | yes |
+| The statement's further content (facts, report or order, that a person decided, the ground with the law or clause, where and how long it applies, the courts) | no | yes |
+| That an authority can defer the statement | no | yes |
+| Authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your contact with its languages | no | yes |
+| The guest-write record's information (controller, purpose, legal basis, N, recipients, rights, the supervisory authority) and the right to object apart | while *Record guests' writes* is on | while it is on |
+
+In the record's part too an empty value reads *not stated by this operator* in the second mode and is left out in
+*private*. The values it uses are the instance contact and its languages, the address statements name (else the
+contact), the provider identification, the supervisory authority and N.
+
+**When members and guests are asked again.** A space's owner changing their terms, a veyq release that changes the
+section's text, or you switching the operating mode asks every member and guest of every space again. Changing a value,
+N or the record switch asks nobody.
+
+**It is a draft.** No lawyer has reviewed the text yet, and every rendering starts by saying so. Before you publish an
+instance, have it checked. Known gaps against the law, also named in ADR 0035 decision 6: it states no backup period B
+for backups you make another way (it says such a backup holds the record until it is deleted); and your members' own
+privacy information (their account, their acceptances) is in no text yet. Each has a change of its own planned.
 
 ## Not built
 

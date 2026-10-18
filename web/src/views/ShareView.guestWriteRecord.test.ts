@@ -32,6 +32,7 @@ import { stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
 import { chooseNew } from '../test/newMenu'
 import { authenticatedCalls } from '../test/guestMode'
+import { OPERATOR_SECTION } from '../test/models'
 
 const SCOPE_ID = '99999999-9999-4999-8999-999999999999'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_n'
@@ -72,7 +73,7 @@ async function firstWrite(w: Page) {
 beforeEach(async () => {
   localStorage.clear()
   authenticatedCalls.length = 0
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
   stubApi(publicShareFilesApi, { listShareFiles: { items: [] } })
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })

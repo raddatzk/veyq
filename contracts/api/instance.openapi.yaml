@@ -58,8 +58,9 @@ tags:
   - name: instance-guest-write-record
     description: >
       How long the guest-write record keeps a row (ADR 0093 § 10, ADR 0092 § 2): N days, an instance setting the Server
-      Owner sets (ADR 0089). Whether the record is kept at all is the capability switch
-      `core.public-shares.guest-write-record`, not this. A tag of its own, so its resource owns the
+      Owner sets (ADR 0089), and the deletion of one identity's rows when its guest objects (GDPR Art. 21). Whether the
+      record is kept at all is the capability switch `core.public-shares.guest-write-record`, not this. A tag of its
+      own, so its resource owns the
       `/api/instance/guest-write-record` subtree.
 
   - name: instance-store-reconcile
@@ -2014,6 +2015,50 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
 
+  /api/instance/guest-write-record/identities/{identityId}:
+    delete:
+      tags: [instance-guest-write-record]
+      operationId: eraseGuestWriteRecordsOfIdentity
+      x-veyq-channel: admin
+      summary: Delete one share identity's guest-write-record rows — a guest's objection (GDPR Art. 21).
+      description: >
+        Deletes every live row of the guest-write record that names this share identity (ADR 0093 § 10): what the
+        Server Owner does when the guest behind it objects to the record (GDPR Art. 21(1)) and no compelling reason to
+        keep it stands. Rows a hold copied are **not** deleted — a hold is evidence a report or an authority's order
+        asked for, and it ends on its own (ADR 0093 § 4) — and the answer counts them, so the Server Owner can tell the
+        guest what stays and until when. Nothing stops a later write of the same identity from being recorded again,
+        as the guest page says. Idempotent: an identity with no rows, or none any more, answers zeros. Server-Owner
+        only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: identityId
+          in: path
+          required: true
+          description: The share identity's id, as a moderation case or the guest names it.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The identity's live rows are gone; how many went, and how many a hold keeps.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GuestWriteRecordErasure" }
+              example: { erased: 3, keptInHolds: 1 }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: The identity id is not a UUID, so no route matches it.
+
   /api/instance/store/reconcile:
     get:
       tags: [instance-store-reconcile]
@@ -3736,6 +3781,22 @@ components:
           maximum: 30
           example: 14
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(30)'
+
+    GuestWriteRecordErasure:
+      type: object
+      description: What deleting one share identity's guest-write-record rows did.
+      required: [erased, keptInHolds]
+      properties:
+        erased:
+          x-veyq-visibility: measure
+          type: integer
+          description: How many live rows were deleted.
+          example: 3
+        keptInHolds:
+          x-veyq-visibility: measure
+          type: integer
+          description: How many of this identity's rows a hold copied; they stay until their hold ends.
+          example: 1
     OperatingMode:
       $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
 

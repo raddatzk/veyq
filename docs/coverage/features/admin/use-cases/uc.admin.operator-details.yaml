@@ -85,8 +85,9 @@ acceptanceCriteria:
           (`OperatorPanel.test.ts`, `operator.test.ts`), waiting under the use-case gap, and lane L1 walks them in both modes (the `stack` gap).
   - id: the-identification-appears-on-the-login-and-share-pages
     text: >-
-      Where set, in either mode, the identification is shown on the login and the share pages through the public read;
-      a failed read shows nothing and blocks nothing.
+      Where set, in either mode, the identification and the contact with its languages are shown on the login and the
+      share pages and in the signed-in shell through the public read, beside a link to the public terms of the
+      instance; a failed read shows no values and blocks nothing, the terms link stays.
     coverage:
       backend:
         integration: [OperatorDetailsSliceTest.thePublicReadNeverCarriesTheNotificationAddressOnAnyHost]
@@ -95,9 +96,9 @@ acceptanceCriteria:
     gaps:
       - surface: web
         reason: >-
-          The component is mounted alone, in guest mode; that the login and share pages place it is their templates
-          (`LoginView.vue`'s card footer, `ShareView.vue`'s footer), walked on the login page by lane L1 (the `stack`
-          gap) and not by a web suite.
+          The component is mounted alone, in guest mode; that the login and share pages and the shell place it is their
+          templates (`LoginView.vue`'s card footer, `ShareView.vue`'s footer, `AppShell.vue`'s workspace footer),
+          walked by lane L1 (the `stack` gap) and not by a web suite.
   - id: operator-operations-are-server-owner-only-on-the-admin-channel
     text: >-
       Every operation that reads the notification address or writes a value or the mode is a Server-Owner operation

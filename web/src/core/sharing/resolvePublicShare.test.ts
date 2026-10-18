@@ -13,7 +13,7 @@ import {
   pickShareTerms,
   fetchShareTerms,
   derivePasswordToken,
-  acceptedTermsRevision,
+  acceptedTermsKey,
   recordTermsAccepted,
   pickLocaleText,
   openShareNote,
@@ -29,6 +29,7 @@ import { httpError } from '../../test/httpError'
 import { ShareRole, type PublicShare, type SharingApi } from '../../api/generated/sharing'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 import { noteDigest } from './shareNote'
+import { OPERATOR_SECTION } from '../../test/models'
 
 const K_SHARE = v1.randomBytes(32)
 const FRAGMENT = b64url(K_SHARE)
@@ -170,15 +171,15 @@ describe("the note's acceptance switch on the head (uc.sharing.share-note)", () 
 })
 
 describe('terms helpers', () => {
-  it('records and reads the accepted revision per tenant, and 0 for a tenant never seen', () => {
-    expect(acceptedTermsRevision('t-1')).toBe(0)
-    recordTermsAccepted('t-1', 3)
-    expect(acceptedTermsRevision('t-1')).toBe(3)
-    expect(acceptedTermsRevision('t-2')).toBe(0)
+  it('records and reads the accepted triple per tenant, and nothing for a tenant never seen', () => {
+    expect(acceptedTermsKey('t-1')).toBe('')
+    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 2, variant: 'REDUCED' })
+    expect(acceptedTermsKey('t-1')).toBe('3:2:REDUCED')
+    expect(acceptedTermsKey('t-2')).toBe('')
   })
 
   it('fetches the terms of the share by its id, with no credential (terms are public)', async () => {
-    const getShareTerms = vi.fn<SharingApi['getShareTerms']>().mockResolvedValue({ tenantId: 't', termsRevision: 2, terms: { en: 'x' } })
+    const getShareTerms = vi.fn<SharingApi['getShareTerms']>().mockResolvedValue({ tenantId: 't', termsRevision: 2, operatorSection: OPERATOR_SECTION, terms: { en: 'x' } })
     fakeApi(publicSharesApi, { getShareTerms })
     await expect(fetchShareTerms('s1')).resolves.toMatchObject({ termsRevision: 2 })
     expect(getShareTerms).toHaveBeenCalledWith({ shareId: 's1' })
@@ -191,9 +192,9 @@ describe('terms helpers', () => {
   }, 60_000)
 
   it('picks the viewer\'s locale, falling back to en', () => {
-    const terms = { tenantId: 't', termsRevision: 1, terms: { de: 'Regeln', en: 'Rules' } }
+    const terms = { tenantId: 't', termsRevision: 1, operatorSection: OPERATOR_SECTION, terms: { de: 'Regeln', en: 'Rules' } }
     expect(pickShareTerms(terms, 'de')).toBe('Regeln')
     expect(pickShareTerms(terms, 'fr')).toBe('Rules')
-    expect(pickShareTerms({ tenantId: 't', termsRevision: 0, terms: undefined }, 'de')).toBe('')
+    expect(pickShareTerms({ tenantId: 't', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: undefined }, 'de')).toBe('')
   })
 })
