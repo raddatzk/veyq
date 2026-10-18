@@ -110,21 +110,21 @@ tenant is erased or cascades.
 
 - [x] **0 docs** — the two use-cases and ADR 0101 corrected to the owner's answers where they differ from the
   recommendations. · Done when: feature-format, coverage, doc-link, doc-citation, change guards green.
-- [ ] **1 contracts** — `eraseOwnAccount` (signed in, password proof), `eraseAccount` and `stopAccountErasure` (admin
+- [x] **1 contracts** — `eraseOwnAccount` (signed in, password proof), `eraseAccount` and `stopAccountErasure` (admin
   channel, by address), `deleteTenant` and `stopTenantDeletion` (admin channel), the tenant member role change,
   the owner invite into an active tenant, `PENDING_DELETION` in `TenantStatus`; each new operation classified in
   `OperatorBlindProbeTest`, each admin one in the admin-channel sweep. · Done when: `npm run generate:api`; the
   contracts guards; `./gradlew check` red only on the tests that see a new operation on day one (name them), and
   `npm run check` in `web/` and `admin-web/` once, naming the typed lines `TenantStatus` reddens
   (`grep -rn "'SUSPENDED'" web/src admin-web/src`).
-- [ ] **2 guards** — `scripts/validate_account_erasure_arity.py`: the FK closure below `veyq_user` and below
+- [x] **2 guards** — `scripts/validate_account_erasure_arity.py`: the FK closure below `veyq_user` and below
   `veyq_tenant` from the migrations, each table erased by its eraser or cascading; every account-id column without a key
   (the second-angle locator's spellings) present in the eraser's map. Bite against the untouched tree first: it must be
   red today, naming every table the first two locators list (`changes/README.md` § run a new guard's predicate against
   the UNTOUCHED tree); then a forged table `REFERENCES veyq_user` turns it red after phase 3 (control: the same table
   with `ON DELETE CASCADE` → green). · Done when: the guard is red on this phase's tree for the reason it names, and
   its docstring carries the required fields.
-- [ ] **3 backend** — the pending erasure, its two doors and its stop; the lockout at the request (sessions, sign-in,
+- [x] **3 backend** — the pending erasure, its two doors and its stop; the lockout at the request (sessions, sign-in,
   pendings, the member removal per tenant, the roster); the mail; the purge after the window; the acceptance rows kept
   while a case names the account; the tenant deletion, its stop and its purge, its mail to the members (whose
   accounts stay, Q20);
@@ -138,12 +138,12 @@ tenant is erased or cascades.
   `last_owner_choice_required` (control: with "name a new owner" → erased, the named member the owner; with "delete
   along" → the tenant pending deletion; the Server Owner's door → erased, the tenant listed ownerless) (Q18); a deleted tenant's hold survives the purge (control: an ended hold does not);
   `EveryStoredTimeHasAReaderTest` names the purge as the reader of the new times.
-- [ ] **4 web + admin-web** — the settings' erase dialog (what goes, what stays, the shared-scope advice, the last
+- [x] **4 web + admin-web** — the settings' erase dialog (what goes, what stays, the shared-scope advice, the last
   owner's choice per tenant — delete along or name a new owner — and the sole-member tenant), clearing the browser's records for the address; "make owner" in the tenant's
   member list; admin-web: an Accounts panel with erase and stop by address, the tenant panel's delete (typed domain)
   and stop, an ownerless tenant marked with its two ways on; the CLI verbs. · Done when: `npm run check` green in both;
   a browser pass of a self-erasure through to the refused sign-in, and of a tenant deletion and its stop, in DE and EN.
-- [ ] **5 docs** — ADR 0101's status (built), ADR 0035 decision 4's sentence, the security model's § Deletion &
+- [x] **5 docs** — ADR 0101's status (built), ADR 0035 decision 4's sentence, the security model's § Deletion &
   erasure; site: a new Use page on erasing your account (`site/src/content/docs/account/`, EN and DE), the space owners'
   page on members (`space-owners/who-gets-into-your-space.mdx`, EN and DE: "make owner", the last owner), the Run pages
   (`run/moderation.md` § your steps, `run/first-run.mdx` § Tenants: deleting a tenant, answering an erasure request);
@@ -159,4 +159,19 @@ owner's go.
 
 ## Retrospective
 
-_Filled at implementation._
+- **Planning: two decisions met an invariant of another ADR only at implement time.** Decision 9's owner invite into an
+  active tenant could not hand a non-member the tenant key (ADR 0020 move 6: only a key-holder admits), so it was narrowed
+  to a member; and "a moderator leaves the roster as a removal does" silently included the removal's last-holder
+  refusal (ADR 0099 § 5), which the ADR's "the Server Owner's door does not refuse" contradicts. Root cause: the refine
+  read the neighbour operations for what they do, not for what they refuse. Next time: a refine that reuses an operation
+  lists that operation's refusals beside the new decision's, and one that lets the operator give someone a role in a
+  space names who hands them the key (harvested into docs/ai/README.md).
+- **Planning: the second-angle locator searched for ids only.** The address an erased account leaves in a tenant's
+  `owner_email` and its old invites was found by the admin-web implementer reading the tenant list, not by the locator;
+  the guard now also classifies `email`/`…_email`/`…_address` columns and was red on exactly that before the fix.
+- **Execution: a long run piped through `head` and a rollback-only commit.** `./gradlew check | grep | head -40` ended the
+  build at forty lines of expected log noise and reported success; and `setRollbackOnly()` inside
+  `QuarkusTransaction.call` throws on commit, which only the slice tests caught (the trap is commented at
+  `AccountErasureHandler.refusable`). Process: under a machine load of 20–70 the UI work went to two parallel
+  implementers and the browser pass to a third; their reports came back measured, but the web package's full
+  `npm run check` could only go green once the load fell.
