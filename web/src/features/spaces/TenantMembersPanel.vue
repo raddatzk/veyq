@@ -19,6 +19,9 @@ import {
   reissueMemberInvite,
   removeTenantMember,
   revokeMemberInvite,
+  setTenantMemberRole,
+  SetTenantMemberRoleRequestRoleEnum,
+  memberError,
   type PendingMemberInvite,
   type ScopeMember,
 } from './members'
@@ -209,6 +212,30 @@ async function remove(member: ScopeMember) {
   }
 }
 
+// Make a member an owner, or an owner a member again (ADR 0101 decision 9) — owner-only, mirroring GroupMembersPanel's
+// promote/demote one scope-kind up. A pure role change, no key moves; the last-owner guard is the server's (`409
+// last_owner`), and the directory reloads to show the new role. Stepping back yourself takes this panel's owner
+// actions away with the reload — what the role says.
+const roleBusy = ref<string | null>(null)
+async function changeRole(member: ScopeMember, role: SetTenantMemberRoleRequestRoleEnum) {
+  if (!activeSpace.tenantId) return
+  actionError.value = ''
+  reissuedTo.value = ''
+  roleBusy.value = member.userId
+  try {
+    await setTenantMemberRole(activeSpace.tenantId, member.userId, role)
+    toast.success(role === SetTenantMemberRoleRequestRoleEnum.Owner ? t('members.promoted') : t('members.demoted'))
+    await reload()
+  } catch (e) {
+    on401(e)
+    if (isUnauthorized(e)) return
+    const { code } = await memberError(e)
+    actionError.value = code === 'last_owner' ? t('members.lastOwner') : t('members.roleChangeFailed')
+  } finally {
+    roleBusy.value = null
+  }
+}
+
 // Turn off every link of the space (ADR 0075 point 5) — owner-only, behind the confirmation dialog. Each link then
 // comes back only as a new one its owner renews; the toast names how many went off.
 const revokingLinks = ref(false)
@@ -374,6 +401,28 @@ async function revoke(invite: PendingMemberInvite) {
                 text
                 size="small"
                 @click="openReview(member)"
+              />
+              <Button
+                v-if="isOwner && member.role === 'MEMBER'"
+                :label="t('members.promote')"
+                icon="pi pi-arrow-up"
+                severity="secondary"
+                outlined
+                size="small"
+                :loading="roleBusy === member.userId"
+                :data-promote="member.userId"
+                @click="changeRole(member, SetTenantMemberRoleRequestRoleEnum.Owner)"
+              />
+              <Button
+                v-else-if="isOwner && member.role === 'OWNER'"
+                :label="t('members.demote')"
+                icon="pi pi-arrow-down"
+                severity="secondary"
+                outlined
+                size="small"
+                :loading="roleBusy === member.userId"
+                :data-demote="member.userId"
+                @click="changeRole(member, SetTenantMemberRoleRequestRoleEnum.Member)"
               />
               <Button
                 v-if="isOwner && member.role !== 'OWNER'"

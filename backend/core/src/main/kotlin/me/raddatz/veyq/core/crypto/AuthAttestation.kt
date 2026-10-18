@@ -27,6 +27,20 @@ object AuthAttestation {
         ).fold(ByteArray(0)) { acc, f -> acc + ByteBuffer.allocate(4).putInt(f.size).array() + f }
     }.getOrNull()
 
+    /**
+     * The password proof of an account's own erasure (uc.account.erase-account, ADR 0101 decision 1): the account and a
+     * login challenge the server minted for its address, spent by the request, so a captured proof erases nothing twice.
+     * Byte layout: `packages/crypto`'s `eraseAccountAttestationStatement`, pinned by the `auth_attestation.erase_account`
+     * vector. Null when [nonce] is not base64.
+     */
+    fun eraseAccountStatement(userId: String, nonce: String): ByteArray? = runCatching {
+        listOf(
+            "veyq/v1/auth-attestation/erase-account".toByteArray(Charsets.UTF_8),
+            userId.toByteArray(Charsets.UTF_8),
+            Base64.getDecoder().decode(nonce),
+        ).fold(ByteArray(0)) { acc, f -> acc + ByteBuffer.allocate(4).putInt(f.size).array() + f }
+    }.getOrNull()
+
     /** True iff [signature] verifies over [statement] under the raw base64 [publicKey]; malformed input is false. */
     fun verify(publicKey: String?, statement: ByteArray?, signature: String): Boolean {
         if (publicKey == null || statement == null) return false

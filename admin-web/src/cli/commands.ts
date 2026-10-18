@@ -5,6 +5,8 @@
 // in the facade, where the UI gets it too.
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
+// + a tenant's deletion and its stop, and the owner invite of an ownerless tenant (ADR 0101 decisions 9 and 10)
+// + an account's erasure, its stop and the pending erasures (ADR 0101 decisions 1-3, uc.account.erase-account)
 // + the tenant storage quota + release info with the release check's notices and its switch + the config-secret state +
 // the object-store setting and its check + the bucket reconcile and its two switches + the capability switches with
 // their requirements + the external services +
@@ -30,6 +32,8 @@
 import {
   changeTenantDomain,
   createTenant,
+  deleteTenant,
+  inviteTenantOwner,
   listTenants,
   reactivateTenant,
   reassignInvite,
@@ -37,8 +41,10 @@ import {
   parseQuotaGib,
   revokeTenant,
   setTenantStorageQuota,
+  stopTenantDeletion,
   suspendTenant,
 } from '../features/tenants/tenants'
+import { eraseAccount, listAccountErasures, stopAccountErasure } from '../features/instance/accounts'
 import { CliError, renderResult } from './output'
 import { getInstanceRelease } from '../features/instance/release'
 import { getReleaseNotices, setReleaseCheck } from '../features/instance/releaseNotices'
@@ -358,6 +364,26 @@ export const COMMANDS: Record<string, Command> = {
     summary: 'Bring a SUSPENDED tenant back to ACTIVE.',
     flags: { 'tenant-id': tenantId },
     run: (f) => reactivateTenant(f['tenant-id']),
+  },
+  'tenant delete': {
+    usage: 'tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
+    summary:
+      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does.',
+    flags: { 'tenant-id': tenantId, domain: { describe: 'the tenant’s own domain, typed as the confirmation', required: true }, ...STATEMENT_FLAGS },
+    run: async (f) => deleteTenant(f['tenant-id'], f.domain, await statementOf(f)),
+  },
+  'tenant stop-deletion': {
+    usage: 'tenant stop-deletion --tenant-id <id>',
+    summary: 'Stop a tenant’s pending deletion before it is erased; it returns SUSPENDED (bring it back with `tenant reactivate`).',
+    flags: { 'tenant-id': tenantId },
+    run: (f) => stopTenantDeletion(f['tenant-id']),
+  },
+  'tenant invite-owner': {
+    usage: 'tenant invite-owner --tenant-id <id> --email <address>',
+    summary:
+      'Invite one of an ACTIVE tenant’s members to own it — the way out of an ownerless tenant. Mailed where instance mail is set up (delivery SENT); otherwise hand over the copy-link from bootstrapSecret.',
+    flags: { 'tenant-id': tenantId, email: { describe: 'the address of one of the tenant’s members', required: true } },
+    run: (f) => inviteTenantOwner(f['tenant-id'], f.email),
   },
   'tenant quota': {
     usage: 'tenant quota --tenant-id <id> --gib <GiB|none>',
@@ -710,6 +736,25 @@ export const COMMANDS: Record<string, Command> = {
     flags: { address: { describe: 'the blocked account’s address, as `moderation proposals` prints it', required: true } },
     run: async (f) => liftSignInBlock(await signInBlockByAddress(f.address)),
     render: (r) => renderSteps(r as ModerationSteps),
+  },
+  'account erase': {
+    usage: 'account erase --address <address>',
+    summary:
+      'Erase an account: it stops at once (sessions end, sign-in refused) and is erased after 30 days (printed as dueAt) unless `account stop-erasure`. Not the Server Owner’s own account; a last owner’s tenant is left ownerless (`tenant list`); holds and moderation records stay.',
+    flags: { address: { describe: 'the account’s address', required: true } },
+    run: (f) => eraseAccount(f.address),
+  },
+  'account stop-erasure': {
+    usage: 'account stop-erasure --address <address>',
+    summary: 'Stop a pending account erasure before the purge; the account signs in again.',
+    flags: { address: { describe: 'the account’s address, as `account erasures` prints it', required: true } },
+    run: (f) => stopAccountErasure(f.address),
+  },
+  'account erasures': {
+    usage: 'account erasures',
+    summary: 'Print the pending account erasures, earliest due first: each address, when and by whom (SELF or SERVER_OWNER) it was requested, and when it is erased.',
+    flags: {},
+    run: () => listAccountErasures(),
   },
   'order remove': {
     usage: 'order remove --share <link|id> --reference <text> [--received-at <ISO time>] [--defer-until <ISO time>] [--lang en|de]',

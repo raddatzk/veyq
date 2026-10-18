@@ -214,6 +214,28 @@ describe('AppSidebar tenant switcher', () => {
 
     assign.mockRestore()
   })
+  // ADR 0101 decision 10: a tenant pending deletion is offline exactly as a suspension takes it.
+  it('lists a tenant pending deletion offline and not enterable, like a suspended one', async () => {
+    vi.mocked(listMyTenants).mockResolvedValueOnce([
+      myTenant({ tenantId: 't-1', domain: '127.0.0.1' }),
+      myTenant({ tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'PENDING_DELETION' }),
+      myTenant({ tenantId: 't-3', name: 'Nachbarn', domain: 'nachbarn.localhost', role: 'MEMBER', status: 'ACTIVE' }),
+    ])
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
+    const wrapper = await mountAt('')
+
+    const rows = wrapper.findAll('.sidebar-tenant-overview-list .sidebar-tenant-link')
+    expect(rows[1].find('.sidebar-tenant-offline').text()).toBe(t('shell.tenantOffline'))
+    expect(rows[1].attributes('disabled')).toBeDefined()
+    await rows[1].trigger('click')
+    expect(assign).not.toHaveBeenCalled()
+    // control: another ACTIVE tenant of the same list is enterable
+    expect(rows[2].find('.sidebar-tenant-offline').exists()).toBe(false)
+    await rows[2].trigger('click')
+    expect(assign).toHaveBeenCalledWith('https://nachbarn.localhost')
+
+    assign.mockRestore()
+  })
 })
 
 // The Favorites section is CORE's (inbox #409): every pinned node of the scope, each with its KIND's icon from the registry and

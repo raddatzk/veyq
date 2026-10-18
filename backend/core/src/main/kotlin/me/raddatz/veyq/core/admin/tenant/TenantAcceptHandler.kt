@@ -53,6 +53,8 @@ sealed interface PreviewOutcome {
         val ownerEmail: String,
         val hasAccount: Boolean,
         val role: String,
+        /** An OWNER invite into an ACTIVE tenant (ADR 0101 decision 9): accepted by [TenantAcceptHandler.acceptOwnership]. */
+        val handover: Boolean,
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
     data object NoLongerValid : PreviewOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
@@ -66,6 +68,15 @@ sealed interface AcceptOutcome {
     data object AlreadyActive : AcceptOutcome, HttpFailure by httpFailure("tenant_not_pending", FailureStatus.CONFLICT)
     data object MissingGrant : AcceptOutcome, HttpFailure by Failures.invalidRequest
     data object UsernameTaken : AcceptOutcome, HttpFailure by Failures.usernameTaken
+}
+
+/** Result of a member accepting an owner invite into an ACTIVE tenant (`acceptTenantOwnership`, ADR 0101 decision 9). */
+sealed interface AcceptOwnershipOutcome {
+    data object Done : AcceptOwnershipOutcome
+    data object NotFound : AcceptOwnershipOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
+    data object NoLongerValid : AcceptOwnershipOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
+    data object NotInvitedOwner : AcceptOwnershipOutcome, HttpFailure by httpFailure("not_invited_owner", FailureStatus.FORBIDDEN)
+    data object NotMember : AcceptOwnershipOutcome, HttpFailure by httpFailure("not_tenant_member", FailureStatus.CONFLICT)
 }
 
 sealed interface RegisterAcceptOutcome {
@@ -110,7 +121,30 @@ class TenantAcceptHandler(
             ownerEmail = invite.ownerEmail,
             hasAccount = accounts.findByEmail(invite.ownerEmail) != null,
             role = invite.role,
+            handover = invite.role == TenantInviteEntity.OWNER && tenant.status == TenantEntity.ACTIVE,
         )
+    }
+
+    /**
+     * A member accepts an owner invite into an ACTIVE tenant (`inviteTenantOwner`, ADR 0101 decision 9): they become an
+     * OWNER of its TENANT scope. Nothing is born and no key moves — a member already holds the tenant's key — so the
+     * invite is only spent and the role set, under the tenant scope's lock every role change takes. The caller must be
+     * the invited address and still a member: an invite to someone who left since makes nobody an owner.
+     */
+    @Transactional
+    fun acceptOwnership(userId: String, bootstrapSecret: String): AcceptOwnershipOutcome {
+        val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret))
+            ?.takeIf { it.role == TenantInviteEntity.OWNER } ?: return AcceptOwnershipOutcome.NotFound
+        if (!isLive(invite)) return AcceptOwnershipOutcome.NoLongerValid
+        val tenant = store.findTenant(invite.tenantId) ?: return AcceptOwnershipOutcome.NotFound
+        if (tenant.status != TenantEntity.ACTIVE) return AcceptOwnershipOutcome.NoLongerValid
+        val caller = VeyqUser.findById(userId) ?: return AcceptOwnershipOutcome.NotInvitedOwner
+        if (caller.email != invite.ownerEmail) return AcceptOwnershipOutcome.NotInvitedOwner
+        store.lockTenantScope(tenant.id)
+        if (!store.isTenantMember(userId, tenant.id)) return AcceptOwnershipOutcome.NotMember
+        if (!store.consumeLiveInvite(invite.id)) return AcceptOwnershipOutcome.NoLongerValid
+        store.setTenantRole(tenant.id, userId, me.raddatz.veyq.core.membership.MembershipEntity.OWNER)
+        return AcceptOwnershipOutcome.Done
     }
 
     /** Existing-user accept: the caller (resolved from the session) must be the invited person. Role-branched
@@ -195,6 +229,9 @@ class TenantAcceptHandler(
         if (member) store.lockTenantScope(tenant.id)
         if (!store.consumeLiveInvite(invite.id)) return RegisterAcceptOutcome.NoLongerValid
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
+        // An owner invite into an ACTIVE tenant goes to a member (ADR 0101 decision 9), never to a new account: a tenant
+        // is born only from PENDING (a second birth would collide on the tenant scope's id).
+        if (!member && tenant.status != TenantEntity.PENDING) return unspend(RegisterAcceptOutcome.NoLongerValid)
         if (accounts.findByEmail(invite.ownerEmail) != null) return unspend(RegisterAcceptOutcome.EmailTaken)
         if (profiles.usernameTaken(tenant.id, username)) return unspend(RegisterAcceptOutcome.UsernameTaken)
         // The client-minted account id (ADR 0072): the optional sealed real name is bound to (tenant scope, it).

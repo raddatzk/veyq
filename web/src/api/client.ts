@@ -20,6 +20,7 @@ import {
   AccountDeviceRegisterApi,
   AccountEmailApi,
   AccountEmailChangeApi,
+  AccountErasureApi,
   AccountPasswordApi,
   AccountProfileApi,
   AccountRotationApi,
@@ -115,6 +116,12 @@ export function accountEmailApi(): AccountEmailApi {
 /** Changing the sign-in address (uc.account.change-email) — session-authenticated; the request carries its own proofs. */
 export function accountEmailChangeApi(): AccountEmailChangeApi {
   return new AccountEmailChangeApi(new AccountConfiguration(bearerParams()))
+}
+
+/** Erasing the caller's own account (uc.account.erase-account, ADR 0101) — session-authenticated; the request carries
+ *  its own password proof. */
+export function accountErasureApi(): AccountErasureApi {
+  return new AccountErasureApi(new AccountConfiguration(bearerParams()))
 }
 
 export function accountRotationApi(): AccountRotationApi {

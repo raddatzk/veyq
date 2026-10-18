@@ -1406,6 +1406,10 @@ printed `BUILD DONE` over a build still running. Two shapes, one rule:
 
 The tell is a step whose success is reported by the same command that was supposed to do it.
 
+**And never pipe a long run into `head`.** `cr-account-erasure` filtered `./gradlew check` through `grep … | head -40`:
+forty lines of expected test log noise later `head` exited, the pipe broke, the build died mid-suite, and the chain
+reported `0`. Write the run to a file and read the file.
+
 ### A new universal check meets every existing local one
 
 **Grep the surface it sweeps for tests that already assert something about it.** This is the inverse of the guard-anchor rule below, and it bites the other way:

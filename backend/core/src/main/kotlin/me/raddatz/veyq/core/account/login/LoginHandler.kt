@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.account.login
 
 import me.raddatz.veyq.core.crypto.Ed25519Verifier
 import me.raddatz.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.normalizeEmail
@@ -76,7 +77,8 @@ class LoginHandler(
         val ok = verifySignature(challenge, user, signatureB64)
         // A blocked sign-in (uc.account.login E5) answers as a wrong password, decided after the full verification and
         // under the account lock the block takes too (`SignInBlocks`), so the answer tells nobody the account is blocked.
-        return if (ok && user != null && !blocks.signInBlocked(user.id)) sessions.issue(user.id) else null
+        // A pending erasure answers the same (ADR 0101 decision 1), under the same lock the erasure request takes.
+        return if (ok && user != null && !blocks.signInBlocked(user.id) && !AccountErasureEntity.isPending(user.id)) sessions.issue(user.id) else null
     }
 
     private fun verifySignature(challenge: LoginChallengeEntity?, user: VeyqUser?, signatureB64: String): Boolean {

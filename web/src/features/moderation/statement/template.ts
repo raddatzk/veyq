@@ -25,6 +25,10 @@ export const TEMPLATE = {
       en: { measure: 'a space you own, {domain}, was taken offline', reach: 'Nobody can open it or anything in it, its members included, and its links answer as if they did not exist; nothing was deleted.' },
       de: { measure: 'ein Bereich, der dir gehört, {domain}, wurde offline genommen', reach: 'Niemand kann ihn oder etwas darin öffnen, auch seine Mitglieder nicht, und seine Links antworten, als gäbe es sie nicht; gelöscht wurde nichts.' },
     },
+    TENANT_DELETED: {
+      en: { measure: 'a space you own, {domain}, was deleted', reach: 'Nobody can open it or anything in it from now on, its members included, and its links answer as if they did not exist. Everything in it is erased after a waiting period unless the deletion is stopped before; the accounts of its members stay.' },
+      de: { measure: 'ein Bereich, der dir gehört, {domain}, wurde gelöscht', reach: 'Ab jetzt kann niemand ihn oder etwas darin öffnen, auch seine Mitglieder nicht, und seine Links antworten, als gäbe es sie nicht. Alles darin wird nach einer Wartezeit gelöscht, wenn die Löschung nicht vorher gestoppt wird; die Konten seiner Mitglieder bleiben.' },
+    },
   },
   roles: {
     SHARE_CREATOR: { en: 'the person who created the link', de: 'Person, die den Link erstellt hat' },

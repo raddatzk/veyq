@@ -17,6 +17,7 @@ vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template
 vi.mock('../features/account/pairing/AddDevicePanel.vue', () => ({ default: { template: '<div class="stub-add-device" />' } }))
 vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
 vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
+vi.mock('../features/account/erasure/EraseAccountPanel.vue', () => ({ default: { template: '<div class="stub-erase" />' } }))
 
 import SettingsHubView from './SettingsHubView.vue'
 import { listMyGroups, listMyTenants } from '../features/spaces/scopes'
@@ -246,6 +247,16 @@ describe('SettingsHubView — split view index vs detail', () => {
     const w = await mountHub('/settings/sessions')
     expect(navText(w)).toContain(t('settings.sessions'))
     expect(w.find('.stub-sessions').exists()).toBe(true)
+    expect(w.find('.stub-appearance').exists()).toBe(false)
+  })
+
+  it('Erase account is a Personal section reachable with no scope at all (uc.account.erase-account)', async () => {
+    // Account-wide: the account is erased, not a membership. Mounting its stub rather than the appearance fallback is what
+    // says the route resolved.
+    clearActiveSpace()
+    const w = await mountHub('/settings/erase')
+    expect(navText(w)).toContain(t('erasure.navTitle'))
+    expect(w.find('.stub-erase').exists()).toBe(true)
     expect(w.find('.stub-appearance').exists()).toBe(false)
   })
 

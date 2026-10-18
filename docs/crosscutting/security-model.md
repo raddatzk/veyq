@@ -656,8 +656,15 @@ re-applies before it serves ([ADR 0056](../decisions/0056-instance-durable-state
 decision 8) — **decided, not built**: today only the cluster's gate and the object pool rotate, by count, Compose's
 captures are kept until the operator deletes them, and a restore brings back what was erased after its capture. An
 account is erased on request and an active tenant can be deleted
-([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), decided, not
-built; today no path deletes an account). The two steps carry
+([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)): the account stops
+at the request — sessions, sign-in, its pending invites and pairings, its memberships of shared scopes — and after the
+scope trash's retention one purge erases it with its own scopes, every row keyed on it and its address wherever it was
+copied; a tenant goes offline at once and is erased after the same window. Nothing is decrypted to erase: what goes is
+ciphertext and metadata, its bytes through the reclaim list. What it put into shared scopes stays with the scope under
+its opaque id, shown as a former member's, and holds and the moderation records naming it stay to their own ends, its
+terms acceptance rows with them while a case names it. `scripts/validate_account_erasure_arity.py` holds that every
+table reachable by foreign key from an account or a tenant is erased or cascades and that every column naming an
+account or its address without a key is classified. The two steps carry
 different authority. **Trashing is reversible** — an item moves to a trash and is restorable for the retention
 window — so it may be done by **any member of the scope** (recovery, not destruction), and it is **audited**:
 the trashed record carries **who** trashed it and **when**, so the action is accountable rather than anonymous.

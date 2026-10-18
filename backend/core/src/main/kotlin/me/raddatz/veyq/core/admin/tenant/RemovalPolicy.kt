@@ -48,9 +48,13 @@ sealed interface RemovalPlan {
  *    server rule, the tenant owner never gains access); *who* that successor is stays a shell query.
  */
 object RemovalPolicy {
-    fun plan(scopes: List<RemovalScope>, tenantScopeId: String): RemovalPlan {
+    /**
+     * [allowLastOwner] is the account erasure's Server Owner door (ADR 0101 decision 9): an erasure cannot wait on a
+     * third person, so the last owner is cut like any member and the tenant is left with no owner.
+     */
+    fun plan(scopes: List<RemovalScope>, tenantScopeId: String, allowLastOwner: Boolean = false): RemovalPlan {
         val tenant = scopes.firstOrNull { it.scopeId == tenantScopeId } ?: return RemovalPlan.MemberNotFound
-        if (tenant.role == MembershipEntity.OWNER && tenant.ownerCount <= 1) return RemovalPlan.LastOwner
+        if (!allowLastOwner && tenant.role == MembershipEntity.OWNER && tenant.ownerCount <= 1) return RemovalPlan.LastOwner
         return RemovalPlan.Cascade(scopes.map(::step))
     }
 

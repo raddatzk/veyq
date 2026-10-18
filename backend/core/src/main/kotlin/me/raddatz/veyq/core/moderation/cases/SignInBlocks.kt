@@ -164,17 +164,29 @@ class SignInBlocks(
      * open proposal to take it offline is settled as taken.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun takenOffline(tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) {
+    fun takenOffline(tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) =
+        tenantStep(BlockKind.TENANT_OFFLINE, tenantId, serverOwnerId, statement, now)
+
+    /**
+     * [tenantId] was deleted, **in the caller's transaction** (the deletion's; ADR 0101 decision 10): over content, a
+     * `TENANT_DELETED` measure records it and carries the statement (DSA Art. 17(1)(c), a termination of the service for its
+     * owners), exactly as a suspension's `TENANT_OFFLINE` does; every open proposal to take it offline is settled as taken.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun deleted(tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) =
+        tenantStep(BlockKind.TENANT_DELETED, tenantId, serverOwnerId, statement, now)
+
+    private fun tenantStep(kind: BlockKind, tenantId: String, serverOwnerId: String, statement: StepStatementInput?, now: Instant) {
         if (statement != null) {
             val onCase = proposedCase(ProposalStep.TENANT_OFFLINE, tenantId)
             val row = ModerationBlockEntity().apply {
                 id = UUID.randomUUID().toString()
-                kind = BlockKind.TENANT_OFFLINE.name
+                this.kind = kind.name
                 targetId = tenantId
                 caseId = onCase
                 takenBy = serverOwnerId
                 takenAt = now
-                activeKey = ModerationBlockEntity.activeKeyOf(BlockKind.TENANT_OFFLINE, tenantId)
+                activeKey = ModerationBlockEntity.activeKeyOf(kind, tenantId)
             }
             row.persist()
             if (onCase != null) {
@@ -189,8 +201,35 @@ class SignInBlocks(
 
     /** [tenantId] came back, **in the caller's transaction** (the reactivation's): a `TENANT_OFFLINE` measure in force is lifted. */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun backOnline(tenantId: String, serverOwnerId: String, now: Instant) {
-        val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(BlockKind.TENANT_OFFLINE, tenantId)).firstResult()
+    fun backOnline(tenantId: String, serverOwnerId: String, now: Instant) = lift(BlockKind.TENANT_OFFLINE, tenantId, serverOwnerId, now)
+
+    /** [tenantId]'s deletion was stopped, **in the caller's transaction**: a `TENANT_DELETED` measure in force is lifted. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun deletionStopped(tenantId: String, serverOwnerId: String, now: Instant) = lift(BlockKind.TENANT_DELETED, tenantId, serverOwnerId, now)
+
+    /**
+     * [targetId] — an account or a tenant — was erased, **in its purge's transaction** (ADR 0101 decisions 7, 10): every
+     * measure of [kinds] on it still in force ends with it, lifted by no one and logged so, dated from [now]. Without
+     * this a measure on nothing would stand forever, and its statement and its case's records with it — the retention of
+     * ADR 0093 § 11 counts from a lift (GDPR Art. 5(1)(e)).
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun targetErased(targetId: String, kinds: List<BlockKind>, now: Instant) {
+        ModerationBlockEntity.list("targetId = ?1 and kind in ?2 and activeKey is not null", targetId, kinds.map { it.name })
+            .forEach { row ->
+                row.liftedAt = now
+                row.activeKey = null
+                val caseId = row.caseId
+                if (caseId != null) {
+                    log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = targetId)
+                } else {
+                    log.append(ModerationEvent.MEASURE_LIFTED, now, moderatorId = null, actorId = null, reason = row.kind, targetId = targetId, datedFrom = now)
+                }
+            }
+    }
+
+    private fun lift(kind: BlockKind, tenantId: String, serverOwnerId: String, now: Instant) {
+        val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, tenantId)).firstResult()
             ?: return
         row.liftedAt = now
         row.liftedBy = serverOwnerId

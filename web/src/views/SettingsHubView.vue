@@ -23,6 +23,7 @@ import TenantCapabilitiesPanel from '../features/tenant/TenantCapabilitiesPanel.
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
 import TrustResetPanel from '../features/account/trustReset/TrustResetPanel.vue'
+import EraseAccountPanel from '../features/account/erasure/EraseAccountPanel.vue'
 import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
 import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
@@ -123,6 +124,11 @@ const categories = computed<NavCategory[]>(() => {
         ...(trustRefused.value ? [{ id: 'trust-reset', label: t('trustReset.navTitle'), icon: 'pi pi-history' }] : []),
         // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
         ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'pi pi-user' }] : []),
+        // Erasing the account (uc.account.erase-account, ADR 0101) — last, below everything it ends. Account-wide like
+        // sessions; the hub's `requiresUnlock` gives the panel the account id and address its proof binds. The Server
+        // Owner's account is never erased: the panel reads that from the server and says so (A2), as it is the only
+        // place that knows.
+        { id: 'erase', label: t('erasure.navTitle'), icon: 'pi pi-user-minus' },
       ],
     },
   ]
@@ -229,6 +235,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'pairing') return { component: AddDevicePanel, props: {} }
   if (id === 'security') return { component: KeyRotationPanel, props: {} }
   if (id === 'trust-reset') return { component: TrustResetPanel, props: {} }
+  if (id === 'erase') return { component: EraseAccountPanel, props: {} }
   return { component: AppearancePanel, props: {} }
 })
 

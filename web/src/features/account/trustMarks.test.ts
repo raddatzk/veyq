@@ -5,7 +5,7 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import * as v1 from '@veyq/crypto/v1'
-import { carryMarks, raiseMarks, readMarks } from './trustMarks'
+import { carryMarks, forgetMarks, raiseMarks, readMarks } from './trustMarks'
 
 const A = v1.randomBytes(32)
 const B = v1.randomBytes(32)
@@ -34,6 +34,15 @@ describe('trust-state marks', () => {
     await raiseMarks(A, { pins: 5, epochs: { s1: 2 } })
     expect(await readMarks(B)).toEqual({ pins: 0, register: 0, epochs: {} })
     expect((await readMarks(A)).pins).toBe(5) // control: the account that raised them reads them
+  })
+
+  // uc.account.erase-account: the browser that erased an account forgets its marks (ADR 0101 decision 4) — that slot only.
+  it('forgets one account’s marks and leaves another account’s on the same browser', async () => {
+    await raiseMarks(A, { pins: 5, register: 2, epochs: { s1: 3 } })
+    await raiseMarks(B, { pins: 4 })
+    await forgetMarks(A)
+    expect(await readMarks(A)).toEqual({ pins: 0, register: 0, epochs: {} })
+    expect((await readMarks(B)).pins).toBe(4) // control: the other account's slot is untouched
   })
 
   it('carries an account’s marks to its new key, merging with what that key already holds', async () => {

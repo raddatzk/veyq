@@ -13,10 +13,11 @@
 // ({@link carryMarks}); every other device must unlock afresh — with the password and Secret Key it starts without
 // marks (ADR 0028 Decision 7's named no-mark case), linked again it starts from its linker's.
 //
-// **Not a secret, so it survives sign-out** — only the session's convenience tiers are dropped there. No path
-// deletes the marks today, because none deliberately removes an account's saved device data: the one wholesale
-// wipe (`forgetAllTrust`) has no caller. Whatever path is added for that must take the marks with it. Losing
-// them reopens the no-mark case and breaks nothing.
+// **Not a secret, so it survives sign-out** — only the session's convenience tiers are dropped there. One path
+// deletes them: erasing the account (uc.account.erase-account, `erasure/eraseAccount.ts`) takes its slot with it
+// ({@link forgetMarks}), the browser that erased clearing its own records for the account (ADR 0101 decision 4). The
+// one wholesale wipe (`forgetAllTrust`) has no caller; whatever caller it gains must take the marks with it too.
+// Losing them reopens the no-mark case and breaks nothing.
 //
 // **Best-effort storage, fail-closed reading.** A browser with no IndexedDB (or a denied one) holds no marks, which
 // is again the no-mark case; a write that does not land leaves the mark lower, which is only ever safer for the
@@ -150,6 +151,21 @@ export async function setMark(mk: Uint8Array, document: AccountDocument, revisio
   } catch {
     /* a mark that did not land is the mark that was there: the reset's write is then refused on the next read,
        and the person can start over again — never a silent acceptance */
+  }
+}
+
+/**
+ * Forget every mark this device holds for the account whose Master Key is `mk`: its slot's record is deleted. For the
+ * erasure of that account only (file header) — a mark is never lowered on any other path. Best-effort, never throws:
+ * a record left behind is keyed by a Master Key nobody can unlock again.
+ */
+export async function forgetMarks(mk: Uint8Array): Promise<void> {
+  if (!hasStore()) return
+  const slot = slotOf(mk)
+  try {
+    await idbRun(DB, STORE, 'readwrite', (s) => s.delete(slot))
+  } catch {
+    /* nothing to forget, or storage denied */
   }
 }
 

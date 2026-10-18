@@ -9,6 +9,7 @@ sources:
   - docs/features/moderation/use-cases/uc.moderation.report-to-an-authority.md
   - docs/features/moderation/enablers/en.moderation.log.md
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
+  - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/features/admin/use-cases/uc.admin.switch-capabilities.md
   - docs/decisions/0066-tenant-suspension.md
   - docs/crosscutting/security-model.md
@@ -200,6 +201,15 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
   suspension for any other reason — unpaid, maintenance — carries none. Bringing the tenant back lifts the record.
 
 You still cannot read anything private, which is the design working as intended.
+
+To close a tenant for good, **Delete tenant** takes it offline the same way and erases it 30 days later
+([First-run setup and the admin console](/veyq/run/first-run/#tenants)); a deletion settles the tenant's open proposals
+as taken, as a suspension does. **Over content** it carries a statement of reasons to each owner of the tenant exactly
+as taking it offline does: tick **Over content** in the delete form and fill in the statement, or add `--over-content
+--ground <ground> [--provision <text>] [--facts <text>]` to `tenant delete`; a moderator's open proposal makes it over
+content. **Stop deletion** lifts that record. Its holds and this page's records stay: they hang on cases, not tenants. A
+record still in force on the tenant, or a sign-in block on an account you erase, ends when the purge erases what it
+was on, so its statement goes at its date instead of being kept forever.
 
 ## What else you have
 

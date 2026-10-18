@@ -1,22 +1,90 @@
 useCase: uc.account.erase-account
 feature: account
 title: Erase an account
-status: planned
-# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 17); the work order is cr-account-erasure.
+# Built by cr-account-erasure. The backend's slice drives both doors over HTTP, the purge by its forced entry and the
+# race against a sign-in; the web's refs are the settings' erase panel and its flow. That a restore erases an erased
+# account again is the erasure ledger's (cr-backup-erasure-and-retention), which writes that criterion when it lands.
 acceptanceCriteria:
   - id: both-doors-start-the-same-erasure
     text: A member with their password, and the Server Owner by address on the admin channel, both start the same pending erasure; the Server Owner's own account is refused.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
+          - AccountErasureSliceTest.signInIsRefusedDuringTheWindowAndAdmittedAgainAfterAStop
+          - AccountErasureSliceTest.theServerOwnersOwnAccountIsRefusedAtBothDoors
+          - AccountErasureSliceTest.aWrongProofOrASpentChallengeErasesNothing
+        unit: [AuthAttestationTest.theErasureStatementIsTheVectorsAndBindsTheAccountAndTheChallenge]
+      web:
+        unit:
+          - src/features/account/erasure/eraseAccount.test.ts
+          - src/features/account/erasure/EraseAccountPanel.test.ts
+          - src/views/SettingsHubView.test.ts
   - id: the-account-stops-at-the-request
     text: At the request every session ends, sign-in is refused, pending invites, pairings, recoveries and address changes go, and the member removal runs in every tenant, in one transaction.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
+          - AccountErasureSliceTest.noSessionOutlivesAnErasureASignInRacedAgainst
+          - AccountErasureSliceTest.theLastHolderOfTheModerationKeyIsRefusedUntilAnotherHoldsIt
+          - AccountErasureSliceTest.theErasureMailIsRetriedUntilItGoesOutAndADeletionMailsEveryMember
+      web:
+        unit:
+          - src/features/account/erasure/eraseAccount.test.ts
+          - src/views/LoginView.test.ts
+          - src/features/account/trustMarks.test.ts
+    gaps:
+      - surface: backend
+        reason: >-
+          The pending invites, pairings, recoveries and address changes are superseded in the request's transaction
+          (`AccountErasureHandler.start`), and the purge deletes their rows; no slice seeds each of them at the request.
   - id: the-purge-erases-every-row-keyed-on-the-account
     text: After the scope trash's retention the purge erases the account row and every row keyed on it, and a guard derived from the migrations holds every such table erased or cascading.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
+          - MemoriesAccountErasureSliceTest.aSharedMemoryKeepsTheErasedMembersMediaAndLosesTheirFavorites
+    gaps:
+      - surface: backend
+        reason: >-
+          The guard half is `scripts/validate_account_erasure_arity.py` (the FK closure below `veyq_user`, and every
+          column naming an account or its address without a key classified), which the trust-chain glob runs.
   - id: what-the-law-keeps-stays
-    text: Holds, moderation records and, while a case names the account, its terms acceptance rows stay under the opaque id to their own ends; content in shared scopes keeps its attribution.
+    text: Holds, moderation records and, while a case or a step on no case names the account, its terms acceptance rows stay under the opaque id to their own ends, a measure on the account ending with the purge; content in shared scopes keeps its attribution.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.aMeasureOnTheAccountKeepsItsTermsRowsUntilNoCaseNamesItAnyMore
+          - ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate
+          - AccountErasureSliceTest.aMemberErasesTheirAccountAndThePurgeErasesWhatIsTheirsButNotTheSharedScopes
+          - MemoriesAccountErasureSliceTest.aSharedMemoryKeepsTheErasedMembersMediaAndLosesTheirFavorites
   - id: the-last-owner-is-handled
-    text: A last owner with other members is refused at the self-service door, a sole-member tenant is deleted with the account, and the Server Owner's door leaves the tenant ownerless instead of refusing.
-  - id: a-restore-erases-it-again
-    text: An erased account restored from a backup is erased again before the instance serves.
+    text: A last owner with other members chooses at the self-service door, per tenant, to delete it along or to name a new owner from its members, and a request without that choice is refused; a sole-member tenant is deleted with the account; the Server Owner's door leaves the tenant ownerless instead of refusing.
+    coverage:
+      backend:
+        integration:
+          - AccountErasureSliceTest.theLastOwnerWithMembersChoosesAndNoChoiceIsRefused
+          - AccountErasureSliceTest.theLastOwnerMayDeleteTheTenantAlongAndASoleMembersTenantGoesWithoutAChoice
+          - AccountErasureSliceTest.theServerOwnersDoorNeverRefusesALastOwnerAndLeavesTheTenantOwnerless
+        unit: [RemovalPolicyTest.theErasuresServerOwnerDoorCutsTheLastOwnerLikeAnyMember]
+      web:
+        unit:
+          - src/features/account/erasure/EraseAccountPanel.test.ts
+          - src/features/spaces/TenantMembersPanel.test.ts
+          - src/views/TenantJoinView.handover.test.ts
 gaps:
-  backend: "Not built: no operation erases an account (AccountEmailResource.kt:35); cr-account-erasure builds it."
-  web: "Not built: the settings offer no erasure; cr-account-erasure builds it."
-  admin-web: "Not built: admin-web and veyq-admin have no account erasure; cr-account-erasure builds it."
+  admin-web: >-
+    Built and passing locally: `src/features/instance/AccountsPanel.test.ts` (erase refused until the address is typed
+    twice, the pending list and its stop), `accounts.test.ts` and `src/cli/cli.test.ts` (`account erase`,
+    `stop-erasure`, `erasures`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
+  crypto: >-
+    `packages/crypto/src/v1.conformance.test.ts` asserts the erase-account statement and signature against the
+    `auth_attestation.erase_account` vector; crypto's job has never executed, so ADR 0040 admits it nowhere. The backend
+    asserts the same vector (`AuthAttestationTest`).
+  stack: >-
+    Lane L1's browser pass (`e2e/tests/features/tenant-and-account-erasure.spec.ts`) erases an account in the settings through to
+    the refused sign-in, with the last owner's choice, and stops an erasure in the console, against the release
+    candidate's two images. Green only in local runs of `scripts/run_stack_e2e.py`; the lane's CI job awaits its first
+    run.

@@ -109,10 +109,10 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    never client-supplied, written once per revision (re-accepting a recorded revision keeps its first time; accepting
    a newer revision adds a row and leaves the older ones untouched). No API serves the history, so a space owner
    cannot read it either: the operator and support read it from the database. The rows go with their tenant
-   (`ON DELETE CASCADE`); the user reference has no cascade, like the tenant profile's, so the account erasure names the
-   table: it deletes a member's rows, and keeps them under the opaque id only while a moderation case names the account,
+   (`ON DELETE CASCADE`); the user reference is no foreign key, so a row can outlive the account a case names, and the
+   account erasure names the table: it deletes a member's rows, and keeps them under the opaque id only while a moderation case names the account,
    to that case's log retention date ([ADR 0101](0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
-   decision 6; decided, not built). (Inbox #318
+   decision 6, `TermsEvidence`). (Inbox #318
    dropped the time as unread on 2026-10-09; the owner restored it the same day as that evidence; #402 on
    2026-10-10 turned the single latest row into the history — a coordinator decision on the owner's behalf, to be
    reviewed.) The anonymous acceptance is client-only. **No

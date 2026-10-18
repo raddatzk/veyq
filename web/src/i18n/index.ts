@@ -95,6 +95,12 @@ const en = {
   members: {
     title: 'Members',
     sub: 'People in this shared space and their access.',
+    promote: 'Make co-owner',
+    demote: 'Remove co-owner',
+    promoted: 'They own this space now too.',
+    demoted: 'They are a member of this space again.',
+    lastOwner: 'A shared space needs at least one owner.',
+    roleChangeFailed: 'Could not change the role. Please try again.',
     invite: 'Invite member',
     inviteIntro: 'Invite someone by email. They set up their own account; access to the shared space is delivered automatically once any member is online.',
     email: 'Email address',
@@ -225,6 +231,43 @@ const en = {
       'Every other device is signed out and loses its saved key. To get back in, each one needs the new password and your Secret Key — or to be added again from this device with “Add a device”.',
     rememberDevice: 'Remember this device',
     changeAgain: 'Change it again',
+  },
+  // uc.account.erase-account (ADR 0101): what goes, what stays, the last owner's choice, the password proof.
+  erasure: {
+    navTitle: 'Erase account',
+    title: 'Erase your account',
+    sub: 'Leave this instance for good: your account and what is kept about you are erased, apart from what the law keeps.',
+    factGoes:
+      'Your account goes: its keys, devices and sessions, your profiles and memberships in every space, your favorites, and your personal space with everything in it.',
+    factSharedStays:
+      'What you put into shared spaces and groups stays there and shows as a former member’s. Delete what you want gone from them first, while you are still a member.',
+    factKept: 'Reports, moderation records and held copies that name your account stay until their legal retention ends.',
+    factBackups: 'Backups of this instance keep your account until they expire.',
+    factWindow:
+      'The erasure completes after a waiting period — 30 days unless the Server Owner set another. From the moment you confirm, you cannot sign in, and only the Server Owner can stop it.',
+    choiceTitle: 'Spaces you are the last owner of',
+    choiceSub: 'Others are members here. For each one, choose: delete it along with your account, or make one of its members the owner.',
+    choicePlaceholder: 'Choose…',
+    deleteAlong: 'Delete the space',
+    makeOwner: 'Make {name} the owner',
+    soleTitle: 'Deleted along with your account',
+    soleSub: 'You are the only member of these spaces.',
+    passwordLabel: 'Your password',
+    action: 'Erase account',
+    confirmTitle: 'Erase your account?',
+    confirmBody:
+      'You are signed out everywhere at once and cannot sign in again. Until the erasure completes, only the Server Owner can stop it.',
+    loadFailed: 'Could not read what erasing your account would decide. Please try again.',
+    serverOwner: 'This is the Server Owner’s account. It cannot be erased: nobody would be left to run this instance.',
+    errorLocked: 'Unlock your account on this device first, then erase it.',
+    errorPassword: 'That password didn’t match. Nothing was erased.',
+    errorChoiceRequired: 'Choose what happens to every space you are the last owner of. Nothing was erased.',
+    errorModerationLastHolder:
+      'You hold the moderation key alone. Another moderator must hold it before you can go — stepping down is refused the same way. Nothing was erased.',
+    errorFailed: 'Your account could not be erased. Nothing was changed — please try again.',
+    // Shown on the sign-in page: the ending replaced the panel.
+    ended:
+      'Your account is being erased, and you are signed out. You cannot sign in again; until the erasure completes, only the Server Owner can stop it.',
   },
   rotation: {
     title: 'Replace your keys',
@@ -557,6 +600,15 @@ const en = {
       failed: 'Could not accept the invitation. Please try again.',
       emailTaken: 'That email already has an account — sign in instead.',
       wrongOwner: 'You are signed in as a different user than the one invited.',
+      // Handover (ADR 0101 decision 9): an owner invite into an active space whose member the invitee already is.
+      invitedToHandover: 'You have been asked to own “{tenant}” ({domain}), which you are a member of.',
+      signinSubHandover: 'Sign in as {email} to take ownership.',
+      signinReadySubHandover: 'You’re signed in as {email} — accept to take ownership.',
+      joinHandover: 'Accept & take ownership',
+      doneHandover: 'You own “{tenant}” now.',
+      doneNoteHandover: 'Its owner settings are yours, under Settings.',
+      notMemberHandover: 'You are no longer a member of this space, so you cannot take it over. Ask the Server Owner for a new invitation.',
+      openSpace: 'Open the space',
     },
   },
   kit: {
@@ -2402,6 +2454,12 @@ const de: typeof en = {
   members: {
     title: 'Mitglieder',
     sub: 'Personen in diesem geteilten Bereich und ihr Zugang.',
+    promote: 'Mitbesitz geben',
+    demote: 'Mitbesitz entfernen',
+    promoted: 'Der Bereich gehört jetzt auch dieser Person.',
+    demoted: 'Die Person ist wieder Mitglied dieses Bereichs.',
+    lastOwner: 'Ein geteilter Bereich braucht mindestens eine besitzende Person.',
+    roleChangeFailed: 'Die Rolle konnte nicht geändert werden. Bitte erneut versuchen.',
     invite: 'Mitglied einladen',
     inviteIntro: 'Lade jemanden per E-Mail ein. Die Person richtet ihr eigenes Konto ein; der Zugang zum geteilten Bereich wird automatisch ausgeliefert, sobald ein Mitglied online ist.',
     email: 'E-Mail-Adresse',
@@ -2530,6 +2588,43 @@ const de: typeof en = {
       'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes das neue Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
     rememberDevice: 'Dieses Gerät merken',
     changeAgain: 'Noch einmal ändern',
+  },
+  // uc.account.erase-account (ADR 0101): was geht, was bleibt, die Wahl der letzten besitzenden Person, der Passwortbeweis.
+  erasure: {
+    navTitle: 'Konto löschen',
+    title: 'Dein Konto löschen',
+    sub: 'Verlasse diese Instanz endgültig: Dein Konto und was über dich gespeichert ist, wird gelöscht – bis auf das, was das Gesetz aufzubewahren verlangt.',
+    factGoes:
+      'Dein Konto geht: seine Schlüssel, Geräte und Sitzungen, deine Profile und Mitgliedschaften in jedem Bereich, deine Favoriten und dein persönlicher Bereich mit allem darin.',
+    factSharedStays:
+      'Was du in geteilte Bereiche und Gruppen gelegt hast, bleibt dort und erscheint als das eines ehemaligen Mitglieds. Lösche vorher, was dort verschwinden soll, solange du noch Mitglied bist.',
+    factKept: 'Meldungen, Moderationsunterlagen und gesicherte Kopien, die dein Konto nennen, bleiben bis zum Ende ihrer gesetzlichen Aufbewahrung.',
+    factBackups: 'Sicherungen dieser Instanz behalten dein Konto, bis sie ablaufen.',
+    factWindow:
+      'Die Löschung ist nach einer Wartezeit abgeschlossen – 30 Tage, sofern die Person, die den Server betreibt, keine andere festgelegt hat. Ab deiner Bestätigung kannst du dich nicht mehr anmelden, und nur sie kann die Löschung noch aufhalten.',
+    choiceTitle: 'Bereiche, die nur noch dir gehören',
+    choiceSub: 'Hier sind noch andere Mitglieder. Wähle für jeden Bereich: mit deinem Konto löschen oder einem seiner Mitglieder übergeben.',
+    choicePlaceholder: 'Auswählen…',
+    deleteAlong: 'Bereich löschen',
+    makeOwner: 'An {name} übergeben',
+    soleTitle: 'Wird mit deinem Konto gelöscht',
+    soleSub: 'Du bist das einzige Mitglied dieser Bereiche.',
+    passwordLabel: 'Dein Passwort',
+    action: 'Konto löschen',
+    confirmTitle: 'Dein Konto löschen?',
+    confirmBody:
+      'Du wirst sofort überall abgemeldet und kannst dich nicht mehr anmelden. Bis die Löschung abgeschlossen ist, kann nur die Person, die den Server betreibt, sie aufhalten.',
+    loadFailed: 'Es ließ sich nicht lesen, was das Löschen deines Kontos entscheiden würde. Bitte erneut versuchen.',
+    serverOwner: 'Das ist das Konto der Person, die den Server betreibt. Es kann nicht gelöscht werden: Sonst bliebe niemand, der diese Instanz betreibt.',
+    errorLocked: 'Entsperre dein Konto zuerst auf diesem Gerät, dann lösche es.',
+    errorPassword: 'Das Passwort stimmt nicht. Es wurde nichts gelöscht.',
+    errorChoiceRequired: 'Wähle für jeden Bereich, der nur noch dir gehört, was mit ihm geschieht. Es wurde nichts gelöscht.',
+    errorModerationLastHolder:
+      'Du hältst den Moderationsschlüssel allein. Eine andere moderierende Person muss ihn halten, bevor du gehen kannst – ein Rücktritt wird genauso abgelehnt. Es wurde nichts gelöscht.',
+    errorFailed: 'Dein Konto konnte nicht gelöscht werden. Es wurde nichts geändert – bitte erneut versuchen.',
+    // Auf der Anmeldeseite: Das Ende der Sitzung hat das Panel ersetzt.
+    ended:
+      'Dein Konto wird gelöscht, und du bist abgemeldet. Du kannst dich nicht mehr anmelden; bis die Löschung abgeschlossen ist, kann nur die Person, die den Server betreibt, sie aufhalten.',
   },
   rotation: {
     title: 'Schlüssel ersetzen',
@@ -2837,6 +2932,15 @@ const de: typeof en = {
       failed: 'Einladung konnte nicht angenommen werden. Bitte erneut versuchen.',
       emailTaken: 'Diese E-Mail hat bereits ein Konto — bitte stattdessen anmelden.',
       wrongOwner: 'Du bist mit einem anderen Konto angemeldet als dem, das eingeladen wurde.',
+      // Übergabe (ADR 0101 Entscheidung 9): eine Inhaberschafts-Einladung in einen aktiven Bereich, dessen Mitglied die Person schon ist.
+      invitedToHandover: 'Du wurdest gebeten, „{tenant}“ ({domain}) zu besitzen, dessen Mitglied du bist.',
+      signinSubHandover: 'Melde dich als {email} an, um die Inhaberschaft zu übernehmen.',
+      signinReadySubHandover: 'Du bist als {email} angemeldet — nimm an, um die Inhaberschaft zu übernehmen.',
+      joinHandover: 'Annehmen & übernehmen',
+      doneHandover: '„{tenant}“ gehört jetzt dir.',
+      doneNoteHandover: 'Seine Einstellungen für besitzende Personen findest du unter Einstellungen.',
+      notMemberHandover: 'Du bist kein Mitglied dieses Bereichs mehr und kannst ihn deshalb nicht übernehmen. Bitte die Person, die den Server betreibt, um eine neue Einladung.',
+      openSpace: 'Bereich öffnen',
     },
   },
   kit: {

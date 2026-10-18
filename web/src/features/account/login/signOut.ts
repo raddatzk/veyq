@@ -7,7 +7,9 @@
 // hands over to the ending (`app/sessionEnd.ts`), which loads the sign-in page as a new document. That document is
 // the wipe, so nothing here resets a store: not the vault, not the active space, not anything added next year.
 //
-// `handle401` is deliberately NOT this: it is redirect-only, for a request that came back unauthorized.
+// `handle401` is deliberately NOT this: it is redirect-only, for a request that came back unauthorized. Nor is the
+// account erasure (`features/account/erasure/eraseAccount.ts`): its request already ended every session server-side,
+// so it has no server half left to run and hands straight over to the same ending.
 import { sessionApi } from '../../../api/client'
 import { isSessionRefusal, withRefresh } from '../../../app/sessionRefresh'
 import { endSession } from '../../../app/sessionEnd'

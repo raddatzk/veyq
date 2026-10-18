@@ -219,6 +219,7 @@ class OperatorBlindProbeTest {
         "reissueMemberInvite" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue") },
         "revokeMemberInvite" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/member-invites/$someId") },
         "removeTenantMember" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/members/$someId") },
+        "setTenantMemberRole" to Probe(Address.TENANT) { s -> Call("PATCH", "/api/tenants/${s.tenantId}/members/$someId", """{"role":"OWNER"}""") },
         "getTenantTerms" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/terms") },
         // A member's picture (ADR 0084): tenant-gated like the directory. The control reaches the handler and answers
         // `404 avatar_not_found` for the invented member - a code the gate's own `tenant_not_found` is not.
@@ -267,13 +268,16 @@ class OperatorBlindProbeTest {
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
             "reportInShare", "getShareOrderNotice",
-            "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite",
+            "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )
         reason(
             "Server-Owner route: @RolesAllowed(SERVER_OWNER) plus its own lifecycle guards; it administers tenants, " +
                 "it does not act inside one.",
             "createTenant", "listTenants", "resendTenantInvite", "reassignTenantInvite", "changeTenantDomain",
             "revokeTenant", "suspendTenant", "reactivateTenant", "setTenantStorageQuota", "clearTenantStorageQuota",
+            "deleteTenant", "stopTenantDeletion", "inviteTenantOwner",
+            // the account erasure's Server Owner door (ADR 0101): it acts on an account across every tenant
+            "listAccountErasures", "eraseAccount", "stopAccountErasure",
             "getInstanceRelease",
             "getInstanceStoreProvisioning",
             "getInstanceConfigSecret",
@@ -300,6 +304,7 @@ class OperatorBlindProbeTest {
             "getDeviceRegister", "putDeviceRegister", "rotateAccountKeys", "changePassword", "listSessionFamilies",
             "revokeOtherSessionFamilies", "revokeSessionFamily", "delegatePairingSession", "sealPairingChannel",
             "clearDeclinesForAcceptedKey", "getAccountEmail", "confirmEmail", "listRotationScopeStates",
+            "getOwnAccountErasurePreview", "eraseOwnAccount",
         )
         reason(
             "Host-resolved and self-scoped: reads or writes only the caller's own rows on the Host's own tenant, so " +

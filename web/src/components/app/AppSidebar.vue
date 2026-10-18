@@ -246,9 +246,10 @@ function isActive(tenant: MyTenant): boolean {
 }
 
 // A suspended tenant (uc.spaces.scope-access A7) stays listed — its initial, marked offline — but is not enterable:
-// its domain answers nothing but the offline notice. Not the awaiting-access marker, which is a different reason.
+// its domain answers nothing but the offline notice. Not the awaiting-access marker, which is a different reason. A tenant
+// pending deletion (ADR 0101 decision 10) is offline exactly as a suspension takes it, until the Server Owner stops it.
 function isOffline(tenant: MyTenant): boolean {
-  return tenant.status === TenantStatus.Suspended
+  return tenant.status === TenantStatus.Suspended || tenant.status === TenantStatus.PendingDeletion
 }
 
 function switchTenant(tenant: MyTenant) {

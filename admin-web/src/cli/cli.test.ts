@@ -18,6 +18,12 @@ vi.mock('../features/tenants/tenants', async (importOriginal) => ({
   revokeTenant: vi.fn(),
   suspendTenant: vi.fn(),
   reactivateTenant: vi.fn(),
+  deleteTenant: vi.fn(),
+  stopTenantDeletion: vi.fn(),
+  inviteTenantOwner: vi.fn(),
+}))
+vi.mock('../features/instance/accounts', () => ({
+  eraseAccount: vi.fn(), stopAccountErasure: vi.fn(), listAccountErasures: vi.fn(),
 }))
 vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
 vi.mock('../features/instance/stepStatement', async (importOriginal) => ({
@@ -116,6 +122,7 @@ import { enterOrder, OrderInvalid, type AuthorityOrder } from '../features/insta
 import { stepStatement } from '../features/instance/stepStatement'
 import { ORDER_FORMS } from '../features/instance/orderForms'
 import { instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
+import { eraseAccount, listAccountErasures, stopAccountErasure, type PendingAccountErasure } from '../features/instance/accounts'
 import { stubApi } from '../test/apiMock'
 import { httpError } from '../test/httpError'
 import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
@@ -142,7 +149,7 @@ const created: TenantCreated = {
 }
 const row: TenantSummary = {
   tenantId: 't1', name: 'Fam', domain: 'f.example.com', ownerEmail: 'k@example.com', status: 'PENDING',
-  storageUsedBytes: 5, storageQuotaBytes: null,
+  storageUsedBytes: 5, storageQuotaBytes: null, ownerless: false, deletionDueAt: null,
 }
 const invite = (ownerEmail: string): TenantInviteState => ({
   ownerEmail, inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES, bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK',
@@ -258,6 +265,44 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     expect(tenants.revokeTenant).toHaveBeenCalledWith('t1')
     expect(tenants.suspendTenant).toHaveBeenCalledWith('t2', null)
     expect(tenants.reactivateTenant).toHaveBeenCalledWith('t2')
+  })
+
+  it('tenant delete passes the id and the typed domain, and prints when the tenant is erased (uc.admin.delete-tenant)', async () => {
+    vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES })
+    const r = await invoke(['tenant', 'delete', '--tenant-id', 't1', '--domain', 'f.example.com'])
+    expect(r.code).toBe(0)
+    expect(tenants.deleteTenant).toHaveBeenCalledWith('t1', 'f.example.com', null)
+    expect(JSON.parse(r.out)).toEqual({ dueAt: EXPIRES.toISOString() })
+  })
+
+  it('tenant delete without --domain is refused before signing in — the domain IS the confirmation', async () => {
+    const r = await invoke(['tenant', 'delete', '--tenant-id', 't1'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--domain is required')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(tenants.deleteTenant).not.toHaveBeenCalled()
+  })
+
+  it('tenant delete exits 1 with a wrong domain’s refusal', async () => {
+    vi.mocked(tenants.deleteTenant).mockRejectedValueOnce(httpError(409, 'tenant_domain_mismatch'))
+    const r = await invoke(['tenant', 'delete', '--tenant-id', 't1', '--domain', 'wrong.example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 409 tenant_domain_mismatch')
+  })
+
+  it('tenant stop-deletion reaches its own operation and reports the 204 as a success', async () => {
+    vi.mocked(tenants.stopTenantDeletion).mockResolvedValueOnce(undefined)
+    const r = await invoke(['tenant', 'stop-deletion', '--tenant-id', 't1'])
+    expect(tenants.stopTenantDeletion).toHaveBeenCalledWith('t1')
+    expect(JSON.parse(r.out)).toEqual({ ok: true })
+  })
+
+  it('tenant invite-owner passes the member address and prints the invite whole — the copy-link when not mailed (ADR 0101 decision 9)', async () => {
+    vi.mocked(tenants.inviteTenantOwner).mockResolvedValueOnce(invite('member@example.com'))
+    const r = await invoke(['tenant', 'invite-owner', '--tenant-id', 't1', '--email', 'member@example.com'])
+    expect(r.code).toBe(0)
+    expect(tenants.inviteTenantOwner).toHaveBeenCalledWith('t1', 'member@example.com')
+    expect(JSON.parse(r.out)).toMatchObject({ ownerEmail: 'member@example.com', bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK' })
   })
 
   it('tenant quota sets the quota typed in GiB as bytes, and none clears it (uc.admin.tenant-storage-quota)', async () => {
@@ -732,6 +777,16 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
     expect(tenants.suspendTenant).toHaveBeenLastCalledWith('t3', statement)
   })
 
+  it('tenant delete over content carries its statement to the tenant’s owners', async () => {
+    const statement = { statementId: 's-2', ground: 'ILLEGAL_CONTENT' as const, provision: '', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+    vi.mocked(stepStatement).mockResolvedValueOnce(statement)
+    vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES })
+    const r = await invoke(['tenant', 'delete', '--tenant-id', 't3', '--domain', 'f.example.com', '--over-content', '--ground', 'ILLEGAL_CONTENT', '--facts', 'what was found'])
+    expect(r.code).toBe(0)
+    expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: '', facts: 'what was found' })
+    expect(tenants.deleteTenant).toHaveBeenLastCalledWith('t3', 'f.example.com', statement)
+  })
+
   it('account block exits 1 with each refusal’s code', async () => {
     for (const [status, code] of [[404, 'account_not_found'], [404, 'case_not_found'], [409, 'sign_in_block_exists'], [409, 'cannot_block_server_owner']] as const) {
       vi.mocked(blockSignIn).mockRejectedValueOnce(httpError(status, code))
@@ -904,11 +959,56 @@ describe('veyq-admin — an authority’s order (uc.moderation.authority-order)'
   })
 })
 
+describe('veyq-admin — an account’s erasure (uc.account.erase-account)', () => {
+  const pending: PendingAccountErasure = {
+    address: 'member@example.com', requestedAt: EXPIRES, requestedBy: 'SERVER_OWNER', dueAt: new Date('2026-11-09T12:00:00.000Z'),
+  }
+
+  it('account erase passes the address and prints the pending erasure with its due date', async () => {
+    vi.mocked(eraseAccount).mockResolvedValueOnce(pending)
+    const r = await invoke(['account', 'erase', '--address', 'member@example.com'])
+    expect(r.code).toBe(0)
+    expect(eraseAccount).toHaveBeenCalledWith('member@example.com')
+    expect(JSON.parse(r.out)).toEqual({
+      address: 'member@example.com', requestedAt: EXPIRES.toISOString(), requestedBy: 'SERVER_OWNER', dueAt: '2026-11-09T12:00:00.000Z',
+    })
+  })
+
+  it('account erase exits 1 with each refusal’s code, and refuses a missing address before signing in', async () => {
+    for (const [status, code] of [[404, 'account_not_found'], [409, 'server_owner_account'], [409, 'account_erasure_pending'], [409, 'moderation_last_holder']] as const) {
+      vi.mocked(eraseAccount).mockRejectedValueOnce(httpError(status, code))
+      const r = await invoke(['account', 'erase', '--address', 'member@example.com'])
+      expect(r.code).toBe(1)
+      expect(r.err).toBe(`veyq-admin: request failed: HTTP ${status} ${code}`)
+    }
+    vi.mocked(signIn).mockClear()
+    vi.mocked(eraseAccount).mockClear()
+    const missing = await invoke(['account', 'erase'])
+    expect(missing.code).toBe(1)
+    expect(missing.err).toContain('--address is required')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(eraseAccount).not.toHaveBeenCalled()
+  })
+
+  it('account stop-erasure reaches its own operation; account erasures prints the pending ones', async () => {
+    vi.mocked(stopAccountErasure).mockResolvedValueOnce(undefined)
+    const stopped = await invoke(['account', 'stop-erasure', '--address', 'member@example.com'])
+    expect(stopAccountErasure).toHaveBeenCalledWith('member@example.com')
+    expect(JSON.parse(stopped.out)).toEqual({ ok: true })
+
+    vi.mocked(listAccountErasures).mockResolvedValueOnce([pending])
+    const listed = await invoke(['account', 'erasures'])
+    expect(listed.code).toBe(0)
+    expect(listAccountErasures).toHaveBeenCalledOnce()
+    expect(JSON.parse(listed.out)).toEqual([{ ...pending, requestedAt: EXPIRES.toISOString(), dueAt: '2026-11-09T12:00:00.000Z' }])
+  })
+})
+
 describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'order remove --share', 'order preserve --share', 'order inform --share', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'account erase --address', 'account stop-erasure --address', 'account erasures', 'tenant delete --tenant-id', 'tenant stop-deletion --tenant-id', 'tenant invite-owner --tenant-id','order remove --share', 'order preserve --share', 'order inform --share', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.
@@ -922,9 +1022,9 @@ describe('veyq-admin — usage and refusals', () => {
   })
 
   it('an unknown command names what it did not understand and exits 1', async () => {
-    const r = await invoke(['tenant', 'delete'])
+    const r = await invoke(['tenant', 'explode'])
     expect(r.code).toBe(1)
-    expect(r.err).toContain("unknown command 'tenant delete'")
+    expect(r.err).toContain("unknown command 'tenant explode'")
     expect(signIn).not.toHaveBeenCalled()
   })
 

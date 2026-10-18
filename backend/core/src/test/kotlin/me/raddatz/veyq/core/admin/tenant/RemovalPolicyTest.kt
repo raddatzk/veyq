@@ -43,6 +43,15 @@ class RemovalPolicyTest {
     }
 
     @Test
+    fun theErasuresServerOwnerDoorCutsTheLastOwnerLikeAnyMember() {
+        // ADR 0101 decision 9: the Server Owner's door never refuses, and leaves the tenant ownerless.
+        val plan = RemovalPolicy.plan(listOf(tenant(role = MembershipEntity.OWNER, ownerCount = 1)), tenantId, allowLastOwner = true)
+        assertEquals(listOf(CascadeStep(tenantId, CascadeAction.REMOVE, rotateAfter = false)), cascade(plan))
+        // Control: the same row without the allowance is the last owner, refused.
+        assertEquals(RemovalPlan.LastOwner, RemovalPolicy.plan(listOf(tenant(role = MembershipEntity.OWNER, ownerCount = 1)), tenantId))
+    }
+
+    @Test
     fun aTenantOwnerWithACoOwnerIsNotTheLastOwner() {
         val plan = RemovalPolicy.plan(listOf(tenant(role = MembershipEntity.OWNER, ownerCount = 2)), tenantId)
         assertEquals(
