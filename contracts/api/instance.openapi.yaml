@@ -1514,6 +1514,13 @@ paths:
         lifted (uc.account.login E5). Settles the open `MEMBER_SIGN_IN` proposals for the account as taken. The account
         is named by its address, as an appointment names it. `409 sign_in_block_exists` while one is in force;
         `409 cannot_block_server_owner` for the Server Owner's own account. Server-Owner only.
+
+        **Over content it carries a statement of reasons** (ADR 0093 § 7, DSA Art. 17(1)(d); uc.moderation.object-to-a-measure
+        A7): a block that answers a case, or takes a moderator's open proposal, always; a block with neither when
+        `overContent` says so. Then `statement` is required (`400 statement_required`) and is written with the block, in
+        its transaction — the row, its recipient (the account), the log event — and mailed to the account's address with
+        the facts once the block committed. A block with no case, no proposal and `overContent` false carries none. A
+        block from a proposal with no case named is recorded on the proposal's case.
       security:
         - bearerAuth: []
       requestBody:
@@ -1529,11 +1536,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationSteps" }
         "400":
-          description: The request was malformed (`invalid_request`).
+          description: >
+            `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
+            `statement_required` = the block is over content and carries no statement; `statement_facts_required` /
+            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invalid_request }
+              example: { code: statement_required }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1553,7 +1563,10 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: account_not_found }
         "409":
-          description: "`sign_in_block_exists` = the account is blocked already; `cannot_block_server_owner` = it is the Server Owner's own."
+          description: >
+            `sign_in_block_exists` = the account is blocked already; `cannot_block_server_owner` = it is the Server
+            Owner's own; `moderation_epoch_changed` = the facts are not sealed to the current epoch; `moderation_off` =
+            no epoch exists to seal them to; `id_taken` = the statement id is taken.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2366,6 +2379,20 @@ components:
           format: uuid
           description: The case the block answers (a moderator's proposal); null for none.
           example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
+        overContent:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The Server Owner says a block with no case and no open proposal is over content, so it carries a statement
+            (ADR 0093 § 7). A block that answers a case or a proposal is over content regardless.
+          example: false
+        statement:
+          description: The statement of reasons the block carries when it is over content; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerStatementInput"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     InstanceRelease:
       type: object
@@ -3711,6 +3738,10 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(30)'
     OperatingMode:
       $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
+
+    # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
+    ServerOwnerStatementInput:
+      $ref: '_common.openapi.yaml#/components/schemas/ServerOwnerStatementInput'
 
     # An authority's order is single-sourced with the moderator's door (moderation.openapi.yaml, enterModerationOrder).
     AuthorityOrderKind:

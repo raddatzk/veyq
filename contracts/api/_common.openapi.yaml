@@ -343,6 +343,93 @@ components:
           description: When the server received it.
           example: 2026-10-17T12:00:00Z
 
+    # The statement of reasons' shared parts (ADR 0093 § 7) — single-sourced: a moderator's measure carries them on the
+    # public listener (moderation.openapi.yaml), the Server Owner's own steps on the admin channel (instance.openapi.yaml,
+    # tenants.openapi.yaml).
+    ModerationGround:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        The ground a measure rests on (ADR 0093 § 7): the law — child sexual abuse material, terrorist content, a threat
+        to life or safety, other illegal content — or the terms of use (`TERMS_BREACH`). The report categories' values.
+      enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
+      example: TERMS_BREACH
+
+    StatementProvision:
+      x-veyq-visibility: public
+      type: [string, "null"]
+      description: >
+        The provision of the law or the clause of the terms the ground relies on (DSA Art. 17(3)(d), (e); ADR 0093 § 7),
+        a short reference in the moderator's own words — "§ 86a StGB", "Space terms, clause 4" — stored in the clear beside
+        the ground and rendered after it. Never the facts: why the content falls under it is what the sealed facts explain.
+        Required in the full form (`statement_provision_required`), optional in the reduced; blank counts as none.
+      maxLength: 200
+      example: § 86a StGB
+      x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
+
+    SealedStepFacts:
+      type: object
+      description: >
+        The facts of a Server Owner's step, sealed for the log by admin-web or veyq-admin to the moderation key's current
+        public half, bound to the statement's client-minted id (`sealTo` purpose `moderation-step-facts` [epoch,
+        statementId]) — sealing needs only the public half.
+      required: [epoch, sealedFacts]
+      properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The epoch they are sealed to — the current one, or `409 moderation_epoch_changed`.
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+        sealedFacts:
+          type: string
+          description: The sealed facts.
+          contentEncoding: base64
+          maxLength: 12000
+          example: c2VhbGVkLWZhY3Rz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ServerOwnerStatementInput:
+      type: object
+      description: >
+        The statement of reasons a Server Owner's own step over content carries (ADR 0093 § 7; DSA Art. 17(1)(c), (d)) —
+        entered with the step, in the template and the form the operating mode sets. It goes by instance mail to the
+        member whose sign-in is blocked, or to each owner of the tenant taken offline, **with the facts**: they cannot
+        sign in to open a sealed copy (owner decisions Q24-Q25 of cr-statement-legal-gaps). The server mails the facts
+        once, after the step committed, and keeps them only as `factsForLog`, sealed; the objection goes to the instance contact.
+        The full form requires the facts and the provision (`400 statement_facts_required`,
+        `400 statement_provision_required`); `facts` and `factsForLog` come together or not at all (`400
+        invalid_request`).
+      required: [statementId, ground]
+      properties:
+        statementId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The statement's id, minted by the client — the sealed facts are bound to it (ADR 0072 Decision 3).
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        ground: { $ref: "#/components/schemas/ModerationGround" }
+        provision: { $ref: "#/components/schemas/StatementProvision" }
+        facts:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The Server Owner's own words, mailed in the clear to the member whose sign-in they block or to the owners of
+            the tenant they take offline (ADR 0093 § 7, owner decision Q24 of cr-statement-legal-gaps): a blocked member
+            cannot sign in to open a sealed copy, and the mail is the statement's only channel. A consented disclosure by
+            its author (ADR 0049 decision 2); the server stores only the sealed copy beside it.
+          type: [string, "null"]
+          description: What the Server Owner found, in their own words; null without facts.
+          maxLength: 4000
+          example: The account posted the same unlawful image in three spaces after two warnings.
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 4000)'
+        factsForLog:
+          oneOf:
+            - $ref: "#/components/schemas/SealedStepFacts"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
     # An authority's order (ADR 0093 § 12, uc.moderation.authority-order) — single-sourced: a moderator enters it on the
     # public listener (moderation.openapi.yaml) and the Server Owner on the admin channel (instance.openapi.yaml).
     AuthorityOrderKind:

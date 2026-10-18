@@ -1156,6 +1156,37 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
+  /api/shares/{shareId}/order-notice:
+    get:
+      tags: [sharing]
+      operationId: getShareOrderNotice
+      summary: A guest uploader's notice that an authority's removal order took its upload down (unauthenticated).
+      description: >
+        **No auth** — TCO Art. 11(1), ADR 0093 § 12 (uc.moderation.authority-order step 5). A guest identity whose upload
+        an authority's **removal order** blocked is told so on the link it came through, even while that link is blocked:
+        the time the order was received, and the instance contact from which the reasons or a copy of the order are
+        given on request (Art. 11(2)). The identity is named by the `X-Contributor-Token` its client holds, and only its
+        own uploads count. It is the one thing a link blocked by such an order still answers, and only to such an
+        identity: another identity's token, an unknown one, an upload blocked by a moderator's measure (DSA Art. 17(2):
+        a guest is told nothing then), an order whose statement an authority's deferral still holds back (Art. 11(3)),
+        and a measure since lifted all get the link's ordinary unknown answer, `404 share_not_found` — so the read tells
+        nobody else that the link exists. No password and no write proof: the contributor token is the identity's own
+        capability, minted only for the client that named itself.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/ContributorToken"
+      responses:
+        "200":
+          description: The removals by an authority's order of this identity's uploads, oldest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareOrderNotice" }
+              example: { removals: [{ orderReceivedAt: 2026-10-18T07:12:00Z }], contactAddress: abuse@example.org }
+        "404":
+          description: Nothing to tell this token on this link — the link's ordinary unknown answer (`share_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2561,6 +2592,39 @@ components:
     # `LocalizedMarkdown` model in this module while the shape is single-sourced with the tenants spec (ADR 0038).
     LocalizedMarkdown:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+
+    ShareOrderNotice:
+      type: object
+      description: >
+        What a guest uploader is told of an authority's removal order that took its upload down (TCO Art. 11, ADR 0093
+        § 12): when each order was received, and where to ask for the reasons or a copy. Never the order's reference,
+        the authority, or anything of another identity.
+      required: [removals, contactAddress]
+      properties:
+        removals:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ShareOrderRemoval" }
+        contactAddress:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          format: email
+          description: The instance contact (ADR 0093 § 11), where the reasons or a copy of the order are asked for; null where none is set.
+          maxLength: 254
+          example: abuse@example.org
+
+    ShareOrderRemoval:
+      type: object
+      description: One removal order that blocked an upload of this identity.
+      required: [orderReceivedAt]
+      properties:
+        orderReceivedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the order was received at the instance's contact point, as it was entered.
+          example: 2026-10-18T07:12:00Z
 
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:

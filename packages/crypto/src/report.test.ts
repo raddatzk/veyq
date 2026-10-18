@@ -354,6 +354,31 @@ describe('statement facts and objections', () => {
   })
 })
 
+describe("a Server Owner's step facts", () => {
+  const sk = unhex(vectors.xwing.vectors[0].sk)
+  const step = vectors.seal.asym['moderation-step-facts']
+
+  it('open their vector with the epoch key, as the note encoding', () => {
+    const f = v1.openStepFacts(step.context.epoch, step.context.statementId, sk, unhex(step.blob))
+    expect(f).toBe('The member posted the same unlawful image in three spaces after two warnings.')
+    expect(hex(v1.encodeModerationNote(f))).toBe(step.plaintext)
+  })
+
+  it('facts sealed for one statement and epoch open for no other, and never as a note, an objection or an order', () => {
+    const m = key(7)
+    const kem = v1.moderationBundle(m).kem
+    const secret = v1.moderationKemSecret(m)
+    const sealed = v1.sealStepFacts(3, ID, kem, 'blocked over a terms breach')
+    expect(v1.openStepFacts(3, ID, secret, sealed)).toBe('blocked over a terms breach')
+    expect(() => v1.openStepFacts(4, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-step-facts'))
+    expect(() => v1.openStepFacts(3, ID.replace(/1$/, '2'), secret, sealed)).toThrow(new v1.OpenRefused('moderation-step-facts'))
+    expect(() => v1.openModerationNote(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-note'))
+    expect(() => v1.openObjection(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-objection'))
+    expect(() => v1.openOrderReference(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-order'))
+    expect(() => v1.sealStepFacts(3, ID, kem, ' ')).toThrow(new ReportInvalid('note'))
+  })
+})
+
 describe("an authority's order reference", () => {
   const sk = unhex(vectors.xwing.vectors[0].sk)
   const order = vectors.seal.asym['moderation-order']

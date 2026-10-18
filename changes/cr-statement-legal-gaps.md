@@ -134,7 +134,7 @@ the statement names — the Server Owner lifts with the existing unblock or reac
   provision; the Server Owner's statement), authority-order (step 5–6: the guest's notice, its deferral). Their new
   acceptance criteria join the coverage files in the phases that bring their refs (a built file holds no uncovered
   criterion, `docs/coverage/README.md`). · Done when: feature-format, doc-link, doc-citation, change guards green.
-- [ ] **1 contracts** — `statement-of-reasons.json`: `reporterDecision`, `{provision}` in the ground passage, the
+- [x] **1 contracts** — `statement-of-reasons.json`: `reporterDecision`, `{provision}` in the ground passage, the
   `scope` passage; the measure request gains `provision`; `blockAccountSignIn` and `suspendTenant` gain an optional
   statement (over-content flag, ground, provision, facts, the sealed log copy); the guest's order-notice read (new
   operation; classify it in `OperatorBlindProbeTest`). · Done when: `npm run generate:api`; the contracts guards;

@@ -161,6 +161,10 @@ export const SEAL_TO_PURPOSES = {
   // the order — a moderator's browser, admin-web or veyq-admin, which needs no private half for it — and bound to the
   // order id that client mints, so a reference moved onto another order does not open there.
   'moderation-order': [['epoch', 'uint'], ['orderId', 'id']],
+  // The facts of a Server Owner's own step over content — a member's sign-in block, a tenant taken offline (ADR 0093
+  // § 7) — sealed for the log to the epoch's public half by admin-web or veyq-admin, which hold no private half, and
+  // bound to the statement id that client mints: the step may have no case to bind to.
+  'moderation-step-facts': [['epoch', 'uint'], ['statementId', 'id']],
 } as const satisfies Schema
 
 type KindValue<K extends FieldKind> = K extends 'uint'

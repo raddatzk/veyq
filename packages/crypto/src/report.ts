@@ -265,3 +265,15 @@ export const sealOrderReference = (epoch: number, orderId: string, kem: HybridPu
 /** Open an order's reference with the epoch's decapsulation key, at the order and epoch the server stored it with. */
 export const openOrderReference = (epoch: number, orderId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
   decodeModerationNote(openAs({ purpose: 'moderation-order', epoch, orderId }, kemSecret, blob))
+
+/**
+ * The facts of a Server Owner's own step over content (ADR 0093 § 7), sealed for the log to the epoch's public half
+ * (`moderation-step-facts` [epoch, statementId]) — admin-web and the CLI seal them with the public half alone, beside the
+ * clear copy the mail to the affected carries.
+ */
+export const sealStepFacts = (epoch: number, statementId: string, kem: HybridPublic, facts: string): Uint8Array =>
+  sealTo({ purpose: 'moderation-step-facts', epoch, statementId }, kem, encodeModerationNote(facts))
+
+/** Open a step's facts with the epoch's decapsulation key, at the statement and epoch the server stored them with. */
+export const openStepFacts = (epoch: number, statementId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
+  decodeModerationNote(openAs({ purpose: 'moderation-step-facts', epoch, statementId }, kemSecret, blob))

@@ -756,13 +756,35 @@ paths:
         grant, content row or session is read, written or revoked, and the transition is reversible via
         `reactivateTenant`. Server-Owner only — and Server-Owner status does not exempt the caller's own
         membership while the tenant is suspended. Settles every open moderator proposal to take this tenant offline as taken (uc.moderation.take-a-measure).
+
+        **Over content it carries a statement of reasons** (ADR 0093 § 7, DSA Art. 17(1)(c); uc.moderation.object-to-a-measure
+        A7): always when it takes a moderator's open proposal (the suspension is then recorded on that proposal's case),
+        and when `overContent` says so. Then `statement` is required (`400 statement_required`); it is recorded with the
+        suspension, in its transaction, as a measure of kind `TENANT_OFFLINE` that `reactivateTenant` lifts, and mailed
+        with the facts to each owner of the tenant once the suspension committed (owner decision Q25). A suspension for
+        any other reason (unpaid, maintenance) sends no body, or `overContent` false, and carries none.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SuspendTenantRequest" }
+            example: { overContent: true, statement: { statementId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, ground: TERMS_BREACH, provision: "Space terms, clause 4", facts: The space hosts a public link to unlawful content after two warnings., factsForLog: { epoch: 2, sealedFacts: c2VhbGVkLWZhY3Rz } } }
       responses:
         "204":
           description: The tenant is now SUSPENDED.
+        "400":
+          description: >
+            `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
+            `statement_required` = the suspension is over content and carries no statement; `statement_facts_required` /
+            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: statement_required }
         "401":
           description: Generic authentication failure.
           content:
@@ -799,7 +821,8 @@ paths:
       description: >
         Brings a SUSPENDED tenant back: flips its status to ACTIVE, and every operation on the tenant answers
         again — its shares and invites included, unchanged, and its waiting background jobs resume. Nothing was torn down by the suspension, so nothing is rebuilt here (ADR 0066) — a member whose
-        session stayed technically valid throughout simply resumes. Server-Owner only.
+        session stayed technically valid throughout simply resumes. A suspension taken over content was recorded as a
+        measure of kind `TENANT_OFFLINE` (ADR 0093 § 7); reactivating lifts it and logs the lift. Server-Owner only.
       security:
         - bearerAuth: []
       parameters:
@@ -2731,6 +2754,29 @@ components:
           description: True switches the entry off for this tenant, false switches it back on.
           example: true
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+
+    SuspendTenantRequest:
+      type: object
+      description: Whether the suspension is over content, and the statement of reasons it then carries (ADR 0093 § 7).
+      properties:
+        overContent:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The Server Owner says the suspension is over content though no moderator's proposal names the tenant, so it
+            carries a statement. A suspension that takes an open proposal is over content regardless.
+          example: true
+        statement:
+          description: The statement of reasons the suspension carries when it is over content; null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/ServerOwnerStatementInput"
+            - type: "null"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
+    ServerOwnerStatementInput:
+      $ref: '_common.openapi.yaml#/components/schemas/ServerOwnerStatementInput'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

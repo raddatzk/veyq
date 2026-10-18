@@ -633,7 +633,8 @@ paths:
         **Its statement of reasons is sent with it** (ADR 0093 § 7, uc.moderation.object-to-a-measure): the ground, and
         the facts sealed to the moderation key and once more to each affected member's identity
         (`getModerationStatementRecipients` lists them for this step and target). In the *club, organisation or company*
-        operating mode the facts are required (`400 statement_facts_required`); in *private* they are optional. Facts
+        operating mode the facts and the provision or clause relied on are required (`400 statement_facts_required`,
+        `400 statement_provision_required`); in *private* both are optional. Facts
         sealed for other members than the server would tell are refused (`409 statement_recipients_changed`: read the
         recipients again). The case is then `DECIDED` and its hold ends six months after the statement is sent — from
         the decision where nobody can be told. The reporters in `reporterNotices` are told the decision, as on a
@@ -657,7 +658,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationCase" }
         "400":
-          description: "`invalid_request`, or `statement_facts_required` = the operating mode asks for the facts and none were given."
+          description: "`invalid_request`, or `statement_facts_required` / `statement_provision_required` = the operating mode asks for the facts / the provision or clause relied on and none was given."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_facts_required } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
@@ -2064,14 +2065,6 @@ components:
           example: reporter@example.com
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
 
-    ModerationGround:
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        The ground a measure rests on (ADR 0093 § 7): the law — child sexual abuse material, terrorist content, a threat
-        to life or safety, other illegal content — or the terms of use (`TERMS_BREACH`). The report categories' values.
-      enum: [CHILD_SEXUAL_ABUSE, TERRORIST_CONTENT, THREAT_TO_LIFE, ILLEGAL_CONTENT, TERMS_BREACH]
-      example: TERMS_BREACH
 
     StatementForm:
       x-veyq-visibility: enum
@@ -2098,6 +2091,7 @@ components:
       required: [ground]
       properties:
         ground: { $ref: "#/components/schemas/ModerationGround" }
+        provision: { $ref: "#/components/schemas/StatementProvision" }
         facts:
           oneOf:
             - $ref: "#/components/schemas/SealedModerationNote"
@@ -2317,7 +2311,7 @@ components:
       description: >
         A statement of reasons as an affected member reads it (ADR 0093 § 7) — the clear fields the template is rendered
         from, and the facts sealed to the reader. It names the host, never the moderator.
-      required: [id, caseId, measureKind, targetId, shareId, scopeId, ground, basis, form, sentAt, roles, sealedFacts, inForce, liftedAt, contactAddress, objection, canObject]
+      required: [id, caseId, measureKind, targetId, shareId, scopeId, ground, provision, basis, form, sentAt, roles, sealedFacts, inForce, liftedAt, contactAddress, objection, canObject]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
         caseId:
@@ -2351,6 +2345,7 @@ components:
           description: The space a `CONTENT` measure's target lies in; null otherwise.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
         ground: { $ref: "#/components/schemas/ModerationGround" }
+        provision: { $ref: "#/components/schemas/StatementProvision" }
         basis: { $ref: "#/components/schemas/StatementBasis" }
         form: { $ref: "#/components/schemas/StatementForm" }
         sentAt:
@@ -2654,6 +2649,12 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrderRequest'
     AuthorityOrder:
       $ref: '_common.openapi.yaml#/components/schemas/AuthorityOrder'
+
+    # The statement of reasons' shared parts are single-sourced in _common (ADR 0093 § 7).
+    ModerationGround:
+      $ref: '_common.openapi.yaml#/components/schemas/ModerationGround'
+    StatementProvision:
+      $ref: '_common.openapi.yaml#/components/schemas/StatementProvision'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
