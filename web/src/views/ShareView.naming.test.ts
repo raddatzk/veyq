@@ -35,6 +35,7 @@ import { chooseNew, hasNewMenu } from '../test/newMenu'
 import { mountConfirmDialog } from '../test/confirmDialog'
 import { authenticatedCalls } from '../test/guestMode'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
+import { OPERATOR_SECTION } from '../test/models'
 
 const SCOPE_ID = '99999999-9999-4999-8999-999999999999'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_n'
@@ -77,7 +78,7 @@ beforeEach(async () => {
   if (confirmRequest.value) settleConfirm(false)
   localStorage.clear()
   authenticatedCalls.length = 0
-  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, terms: {} })
+  vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
   stubApi(publicShareFilesApi, { listShareFiles: { items: [] } })
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })

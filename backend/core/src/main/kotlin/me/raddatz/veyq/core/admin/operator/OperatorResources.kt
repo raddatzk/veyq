@@ -16,6 +16,8 @@ import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
+import me.raddatz.veyq.core.terms.OperatorSections
+import me.raddatz.veyq.core.terms.toWire
 import jakarta.annotation.security.PermitAll
 import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.core.Response
@@ -110,7 +112,18 @@ class InstanceOperatorResource(
  * field for it either, so it cannot leak through a mapping mistake here.
  */
 @PermitAll
-class OperatorResource(private val details: OperatorDetailsHandler) : OperatorApi {
+class OperatorResource(
+    private val details: OperatorDetailsHandler,
+    private val sections: OperatorSections,
+) : OperatorApi {
+
+    /**
+     * The operator section of the terms, public (ADR 0035 decision 6; DSA Art. 14(1) asks the terms to be publicly
+     * available and easily accessible): the instance's rendering — Host-independent like the values, and with the
+     * guest-write record's passages while the record is on at the instance level, the switch being the operator's alone.
+     */
+    @RateLimit(key = RateLimitKey.IP) // unauthenticated; read by the public terms page every login and share page links
+    override fun getOperatorTerms(): Response = Response.ok(sections.render(null).toWire()).build()
 
     @RateLimit(key = RateLimitKey.IP) // unauthenticated; read by every login and share page
     override fun getOperatorDetails(): Response {

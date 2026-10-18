@@ -541,7 +541,11 @@ paths:
         `activeShare()` gate, so an unknown / disabled / expired share is the **same non-enumerable 404** as
         `resolveShare`. Independent of the share password (terms are public — **no** `X-Share-Password`). The server
         records **nothing** about the accountless visitor: acceptance is client-only, no acceptance is written here.
-        A tenant with no published terms returns `termsRevision: 0` (`terms` null) — the client never gates.
+        A tenant with no published terms returns `termsRevision: 0` (`terms` null) — the client never gates. The fixed
+        operator section (ADR 0035 decision 6) comes with them, after the space's text, in the operating mode's variant
+        and with the guest-write record's passages while that record is on for the space; the visitor's local
+        acceptance is keyed by the tenant and holds the triple (`termsRevision`, `operatorSection.revision`,
+        `operatorSection.variant`). At revision 0 the section is shown without a gate.
       parameters:
         - $ref: "#/components/parameters/ShareId"
       responses:
@@ -550,7 +554,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareTerms" }
-              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsRevision: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
+              example:
+                tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                termsRevision: 3
+                terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" }
+                operatorSection:
+                  revision: 1
+                  variant: FULL
+                  text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
+                  record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
+                  objection: { de: "### Dein Widerspruchsrecht …", en: "### Your right to object …" }
         "404":
           description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case, like `resolveShare`.
           content:
@@ -2537,7 +2550,7 @@ components:
         The owning tenant's public terms for a share, served to an accountless visitor to accept **client-side**
         (uc.sharing.share-accept). No acceptance is recorded server-side. The `tenantId` is opaque metadata only
         **returned** (never passed in — no existence oracle); it is the client's per-tenant localStorage key.
-      required: [tenantId, termsRevision]
+      required: [tenantId, termsRevision, operatorSection]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -2556,11 +2569,17 @@ components:
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"
+        operatorSection:
+          $ref: "#/components/schemas/OperatorSection"
 
     # A local named alias to the _common source (the ErrorResponse pattern) so the generator emits a
     # `LocalizedMarkdown` model in this module while the shape is single-sourced with the tenants spec (ADR 0038).
     LocalizedMarkdown:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+    OperatorSection:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
+    OperatorSectionVariant:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
 
     # The report's shapes are single-sourced with the moderation spec's member route (uc.moderation.report).
     ReportSubmission:

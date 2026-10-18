@@ -4,6 +4,10 @@
 // re-gating members (uc.account.accept-terms). Member-readable → non-owners see it read-only; the editor + Save
 // are owner-only (the backend 403s otherwise). Operator-blind: terms are the space's PUBLIC policy, no key.
 //
+// Below them, for owner and member alike, the fixed operator section every space's terms carry (ADR 0035 decision 6),
+// read-only: veyq's text with the operator's values. The owner cannot edit or remove it; its own revision moves only
+// with a release, so it never bumps this space's revision. At revision 0 this is where a member reads it.
+//
 // **The terms are a `LocaleMap`, not two `de`/`en` refs** (cr-terms-editor-lists-the-languages-that-have-terms).
 // The two flat refs this panel used to hold could not tell `''` from *absent*, so it rendered a textarea for a
 // language nobody had written and said nothing about whether that emptiness was deliberate. With the map, a
@@ -25,6 +29,8 @@ import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
 import { httpStatus, HttpStatus, isUnauthorized } from '../../shared/httpError'
 import LocaleMarkdownEditor from '../../shared/ui/LocaleMarkdownEditor.vue'
+import OperatorSectionView from '../../core/terms/OperatorSectionView.vue'
+import type { OperatorSection } from '../../core/terms/operatorSection'
 import { localeLabel, type LocaleMap } from '../../shared/ui/localeMap'
 import { SUPPORTED_LOCALES } from '../../i18n'
 
@@ -36,6 +42,7 @@ const on401 = handle401(useRouter())
 const terms = ref<LocaleMap>({})
 const revision = ref(0)
 const isOwner = ref(false)
+const section = ref<OperatorSection | null>(null)
 const actionError = ref('')
 
 /**
@@ -67,6 +74,7 @@ const { pending: loading, error: loadErr } = useAsyncData(async () => {
   const current = await getTenantTerms(activeSpace.tenantId)
   revision.value = current.termsRevision
   terms.value = toMap(current.terms)
+  section.value = current.operatorSection
   const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
   isOwner.value = mine?.role === 'OWNER'
 }, { onError: on401 })
@@ -202,6 +210,14 @@ async function save() {
         <div v-if="previewBody" class="markdown-body terms-readonly" v-html="renderedPreview"></div>
         <p v-else class="settings-muted">{{ t('terms.noneSet') }}</p>
       </template>
+
+      <div v-if="!loading && !loadError && section" class="terms-preview" data-testid="terms-operator-section">
+        <span class="settings-muted terms-preview-label">{{ t('terms.operatorSectionLabel') }}</span>
+        <small class="settings-muted">{{ t('terms.operatorSectionNote') }}</small>
+        <div class="terms-operator-body">
+          <OperatorSectionView :section="section" />
+        </div>
+      </div>
     </section>
   </section>
 </template>
@@ -218,6 +234,14 @@ async function save() {
   margin-top: 1rem;
   display: grid;
   gap: 0.4rem;
+}
+.terms-operator-body {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 .terms-preview-label {
   font-size: 0.8rem;

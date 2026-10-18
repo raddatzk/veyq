@@ -18,6 +18,7 @@ sources:
   - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
   - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
+  - docs/decisions/0035-server-terms-of-service.md
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
@@ -352,8 +353,8 @@ Everything else expires.
   shorter N reaches every kept row at the next cleanup, a longer one only rows written from then on, so no guest is
   kept longer than the page told them.
 - **Guests are told** before their first write, on the page itself, with the N in effect and the right to object as a
-  sentence of its own. You are the controller, not a space's owner; the full information belongs in the operator
-  section of the terms, which comes with a later change.
+  sentence of its own, and a link to the full information in [the terms of the instance](#the-terms-of-the-instance).
+  You are the controller, not a space's owner.
 - **The address is the one the network vouches for**, never one the client wrote ([Networking](/veyq/run/networking/)).
   On Compose it is strong by construction; on Kubernetes it is only as strong as an enforced NetworkPolicy. The source
   port is known where your edge states it (on Compose, the recipe's Traefik always does); otherwise only the address is
@@ -385,8 +386,9 @@ empty:
   represents it;
 - **the data-protection supervisory authority**.
 
-These are public: the app reads them before sign-in on every address of the instance, and shows the identification,
-where it is set, behind **Legal notice** on the sign-in and share pages. The **notification address** is not public:
+These are public: the app reads them before sign-in on every address of the instance, and shows the identification
+and the contact with its languages, where they are set, behind **Legal notice** on the sign-in and share pages and at
+the bottom of the signed-in app, beside **Terms of this instance**. The **notification address** is not public:
 new moderation cases will be mailed there. Saving it mails a code to it through the instance mail, once Server → Mail
 is set up and confirmed (the panel says so until then); you type the code into the same panel, and nothing is mailed
 to the address before. A changed address asks again. **Clear all** removes every value and keeps the mode.
@@ -446,6 +448,42 @@ reporter's address goes earlier, six months after they were told the decision.
 choosing could read later reports; moderators' pages compare the key the server publishes with the one they hold and
 stop when it differs, but a reporter cannot check it. Moderation keeps a team accountable to each other; it is not a
 control against the operator.
+
+## The terms of the instance
+
+veyq ships a fixed **operator section** of the terms and puts it after every space's own terms
+([ADR 0035](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0035-server-terms-of-service.md) decision 6):
+members read it at the terms gate, guests at a link's terms gate, and anyone, without an account, under **Terms of this
+instance** (`/operator-terms`, served by `GET /api/operator/terms`). Nobody edits its text, you included: it is yours in
+law (you are the host), so a space's owner cannot delete it, and its wording is fixed so nothing a supervisor checks can
+be dropped. You fill it in under **Server → Operator** above, and a changed value shows at once.
+
+What it says depends on the operating mode:
+
+| Part | Private | Club, organisation or company |
+|---|---|---|
+| Who runs the instance (your identification) | where set | always; an empty field reads *not stated by this operator* |
+| How to report, who reviews, that a report blocks nothing, what is kept and for how long | yes | yes |
+| The measures, that those affected are told why and can object once | yes | yes |
+| The statement's further content (facts, report or order, that a person decided, the courts) | no | yes |
+| That an authority can defer the statement | no | yes |
+| Authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your contact with its languages | no | yes |
+| The guest-write record's information (controller, purpose, legal basis, N, recipients, rights, the supervisory authority) and the right to object apart | while *Record guests' writes* is on | while it is on |
+
+In the record's part too an empty value reads *not stated by this operator* in the second mode and is left out in
+*private*. The values it uses are the instance contact and its languages, the address statements name (else the
+contact), the provider identification, the supervisory authority and N.
+
+**When members and guests are asked again.** A space's owner changing their terms, a veyq release that changes the
+section's text, or you switching the operating mode asks every member and guest of every space again. Changing a value,
+N or the record switch asks nobody.
+
+**It is a draft.** No lawyer has reviewed the text yet, and every rendering starts by saying so. Before you publish an
+instance, have it checked. Known gaps against the law, also named in ADR 0035 decision 6: it states no backup period B
+for backups you make another way (it says such a backup holds the record until it is deleted); your own steps — a
+member's sign-in block, a tenant taken offline — carry no statement yet although the section says those affected are
+told; and your members' own privacy information (their account, their acceptances) is in no text yet. Each has a
+change of its own planned.
 
 ## Not built
 

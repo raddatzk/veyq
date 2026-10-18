@@ -47,25 +47,25 @@ export const activeSpace = reactive({
   // With status 'error': the i18n key naming the trust-state refusal that stopped the scope opening (ADR 0028
   // Decision 7 — a shared grant's granter is checked against the pin store this device refused), else null.
   trustRefusal: null as string | null,
-  // The active tenant's terms of service (cr-0114, ADR 0035): the space owner's current `termsRevision` and the
-  // caller's `acceptedRevision` — both 0 when no terms are set / none accepted. When accepted < revision the
-  // member accept-gate fires (`termsStale()`, enforced by the router). Refreshed on every scope entry.
+  // The active tenant's terms of service (cr-0114, ADR 0035): the space owner's current `termsRevision` (0 when none
+  // is set) and whether the caller accepted the current triple — that revision, the operator section's revision and
+  // its variant (ADR 0035 decision 6). With terms set and the triple not accepted the member accept-gate fires
+  // (`termsStale()`, enforced by the router). Refreshed on every scope entry.
   termsRevision: 0,
-  acceptedRevision: 0,
+  termsAccepted: false,
 })
 
 /** Whether the active tenant has terms the caller hasn't accepted yet — the member accept-gate condition
  *  (uc.account.accept-terms). False when no tenant is active or no terms are set (revision 0). Fail-open: a
  *  transient terms-fetch error leaves the revisions at 0, so a member is never locked out by an API hiccup. */
 export function termsStale(): boolean {
-  return activeSpace.tenantId !== null && activeSpace.termsRevision > 0 &&
-    activeSpace.acceptedRevision < activeSpace.termsRevision
+  return activeSpace.tenantId !== null && activeSpace.termsRevision > 0 && !activeSpace.termsAccepted
 }
 
-/** Record locally that the caller accepted [revision] (called by the /terms view after a successful accept), so
- *  `termsStale()` clears and the guard lets them back into the shell without a re-fetch. */
-export function markTermsAccepted(revision: number): void {
-  if (revision > activeSpace.acceptedRevision) activeSpace.acceptedRevision = revision
+/** Record locally that the caller accepted the current triple (called by the /terms view after a successful accept),
+ *  so `termsStale()` clears and the guard lets them back into the shell without a re-fetch. */
+export function markTermsAccepted(): void {
+  activeSpace.termsAccepted = true
 }
 
 // The scope's epoch keys are held outside the reactive proxy on purpose — key material must not flow through Vue
@@ -214,7 +214,7 @@ export function clearActiveSpace(): void {
   activeSpace.tenantUnavailable = false
   activeSpace.trustRefusal = null
   activeSpace.termsRevision = 0
-  activeSpace.acceptedRevision = 0
+  activeSpace.termsAccepted = false
   setTenantCapabilities(null)
   if (epochKeys) zeroEpochKeys(epochKeys)
   epochKeys = null
@@ -250,15 +250,15 @@ export async function refreshTenantCapabilities(tenantId: string | null): Promis
 async function refreshTenantTerms(tenantId: string | null): Promise<void> {
   if (!tenantId) {
     activeSpace.termsRevision = 0
-    activeSpace.acceptedRevision = 0
+    activeSpace.termsAccepted = false
     return
   }
   try {
     const t = await getTenantTerms(tenantId)
     activeSpace.termsRevision = t.termsRevision
-    activeSpace.acceptedRevision = t.acceptedRevision
+    activeSpace.termsAccepted = t.accepted
   } catch {
     activeSpace.termsRevision = 0
-    activeSpace.acceptedRevision = 0
+    activeSpace.termsAccepted = false
   }
 }

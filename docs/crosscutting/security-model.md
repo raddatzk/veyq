@@ -162,7 +162,8 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
   space); the tenant's **terms text + `terms_revision`** (the space owner's *public* policy,
   served to everyone incl. pre-auth) and a member's **accepted terms revisions** and **when they accepted each**
-  (one row per revision, never overwritten; `accepted_at`, the server's own clock, written once per revision — audit
+  (one row per accepted triple — the space's revision, the operator section's revision and its variant — never
+  overwritten; `accepted_at`, the server's own clock, written once per revision — audit
   evidence for a dispute, also about a superseded revision; restored by owner decision 2026-10-09 after #318 had
   dropped it, kept as a history since #402) (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
@@ -385,6 +386,11 @@ server-blind token makes this work without the server ever seeing a name:
   after the close, never while a measure of it is in force ([en.moderation.log](../features/moderation/enablers/en.moderation.log.md)).
   Not built, open legally: a hold until the handover beyond 90 days, and an authority's link to a held copy. No
   moderation path has run on a deployed instance.
+  The fixed **operator section** every space's terms carry
+  states all this to members and guests — the notice path, what is kept, the measures, the statement and the
+  objection, in the club, organisation or company mode the authorities, and while the guest-write record is on its
+  GDPR Art. 13 information — veyq's text filled with the operator's published values, public without an account
+  ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6); it is a draft until a qualified legal review.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
@@ -393,7 +399,8 @@ server-blind token makes this work without the server ever seeing a name:
   A link guest has no account, so the evidence a report about its upload can carry is the connection: while the
   Server Owner keeps the record on, each write that enters a guest as last editor stores the client address the
   network vouches for, its source port and a millisecond time, for N days (1 to 30, default 7); a report's hold copies
-  the rows of what it concerns. Guests are told before their first write, with N and the right to object. The record
+  the rows of what it concerns. Guests are told before their first write, with N and the right to object, and linked
+  to the full Art. 13 text in the operator section of the terms. The record
   adds operator-visible metadata about guests, never content, and nothing about members or readers; an address
   without a port may name no single subscriber behind carrier-grade NAT, and on Helm the address is only as strong as
   an enforced NetworkPolicy ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
@@ -450,7 +457,7 @@ server-blind token makes this work without the server ever seeing a name:
 - **The accountless-visitor terms acceptance is client-only** ([ADR 0035](../decisions/0035-server-terms-of-service.md)
   §3, [uc.sharing.share-accept](../features/sharing/use-cases/uc.sharing.share-accept.md)): before viewing, an
   account-less share visitor accepts the space's terms, but the acceptance lives in **localStorage** (per
-  tenant + revision) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
+  tenant, holding the accepted revision with the operator section's revision and variant) — the server records **nothing** about the visitor, so opening a share stays anonymous. The
   terms are **public operational content** (no blindness cost), served from the *share* via a guest
   `GET /api/shares/{shareId}/terms` keyed on the non-enumerable `shareId` (no `tenantId` existence oracle). It is an
   **operational gate, not enforcement** — bypassable by an accountless visitor and no legal-non-repudiation record;

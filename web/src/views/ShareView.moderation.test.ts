@@ -14,7 +14,7 @@ vi.mock('../core/sharing/resolvePublicShare', async (orig) => ({
   resolvePublicShare: vi.fn(async () => {
     throw new Error('not in this test')
   }),
-  fetchShareTerms: vi.fn(async () => ({ tenantId: 't', termsRevision: 0, terms: [] })),
+  fetchShareTerms: vi.fn(async () => ({ tenantId: 't', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: [] })),
 }))
 vi.mock('../features/moderation/review/ShareReview.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -24,6 +24,7 @@ vi.mock('../features/moderation/review/ShareReview.vue', async () => {
 import ShareView from './ShareView.vue'
 import { fetchShareTerms, resolvePublicShare } from '../core/sharing/resolvePublicShare'
 import { realI18n } from '../test/i18n'
+import { OPERATOR_SECTION } from '../test/models'
 
 const mountView = async () => {
   const w = mount(ShareView, { global: { plugins: [realI18n()], stubs: { OperatorIdentification: true } } })

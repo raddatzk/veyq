@@ -20,11 +20,13 @@ import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import java.time.Instant
 import java.util.UUID
+import org.hamcrest.CoreMatchers.containsString
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
+import org.hamcrest.Matchers.greaterThanOrEqualTo
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
@@ -236,6 +238,12 @@ class ShareSliceTest {
             .body("termsRevision", equalTo(1))
             .body("terms.de", equalTo("## Nutzungsbedingungen"))
             .body("terms.en", equalTo("## Terms of use"))
+            // ... with the operator section after them (ADR 0035 decision 6): its revision and variant join the
+            // visitor's local key.
+            .body("operatorSection.revision", greaterThanOrEqualTo(1))
+            .body("operatorSection.variant", notNullValue())
+            .body("operatorSection.text.en", containsString("## On this instance"))
+            .body("operatorSection.text.de", containsString("## Auf dieser Instanz"))
 
         // (c) the server records NOTHING about the accountless visitor — no acceptance row exists for the tenant.
         val acceptances = QuarkusTransaction.requiringNew().call {
@@ -255,6 +263,8 @@ class ShareSliceTest {
             .then().statusCode(200)
             .body("termsRevision", equalTo(0))
             .body("terms", nullValue())
+            // the operator section is served without a gate (ADR 0035 decision 6)
+            .body("operatorSection.text.en", containsString("## On this instance"))
     }
 
     @Test
