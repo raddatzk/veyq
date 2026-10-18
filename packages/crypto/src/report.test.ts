@@ -269,3 +269,52 @@ describe('moderation notes', () => {
     expect(() => v1.openReport(4, v1.moderationKemSecret(m), sealed)).toThrow(new v1.OpenRefused('moderation-report'))
   })
 })
+
+describe('statement facts and objections', () => {
+  const sk = unhex(vectors.xwing.vectors[0].sk)
+  const facts = vectors.seal.asym['moderation-facts']
+  const objection = vectors.seal.asym['moderation-objection']
+  const OTHER = '7e8f9a0b-1c2d-4e3f-8a5b-6c7d8e9f0a1b'
+
+  it('open their vectors: the facts with the recipient identity, the objection with the epoch key', () => {
+    const f = v1.openModerationFacts(facts.context.caseId, facts.context.accountId, sk, unhex(facts.blob))
+    expect(f).toBe("The photo shows a person's home address next to a threat.")
+    expect(hex(v1.encodeModerationNote(f))).toBe(facts.plaintext)
+    const o = v1.openObjection(objection.context.epoch, objection.context.statementId, sk, unhex(objection.blob))
+    expect(o).toBe('This is my own address, posted with my consent; there is no threat.')
+    expect(hex(v1.encodeModerationNote(o))).toBe(objection.plaintext)
+  })
+
+  it('facts sealed to one member and case open for no other, and never as a note', () => {
+    const m = key(9)
+    const identity = v1.moderationBundle(m).kem
+    const secret = v1.moderationKemSecret(m)
+    const sealed = v1.sealModerationFacts(ID, OTHER, identity, 'what was found')
+    expect(v1.openModerationFacts(ID, OTHER, secret, sealed)).toBe('what was found')
+    expect(() => v1.openModerationFacts(ID, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-facts'))
+    expect(() => v1.openModerationFacts(ID.replace(/1$/, '2'), OTHER, secret, sealed)).toThrow(
+      new v1.OpenRefused('moderation-facts'),
+    )
+    expect(() => v1.openModerationFacts(ID, OTHER, sk, sealed)).toThrow(new v1.OpenRefused('moderation-facts'))
+    expect(() => v1.openModerationNote(0, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-note'))
+    expect(() => v1.sealModerationFacts(ID, OTHER, identity, ' ')).toThrow(new ReportInvalid('note'))
+  })
+
+  it('a note, the facts or an objection whose text is not UTF-8 is refused by name', () => {
+    const bad = new Uint8Array(REPORT.bucketBytes)
+    bad.set(lp(Uint8Array.of(0xff, 0xfe)))
+    expect(() => v1.decodeModerationNote(bad)).toThrow(new ReportInvalid('note is not UTF-8'))
+  })
+
+  it('an objection sealed for one statement and epoch opens for no other, and never as a note', () => {
+    const m = key(8)
+    const kem = v1.moderationBundle(m).kem
+    const secret = v1.moderationKemSecret(m)
+    const sealed = v1.sealObjection(2, ID, kem, 'I object')
+    expect(v1.openObjection(2, ID, secret, sealed)).toBe('I object')
+    expect(() => v1.openObjection(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-objection'))
+    expect(() => v1.openObjection(2, ID.replace(/1$/, '2'), secret, sealed)).toThrow(new v1.OpenRefused('moderation-objection'))
+    expect(() => v1.openModerationNote(2, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-note'))
+    expect(() => v1.sealObjection(2, ID, kem, '')).toThrow(new ReportInvalid('note'))
+  })
+})

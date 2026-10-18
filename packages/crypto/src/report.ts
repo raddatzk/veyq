@@ -207,3 +207,22 @@ export const sealModerationNote = (epoch: number, caseId: string, kem: HybridPub
 /** Open a note with the epoch's decapsulation key, at the case and epoch the server stored it with. */
 export const openModerationNote = (epoch: number, caseId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
   decodeModerationNote(openAs({ purpose: 'moderation-note', epoch, caseId }, kemSecret, blob))
+
+/**
+ * The facts of a statement of reasons, sealed to one affected member's identity (`moderation-facts` [caseId,
+ * accountId], ADR 0093 § 7): the note's encoding, so its length tells the server a bucket.
+ */
+export const sealModerationFacts = (caseId: string, accountId: string, identity: HybridPublic, facts: string): Uint8Array =>
+  sealTo({ purpose: 'moderation-facts', caseId, accountId }, identity, encodeModerationNote(facts))
+
+/** Open the facts with the recipient's own identity key, at the case and account the statement names. */
+export const openModerationFacts = (caseId: string, accountId: string, identitySecret: HybridSecret, blob: Uint8Array): string =>
+  decodeModerationNote(openAs({ purpose: 'moderation-facts', caseId, accountId }, identitySecret, blob))
+
+/** An objection to a measure, sealed to the epoch's public half (`moderation-objection` [epoch, statementId]). */
+export const sealObjection = (epoch: number, statementId: string, kem: HybridPublic, objection: string): Uint8Array =>
+  sealTo({ purpose: 'moderation-objection', epoch, statementId }, kem, encodeModerationNote(objection))
+
+/** Open an objection with the epoch's decapsulation key, at the statement and epoch the server stored it with. */
+export const openObjection = (epoch: number, statementId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
+  decodeModerationNote(openAs({ purpose: 'moderation-objection', epoch, statementId }, kemSecret, blob))
