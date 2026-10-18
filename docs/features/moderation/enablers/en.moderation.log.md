@@ -51,7 +51,7 @@ operational log names a case id at most, never an account, an address or a seale
 | `RECEIVED` / `REPORT_ATTACHED` | a report opens the case / joins it | the reporting member (none for a guest) |
 | `OPENED` | the review served the case's report shares | the moderator |
 | `DISMISSED` | a moderator dismissed the case | the moderator; the note sealed |
-| `MEASURE_TAKEN` / `MEASURE_LIFTED` | a measure was taken / lifted (a reporter's bar is lifted as one) | who acted; the measure's kind in `reason`, its target in `target_id`; the note sealed |
+| `MEASURE_TAKEN` / `MEASURE_LIFTED` | a measure was taken / lifted (a reporter's bar is lifted as one), or ended with its erased target (`MeasureTargets`) | who acted — no one for an end by erasure; the measure's kind in `reason`, its target in `target_id`; the note sealed |
 | `PROPOSED` | a moderator proposed a Server Owner's step | the moderator; the step and its target; the note sealed |
 | `PROPOSAL_TAKEN` / `PROPOSAL_DECLINED` | the Server Owner took the step (a sign-in block, a suspension) or declined it | the Server Owner; the step and its target |
 | `HOLD_EXTENDED` | a moderator extended the hold | the moderator; the new end in `hold_until`; the reason sealed |
@@ -92,7 +92,7 @@ with every record of it — the case row, its reports' sealed parts and reporter
 `K_report`; a report spanning several cases goes with the last), its measures and proposals, statements and their
 recipients, deferrals, objections and the orders that opened it. **Never while a measure of it is in force** (deleting
 the row would lift a block nobody lifted, and a standing measure needs its statement while it can be contested), nor
-while a proposal of it waits; a lift is an event of its own date, which moves the case's. An order that opened no case
+while a proposal of it waits; a lift — or its target's erasure, which ends it the same way — is an event of its own date, which moves the case's. An order that opened no case
 goes with its `ORDER_RECEIVED` on that event's date. A **Server Owner's step on no case** — a sign-in block, or a
 tenant taken offline over content, on their own finding — goes with its statement and that statement's recipients at
 31 December of the third year after its lift, never while it stands; its events are instance events, dated and purged

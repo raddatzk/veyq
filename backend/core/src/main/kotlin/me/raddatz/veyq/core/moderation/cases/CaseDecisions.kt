@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.moderation.ModerationGrantEntity
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.block.ProposalOutcome
@@ -161,6 +162,7 @@ class CaseDecisions(
     private val operatingMode: OperatingModeHandler,
     private val mail: StatementMail,
     private val deferrals: StatementDeferrals,
+    private val measureTargets: MeasureTargets,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
 ) {
@@ -255,37 +257,59 @@ class CaseDecisions(
         moderatorId: String, caseId: String, step: MeasureStep, shareId: String?, targetId: String?, note: SealedNote?,
         statement: StatementInput, reporters: List<ReporterNotice> = emptyList(), now: Instant = Instant.now(),
     ): DecisionOutcome {
-        var changed: ModerationBlockEntity? = null
-        var statementId: String? = null
-        val outcome = createOrConflict(
-        conflict = { refused(CaseFailures.measureExists) },
-    ) {
-        val case = lock(caseId) ?: return@createOrConflict refused(CaseFailures.caseNotFound)
-        if (case.state == CaseState.CLOSED.name) return@createOrConflict refused(CaseFailures.caseClosed)
-        noteRefusal(note)?.let { return@createOrConflict refused(it) }
+        val taken = createOrConflict(conflict = { Taken(refused(CaseFailures.measureExists)) }) {
+            takeIn(moderatorId, caseId, step, shareId, targetId, note, statement, now)
+        }
+        // A measure that ended at once (its target was gone) changed no live view.
+        taken.changed?.takeIf { it.activeKey != null }?.let { row -> row.scopeId?.let { announce(row.blockKind, row.targetId, it) } }
+        taken.statementId?.let { id ->
+            mail.statementSent(id)
+            mail.tellReporters(caseId, reporters, StatementMail.Decision.DECIDED, moderatorId)
+        }
+        return taken.outcome
+    }
+
+    /** What [takeIn] did: its outcome, the measure it wrote and its statement — announced and mailed after the commit. */
+    class Taken(val outcome: DecisionOutcome, val changed: ModerationBlockEntity? = null, val statementId: String? = null)
+
+    /**
+     * [take]'s writes, **in the caller's transaction** — the race test holds them uncommitted while the target is erased
+     * (`MeasureTargetErasureRacesSliceTest`). The target's row is locked before the measure is written
+     * ([MeasureTargets.lockStanding]); a target already erased gets its measure ended at once, as its eraser would have.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun takeIn(
+        moderatorId: String, caseId: String, step: MeasureStep, shareId: String?, targetId: String?, note: SealedNote?,
+        statement: StatementInput, now: Instant,
+    ): Taken {
+        val case = lock(caseId) ?: return Taken(refused(CaseFailures.caseNotFound))
+        if (case.state == CaseState.CLOSED.name) return Taken(refused(CaseFailures.caseClosed))
+        noteRefusal(note)?.let { return Taken(refused(it)) }
         val held = snapshots.rowsOf(case.id, now)
         val known = targets.of(case, held)
         val (resolved, refusal) = resolve(case, step, shareId, targetId, known)
-        if (resolved == null) return@createOrConflict refused(refusal!!)
+        if (resolved == null) return Taken(refused(refusal!!))
         // The statement's form follows the operating mode, read now (ADR 0093 § 14): the full form requires the facts and
         // the provision or clause the ground relies on (DSA Art. 17(3)(d), (e)).
         val full = operatingMode.read().mode == OperatingMode.ORGANISATION
-        if (statement.facts == null && full) return@createOrConflict refused(CaseFailures.factsRequired)
-        if (statement.provision.isNullOrBlank() && full) return@createOrConflict refused(CaseFailures.provisionRequired)
-        noteRefusal(statement.facts)?.let { return@createOrConflict refused(it) }
+        if (statement.facts == null && full) return Taken(refused(CaseFailures.factsRequired))
+        if (statement.provision.isNullOrBlank() && full) return Taken(refused(CaseFailures.provisionRequired))
+        noteRefusal(statement.facts)?.let { return Taken(refused(it)) }
         statement.deferral?.let { d ->
-            if (!deferrals.inBounds(d.until, now)) return@createOrConflict refused(CaseFailures.deferralOutOfBounds)
-            noteRefusal(d.reason)?.let { return@createOrConflict refused(it) }
+            if (!deferrals.inBounds(d.until, now)) return Taken(refused(CaseFailures.deferralOutOfBounds))
+            noteRefusal(d.reason)?.let { return Taken(refused(it)) }
         }
         val told = recipients.of(case, resolved, known, held)
         val members = told.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }.toSet()
-        if (statement.facts == null && statement.factsFor.isNotEmpty()) return@createOrConflict refused(CaseFailures.invalid)
-        if (statement.facts != null && statement.factsFor.keys != members) return@createOrConflict refused(CaseFailures.recipientsChanged)
+        if (statement.facts == null && statement.factsFor.isNotEmpty()) return Taken(refused(CaseFailures.invalid))
+        if (statement.facts != null && statement.factsFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
         val row = block(resolved.kind, resolved.targetId, case, moderatorId, now).apply {
             if (resolved.kind == BlockKind.CONTENT_NODE || resolved.kind == BlockKind.CONTENT_ITEM) scopeId = case.scopeId
             if (resolved.kind == BlockKind.GUEST_IDENTITY) this.shareId = resolved.shareId
         }
-        if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return@createOrConflict refused(CaseFailures.measureExists)
+        if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return Taken(refused(CaseFailures.measureExists))
+        // The target's row lock, the one its eraser takes: an erasure either committed before (gone, ended below) or waits.
+        val standing = measureTargets.lockStanding(row.blockKind, row.targetId)
         row.persist()
         log.appendCase(
             ModerationEvent.MEASURE_TAKEN, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
@@ -325,16 +349,10 @@ class CaseDecisions(
         statement.deferral?.let { d ->
             deferrals.defer(written, case.id, d.until, DeferralReason(moderatorId, null, d.reason.epoch, d.reason.sealed), renewal = false, now)
         }
-        changed = row
-        statementId = written.id
-        DecisionOutcome.Done
-    }
-        changed?.let { row -> row.scopeId?.let { announce(row.blockKind, row.targetId, it) } }
-        statementId?.let { id ->
-            mail.statementSent(id)
-            mail.tellReporters(caseId, reporters, StatementMail.Decision.DECIDED, moderatorId)
-        }
-        return outcome
+        // A measure never stands on an erased target (MeasureTargets): one that is gone ends at once, lifted by no one —
+        // the decision and its statement stay, and the hold runs to its own end (ADR 0093 § 4).
+        if (!standing) measureTargets.erased(listOf(row.blockKind), listOf(row.targetId), now)
+        return Taken(DecisionOutcome.Done, row, written.id)
     }
 
     fun lift(moderatorId: String, caseId: String, measureId: String, note: SealedNote?, now: Instant = Instant.now()): DecisionOutcome {
@@ -550,11 +568,14 @@ class CaseDecisions(
                 ?: report.reporterShare?.let { block(BlockKind.REPORTER_LINK, it, case, moderatorId, now) }
                 ?: return@createOrConflict refused(CaseFailures.reportNotFound)
             if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return@createOrConflict refused(CaseFailures.measureExists)
+            // The reporter's account or link row, as at a measure (MeasureTargets): a bar on one already erased ends at once.
+            val standing = measureTargets.lockStanding(row.blockKind, row.targetId)
             row.persist()
             log.appendCase(
                 ModerationEvent.REPORTER_BARRED, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
                 epoch = note?.epoch, sealedText = note?.sealed,
             )
+            if (!standing) measureTargets.erased(listOf(row.blockKind), listOf(row.targetId), now)
             DecisionOutcome.Done
         }
 

@@ -246,7 +246,11 @@ admin-web or `veyq-admin` ([ADR 0099](0099-moderators-share-one-instance-moderat
 § 6). Blocking a member's sign-in and taking a tenant offline reach content and people nobody reported, while blocking the share and the content already stops what was reported from being served.
 
 Blocking deletes nothing, so every step can be lifted. Every step hangs on ids, never on a report or a key, so an
-authority's order (§ 12) takes the same steps. **An address is evidence, never the ground of a block.** A
+authority's order (§ 12) takes the same steps. **A step ends with its target** (GDPR Art. 5(1)(e)):
+when what it stands on is erased — a link deleted, a node or an item purged, a guest identity dropped, a space, an
+account or a tenant purged — the eraser ends it in its own transaction, lifted by no one and logged so; standing on
+nothing it would block nothing and still hold its case's records forever (§ 11). A step taken on a target already
+erased ends at once, the decision and its statement staying. The hold is not ended by it: it keeps its own end (§ 4). **An address is evidence, never the ground of a block.** A
 copy a member made (Depot's "Copy to…") is a new blob under a new key; with no dedup the server cannot know it, and
 a block reaches only the reported copy.
 
@@ -410,7 +414,7 @@ range and its no-extension rule (§ 2 there).
   proposals, its statements with their recipients, its deferrals and objections, the orders that opened it, and its
   events. **Never while a measure of it is in force**: deleting the row would lift a block nobody lifted (§ 6), and a
   standing measure needs its statement for as long as it can be contested (DSA Art. 17, GDPR Art. 17(3)(e)); its lift
-  is an event of its own date, which moves the case's. Nor while a proposal of it waits for the Server Owner. An order
+  — or its target's erasure, which ends it the same way (§ 6) — is an event of its own date, which moves the case's. Nor while a proposal of it waits for the Server Owner. An order
   that opened no case goes with its event at 31 December of the third year after its entry; a Server Owner's step on no
   case (§ 7) goes with its statement at 31 December of the third year after its lift. The hold's snapshot and
   pins are content and end by § 4's table, long before.

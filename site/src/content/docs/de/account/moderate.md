@@ -106,6 +106,11 @@ Eine Sperre entscheidet den Fall, und was für ihn gesichert ist, bleibt dann se
 einer Maßnahme — deiner oder der einer anderen moderierenden Person — liefert das Gesperrte wieder unverändert aus. Wird
 die letzte Maßnahme in Kraft aufgehoben, wird das Gesicherte freigegeben und der Fall abgeschlossen.
 
+Eine Maßnahme endet von selbst, wenn das Gesperrte endgültig gelöscht wird — ein gelöschter Link, etwas endgültig aus
+dem Papierkorb Entferntes, ein gelöschter Bereich: Der Fall zeigt sie dann als aufgehoben, obwohl niemand sie aufgehoben hat. Was für den Fall
+gesichert ist, bleibt trotzdem seine sechs Monate gesichert. Eine Sperre auf etwas bereits endgültig Gelöschtes endet
+sofort; deine Entscheidung und ihre Begründung bleiben.
+
 ## Widersprüche
 
 Wer von einer Sperre betroffen ist, kann einmal widersprechen. Der Fall zeigt den Widerspruch dann unter
