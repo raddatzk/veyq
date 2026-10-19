@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 // The buckets data layer is mocked — this test drives the component's selection / delete-to-trash+undo / move-gating
@@ -53,7 +53,7 @@ import type { TreeNode } from '../../../core/node/tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
-import { realI18n } from '../../../test/i18n'
+import { realI18n, t } from '../../../test/i18n'
 import { mediaItem, treeNode, memberMemoryRights } from '../../../test/models'
 import { computed } from 'vue'
 import { MEMORY_VIEW, memberMemorySource } from '../source'
@@ -368,5 +368,52 @@ describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)
     await selectBucket(wrapper, 'b-share')
     expect(wrapper.find('.bucket-select-value').text()).toContain('Contribution')
     expect(wrapper.find('.bucket-select-value').text()).not.toContain('(guest)')
+  })
+})
+
+// ADR 0105: the contributors' view is the same windowed grid — the REAL MediaGrid here, not the stub — so a bucket of
+// 2,000 mounts about a window of tiles, while the selection is by id: select-all selects all 2,000, and Space on a
+// focused tile toggles its checkbox as a click does. happy-dom lays nothing out: every box is 960 px wide, the window
+// is happy-dom's own viewport.
+describe('MemoryBuckets — a bucket of 2,000 on the windowed grid (ADR 0105)', () => {
+  function mountReal(mediaItems: MediaItem[]) {
+    return mount(MemoryBuckets, {
+      props: { scopeId: 's-1', nodeId: 'n-1', memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
+      global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub }, provide: memberView('s-1') },
+      attachTo: document.body,
+    })
+  }
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('mounts about a window of tiles, and select-all selects every one of the 2,000 by id', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 2000)])
+    const all = Array.from({ length: 2000 }, (_, i) => media(`m${i}`, 'user:me', 'b-own'))
+    const wrapper = mountReal(all)
+    await flushPromises()
+    const windowed = wrapper.findAll('.media-tile').length
+    expect(windowed).toBeGreaterThan(0)
+    expect(windowed).toBeLessThan(200) // three viewports of 768 px at ~200 px rows of ~4: far below 2,000
+    await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
+    expect(wrapper.find('.bucket-selection-bar').text()).toContain(t('memory.buckets.selected', { selected: 2000, visible: 2000 }))
+    expect(wrapper.findAll('.media-tile.is-selected').length).toBe(windowed) // every mounted tile shows it
+  })
+
+  it('Space on a focused tile toggles its selection; Enter is still its open button', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 3)])
+    const wrapper = mountReal([media('m0', 'user:me', 'b-own'), media('m1', 'user:me', 'b-own'), media('m2', 'user:me', 'b-own')])
+    await flushPromises()
+    const open = wrapper.find('[data-grid-id="m1"] .media-tile-open').element as HTMLButtonElement
+    open.focus()
+    open.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }))
+    await flushPromises()
+    expect(wrapper.find('[data-grid-id="m1"] .media-tile').classes()).toContain('is-selected')
+    open.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }))
+    await flushPromises()
+    expect(wrapper.find('[data-grid-id="m1"] .media-tile').classes()).not.toContain('is-selected')
+    expect(wrapper.emitted('openLightbox')).toBeUndefined()
   })
 })

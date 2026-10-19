@@ -208,6 +208,7 @@ const {
   trashedItems,
   trashThumbs,
   trashThumbFailed,
+  wantTrashThumbs,
   trashStatus,
   selectedTrash,
   trashMenu,
@@ -736,7 +737,7 @@ watch(
                 </button>
               </div>
             </div>
-            <MediaGrid :items="trashLayoutItems" :aria-label="t('memory.trash.title')">
+            <MediaGrid :items="trashLayoutItems" :aria-label="t('memory.trash.title')" @window="wantTrashThumbs">
               <template #tile="{ tile, item }">
                 <MediaTile
                   class="memory-trash-tile"
