@@ -86,6 +86,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { clearUploads } from '../features/memory/uploadQueue'
 import { setViewMode } from '../shared/state/useViewMode'
 import { fakeApi, stubApi } from '../test/apiMock'
+import { apiResponse } from '../test/apiResponse'
 import { realI18n, t } from '../test/i18n'
 import { authenticatedCalls } from '../test/guestMode'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
@@ -136,7 +137,8 @@ beforeEach(async () => {
   vi.clearAllMocks()
   setViewMode('grid')
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-1', MEMORY), row('c-1', CHAPTER)], identities: [], more: false } })
+  const listing = { media: [row('m-1', MEMORY), row('c-1', CHAPTER)], identities: [], more: false }
+  stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }) })
   // A tier read (the lightbox's preview) is refused: the stage shows its error, the download stays.
   fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
   vi.mocked(addSharePhoto).mockResolvedValue({ blobId: 'b-up', mediaId: 'm-up' })
@@ -279,7 +281,8 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
 
   it('a CHAPTER link: the chapter\'s detail at the root, under its own key; a contributor uploads into it', async () => {
     saveGuestSession(SHARE, GUEST)
-    stubApi(publicShareMediaApi, { listShareMedia: { media: [row('c-1', CHAPTER)], identities: [], more: false } })
+    const listing = { media: [row('c-1', CHAPTER)], identities: [], more: false }
+    stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }) })
     fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
     const w = await mountPage(head(ShareRole.ReadWrite, { chapterRoot: true }))
     await vi.waitFor(() => expect(tiles(w)).toEqual(['c-1']))
@@ -311,6 +314,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(w.find('[data-testid="guest-write-record-notice"]').exists(), 'no N served: nothing said').toBe(false)
     expect(publicShareMediaApi().listShareMedia, 'an uploader is served no media').not.toHaveBeenCalled()
+    expect(publicShareMediaApi().listShareMediaRaw, 'nor polls any').not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
     expect(touched).toEqual([])
     w.unmount()
@@ -341,6 +345,7 @@ describe('a note that asks to be accepted before the share opens', () => {
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(w.text(), 'the drop page').not.toContain(t('share.uploaderIntro'))
     expect(publicShareMediaApi().listShareMedia, 'no media read').not.toHaveBeenCalled()
+    expect(publicShareMediaApi().listShareMediaRaw, 'no media read').not.toHaveBeenCalled()
   }
 
   for (const role of [ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly]) {

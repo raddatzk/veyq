@@ -20,7 +20,7 @@ import { contentApi, publicSharesApi } from '../../api/client'
 import { caseMediaApi, publicShareMediaApi } from './api'
 import { activeReview } from '../../core/sharing/review'
 import { withRefresh } from '../../app/sessionRefresh'
-import { isCodedError, HttpStatus } from '../../shared/httpError'
+import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { resolvePublicShare, ShareUnavailableError, type PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import {
   carriedSettings,
@@ -358,22 +358,63 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
     const held = await caseMediaApi().listCaseMedia({ caseId: review.caseId, ...(await review.proof('listCaseMedia')) })
     return { ...held, more: false }
   }
+  let first: ShareMediaListing
+  try {
+    first = await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken, nodeId, limit: MEDIA_PAGE_LIMIT })
+  } catch {
+    throw new ShareUnavailableError('not_found')
+  }
+  return restOfShareMedia(shareId, pwToken, nodeId, first)
+}
+
+/** A read of the guest listing with its tag: the listing in full and the `ETag` its first page carried (`null`: none —
+ *  a moderator's review, a `WRITE_ONLY` link, a server that names none). */
+export type TaggedShareMedia = { listing: ShareMediaListing; etag: string | null }
+
+/**
+ * [listShareMedia] with the listing's tag — the guest gallery's first load and its live poll (inbox #497). The tag is a
+ * digest of everything the read serves, every page of it (ADR 0081 decision 4: never a revision, so nothing outside what
+ * the link shows moves it); with `ifNoneMatch` the first page is conditional, and a listing that still serves exactly
+ * that answers `304`, which is `null` here — nothing to read, open or compare. A later page is never conditional; the
+ * listing keeps the first page's tag, which was read before its rows, so a change committed while the guest pages moves
+ * the server's tag past it and the next poll re-reads. Throws [ShareUnavailableError] as [listShareMedia] does.
+ */
+export async function readShareMedia(
+  shareId: string, role: ShareRole, pwToken: string | undefined, nodeId: string, ifNoneMatch?: string,
+): Promise<TaggedShareMedia | null> {
+  if (role === ShareRole.WriteOnly || activeReview()) return { listing: await listShareMedia(shareId, role, pwToken, nodeId), etag: null }
+  let first: ShareMediaListing
+  let etag: string | null
+  try {
+    const res = await publicShareMediaApi().listShareMediaRaw({ shareId, xSharePassword: pwToken, nodeId, limit: MEDIA_PAGE_LIMIT, ifNoneMatch })
+    first = await res.value()
+    etag = res.raw.headers.get('ETag')
+  } catch (e) {
+    if (ifNoneMatch && isHttpStatus(e, HttpStatus.notModified)) return null // idle: what the link serves is unchanged
+    throw new ShareUnavailableError('not_found')
+  }
+  return { listing: await restOfShareMedia(shareId, pwToken, nodeId, first), etag }
+}
+
+/** Every page after [first], each asked after the last id the page before gave, until the server says no more remain —
+ *  merged into one listing (the identities once each). */
+async function restOfShareMedia(shareId: string, pwToken: string | undefined, nodeId: string | undefined, first: ShareMediaListing): Promise<ShareMediaListing> {
   const media: ShareMediaListing['media'] = []
   const identities = new Map<string, ShareMediaListing['identities'][number]>()
+  let page = first
   let after: string | undefined
   for (;;) {
-    let page: ShareMediaListing
-    try {
-      page = await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken, nodeId, after, limit: MEDIA_PAGE_LIMIT })
-    } catch {
-      throw new ShareUnavailableError('not_found')
-    }
     media.push(...page.media)
     for (const i of page.identities) identities.set(i.identityId, i)
     const last = page.media.at(-1)?.mediaId
     if (!page.more) break
     if (!last || last === after) throw new Error('share_media_page_did_not_advance') // a page that says more must move on
     after = last
+    try {
+      page = await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken, nodeId, after, limit: MEDIA_PAGE_LIMIT })
+    } catch {
+      throw new ShareUnavailableError('not_found')
+    }
   }
   return { media, identities: [...identities.values()], more: false }
 }
