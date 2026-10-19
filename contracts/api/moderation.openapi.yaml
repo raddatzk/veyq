@@ -1865,7 +1865,10 @@ components:
           items: { $ref: "#/components/schemas/ModerationTargetLink" }
         uploaders:
           type: array
-          maxItems: 10000
+          description: >
+            Every uploader the held rows name, whole. No `maxItems`: nothing bounds how many members and guest identities
+            a held subtree names (a space's members and a link's guests are uncounted), and a cap here would either
+            break the answer's own schema or drop an uploader. The same list as `ModerationCaseExport.uploaders`.
           items: { $ref: "#/components/schemas/ModerationTargetUploader" }
 
     ModerationTargetLink:
@@ -2605,7 +2608,11 @@ components:
           items: { $ref: "#/components/schemas/ModerationExportMeasure" }
         uploaders:
           type: array
-          maxItems: 1000
+          description: >
+            Every uploader the held rows name, whole. No `maxItems`: nothing bounds how many members and guest identities
+            a held subtree names (a space's members and a link's guests are uncounted), and a cap here would either
+            break the answer's own schema or drop an uploader, where an Art. 18 report carries all relevant information
+            (ADR 0093 § 13). The same list as `ModerationTargets.uploaders`.
           items: { $ref: "#/components/schemas/ModerationExportUploader" }
         guestWrites:
           type: array
