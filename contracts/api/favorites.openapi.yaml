@@ -91,6 +91,7 @@ paths:
           description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
 components:
   securitySchemes:

@@ -152,6 +152,7 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable (`share_not_found`); or the `nodeId` names no live node inside the share's subtree (`node_not_found`, the same for a node outside it as for none).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/shares/{shareId}/media/{mediaId}:
     delete:

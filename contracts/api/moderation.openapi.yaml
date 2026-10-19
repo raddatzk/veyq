@@ -98,6 +98,7 @@ paths:
           description: "`epoch` is not the moderation key's current epoch (`moderation_epoch_changed`): read the key again and seal anew."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many reports from this account (`rate_limited`), or too many of its reports still open (`too_many_open_reports`).
           content:
@@ -332,6 +333,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: mail_code_invalid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many requests from this caller; retry after the window.
           content:
@@ -526,6 +528,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: identity_changed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases:
     get:
@@ -634,6 +637,7 @@ paths:
           description: "`case_not_open` = the case is decided or closed; `moderation_epoch_changed` = the note is not sealed to the current epoch."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: case_not_open } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases/{caseId}/measures:
     post:
@@ -695,6 +699,7 @@ paths:
             `id_taken` = the statement's id is not free (ADR 0072 Decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: "`statement_recipients_too_many` = with facts, the statement would reach more members than one step can wrap their key to (6,000, `ModerationStatementRecipients.accounts`); nobody is told only in part."
           content:
@@ -739,6 +744,7 @@ paths:
           description: "`moderation_epoch_changed` = the note is not sealed to the current epoch."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases/{caseId}/proposals:
     post:
@@ -780,6 +786,7 @@ paths:
           description: "`moderation_proposal_exists` = the same step on the same target is open; `case_closed`; `moderation_epoch_changed`."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proposal_exists } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases/{caseId}/hold/extension:
     post:
@@ -825,6 +832,7 @@ paths:
           description: "`nothing_held` = the case holds no hold alive; `moderation_epoch_changed` = the reason is not sealed to the current epoch; `extension_reason_not_allowed` = on a case of child sexual abuse material, a reason type other than an authority's reference or an Art. 18 report in progress."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases/{caseId}/statement-recipients:
     get:
@@ -935,6 +943,7 @@ paths:
             the current epoch.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: objection_needs_another_moderator } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/statements:
     get:
@@ -998,6 +1007,7 @@ paths:
             `moderation_epoch_changed` = the objection is not sealed to the current epoch: read the key again.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: objection_exists } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many objections from this account (`rate_limited`).
           content:
@@ -1044,6 +1054,7 @@ paths:
           description: "`moderation_measure_exists` = the reporter is barred already; `moderation_epoch_changed`."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/orders:
     post:
@@ -1087,6 +1098,7 @@ paths:
           description: "`order_exists` = an order with this id is recorded; `moderation_epoch_changed` = the reference is not sealed to the current epoch."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: order_exists } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     get:
       tags: [moderation]
       operationId: listModerationOrders
@@ -1161,6 +1173,7 @@ paths:
             the current epoch.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: deferral_renewed } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases/{caseId}/handovers:
     post:
@@ -1201,6 +1214,7 @@ paths:
           description: "`moderation_epoch_changed` = the note is not sealed to the current epoch."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/moderation/cases/{caseId}/export:
     get:

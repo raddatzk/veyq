@@ -78,6 +78,15 @@ components:
       description: The node's current item revision - echo it as `If-None-Match` on the next poll.
       schema: { type: string, example: "7" }
   responses:
+    RequestTooLarge:
+      description: >
+        The request's declared body is past the server's request limit (`request_too_large`; `quarkus.http.limits.max-body-size`,
+        10,240 KiB unless the instance sets it) — answered on the `Content-Length` header alone, before the body is read or
+        the caller is authenticated, and the connection is closed with it. Every operation that takes a body declares it.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { code: request_too_large }
     ItemsNotModified:
       description: >
         Not Modified - the client's `If-None-Match` equals the node's current item revision; nothing changed. No body,
