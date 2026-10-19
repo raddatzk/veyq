@@ -27,10 +27,12 @@ export const ITEMS_POLL: LivePollerOptions = { intervalMs: 20_000, maxBackoffMs:
 
 /** What the next poll echoes: the revision it holds (the `If-None-Match`), the delete revision (the `sinceDelete`
  *  gate) and the keyset cursor the server answered with the last page it read (undefined: none yet). `key` names what
- *  the poll was made for (a node id) so a result for a view that has moved on is dropped. */
-export interface ItemsPollCursor<K = unknown> {
+ *  the poll was made for (a node id) so a result for a view that has moved on is dropped. The revision's type `R` is the
+ *  caller's: the node's item revision for a member's list, an opaque tag where the list's `ETag` is a digest (a share
+ *  guest's, ADR 0081 decision 4) — the loop only holds it and hands it back. */
+export interface ItemsPollCursor<K = unknown, R = number> {
   key: K
-  revision: number
+  revision: R
   deleteRevision: number
   since?: string
 }
@@ -38,12 +40,12 @@ export interface ItemsPollCursor<K = unknown> {
 /** One conditional read of the list, after every page of it ([readItemPages]): nothing changed (`304`), or the delta
  *  with the first page's revisions and — only when a removal advanced past the echoed `sinceDelete` — the id set, and
  *  the cursor the next poll continues from (null: no page carried a row, keep the one held). */
-export type ItemsPollPage<T> =
+export type ItemsPollPage<T, R = number> =
   | { notModified: true }
-  | { notModified: false; items: T[]; revision: number; deleteRevision: number; ids: string[] | null; cursor: string | null }
+  | { notModified: false; items: T[]; revision: R; deleteRevision: number; ids: string[] | null; cursor: string | null }
 
 /** A page that changed something, as the reducer sees it. */
-export type ItemsChange<T> = Extract<ItemsPollPage<T>, { notModified: false }>
+export type ItemsChange<T, R = number> = Extract<ItemsPollPage<T, R>, { notModified: false }>
 
 /** ONE page of the list as the server answers it (ADR 0033 decision 6): at most a limit of items, `more` while items
  *  remain past them, and the keyset `cursor` of its last item. */
@@ -96,22 +98,22 @@ export async function readItemPages<T>(
   }
 }
 
-export interface ItemsPollTickOptions<T, K> {
+export interface ItemsPollTickOptions<T, K, R = number> {
   /** The poll's starting point from the caller's live state, or null when there is nothing to poll (not loaded, locked,
    *  no live poll for this session): the tick then asks the server nothing and waits for the next interval. */
-  cursor: () => ItemsPollCursor<K> | null
+  cursor: () => ItemsPollCursor<K, R> | null
   /** The conditional read — the application's generated client with `ifNoneMatch`, `since` and `sinceDelete` from the
    *  cursor, a `304` read as `{ notModified: true }`. Rejects on a failure. */
-  fetch: (cursor: ItemsPollCursor<K>, signal: AbortSignal) => Promise<ItemsPollPage<T>>
+  fetch: (cursor: ItemsPollCursor<K, R>, signal: AbortSignal) => Promise<ItemsPollPage<T, R>>
   /** Whether the view the cursor was taken for is still the open one (default: always). */
   isCurrent?: (key: K) => boolean
   /** What the view does with a change: merge the delta, store the new revisions, decrypt, settle. It runs only for a
    *  change of a run that is still live and of a view that is still current, and must check `signal` after every await. */
-  apply: (change: ItemsChange<T>, cursor: ItemsPollCursor<K>, signal: AbortSignal) => void | Promise<void>
+  apply: (change: ItemsChange<T, R>, cursor: ItemsPollCursor<K, R>, signal: AbortSignal) => void | Promise<void>
 }
 
 /** One tick of an item list's live loop, for `createLivePoller(...).start`. */
-export function itemsPollTick<T, K = unknown>(options: ItemsPollTickOptions<T, K>): LiveTick {
+export function itemsPollTick<T, K = unknown, R = number>(options: ItemsPollTickOptions<T, K, R>): LiveTick {
   return async (signal) => {
     const cursor = options.cursor()
     if (!cursor) return 'skip'

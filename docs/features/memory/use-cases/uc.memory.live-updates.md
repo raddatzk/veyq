@@ -2,8 +2,9 @@
 
 - **ID:** uc.memory.live-updates
 - **Primary actor:** A member with an **unlocked vault** viewing a Memory's **gallery** in a **shared scope**
-  (group / tenant) or a **contributor share**, while other members or contributors add or remove media in the
-  same Memory.
+  (group / tenant) or a **contributor share** — or a **share guest** of a `READ` or `READ_WRITE` link with the same
+  Memory open (a share view is the member view, inbox #401) — while other members or contributors add or remove media
+  in the same Memory.
 - **Goal:** The open gallery **reflects others' media changes live** — newly attached media **auto-inserts** as
   tiles, removed media **drops out** — with **no manual reload**; and a re-open is **fast** because a cheap
   "nothing changed" check skips the media re-list. **Operator-blind** throughout (an opaque revision counter +
@@ -47,6 +48,16 @@
   broken grid; the rest render.
 - **E6 — the poll request errors / offline:** back off and retry; the last-rendered grid stays; recovery re-syncs
   on the next successful poll (the revision compare makes recovery a single round-trip).
+- **E7 — a share guest has the Memory open** (inbox #497): the same loop, on the guest's own listing
+  (`listShareMedia` for the node on screen). Its tag is **not** the node's item revision, which also moves on what a
+  guest is not shown (a medium moved between buckets) and would tell an anonymous visitor when the Memory is worked on: it
+  is a digest of everything the link's listing serves, every page of it
+  ([ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md) decision 4). Nothing the
+  link shows changed — a change elsewhere in the space included — ⇒ `304`. Something did ⇒ the **whole listing**, which
+  the client merges with every id in it as the id set (a guest is told no order of the Memory's changes to continue a
+  keyset from): a second uploader's photo appears, one gone from the link drops. An idle guest poll is as cheap as a
+  member's, because the server remembers the digest by the node's revisions
+  ([ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) decision 7).
 
 ## Quality notes
 
