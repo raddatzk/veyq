@@ -2,7 +2,7 @@ package me.raddatz.veyq.core.account.identitypins
 
 import io.quarkus.panache.common.Sort
 import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
-import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.AccountStore
@@ -30,14 +30,24 @@ data class PinWrite(
     val replaceAll: Boolean,
 ) {
     /**
-     * Whether the write contradicts itself — refused before anything is read, `400 invalid_request`: one `pinId` put
-     * twice (which would the store keep?), deleted twice, or both put and deleted, and a `delete` beside `replaceAll`
-     * (which already removes everything not put). The bounds of each field are the contract's.
+     * A `delete` beside `replaceAll` (which already removes everything not put) — `IdentityPinsWrite`'s own
+     * `if`/`then`, so the shape's `400 invalid_request`. The bounds of each field are the contract's too.
+     */
+    fun deletesBesideReplaceAll(): Boolean = replaceAll && delete.isNotEmpty()
+
+    /**
+     * Whether the lists contradict each other — refused before anything is read, `422 pins_contradictory` (inbox
+     * #507): one `pinId` put twice (which would the store keep?), deleted twice, or both put and deleted. Rules across
+     * list items and across lists, which no schema states — `uniqueItems` compares whole entries, and the generators
+     * would turn a unique list into a set that drops the second one silently.
      */
     fun contradictory(): Boolean {
         val putIds = put.map { it.pinId }
-        return putIds.toSet().size != putIds.size || delete.toSet().size != delete.size ||
-            putIds.any { it in delete.toSet() } || (replaceAll && delete.isNotEmpty())
+        return putIds.toSet().size != putIds.size || delete.toSet().size != delete.size || putIds.any { it in delete.toSet() }
+    }
+
+    companion object {
+        val contradiction: HttpFailure = httpFailure("pins_contradictory", UNPROCESSABLE)
     }
 }
 
@@ -45,8 +55,11 @@ data class PinWrite(
 sealed interface PutResult {
     data class Written(val revision: Long) : PutResult
     object Stale : PutResult, HttpFailure by httpFailure("stale_revision", CONFLICT)
-    /** The write would leave more entries than the one write that carries them all may hold ([MAX_ENTRIES]). */
-    object Full : PutResult, HttpFailure by Failures.invalidRequest
+    /**
+     * The write would leave more entries than the one write that carries them all may hold ([MAX_ENTRIES]) — an answer
+     * about what the store already holds, which no request can know, so not the shape's `400` (inbox #507).
+     */
+    object Full : PutResult, HttpFailure by httpFailure("pin_store_full", UNPROCESSABLE)
 }
 
 /**

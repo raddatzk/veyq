@@ -185,17 +185,19 @@ class IdentityPinsSliceTest {
     }
 
     @Test
-    fun aContradictoryWriteIs400AndStoresNothing() {
+    fun aContradictoryWriteIsRefusedAndStoresNothing() {
         val token = issueToken(seedUser())
+        // The schema's own rule (`IdentityPinsWrite`'s `if`/`then`) is the shape's 400; the rules across the lists no
+        // schema states are 422 `pins_contradictory` (inbox #507).
         val contradictions = listOf(
-            "one pinId put twice" to Triple(listOf(pin(1), PinEntry(pin(1).pinId, entryOf(7))), emptyList<String>(), false),
-            "one pinId deleted twice" to Triple(emptyList(), listOf(pin(1).pinId, pin(1).pinId), false),
-            "one pinId put and deleted" to Triple(listOf(pin(1)), listOf(pin(1).pinId), false),
-            "a delete beside replaceAll" to Triple(listOf(pin(1)), listOf(pin(2).pinId), true),
+            Triple("one pinId put twice", Triple(listOf(pin(1), PinEntry(pin(1).pinId, entryOf(7))), emptyList<String>(), false), 422),
+            Triple("one pinId deleted twice", Triple(emptyList(), listOf(pin(1).pinId, pin(1).pinId), false), 422),
+            Triple("one pinId put and deleted", Triple(listOf(pin(1)), listOf(pin(1).pinId), false), 422),
+            Triple("a delete beside replaceAll", Triple(listOf(pin(1)), listOf(pin(2).pinId), true), 400),
         )
-        for ((name, w) in contradictions) {
+        for ((name, w, status) in contradictions) {
             write(token, 0, HEAD_1, put = w.first, delete = w.second, replaceAll = w.third)
-                .then().statusCode(400).body("code", equalTo("invalid_request"))
+                .then().statusCode(status).body("code", equalTo(if (status == 400) "invalid_request" else "pins_contradictory"))
             get(token).then().body("revision", equalTo(0))
             assertEquals(emptyList<PinEntry>(), entries(token), name)
         }
@@ -237,9 +239,10 @@ class IdentityPinsSliceTest {
         assertEquals(25_000, listed.size)
         assertEquals(listOf(pin(1), pin(445), pin(1000), pin(25_000)), listOf(listed[0], listed[444], listed[999], listed[24_999]))
 
-        // The store holds no more: one more entry is refused, and nothing of that write lands — not even its head.
+        // The store holds no more: one more entry is refused, and nothing of that write lands — not even its head. An
+        // answer about what the store holds, not about the request's shape (inbox #507).
         write(token, 1, HEAD_2, put = listOf(pin(25_001)))
-            .then().statusCode(400).body("code", equalTo("invalid_request"))
+            .then().statusCode(422).body("code", equalTo("pin_store_full"))
         get(token).then().body("blob", equalTo(HEAD_1)).body("revision", equalTo(1))
         assertEquals(25_000L, count(user))
         // Control: a replacement inside the bound lands.

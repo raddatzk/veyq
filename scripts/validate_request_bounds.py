@@ -16,8 +16,9 @@ beside the `$ref`, or else the target's own `x-field-extra-annotation`, which th
      `@Size(min = N)` (a `@NotBlank`/`@NotEmpty` also satisfies N = 1); `minimum` → `@Min(N)`; `maximum` →
      `@Max(N)`; `pattern` → a `@Pattern` with the same regexp (anchors normalised: bean validation matches the
      whole value either way); `contentEncoding: base64` → the base64 `@Pattern` the specs use; `format: email`
-     → `@Email`.
-  2. **annotation → bound.** No `@Size`/`@Min`/`@Max`/`@Pattern`/`@Email` enforces something the schema does
+     → core's `@Mailbox` (`core/validation/Mailbox.kt`), never Hibernate's `@Email`, which takes addresses the
+     format refuses (inbox #510).
+  2. **annotation → bound.** No `@Size`/`@Min`/`@Max`/`@Pattern`/`@Mailbox` enforces something the schema does
      not declare. The base64 `@Pattern` counts as declared by `contentEncoding: base64`.
   3. **cascade.** A property whose target is an object schema, or a list of one, carries
      `@field:jakarta.validation.Valid` whenever that target carries any constraint at any depth — validation
@@ -94,7 +95,9 @@ MIN_RE = re.compile(CONSTRAINT + r"Min\((-?\d+)\)")
 MAX_RE = re.compile(CONSTRAINT + r"Max\((-?\d+)\)")
 # `regexp = "<Kotlin string literal>"` — the literal may contain `\"`, so match escapes explicitly.
 PATTERN_RE = re.compile(CONSTRAINT + r'Pattern\(regexp\s*=\s*"((?:[^"\\]|\\.)*)"\)')
-EMAIL_RE = re.compile(CONSTRAINT + r"Email\b")
+# `format: email` is core's one reading of the format (inbox #510); Hibernate's `@Email` is laxer, so it is refused.
+EMAIL_RE = re.compile(r"@field:me\.raddatz\.veyq\.core\.validation\.Mailbox\b")
+HIBERNATE_EMAIL_RE = re.compile(CONSTRAINT + r"Email\b")
 # Rule 6: the elements' bounds of a list of scalars, carried on the list (core's own constraint, `core/http/EachElement.kt`).
 EACH_RE = re.compile(r'@field:me\.raddatz\.veyq\.core\.http\.EachElement\(((?:[^()"]|"(?:[^"\\]|\\.)*")*)\)')
 EACH_ARG_RE = re.compile(r'(minLength|maxLength)\s*=\s*(\d+)|pattern\s*=\s*"((?:[^"\\]|\\.)*)"')
@@ -347,7 +350,10 @@ def check_property(where: str, prop: dict) -> None:
             fail("bound→annotation", f"{what} has no `@Pattern(regexp = \"{rx}\")`"
                  + (f" (annotated {patterns})" if patterns else "") + ".")
     if s.get("format") == "email" and not has_email:
-        fail("bound→annotation", "`format: email` has no `@Email`.")
+        fail("bound→annotation", "`format: email` has no `@Mailbox`.")
+    if HIBERNATE_EMAIL_RE.search(ann):
+        fail("annotation→bound", "`@Email` is Hibernate's reading of an address, laxer than `format: email` — "
+             "annotate `@field:me.raddatz.veyq.core.validation.Mailbox` (inbox #510).")
 
     # rule 2 — nothing is annotated that the schema does not declare
     for n in size_max:
@@ -371,7 +377,7 @@ def check_property(where: str, prop: dict) -> None:
             fail("annotation→bound", f"`@Pattern(regexp = \"{rx}\")` enforces a pattern the schema does not "
                  f"declare (schema: {declared_patterns or 'none'}).")
     if has_email and s.get("format") != "email":
-        fail("annotation→bound", "`@Email` enforces a format the schema does not declare (`format: email`).")
+        fail("annotation→bound", "`@Mailbox` enforces a format the schema does not declare (`format: email`).")
 
 
 def check_elements(where: str, prop: dict, element: dict) -> None:

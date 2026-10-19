@@ -265,8 +265,22 @@ components:
 
     ReportItemSubmission:
       type: object
-      description: One reported item, and the keys that open it sealed under the report's `K_report`.
+      description: >
+        One reported item, and the keys that open it sealed under the report's `K_report`. A NODE or an ITEM names its
+        `id`, a LINK none (else `400 invalid_request`) — the schema's own rule (inbox #507).
       required: [kind, sealedShare]
+      # ReportHandler.malformed. Under `dependentSchemas` (on the required `kind`), never at the top, where an `if` turns
+      # a sibling-annotated `$ref` to this schema into `Any`; there both generators ignore it (measured on
+      # openapi-generator 7.23.0, Kotlin and TypeScript).
+      dependentSchemas:
+        kind:
+          if:
+            properties: { kind: { const: LINK } }
+          then:
+            properties: { id: { type: "null" } }
+          else:
+            required: [id]
+            properties: { id: { type: string } }
       properties:
         kind:
           x-veyq-visibility: enum
@@ -336,7 +350,10 @@ components:
           type: array
           minItems: 1
           maxItems: 100
-          description: The reported items, each at most once; above 100 the client offers the enclosing node instead.
+          description: >
+            The reported items, each at most once; above 100 the client offers the enclosing node instead. A kind and
+            id named twice is `422 report_item_repeated` — a rule across the items no schema states (`uniqueItems`
+            compares whole items, and the generators would turn the list into a set).
           items: { $ref: "#/components/schemas/ReportItemSubmission" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 100)'
         receiptAddress:
@@ -350,7 +367,7 @@ components:
           description: Where the receipt goes, if the reporter left an address. Not stored.
           maxLength: 254
           example: reporter@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     ReportReceipt:
       type: object

@@ -1331,6 +1331,16 @@ components:
     RotateScopeRequest:
       type: object
       required: [epoch, wrappedPrev, grants, admissions]
+      # `revokeLinks` belongs to a removal-rotation (ScopesHandler.rotateScope): with it true, `removesUserId` is
+      # required and not null — the schema's own rule (inbox #507). Under `dependentSchemas`, never at the top, where an
+      # `if` turns a sibling-annotated `$ref` to this schema into `Any`; there both generators ignore it (measured on
+      # openapi-generator 7.23.0, Kotlin and TypeScript).
+      dependentSchemas:
+        revokeLinks:
+          if: { properties: { revokeLinks: { const: true } } }
+          then:
+            required: [removesUserId]
+            properties: { removesUserId: { type: string } }
       properties:
         epoch:
           x-veyq-visibility: structure
