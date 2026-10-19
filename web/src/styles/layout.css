@@ -1,4 +1,8 @@
 .app-shell {
+  /* How far down the shell's own sticky chrome reaches: where a page's sticky row stops (a Memory's tab row,
+     uc.memory.banner). The top bar here, the compact header below 1020px; a page outside the shell (a share's plain
+     layout) has none, and its sticky row stops at 0. */
+  --app-sticky-top: var(--app-topbar-height);
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
@@ -516,6 +520,7 @@
 
 @media (max-width: 1020px) {
   .app-shell {
+    --app-sticky-top: calc(72px + 3rem + 1px); /* the compact header: its two rows and its border */
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
   }

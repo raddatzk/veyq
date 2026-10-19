@@ -284,6 +284,9 @@
         },
         "cover": {
           "$ref": "#/$defs/memoriesCover"
+        },
+        "banner": {
+          "$ref": "#/$defs/memoriesBanner"
         }
       },
       "required": [
@@ -375,6 +378,9 @@
         },
         "cover": {
           "$ref": "#/$defs/memoriesCover"
+        },
+        "banner": {
+          "$ref": "#/$defs/memoriesBanner"
         }
       },
       "required": [
@@ -455,6 +461,57 @@
         },
         "crop": {
           "type": "object"
+        }
+      }
+    },
+    "memoriesBanner": {
+      "description": "The banner (uc.memory.banner): its own image or video as a payload (and a video's poster), framed by a fill or fit frame around a normalized 0..1 focal point, with an optional description. `mediaIndex` names the exported medium it was copied from, when that medium is in the archive; an import never needs it.",
+      "type": "object",
+      "required": [
+        "file",
+        "medium"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/payload"
+        },
+        "poster": {
+          "$ref": "#/$defs/payload"
+        },
+        "medium": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "frame": {
+          "enum": [
+            "fill",
+            "fit"
+          ]
+        },
+        "focal": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "alt": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "mediaIndex": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

@@ -284,13 +284,17 @@ class ModuleCompositionTest {
     }
 
     /**
-     * Inbox #366: a member's start takes every role an application declares — Memories' four and Depot's one, which only
+     * Inbox #366: a member's start takes every role an application declares — Memories' five (a medium's three and a
+     * Memory's banner and poster), core's cover and Depot's one, which only
      * this composition holds together — and refuses a well-formed token none declares, whole and before any session.
      */
     @Test
     fun aMemberStartTakesTheRolesTheApplicationsDeclare() {
         val declared = memberRoles.flatMap { it.roles() }.toSet()
-        assertEquals(setOf("ORIGINAL", "THUMBNAIL", "PREVIEW", "COVER", "FILE_CONTENT"), declared, "the roles the applications declare")
+        assertEquals(
+            setOf("ORIGINAL", "THUMBNAIL", "PREVIEW", "BANNER", "BANNER_POSTER", "COVER", "FILE_CONTENT"), declared,
+            "the roles the applications declare",
+        )
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         fun start(role: String) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", role = role)}]}""")

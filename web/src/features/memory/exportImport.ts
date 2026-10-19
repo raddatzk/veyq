@@ -2,7 +2,12 @@
 // place, its cover and - as TEXT - who was there. Core carries only the tree and the payload bytes, so everything below
 // travels inside the hook's own `content`:
 //
-//   { type: 'memories.memory' | 'memories.chapter', schema, media: [...], date?, location?, participants?, cover? }
+//   { type: 'memories.memory' | 'memories.chapter', schema, media: [...], date?, location?, participants?, cover?, banner? }
+//
+// The banner (uc.memory.banner) travels as its own files - `banner.jpg`, or the video as it is plus `banner-poster.jpg` -
+// with its frame, focal point and description, and the index of the exported medium it was copied from; an import uploads
+// the files into the new node's banner slots as they are (the archive holds the banner's own bytes: nothing is derived
+// again). A banner whose bytes cannot be read is left out, never a failed export or import.
 //
 // A chapter is a node of its own, so its media sit in ITS content and the Memory hook never needs the chapter's nodes.
 //
@@ -51,6 +56,9 @@ import { normalizeLocation } from './memoryLocation'
 import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
 import { memoryPhotoSource, normalizeMemoryCover } from './memoryCover'
+import { MIME_TO_EXT } from '../../core/blob/meta'
+import { CENTRE, normalizeBanner, normalizeFocal, sealedBanner, type Banner, type BannerMedium } from './banner/bannerModel'
+import { uploadBanner, writeMemoryBanner } from './banner/bannerWrite'
 
 export const MEMORY_CONTENT = 'memories.memory'
 export const CHAPTER_CONTENT = 'memories.chapter'
@@ -80,6 +88,17 @@ type CopiedMedium = {
 }
 
 type ExportedCover = { mediaIndex: number; crop: unknown } | { file: ManifestPayload; crop: unknown }
+
+/** The banner as the export schema's `memoriesBanner` carries it. */
+type ExportedBanner = {
+  file: ManifestPayload
+  poster?: ManifestPayload
+  medium: BannerMedium
+  frame: 'fill' | 'fit'
+  focal: { x: number; y: number }
+  alt?: string
+  mediaIndex?: number
+}
 
 function contributorOf(item: MediaItem, people: Awaited<ReturnType<typeof loadTenantPeople>> | null): string | undefined {
   const owner = item.ownerKey
@@ -156,7 +175,49 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
 
   const cover = normalizeMemoryCover(raw.cover, node.id)
   if (cover) content.cover = await coverOf(ctx, source, cover, items)
+  const banner = normalizeBanner(raw.banner, node.id)
+  if (banner) {
+    const exported = await bannerOf(ctx, source, banner, items)
+    if (exported) content.banner = exported
+  }
   return content
+}
+
+/**
+ * The banner's files and framing. A download reads an image or a poster whole (one JPEG each) and a video by chunk through
+ * the session's source; a copy reads every one of them by frame (`readByChunk`, a member's). Nothing is read here but the
+ * banner's own attachments: the gallery medium it came from is named by its index only.
+ */
+async function bannerOf(ctx: ExportNodeContext, source: MemorySource, banner: Banner, items: MediaItem[]): Promise<ExportedBanner | undefined> {
+  const add = (name: string, ref: Banner['blob'], mediaType: string): ManifestPayload => {
+    const provider = ctx.purpose === 'copy' ? readByChunk(ctx.scopeId, ctx.nodeKey, ref).provider : source.loaders.attachmentChunks(ref, ctx.nodeKey)
+    return ctx.addPayload(name, {
+      size: plaintextSize(ref), mediaType,
+      chunks: () => iterateBlob(provider, { signal: ctx.signal }), frames: framesOf(provider),
+    })
+  }
+  const whole = async (name: string, ref: Banner['blob']): Promise<ManifestPayload | null> => {
+    if (ctx.purpose === 'copy') return add(name, ref, 'image/jpeg')
+    const bytes = await source.loaders.coverBlob(ref, ctx.nodeKey).catch(() => null)
+    if (!bytes) return null
+    return ctx.addPayload(name, { size: bytes.length, mediaType: 'image/jpeg', chunks: async function* () { yield bytes }, frames: framesOfBytes(bytes) })
+  }
+  let file: ManifestPayload | null
+  let poster: ManifestPayload | null = null
+  if (banner.medium === 'image') {
+    file = await whole('banner.jpg', banner.blob)
+  } else {
+    const type = banner.type ?? 'video/mp4'
+    file = add(`banner.${MIME_TO_EXT[type] ?? 'mp4'}`, banner.blob, type)
+    if (banner.poster) poster = await whole('banner-poster.jpg', banner.poster)
+  }
+  if (!file) return undefined // a banner whose bytes do not read is left out, never a failed download
+  const out: ExportedBanner = { file, medium: banner.medium, frame: banner.frame, focal: banner.focal }
+  if (poster) out.poster = poster
+  if (banner.alt) out.alt = banner.alt
+  const mediaIndex = banner.origin ? items.findIndex((i) => i.mediaId === banner.origin!.mediaId) : -1
+  if (mediaIndex >= 0) out.mediaIndex = mediaIndex
+  return out
 }
 
 /** A blob's frames as a copy reads them: the chunks its upload sealed, one at a time. */
@@ -223,7 +284,7 @@ async function coverOf(
 
 /** The contract's `maxLength` / `maxItems` of Memories' fields (`contracts/export/veyq-subtree.schema.json`, `memories*`
  *  `$defs`); `exportImport.test.ts` pins each to the schema. */
-export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100 } as const
+export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100, bannerAlt: 200 } as const
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -276,6 +337,16 @@ export function validateMemoryContent(content: ManifestContent): ContentProblem 
   const c = content.cover
   if (c !== undefined && (!isObj(c) || ('mediaIndex' in c ? !(Number.isSafeInteger(c.mediaIndex) && (c.mediaIndex as number) >= 0) : !isPayload(c.file)))) {
     return shape('cover')
+  }
+  const b = content.banner
+  if (b !== undefined) {
+    if (!isObj(b) || !isPayload(b.file) || (b.medium !== 'image' && b.medium !== 'video')) return shape('banner')
+    if ((b.poster !== undefined && !isPayload(b.poster)) || (b.frame !== undefined && b.frame !== 'fill' && b.frame !== 'fit')) return shape('banner')
+    if (b.focal !== undefined && (!isObj(b.focal) || !isNum(b.focal.x, 0, 1) || !isNum(b.focal.y, 0, 1))) return shape('banner focal')
+    if (b.mediaIndex !== undefined && !(Number.isSafeInteger(b.mediaIndex) && (b.mediaIndex as number) >= 0)) return shape('banner mediaIndex')
+    if (b.alt !== undefined && (typeof b.alt !== 'string' || Array.from(b.alt).length > MEMORIES_LIMITS.bannerAlt)) {
+      return typeof b.alt !== 'string' ? shape('banner alt is not text') : { code: 'too_large', message: `banner alt is longer than ${MEMORIES_LIMITS.bannerAlt}` }
+    }
   }
   return null
 }
@@ -344,6 +415,15 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
 
     const cover = content.cover as ExportedCover | undefined
     if (cover) await restoreCover(ctx, nodeId, nodeKey, cover, added.map((a) => a.mediaId))
+    const banner = content.banner as ExportedBanner | undefined
+    if (banner) {
+      try {
+        await restoreBanner(ctx, nodeId, nodeKey, banner, added.map((a) => a.mediaId))
+      } catch (e) {
+        if (ctx.signal?.aborted) throw e
+        // A banner that does not come back is a loss, never a failed import: the Memory and its media stand.
+      }
+    }
     return { nodeId, nodeKey }
   }
 }
@@ -387,4 +467,29 @@ async function restoreCover(ctx: ImportNodeContext, nodeId: string, nodeKey: Uin
     ? await uploadCoverBlob(ctx.scopeId, nodeId, nodeKey, await ctx.payload(cover.file, 'cover'), { type: cover.file.mediaType }, { signal: ctx.signal })
     : await uploadCoverImage(ctx.scopeId, nodeId, nodeKey, { blob: wholePayload(await ctx.payload(cover.file, 'cover')), mediaType: cover.file.mediaType, name: 'cover' }, undefined, { signal: ctx.signal })
   await writeNodeCover({ scopeId: ctx.scopeId, nodeId, nodeKey, current, cover: uploadedCover(plan, readCover({ crop }, nodeId)!.crop), uploadId, surfaceConflict: false })
+}
+
+/** The banner's files uploaded as they are (a download's and a copy's alike: the archive holds the banner's own bytes),
+ *  then the one write of slots and meta. The origin is the new medium at the exported index, when there is one. */
+async function restoreBanner(ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, banner: ExportedBanner, mediaIds: string[]): Promise<void> {
+  const file = await ctx.payload(banner.file, banner.file.path.split('/').pop() ?? 'banner')
+  const prepared = banner.medium === 'image'
+    ? ({ medium: 'image', image: file } as const)
+    : banner.poster
+      ? ({ medium: 'video', video: file, type: banner.file.mediaType, poster: await ctx.payload(banner.poster, 'banner-poster.jpg') } as const)
+      : null
+  if (!prepared) return // a video banner without its poster: the frame its viewers would see first is not in the archive
+  const uploaded = await uploadBanner(ctx.scopeId, nodeId, nodeKey, prepared, { signal: ctx.signal })
+  const row = (await listTree(ctx.scopeId, ctx.epochs)).find((n) => n.id === nodeId)
+  if (!row) return
+  await writeMemoryBanner({
+    scopeId: ctx.scopeId, nodeId, nodeKey, current: nodeMetaState(row),
+    banner: sealedBanner({
+      medium: uploaded.medium, blob: uploaded.blob, poster: uploaded.poster, type: uploaded.type,
+      origin: banner.mediaIndex !== undefined ? mediaIds[banner.mediaIndex] ?? null : null,
+      framing: { frame: banner.frame === 'fit' ? 'fit' : 'fill', focal: banner.focal ? normalizeFocal(banner.focal) : CENTRE, alt: banner.alt },
+    }),
+    upload: { uploadId: uploaded.uploadId, posterUploadId: uploaded.posterUploadId },
+    surfaceConflict: false,
+  })
 }

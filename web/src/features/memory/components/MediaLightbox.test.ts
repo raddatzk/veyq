@@ -227,6 +227,31 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.emitted('setCover')).toBeFalsy() // clicking the current cover does nothing
   })
 
+  // uc.memory.banner A1: "Use as banner" hands the shown medium (its decrypted preview, whether it is a video) to the banner
+  // dialog, only with `canSetBanner`; the medium the banner was made from reads "Current banner" and asks for nothing.
+  it('“Use as banner” emits setBanner for the shown medium only where offered, and marks the banner\'s source', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const banner = (w: ReturnType<typeof mountLightbox>, key: string) =>
+      w.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t(key))
+
+    const without = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    expect(banner(without, 'memory.banner.useAsBanner'), 'not offered without canSetBanner').toBeUndefined()
+
+    const offered = mountLightbox(memoryKey, items, 0, null, { canSetBanner: true })
+    await flushPromises()
+    await banner(offered, 'memory.banner.useAsBanner')!.trigger('click')
+    expect(offered.emitted('setBanner')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId, src: expect.stringMatching(/^blob:/), video: false })
+
+    const current = mountLightbox(memoryKey, items, 0, null, { canSetBanner: true, bannerMediaId: items[0].mediaId })
+    await flushPromises()
+    const pressed = banner(current, 'memory.banner.isBanner')!
+    expect(pressed.attributes('aria-pressed')).toBe('true')
+    await pressed.trigger('click')
+    expect(current.emitted('setBanner')).toBeFalsy()
+  })
+
   it('pages prev/next through the grid order, fetching the next item’s preview, and clamps at the ends', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedTwo(memoryKey)

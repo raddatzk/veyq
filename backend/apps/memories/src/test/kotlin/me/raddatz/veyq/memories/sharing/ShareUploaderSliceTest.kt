@@ -281,6 +281,15 @@ class ShareUploaderSliceTest {
         val identityId = idResp.path<String>("identityId")
         val contributorToken = idResp.path<String>("contributorToken")
 
+        // a Memory's banner and its poster are a member's write (ADR 0102): an uploader starts neither (the start below,
+        // in a medium's role through the same request, is the control)
+        for (role in listOf("BANNER", "BANNER_POSTER")) {
+            given().contentType(ContentType.JSON)
+                .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw", role = role)}]}""")
+                .`when`().post("/api/shares/$shareId/blob-uploads")
+                .then().statusCode(400).body("code", equalTo("invalid_request"))
+        }
+
         val uploadId = given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")

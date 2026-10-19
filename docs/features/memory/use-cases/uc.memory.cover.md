@@ -103,6 +103,8 @@ never sees which picture you picked.
 
 - Feature: [Memory](../_index.md)
 - Enabler: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` envelope this fills)
+- Sibling: [uc.memory.banner](uc.memory.banner.md) — the picture or video above the Memory, independent of the cover: its
+  own attachment (a copy, never a reference) framed by a focal point, not a crop
 - Use-cases: [uc.memory.date](uc.memory.date.md) + [uc.memory.place](uc.memory.place.md) (the sibling curated
   sub-objects on the same `wrappedMeta`), [uc.memory.gallery](uc.memory.gallery.md) (the media tiers the cover is
   chosen from + displayed with), [uc.memory.browse](uc.memory.browse.md) (the card + `updateNode` this folds into)

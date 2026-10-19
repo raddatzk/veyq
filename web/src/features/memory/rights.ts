@@ -5,7 +5,7 @@
 // kind grants nothing, so a new kind or a new role never inherits a right by accident.
 //
 // Member-only by construction (rule 2 of #401): item marks (`K_SC` at `E_0`), the
-// node's sealed meta (date, place, cover), the media trash and the contributions organizer (`MemoryBuckets`, member
+// node's sealed meta (date, place, cover, banner), the media trash and the contributions organizer (`MemoryBuckets`, member
 // globals) — no guest role grants them, whatever a source implements.
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, RightsTarget, MemberAccess } from '../../core/access'
@@ -30,6 +30,8 @@ export interface MemoryRights {
   editMeta: boolean
   /** Choose the node's cover. */
   setCover: boolean
+  /** Set, re-frame or remove the node's banner (uc.memory.banner): exactly who may choose its cover (ADR 0102 decision 5). */
+  setBanner: boolean
   /** Mark media and filter by marks (shared with the scope, sealed under `K_SC` at `E_0`, ADR 0068). */
   mark: boolean
   /** Manage the node's public links (READ / READ_WRITE). */
@@ -64,6 +66,7 @@ export const NO_MEMORY_RIGHTS: Readonly<MemoryRights> = Object.freeze({
   createChapter: false,
   editMeta: false,
   setCover: false,
+  setBanner: false,
   mark: false,
   share: false,
   shareContribute: false,
@@ -113,6 +116,7 @@ function memberRights(access: MemberAccess, at: RightsTarget): MemoryRights {
     createChapter: write && at.kind === MEMORY_KIND,
     editMeta: write,
     setCover: write,
+    setBanner: write,
     rename: write,
     deleteNode: write,
     move: write,

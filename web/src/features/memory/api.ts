@@ -1,5 +1,6 @@
 // The Memories application's API clients — the factories over the clients generated from its own specs
-// (`contracts/api/memories/`: `generated/media`, `generated/item-favorites`, `generated/share-media`). They live here, not in core's
+// (`contracts/api/memories/`: `generated/media`, `generated/item-favorites`, `generated/share-media`,
+// `generated/memory-banner`). They live here, not in core's
 // `api/client.ts`, because core imports no application client (ADR 0079;
 // `validate_web_core_imports_no_applications.py` derives these directories from `generate:api`). The credential
 // is core's: [bearerParams] for a member's call, [publicParams] for a guest's, so the token source stays one.
@@ -10,6 +11,7 @@ import {
   OwnItemFavoritesApi,
 } from '../../api/generated/item-favorites'
 import { CaseMediaApi, Configuration as ShareMediaConfiguration, ShareMediaApi } from '../../api/generated/share-media'
+import { Configuration as MemoryBannerConfiguration, MemoryBannerApi } from '../../api/generated/memory-banner'
 import { bearerParams, publicParams } from '../../api/client'
 
 // ── Bearer: a member's calls, authenticated by the session's access token ──────────────────────────────────
@@ -34,6 +36,12 @@ export function itemFavoritesApi(): ItemFavoritesApi {
 // account-key rotation's re-tag.
 export function ownItemFavoritesApi(): OwnItemFavoritesApi {
   return new OwnItemFavoritesApi(new ItemFavoritesConfiguration(bearerParams()))
+}
+
+// A Memory's banner (uc.memory.banner, ADR 0102) — the `memory-banner` tag: set or remove its slots and sealed meta in one
+// write. A member's only: no link role has a banner operation.
+export function memoryBannerApi(): MemoryBannerApi {
+  return new MemoryBannerApi(new MemoryBannerConfiguration(bearerParams()))
 }
 
 // ── Token-less: a guest's calls from the anonymous /s/ page ────────────────────────────────────────────────
