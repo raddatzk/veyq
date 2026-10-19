@@ -41,18 +41,24 @@ at most, never a secret), the config-secret key being generated or unreadable, b
 that could not be sent. **What it does not log:** content, names, email addresses, client addresses, keys, tokens and
 the links that carry them. A mail that could not be sent is logged by its kind and the mail server's reply code, not
 by its recipient; a new tenant's invitation that falls back to the copy link is logged by the tenant's id. An
-operator who needs to know whose mail it was looks the account or the tenant up by that id. Two paths can still name a
-person until a later release closes them: an unexpected server error is logged with the request's path, its query and
-the error's full text, and a database write that fails is logged with the database's message, which for a sign-up
-colliding with an existing account names that email address.
+operator who needs to know whose mail it was looks the account or the tenant up by that id. Nor does it log what
+someone else wrote: a database's message, a mail server's reply text, a remote API's body.
+
+**An unexpected error** — one the server had no answer for — is answered `500` with an error id in the response
+(`"message": "error id 3f2c…"`), and logged once at `ERROR` under that id: the method, the route as a template
+(`POST /api/scopes/{scopeId}/nodes`, never the address the request was sent to or its query), the exception's class
+chain, the database's SQLState and code where the database refused, and the first line of veyq's own code it passed.
+Not the error's text. A user who reports an error can hand you the id, and you find its one line with
+`./veyqctl logs app | grep <id>`. When that line is not enough, [Troubleshooting](/veyq/run/troubleshooting/) says how
+to log the full text for a while.
 
 What each source holds:
 
 | Source | What it logs |
 |---|---|
-| Application | operational lines, with ids (account, tenant, scope, node, share), domains, key ids and counts |
-| Admin surface | an access log of the admin console: the client address, the time, the method, the path without its query, the status, the size, the user agent and the forwarded address — of whoever reached the console, which by default is only you |
-| Traefik (Compose) | its own errors; the recipe turns **no** access log on |
+| Application | operational lines, with ids (account, tenant, scope, node, share), domains, key ids and counts; an unexpected error by its id, route template and class chain |
+| Admin surface | an access log of the admin console: the time, the method, the path without its query, the status and the size — not who asked: no client address, no user agent, no forwarded address. Its error log, at nginx's default, names the hop that reached it: the loopback or the container bridge on the recipe's binding, a person's address only if you expose the console beyond that |
+| Traefik (Compose) | its own errors, at `--log.level=ERROR`, set by the recipe; **no** access log, which the release's posture check holds. Turning one on records every reader with every share link they open, and it is then your own processing to disclose and bound |
 | Garage | warnings and errors only — `RUST_LOG=garage=warn`, set by both recipes; no line per request |
 | MariaDB | startup and errors; no general, slow-query or binary log |
 | Your gateway (Kubernetes) | its own access log if you turn it on: every reader's address and path, kept as you configure it |
@@ -69,6 +75,10 @@ targets, so veyq keeps people out of the logs instead.
 - **A log shipper** you run (Loki, a journal, a cloud logging agent) keeps copies under its own retention, which is
   yours to set and to name in your record of processing.
 
+**A hold does not reach a log.** A moderation hold copies what it needs out of the database; no log, the store's
+request log, a gateway's access log or a backup is within its reach, and none is needed for a report — the evidence is
+the guest-write record in the database.
+
 **Raising Garage's level for troubleshooting.** A store problem the warnings do not explain may need the request log:
 on Compose add `services: garage: environment: RUST_LOG: garage=info` to `compose.override.yml` and run
 `./veyqctl start`; on Kubernetes `--set garage.logFilter=garage=info`. At `info` Garage logs **every** S3 and admin
@@ -76,7 +86,7 @@ request with the peer's address and port and the object key — behind the proxy
 soon as you are done.
 
 Every run of the end-to-end orchestrator searches every server and container log of the run for any value the client
-sealed and for every token it handled, and fails if one appears
+sealed, for every token it handled and for every email address its suites signed up with, and fails if one appears
 ([cc.security.wire-assertion](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.wire-assertion.md)).
 The run raises Garage to `info` on purpose: the sweep's control is a key it sends to the bucket and then finds in that
 request log.

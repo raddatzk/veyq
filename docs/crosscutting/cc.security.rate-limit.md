@@ -158,6 +158,14 @@ is gone with the algorithm ([ADR 0052](../decisions/0052-token-bucket-rate-limit
   included, still shares one bucket: the key is the IP alone, never its port.
 - **A full bucket may be evicted under key-flood pressure** (past `MAX_TRACKED_KEYS`). Behaviourally free — a
   full bucket is indistinguishable from an absent one.
+- **And a full bucket is evicted by time, whatever the key count** ([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md)
+  § 5). A key is a client address, and for the recovery and invite mails an email address
+  (`RecoveryRateLimiter`, `InviteMailRateLimiter`), so how long it stays in heap is a retention question, not only a
+  memory one. Every `TokenBucketCounter` registers itself with one `TokenBucketSweeper` when it is made — no wiring
+  at its users, so no counter can miss it — and a pass every minute drops every full bucket of every counter. A key
+  therefore lives as long as its bucket takes to refill after its last request, plus at most a minute. Free for the
+  same reason as the flood pass; held by `TokenBucketCounterTest`. The keys are not hashed: a hash sits in the same
+  heap for the same time.
 - **The key map is bounded in steady state, not absolutely** — the weakness that pairs with the eviction above,
   and the one this list exists to not round off. The pass drops only **full** buckets, and a bucket refills one
   token's worth of time after its last request, so an idle flood is reclaimed. A flood arriving **faster than one
