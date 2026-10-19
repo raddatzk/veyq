@@ -11,6 +11,9 @@ import me.raddatz.veyq.core.moderation.ModerationTestKit.appointAndAccept
 import me.raddatz.veyq.core.moderation.ModerationTestKit.asUser
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.SEALED_FACTS
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.PROVISION
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.WRAPPED_FACTS_KEY
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.call
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.SEALED_NOTE
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.case
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.decideObjection
@@ -107,7 +110,34 @@ class StatementsSliceTest {
         mod.take(r.caseId, "CONTENT", targetId = r.folder, factsFor = emptyList()).then().statusCode(409)
             .body("code", equalTo("statement_recipients_changed"))
         mod.case(r.caseId).then().body("measures.size()", equalTo(0))
-        val statementId = mod.take(r.caseId, "CONTENT", targetId = r.folder).then().statusCode(201)
+        // The log's copy, the facts sealed once and the wraps of their key come together or not at all.
+        val withoutOnce = """{"statementId":"${UUID.randomUUID()}","ground":"TERMS_BREACH","provision":"$PROVISION",""" +
+            """"facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"factsKeyFor":[{"accountId":"${r.userId}","wrappedFactsKey":"$WRAPPED_FACTS_KEY"}]}"""
+        val onceWithoutLog = """{"statementId":"${UUID.randomUUID()}","ground":"TERMS_BREACH","provision":"$PROVISION","sealedFacts":"$SEALED_FACTS"}"""
+        val keysWithoutFacts = """{"statementId":"${UUID.randomUUID()}","ground":"TERMS_BREACH","provision":"$PROVISION",""" +
+            """"factsKeyFor":[{"accountId":"${r.userId}","wrappedFactsKey":"$WRAPPED_FACTS_KEY"}]}"""
+        val takeWith = { statement: String ->
+            mod.call(
+                "takeModerationMeasure", r.caseId, "POST", "/api/moderation/cases/${r.caseId}/measures",
+                """{"kind":"CONTENT","targetId":"${r.folder}","statement":$statement}""",
+            )
+        }
+        takeWith(withoutOnce).then().statusCode(400).body("code", equalTo("invalid_request"))
+        // Without the log's facts the organisation's form refuses first, so the other two are asked in the private one.
+        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
+        mode("PRIVATE")
+        try {
+            for (statement in listOf(onceWithoutLog, keysWithoutFacts)) {
+                takeWith(statement).then().statusCode(400).body("code", equalTo("invalid_request"))
+            }
+        } finally {
+            mode(before)
+        }
+        mod.case(r.caseId).then().body("measures.size()", equalTo(0))
+        // The statement's id is the one the browser minted, which the facts are sealed bound to.
+        val minted = UUID.randomUUID().toString()
+        val statementId = mod.take(r.caseId, "CONTENT", targetId = r.folder, statementId = minted).then().statusCode(201)
+            .body("measures[0].statement.id", equalTo(minted))
             .body("measures[0].statement.recipients", equalTo(1))
             .body("measures[0].statement.guests", equalTo(0))
             .body("measures[0].statement.ground", equalTo("TERMS_BREACH"))
@@ -125,6 +155,7 @@ class StatementsSliceTest {
             .body("statements[0].scopeId", equalTo(r.scopeId))
             .body("statements[0].roles", equalTo(listOf("SCOPE_OWNER")))
             .body("statements[0].sealedFacts", equalTo(SEALED_FACTS))
+            .body("statements[0].wrappedFactsKey", equalTo(WRAPPED_FACTS_KEY))
             .body("statements[0].form", equalTo("FULL"))
             .body("statements[0].basis", equalTo("REPORT"))
             .body("statements[0].inForce", equalTo(true))
@@ -143,6 +174,8 @@ class StatementsSliceTest {
         // A blocked link reaches its creator.
         val link = share(r.userId, r.folder)
         mod.recipients(r.caseId, "SHARE", shareId = link).then().statusCode(200).body("accounts[0].accountId", equalTo(r.userId))
+        // A statement id already taken is refused, never substituted (ADR 0072 Decision 3): its facts are sealed bound to it.
+        mod.take(r.caseId, "SHARE", shareId = link, statementId = minted).then().statusCode(409).body("code", equalTo("id_taken"))
         mod.take(r.caseId, "SHARE", shareId = link).then().statusCode(201)
         statementsOf(r.userId).then().body("statements.find { it.measureKind == 'SHARE' }.roles", equalTo(listOf("SHARE_CREATOR")))
             .body("statements.find { it.measureKind == 'SHARE' }.shareId", equalTo(link))

@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.PROVISION
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.SEALED_FACTS
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.WRAPPED_FACTS_KEY
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.SEALED_NOTE
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.take
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
@@ -28,6 +29,7 @@ import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.util.UUID
 
 /**
  * An eraser racing a measure on its target (`MeasureTargets`), run on MariaDB by `scripts/run_backend_races_on_mariadb.py`:
@@ -78,7 +80,8 @@ class MeasureTargetErasureRacesSliceTest {
                 decisions.recipientsOf(w.caseId, MeasureStep.CONTENT, null, w.root).first!!.map { it.first }.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }
             }
             val statement = StatementInput(
-                StatementGround.TERMS_BREACH, SealedNote(1, SEALED_NOTE), members.associateWith { SEALED_FACTS }, provision = PROVISION,
+                UUID.randomUUID().toString(), StatementGround.TERMS_BREACH, SealedNote(1, SEALED_NOTE), SEALED_FACTS,
+                members.associateWith { WRAPPED_FACTS_KEY }, provision = PROVISION,
             )
             // The forced order: the block's writes (its node's lock among them) held uncommitted, the purge run inside.
             whileUncommitted(

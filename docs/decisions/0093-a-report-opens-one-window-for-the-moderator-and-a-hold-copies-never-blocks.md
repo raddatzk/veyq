@@ -279,7 +279,7 @@ a block reaches only the reported copy.
   `K_facts`: it stays with the case's records for their whole retention (§ 11) and opens as every other note does,
   independent of the members' copy, and one more copy per measure costs nothing beside the wraps. All wraps travel in
   the measure's one request, taken whole or refused: at most **6,000 members** (`StatementRecipients.MAX_SEALED`, what
-  the server's 10,240 KiB request limit holds at 1,645 bytes a member beside every other field of the request at its
+  the server's 10,240 KiB request limit holds at 1,650 bytes a member beside every other field of the request at its
   largest), past which a step with facts is refused by name, never cut. That wall no longer moves with the facts'
   length; only paging the upload would remove it.
 - **The Server Owner's own steps carry a statement too** where they are taken over content — a member's sign-in

@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsStore
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.call
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.recipients
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.take
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
@@ -23,19 +24,23 @@ import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * A statement reaches every affected member, and the list the moderator's browser seals the facts to is whole or
- * refused — never cut (inbox #498, ADR 0093 § 7). The browser seals one copy per member and sends them all in the one
- * measure request, which must name exactly the server's members, so the list and `factsFor` carry one bound,
- * [StatementRecipients.MAX_SEALED]: what one request body holds at the smallest sealed facts.
+ * A statement reaches every affected member, and the list the moderator's browser wraps the facts' key to is whole or
+ * refused — never cut (inbox #498, ADR 0093 § 7). The browser seals the facts once and wraps only `K_facts` per member,
+ * sending every wrap in the one measure request, which must name exactly the server's members, so the list and
+ * `factsKeyFor` carry one bound, [StatementRecipients.MAX_SEALED]: what one request body holds at one wrap a member,
+ * whatever the facts' length.
  *
- * The boundary the old cap broke: 1,001 owners of the reported space. Red when the bound goes back to 1,000 — the
- * recipients answer no longer fits its own schema (`ContractBounds`) and the request's `@Size` refuses the 1,001 facts.
- * Past the bound, a step with facts is refused by name, and the same step without facts still tells every member.
+ * The bound is measured, not recalled: [aBodyAtTheBoundWithEveryFieldAtItsLargestFitsTheRequestLimit] sends the largest
+ * body the contract lets a step have at the bound and the server reads it; red (`413`) when the bound grows past what
+ * Quarkus' 10,240 KiB request limit holds. Past the bound, a step with facts is refused by name, and the same step
+ * without facts still tells every member.
  */
 @QuarkusTest
 class StatementRecipientsBoundSliceTest {
@@ -64,11 +69,11 @@ class StatementRecipientsBoundSliceTest {
 
     private fun told(statementId: String): Pair<Long, Long> = QuarkusTransaction.requiringNew().call {
         StatementRecipientEntity.count("statementId", statementId) to
-            StatementRecipientEntity.count("statementId = ?1 and sealedFacts is not null", statementId)
+            StatementRecipientEntity.count("statementId = ?1 and wrappedFactsKey is not null", statementId)
     }
 
     @Test
-    fun aStatementPastTheOldCapReachesEveryMemberWithTheFactsSealedToEach() {
+    fun aStatementPastTheOldCapReachesEveryMemberWithTheFactsKeyWrappedToEach() {
         val mod = CaseTestKit.moderator()
         val r = reported(owners = 1001)
 
@@ -81,7 +86,9 @@ class StatementRecipientsBoundSliceTest {
         val statementId = mod.take(r.caseId, "CONTENT", targetId = r.folder).then().statusCode(201)
             .body("measures[0].statement.recipients", equalTo(1001))
             .extract().path<String>("measures[0].statement.id")
-        assertEquals(1001L to 1001L, told(statementId), "every member is told, each with the facts sealed to them")
+        assertEquals(1001L to 1001L, told(statementId), "every member is told, each with the facts' key wrapped to them")
+        val once = QuarkusTransaction.requiringNew().call { ModerationStatementEntity.findById(statementId)!!.sealedMemberFacts }
+        assertEquals(CaseTestKit.SEALED_FACTS, once, "the facts themselves are stored once, on the statement")
     }
 
     @Test
@@ -109,13 +116,49 @@ class StatementRecipientsBoundSliceTest {
         }
     }
 
+    /**
+     * The largest `takeModerationMeasure` body the contract allows at [StatementRecipients.MAX_SEALED] wraps — every wrap,
+     * the note, the log's facts, the facts sealed once, a deferral's reason and the provision at their `maxLength`, and
+     * the most reporter notices at the longest address — reaches the handler, which answers for its content (a list
+     * naming other members than the server's: `409 statement_recipients_changed`), not for its size. Each wrap's entry
+     * is measured at 1,650 bytes.
+     */
     @Test
-    fun theListAndTheFactsCarryOneBound() {
+    fun aBodyAtTheBoundWithEveryFieldAtItsLargestFitsTheRequestLimit() {
+        val mod = CaseTestKit.moderator()
+        val r = reported(owners = 1)
+        val sealed = { schema: String, property: String -> "A".repeat(ContractBounds.maxLength(SPEC, schema, property)!!) }
+        val note = """{"epoch":1,"sealedNote":"${sealed("SealedModerationNote", "sealedNote")}"}"""
+        val wrap = sealed("WrappedFactsKey", "wrappedFactsKey")
+        val entry = { id: UUID -> """{"accountId":"$id","wrappedFactsKey":"$wrap"},""" }
+        assertEquals(1650, entry(UUID.randomUUID()).toByteArray().size, "one member's share of the body")
+        val wraps = (1..StatementRecipients.MAX_SEALED).joinToString("") { entry(UUID.randomUUID()) }.dropLast(1)
+        // The longest address @Email takes: a 64-character local part, labels of at most 63, 254 characters in all.
+        val address = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(58) + ".de"
+        assertEquals(254, address.length)
+        val notices = (1..ContractBounds.maxItems(SPEC, "ModerationMeasureRequest", "reporterNotices")!!)
+            .joinToString(",") { """{"reportId":"${UUID.randomUUID()}","address":"$address"}""" }
+        val until = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS)
+        val statement = """{"statementId":"${UUID.randomUUID()}","ground":"TERMS_BREACH","provision":"${"p".repeat(200)}",""" +
+            """"facts":$note,"sealedFacts":"${sealed("ModerationStatementInput", "sealedFacts")}","factsKeyFor":[$wraps],""" +
+            """"deferral":{"until":"$until","reason":$note}}"""
+        val body = """{"kind":"CONTENT","targetId":"${r.folder}","note":$note,"statement":$statement,"reporterNotices":[$notices]}"""
+        mod.call("takeModerationMeasure", r.caseId, "POST", "/api/moderation/cases/${r.caseId}/measures", body)
+            .then().statusCode(409).body("code", equalTo("statement_recipients_changed"))
+        val size = body.toByteArray().size
+        assertTrue(size <= REQUEST_LIMIT, "the body is $size bytes, past the server's $REQUEST_LIMIT")
+    }
+
+    @Test
+    fun theListAndTheFactsKeysCarryOneBound() {
         assertEquals(StatementRecipients.MAX_SEALED, ContractBounds.maxItems(SPEC, "ModerationStatementRecipients", "accounts"))
-        assertEquals(StatementRecipients.MAX_SEALED, ContractBounds.maxItems(SPEC, "ModerationStatementInput", "factsFor"))
+        assertEquals(StatementRecipients.MAX_SEALED, ContractBounds.maxItems(SPEC, "ModerationStatementInput", "factsKeyFor"))
     }
 
     private companion object {
         const val SPEC = "moderation.openapi.yaml"
+
+        /** `quarkus.http.limits.max-body-size` is unset: Quarkus' default, 10,240 KiB. */
+        const val REQUEST_LIMIT = 10_240 * 1024
     }
 }

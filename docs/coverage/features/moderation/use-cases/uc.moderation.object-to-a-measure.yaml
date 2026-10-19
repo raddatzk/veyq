@@ -16,7 +16,7 @@ acceptanceCriteria:
       6,000 members with facts, whatever their length.
     coverage:
       backend:
-        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused, StatementRecipientsBoundSliceTest.aStatementPastTheOldCapReachesEveryMemberWithTheFactsSealedToEach, StatementRecipientsBoundSliceTest.pastTheBoundAStepWithFactsIsRefusedByNameAndWithoutFactsStillTellsEveryone, StatementRecipientsBoundSliceTest.theListAndTheFactsCarryOneBound]
+        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused, StatementRecipientsBoundSliceTest.aStatementPastTheOldCapReachesEveryMemberWithTheFactsKeyWrappedToEach, StatementRecipientsBoundSliceTest.pastTheBoundAStepWithFactsIsRefusedByNameAndWithoutFactsStillTellsEveryone, StatementRecipientsBoundSliceTest.aBodyAtTheBoundWithEveryFieldAtItsLargestFitsTheRequestLimit, StatementRecipientsBoundSliceTest.theListAndTheFactsKeysCarryOneBound, SealedTextBoundsTest.theFactsSealedOnceAndEachWrapOfTheirKeyAreTakenAtTheirLargestAndNoLarger, SealedTextBoundsTest.aNoteEncodedSealOfEightThousandBytesIsTakenAndOneCharacterMoreIsNot]
       web:
         unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts]
   - id: the-form-follows-the-operating-mode

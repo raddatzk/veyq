@@ -2190,6 +2190,7 @@ components:
             statementId]) — the one copy every affected member opens; null without facts. At most the seal of 8,000 UTF-8
             bytes: 1 + 12 + 8,192 + 16 bytes.
           contentEncoding: base64
+          minLength: 1
           maxLength: 10964
           example: c2VhbGVkLW9uY2U=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
@@ -2199,7 +2200,7 @@ components:
           description: >
             `K_facts` wrapped to each member `getModerationStatementRecipients` lists; empty without facts. The same bound
             as that list, at most 6,000 — what one `takeModerationMeasure` body carries under the server's 10 MiB request
-            limit at 1,645 bytes a member (`StatementRecipients.MAX_SEALED`), whatever the facts' length. Past it the key
+            limit at 1,650 bytes a member (`StatementRecipients.MAX_SEALED`), whatever the facts' length. Past it the key
             cannot be wrapped to every member in one step, and the server refuses rather than tell only some
             (`422 statement_recipients_too_many`).
           items: { $ref: "#/components/schemas/WrappedFactsKey" }
