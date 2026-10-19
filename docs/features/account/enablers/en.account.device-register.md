@@ -34,13 +34,13 @@ field must not come back, however convenient it looks — the rule is stated at 
 **And a device outlives its logins.** Naming the device rather than each family is one write instead of one
 per login, and the name survives the family it was written during.
 
-## What it is — one sealed blob, the identity-pins shape
+## What it is — one sealed blob
 
-A single **register blob**, sealed under the Master Key (`symWrap(masterKey, blob, "device-register")`) and
-synced exactly like the pin store — the server stores + relays **one opaque ciphertext** plus a cleartext
-monotonic `revision`, and never interprets either
-([en.account.identity-pinning](en.account.identity-pinning.md) is the same shape, and the shape is deliberately
-copied rather than re-invented). The plaintext is three maps:
+A single **register blob**, sealed under the Master Key (`symWrap(masterKey, blob, "device-register")`) — the server
+stores + relays **one opaque ciphertext** plus a cleartext monotonic `revision`, and never interprets either. It is
+the shape the pin store had before it became one entry per pin under a sealed head
+([en.account.identity-pinning](en.account.identity-pinning.md)); the register stays one blob because a person's
+devices, unlike their contacts, stay few (its `maxLength` is 65,532). The plaintext is three maps:
 
 ```
 {

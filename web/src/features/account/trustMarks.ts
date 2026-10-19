@@ -222,15 +222,16 @@ export function servedDocument(doc: { blob?: string | null; revision: number }):
  * `open` is the module's open through {@link openAccountDocument}: the marks apply, so a refused document is a
  * `TrustStateRefused` here exactly as on every other read.
  */
-export interface AccountDocumentStore<T> {
+export interface AccountDocumentStore<T, W extends { revision: number } = { blob: string; revision: number }> {
   readonly document: AccountDocument
   fetch(): Promise<ServedDocument>
   open(mk: Uint8Array, served: ServedDocument): Promise<T>
-  /** Seal `value` under `mk` for the revision it will be STORED at — the write's `revision + 1`. */
-  seal(mk: Uint8Array, value: T, storedRevision: number): string
+  /** Seal `value` under `mk` for the revision it will be STORED at — the write's `revision + 1` — as the document's own
+   *  write body without its `revision`: one blob for the register, the whole entry set and its head for the pin store. */
+  seal(mk: Uint8Array, value: T, storedRevision: number): Omit<W, 'revision'>
   empty(): T
-  /** The document's own revision-guarded PUT; `409 stale_revision` when `revision` is no longer the stored one. */
-  write(update: { blob: string; revision: number }): Promise<void>
+  /** The document's own revision-guarded write; `409 stale_revision` when `revision` is no longer the stored one. */
+  write(update: W): Promise<void>
 }
 
 /** The vault's Master Key, used for one call and zeroed. Null when locked: then there is no account to key by. */

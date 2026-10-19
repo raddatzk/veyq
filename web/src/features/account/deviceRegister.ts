@@ -242,7 +242,7 @@ export const registerDocument: AccountDocumentStore<RegisterPlain> = {
   document: 'register',
   fetch: async () => servedDocument(await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())),
   open: openRegister,
-  seal: sealRegister,
+  seal: (mk, value, storedRevision) => ({ blob: sealRegister(mk, value, storedRevision) }),
   empty,
   write: async (deviceRegisterUpdate) => {
     await withRefresh(() => accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate }))

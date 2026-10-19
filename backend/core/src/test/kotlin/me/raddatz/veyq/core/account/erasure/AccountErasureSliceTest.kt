@@ -6,6 +6,8 @@ import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
 import me.raddatz.veyq.core.admin.tenant.TenantTermsAcceptanceEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.crypto.AuthAttestation
+import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
+import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
 import me.raddatz.veyq.core.favorites.FavoritesEntity
 import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.identity.ModeratorEntity
@@ -83,6 +85,8 @@ class AccountErasureSliceTest {
             member(owner, tenant, shared, MembershipEntity.OWNER)
             member(u, tenant, shared, MembershipEntity.MEMBER)
             FavoritesEntity().apply { id = "$u|$shared"; userId = u; scopeId = shared; ciphertext = "Yw==" }.persist()
+            IdentityPinsEntity().apply { accountId = u; sealedBlob = "aA=="; revision = 1 }.persist()
+            IdentityPinEntryEntity().apply { accountId = u; pinId = "ab".repeat(32); sealedEntry = "ZQ==" }.persist()
             TenantProfileEntity().apply { id = UUID.randomUUID().toString(); userId = u; tenantId = tenant; username = "u${u.take(8)}" }.persist()
             accept(u, tenant)
         }
@@ -120,6 +124,8 @@ class AccountErasureSliceTest {
             assertNotNull(ScopeEntity.findById(shared), "a shared scope is the scope's, not the person's")
             assertEquals(u, NodeAttachmentEntity.findById(upload.attachmentId)!!.uploaderUserId, "content keeps its attribution")
             assertEquals(0L, FavoritesEntity.count("userId", u), "its favorites in the shared scope are gone")
+            assertNull(IdentityPinsEntity.findById(u), "its pin store's head is gone")
+            assertEquals(0L, IdentityPinEntryEntity.count("accountId", u), "and every entry under it (ADR 0104)")
             assertEquals(0L, TenantProfileEntity.count("userId", u))
             assertEquals(0L, MembershipEntity.count("userId", u))
             assertEquals(0L, TenantTermsAcceptanceEntity.count("userId", u), "no case names it: its terms rows go")

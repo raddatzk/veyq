@@ -83,8 +83,9 @@ sequenceDiagram
 
 ## Quality notes
 
-- **Operator-blind.** The pin store is a single Master-Key-sealed ciphertext; the server never learns who pinned
-  or reviewed whom, nor the count.
+- **Operator-blind.** Every pin is an entry sealed under the Master Key at an opaque id; the server never learns who
+  pinned or reviewed whom — only how many pins an account holds
+  ([ADR 0104](../../../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)).
 - **The first-use gap (honest).** A pin only catches a key that *changes* after first sight. A key substituted
   **before** first sight is invisible until someone actively verifies out-of-band
   ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)) or Key Transparency exists
