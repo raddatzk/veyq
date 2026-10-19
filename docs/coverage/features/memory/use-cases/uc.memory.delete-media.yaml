@@ -85,6 +85,20 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [MediaTrashSliceTest.trashedListingCarriesTheAuditAndExcludesFromActive, MediaTrashSliceTest.deleteIsIdempotent]
+  - id: trash-grid-is-windowed
+    text: >-
+      The trash is the same windowed grid over the same thumbnail queue: a trash of thousands mounts about a window,
+      reads the thumbnails of that window only, nearest first, and its select-all still selects every trashed item by id
+      (ADR 0105 decisions 1 and 2).
+    coverage:
+      web:
+        unit: [src/features/memory/useMediaTrash.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The real grid over the composable's tiles in happy-dom, boxes given by hand, at 2,000 items (bitten: reading
+          every thumbnail at once turns two cases red). Not yet seen in a browser: a trash of 1,000 and a restore of a
+          selection across the window's edge — the browser pass waits for the V1 heavy stage.
   - id: self-heal-cover-and-auto
     text: A trashed media that was the cover falls back to the placeholder (the existing dangling-cover E2 path, no cover rewrite required); auto date + auto place re-materialize from the shrunken media list (the trashed media is excluded from listNodeMedia), never touching a manual/fixed value — no delete-specific reconcile code.
     coverage:

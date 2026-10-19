@@ -120,25 +120,25 @@ focus returned from the lightbox. Measured with the volume harness at 1,000 / 3,
 
 ## Phases
 
-- [ ] **0 docs** — ADR 0105 written at refine (proposed). Here: uc.memory.gallery's quality notes gain *bounded
+- [x] **0 docs** — ADR 0105 written at refine (proposed). Here: uc.memory.gallery's quality notes gain *bounded
   rendering* (the obligation of ADR 0105 decision 1, one paragraph pointing there) and, if Q1 is (a), the keyboard in the
   main flow; coverage criteria `the-grid-mounts-only-the-window`, `thumbnails-open-near-the-viewport`,
   `the-grid-is-one-tab-stop-with-arrow-keys`, `focus-returns-from-the-lightbox` (gallery),
   `trash-grid-is-windowed` (delete-media), `contributors-grid-is-windowed` (buckets), gapped until their phases.
   · Done when: `validate_coverage.py`, `validate_feature_format.py` green.
-- [ ] **1 harness and baseline** — decision 6 in `e2e/measure/volume.ts` and the judge; then the baseline on `main`
+- [x] **1 harness and baseline** (harness built; the baseline moved to the V1 heavy stage, owner 2026-10-19) — decision 6 in `e2e/measure/volume.ts` and the judge; then the baseline on `main`
   **after #488 merged**: photos 1,000 / 3,000 / 10,000, desktop and 4×, three runs each (the CAX CR's § Local pre-check
   procedure, browser leg only). **Bite the measurement** (changes/README § bite the MEASUREMENT): on a scratch build that
   mounts every tile, the DOM-node clause is red; on one that never decrypts the window, *viewport complete* never fires and
   the run ends as a stall, not a green. · Done when: both bites observed; the baseline readings recorded outside git and
   summarised in the retrospective.
-- [ ] **2 web: the opener worker** — decision 2, behaviour-preserving: every tile still mounted, every thumbnail still
+- [x] **2 web: the opener worker** (its harness reading at the V1 heavy stage) — decision 2, behaviour-preserving: every tile still mounted, every thumbnail still
   opened, only where the crypto runs and how often changes. · Done when: `npm run check` green (with the new `verify:`);
   unit tests: the memo opens a meta once across sort, filter and resize (bitten: memo off → the count test red); the
   fall-back runs on the page thread when the worker fails to start (bitten: fall-back off → red); the worker drops its
   keys on close (a message after close is refused). The harness at 1,000 × 4×: long tasks fall against phase 1 — the
   reading recorded, no target judged yet.
-- [ ] **3 web: windowing, visibility, keyboard** — decisions 1, 3, 4, 5 in `MediaGrid` / `MediaTile` / the gallery.
+- [x] **3 web: windowing, visibility, keyboard** (its browser pass at the V1 heavy stage) — decisions 1, 3, 4, 5 in `MediaGrid` / `MediaTile` / the gallery.
   · Done when: `npm run check` green; component tests that **mount the real grid and scroll it** (not a stubbed
   window): at 2,000 items the mounted tiles stay within the window's count (bitten: windowing off → red), a scroll
   enqueues only the new window's thumbnails nearest first, an evicted URL is revoked (bitten: no revoke → red); the
@@ -149,11 +149,11 @@ focus returned from the lightbox. Measured with the volume harness at 1,000 / 3,
   guest link): scroll to the end and back, the first and last rows show their thumbnails; the keyboard path from the
   first tile to the last with Tab, arrows, End, Enter; VoiceOver or NVDA announces the grid's size and a tile's position;
   a second member's upload appears in place; the place editor's GPS points and the auto date still read the whole list.
-- [ ] **4 web: the other grids** — the trash and the contributors' view on the same window and queue (decision 3's trash
+- [x] **4 web: the other grids** (its browser pass at the V1 heavy stage) — the trash and the contributors' view on the same window and queue (decision 3's trash
   loader), their select-all still selecting every item by id. · Done when: `npm run check` green; their tests extended
   (select-all at 2,000 items selects 2,000 with ~a window mounted); **browser pass** on the same Chapter: trash 1,000
   items, restore a selection across the window's edge.
-- [ ] **5 measure and record** — the harness at 1,000 / 3,000 / 10,000, desktop and 4×, three runs each, judged by Q2's
+- [ ] **5 measure and record** — OPEN: moved to the V1 heavy stage (owner 2026-10-19); the coordinator closes this CR after it — the harness at 1,000 / 3,000 / 10,000, desktop and 4×, three runs each, judged by Q2's
   targets. uc.memory.gallery's "Seen in a browser" sentences updated; the Use page *Look through the gallery*
   (`site/src/content/docs/memories/the-gallery.mdx`, EN and DE) gains the keyboard line if Q1 is (a)
   (`git grep -ln 'uc.memory.gallery' -- site/src/content/docs` lists the pages that speak for it); inbox #489 done.
@@ -167,4 +167,31 @@ baseline; the bites observed as written; inbox #489 done; `cr-volume-measurement
 
 ## Retrospective
 
-_Filled at implementation._
+Implemented 2026-10-19 in one subagent session (phases 1–4 and the docs of 0 and 5; commits `measure(volume)…`,
+`feat(web)…` × 3, `docs…`). The owner moved every volume-harness reading — phase 1's baseline, phase 2's 1,000 × 4×,
+phase 5 — to the V1 heavy stage mid-session, and with it the browser passes; nothing here is a reading.
+
+**Re-grounded against main 7292b1d3** (after #488 and #490), the locator changes, none a decision change:
+- `MediaGrid` has a fourth caller, `MemoryShareBody.vue` (the drop page's own tiles); it gets the window by
+  construction. The guest's gallery is still `MemoryDetail` over a guest source.
+- `unsealMeta(` has 8 call sites outside tests, not 14: #401's source moved two behind `loaders.meta`, and the sort and
+  aspect are in `useMediaGalleryLive`. Every one now reads the memo (`openedListing.ts`) except the write path's
+  (`setMediaMeta`) and the bench.
+- #488's `readScheduler` serves a lane in the order asked, so "viewport-distance priority" is the order the pipeline
+  asks in plus an `AbortSignal` per read; nothing in the scheduler changed. #490's paging needed nothing: the grid
+  appears after `listMedia` (every page) and `openListing` both resolved.
+
+**What went wrong, and why:**
+- *The memo opened twice what the page had already opened* (planning: decision 2 named a memo "per item"; execution: I
+  first stamped an entry "complete" only with both seals). A sort that ran before the Worker's batch opened the meta on
+  the page, the batch then opened it again — the count test caught it on its first run. Next time a memo over two
+  values asks per value what is missing, from the first draft.
+- *The tab-stop rule as written would have cut the item mark off the keyboard.* Decision 4 said "one tab stop" and the
+  ADR "the tile's button inside its cell"; the tile also carries a heart (and in the trash and contributors' view a
+  checkbox and a menu), and the lightbox has no heart (uc.memory.gallery step 7 says it has). Implemented: the tab order
+  holds the active tile's controls, so Tab walks one tile and leaves. Flagged for the owner (report), the ADR says it.
+- *The machine ran at load 13–31 all session* (Defender scanning the build output, other sessions): vitest's 10 s hook
+  timeout failed whole files spuriously; local runs used `--hookTimeout=60000`, which the suite's config does not set.
+
+**Next time:** a CR whose gate is a measurement on a shared machine names, at refine, what the implementer does when the
+machine is not quiet — here the owner had to move it mid-session.
