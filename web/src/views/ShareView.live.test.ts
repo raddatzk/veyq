@@ -42,7 +42,8 @@ import { publicShareFilesApi } from '../features/depot/api'
 import type { ShareFilesApi } from '../api/generated/depot'
 import { fakeApi } from '../test/apiMock'
 import { titlesOf } from '../test/levelRows'
-import { realI18n } from '../test/i18n'
+import { realI18n, t } from '../test/i18n'
+import { saveGuestSession } from '../core/sharing/guestIdentity'
 import { viewModeStorageKey, setViewMode } from '../shared/state/useViewMode'
 import { levelTabStorageKey } from '../shared/state/useLevelTab'
 import { setAccountUserId } from '../app/account'
@@ -305,6 +306,33 @@ describe("a share guest's opened node, live", () => {
     await flushPromises()
     expect(w.find('.node-blocked').exists(), 'the lift reaches the page: it kept polling under the placeholder').toBe(false)
     expect(title(w).text()).toBe('bericht.pdf')
+    w.unmount()
+  })
+})
+
+// The guest-write record's notice follows the switch and its N on an open page (inbox #506): the resolve carries the N
+// in its body (so the tag moves when it does), and the head is swapped only when `shareTreeFingerprint` differs — which it
+// must for a poll whose only difference is the N. Ciphertext is sealed once, so the N is all that differs.
+describe("a share guest's write-record notice, live", () => {
+  const notice = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('[data-testid="guest-write-record-notice"]')
+
+  it('shows the new N after one poll interval, and goes when the switch turns off', async () => {
+    saveGuestSession(SHARE, { identityId: 'id-0', contributorToken: 'tok-0', displayName: 'Anna' })
+    const shown = head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')])
+    const days = (n: number | null): PublicShareHead => ({ ...shown, share: { ...shown.share, guestWriteRecordDays: n } })
+    serve(days(9))
+    const w = await mountPage()
+    expect(notice(w).text(), 'the N the load served').toContain(t('share.guest.recordKept', { days: 9 }, 9))
+
+    serve(days(30))
+    await settle(OVER_ONE_INTERVAL)
+    await flushPromises()
+    expect(notice(w).text()).toContain(t('share.guest.recordKept', { days: 30 }, 30))
+
+    serve(days(null))
+    await settle(OVER_ONE_INTERVAL)
+    await flushPromises()
+    expect(notice(w).exists(), 'the switch is off: nothing is recorded, nothing is said').toBe(false)
     w.unmount()
   })
 })

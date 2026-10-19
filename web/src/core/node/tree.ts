@@ -201,11 +201,13 @@ export async function fetchTree(scopeId: string, ifNoneMatch?: string | null): P
  *  block or lift changes no ciphertext, and a fingerprint without it dropped the poll that carried one (inbox #503).
  *  Ciphertext, ids and that flag only — it is compared for equality, never read — so a live poll (`treeStore.pollTree`)
  *  can tell "nothing changed" from "something did" without opening a single name. A row's encrypted name changes with
- *  every rename (a fresh nonce), so nothing a rename or a move writes can leave it equal. */
+ *  every rename (a fresh nonce), so nothing a rename or a move writes can leave it equal. A row's drop key and an identity
+ *  folder's wrapped `K_up` are in it too (inbox #506): opening an identity folder reads them from the rows held
+ *  (`childEntryKey`), and a node's first WRITE_ONLY link sets the drop key and nothing else (a bump site of ADR 0081). */
 export function treeFingerprint(rows: readonly NodeSummary[]): string {
   return rows
     .map((r) =>
-      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.placementRevision, r.metaRevision, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? '', r.blockedByOperator].join('|'),
+      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.placementRevision, r.metaRevision, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? '', r.wrappedIdentityKey ?? '', r.sealedDropPrivateKey ?? '', r.blockedByOperator].join('|'),
     )
     .sort()
     .join('\n')
