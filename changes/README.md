@@ -1993,6 +1993,24 @@ text lists, per duty it serves, the surface and the content the law names, and o
 it; where the build cannot back a sentence the law asks, the CR names it as a legal blocker with an owner rather than
 leave the implementer to choose between the code and the law.
 
+### A new required response field is a fixture change wherever that response is built
+
+A contracts phase that adds a required field to a RESPONSE predicts its reds where the server constructs it — and misses
+the clients' test fixtures, which construct the same object to stub the server. cr-gallery-list-paging's phase 1 said
+"web check green: only optional request parameters were added"; its required `more` reddened 23 web fixtures, and its new
+query parameters changed the generated JAX-RS signature the CR had not named either. At refine, grep the tests for a
+literal of the response (`identities: [`, `mediaRevision:`) as well as the server's constructor.
+
+### A set the CR says is derived is derived at refine too, and an annotation is proved on the wire
+
+When a decision says "the set is derived from the contracts, never listed", the refine's own hand list of it is the
+estimate the derivation exists to replace: cr-gallery-list-paging listed nine operations whose answers carry a token, and
+its derivation found sixteen — the refine's grep stopped at top-level schemas and missed the presigned URLs nested in
+items. Run the derivation's predicate at refine, not a grep that paraphrases it. And a framework annotation is a claim
+about the framework until a request shows it: `@Uncompressed` on an implementing `override` is not read by Quarkus REST
+(it reads the method that declares the endpoint — here the generated interface), and only the wire test's refusal that
+the method answered itself showed it.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
