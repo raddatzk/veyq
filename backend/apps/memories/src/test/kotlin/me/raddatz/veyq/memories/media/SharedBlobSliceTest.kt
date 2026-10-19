@@ -8,8 +8,15 @@ import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
 import me.raddatz.veyq.core.blobstore.StoreReclaimStore
+import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.take
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.body
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.item
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.openCase
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.quota.StorageUsage
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -22,6 +29,10 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.memories.banner.BannerKit
 import me.raddatz.veyq.memories.banner.MemoryBanner
+import me.raddatz.veyq.memories.media.SharedObjectKit.medium
+import me.raddatz.veyq.memories.media.SharedObjectKit.setBanner
+import me.raddatz.veyq.memories.media.SharedObjectKit.shared
+import me.raddatz.veyq.memories.media.SharedObjectKit.trashAndPurge
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -55,7 +66,8 @@ import java.util.UUID
  * `StorageUsage` summing every row reddens [quotaCountsAnObjectOnce]; (d) `blobBlocked` asking the row alone reddens
  * [aBlockOnTheMediumReachesTheCoverOnItsObject]; (e) `SharedBlobs.persist` without the arms' `holds` reddens
  * [aSourceTheNodeDoesNotHoldIsRefusedAndNothingIsWritten]; (f) `ScopePurge` recording every row reddens
- * [theScopesErasureRecordsAnObjectOnce].
+ * [theScopesErasureRecordsAnObjectOnce]; (g) `CaseDecisions.takeIn` handing `erased` no `holding` reddens
+ * [aMeasureTakenOnAnErasedMediumHangsOnTheBannersObjectUntilItsLastRowGoes].
  */
 @QuarkusTest
 class SharedBlobSliceTest {
@@ -75,9 +87,6 @@ class SharedBlobSliceTest {
     @Inject
     @All
     lateinit var arms: MutableList<SharedSubtreeContributor>
-
-    /** One medium: its original and its PREVIEW tier, as the gallery's upload completes them. */
-    data class Medium(val mediaId: String, val original: CoverKit.Started, val preview: CoverKit.Started)
 
     // --- a cover on a medium's PREVIEW ---------------------------------------------------------------------------------
 
@@ -272,6 +281,61 @@ class SharedBlobSliceTest {
         }
     }
 
+    /**
+     * The same where the measure comes after the erasure (owner 2026-10-19, ADR 0093 § 6): a reported medium erased while
+     * the banner holds its objects, then blocked through its case - the measure does not end at once but hangs on the
+     * objects its case's hold names (`MeasureTargets.survivingObjects`), the banner is refused, and the measure ends with
+     * the banner's removal. Control on the same predicate: a reported medium erased with no other row on its objects gets
+     * its measure ended at once. Bite: `takeIn` handing `erased` no `holding` reddens the first half (the measure ends at
+     * once, the banner is served).
+     */
+    @Test
+    fun aMeasureTakenOnAnErasedMediumHangsOnTheBannersObjectUntilItsLastRowGoes() {
+        val mod = CaseTestKit.moderator()
+        val (userId, scopeId) = seedMemberScope(ScopeEntity.GROUP)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val m = medium(userId, scopeId, memory)
+        val alone = medium(userId, scopeId, memory)
+        val banner = UUID.randomUUID().toString()
+        val poster = UUID.randomUUID().toString()
+        setBanner(userId, scopeId, memory, shared(m.original.blobId, banner), shared(m.preview.blobId, poster)).statusCode(204)
+        asMember(userId, scopeId, body(listOf(item("ITEM", m.mediaId), item("ITEM", alone.mediaId)))).then().statusCode(201)
+        val caseId = openCase("ITEM", m.mediaId)!!.id
+        val aloneCase = openCase("ITEM", alone.mediaId)!!.id
+        trashAndPurge(userId, scopeId, m.mediaId)
+        trashAndPurge(userId, scopeId, alone.mediaId)
+        assertEquals("store_unavailable", CoverKit.downloadError(userId, scopeId, banner), "served before the measure")
+
+        val measure = mod.take(caseId, "CONTENT", targetId = m.mediaId).then().statusCode(201).extract().path<String>("measures[0].id")
+        QuarkusTransaction.requiringNew().run {
+            val row = ModerationBlockEntity.findById(measure)!!
+            assertTrue(row.activeKey != null, "taken on the erased medium, the measure stands while the banner holds its objects")
+            assertEquals(setOf(m.original.storageKey, m.preview.storageKey), row.heldKeys)
+        }
+        assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, banner), "the banner is refused")
+        assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, poster))
+
+        // Control: nothing else holds the other medium's objects - its measure ends at once, lifted by no one.
+        val ended = mod.take(aloneCase, "CONTENT", targetId = alone.mediaId).then().statusCode(201).extract().path<String>("measures[0].id")
+        QuarkusTransaction.requiringNew().run {
+            val row = ModerationBlockEntity.findById(ended)!!
+            assertEquals(null, row.activeKey, "no object survives the medium: the measure ends at once")
+            assertTrue(row.liftedAt != null && row.liftedBy == null && row.heldObjects == null)
+        }
+
+        BannerKit.remove(userId, scopeId, memory, banner, poster, metaRevision = 1).statusCode(204)
+        QuarkusTransaction.requiringNew().run {
+            val row = ModerationBlockEntity.findById(measure)!!
+            assertEquals(null, row.activeKey, "the object's last row went: the measure ends with it")
+            assertTrue(row.liftedAt != null && row.liftedBy == null, "ended with its target, lifted by no one")
+            assertEquals(
+                1L,
+                ModerationEventEntity.count("caseId = ?1 and event = ?2 and moderatorId is null", caseId, "MEASURE_LIFTED"),
+                "its end is logged on its case",
+            )
+        }
+    }
+
     @Test
     fun aLiftedMeasureServesTheBannerAgain() {
         val (userId, scopeId) = seedMemberScope()
@@ -365,33 +429,12 @@ class SharedBlobSliceTest {
 
     // --- helpers -------------------------------------------------------------------------------------------------------
 
-    private fun medium(userId: String, scopeId: String, nodeId: String): Medium {
-        val mediaId = UUID.randomUUID().toString()
-        val original = CoverKit.start(userId, scopeId, nodeId, role = "ORIGINAL", ownerId = mediaId)
-        val preview = CoverKit.start(userId, scopeId, nodeId, role = "PREVIEW", ownerId = mediaId)
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body(
-                """{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","originalUploadId":"${original.uploadId}",""" +
-                    """"derivatives":[{"kind":"PREVIEW","uploadId":"${preview.uploadId}"}]}]}""",
-            )
-            .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200).body("results[0].error", nullValue())
-        return Medium(mediaId, original, preview)
-    }
-
-    private fun shared(source: String, blobId: String = UUID.randomUUID().toString()): String =
-        """{"sourceBlobId":"$source","blobId":"$blobId","wrappedBlobKey":"c2hhcmVk","wrappedBlobMeta":null}"""
-
     private fun specOf(source: String): SharedBlobSpec = SharedBlobSpec(source, UUID.randomUUID().toString(), "c2hhcmVk", null)
 
     private fun setCover(userId: String, scopeId: String, nodeId: String, shared: String): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shared":$shared,"expectedBlobId":null,"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/cover").then()
-
-    private fun setBanner(userId: String, scopeId: String, nodeId: String, shared: String, posterShared: String?): ValidatableResponse =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shared":$shared,"posterShared":${posterShared ?: "null"},"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
-            .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/banner").then()
 
     private fun completeShared(
         userId: String, scopeId: String, nodeId: String, mediaId: String, shared: String, previewUploadId: String?,
@@ -400,11 +443,6 @@ class SharedBlobSliceTest {
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","originalShared":$shared,"derivatives":$derivatives}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200)
-    }
-
-    private fun trashAndPurge(userId: String, scopeId: String, mediaId: String) {
-        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$mediaId").then().statusCode(204)
-        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/media/$mediaId/purge").then().statusCode(204)
     }
 
     private fun block(scopeId: String, mediaId: String) = QuarkusTransaction.requiringNew().run {

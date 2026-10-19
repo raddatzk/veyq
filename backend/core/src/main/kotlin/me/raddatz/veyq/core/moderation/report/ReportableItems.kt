@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.moderation.report
 
+import me.raddatz.veyq.core.moderation.hold.HeldRow
+
 /**
  * Where an application's item lies — the space and the node it sits on — so core can check a report's reach
  * (uc.moderation.report) without naming an application table (ADR 0079). One implementation per application that keeps
@@ -30,6 +32,14 @@ interface ReportableItems {
      * of the item takes.
      */
     fun lockExisting(itemId: String): Boolean
+
+    /**
+     * The storage keys of the item [itemId]'s stored objects as a hold copied them ([held], its case's snapshot) — its row
+     * and its blobs' rows, read after the item itself is gone — or none for an id that is not one of this application's
+     * items. What a measure taken on the erased item hangs on where another row still names one (a cover or a banner
+     * sharing the medium's object, `MeasureTargets.survivingObjects`, ADR 0093 § 6).
+     */
+    fun heldObjectsOf(itemId: String, held: List<HeldRow>): Set<String>
 }
 
 /** An item's place: its space and the node it sits on. */

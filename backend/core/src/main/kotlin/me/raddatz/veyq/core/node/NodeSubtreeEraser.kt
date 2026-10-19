@@ -21,4 +21,12 @@ interface NodeSubtreeEraser {
     val phase: Int
 
     fun erase(scopeId: String, nodeIds: List<String>): Set<String>
+
+    /**
+     * The blobs [erase] will delete the rows of, with the locks on its own item rows taken first (item rows before blob
+     * rows, `StoredObjectLocks`): the caller locks every eraser's objects **at once**, in the one lock order, before any
+     * eraser runs - one by one, two erasers' objects would be locked in phase order, crosswise to a measure-taker's.
+     * None for an eraser that deletes no blob row.
+     */
+    fun blobIdsOf(scopeId: String, nodeIds: List<String>): Collection<String> = emptyList()
 }
