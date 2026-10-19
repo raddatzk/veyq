@@ -129,7 +129,7 @@ says what veyq builds and the question stays a named blocker.
   officer fields with the suggested rows; the CLI flags. · Done when: `npm run check` green in both; a browser pass of
   the notice signed out, from the invite page, from the report dialog and from a guest's first write, in DE and EN and
   in both modes.
-- [ ] **4 docs** — ADR 0035's status (decision 8 built); the security model's sentence on what is disclosed where;
+- [x] **4 docs** — ADR 0035's status (decision 8 built); the security model's sentence on what is disclosed where;
   site: `privacy/is-my-data-safe.md` and its DE twin (point to the instance's own notice for what *this* instance
   keeps), `run/first-run.mdx` or `run/moderation.md` (the values the notice renders and the Server Owner's duty to keep
   them true; the record of processing, processor agreements, a breach and an access request — the audit's D items —

@@ -50,4 +50,8 @@ Anyone can read, before they sign up and at any time after, what the instance ke
 [ADR 0035](../../../decisions/0035-server-terms-of-service.md) decisions 6–8,
 [uc.admin.operator-details](uc.admin.operator-details.md),
 [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-§ 10 and Still open 6, 7 and 10.
+§ 10 and Still open 6, 7 and 10. Run area of the docs site: [Moderation](../../../../site/src/content/docs/run/moderation.md)
+(the notice, the values it renders, the guest id an objection names) and
+[Data protection](../../../../site/src/content/docs/run/data-protection.md) (the record of processing it keeps in step
+with); Use area: [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md) and
+[What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx).

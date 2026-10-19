@@ -12,8 +12,13 @@
   the triple ([uc.account.accept-terms](../features/account/use-cases/uc.account.accept-terms.md)). Its text is a
   **draft until a qualified legal review** and says so on every rendering; decision 6 names the gaps against the law
   that remain. Decision 8 (the instance privacy notice, GDPR
-  Art. 13) is **decided, not built** (2026-10-18, from the legal audit of that day, by the owner rule that a legal
-  duty wins; `cr-instance-privacy-notice`).
+  Art. 13, decided 2026-10-18 from the legal audit of that day by the owner rule that a legal duty wins) is **built**
+  (cr-instance-privacy-notice, 2026-10-19): `contracts/terms/privacy-notice.json`, rendered by the backend per tenant
+  host at `GET /api/operator/privacy-notice` and shown at `/privacy`, linked from every page's footer, the invite
+  acceptance, the report dialog and a guest's first write, with the recipients and a data-protection officer as
+  operator values ([uc.admin.privacy-notice](../features/admin/use-cases/uc.admin.privacy-notice.md)); the guest-write
+  record's Art. 13 passage moved there, and the operator section's revision 2 carries a pointer. Its text is a **draft
+  until a qualified legal review** too, and the questions only counsel answers are ADR 0093 Still open 6, 7 and 10.
 - Date: 2026-07-10
 
 ## Context

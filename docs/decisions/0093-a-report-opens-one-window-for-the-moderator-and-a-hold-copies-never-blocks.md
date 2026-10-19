@@ -45,9 +45,9 @@
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
   N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
   first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
-  operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which is built in both
-  variants (cr-operator-section-of-the-terms, 2026-10-18; its text a draft until a qualified review, its gaps against
-  the law named there). It is on the V1 line (owner
+  instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8, built by cr-instance-privacy-notice,
+  2026-10-19; a draft until a qualified review), to which the operator section of the terms (decision 6, built in both
+  variants by cr-operator-section-of-the-terms, 2026-10-18) points. It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
