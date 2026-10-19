@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.account.erasure
 import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterEntity
 import me.raddatz.veyq.core.account.email.EmailChangeEntity
 import me.raddatz.veyq.core.account.email.EmailConfirmationEntity
+import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
 import me.raddatz.veyq.core.account.login.AccessTokenEntity
 import me.raddatz.veyq.core.account.login.RefreshTokenEntity
@@ -156,6 +157,7 @@ class AccountPurge(
         }
         SessionFamilyEntity.delete("userId", accountId)
         MasterKeyWrapEntity.delete("userId", accountId)
+        IdentityPinEntryEntity.delete("accountId", accountId)
         IdentityPinsEntity.delete("accountId", accountId)
         DeviceRegisterEntity.delete("accountId", accountId)
         DevicePairingEntity.delete("userId", accountId)

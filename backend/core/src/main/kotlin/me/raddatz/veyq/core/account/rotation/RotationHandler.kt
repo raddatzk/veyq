@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.account.rotation
 
 import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterStore
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsStore
+import me.raddatz.veyq.core.account.identitypins.PinWrite
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.account.deviceregister.PutResult as RegisterPut
 import me.raddatz.veyq.core.account.identitypins.PutResult as PinsPut
@@ -137,7 +138,7 @@ class RotationHandler(
         passwordWrap: RewrittenWrap,
         recoveryWrap: RewrittenWrap,
         secretKeyProofSignature: String,
-        pins: ResealedDocument,
+        pins: PinWrite,
         register: ResealedDocument,
     ): RotationOutcome = try {
         applyAll(
@@ -156,7 +157,7 @@ class RotationHandler(
         passwordWrap: RewrittenWrap,
         recoveryWrap: RewrittenWrap,
         secretKeyProofSignature: String,
-        pins: ResealedDocument,
+        pins: PinWrite,
         register: ResealedDocument,
     ): RotationOutcome = QuarkusTransaction.requiringNew().call<RotationOutcome> {
         val user = accounts.lock(userId) ?: return@call RotationOutcome.Unavailable
@@ -177,11 +178,12 @@ class RotationHandler(
         )
         if (!applied) return@call RotationOutcome.Unavailable
 
-        // Both documents or no rotation. Each store's `put` joins this transaction, so a Stale here means the
-        // writes above are still pending — the throw is what rolls them back, not a compensating write.
+        // Both documents or no rotation. Each store's write joins this transaction, so a Stale here means the
+        // writes above are still pending — the throw is what rolls them back, not a compensating write. The pins are
+        // the whole re-keyed set (`replaceAll`, ADR 0104): new ids under the new Master Key, every entry and the head.
         // (`setRollbackOnly` + returning an outcome does not work here: `call` then tries to commit and fails
         // with a RollbackException, which reached the client as a 500.)
-        val pinsStale = identityPins.put(userId, pins.blob, pins.expectedRevision) is PinsPut.Stale
+        val pinsStale = identityPins.write(userId, pins) !is PinsPut.Written
         if (pinsStale || deviceRegister.put(userId, register.blob, register.expectedRevision) is RegisterPut.Stale) {
             throw StaleDocumentRollback()
         }

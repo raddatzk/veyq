@@ -1396,7 +1396,7 @@ def forge_revision_field_named_version(root: pathlib.Path) -> str:
                          "        revision:\n", "        version:\n")
     f = root / "contracts" / "api" / "account.openapi.yaml"
     head, sep, tail = f.read_text().partition("    IdentityPinsWrite:\n")
-    required = "      required: [revision, head, put, delete, replaceAll]\n"
+    required = "      required: [revision, head, put, remove, replaceAll]\n"
     if not sep or required not in tail:
         raise ForgeError("account.openapi.yaml IdentityPinsWrite: required anchor not found (drifted?)")
     f.write_text(head + sep + tail.replace(required, required.replace("[revision,", "[version,"), 1))

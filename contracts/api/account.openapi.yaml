@@ -354,15 +354,15 @@ paths:
           - field: revision
       summary: Write entries and the head of the caller's identity-pin store, in one compare-and-set.
       description: >
-        The one write of the pin store (ADR 0104 decision 4): the entries in `delete` are removed, the entries in `put`
+        The one write of the pin store (ADR 0104 decision 4): the entries in `remove` are removed, the entries in `put`
         are stored (an existing `pinId` is replaced), and `head` becomes the new head — in **one** transaction, and only
         if `revision` is still the stored revision, which is then bumped by one and returned. `replaceAll` removes every
-        other entry first (the trust reset and the rotation write the whole set; `delete` is then empty). The head and
+        other entry first (the trust reset and the rotation write the whole set; `remove` is then empty). The head and
         every entry are sealed by the client — the head bound to the revision it is stored at, `revision + 1`, an entry
         to its `pinId` (ADR 0072). If the stored revision moved since the client read (another device wrote), the server
         responds `409 stale_revision` and **nothing** of the write lands; the client re-reads, re-applies and retries
         (en.account.identity-pinning § Sync). The first write of a born-empty store sends `revision: 0`. A write that
-        names one `pinId` twice, puts and deletes one `pinId`, deletes alongside `replaceAll`, or would leave the store
+        names one `pinId` twice, puts and removes one `pinId`, removes alongside `replaceAll`, or would leave the store
         with more than 25,000 entries is `400 invalid_request`. Operator-blind: the server sees opaque ids, one sealed
         entry each and a sealed head — never a `userId`, a key, a state or who pinned whom; it does see how many entries
         there are, as it always could (ADR 0104 decision 5).
@@ -379,7 +379,7 @@ paths:
               put:
                 - pinId: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7
                   entry: c2VhbGVkLXBpbi1lbnRyeQ==
-              delete: []
+              remove: []
               replaceAll: false
       responses:
         "200":
@@ -389,8 +389,8 @@ paths:
               schema: { $ref: "#/components/schemas/IdentityPins" }
         "400":
           description: >
-            The request was malformed: a missing or invalid field, a `pinId` named twice, a `pinId` both put and deleted,
-            a `delete` alongside `replaceAll`, or more than 25,000 entries after the write.
+            The request was malformed: a missing or invalid field, a `pinId` named twice, a `pinId` both put and removed,
+            a `remove` alongside `replaceAll`, or more than 25,000 entries after the write.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1483,7 +1483,7 @@ components:
       description: >
         One write of the pin store (ADR 0104 decision 4): entries to remove, entries to store, and the new head, applied
         together and only if `revision` is still the stored one (optimistic concurrency → `409 stale_revision`).
-      required: [revision, head, put, delete, replaceAll]
+      required: [revision, head, put, remove, replaceAll]
       properties:
         revision:
           x-veyq-visibility: structure
@@ -1513,8 +1513,9 @@ components:
           maxItems: 25000
           items: { $ref: "#/components/schemas/IdentityPinEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 25000)'
-        delete:
+        remove:
           type: array
+          # Not `delete`: the TypeScript generator reserves the word and emits a model that does not compile.
           description: The `pinId`s of entries to remove; one that is not stored is ignored. Empty with `replaceAll`.
           maxItems: 25000
           items: { $ref: "#/components/schemas/IdentityPinId" }
