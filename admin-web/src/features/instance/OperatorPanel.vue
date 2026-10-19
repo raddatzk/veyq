@@ -8,7 +8,9 @@
 //   - the warnings are the facade's (`operatorWarnings`): only in the organisation mode, the contact one only while
 //     public links are on — read from the register's effective state, not assumed;
 //   - a recipient the instance suggests (an external store's host, the mail relay's host) is only offered: it becomes a
-//     row the Server Owner completes, and nothing is published until the row is saved (cr-instance-privacy-notice 3);
+//     row of its kind the Server Owner completes, and nothing is published until the row is saved (cr-instance-privacy-notice 3);
+//   - what a recipient does is a kind chosen from a list, which the notice names in its own words on each language's page;
+//     only *Other* asks for the operator's words, and a description is never sent with another kind;
 //   - the confirmation is the server's answer after each save; this panel never claims an address is confirmed.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -16,10 +18,11 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import {
   clearOperator, confirmOperatorNotification, getOperator, InstanceOperatorNotificationConfirmationEnum as Confirmation,
-  OperatorRecipientSuggestionKindEnum as SuggestionKind, operatorWarnings, parseLanguages, PUBLIC_SHARES_ID, setOperator,
+  OperatorRecipientKind, operatorWarnings, parseLanguages, PUBLIC_SHARES_ID, RECIPIENT_KINDS, setOperator,
   suggestionRow, suggestionTaken, type InstanceOperator, type OperatorRecipientSuggestion,
 } from './operator'
 import { listInstanceCapabilities } from './capabilities'
@@ -46,8 +49,9 @@ const providerAddress = ref('')
 const providerEmail = ref('')
 const providerRepresentative = ref('')
 const supervisoryAuthority = ref('')
-/** The recipients as edited: a row's fields as typed, the country empty where not named. */
-const recipients = ref<{ name: string; purpose: string; country: string }[]>([])
+/** The recipients as edited: a row's fields as typed, its kind null until chosen, the description and the country
+ *  empty where not given. */
+const recipients = ref<{ name: string; kind: OperatorRecipientKind | null; description: string; country: string }[]>([])
 const dataProtectionOfficer = ref('')
 const code = ref('')
 const actionError = ref('')
@@ -64,26 +68,25 @@ function apply(o: InstanceOperator) {
   providerEmail.value = o.providerEmail ?? ''
   providerRepresentative.value = o.providerRepresentative ?? ''
   supervisoryAuthority.value = o.supervisoryAuthority ?? ''
-  recipients.value = o.recipients.map((r) => ({ name: r.name, purpose: r.purpose, country: r.country ?? '' }))
+  recipients.value = o.recipients.map((r) => ({ name: r.name, kind: r.kind, description: r.description ?? '', country: r.country ?? '' }))
   dataProtectionOfficer.value = o.dataProtectionOfficer ?? ''
 }
 
-const suggestionPurpose = (kind: SuggestionKind) =>
-  t(kind === SuggestionKind.ObjectStore ? 'operator.suggestedObjectStore' : 'operator.suggestedMailRelay')
+/** The kinds as the console names them, in its own language — the notice names them in each of its own. */
+const kindOptions = computed(() => RECIPIENT_KINDS.map((k) => ({ value: k, label: t(`operator.recipientKind.${k}`) })))
 
 /** The suggestions no row names yet — what the instance itself knows of, for the Server Owner to confirm. */
 const openSuggestions = computed(() => {
-  const rows = recipients.value.map((r) => ({ name: r.name, purpose: r.purpose, country: r.country || null }))
-  return (op.value?.recipientSuggestions ?? []).filter((s) => !suggestionTaken(s, rows))
+  return (op.value?.recipientSuggestions ?? []).filter((s) => !suggestionTaken(s, recipients.value))
 })
 
 function addRecipient() {
-  recipients.value.push({ name: '', purpose: '', country: '' })
+  recipients.value.push({ name: '', kind: null, description: '', country: '' })
 }
 
 function adoptSuggestion(s: OperatorRecipientSuggestion) {
-  const row = suggestionRow(s, suggestionPurpose)
-  recipients.value.push({ name: row.name, purpose: row.purpose, country: '' })
+  const row = suggestionRow(s)
+  recipients.value.push({ name: row.name, kind: row.kind, description: '', country: '' })
 }
 
 function removeRecipient(i: number) {
@@ -117,10 +120,14 @@ const { run: runSave, pending: saving } = useAsyncAction(
       providerEmail: blank(providerEmail.value),
       providerRepresentative: blank(providerRepresentative.value),
       supervisoryAuthority: blank(supervisoryAuthority.value),
-      // A row with no name or no purpose says nothing a reader could use; the server drops it too.
+      // A row with no name or no kind says nothing a reader could use, and is not sent. A description goes only with
+      // Other: one left over from a kind changed since is dropped, and Other without one is the server's to refuse.
       recipients: recipients.value
-        .filter((r) => r.name.trim() && r.purpose.trim())
-        .map((r) => ({ name: r.name.trim(), purpose: r.purpose.trim(), country: blank(r.country) })),
+        .filter((r) => r.name.trim() && r.kind)
+        .map((r) => ({
+          name: r.name.trim(), kind: r.kind!,
+          description: r.kind === OperatorRecipientKind.Other ? blank(r.description) : null, country: blank(r.country),
+        })),
       dataProtectionOfficer: blank(dataProtectionOfficer.value),
     }))
     code.value = ''
@@ -287,8 +294,10 @@ const confirmation = computed(() => {
             <InputText v-model="r.name" class="operator-recipient__name" autocomplete="off" maxlength="200" />
           </label>
           <label>
-            <span>{{ t('operator.recipientPurpose') }}</span>
-            <InputText v-model="r.purpose" class="operator-recipient__purpose" autocomplete="off" maxlength="300" />
+            <span :id="`operator-recipient-kind-${i}`">{{ t('operator.recipientPurpose') }}</span>
+            <Select v-model="r.kind" :options="kindOptions" option-label="label" option-value="value"
+                    :aria-labelledby="`operator-recipient-kind-${i}`" :placeholder="t('operator.recipientKindPick')"
+                    class="operator-recipient__kind" />
           </label>
           <label>
             <span>{{ t('operator.recipientCountry') }}</span>
@@ -296,6 +305,12 @@ const confirmation = computed(() => {
           </label>
           <Button type="button" severity="secondary" text icon="pi pi-times" class="operator-recipient__remove"
                   :aria-label="t('operator.recipientRemove')" @click="removeRecipient(i)" />
+          <label v-if="r.kind === OperatorRecipientKind.Other" class="operator-recipient__other">
+            <span>{{ t('operator.recipientDescription') }}</span>
+            <InputText v-model="r.description" class="operator-recipient__description" autocomplete="off" maxlength="120"
+                       :invalid="!r.description.trim()" />
+            <small class="settings-muted">{{ t('operator.recipientDescriptionHint') }}</small>
+          </label>
         </div>
         <Message v-for="s in openSuggestions" :key="s.kind" severity="info" :closable="false" class="operator-suggestion" :data-kind="s.kind">
           <span>{{ t('operator.suggested', { host: s.host }) }}</span>
@@ -334,6 +349,9 @@ const confirmation = computed(() => {
   grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1.4fr) minmax(6rem, 0.7fr) auto;
   gap: 0.5rem;
   align-items: end;
+}
+.operator-recipient__other {
+  grid-column: 1 / -1;
 }
 @media (max-width: 640px) {
   .operator-recipient {
