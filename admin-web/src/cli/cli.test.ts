@@ -903,29 +903,32 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
   })
 
   it('operator set --recipients replaces the privacy notice’s list, none empties it, and a malformed row sends nothing', async () => {
-    vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', purpose: 'x', country: undefined }] }))
+    vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', kind: 'BACKUP', country: undefined }] }))
     vi.mocked(setOperator).mockResolvedValueOnce(op())
-    const r = await invoke(['operator', 'set', '--recipients', 'Example Hosting GmbH|hosts the server|Germany; Mail AG|relays the mail',
+    const r = await invoke(['operator', 'set', '--recipients',
+      'Example Hosting GmbH|hosting|Germany; Mail AG|mail-relay; SMS AG|other:sends sign-in texts|Germany',
       '--data-protection-officer', 'DSB GmbH'])
     expect(r.code).toBe(0)
     expect(vi.mocked(setOperator).mock.lastCall![0]).toMatchObject({
       recipients: [
-        { name: 'Example Hosting GmbH', purpose: 'hosts the server', country: 'Germany' },
-        { name: 'Mail AG', purpose: 'relays the mail', country: null },
+        { name: 'Example Hosting GmbH', kind: 'HOSTING', description: null, country: 'Germany' },
+        { name: 'Mail AG', kind: 'MAIL_RELAY', description: null, country: null },
+        { name: 'SMS AG', kind: 'OTHER', description: 'sends sign-in texts', country: 'Germany' },
       ],
       dataProtectionOfficer: 'DSB GmbH',
     })
 
-    vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', purpose: 'x', country: undefined }] }))
+    vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', kind: 'BACKUP', country: undefined }] }))
     vi.mocked(setOperator).mockResolvedValueOnce(op())
     expect((await invoke(['operator', 'set', '--recipients', 'none'])).code).toBe(0)
     expect(vi.mocked(setOperator).mock.lastCall![0].recipients).toEqual([])
 
     vi.mocked(setOperator).mockClear()
     vi.mocked(getOperator).mockResolvedValueOnce(op())
-    const bad = await invoke(['operator', 'set', '--recipients', 'Example AG'])
+    const bad = await invoke(['operator', 'set', '--recipients', 'Example AG|hosts the server'])
     expect(bad.code).toBe(1)
-    expect(bad.err).toContain("'Example AG' is not <name>|<what they do>|<country>")
+    expect(bad.err).toContain("'Example AG|hosts the server' is not <name>|<kind>|<country>")
+    expect(bad.err).toContain('hosting, object-storage, mail-relay, backup, other')
     expect(setOperator).not.toHaveBeenCalled()
   })
 

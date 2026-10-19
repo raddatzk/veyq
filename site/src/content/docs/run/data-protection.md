@@ -60,21 +60,26 @@ in your basis and your recipients. Every row names where veyq keeps the data, so
 | Moderation | reports (category, time, the reporter's account or link in the clear; reason, contact and context **sealed** to the moderation key), cases, holds (copies of the reported rows, guest-write rows with IP addresses included), the moderation log, statements, objections, authority orders, blocks (`veyq_moderation_*`, `veyq_hold*`, `veyq_authority_order`) | the DSA's and the TCO Regulation's notice-and-action duties (Art. 6(1)(c)) and defending against misuse | a hold by its own end; a case whole — reports, measures, statements, objections, orders, its log — on 31 December of the third year after it closed, never while one of its blocks is in force ([Moderation](/veyq/run/moderation/#moderators)) |
 | A reporter's contact | the address a receipt and the decision go to: mailed from memory, kept only **sealed** to the moderation key, apart from the rest of the report | telling a reporter (DSA Art. 16(4) and (5)) | six months after the reporter was told the decision |
 | Moderators | the appointed accounts and each one's confirmed notification address (`veyq_moderator`) | telling moderators of a new case | as long as the appointment; the row stays after a removal |
-| Your own details | the instance contact, the provider identification, the supervisory authority, a data-protection officer, your notification address (`veyq_operator_details`, `veyq_instance_mail_settings`), and the recipients the privacy notice names (`veyq_operator_recipient`) | what a host publishes, and its own mail | until you change them |
+| Your own details | the instance contact, the provider identification, the supervisory authority, a data-protection officer, your notification address (`veyq_operator_details`, `veyq_instance_mail_settings`), and the recipients the privacy notice names, each a name, a kind and a country (`veyq_operator_recipient`) | what a host publishes, and its own mail | until you change them |
 | Logs | pseudonymous ids (account, tenant, scope, share) and no person: no address, no User-Agent, no email address, no request's URI or text; the admin console's access log keeps no reader's address | operating and securing the service | by size, not time: the period's criterion is the rotation size and a container's recreation, which every upgrade does — [Operations](/veyq/run/operations/#logs) |
 | Rate-limit buckets | the client address, and for recovery and invitation mails the email address, as a bucket's key — in memory only | defending against abuse | until the bucket has refilled after its last request, at most a minute more; gone at a restart |
 | Backups | everything in the database except the guest-write record's rows, plus the store's index | restoring the instance | at most B days, 30 until you set it; a restore erases again what was erased after the capture ([Backup and restore](/veyq/run/backup-and-restore/)); a backup made otherwise holds the record too, and you keep it no longer than B |
 
 **What leaves the server, and to whom:**
 
-| Recipient | What it receives | Turned off by |
-|---|---|---|
-| Your mail provider (SMTP) | each mail's recipient address, the space-group's or instance's sender address, and its text — an invitation's link, a code, a notice, a statement without its facts | not setting mail up; then nothing is mailed |
-| Your object store (S3) | ciphertext only, under random keys — but **members' and guests' browsers fetch from it directly**, so the store's provider sees their IP addresses and request headers | — (the bundled store keeps it on your host) |
-| GitHub | your server's IP address, once a day, for the release list ([Operations](/veyq/run/operations/#new-releases)) | the release check's own switch |
-| Let's Encrypt | your ACME email and every domain the instance serves (the domains also appear in public certificate logs) | your own certificates (Kubernetes: no `gateway.tls.acme`) |
-| The breached-password service (default `api.pwnedpasswords.com`) | from the **browser**: the first five characters of a new password's SHA-1, and the browser's IP address | the capability `core.breached-password` |
-| The place-name service and the map tiles (Memories) | from the **browser**: a place's coordinates and the language; the map area viewed; the browser's IP address | `memories.places`, `memories.map` |
+| Recipient | What it receives | Turned off by | In the privacy notice |
+|---|---|---|---|
+| Your mail provider (SMTP) | each mail's recipient address, the space-group's or instance's sender address, and its text — an invitation's link, a code, a notice, a statement without its facts | not setting mail up; then nothing is mailed | a recipient you name, kind *relays the mail* |
+| Your object store (S3) | ciphertext only, under random keys — but **members' and guests' browsers fetch from it directly**, so the store's provider sees their IP addresses and request headers | — (the bundled store keeps it on your host) | an external one: a recipient you name, kind *stores the encrypted files* |
+| GitHub | your server's IP address, once a day, for the release list ([Operations](/veyq/run/operations/#new-releases)) | the release check's own switch | not named |
+| Let's Encrypt | your ACME email and every domain the instance serves (the domains also appear in public certificate logs) | your own certificates (Kubernetes: no `gateway.tls.acme`) | not named |
+| The breached-password service (default `api.pwnedpasswords.com`) | from the **browser**: the first five characters of a new password's SHA-1, and the browser's IP address | the capability `core.breached-password` | named by the notice itself, by the address it calls |
+| The place-name service and the map tiles (Memories) | from the **browser**: a place's coordinates and the language; the map area viewed; the browser's IP address | `memories.places`, `memories.map` | named by the notice itself, by the address each calls |
+
+A recipient you name takes one of five kinds, which the notice words in its own language on each version: *hosts the
+server*, *stores the encrypted files*, *relays the mail*, *keeps the backups*, or *other* — the one that takes a short
+description of yours (at most 120 characters), shown as you typed it and in quotes on both the English and the German
+version. Your host and wherever your backups are kept belong in the list too ([below](#contracts-with-your-providers)).
 
 The browser-side services receive data from members' browsers, not from your server, but you chose them: the privacy
 notice names each by the address you set while it is on, or switch them off ([Capabilities](/veyq/run/capabilities/)).

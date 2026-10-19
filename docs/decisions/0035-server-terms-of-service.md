@@ -228,7 +228,11 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    object set apart as in decision 6 before, and the operator section keeps a pointer; the recipients are a **list** the
    Server Owner keeps — name, what they do, country — with suggested rows for what the instance knows (an external
    store's host, the instance mail relay's host) that publish nothing until saved, since fixed slots miss a backup host
-   or a second relay. A space's own mail relay is named generically, as the space owner's choice: who controls it is
+   or a second relay. What they do is a **fixed kind** — hosting, object storage, mail relay, backups, other — which the
+   notice's own text names in each language, so the German and the English notice never mix languages (owner
+   2026-10-19); only *other* takes a short description of the operator's own (at most 120 characters), shown as typed
+   and quoted on both pages, the one place the operator's language shows through, and visibly as theirs. A suggested
+   row comes with its kind. A space's own mail relay is named generically, as the space owner's choice: who controls it is
    the joint-control question. A guest objecting to the record names the identity whose rows are erased by a **guest
    id** its own view shows to copy (Art. 21(1) with 12(2)), the share identity's random id; an objection erases the
    rows so far and does not stop later writes from being recorded, and the notice says so (owner: keep it so).

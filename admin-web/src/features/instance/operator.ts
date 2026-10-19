@@ -5,11 +5,14 @@
 //     the one place it is asked;
 //   - which preset switches a mode would change ([presetChanges]) — from the server's own preset, never a copy;
 //   - the warnings and when they show ([operatorWarnings]) — only in the organisation mode, never a refusal;
-//   - the privacy notice's recipients (ADR 0035 decision 8): a row as the CLI types it ([parseRecipient]), and a
-//     suggestion the instance makes turned into a row the Server Owner completes ([suggestionRow]) — never stored as is.
+//   - the privacy notice's recipients (ADR 0035 decision 8): what they do is a fixed kind the notice names in each of its
+//     languages, and only an OTHER one carries the operator's own words ([recipientFits], the server's rule); a row as
+//     the CLI types it ([parseRecipient]), and a suggestion the instance makes turned into a row of its kind the Server
+//     Owner completes ([suggestionRow]) — never stored as is.
 import { instanceOperatorApi } from '../../api/client'
 import {
   OperatingMode,
+  OperatorRecipientKind,
   OperatorRecipientSuggestionKindEnum as SuggestionKind,
   type InstanceOperatingMode,
   type InstanceOperatingModePresetEntry,
@@ -19,7 +22,9 @@ import {
   type OperatorRecipientSuggestion,
 } from '../../api/generated/instance'
 
-export { OperatingMode, InstanceOperatorNotificationConfirmationEnum, OperatorRecipientSuggestionKindEnum } from '../../api/generated/instance'
+export {
+  OperatingMode, InstanceOperatorNotificationConfirmationEnum, OperatorRecipientKind, OperatorRecipientSuggestionKindEnum,
+} from '../../api/generated/instance'
 export type {
   InstanceOperatingMode, InstanceOperatingModePresetEntry, InstanceOperator, InstanceOperatorUpdate, OperatorRecipient,
   OperatorRecipientSuggestion,
@@ -81,23 +86,50 @@ export function operatorWarnings(
   }
 }
 
-/** A row offered for [s], with what the recipient does in the console's language ([purpose]) — for the Server Owner
- *  to complete with the provider's name and country, and to keep or drop. The host stands in for the name until then. */
-export function suggestionRow(s: OperatorRecipientSuggestion, purpose: (kind: SuggestionKind) => string): OperatorRecipient {
-  return { name: s.host, purpose: purpose(s.kind), country: null }
+/** The kinds in the order the console offers them, OTHER last. */
+export const RECIPIENT_KINDS: readonly OperatorRecipientKind[] = Object.values(OperatorRecipientKind)
+
+/** The recipient kind a suggestion's row gets — the suggestion's own kind, which the contract keeps a subset of. */
+const SUGGESTED_KIND: Record<SuggestionKind, OperatorRecipientKind> = {
+  [SuggestionKind.ObjectStorage]: OperatorRecipientKind.ObjectStorage,
+  [SuggestionKind.MailRelay]: OperatorRecipientKind.MailRelay,
+}
+
+/** Whether [r]'s description fits its kind, as the server holds it: required for OTHER, absent for every other kind. */
+export function recipientFits(r: Pick<OperatorRecipient, 'kind' | 'description'>): boolean {
+  return (r.kind === OperatorRecipientKind.Other) === Boolean(r.description?.trim())
+}
+
+/** A row offered for [s], of the kind the instance knows it to be — for the Server Owner to complete with the
+ *  provider's name and country, and to keep or drop. The host stands in for the name until then. */
+export function suggestionRow(s: OperatorRecipientSuggestion): OperatorRecipient {
+  return { name: s.host, kind: SUGGESTED_KIND[s.kind], description: null, country: null }
 }
 
 /** Whether a recipient already names [s]'s host — the console then offers it no more. */
-export function suggestionTaken(s: OperatorRecipientSuggestion, recipients: OperatorRecipient[]): boolean {
+export function suggestionTaken(s: OperatorRecipientSuggestion, recipients: Pick<OperatorRecipient, 'name' | 'description'>[]): boolean {
   const host = s.host.toLowerCase()
-  return recipients.some((r) => `${r.name} ${r.purpose}`.toLowerCase().includes(host))
+  return recipients.some((r) => `${r.name} ${r.description ?? ''}`.toLowerCase().includes(host))
 }
 
-/** A recipient as the CLI takes it: `<name>|<what they do>|<country>`, the country optional; null when malformed. */
+/** The kinds as the CLI spells them (`object-storage`), each to the wire's. */
+export const CLI_RECIPIENT_KINDS: Readonly<Record<string, OperatorRecipientKind>> = Object.fromEntries(
+  RECIPIENT_KINDS.map((k) => [k.toLowerCase().replace(/_/g, '-'), k]),
+)
+
+/**
+ * A recipient as the CLI takes it: `<name>|<kind>|<country>`, the kind one of [CLI_RECIPIENT_KINDS] and an `other` one
+ * with its description after a colon (`other:sends sign-in texts`), the country optional; null when malformed — an
+ * unknown kind, an `other` without its words, or words on any other kind ([recipientFits]).
+ */
 export function parseRecipient(typed: string): OperatorRecipient | null {
-  const [name, purpose, country, ...rest] = typed.split('|').map((x) => x.trim())
-  if (rest.length || !name || !purpose) return null
-  return { name, purpose, country: country || null }
+  const [name, what, country, ...rest] = typed.split('|').map((x) => x.trim())
+  if (rest.length || !name || !what) return null
+  const colon = what.indexOf(':')
+  const kind = CLI_RECIPIENT_KINDS[(colon < 0 ? what : what.slice(0, colon)).trim().toLowerCase()]
+  const description = colon < 0 ? null : what.slice(colon + 1).trim() || null
+  const r: OperatorRecipient = { name, kind, description, country: country || null }
+  return kind && recipientFits(r) ? r : null
 }
 
 /** The mode in effect, whether one was ever chosen, and the preset with each entry's switch now. */
@@ -150,7 +182,9 @@ export function operatorUpdateOf(op: InstanceOperator): InstanceOperatorUpdate {
     providerEmail: op.providerEmail ?? null,
     providerRepresentative: op.providerRepresentative ?? null,
     supervisoryAuthority: op.supervisoryAuthority ?? null,
-    recipients: op.recipients.map((r) => ({ name: r.name, purpose: r.purpose, country: r.country ?? null })),
+    recipients: op.recipients.map((r) => ({
+      name: r.name, kind: r.kind, description: r.description ?? null, country: r.country ?? null,
+    })),
     dataProtectionOfficer: op.dataProtectionOfficer ?? null,
   }
 }
