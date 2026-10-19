@@ -3,12 +3,12 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.config.VeyqConfig
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -41,7 +41,7 @@ class NodeTreeRaceCoreSliceTest {
 
     @Test
     fun aSubtreeRestoredWhileThePurgeRunsSurvives() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = seedMemberScope()
             val (memory, chapter) = expiredSubtree(scopeId)
             whileUncommitted(
@@ -64,7 +64,7 @@ class NodeTreeRaceCoreSliceTest {
 
     @Test
     fun aRestoreOfASubtreeThePurgeIsErasingAnswersNotFound() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = seedMemberScope()
             val (memory, _) = expiredSubtree(scopeId)
             val restored = whileUncommitted(
@@ -84,7 +84,7 @@ class NodeTreeRaceCoreSliceTest {
      */
     @Test
     fun aChildRestoredWhileItsParentIsTrashedStaysInTheTrash() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = seedMemberScope()
             val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val child = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
@@ -115,7 +115,7 @@ class NodeTreeRaceCoreSliceTest {
      */
     @Test
     fun aChildCreatedOrMovedBeforeItsParentsTrashCommitsIsTrashedWithIt() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             for (how in listOf("create", "move")) {
                 val (_, scopeId) = seedMemberScope()
                 val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
@@ -154,7 +154,7 @@ class NodeTreeRaceCoreSliceTest {
      */
     @Test
     fun aRenameOntoANameAConcurrentRenameIsTakingAnswersSlugTaken() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val first = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)

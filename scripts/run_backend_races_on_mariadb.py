@@ -8,7 +8,7 @@ made after a later row lock read the state from before it. Every H2 race test wa
 about production too.
 
 **What it runs.** Every test class that races — the files in every backend test root (`backend_tree.test_roots()`)
-that call the race harness (`race(` or `whileUncommitted(` from `testing/Race.kt`, in `:core`'s test fixtures) or build their own overlap from a
+that call the race harness (`race(`, `whileUncommitted(` or `holdForOverlap(` from `testing/Race.kt`, in `:core`'s test fixtures) or build their own overlap from a
 latch or a barrier. Derived from the code, not listed, so a new race test is in the next run without anyone
 registering it ([race_classes]). Whole classes run, not only their race methods: the non-race methods of a race
 class are cheap and prove the class still boots on MariaDB. Each class runs in the Gradle project that owns its
@@ -26,6 +26,10 @@ applied both baselines, every `:core` class failed Flyway's validate on the Memo
 **Also the schema check.** The default run adds `*EntitySchemaValidationTest` ([schema_classes]): Hibernate's own
 `validate` of every entity against the migrated MariaDB schema (a `UUID` column an entity maps without
 `columnDefinition = "uuid"` is red there and in a dev boot's log, nowhere else).
+
+**The race user may read lock waits.** The throwaway user gets `PROCESS` beside its databases: the race harness
+proves each round's order from InnoDB's lock-wait record (`holdForOverlap` in `testing/Race.kt`, inbox #512), which
+MariaDB hides without it, and fails by name rather than counting an unchecked round.
 
 **What it never touches.** The owner's dev database (`veyq-mariadb`, port 3306). The container here has its own
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
@@ -61,7 +65,7 @@ BACKEND = REPO / "backend"
 COMPOSE_FILE = REPO / "infra" / "docker-compose.yml"
 NAME = f"veyq-race-mariadb-{os.getpid()}"
 PASSWORD = "race"  # a throwaway container's credential, not a secret
-RACE_CALL = re.compile(r"\b(race|whileUncommitted)\(|\bCountDownLatch\b|\bCyclicBarrier\b")
+RACE_CALL = re.compile(r"\b(race|whileUncommitted|holdForOverlap)\(|\bCountDownLatch\b|\bCyclicBarrier\b")
 
 
 def pinned_image() -> str:
@@ -178,6 +182,14 @@ def start(image: str, port: int, databases: list[str]) -> None:
                      f"CREATE DATABASE IF NOT EXISTS `{db}`; GRANT ALL ON `{db}`.* TO 'veyq'@'%';"],
                     check=True, capture_output=True, text=True, timeout=60,
                 )
+            # The race harness reads InnoDB's lock waits to prove each round's order was forced (Race.kt
+            # `holdForOverlap`, inbox #512); information_schema.INNODB_LOCK_WAITS / INNODB_TRX answer error 1227
+            # without PROCESS (measured, MariaDB 11.4). A grant on this throwaway container only.
+            subprocess.run(
+                ["docker", "exec", NAME, "mariadb", "-uroot", f"-p{PASSWORD}", "-e",
+                 "GRANT PROCESS ON *.* TO 'veyq'@'%';"],
+                check=True, capture_output=True, text=True, timeout=60,
+            )
             return
         time.sleep(2)
     sys.exit("the throwaway MariaDB did not become ready")

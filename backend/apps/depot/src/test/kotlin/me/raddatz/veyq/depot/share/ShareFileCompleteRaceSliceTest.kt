@@ -11,13 +11,13 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.SharingStore
 import me.raddatz.veyq.core.testing.FakePresignProfile
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.depot.DepotNodeKinds
 import me.raddatz.veyq.depot.content.CompleteFileOutcome
 import me.raddatz.veyq.depot.content.DepotBlobRoles
@@ -83,7 +83,7 @@ class ShareFileCompleteRaceSliceTest {
     }
 
     private fun raceAgainst(what: String, change: (Tree) -> Unit) {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val uploadId = startStaged(t)
             val answer = whileUncommitted(change = { change(t) }, overlapping = { complete(t, uploadId) })

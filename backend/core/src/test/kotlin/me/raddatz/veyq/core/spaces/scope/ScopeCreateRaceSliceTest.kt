@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.testing.answer
 import me.raddatz.veyq.core.testing.assertWinnerAndLoser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -60,7 +61,7 @@ class ScopeCreateRaceSliceTest {
     fun overlappingPersonalCreatesUnderTwoIdsCreateOneScope() {
         val domain = domainOf(seedTenant())
         val tenantId = domain.removePrefix("t-").removeSuffix(".example.com")
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val userId = member(domain)
             val grant = SignedGrant(personalGrant, TestAdmission.SIGNATURE)
             val second = whileUncommitted(

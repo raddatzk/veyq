@@ -2,11 +2,11 @@ package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.BlobEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -40,7 +40,7 @@ class PurgeRaceSliceTest {
 
     @Test
     fun aMediaRestoredWhileTheRetentionPurgeRunsSurvives() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (scopeId, mediaId) = trashedMedia()
             whileUncommitted(
                 change = { assertNotNull(store.restoreMedia(scopeId, mediaId), "round $round") },
@@ -55,7 +55,7 @@ class PurgeRaceSliceTest {
 
     @Test
     fun aRestoreOfAMediaTheRetentionPurgeIsErasingAnswersNotFound() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (scopeId, mediaId) = trashedMedia()
             val restored = whileUncommitted(
                 change = { store.purgeTrashedBefore(Instant.now().plusSeconds(60)) },
@@ -68,7 +68,7 @@ class PurgeRaceSliceTest {
 
     @Test
     fun aMediaRestoredWhileAMemberPurgesItSurvives() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (scopeId, mediaId) = trashedMedia()
             val purged = whileUncommitted(
                 change = { assertNotNull(store.restoreMedia(scopeId, mediaId), "round $round") },

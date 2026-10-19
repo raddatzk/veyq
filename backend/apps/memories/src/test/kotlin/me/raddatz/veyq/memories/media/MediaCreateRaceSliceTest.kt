@@ -14,6 +14,7 @@ import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.testing.assertWinnerAndLoser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -127,7 +128,7 @@ class MediaCreateRaceSliceTest {
      */
     @Test
     fun concurrentFirstUploadsOfOneUploaderShareOnePrimary() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val (first, second) = startOne(userId, scopeId) to startOne(userId, scopeId)

@@ -14,6 +14,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.http.ContentType
@@ -49,7 +50,7 @@ class ModerationRaceSliceTest {
      * and then deletes the grant it wrote — never a grant left behind for an account the roster dropped.
      */
     @Test
-    fun aRemovalOverlappingADeliveryLeavesTheRemovedModeratorNoGrant() = repeat(RACE_ROUNDS) { round ->
+    fun aRemovalOverlappingADeliveryLeavesTheRemovedModeratorNoGrant() = raceRounds { round ->
         val (owner, deputy, _) = world()
         whileUncommitted(
             change = { handler.deliver(owner, deputy, IDENTITY_PUBLIC_KEY, listOf(GrantIn(deputy, IDENTITY_PUBLIC_KEY, 1, sealedGrant()))) },

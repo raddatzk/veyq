@@ -12,12 +12,12 @@ import me.raddatz.veyq.core.moderation.report.ReportTestKit.item
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.openCase
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.report.ReportShareEntity
 import jakarta.inject.Inject
@@ -67,7 +67,7 @@ class ModerationRacesSliceTest {
     @Test
     fun aReportInsideADismissalOpensANewCaseAndNoHoldStaysOnTheClosedOne() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val m = seedMemberScope(ScopeEntity.GROUP)
             val folder = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             asMember(m.userId, m.scopeId, body(listOf(item("NODE", folder)))).then().statusCode(201)
@@ -94,7 +94,7 @@ class ModerationRacesSliceTest {
     @Test
     fun aSignInRacingASignInBlockLeavesNoSessionOfTheAccountActive() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val kp = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
             val email = "race-${UUID.randomUUID()}@example.com"
             val member = seedUser(email = email, authPublicKey = b64(kp.public.encoded.let { it.copyOfRange(it.size - 32, it.size) }))

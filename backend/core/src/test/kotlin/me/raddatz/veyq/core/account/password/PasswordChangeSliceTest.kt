@@ -11,8 +11,8 @@ import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -161,7 +161,7 @@ class PasswordChangeSliceTest {
         // The consent toggle reads the account before the change's new auth key commits and flushes after it. A
         // full-row UPDATE wrote the old key back, while the change's new wraps stayed: the server then verified the
         // next sign-in against a key the client no longer derives (inbox #224).
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val user = seedAccount()
             val tenantId = seedTenant()
             profiles.create(user, tenantId, "u$round-${UUID.randomUUID().toString().take(8)}")

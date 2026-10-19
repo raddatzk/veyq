@@ -12,7 +12,6 @@ import me.raddatz.veyq.memories.media.MediaShareGuestWrites
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.DROP_PRIVATE_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.DROP_PUBLIC_KEY
@@ -23,6 +22,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -339,7 +339,7 @@ class ShareUploaderSliceTest {
      */
     @Test
     fun aDeleteOwnOverlappingItselfAnswersAsAReplay() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val identity = createIdentity(createShare(userId, memory, role = "WRITE_ONLY"))

@@ -21,6 +21,8 @@ import java.security.Signature
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Base64
+import me.raddatz.veyq.core.testing.raceRounds
+import me.raddatz.veyq.core.testing.holdForOverlap
 
 /**
  * Slice tests for challenge-response login + sessions (uc.account.login). Seeds a user with a REAL
@@ -229,7 +231,7 @@ class LoginSliceTest {
         // committed. Its grace must then measure distance one against the winner's successor. Reading the CURRENT
         // row from a snapshot taken before the lock wait (MariaDB at REPEATABLE READ, with a plain read) finds the
         // presented row itself, measures distance zero and revokes the family — 800 of 800 races before ADR 0078.
-        repeat(FORK_ROUNDS) { round ->
+        raceRounds(FORK_ROUNDS) { round ->
             val r1 = login().refreshToken
             val familyId = familyIdOf(r1)
             val answers = whileFamilyIsHeld(familyId) { race({ refreshAnswer(r1) }, { refreshAnswer(r1) }) }
@@ -272,7 +274,7 @@ class LoginSliceTest {
         // on distance zero — ADR 0004's detector silenced. Serial, either order revokes (distance 0 or 2).
         // A test transaction holds the family row while both start, so they queue on it together; 10 rounds, because
         // that hold made the fork 3 of 5 in the probe, not 5 of 5.
-        repeat(FORK_ROUNDS) { round ->
+        raceRounds(FORK_ROUNDS) { round ->
             val r1 = login().refreshToken
             val r2 = refresh(r1).then().statusCode(200).extract().path<String>("refreshToken") // r1 is now one behind
             val familyId = familyIdOf(r1)
@@ -431,7 +433,7 @@ class LoginSliceTest {
         }
 
     /**
-     * Run [body] while a test transaction holds the family row with `PESSIMISTIC_WRITE` for [HOLD_MS], so every
+     * Run [body] while a test transaction holds the family row with `PESSIMISTIC_WRITE` ([holdForOverlap]), so every
      * refresh it starts queues on that row together. The hold lives in the test's own transaction; nothing in
      * production code waits for a test.
      */
@@ -439,16 +441,18 @@ class LoginSliceTest {
         val held = java.util.concurrent.CountDownLatch(1)
         val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
         try {
-            val holder = pool.submit {
-                QuarkusTransaction.requiringNew().run {
-                    SessionFamilyEntity.findById(familyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-                    held.countDown()
-                    Thread.sleep(HOLD_MS)
-                }
-            }
+            val holder = pool.submit(
+                java.util.concurrent.Callable {
+                    QuarkusTransaction.requiringNew().call {
+                        SessionFamilyEntity.findById(familyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+                        held.countDown()
+                        holdForOverlap()
+                    }
+                },
+            )
             held.await()
             val result = body()
-            holder.get()
+            holder.get().requireForced() // no refresh queued on the held row: the round raced nothing (inbox #512)
             return result
         } finally {
             pool.shutdownNow()
@@ -504,7 +508,6 @@ class LoginSliceTest {
 
         /** The fork needs both refreshes queued on one held row; the probe forked 3 of 5 rounds that way. */
         private const val FORK_ROUNDS = 10
-        private const val HOLD_MS = 300L
         private val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
         private val OTHER_KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
 

@@ -4,9 +4,9 @@ import me.raddatz.veyq.core.account.login.SessionFamilyEntity
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.AccountStore
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -52,7 +52,7 @@ class PairingExpiryRaceSliceTest {
      */
     @Test
     fun aSweepOverlappingADelegationRevokesTheFamilyItMinted() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val userId = seedUser()
             val id = answeredChannel()
             // The sweep's clock just past the TTL — not further: a clock past the retention would delete the row too.

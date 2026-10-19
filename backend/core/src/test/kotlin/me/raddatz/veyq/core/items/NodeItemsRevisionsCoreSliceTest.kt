@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -92,7 +93,7 @@ class NodeItemsRevisionsCoreSliceTest {
      */
     @Test
     fun twoFirstBumpsOverlappingCountBoth() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = seedMemberScope()
             val node = folder(scopeId)
             whileUncommitted(

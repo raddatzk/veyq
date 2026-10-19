@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.UploadDeclare
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.blob.UploadSessionEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.whileUncommitted
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.TestIds
@@ -18,6 +17,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -156,7 +156,7 @@ class TenantStorageQuotaSliceTest {
      */
     @Test
     fun aStartWhileAnotherReservationIsUncommittedCountsIt() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val f = fixture()
             setQuota(f.tenantId, s.byteSize)
             val answer = whileUncommitted(

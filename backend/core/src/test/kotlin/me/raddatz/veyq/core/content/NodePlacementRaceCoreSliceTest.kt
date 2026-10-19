@@ -1,12 +1,12 @@
 package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.node.NodeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -33,7 +33,7 @@ class NodePlacementRaceCoreSliceTest {
 
     @Test
     fun aRenameOverlappingAMoveOfTheSameNodeLosesWhole() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val move = placementTo(t.b, encryptedName = "bW92ZWQ=", wrappedContentKey = "bW92ZWQtd3JhcA==")
             val rename = placementTo(t.a, encryptedName = "cmVuYW1lZA==", wrappedContentKey = "cmVuYW1lZC13cmFw")
@@ -52,7 +52,7 @@ class NodePlacementRaceCoreSliceTest {
 
     @Test
     fun twoMovesThatWouldFormACycleTogetherLandOneOfThem() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val loser = whileUncommitted(
                 change = { assertEquals(UpdateNodeOutcome.Updated, update(t, t.a, placementTo(t.b)), "round $round: a into b") },
@@ -69,7 +69,7 @@ class NodePlacementRaceCoreSliceTest {
 
     @Test
     fun twoMovesOfOneNodeToDifferentParentsLandOne() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val toB = placementTo(t.b, encryptedName = "dG8tYg==", wrappedContentKey = "dG8tYi13cmFw")
             val toRoot = placementTo(null, encryptedName = "dG8tcm9vdA==", wrappedContentKey = "dG8tcm9vdC13cmFw")

@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.core.spaces.scope.RotationDecision
 import me.raddatz.veyq.core.spaces.scope.RotationGrant
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
@@ -275,8 +276,8 @@ class MemberInviteManagementSliceTest {
         // The mint compares the admission's epoch with the tenant scope's under the rotation's lock. The gate before
         // it had loaded that scope row, and a lock on a loaded row handed back the copy from before the lock: an
         // admission at the epoch the rotation left was minted, behind a rotation that could not carry it.
-        repeat(ROUNDS) { round ->
-            val domain = "stale-mint-$round.example.com"
+        raceRounds(ROUNDS) { round ->
+            val domain = "stale-mint-$round-${UUID.randomUUID().toString().take(8)}.example.com" // fresh per attempt: raceRounds may run a round again
             val (tenantId, owner) = seedActiveTenant(domain, "owner@$domain", mail)
             val answer = whileUncommitted(
                 change = { assertTrue(rotateTenant(tenantId, owner, emptyList()) is RotationDecision.Commit, "round $round") },
@@ -294,10 +295,10 @@ class MemberInviteManagementSliceTest {
         // A reissue copies the outstanding invite's admission onto the fresh one. Read before a tenant rotation's
         // commit, it copied the tag the rotation was replacing, and the rotation's carry missed the fresh invite it
         // never saw: the person was invited behind an epoch nobody re-tagged them for.
-        repeat(ROUNDS) { round ->
-            val domain = "stale-reissue-$round.example.com"
+        raceRounds(ROUNDS) { round ->
+            val domain = "stale-reissue-$round-${UUID.randomUUID().toString().take(8)}.example.com" // fresh per attempt
             val (tenantId, owner) = seedActiveTenant(domain, "owner@$domain", mail)
-            seedMemberInvite(tenantId, "m@$domain", "stale-reissue-secret-$round")
+            seedMemberInvite(tenantId, "m@$domain", "stale-reissue-secret-$domain")
             val inviteId = firstPendingInviteId(tenantId)
             val admissionId = tx { store.listPendingMemberInvites(tenantId).first().admission!!.id }
             val answer = whileUncommitted(

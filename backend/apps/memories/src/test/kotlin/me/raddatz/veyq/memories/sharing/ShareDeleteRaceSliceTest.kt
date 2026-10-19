@@ -2,12 +2,12 @@ package me.raddatz.veyq.memories.sharing
 
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.TestIds
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -44,7 +44,7 @@ class ShareDeleteRaceSliceTest {
     fun anEditOverlappingTheDeleteFindsNoShareAndWritesNothing() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val shareId = createShare(userId, memory)
             val outcome = whileUncommitted(
                 change = { assertTrue(sharing.delete(shareId), "round $round") },
@@ -67,7 +67,7 @@ class ShareDeleteRaceSliceTest {
     fun aReactivationOverlappingTheDeleteLeavesTheLinkOff() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val shareId = createShare(userId, memory)
             assertTrue(sharing.revoke(userId, shareId), "round $round")
             val outcome = whileUncommitted(

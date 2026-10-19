@@ -4,7 +4,9 @@ import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.Overlap
+import me.raddatz.veyq.core.testing.holdForOverlap
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -22,6 +24,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -53,7 +56,7 @@ class MediaLockOrderRaceSliceTest {
      */
     @Test
     fun aSubBucketDeleteAndATrashOfItsMediumBothFinish() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val f = fixture()
             val (held, other) = between(
                 first = { MediaEntity.findById(f.mediaId, LockModeType.PESSIMISTIC_WRITE) }, // trashMedia's first lock
@@ -76,7 +79,7 @@ class MediaLockOrderRaceSliceTest {
      */
     @Test
     fun aMoveIntoASubBucketAndThatBucketsDeleteBothFinish() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val f = fixture()
             val (held, other) = between(
                 first = { BucketEntity.findById(f.subBucketId, LockModeType.PESSIMISTIC_WRITE) }, // deleteBucketReparent's first lock
@@ -96,10 +99,13 @@ class MediaLockOrderRaceSliceTest {
     /**
      * Run [first] in a transaction of its own and flush it, so its lock is taken; then, while [other] runs on another
      * thread, hold [OVERLAP_HOLD_MS] and run [second] in the same transaction, and commit. Returns what each side
-     * failed with (null: it finished). [other] opens its own transaction (a `@Transactional` store method).
+     * failed with (null: it finished). [other] opens its own transaction (a `@Transactional` store method). A round
+     * in which [other] was not waiting on the held side when the hold ended interleaved nothing: it throws
+     * [me.raddatz.veyq.core.testing.OrderNotForced], and [raceRounds] runs it again (inbox #512).
      */
     private fun between(first: () -> Unit, second: () -> Unit, other: () -> Unit): Pair<Throwable?, Throwable?> {
         val firstTaken = CountDownLatch(1)
+        val overlap = AtomicReference<Overlap>()
         val pool = Executors.newFixedThreadPool(2)
         try {
             val held = pool.submit(
@@ -109,7 +115,7 @@ class MediaLockOrderRaceSliceTest {
                             first()
                             Arc.container().instance(EntityManager::class.java).get().flush()
                             firstTaken.countDown()
-                            Thread.sleep(OVERLAP_HOLD_MS) // the other writer reaches its first lock meanwhile
+                            overlap.set(holdForOverlap()) // the other writer reaches its first lock meanwhile
                             second()
                         }
                     }.exceptionOrNull().also { firstTaken.countDown() }
@@ -117,7 +123,9 @@ class MediaLockOrderRaceSliceTest {
             )
             check(firstTaken.await(10, TimeUnit.SECONDS)) { "the held side never took its first lock" }
             val overlapping = pool.submit(Callable { runCatching { other() }.exceptionOrNull() })
-            return held.get(60, TimeUnit.SECONDS) to overlapping.get(60, TimeUnit.SECONDS)
+            val failures = held.get(60, TimeUnit.SECONDS) to overlapping.get(60, TimeUnit.SECONDS)
+            overlap.get()?.requireForced()
+            return failures
         } finally {
             pool.shutdownNow()
         }

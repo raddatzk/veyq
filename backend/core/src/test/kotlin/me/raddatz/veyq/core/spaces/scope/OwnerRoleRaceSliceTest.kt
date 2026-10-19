@@ -5,10 +5,10 @@ import me.raddatz.veyq.core.admin.tenant.TenantHandler
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -33,7 +33,7 @@ class OwnerRoleRaceSliceTest {
 
     @Test
     fun twoOwnersDemotingEachOtherLeaveOneOwner() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val (a, b) = t.member() to t.member()
             val group = t.group(a to OWNER, b to OWNER)
@@ -57,7 +57,7 @@ class OwnerRoleRaceSliceTest {
 
     @Test
     fun twoOwnersStepDownTogetherLeaveOneOwner() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val (a, b) = t.member() to t.member()
             val group = t.group(a to OWNER, b to OWNER)
@@ -78,7 +78,7 @@ class OwnerRoleRaceSliceTest {
         // The removal plans its cascade from owner counts it reads: read before a co-owner's demote commits, it cut
         // the other owner as one of two, and the group was left with none. Replayed after the demote, the cut member
         // is the sole owner and the orphan rule hands the group on first.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val (stays, cut) = t.member() to t.member()
             val group = t.group(stays to OWNER, cut to OWNER)

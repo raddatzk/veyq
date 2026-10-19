@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -680,7 +681,7 @@ class ShareSharedScopeSliceTest {
         // The edit of a link reads it before the owner's removal turns it off and writes after: a full-row UPDATE
         // would write `enabled = true` back and keep the removed member's link live. The edit's row lock (the share
         // write's `liveForUpdate`) and `@DynamicUpdate` each close it on their own.
-        repeat(ROUNDS) { round ->
+        raceRounds(ROUNDS) { round ->
             val domain = "edit-${UUID.randomUUID()}.example.com"
             val (tenantId, owner) = seedActiveTenant(domain)
             val member = seedTenantMember(tenantId, "m@$domain")
@@ -710,7 +711,7 @@ class ShareSharedScopeSliceTest {
         // its write lands after: the removed member then owned a live link in a group they are no longer in — a
         // state neither order of the two produces (reactivate first: the removal turns the adopted link off; the
         // removal first: the caller is no member). Checked under the scope's lock, which every removal holds.
-        repeat(ROUNDS) { round ->
+        raceRounds(ROUNDS) { round ->
             val domain = "react-${UUID.randomUUID()}.example.com"
             val (tenantId, owner) = seedActiveTenant(domain)
             val member = seedTenantMember(tenantId, "m@$domain")
