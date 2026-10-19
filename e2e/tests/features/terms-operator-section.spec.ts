@@ -192,7 +192,7 @@ test(
       // The reduced privacy notice: the record's passage gone with its switch, the recipient's open country simply
       // absent rather than a gap (owner Q26) — the full one shows "von der Betreiberseite nicht angegeben" there.
       await german.goto(`${tenantOrigin()}/privacy`)
-      await expect(german.locator('#recipients')).toContainText('E2E Hosting GmbH: hosts the server', { timeout: 60_000 })
+      await expect(german.locator('#recipients')).toContainText('E2E Hosting GmbH: hostet den Server', { timeout: 60_000 })
       await expect(german.locator('#recipients')).not.toContainText('nicht angegeben')
       await expect(german.locator('#guest-write-record')).toHaveCount(0)
       await expect(german.locator('aside#right-to-object')).toBeVisible() // control: the page rendered, its general right too

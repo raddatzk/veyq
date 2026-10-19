@@ -171,7 +171,8 @@ test(
     await page.getByRole('button', { name: 'Add a recipient' }).click()
     const recipient = page.getByTestId('operator-recipient')
     await recipient.getByLabel('Name').fill('E2E Hosting GmbH')
-    await recipient.getByLabel('What they do').fill('hosts the server')
+    await recipient.locator('.operator-recipient__kind').click() // what they do: a kind from the list
+    await page.getByRole('option', { name: 'Hosts the server' }).click()
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(warnContact).toHaveCount(0)
     await expect(warnIdentification).toHaveCount(0)
