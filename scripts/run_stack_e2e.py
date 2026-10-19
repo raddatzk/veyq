@@ -75,7 +75,9 @@ the recipe:
      parameterised by compose project): every value the suite typed (`canaries-<spec>.json`, `e2e/src/canaries.ts`)
      must be absent from the instance's database, its bucket (keys and bytes), every container log of the project
      since the run began, and every statement the database received in the window — each sensor armed by a positive
-     control, and every spec file that executed a test must have recorded canaries. [sweep] lists what is not swept.
+     control, and every spec file that executed a test must have recorded canaries. And every address an account was
+     signed up with (`pii-<spec>.json`, `recordPii`) must be absent from every container log, and present in the
+     statement log (ADR 0092 § 4). [sweep] lists what is not swept.
   9. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
   10. **teardown** — `docker compose down -v` by the run's project name (unless `--keep`).
   11. **host** — the run touched nothing that is not its own: every container that existed before it still exists
@@ -969,11 +971,17 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
     in the store's log, the app's log naming its database, and the window's two sentinel statements — because 0 hits
     from a sensor that read nothing is not a pass.
 
+    The `pii` set (ADR 0092 § 4): every address an account was signed up with (`freshOwner` records it,
+    `e2e/src/accounts.ts`) is searched in every container log, and nowhere else — the dump, the statement log and the
+    mailbox hold it by design. Its control ([sweeps.pii_control]): at least one, and each found in the statement log,
+    which holds every account the instance created in the window; this lane reads no mailbox (below), so the mailbox
+    control `run_web_e2e.py` uses is not open here.
+
     Not swept here, and why: the HTTP recording and the capability tokens derived from it (the browser suite records no
     HTTP; `run_web_e2e.py` sweeps both at API level), boot logs (the backend's log is the `app` container's, swept as
     one), and the mailbox: the overlay's Mailpit (the relay a provider would give the instance) is reached only from the
-    run's own networks, and what reaches it is the instance mail a feature scenario sets up — a confirmation code the
-    server minted, never a value the suite typed — while a tenant of the run has no mail settings.
+    run's own networks, and what reaches it is the instance mail a feature scenario sets up — a code or link the server
+    minted, an invitation or a notice, never a value the suite typed.
     """
     close_window(opened)
     canary_files = sorted(workdir.glob("canaries-*.json"))
@@ -990,6 +998,11 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
     instance = json.loads((workdir / "instance.json").read_text(encoding="utf-8"))
     email = instance["owner"]["email"]
     print(f"sweep: {len(carriers)} typed canary/canaries from {', '.join(p.name for p in canary_files)}", flush=True)
+    # The third needle set: every address an account was signed up with (`recordPii`, e2e/src/accounts.ts), searched
+    # in the container logs only — the database, the statement log and the mailbox hold it by design (ADR 0092 § 4).
+    pii_files = sorted(workdir.glob("pii-*.json"))
+    pii, pii_problems = sweeps.load_pii(pii_files)
+    print(f"sweep: {len(pii)} pii address(es) from {', '.join(p.name for p in pii_files) or 'no file'}", flush=True)
 
     rel = "the browser suite"
     verdicts = [
@@ -999,10 +1012,15 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
         ("container logs", sweeps.sweep_containers(
             stack, workdir, canary_files, opened.since, opened.store_sentinel,
             controls={APP_SERVICE: lambda text: None if sweeps.names_database(text, DATABASE) else
-                      f"the app's log never names its database {DATABASE} (Flyway's JDBC line) — not the whole log"})),
+                      f"the app's log never names its database {DATABASE} (Flyway's JDBC line) — not the whole log"},
+            pii=pii)),
         ("statement log", sweeps.sweep_statements(
             opened.statements.retained, canary_files, opened.statement_sentinels, databases=[],
             problems=opened.statements.problems, written=[email])),
+        # The pii set's control: zero addresses is a failure, and each must be one the instance wrote — this lane reads
+        # no mailbox (above), and the statement log holds every account the instance created during the run.
+        ("pii control", "; ".join(pii_problems) or sweeps.pii_control(
+            pii_files, [opened.statements.retained], "the statement log")),
     ]
     failed = [f"{surface}: {why}" for surface, why in verdicts if why]
     if failed:

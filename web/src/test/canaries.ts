@@ -115,3 +115,23 @@ export function recordCanaries(...values: unknown[]): void {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, JSON.stringify([...collected], null, 2), 'utf8')
 }
+
+/** Every address this suite signed an account up with. */
+const addresses = new Set<string>()
+
+/**
+ * Record [address] — one an account is signed up with — as a `pii` needle, and hand it back. Not a canary: the
+ * database, the recording and the mailbox hold an account's address by design (`x-veyq-visibility: pii`), so the
+ * orchestrator searches these in the run's boot and container logs only, none of which may hold one (ADR 0092 § 4),
+ * and requires each in a mail or a database dump of the run first. Written like [recordCanaries], to
+ * `VEYQ_PII_FILE`; a no-op when that is unset.
+ */
+export function recordPii(address: string): string {
+  if (!address.includes('@')) throw new Error(`recordPii: ${JSON.stringify(address)} is no email address`)
+  addresses.add(address)
+  const path = process.env.VEYQ_PII_FILE
+  if (!path) return address
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify([...addresses], null, 2), 'utf8')
+  return address
+}

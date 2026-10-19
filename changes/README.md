@@ -1284,6 +1284,17 @@ library's sources would have read the wrong layer; the Quarkus extension's sourc
 answered it. So a claim about a library's default names the layer the app reaches it through and is measured there —
 the extension's config mapping, or a run.
 
+### A handler registered for a supertype answers for every subtype the framework asks about
+
+**"Catch everything" is a registration for every type below it, including the ones the framework looks up to decide
+its own routing.** `cr-logging` decided an `ExceptionMapper<Throwable>` beside a Vert.x failure handler. Quarkus REST
+asks for a mapper of `NotFoundException` before it passes an unmatched route on, and finds the `Throwable` one by
+walking the hierarchy — so the app shell's SPA fallback and the admin channel's unknown-route refusal would have
+stopped answering. The trap was already written at `EmptyBadRequestFilter`, two files from the decision's locator,
+and the build moved to one failure handler that Quarkus REST reaches through `RoutingContext.fail`. So a refine that
+registers a handler for a broad type reads which lookups the framework makes for the types under it (the
+framework's sources, at the line that asks), and greps the code for the trap notes beside the layer it adds to.
+
 ### Every pod a CR adds is asked again what it reaches and what it writes
 
 **A property argued for one component does not carry to its neighbour.** `cr-kubernetes-backup-gate` settled that the
