@@ -197,14 +197,15 @@ export async function fetchTree(scopeId: string, ifNoneMatch?: string | null): P
 }
 
 /** A string that differs whenever any listed row differs in a way a view can show: the shape (parent, kind, order), the
- *  sealed entry and its placement revision, the sealed meta and its revision. Ciphertext and ids only — it is compared
- *  for equality, never read — so a live poll (`treeStore.pollTree`) can tell "nothing changed" from "something did"
- *  without opening a single name. A row's encrypted name changes with every rename (a fresh nonce), so nothing a
- *  rename or a move writes can leave it equal. */
+ *  sealed entry and its placement revision, the sealed meta and its revision, and the operator's block — a moderator's
+ *  block or lift changes no ciphertext, and a fingerprint without it dropped the poll that carried one (inbox #503).
+ *  Ciphertext, ids and that flag only — it is compared for equality, never read — so a live poll (`treeStore.pollTree`)
+ *  can tell "nothing changed" from "something did" without opening a single name. A row's encrypted name changes with
+ *  every rename (a fresh nonce), so nothing a rename or a move writes can leave it equal. */
 export function treeFingerprint(rows: readonly NodeSummary[]): string {
   return rows
     .map((r) =>
-      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.placementRevision, r.metaRevision, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? ''].join('|'),
+      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.placementRevision, r.metaRevision, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? '', r.blockedByOperator].join('|'),
     )
     .sort()
     .join('\n')
@@ -325,6 +326,18 @@ export const openMemory = openContentKey
  */
 export function nodeContentKey(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array | null {
   return contentKeyChain(scopeId, epochs, tree, nodeId)[0] ?? null
+}
+
+/**
+ * `next`, unless it holds the very bytes of `previous` — then `previous`. A host derives the key of the node on screen
+ * from its tree, and the tree is re-read under it (a live poll, ADR 0081; a write's own re-read): the key comes out as
+ * a new array of the same bytes, and a page that keys anything on it — a gallery's reload, a tab's reset — would run it
+ * again for nothing. Fed as a `computed`'s previous value, it keeps the key the same object while it is the same key.
+ */
+export function sameKeyOr(previous: Uint8Array | null | undefined, next: Uint8Array | null): Uint8Array | null {
+  if (!previous || !next || previous.length !== next.length) return next
+  for (let i = 0; i < next.length; i++) if (previous[i] !== next[i]) return next
+  return previous
 }
 
 /**

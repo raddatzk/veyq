@@ -106,8 +106,6 @@ export function registerDepot(registry: Registry): void {
     cover: {},
     shareable: true,
     detail: DropBoxDetail,
-    // Its page is its guests' folders and their files, all tree rows: the host keeps it live as a level (owner decision 2026-10-17).
-    liveDetail: true,
     // Core's delete dialog (the detail's delete): "Delete drop box", the detail's own button label.
     deleteTitle: 'depot.dropBox.delete',
     // …and its sentence names what goes with it: the guests' folders, and the links that stop taking files (#395).

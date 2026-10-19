@@ -11,7 +11,7 @@ vi.mock('../../api/client', () => ({
 
 import {
   listTree, listTrash, restoreNode, renameNode, moveNode, createFolder, nodeContentKey, contentKeyChain, openName, slugTokenFor,
-  PlacementConflictError, PLACEMENT_RETRIES, type TreeNode,
+  PlacementConflictError, PLACEMENT_RETRIES, sameKeyOr, type TreeNode,
 } from './tree'
 import { httpError } from '../../test/httpError'
 import { FOLDER_KIND } from './kind'
@@ -101,6 +101,20 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
     expect(contentKeyChain(SCOPE_ID, epochsOf(scopeKey), tree, CHAP).map((k) => Array.from(k)))
       .toEqual([chapKey, memKey, folderKey].map((k) => Array.from(k)))
     expect(contentKeyChain(SCOPE_ID, epochsOf(scopeKey), [node(MEM, FOLD, 'MEMORY', wrap(scopeKey, MEM, memKey))], MEM)).toEqual([])
+  })
+})
+
+describe('sameKeyOr — the key of the node on screen stays the same object while it is the same key (inbox #503)', () => {
+  it('hands back the previous array for the same bytes, the next one for other bytes or none', () => {
+    const previous = new Uint8Array(32).fill(5)
+    expect(sameKeyOr(previous, new Uint8Array(32).fill(5))).toBe(previous)
+    const other = new Uint8Array(32).fill(5)
+    other[31] = 6
+    expect(sameKeyOr(previous, other)).toBe(other)
+    expect(sameKeyOr(previous, new Uint8Array(16).fill(5))).not.toBe(previous)
+    expect(sameKeyOr(previous, null)).toBeNull()
+    const first = new Uint8Array(32)
+    expect(sameKeyOr(undefined, first)).toBe(first)
   })
 })
 
