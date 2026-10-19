@@ -55,7 +55,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_node (operator-blind).
   const pipeline = useThumbnailPipeline<MediaItem>({
     idOf: (m) => m.mediaId,
-    isDerivable: hasDerivatives,
+    // A medium a moderator blocked has no thumbnail to read: every byte of it answers 451 (uc.moderation.take-a-measure).
+    isDerivable: (m) => !m.blocked && hasDerivatives(m),
     decryptTile: (m, signal) => {
       const key = ctx.memoryKey()
       return key ? ctx.source.loaders.grid(m, key, signal) : Promise.resolve(null)
@@ -325,6 +326,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
    *  snapshot stays consistent) - and, **only when the id-set is present** (a delete advanced the delete revision),
    *  drop any cached media absent from it, revoking its thumbnail. Reassigns `items` so the justified grid re-sorts. */
   function upsertItems(delta: MediaItem[], mediaIds: string[] | null) {
+    const blockedNow: string[] = []
     items.value = reconcileItems(items.value, delta, mediaIds, {
       idOf: (m) => m.mediaId,
       skip: (id) => pendingDelete.has(id), // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
@@ -332,12 +334,23 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
         existing.wrappedMeta = m.wrappedMeta // a meta edit re-sealed the tier; patch in place (shared with the lightbox snapshot)
         existing.metaRevision = m.metaRevision // …and the version it is at, or the next write from here would 409 once
         existing.updatedAt = m.updatedAt
+        // A block or its lift (uc.moderation.take-a-measure, ADR 0093 § 6) bumps the item's revision, so it arrives here:
+        // the tile and an open lightbox (the same object) show "Blocked by the operator" at once, its decrypted thumbnail
+        // goes below; a lift shows the medium again, its thumbnail read anew when the grid wants it.
+        if (m.blocked && !existing.blocked) {
+          existing.blocked = true
+          blockedNow.push(m.mediaId)
+        } else if (!m.blocked && existing.blocked) delete existing.blocked
       },
       onIds: (listed) => {
         for (const id of [...pendingDelete]) if (!listed.has(id)) pendingDelete.delete(id) // cr-0111: server confirmed it's gone → lift the tombstone
       },
       onDrop: (id) => pipeline.dropThumb(id),
     })
+    for (const id of blockedNow) pipeline.dropThumb(id) // revoke the decrypted thumbnail its block withdrew
+    // The pipeline reads what the grid wants from the list it holds: hand it the merged one, so a medium the poll added,
+    // or one whose block was lifted, gets its thumbnail when its tile is near the viewport.
+    pipeline.reconcile(items.value)
   }
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and

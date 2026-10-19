@@ -213,6 +213,29 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     w.unmount()
   })
 
+  // uc.moderation.take-a-measure: a guest sees a block as a member does - the tile turns to the placeholder on the poll that
+  // carries it, and back on the one that carries its lift (the thumbnail's revoke is useMediaGalleryLive.test.ts's).
+  it('READ: a medium blocked while the gallery is open turns to the placeholder without a reload, and back on its lift', async () => {
+    const w = await mountPage(ShareRole.Read)
+    const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
+    const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+    const blocked = () => w.find('[data-media-id="m-1"] .media-tile-blocked')
+
+    raw.mockResolvedValueOnce(apiResponse({ media: [{ ...row('m-1', MEMORY), blockedByOperator: true }, row('m-own', MEMORY)], identities: [], more: false }, { ETag: '"t2"' }))
+    await tick(new AbortController().signal)
+    await flushPromises()
+    expect(blocked().exists(), 'the blocked tile').toBe(true)
+    expect(blocked().text()).toBe(t('node.blockedByOperator'))
+    expect(w.find('[data-media-id="m-own"] .media-tile-blocked').exists()).toBe(false)
+    expect(tiles(w), 'the tile keeps its place').toEqual(['m-1', 'm-own'])
+
+    raw.mockResolvedValueOnce(apiResponse({ media: [row('m-1', MEMORY), row('m-own', MEMORY)], identities: [], more: false }, { ETag: '"t3"' }))
+    await tick(new AbortController().signal)
+    await flushPromises()
+    expect(blocked().exists(), 'lifted').toBe(false)
+    w.unmount()
+  })
+
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
     it(`${role}: the gallery of the node on screen, its chapters, and nothing of a member's`, async () => {
       const w = await mountPage(role)

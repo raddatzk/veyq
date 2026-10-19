@@ -174,7 +174,7 @@ let detailsDeferred: string | null = null
 
 function prefetchAhead() {
   const next = props.items[current.value + 1]
-  if (!next || !hasDerivatives(next) || ahead?.mediaId === next.mediaId) return
+  if (!next || next.blocked || !hasDerivatives(next) || ahead?.mediaId === next.mediaId) return // a blocked one answers 451
   const bytes = previewOf(next)
   bytes.catch(() => {}) // a failed prefetch is the show's to retry
   ahead = { mediaId: next.mediaId, bytes }
@@ -238,6 +238,10 @@ watch(() => props.suspendKeys, (suspended) => {
   if (suspended) stopSlideshow('paused') // a modal opened over the lightbox
 })
 
+/** Whether a read started for `target` must be dropped when it lands: the stage shows another item now, or a block reached
+ *  this one meanwhile (its URLs were revoked on the block; minting one now would show it again). */
+const movedOn = (target: MediaItem) => item.value !== target || !!target.blocked
+
 // Load the current item's preview tier (operator-blind: ciphertext → decrypt → object URL). A non-derivable
 // item (E1) carries no preview tier, so the stage shows a download fallback instead of fetching its original.
 async function loadPreview() {
@@ -255,7 +259,7 @@ async function loadPreview() {
   const target = item.value
   try {
     const bytes = await (takeAhead(target) ?? previewOf(target)) // the slideshow's prefetch, when it is this item's
-    if (item.value !== target) return // navigated away while decrypting — drop this result
+    if (movedOn(target)) return // navigated away, or blocked, while decrypting — drop this result
     setPreview(new Blob([bytes as BlobPart]))
   } catch {
     if (item.value === target) error.value = true
@@ -311,12 +315,12 @@ async function maybeLoadOriginal() {
   const natural = { w: img.naturalWidth, h: img.naturalHeight }
   try {
     const bytes = await originalOf(target)
-    if (item.value !== target) return // navigated away while decrypting — drop it
+    if (movedOn(target)) return // navigated away, or blocked, while decrypting — drop it
     setOriginal(new Blob([bytes as BlobPart]))
     const probe = new Image()
     probe.src = originalUrl.value!
     await probe.decode() // a type that claims a raster but does not decode keeps the preview
-    if (item.value !== target) return
+    if (movedOn(target)) return
     previewNatural.value = natural
     originalReady.value = true
   } catch {
@@ -327,7 +331,11 @@ watch(zoom.scale, () => void maybeLoadOriginal())
 
 // Reload when the SHOWN item changes — by identity, not just the index: after a delete (cr-0110) the parent
 // removes the item and the array shifts, so the same index now holds a different item (its mediaId changes).
-watch(() => item.value?.mediaId, () => { previewLoad = loadPreview() }, { immediate: true })
+// …and when the shown item is blocked or lifted (uc.moderation.take-a-measure): the gallery's live poll patches the item
+// in place, so the stage turns to the placeholder at once and the reload revokes every decrypted URL of it (preview,
+// original, video) and ends its playback; a lift reads the preview again. One watcher for both, so a step onto an item
+// that differs in both loads once.
+watch([() => item.value?.mediaId, () => !!item.value?.blocked], () => { previewLoad = loadPreview() }, { immediate: true })
 
 // When the item changes: unseal the listed tier (date + GPS + place) **instantly** from the listed item (no
 // fetch), then lazily fetch + unseal the panel bundle via the exif endpoint (never listed). Finally, resolve
@@ -612,15 +620,15 @@ async function playVideo() {
     )
     if (url) {
       const handle = handleFromUrl(url)
-      if (item.value !== target) {
-        if (handle) revokePlayback(handle) // navigated away mid-register — don't leak the session
+      if (movedOn(target)) {
+        if (handle) revokePlayback(handle) // navigated away (or blocked) mid-register — don't leak the session
         return
       }
       videoHandle.value = handle
       videoSwUrl.value = url // the <video> src; the SW answers its range requests
     } else {
       const bytes = await originalOf(target) // Slice-1 fallback: no usable SW
-      if (item.value !== target) return // navigated away mid-decrypt — drop it
+      if (movedOn(target)) return // navigated away (or blocked) mid-decrypt — drop it
       setVideo(new Blob([bytes as BlobPart], { type }))
     }
   } catch {
