@@ -14,7 +14,7 @@ const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 // A PDF is drawn by pdf.js, which `pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
 vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
-vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn() }))
+vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 vi.mock('../download', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn(), fileChunkProvider: vi.fn(),
 }))

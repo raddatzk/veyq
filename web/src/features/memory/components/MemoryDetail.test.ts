@@ -9,6 +9,9 @@ vi.mock('../../../api/client', () => ({
   sessionApi: vi.fn(),
 }))
 vi.mock('../api', () => ({ mediaApi: vi.fn() }))
+// The toast a failed mark speaks through (inbox #500): spies, so a test reads what the user was told.
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))
+vi.mock('../../../shared/state/useToast', () => ({ useToast: () => toast }))
 
 // exifr drives the sealed capture-time tier; default = no date, tests override per media (cr-0066).
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
@@ -41,6 +44,7 @@ import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights } from '../../../test/models'
+import { ItemMarksTooMany } from '../itemFavorites'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -157,6 +161,41 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(mark.attributes('aria-pressed')).toBe('false')
     // no member id anywhere in the rendered gallery
     expect(wrapper.html()).not.toMatch(/member-?id/i)
+  })
+
+  /**
+   * inbox #500: the store has already put the heart back; the gallery says why. A full set has its own message (trying
+   * again will not help), any other failure the generic one, and a mark that lands says nothing — the control.
+   */
+  it('a mark that does not land says so: the full set its own message, anything else the generic one', async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+    const toggle = vi.fn(async () => {})
+    const source = { ...memberMemorySource({ scopeId: () => SCOPE_ID }), marks: { load: async () => {}, toggle } }
+    const wrapper = mountDetail(memoryKey, { source, scopeKey: v1.randomBytes(32), personalScope: false })
+    await flushPromises()
+    await flushPromises()
+    const mark = wrapper.find('.media-tile-mark')
+
+    await mark.trigger('click')
+    await flushPromises()
+    expect(toggle).toHaveBeenCalledTimes(1)
+    expect(toast.error).not.toHaveBeenCalled()
+
+    toggle.mockRejectedValueOnce(new ItemMarksTooMany('12285 marks'))
+    await mark.trigger('click')
+    await flushPromises()
+    expect(toast.error).toHaveBeenLastCalledWith(t('media.marks.tooMany'))
+
+    toggle.mockRejectedValueOnce(new Error('network'))
+    await mark.trigger('click')
+    await flushPromises()
+    expect(toast.error).toHaveBeenLastCalledWith(t('media.marks.saveFailed'))
+    expect(toast.error).toHaveBeenCalledTimes(2)
   })
 
   it('lists the Memory media → renders the decrypted title, item count and a thumbnail tile per item', async () => {

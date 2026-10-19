@@ -116,13 +116,12 @@ blob for that Memory; the `PUT` writes only the caller's.
   marked** — *"only mine"* is a **filter**, never a promise. This is the same trap as the pin defect above, one
   level down, which is why that one was fixed rather than deferred.
 - **The write shape is the size limit, and it is why item blobs are per-node.** The whole set is re-sealed on
-  every single toggle, so a set's size is also its *per-click upload*. `measured` (real UUIDs +
-  `JSON.stringify`, against this tree): a 65 536-char `ciphertext` cap holds **1 259** bare ids — **1 257** beside
-  an item mark's self-tag (below) — and at 500 ids a
-  single toggle already re-uploads 25 KiB. Partitioning item marks **per node** keeps the ceiling beyond a
-  Memory's practical media count and the upload at that Memory's set — and it costs **no** extra metadata,
-  because the client has just fetched that node's media list, so the server already observed the node id. A
-  larger cap, per-item rows and keyed-hash buckets were all rejected; the reasoning is in
+  every single toggle, so a set's size is also its *per-click upload*. Partitioning item marks **per node** keeps the
+  upload at that Memory's set — and it costs **no** extra metadata, because the client has just fetched that node's
+  media list, so the server already observed the node id. A mark is a media id's 16 raw bytes beside the self-tag, and
+  the contract caps the blob at 262 144 characters: **12 284** marks per member and Memory, a whole 10 000-photo Memory;
+  the client refuses the next one before any write and the heart says so. The pin set stays a JSON array under a 65 536
+  cap, **1 259** pins per scope. The numbers, measured, and why per-item rows and keyed-hash buckets were rejected:
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §4.
 - **Two seals, two purposes.** The typed seal as everywhere else
   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with **distinct** purposes `favorites`
@@ -130,7 +129,7 @@ blob for that Memory; the `PUT` writes only the caller's.
   slot it is stored at (the scope, and for an item mark also the node), so the server cannot serve one scope's
   pins or one node's marks as another's. An item mark is **not** bound to the member who made it: the read names
   no member (ADR 0068 §6), so a reader has none to bind. *Whose* it is rides inside the plaintext,
-  `{"tag","ids"}`: an HMAC under a key derived from the marking member's master key, over the scope, the node and
+  `tag ‖ ids`: an HMAC under a key derived from the marking member's master key, over the scope, the node and
   the marked set, which only that member's client can compute. An entry is the caller's own only when the server
   flags it `self` **and** the tag verifies; anything else counts as someone else's
   ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9). The per-tile count is the
