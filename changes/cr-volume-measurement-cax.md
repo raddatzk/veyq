@@ -100,8 +100,9 @@ member list's one query per member and missing ETag (458 SELECTs, 42 ms at 445);
 while a phone uploads — the CAX run should watch the app there first.
 
 **For this CR's run.**
-- *Phase 2's member axis* runs to 1,000 as planned: `cr-identity-pins-per-entry` (done 2026-10-19, #491) stores a pin
-  per entry, and its live proof seeded this harness's member stage to 1,000 on a local production-recipe instance.
+- *Phase 2's member axis* runs to 1,000 as planned: `cr-identity-pins-per-entry` (built 2026-10-19, #491) stores a pin
+  per entry, and its live proof seeded this harness's member stage to 1,000 on a local production-recipe instance (999
+  members granted; the profile stage was stopped at 722 on the owner's word).
 - *The gallery's browser leg changes shape* once `cr-gallery-virtualization` (planned) lands: its harness metric is
   *viewport complete* and *end complete*, not "last thumbnail of all", and its targets replace the 15 s clause for a
   windowed grid. Until then the rule above reads as written.
