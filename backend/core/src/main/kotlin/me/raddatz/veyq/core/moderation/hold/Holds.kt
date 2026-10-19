@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.hold
 
+import me.raddatz.veyq.core.backup.ErasureLedger
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.EntityManager
@@ -16,6 +17,7 @@ import java.util.UUID
 @ApplicationScoped
 class Holds(
     private val em: EntityManager,
+    private val ledger: ErasureLedger,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All contributors: MutableList<HoldSnapshotContributor>,
 ) {
@@ -114,7 +116,7 @@ class Holds(
         val (floored, ending) = holds.partition { h -> h.floorUntil?.isAfter(now) == true && h.expiresAt.isAfter(now) }
         floored.forEach { h -> moveEnd(h, h.floorUntil!!, HoldTrigger.ORDER) }
         val alive = ending.any { it.expiresAt.isAfter(now) }
-        if (ending.isNotEmpty()) drop(ending.map { it.id })
+        end(ending)
         return alive
     }
 
@@ -126,8 +128,31 @@ class Holds(
     fun purgeExpired(now: Instant): List<String> {
         val ended = HoldEntity.list("expiresAt <= ?1", now)
         if (ended.isEmpty()) return emptyList()
-        drop(ended.map { it.id })
+        end(ended)
         return ended.mapNotNull { it.caseId }.distinct()
+    }
+
+    /**
+     * End [holds] — their snapshot and pins go — each with its erasure-ledger line, in the caller's transaction (ADR 0056
+     * decision 8): a restore of a capture older than the end brings the hold back with its end still ahead, and the start
+     * ends it again ([reend]). Every end runs through here, so no path ends a hold without its line.
+     */
+    private fun end(holds: List<HoldEntity>) {
+        if (holds.isEmpty()) return
+        holds.forEach { ledger.holdEnded(it.id, it.caseId) }
+        drop(holds.map { it.id })
+    }
+
+    /**
+     * End again the hold [holdId] a restore brought back after it had ended (its `HOLD_ENDED` line, ADR 0056 decision 8),
+     * **in the caller's transaction**: its snapshot and pins go, and no second line is written. Answers whether its row
+     * existed — a second start finds none, so a line applied twice changes nothing.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun reend(holdId: String): Boolean {
+        if (HoldEntity.findById(holdId) == null) return false
+        drop(listOf(holdId))
+        return true
     }
 
     private fun drop(holdIds: List<String>) = holdIds.chunked(500).forEach { ids ->

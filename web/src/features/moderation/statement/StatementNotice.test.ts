@@ -40,6 +40,7 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   sealedFacts: 'c2VhbGVk',
   inForce: true,
   liftedAt: undefined,
+  endedWithTarget: false,
   contactAddress: 'abuse@example.org',
   objection: undefined,
   canObject: true,
@@ -143,4 +144,14 @@ describe('StatementNotice', () => {
     expect(w.find('.statement-objection-review').text()).toBe(t('statement.otherReview'))
   })
 
+  it('a measure that ended with its erased target says so, and one a moderator lifted says lifted (ADR 0093 § 6)', async () => {
+    const lifted = new Date('2026-10-18T10:00:00Z')
+    const time = lifted.toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })
+    state.list = [statement({ canObject: false, inForce: false, liftedAt: lifted, endedWithTarget: true })]
+    let w = await mountNotice({ targetId: NODE })
+    expect(w.find('.statement-lifted').text()).toBe(t('statement.endedWithTarget', { time }))
+    state.list = [statement({ canObject: false, inForce: false, liftedAt: lifted, endedWithTarget: false })]
+    w = await mountNotice({ targetId: NODE })
+    expect(w.find('.statement-lifted').text()).toBe(t('statement.liftedAt', { time }))
+  })
 })

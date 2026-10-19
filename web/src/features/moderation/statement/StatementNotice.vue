@@ -95,6 +95,8 @@ onMounted(() => loadStatements())
       <span class="veyq-form-copy">{{ t('statement.objectHint') }}</span>
       <Button type="submit" class="statement-objection-submit" icon="pi pi-send" :label="t('statement.objectSubmit')" :loading="busy" />
     </form>
-    <p v-else-if="statement.liftedAt" class="veyq-form-copy">{{ t('statement.liftedAt', { time: day(statement.liftedAt) }) }}</p>
+    <p v-else-if="statement.liftedAt" class="veyq-form-copy statement-lifted">
+      {{ t(statement.endedWithTarget ? 'statement.endedWithTarget' : 'statement.liftedAt', { time: day(statement.liftedAt) }) }}
+    </p>
   </section>
 </template>

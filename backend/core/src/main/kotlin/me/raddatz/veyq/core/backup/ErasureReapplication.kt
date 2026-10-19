@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseOrigin
 import me.raddatz.veyq.core.moderation.report.CaseState
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
@@ -24,6 +25,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import java.time.Instant
 import java.util.UUID
 
@@ -34,6 +36,7 @@ data class Reapplied(
     val reblocked: Int,
     val relifted: Int,
     val caseStubs: Int,
+    val casesMoved: Int,
     val unknown: Int,
     val erasedKeys: Int,
     val rowsNamingErasedKeys: Long,
@@ -43,7 +46,8 @@ data class Reapplied(
  * Re-applies the erasure ledger at start (ADR 0056 decision 8, decision 5 of cr-backup-erasure-and-retention): every
  * listed object whose row exists is erased through its kind's own eraser — the one that erased it the first time — so a
  * restore of a capture older than an erasure does not bring it back; per item the last block or lift line wins; a case
- * the database lacks comes back as a stub. **Idempotent by construction**: every branch asks whether its row exists
+ * the database lacks comes back as a stub, and one it holds moves on to the state its last line names; a hold that ended
+ * after the capture ends again. **Idempotent by construction**: every branch asks whether its row exists
  * before it erases, so a line applied twice — a crash between an append and its stamp, a second start — changes nothing.
  * It never decrypts and never deletes an object: an erasure's blobs go onto the reclaim list as the eraser puts them
  * there, and the store reclaim stays the one deleter (ADR 0062).
@@ -63,6 +67,7 @@ class ErasureReapplication(
     private val sessions: SessionService,
     private val log: ModerationLog,
     private val measures: MeasureTargets,
+    private val holds: Holds,
     private val config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin.collections.List with @All (ScopePurge says why).
     @All applications: MutableList<ApplicationErasures>,
@@ -75,8 +80,9 @@ class ErasureReapplication(
         val erasedKeys = HashSet<String>()
 
         // Moderation first, so a block can name its case and an erasure below can end a block on what it erases.
-        val stubs = lines.filter { it.kind == ErasureKind.CASE.name }.associateBy { it.id }.values
-            .count { line -> tx { restoreCase(line, now) } }
+        val lastOfCase = lines.filter { it.kind == ErasureKind.CASE.name }.associateBy { it.id }.values
+        val stubs = lastOfCase.count { line -> tx { restoreCase(line, now) } }
+        val moved = lastOfCase.count { line -> tx { followCase(line) } }
         var reblocked = 0
         var relifted = 0
         lines.filter { it.kind == ErasureKind.BLOCK.name || it.kind == ErasureKind.LIFT.name }
@@ -95,6 +101,7 @@ class ErasureReapplication(
                     ErasureKind.NODE -> tx { line["scope"]?.let { nodes.eraseNodes(it, listOf(line.id)) > 0 } ?: false }
                     ErasureKind.SHARE -> tx { sharing.delete(line.id) }
                     ErasureKind.STORAGE_KEY -> { erasedKeys += line.id; false }
+                    ErasureKind.HOLD_ENDED -> tx { reendHold(line) }
                     // Applied above, last line per item or case.
                     ErasureKind.BLOCK, ErasureKind.LIFT, ErasureKind.CASE -> false
                 }
@@ -115,7 +122,43 @@ class ErasureReapplication(
         val naming = if (erasedKeys.isEmpty()) 0L else tx {
             erasedKeys.chunked(500).sumOf { BlobEntity.count("storageKey in ?1", it) }
         }
-        return Reapplied(lines.size, erased, reblocked, relifted, stubs, unknown, erasedKeys.size, naming)
+        return Reapplied(lines.size, erased, reblocked, relifted, stubs, moved, unknown, erasedKeys.size, naming)
+    }
+
+    /**
+     * A case the restored database holds in an earlier state than its last line names (a capture before its dismissal, its
+     * decision or its close): it moves on to that state — **forward only**, `OPEN` → `DECIDED` → `CLOSED`, closed where it
+     * was closed (the owner, 2026-10-19). Never back: a case reopened after the capture by an objection lost that objection
+     * with the capture, and a decided case with nothing to decide would never close. What decided it — a dismissal's note,
+     * a measure's statement — is lost with the capture, as a stub's sealed parts are; a measure comes back by its own line.
+     */
+    private fun followCase(line: LedgerLine): Boolean {
+        val target = line["state"]?.let { s -> CaseState.entries.firstOrNull { it.name == s } } ?: return false
+        val case = ModerationCaseEntity.findById(line.id, LockModeType.PESSIMISTIC_WRITE) ?: return false
+        val current = CaseState.entries.firstOrNull { it.name == case.state } ?: return false
+        if (target.ordinal <= current.ordinal) return false
+        case.state = target.name
+        case.openKey = null
+        case.noticeDue = null
+        if (target == CaseState.DECIDED && case.decidedAt == null) case.decidedAt = line.at
+        if (target == CaseState.CLOSED) {
+            case.closedAt = line.at
+            ModerationCaseEntity.getEntityManager().flush()
+            log.closeCase(case.id, line.at)
+        }
+        return true
+    }
+
+    /**
+     * The hold ended after the capture, and the restore brought it back with its end still ahead: it ends again — its
+     * snapshot and pins go — and its case logs the end it had (ADR 0093 § 4: a dismissed case's copy is not kept again).
+     */
+    private fun reendHold(line: LedgerLine): Boolean {
+        if (!holds.reend(line.id)) return false
+        line["case"]?.takeIf { ModerationCaseEntity.findById(it) != null }?.let { caseId ->
+            log.appendCase(ModerationEvent.HOLD_ENDED, line.at, caseId)
+        }
+        return true
     }
 
     /** A case the restored database lacks, as a stub: no report, no sealed content, its retention kept (decision 7). */
@@ -200,8 +243,12 @@ class ErasureReapplication(
         val target = line["target"] ?: return false
         val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, target)).firstResult() ?: return false
         row.liftedAt = line.at
+        // Who lifted it, as the line says — none when it ended with its erased target, which is how it reads then.
+        row.liftedBy = line["by"]
         row.activeKey = null
-        row.caseId?.let { log.appendCase(ModerationEvent.MEASURE_LIFTED, line.at, it, reason = kind.name, targetId = target) }
+        row.caseId?.let {
+            log.appendCase(ModerationEvent.MEASURE_LIFTED, line.at, it, moderatorId = row.liftedBy, reason = kind.name, targetId = target)
+        }
         return true
     }
 
