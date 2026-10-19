@@ -16,8 +16,13 @@
 
 ## Main flow
 
-1. **Open a Memory.** The gallery lists its media once (full list) and caches the media **plus** the node's
-   the node's item revision (the ETag; core's, `veyq_node_items_revision`) and the newest `(updatedAt, mediaId)` as its cursor.
+1. **Open a Memory.** The gallery lists its media **in pages** — each page at most a bounded number of items, the next
+   asked from the last item of the one before until the server says no more remain — and caches the media **plus** the
+   node's item revision (the ETag; core's, `veyq_node_items_revision`) as the **first page** answered it, and the last
+   item of the last page as its cursor. The first page's revision is read before its rows, so a change committed while
+   the client pages moves the revision past the cached one: the next poll is a `200` whose delta (or, for a removal,
+   whose id set) carries it — paging loses nothing ([ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md)
+   decision 6). A poll whose delta is longer than one page pages the same way.
 2. **While open, poll.** On an interval — **only while the tab is foregrounded** — the client re-requests
    `listNodeMedia` with `If-None-Match: <cached revision>`.
 3. **Nothing changed ⇒ `304`.** The client does nothing; no media query ran server-side.
