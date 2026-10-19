@@ -8,13 +8,14 @@ import { listTree } from '../../core/node/tree'
 import { createMemory } from './memoryNodes'
 import { setMemoryDate, unsealMemoryDate } from './memoryDate'
 import { setMemoryLocation, unsealMemoryLocation } from './memoryLocation'
-import { memoryPhotoSource, unsealMemoryCover, type MemoryCover } from './memoryCover'
-import { writeNodeCover } from '../../core/node/cover/coverWrite'
+import { unsealMemoryCover } from './memoryCover'
+import { uploadCoverBlob, writeNodeCover } from '../../core/node/cover/coverWrite'
+import { uploadedCover } from '../../core/node/cover/coverModel'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 
 /**
  * Opt-in live smoke for the Memory cover (cr-0072) — the one path the API-mocked unit tests cannot cover: the
- * sealed `cover` sub-object round-tripping through the **real** operator-blind backend (`updateNode` → `listNodes`)
+ * sealed `cover` sub-object round-tripping through the **real** operator-blind backend (`setNodeCover` → `listNodes`)
  * beside the sibling date + location, read back from the SERVER-returned `wrappedMeta`. Gated on `VEYQ_E2E=1`;
  * default `npm run check` skips it. The instance is cold-birthed over the real API by `src/test/e2eBootstrap.ts`,
  * so this needs a FRESH instance and no seeder.
@@ -48,11 +49,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
     // Not plain 'Teneriffa': nine base64-alphabet letters are a canary random ciphertext can contain (inbox #323)
     const location = { name: 'Teneriffa Süd', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
-    const cover = memoryPhotoSource.seal('smoke-media-id', { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }) as MemoryCover // the dialog's seam: the stored shape
+    const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
 
     let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaRevision: 0 })
     meta = await setMemoryLocation(scopeId, nodeId, memoryKey, location, meta)
-    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: meta, cover })
+    // A cover is set only by an upload: its blob sealed as it is (no decode here) and attached in the meta's own write.
+    const up = await uploadCoverBlob(scopeId, nodeId, memoryKey, new Blob([new Uint8Array(512).fill(9)]), { type: 'image/jpeg' })
+    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: meta, cover: uploadedCover(up.plan, crop), uploadId: up.uploadId })
 
     // All three sub-objects come back on the server-stored blob — the cover never clobbered the date/location.
     const withCover = await readBack()
@@ -62,20 +65,20 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     // point of recording the envelope rather than the asserted value.
     //
     // ONE named blind spot (ADR 0053 decision 5): the cover's `source` is dropped before recording. It is a
-    // reference, not sealed user content — `{ kind: 'media', mediaId }` points at a media row whose id lives in
-    // the DB legitimately, and an `{ kind: 'upload', ref }` source carries `ref.wrappedBlobKey`, base64
-    // ciphertext that IS present in `veyq_blob` and would be a false hit every run. Its `kind` discriminant is a
-    // closed-vocabulary leaf (`'media' | 'upload'`) with no confidentiality value, and `'media'` additionally
-    // collides verbatim with the Flyway `media` migration description — the one row a pristine data-only dump
-    // carries. Dropped here, at the recording site, with the reason written down — never as a silent filter in
-    // the recorder. `cover.crop` is all numbers and drops by type, so the cover contributes nothing after this.
+    // reference, not sealed user content — an `{ kind: 'upload', ref }` source carries a blob id that lives in the DB
+    // legitimately and `ref.wrappedBlobKey`, base64 ciphertext that IS present in `veyq_blob` and would be a false hit
+    // every run. Its `kind` discriminant is a closed-vocabulary leaf with no confidentiality value. Dropped here, at the
+    // recording site, with the reason written down — never as a silent filter in the recorder. `cover.crop` is all
+    // numbers and drops by type, so the cover contributes nothing after this.
     const envelope = unsealNodeMeta(memoryKey, { scopeId, nodeId }, withCover.wrappedMeta)
     if (envelope.cover && typeof envelope.cover === 'object') delete (envelope.cover as { source?: unknown }).source
     recordCanaries(envelope, (await listTree(scopeId, epochsOf(scopeKey))).map((n) => n.name))
 
     expect(unsealMemoryDate(scopeId, memoryKey, withCover)).toEqual(date)
     expect(unsealMemoryLocation(scopeId, memoryKey, withCover)).toMatchObject({ name: 'Teneriffa Süd', derivedMode: 'fixed' })
-    expect(unsealMemoryCover(scopeId, memoryKey, withCover)).toEqual(cover)
+    const read = unsealMemoryCover(scopeId, memoryKey, withCover)
+    expect(read?.source.ref.blobId).toBe(up.plan.blobId)
+    expect(read?.crop).toEqual(crop)
 
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
     // The live blob is at version 3 (three meta writes), and the server says so on the listing.

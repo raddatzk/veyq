@@ -3,8 +3,13 @@
 // for a video, the `BANNER_POSTER` slot (its first frame) - and the `banner` field of the node's sealed `wrappedMeta`
 // (core's `nodeMeta.ts`, purpose `node-meta`, bound to scope and node, ADR 0072) names them with how to frame them:
 //
-//   banner = { medium: 'image' | 'video', blob: Ref, poster?: Ref, type?: string, origin?: { mediaId },
-//              frame: 'fill' | 'fit', focal: { x, y }, alt?: string }   Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
+//   banner = { medium: 'image' | 'video', blob: Ref, poster?: Ref, type?: string, sha256?: string,
+//              frame: 'fill' | 'fit', focal: { x, y } }   Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
+//
+// `sha256` is the SHA-256 of the file the banner was made from (base64url, as `blob-meta` carries it): a video banner's
+// `BANNER` blob is that file as it is, so a gallery upload of the same file shares its stored object, and a gallery medium
+// whose original has the same digest is the picture the banner shows (the delete confirmation, ADR 0102 decision 7). A
+// stored banner's `origin` and `alt` (an older client's) are read by nobody and kept by every writer.
 //
 // A ref carries neither owner nor role: both are the node's and the slot's, taken from where the meta is read, never from
 // the sealed payload (ADR 0072), so a ref copied into another node's meta refuses to open there. Nor does it carry the
@@ -27,14 +32,13 @@ import type { BlobRef } from '../../../core/blob/types'
 export const BANNER_ROLE = 'BANNER'
 /** A video banner's poster slot - also the role its upload is started in. */
 export const BANNER_POSTER_ROLE = 'BANNER_POSTER'
-/** The description's bound (characters, as the export schema's `alt.maxLength`). */
-export const MAX_BANNER_ALT = 200
 /** A video banner's type when none (or a malformed one) is stored. */
 export const DEFAULT_VIDEO_TYPE = 'video/mp4'
 const VIDEO_TYPE = /^video\/[A-Za-z0-9.+-]{1,60}$/
 const videoType = (v: unknown): string => (typeof v === 'string' && VIDEO_TYPE.test(v) ? v : DEFAULT_VIDEO_TYPE)
-/** A description trimmed and cut to [MAX_BANNER_ALT] characters - code points, so no character is split in half. */
-export const boundAlt = (v: string | undefined): string => (v ? Array.from(v.trim()).slice(0, MAX_BANNER_ALT).join('') : '')
+/** A digest as `sha256` carries it: 32 bytes in base64url, no padding (the crypto suite's `blob-meta` rule). */
+const SHA256 = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/
+const digestOf = (v: unknown): string | undefined => (typeof v === 'string' && SHA256.test(v) ? v : undefined)
 
 export type BannerMedium = 'image' | 'video'
 /** `fill`: the medium covers the frame around the focal point; `fit`: the whole medium, its sides a blurred enlargement. */
@@ -50,12 +54,12 @@ export type Banner = {
   medium: BannerMedium
   blob: BlobRef
   poster?: BlobRef
-  /** A video's media type (the copied original's); absent for an image. */
+  /** A video's media type (the uploaded file's); absent for an image. */
   type?: string
-  origin?: { mediaId: string }
+  /** The SHA-256 of the file the banner was made from; absent for a banner written before it. */
+  sha256?: string
   frame: BannerFrame
   focal: FocalPoint
-  alt?: string
 }
 
 export const CENTRE: FocalPoint = { x: 0.5, y: 0.5 }
@@ -90,28 +94,26 @@ export function normalizeBannerRef(raw: unknown, nodeId: string, role: string): 
 /**
  * Read a `banner` field value (null: none, or a shape this client does not know). The medium and its ref are
  * mandatory; a video's poster is optional (a banner whose poster is gone still plays). `frame` falls back to `fill`,
- * the focal point to the centre, a description longer than its bound is cut to it.
+ * the focal point to the centre, a malformed digest is none.
  */
 export function normalizeBanner(raw: unknown, nodeId: string): Banner | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const b = raw as {
-    medium?: unknown; blob?: unknown; poster?: unknown; type?: unknown; origin?: unknown; frame?: unknown; focal?: unknown; alt?: unknown
+    medium?: unknown; blob?: unknown; poster?: unknown; type?: unknown; sha256?: unknown; frame?: unknown; focal?: unknown
   }
   if (b.medium !== 'image' && b.medium !== 'video') return null
   const blob = normalizeBannerRef(b.blob, nodeId, BANNER_ROLE)
   if (!blob) return null
   const poster = b.medium === 'video' ? normalizeBannerRef(b.poster, nodeId, BANNER_POSTER_ROLE) : null
-  const originId = (b.origin as { mediaId?: unknown } | null | undefined)?.mediaId
-  const alt = typeof b.alt === 'string' ? boundAlt(b.alt) : ''
+  const sha256 = digestOf(b.sha256)
   return {
     medium: b.medium,
     blob,
     ...(poster ? { poster } : {}),
     ...(b.medium === 'video' ? { type: videoType(b.type) } : {}),
-    ...(typeof originId === 'string' && originId ? { origin: { mediaId: originId } } : {}),
+    ...(sha256 ? { sha256 } : {}),
     frame: b.frame === 'fit' ? 'fit' : 'fill',
     focal: normalizeFocal(b.focal),
-    ...(alt ? { alt } : {}),
   }
 }
 
@@ -130,37 +132,35 @@ export function refShape(ref: BannerRefShape): BannerRefShape {
 }
 
 /** What the editor decided: everything but the bytes' refs. */
-export type BannerFraming = { frame: BannerFrame; focal: FocalPoint; alt?: string }
+export type BannerFraming = { frame: BannerFrame; focal: FocalPoint }
 
-/** The `banner` value to seal, in a fixed key order. `origin` only for a banner made from a gallery medium. */
+/** The `banner` value to seal, in a fixed key order. */
 export function sealedBanner(a: {
   medium: BannerMedium
   blob: BannerRefShape
   poster?: BannerRefShape | null
   /** A video's media type. */
   type?: string | null
-  origin?: string | null
+  /** The SHA-256 of the file the banner was made from (`sharedBlob.contentDigest`). */
+  sha256?: string | null
   framing: BannerFraming
 }): Record<string, unknown> {
-  const alt = boundAlt(a.framing.alt)
+  const sha256 = digestOf(a.sha256)
   return {
     medium: a.medium,
     blob: refShape(a.blob),
     ...(a.medium === 'video' && a.poster ? { poster: refShape(a.poster) } : {}),
     ...(a.medium === 'video' ? { type: videoType(a.type) } : {}),
-    ...(a.origin ? { origin: { mediaId: a.origin } } : {}),
+    ...(sha256 ? { sha256 } : {}),
     frame: a.framing.frame,
     focal: { x: round(a.framing.focal.x), y: round(a.framing.focal.y) },
-    ...(alt ? { alt } : {}),
   }
 }
 
-/** A re-frame of a stored banner: the same bytes, a new frame, focal point or description. Unknown fields kept. */
+/** A re-frame of a stored banner: the same bytes, a new frame or focal point. Every other field kept as stored. */
 export function reframedBanner(raw: unknown, framing: BannerFraming): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const { alt: _old, ...rest } = raw as Record<string, unknown>
-  const alt = boundAlt(framing.alt)
-  return { ...rest, frame: framing.frame, focal: { x: round(framing.focal.x), y: round(framing.focal.y) }, ...(alt ? { alt } : {}) }
+  return { ...(raw as Record<string, unknown>), frame: framing.frame, focal: { x: round(framing.focal.x), y: round(framing.focal.y) } }
 }
 
 /** Four decimals: a focal point needs no more (1/10,000 of the medium), and the meta's size is bounded. */

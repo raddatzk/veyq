@@ -1,14 +1,17 @@
 // A Memory's banner in a real browser (uc.memory.banner, ADR 0102): the browser pass cr-memory-banner's phase 4 names,
-// written as lane L1's spec and NOT YET RUN (the implementing session ran no stack; it waits for the V1 heavy stage).
+// written as lane L1's spec and NOT YET RUN (the implementing sessions ran no stack; it waits for the V1 heavy stage).
+// cr-cover-banner-upload-only-and-dedup edited it (not run either): the banner is set only by a file picked in its dialog,
+// has no description, and a file equal to a gallery medium shares that medium's stored object (ADR 0013 § 5).
 //
 // The owner creates a Memory and adds a landscape image, a portrait image and a video to it, then:
 //  - sets a landscape image as the banner from a file, moves the point that stays in view, and reads the frame at a wide
 //    and at a phone width (3:1 and 16:9, never taller than 35 % of the viewport); scrolls, and the tab row sticks under the
 //    top bar while the banner scrolls away;
-//  - makes the portrait photo of the gallery the banner: it fits, its sides blurred, and switches to fill;
-//  - makes the gallery's video the banner: its poster and a play button, no <video> and no read of the banner's video
-//    before the click; after it, the video plays from the media Service Worker and the presigns it asks for name the
-//    banner's own blob, never the gallery original's;
+//  - uploads the gallery's portrait photo again as the banner: nothing is uploaded (it shares the photo's PREVIEW), it
+//    fits, its sides blurred, and switches to fill;
+//  - uploads the gallery's video again as the banner: nothing is uploaded (it shares the video's ORIGINAL and PREVIEW),
+//    its poster and a play button, no <video> and no read of the banner's video before the click; after it, the video
+//    plays from the media Service Worker and the presigns it asks for name the banner's own blob row, never the gallery's;
 //  - opens the same Memory through a READ link: the banner is there, no banner action, and the tab row sticks at the top
 //    of a page with no top bar;
 //  - removes the banner.
@@ -27,8 +30,9 @@ test.describe.configure({ mode: 'serial' })
 const VIDEO = readFileSync(fileURLToPath(new URL('../../fixtures/testsrc2-6s-vp8.webm', import.meta.url)))
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Sommer am See ${stamp}`
-const description = `Der Steg im Abendlicht ${stamp}`
 
+/** The gallery's files, kept to upload the same bytes into the banner dialog again. */
+let portrait: { name: string; mimeType: string; buffer: Buffer }
 let member: Device
 let guest: Device
 let shareLink = ''
@@ -88,9 +92,10 @@ test('a Memory with a landscape photo, a portrait photo and a video', { tag: ['@
   await page.getByRole('button', { name: memoryName, exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: memoryName })).toBeVisible()
 
+  portrait = { name: recordTyped(`Turm ${stamp}.png`), mimeType: 'image/png', buffer: await drawnImage(page, 900, 1600) }
   const files = [
     { name: recordTyped(`Ufer ${stamp}.png`), mimeType: 'image/png', buffer: await drawnImage(page, 2400, 900) },
-    { name: recordTyped(`Turm ${stamp}.png`), mimeType: 'image/png', buffer: await drawnImage(page, 900, 1600) },
+    portrait,
     { name: recordTyped(`Wellen ${stamp}.webm`), mimeType: 'video/webm', buffer: VIDEO },
   ]
   const chooser = page.waitForEvent('filechooser')
@@ -114,11 +119,12 @@ test(
     await expect(stage).toBeVisible()
     const box = (await stage.boundingBox())!
     await stage.click({ position: { x: box.width * 0.8, y: box.height * 0.2 } }) // the marker: the point that stays in view
-    await dialog.getByLabel('Description').fill(recordTyped(description))
+    await expect(dialog.getByLabel('Description'), 'the banner has no description').toHaveCount(0)
     await dialog.getByRole('button', { name: 'Save banner' }).click()
     await expect(dialog).toBeHidden({ timeout: 60_000 })
 
-    await expect(banner(page).getByRole('img', { name: description })).toBeVisible({ timeout: 60_000 })
+    await expect(banner(page).locator('img.banner-frame-media')).toBeVisible({ timeout: 60_000 })
+    await expect(banner(page).locator('img.banner-frame-media'), 'decorative: the title follows it').toHaveAttribute('alt', '')
     const style = await banner(page).locator('img.banner-frame-media').getAttribute('style')
     expect(style).toMatch(/object-position: 8\d(\.\d+)?% 2\d(\.\d+)?%/)
     const wide = (await banner(page).boundingBox())!
@@ -146,15 +152,34 @@ test(
   },
 )
 
-test('a portrait photo of the gallery fits with blurred sides, and switches to fill', { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:gallery-source-is-a-copy'] }, async () => {
+/** The requests a save sends: any upload start, and the banner write's body. */
+function watchSave(page: Page) {
+  const uploads: string[] = []
+  const writes: string[] = []
+  const on = (r: Request) => {
+    const path = new URL(r.url()).pathname
+    if (r.method() === 'POST' && path.endsWith('/blob-uploads-batch')) uploads.push(r.postData() ?? '')
+    if (r.method() === 'PUT' && path.endsWith('/banner')) writes.push(r.postData() ?? '')
+  }
+  page.on('request', on)
+  return { uploads, writes, stop: () => page.off('request', on) }
+}
+
+test('the gallery\'s portrait photo, uploaded again, shares its preview, fits with blurred sides, and switches to fill', { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:upload-shares-an-equal-gallery-file'] }, async () => {
   const { page } = member
-  await page.getByRole('button', { name: 'Open item 2' }).click()
-  await page.getByRole('button', { name: 'Use as banner' }).click()
+  await expect(page.getByRole('button', { name: 'Use as banner' }), 'the gallery offers no way in').toHaveCount(0)
+  await page.getByRole('button', { name: 'Change banner', exact: true }).click()
   const dialog = bannerDialog(page)
+  const chooser = page.waitForEvent('filechooser')
+  await dialog.getByRole('button', { name: 'Choose an image or a video' }).click()
+  await (await chooser).setFiles(portrait)
   await expect(dialog.getByRole('button', { name: 'Fit' })).toHaveAttribute('aria-pressed', 'true')
+  const save = watchSave(page)
   await dialog.getByRole('button', { name: 'Save banner' }).click()
   await expect(dialog).toBeHidden({ timeout: 60_000 })
-  await page.keyboard.press('Escape')
+  save.stop()
+  expect(save.uploads, 'nothing uploaded: the photo is already stored').toEqual([])
+  expect(save.writes.join(' '), 'the banner is a row on the stored object').toContain('"shared"')
   await expect(banner(page).locator('.banner-frame-backdrop')).toHaveAttribute('aria-hidden', 'true')
 
   await page.getByRole('button', { name: 'Change banner', exact: true }).click()
@@ -165,8 +190,8 @@ test('a portrait photo of the gallery fits with blurred sides, and switches to f
 })
 
 test(
-  'the gallery video becomes the banner: its poster, nothing played before the click, then the banner\'s own blob',
-  { tag: ['@uc.memory.banner:video-poster-no-autoplay', '@uc.memory.banner:gallery-source-is-a-copy'] },
+  'the gallery\'s video, uploaded again, shares its stored object: its poster, nothing played before the click, then the banner\'s own row',
+  { tag: ['@uc.memory.banner:video-poster-no-autoplay', '@uc.memory.banner:upload-shares-an-equal-gallery-file'] },
   async () => {
     const { page } = member
     // the original's blob id, as the gallery's listing names it
@@ -176,11 +201,16 @@ test(
     const media = ((await (await listing).json()) as { media: { blobId: string; derivatives: unknown[] }[] }).media
     const originals = new Set(media.map((m) => m.blobId))
 
-    await page.getByRole('button', { name: 'Open item 3' }).click({ timeout: 60_000 })
-    await page.getByRole('button', { name: 'Use as banner' }).click()
+    await page.getByRole('button', { name: 'Change banner', exact: true }).click({ timeout: 60_000 })
+    const chooser = page.waitForEvent('filechooser')
+    await bannerDialog(page).getByRole('button', { name: 'Choose an image or a video' }).click()
+    await (await chooser).setFiles({ name: `Wellen ${stamp}.webm`, mimeType: 'video/webm', buffer: VIDEO })
+    const save = watchSave(page)
     await bannerDialog(page).getByRole('button', { name: 'Save banner' }).click()
     await expect(bannerDialog(page)).toBeHidden({ timeout: 90_000 })
-    await page.keyboard.press('Escape')
+    save.stop()
+    expect(save.uploads, 'nothing uploaded: the video and its poster are already stored').toEqual([])
+    expect(save.writes.join(' ')).toContain('"posterShared"')
 
     await page.goto(tenantOrigin())
     const presigns: string[] = []

@@ -10,7 +10,7 @@
 //     Emergency Kit Secret Key, unwrapped against the RESTORED server's key material);
 //   - FIRST, before any content: the candidate reports `configSecretState: OK` - the key that came with the backup is
 //     the one the restored rows were sealed for (Decision 4 of cr-upgrade-proof); written for the run's summary too;
-//   - Memories: the Memory's name, date, place and cover (its photo and crop), every photo's bytes, the chapter's;
+//   - Memories: the Memory's name, date, place and cover (its uploaded image and crop), every photo's bytes, the chapter's;
 //   - Depot: the folder's name, each file's name, sealed type and modified time, size and bytes;
 //   - the drop box: its name, each guest's folder (named after the guest) and the guest's files, as above;
 //   - the READ link, opened as its guest: the Memory's title and the bytes of what it serves.
@@ -32,7 +32,7 @@ import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { listMedia, openOriginal } from '../memory/media'
 import { unsealMemoryDate } from '../memory/memoryDate'
 import { unsealMemoryLocation } from '../memory/memoryLocation'
-import { memoryPhotoSource, unsealMemoryCover } from '../memory/memoryCover'
+import { unsealMemoryCover } from '../memory/memoryCover'
 import { openShareOriginal, resolveShare } from '../memory/share'
 import { filesApi } from '../depot/api'
 import { fetchFileContent, fileFacts } from '../depot/download'
@@ -79,8 +79,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - read', () => {
     expect(unsealMemoryDate(scopeId, memoryKey, memoryNode), 'the Memory date').toEqual(m.date)
     expect(unsealMemoryLocation(scopeId, memoryKey, memoryNode)?.name, 'the Memory place').toBe(m.place)
     const cover = unsealMemoryCover(scopeId, memoryKey, memoryNode)
-    expect(cover && memoryPhotoSource.idOf(cover), 'the Memory cover is still its photo').toBe(m.cover.mediaId)
-    expect(cover?.crop, 'the Memory cover crop').toEqual(m.cover.crop)
+    if (m.cover.mediaId) {
+      // A seed from before covers were set only by an upload named one of its photos: not migrated, it reads as no cover.
+      expect(cover, 'an older photo reference is no cover').toBeNull()
+    } else {
+      expect(cover?.source.ref.blobId, 'the Memory cover is still its uploaded image').toBe(m.cover.blobId)
+      expect(cover?.crop, 'the Memory cover crop').toEqual(m.cover.crop)
+    }
     items += 4
 
     const media = async (nodeId: string, key: Uint8Array, expected: typeof m.media, what: string) => {

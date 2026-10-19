@@ -64,7 +64,8 @@ function stored(n: number, size: number, ownerId: string, role: string, ownerKey
 }
 
 // The Memory's photo: a three-frame original and its two tiers. The chapter's: one frame, a thumbnail only.
-const ORIGINAL_META = { type: 'image/jpeg', name: 'IMG_0412.jpg', modifiedAt: 1_694_700_000_000 }
+// With its digest (`blob-meta` `sha256`, ADR 0013 § 5): a copy's original is the same bytes, so the digest is carried as it is.
+const ORIGINAL_META = { type: 'image/jpeg', name: 'IMG_0412.jpg', modifiedAt: 1_694_700_000_000, sha256: 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0' }
 const m1Original = stored(1, 2 * CHUNK_SIZE + 5, M1, 'ORIGINAL', memoryKey, ORIGINAL_META)
 const m1Thumb = stored(2, 900, M1, 'THUMBNAIL', memoryKey, { type: 'image/jpeg' })
 const m1Preview = stored(3, 4000, M1, 'PREVIEW', memoryKey, { type: 'image/jpeg' })
@@ -95,7 +96,8 @@ const LISTINGS: Record<string, unknown> = {
 }
 const EXIF: Record<string, string | null> = { [M1]: seal('media-exif', M1, memoryKey, M1_EXIF), [M2]: null }
 
-// The member's tree: Reisen/ ─ Lissabon (a Memory: date, place, uploaded cover) ─ Alfama (a chapter: its photo as cover).
+// The member's tree: Reisen/ ─ Lissabon (a Memory: date, place, uploaded cover) ─ Alfama (a chapter whose cover is an older
+// client's photo reference: read as no cover, so the copy carries none).
 const DATE = { mode: 'range', from: '2025-09-14', to: '2025-09-17' }
 const NODES: TreeNode[] = [
   treeNode({ id: FOLDER, kind: FOLDER_KIND, name: 'Reisen', parentId: null }),
@@ -209,7 +211,7 @@ afterEach(() => {
 })
 
 describe('a folder holding a Memory with a chapter, copied to the scope root, on the wire', () => {
-  it('writes new ids, keys and ciphertext only; uploads the tiers and facts it read by chunk, decoding nothing; keeps both covers', async () => {
+  it('writes new ids, keys and ciphertext only; uploads the tiers and facts it read by chunk, decoding nothing; keeps the uploaded cover', async () => {
     const { requests, uploads } = fakeServer()
     const decode = vi.fn(() => { throw new Error('a copy decodes nothing') })
     vi.stubGlobal('createImageBitmap', decode)
@@ -233,12 +235,13 @@ describe('a folder holding a Memory with a chapter, copied to the scope root, on
       const text = `${w.path} ${JSON.stringify(w.json ?? {})}`
       for (const original of originals) expect(text, `${w.method} ${w.path}`).not.toContain(original)
     }
-    // …and the reads: the two listings, the two EXIF tiers, the tree twice (each cover write reads its node), and every
-    // original blob presigned ONCE with each of its frames fetched ONCE - by chunk, never whole
+    // …and the reads: the two listings, the two EXIF tiers, the tree once (the one cover write reads its node - the
+    // chapter's photo reference is no cover), and every original blob presigned ONCE with each of its frames fetched ONCE -
+    // by chunk, never whole
     expect(requests.filter(isRead).map((r) => `${r.method} ${r.path}`).sort()).toEqual([
       `GET /api/scopes/${SCOPE}/nodes/${MEMORY}/media?limit=${MEDIA_PAGE_LIMIT}`, `GET /api/scopes/${SCOPE}/nodes/${CHAPTER}/media?limit=${MEDIA_PAGE_LIMIT}`,
       `GET /api/scopes/${SCOPE}/media/${M1}/exif`, `GET /api/scopes/${SCOPE}/media/${M2}/exif`,
-      `GET /api/scopes/${SCOPE}/nodes`, `GET /api/scopes/${SCOPE}/nodes`,
+      `GET /api/scopes/${SCOPE}/nodes`,
       ...all.map(() => `POST /api/scopes/${SCOPE}/blob-downloads-batch`),
       ...all.flatMap((b) => b.frames.map((_, i) => `GET /orig/${b.blobId}/${i}`)),
     ].sort())
@@ -303,15 +306,17 @@ describe('a folder holding a Memory with a chapter, copied to the scope root, on
     expect([c2.wrappedMeta, c2.wrappedExif]).toEqual([null, null])
     expect(writes.some((r) => r.path.includes('/meta')), 'no second pass: every fact was sealed at birth').toBe(false)
 
-    // --- the covers: the Memory's uploaded image copied as its blob (no re-encode), the chapter's photo by its new id ---
+    // --- the covers: the Memory's uploaded image copied as its blob (no re-encode); the chapter's photo reference is none ---
     const coverPut = writes.find((r) => r.method === 'PUT' && r.path === `/api/scopes/${SCOPE}/nodes/${memory.nodeId}/cover`)!.json!
     const c = uploaded(coverPut.uploadId as string, newMemoryKey, cover)
     expect(c.u).toMatchObject({ ownerId: memory.nodeId, role: 'COVER' })
     expect(Array.from(c.plain), 'the cover bytes as they were').toEqual(Array.from(cover.plain))
     const memoryCover = unsealNodeMeta(newMemoryKey, { scopeId: SCOPE, nodeId: memory.nodeId as string }, coverPut.wrappedMeta as string).cover as { source: { kind: string; ref: { blobId: string } }; crop: unknown }
     expect([memoryCover.source.kind, memoryCover.source.ref.blobId, memoryCover.crop]).toEqual(['upload', c.u.blobId, CROP])
-    const chapterPatch = writes.find((r) => r.method === 'PATCH' && r.path === `/api/scopes/${SCOPE}/nodes/${chapter.nodeId}`)!.json!
-    const chapterCover = unsealNodeMeta(newChapterKey, { scopeId: SCOPE, nodeId: chapter.nodeId as string }, chapterPatch.wrappedMeta as string).cover as { source: { kind: string; mediaId: string }; crop: unknown }
-    expect([chapterCover.source, chapterCover.crop]).toEqual([{ kind: 'media', mediaId: c2.mediaId }, CROP])
+    const chapterMetas = writes.filter((r) => r.path.startsWith(`/api/scopes/${SCOPE}/nodes/${chapter.nodeId}`) && typeof r.json?.wrappedMeta === 'string')
+    for (const r of chapterMetas) {
+      expect(unsealNodeMeta(newChapterKey, { scopeId: SCOPE, nodeId: chapter.nodeId as string }, r.json!.wrappedMeta as string).cover).toBeUndefined()
+    }
+    expect(writes.some((r) => r.path === `/api/scopes/${SCOPE}/nodes/${chapter.nodeId}/cover`), 'no cover for the chapter').toBe(false)
   })
 })

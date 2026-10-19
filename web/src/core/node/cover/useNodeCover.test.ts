@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // What core's cover composable does with the dialog (inbox #411, follow-up 2026-10-12): the state it opens the dialog with (the
-// crop restored from the sealed cover; the application's extra source, its crop and hint), and what each save intent writes - ONE
-// atomic write through `writeNodeCover` (the writer's own wire behaviour is `coverWrite.test.ts`), with the conflict rule of the
-// kind of save, and what the user hears when it fails. The registry is the real one (Memories' MEMORY carries the extra source, a
-// folder none); the upload and the write are mocked at their module boundary.
+// crop restored from the sealed cover), and what each save intent writes - ONE atomic write through `writeNodeCover` (the
+// writer's own wire behaviour is `coverWrite.test.ts`), with the conflict rule of the kind of save, and what the user hears when
+// it fails. An upload whose image the kind finds already stored (`KindCover.findStored`) is a shared row, nothing uploaded (ADR
+// 0013 § 5). The registry is the real one (Memories' MEMORY carries `findStored`, mocked at its module; a folder none); the
+// upload and the write are mocked at their module boundary.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -13,6 +14,7 @@ import { b64std } from '@veyq/crypto/base64'
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('../../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }) }))
 vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
+vi.mock('../../../features/memory/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
 vi.mock('./coverStore', async (orig) => ({
   ...(await orig<object>()),
   // The decrypted covers are `coverStore.test.ts`'s: here the store answers from a fixed map, the declared set from the sealed meta.
@@ -26,6 +28,8 @@ vi.mock('./coverStore', async (orig) => ({
 import { useNodeCover, type UseNodeCover } from './useNodeCover'
 import { uploadedCover, type CoverCrop, type LoadedCover } from './coverModel'
 import { uploadCoverImage, writeNodeCover, CoverStaleError } from './coverWrite'
+import { findStoredCover } from '../../../features/memory/storedMatch'
+import { planBlob, unwrapBlobKey } from '../../blob/transport'
 import { MetaConflictError, MetaUnreadableError } from '../sealedMetaWrite'
 import { treeStore } from '../treeStore'
 import { clearUploads } from '../../blob/queue'
@@ -52,6 +56,7 @@ const sealed = (nodeId: string, meta: object) =>
   b64std(v1.sealField({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, ...meta }))))
 const upload = (nodeId: string, blobId: string, c: CoverCrop = FULL) =>
   uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }, c)
+/** An older client's photo reference: read as no cover, carried untouched by every writer. */
 const photo = (mediaId: string, c: CoverCrop = FULL) => ({ source: { kind: 'media', mediaId }, crop: c })
 
 const FOLDER = treeNode({ id: 'f0000000-0000-4000-8000-000000000001', kind: FOLDER_KIND, name: 'Trips', parentId: null, metaRevision: 0 })
@@ -82,14 +87,15 @@ beforeEach(() => {
   loaded = new Map()
   declaredIds = new Set()
   vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 9, replaced: null })
+  vi.mocked(findStoredCover).mockResolvedValue(null)
   vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: FOLDER.id } })
 })
 
 describe('what the dialog opens with', () => {
-  it('a node with no cover: no cover to re-crop or remove, no source, no hint on a kind without one', () => {
+  it('a node with no cover: no cover to re-crop or remove', () => {
     const api = harness([FOLDER])
     api.open(FOLDER)
-    expect(api.editor.value).toMatchObject({ node: { id: FOLDER.id }, cover: null, existingSrc: null, source: null, hint: null })
+    expect(api.editor.value).toEqual({ node: expect.objectContaining({ id: FOLDER.id }), cover: null, existingSrc: null })
   })
 
   it('a node with a cover: its stored crop (from the sealed meta) and its decrypted image are what the dialog re-crops', () => {
@@ -107,29 +113,6 @@ describe('what the dialog opens with', () => {
     const api = harness([node])
     api.open(node)
     expect(api.editor.value).toMatchObject({ cover: { crop }, existingSrc: null })
-  })
-
-  it('the Memory\'s extra source arrives with its hint (translated from the key the application gave) and a fresh crop', () => {
-    const api = harness([MEMORY])
-    api.open(MEMORY, { source: { id: 'm-7', src: 'blob:thumb' } })
-    expect(api.editor.value!.hint).toBe(t('memory.cover.galleryHint'))
-    expect(api.editor.value!.source).toEqual({ id: 'm-7', src: 'blob:thumb', crop: null })
-  })
-
-  it('the extra source restores the stored crop only when that very photo already is the cover', () => {
-    const node = withMeta(MEMORY, { cover: photo('m-7', crop) })
-    declaredIds.add(node.id)
-    const api = harness([node])
-    api.open(node, { source: { id: 'm-7', src: 'blob:thumb' } })
-    expect(api.editor.value!.source!.crop).toEqual(crop)
-    api.open(node, { source: { id: 'm-8', src: 'blob:other' } })
-    expect(api.editor.value!.source!.crop, 'another photo is framed afresh').toBeNull()
-  })
-
-  it('a kind without an extra source ignores one it is handed (core offers only what the kind registered)', () => {
-    const api = harness([FOLDER])
-    api.open(FOLDER, { source: { id: 'm-7', src: 'blob:thumb' } })
-    expect(api.editor.value!.source).toBeNull()
   })
 
   it('close() drops the state', () => {
@@ -222,7 +205,7 @@ describe('what each intent writes', () => {
     expect(lastWrite().surfaceConflict).toBe(true)
   })
 
-  it('keep: a photo cover keeps its photo (the application\'s source value is carried untouched)', async () => {
+  it('keep: an older photo reference is carried untouched (the source stays as stored)', async () => {
     const node = withMeta(MEMORY, { cover: photo('m-7', crop) })
     const api = harness([node])
     api.save(node, { kind: 'keep', crop: FULL })
@@ -245,20 +228,33 @@ describe('what each intent writes', () => {
     expect(writeNodeCover).not.toHaveBeenCalled()
   })
 
-  it('media: the kind\'s extra source seals the photo - the exact stored shape - and a peer\'s change stops it', async () => {
+  it('upload: an image the kind finds stored is a new row on that blob - nothing uploaded, the K_blob wrapped for the cover', async () => {
+    // The Memory's medium's PREVIEW, under the Memory's key, owned by the medium.
+    const preview = planBlob(SCOPE, { ownerId: '33333333-3333-4333-8333-333333333333', role: 'PREVIEW' }, KEY, new Blob([new Uint8Array(40)]))
+    vi.mocked(findStoredCover).mockResolvedValueOnce({ key: KEY, ref: preview })
     const api = harness([MEMORY])
-    api.save(MEMORY, { kind: 'media', mediaId: 'm-7', crop })
+    api.save(MEMORY, { kind: 'upload', file, crop })
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    expect(JSON.stringify(lastWrite().cover)).toBe('{"source":{"kind":"media","mediaId":"m-7"},"crop":{"x":0.1,"y":0.2,"width":0.5,"height":0.28125}}')
-    expect(lastWrite().surfaceConflict).toBe(true)
-    expect(lastWrite().uploadId).toBeUndefined()
+    expect(findStoredCover).toHaveBeenCalledWith(expect.objectContaining({ scopeId: SCOPE, nodeId: MEMORY.id, nodeKey: KEY, file }))
+    expect(uploadCoverImage).not.toHaveBeenCalled()
+    const w = lastWrite()
+    expect(w.uploadId).toBeUndefined()
+    expect(w.shared).toMatchObject({ sourceBlobId: preview.blobId })
+    const ref = (w.cover as { source: { ref: { blobId: string; byteSize: number; wrappedBlobKey: string } } }).source.ref
+    expect(ref.blobId).toBe(w.shared!.blobId)
+    expect(ref.byteSize).toBe(preview.byteSize)
+    expect(unwrapBlobKey(SCOPE, KEY, { ...ref, ownerId: MEMORY.id, role: 'COVER' }), 'the same K_blob, bound to the cover').toEqual(preview.blobKey)
   })
 
-  it('media on a kind that registered no extra source writes nothing', async () => {
-    const api = harness([FOLDER])
-    api.save(FOLDER, { kind: 'media', mediaId: 'm-7', crop })
-    await flushPromises()
-    expect(writeNodeCover).not.toHaveBeenCalled()
+  it('upload: no stored match, or a failure to look, uploads as before; a kind without findStored never looks', async () => {
+    vi.mocked(findStoredCover).mockRejectedValueOnce(new Error('offline'))
+    const api = harness([MEMORY, FOLDER])
+    api.save(MEMORY, { kind: 'upload', file, crop })
+    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
+    expect(lastWrite()).toMatchObject({ uploadId: 'up-1', shared: undefined })
+    api.save(FOLDER, { kind: 'upload', file, crop })
+    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledTimes(2))
+    expect(findStoredCover).toHaveBeenCalledOnce()
   })
 
   it.each([
@@ -267,7 +263,7 @@ describe('what each intent writes', () => {
     ['a share guest', FOLDER, guestAccessOf(ShareRole.Read)],
   ])('%s: no intent writes anything', async (_what, node, access) => {
     const api = harness([node], access)
-    for (const intent of [{ kind: 'remove' }, { kind: 'keep', crop }, { kind: 'media', mediaId: 'm', crop }, { kind: 'upload', file, crop }] as const) api.save(node, intent)
+    for (const intent of [{ kind: 'remove' }, { kind: 'keep', crop }, { kind: 'upload', file, crop }] as const) api.save(node, intent)
     await flushPromises()
     expect(writeNodeCover).not.toHaveBeenCalled()
     expect(uploadCoverImage).not.toHaveBeenCalled()

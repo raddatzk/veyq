@@ -72,12 +72,12 @@ export function galleryFakeStore() {
         const mediaId = item.mediaId // the client-minted id every tier is sealed bound to
         media.push({
           mediaId,
-          originalUploadId: item.originalUploadId,
+          originalUploadId: item.originalUploadId!, // this fake takes uploads only: no shared original
           derivatives: item.derivatives ?? [],
           wrappedMeta: item.wrappedMeta ?? null,
           wrappedExif: item.wrappedExif ?? null,
         })
-        return { blobId: sessions.get(item.originalUploadId)!.blobId, mediaId, error: null }
+        return { blobId: sessions.get(item.originalUploadId!)!.blobId, mediaId, error: null }
       }),
     })),
     // cr-0107: the MediaListPage envelope (delta rows + both revisions + optional id-set). This fake always

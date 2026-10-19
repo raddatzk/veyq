@@ -161,7 +161,6 @@ function expectGuestOnly(w: Page) {
   for (const label of [
     t('share.share'), t('share.uploadRequest'), t('node.favorite'), t('node.unfavorite'), t('node.rename'), t('node.delete'),
     t('media.marks.mark'), t('media.marks.unmark'), t('memory.addChapter'), t('memory.banner.add'), t('memory.banner.change'),
-    t('memory.banner.useAsBanner'),
   ]) {
     expect(byLabel(w, label).exists(), label).toBe(false)
     expect(w.findAll('button').some((b) => b.text() === label), label).toBe(false)
@@ -257,7 +256,6 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
       expect(box.exists()).toBe(true)
       expect(box.find(`[aria-label="${t('media.download')}"]`).exists(), 'download').toBe(true)
       expect(box.find(`[aria-label="${t('media.delete')}"]`).exists(), 'the trash').toBe(false)
-      expect(box.find(`[aria-label="${t('memory.cover.setFromPhoto')}"]`).exists(), 'set as cover').toBe(false)
       expectGuestOnly(w)
       w.unmount()
     })
@@ -351,7 +349,6 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     click(w.find('[data-media-id="m-1"] button').element)
     await flushPromises()
     expect(trashIn(w.find('.media-lightbox')).exists(), "another's photo").toBe(false)
-    expect(w.find(`.media-lightbox [aria-label="${t('memory.cover.setFromPhoto')}"]`).exists(), 'set as cover').toBe(false)
     click(w.find(`.media-lightbox [aria-label="${t('media.close')}"]`).element)
     await flushPromises()
 
