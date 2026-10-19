@@ -77,7 +77,7 @@ const { t, locale } = useI18n()
 // Core's Report (uc.moderation.report) beside the heart and the copy, for whoever sees the file.
 const reportOn = useReportOffered()
 const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, props.access, props.node),
+  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
   ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
   ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
 ])

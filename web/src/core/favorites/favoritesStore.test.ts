@@ -43,8 +43,9 @@ describe('favoritesStore', () => {
   it('reverts the optimistic change when the write fails', async () => {
     vi.mocked(loadFavorites).mockResolvedValue(new Set())
     await loadFavoritesFor('s')
-    vi.mocked(saveFavorites).mockRejectedValue(new Error('network'))
-    await toggleFavorite('a', 's')
+    const network = new Error('network')
+    vi.mocked(saveFavorites).mockRejectedValue(network)
+    await expect(toggleFavorite('a', 's')).rejects.toBe(network) // rethrown, so the heart's owner says so (inbox #500)
     expect(saveFavorites).toHaveBeenCalledOnce() // the write was tried — so the revert is what reads false here
     expect(isFavorite('a')).toBe(false) // reverted to the pre-toggle state
   })

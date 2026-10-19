@@ -39,7 +39,8 @@ mine*. That request does not extend the existing object — it **collides** with
 
 The wall is real. But the number is not the defect — the curve under it is: at 500 favorites a *single* toggle
 re-uploads 25 KiB, long before anything fails. The column is `MEDIUMTEXT`, so storage is not the
-constraint; raising the cap only buys a larger per-toggle upload.
+constraint; raising the cap alone only buys a larger per-toggle upload (§4 says how the marks' cap rose with a smaller
+mark).
 
 ## Decision
 
@@ -55,8 +56,9 @@ constraint; raising the cap only buys a larger per-toggle upload.
 | owner | **core** (§10) | Memories |
 
 The typed single-envelope shape is **rejected**: one blob has one key, so it can serve only one audience.
-The pin's plaintext is a **bare id array**; the mark's is `{"tag", "ids"}`, the ids beside the self-tag that says
-whose they are (§9). Neither carries a `v` field: the versioning axis is the resource.
+The pin's plaintext is a **bare id array**; the mark's is `tag ‖ ids` — the 32-byte self-tag that says whose they are
+(§9), then each marked id's 16 raw bytes, distinct and ascending (`contracts/crypto/vectors/v1.json#item_mark_self`).
+Neither carries a `v` field: the versioning axis is the resource.
 
 **2. "The member's own key" means the master key, not an asymmetric seal to the identity key.**
 [ADR 0014](0014-group-scopes-and-governance.md) §7 names the *property* (private to the member, on every device
@@ -72,13 +74,24 @@ where the fallback survives. One seal, every scope. That is what makes the guara
 *a member's pins must not open with `K_SC` in hand* — in **any** scope, with no case exempted.
 
 **4. Item favorites are partitioned per node — and the partition key is chosen for what it does not leak.**
-One blob per **(member, scope, node)**, not per (member, scope). The ceiling becomes 1 257 ids *per Memory* (the
-table's 1 259, less the self-tag's fixed 61 bytes, §9), which is beyond a Memory's practical media count, and a toggle re-uploads only that Memory's set. Nothing
+One blob per **(member, scope, node)**, not per (member, scope), and a toggle re-uploads only that Memory's set. Nothing
 consumes item favorites outside a single gallery (§7), so nothing needs the scope-wide set.
 
-Three alternatives were rejected, and for the same reason each time — they pay for the fix in **metadata**:
+**The ceiling is a whole Memory's.** A mark is a media id's **16 raw bytes** beside the self-tag (§1), and the contract
+caps the blob at **262 144** base64 characters (the column is `MEDIUMTEXT`), so one member's marks in one Memory stop at
+**12 284** — every photo of a 10 000-photo Memory, the size the gallery is built for
+([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)). `measured` (inbox
+#500, `web/src/features/memory/itemFavorites.test.ts` through the real seal): 21⅓ base64 characters a mark; 1 258 and
+12 000 marks round-trip; 12 284 seal to 262 140 characters, and the 12 285th is refused by the client before any write,
+with a message at the heart. A toggle uploads about 27 KB at 1 258 marks and 256 KB at the ceiling. In the JSON form
+of the table above the ceiling was 1 257 — 12.6 % of such a Memory, reachable by one keen member, and the 1 258th
+was refused with a heart that sprang back silently; that is why the encoding changed, not the shape. The pin keeps the
+JSON form and the 65 536 cap: 1 259 pins in one scope's sidebar are past any list a person reads.
 
-- **A larger cap.** Fixes nothing: the per-toggle upload is the defect, and a larger cap enlarges it.
+Three alternatives were rejected; the last two because they pay for the fix in **metadata**:
+
+- **A larger cap alone.** It moves the wall and keeps 52 characters a mark on every toggle. The cap rose only together
+  with the 16-byte encoding, which cuts each mark to 21⅓.
 - **One row per favorited item, keyed by a blinded token.** Removes the ceiling and makes a toggle O(1), but
   hands the server a per-item write it can correlate, by timing, with the presigned GET for that same media
   moments earlier. That breaks the enabler's own postcondition — *the server never learns which Memories are

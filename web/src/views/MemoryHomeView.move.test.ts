@@ -22,7 +22,7 @@ vi.mock('../app/activeSpace', async () => {
   }
 })
 vi.mock('../core/favorites/favoritesStore', () => ({
-  favoritesStore: { loaded: true, ids: new Set<string>() }, loadFavoritesFor: vi.fn(), isFavorite: vi.fn(), toggleFavorite: vi.fn(),
+  favoritesStore: { loaded: true, ids: new Set<string>() }, loadFavoritesFor: vi.fn(), isFavorite: vi.fn(), toggleFavorite: vi.fn(async () => {}),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))

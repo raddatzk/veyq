@@ -60,7 +60,7 @@ const cover = useNodeCover(() => props.access, () => props.tree, () => [props.no
 // …and core's Report (uc.moderation.report), for whoever sees it.
 const reportOn = useReportOffered()
 const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, props.access, props.node),
+  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
   ...cover.headerActions(props.node),
   ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
   ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),

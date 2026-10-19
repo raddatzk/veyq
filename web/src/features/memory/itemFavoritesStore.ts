@@ -48,7 +48,9 @@ export async function loadItemFavoritesFor(
 }
 
 /**
- * Toggle the caller's mark on an item — optimistic, reverts on a failed write.
+ * Toggle the caller's mark on an item — optimistic; a write that does not land reverts AND rethrows, so the heart's
+ * owner says why (inbox #500: a heart that springs back without a word reads as a click that missed).
+ * `ItemMarksTooMany` is the one failure with its own message: the set is full, and trying again will not help.
  *
  * **Refused until the caller's own set has loaded for THIS node** (ADR 0077 point 5, inbox #274). The write
  * replaces the whole set, so a toggle before the load — or after a load that failed, which leaves `loaded` false
@@ -70,8 +72,9 @@ export async function toggleItemFavorite(
   itemFavoritesStore.marks = [...others, { own: true, ids: mine }]
   try {
     await saveItemFavorites(scopeId, nodeId, scopeKey, mine)
-  } catch {
+  } catch (e) {
     itemFavoritesStore.marks = before
+    throw e
   }
 }
 

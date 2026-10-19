@@ -39,7 +39,7 @@ vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
   isFavorite: vi.fn(() => false),
-  toggleFavorite: vi.fn(),
+  toggleFavorite: vi.fn(async () => {}),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 vi.mock('../core/node/treeStore', async () => {

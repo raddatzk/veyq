@@ -31,6 +31,7 @@ import { memoryRights } from '../rights'
 import { targetOf } from '../../../core/access'
 import { guestMemorySource, memberMemorySource } from '../source'
 import MemoryDetail from './MemoryDetail.vue'
+import { useToast } from '../../../shared/state/useToast'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -56,6 +57,7 @@ const itemMarkKey = computed<Uint8Array | null>(() => {
 })
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
 const { t } = useI18n()
+const toast = useToast()
 // Core's heart (inbox #409) and cover action (inbox #411): the same actions every kind's header gets; a guest's list is empty.
 // The cover DIALOG is core's too (`CoverEditor`, mounted below); the Memory only adds its extra source to it - a photo chosen
 // in the gallery lightbox (`coverFromPhoto`) - through its descriptor's `cover.extraSource`.
@@ -63,7 +65,7 @@ const cover = useNodeCover(() => props.access, () => props.tree, () => [props.no
 const reportOn = useReportOffered()
 // …and core's "Copy to…" (uc.platform.copy-node) beside the move, a member's, where this build copies the kind.
 const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, props.access, props.node),
+  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
   ...cover.headerActions(props.node),
   ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
   ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
