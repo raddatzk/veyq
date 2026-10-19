@@ -405,9 +405,9 @@ components:
           type: string
           description: The sealed facts.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLWZhY3Rz
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12456) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ServerOwnerStatementInput:
       type: object
@@ -480,9 +480,9 @@ components:
           type: string
           description: The sealed reference.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLXJlZmVyZW5jZQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12456) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AuthorityOrderRequest:
       type: object
@@ -606,7 +606,7 @@ components:
           type: string
           description: The authority's reference, sealed (`moderation-order` [epoch, orderId]).
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLXJlZmVyZW5jZQ==
         providerName:
           x-veyq-visibility: public

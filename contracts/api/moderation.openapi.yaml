@@ -650,8 +650,9 @@ paths:
         the target is refused (`409 moderation_measure_exists`).
 
         **Its statement of reasons is sent with it** (ADR 0093 § 7, uc.moderation.object-to-a-measure): the ground, and
-        the facts sealed to the moderation key and once more to each affected member's identity
-        (`getModerationStatementRecipients` lists them for this step and target). In the *club, organisation or company*
+        the facts sealed to the moderation key and once more under a fresh `K_facts`, which alone is wrapped to each
+        affected member's identity (`getModerationStatementRecipients` lists them for this step and target). The
+        statement's id is the client's, the facts bound to it (`409 id_taken` when it is not free). In the *club, organisation or company*
         operating mode the facts and the provision or clause relied on are required (`400 statement_facts_required`,
         `400 statement_provision_required`); in *private* both are optional. Facts
         sealed for other members than the server would tell are refused (`409 statement_recipients_changed`: read the
@@ -669,7 +670,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ModerationMeasureRequest" }
-            example: { kind: CONTENT, targetId: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b, statement: { ground: TERMS_BREACH, facts: { epoch: 2, sealedNote: c2VhbGVkLWZhY3Rz }, factsFor: [{ accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, sealedFacts: c2VhbGVkLWZhY3Rz }] } }
+            example: { kind: CONTENT, targetId: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b, statement: { statementId: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e, ground: TERMS_BREACH, facts: { epoch: 2, sealedNote: c2VhbGVkLWZhY3Rz }, sealedFacts: c2VhbGVkLW9uY2U=, factsKeyFor: [{ accountId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, wrappedFactsKey: d3JhcHBlZC1rZXk= }] } }
       responses:
         "201":
           description: Taken; the case as it now stands.
@@ -677,7 +678,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationCase" }
         "400":
-          description: "`invalid_request`, or `statement_facts_required` / `statement_provision_required` = the operating mode asks for the facts / the provision or clause relied on and none was given."
+          description: "`invalid_request` = the request was malformed, or the facts for the log, the facts sealed once and their wrapped keys do not come together; `statement_facts_required` / `statement_provision_required` = the operating mode asks for the facts / the provision or clause relied on and none was given."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_facts_required } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
@@ -690,11 +691,12 @@ paths:
           description: >
             `moderation_measure_exists` = this step is already in force on the target; `case_closed` = the case is
             closed; `moderation_epoch_changed` = the note or the facts are not sealed to the current epoch;
-            `statement_recipients_changed` = `factsFor` does not name exactly the members the statement goes to.
+            `statement_recipients_changed` = `factsKeyFor` does not name exactly the members the statement goes to;
+            `id_taken` = the statement's id is not free (ADR 0072 Decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
         "422":
-          description: "`statement_recipients_too_many` = with facts, the statement would reach more members than one step can seal them to (4,000, `ModerationStatementRecipients.accounts`); nobody is told only in part."
+          description: "`statement_recipients_too_many` = with facts, the statement would reach more members than one step can wrap their key to (6,000, `ModerationStatementRecipients.accounts`); nobody is told only in part."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_recipients_too_many } }
 
@@ -828,12 +830,13 @@ paths:
     get:
       tags: [moderation]
       operationId: getModerationStatementRecipients
-      summary: Who a step's statement of reasons would reach — the members to seal its facts to.
+      summary: Who a step's statement of reasons would reach — the members to wrap its facts' key to.
       description: >
         ADR 0093 § 7 (uc.moderation.object-to-a-measure step 2): for the step `kind` on its target, the members the
         statement goes to — the creator of a blocked link or of the link a blocked guest came through, the uploaders the
-        held rows name, every owner of the space on a content block — each with the identity public bundle to seal the
-        facts to (`moderation-facts` [caseId, accountId]), and how many guests it names (they are told nothing in veyq).
+        held rows name, every owner of the space on a content block — each with the identity public bundle to wrap the
+        facts' key to (`moderation-facts-key` [caseId, statementId, accountId]), and how many guests it names (they are
+        told nothing in veyq).
         The same target rules as `takeModerationMeasure` (`404 moderation_target_unknown`). The list is whole or refused
         (`422 statement_recipients_too_many`), never cut: a statement reaches every affected member. Key-proved over
         this case.
@@ -1971,7 +1974,7 @@ components:
             moderation key (`moderation-note` [epoch, caseId]) — an `ORDER_RECEIVED`'s is the order's reference
             (`moderation-order` [epoch, orderId], the order's id in `detail`); null when none.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: null
         until:
           x-veyq-visibility: time
@@ -1997,9 +2000,9 @@ components:
           type: string
           description: The sealed text.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLW5vdGU=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12456) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ModerationDecisionNote:
       type: object
@@ -2159,10 +2162,20 @@ components:
     ModerationStatementInput:
       type: object
       description: >
-        A measure's statement of reasons as the moderator gives it: the ground, and the facts sealed to the moderation
-        key (`moderation-note` [epoch, caseId]) and to each affected member (`moderation-facts` [caseId, accountId]).
-      required: [ground]
+        A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the ground, and the facts — sealed to
+        the moderation key for the log (`facts`, `moderation-note` [epoch, caseId]) and once more under a fresh `K_facts`
+        for the affected (`sealedFacts`), whose key alone is wrapped to each of them (`factsKeyFor`). The three come
+        together or not at all (`400 invalid_request`).
+      required: [statementId, ground]
       properties:
+        statementId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The statement's id, minted by the client — the facts sealed once and every wrap of their key are bound to it
+            (ADR 0072 Decision 3); one already taken is refused (`409 id_taken`).
+          example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e
         ground: { $ref: "#/components/schemas/ModerationGround" }
         provision: { $ref: "#/components/schemas/StatementProvision" }
         facts:
@@ -2170,17 +2183,27 @@ components:
             - $ref: "#/components/schemas/SealedModerationNote"
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
-        factsFor:
-          type: array
-          maxItems: 4000
+        sealedFacts:
+          type: [string, "null"]
           description: >
-            The facts sealed to each member `getModerationStatementRecipients` lists; empty without facts. The same bound
-            as that list, at most 4,000 — what one `takeModerationMeasure` body carries under the server's 10 MiB request limit at the
-            smallest sealed facts (about 2.3 KB a member); longer facts reach the body limit sooner. Past it the
-            facts cannot be sealed to every member in one step, and the server refuses rather than tell only some
+            The facts sealed once, under the statement's fresh `K_facts` (`moderation-statement-facts` [caseId,
+            statementId]) — the one copy every affected member opens; null without facts. At most the seal of 8,000 UTF-8
+            bytes: 1 + 12 + 8,192 + 16 bytes.
+          contentEncoding: base64
+          maxLength: 10964
+          example: c2VhbGVkLW9uY2U=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        factsKeyFor:
+          type: array
+          maxItems: 6000
+          description: >
+            `K_facts` wrapped to each member `getModerationStatementRecipients` lists; empty without facts. The same bound
+            as that list, at most 6,000 — what one `takeModerationMeasure` body carries under the server's 10 MiB request
+            limit at 1,645 bytes a member (`StatementRecipients.MAX_SEALED`), whatever the facts' length. Past it the key
+            cannot be wrapped to every member in one step, and the server refuses rather than tell only some
             (`422 statement_recipients_too_many`).
-          items: { $ref: "#/components/schemas/SealedFactsFor" }
-          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 4000)'
+          items: { $ref: "#/components/schemas/WrappedFactsKey" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 6000)'
         deferral:
           description: >
             An authority asked that the affected not be told yet (TCO Art. 11(3); ADR 0093 § 7 — the authority's switch,
@@ -2191,10 +2214,10 @@ components:
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
-    SealedFactsFor:
+    WrappedFactsKey:
       type: object
-      description: The facts sealed to one affected member's identity.
-      required: [accountId, sealedFacts]
+      description: A statement's `K_facts`, wrapped to one affected member's identity.
+      required: [accountId, wrappedFactsKey]
       properties:
         accountId:
           x-veyq-visibility: id
@@ -2202,13 +2225,15 @@ components:
           format: uuid
           description: The member.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
-        sealedFacts:
+        wrappedFactsKey:
           type: string
-          description: The facts, sealed to that member's identity (`moderation-facts` [caseId, accountId]).
+          description: >
+            `K_facts` sealed to that member's identity (`moderation-facts-key` [caseId, statementId, accountId]) — always
+            1 + 1,120 + 12 + 32 + 16 bytes.
           contentEncoding: base64
-          maxLength: 12000
-          example: c2VhbGVkLWZhY3Rz
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          maxLength: 1576
+          example: d3JhcHBlZC1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1576) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ModerationStatementRecipients:
       type: object
@@ -2217,12 +2242,12 @@ components:
       properties:
         accounts:
           type: array
-          maxItems: 4000
+          maxItems: 6000
           description: >
-            Every member the statement reaches, whole — never a page of them, at most 4,000 — what one `takeModerationMeasure` body carries under the server's 10 MiB request limit at the
-            smallest sealed facts (about 2.3 KB a member); longer facts reach the body limit sooner. Past it the
-            facts cannot be sealed to every member in one step, and the server refuses rather than tell only some
-            (`422 statement_recipients_too_many`).
+            Every member the statement reaches, whole — never a page of them, at most 6,000: what one
+            `takeModerationMeasure` body carries under the server's 10 MiB request limit at one wrapped facts key a member,
+            whatever the facts' length. Past it the key cannot be wrapped to every member in one step, and the server
+            refuses rather than tell only some (`422 statement_recipients_too_many`).
           items: { $ref: "#/components/schemas/StatementRecipient" }
         guests:
           x-veyq-visibility: measure
@@ -2233,7 +2258,7 @@ components:
 
     StatementRecipient:
       type: object
-      description: One affected member, with the identity to seal the facts to.
+      description: One affected member, with the identity to wrap the facts' key to.
       required: [accountId, identityPublicKey]
       properties:
         accountId:
@@ -2284,7 +2309,7 @@ components:
           type: string
           description: The facts sealed to the moderation key (`moderation-note` [epoch, caseId]); null without facts.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: null
         recipients:
           x-veyq-visibility: measure
@@ -2323,7 +2348,7 @@ components:
           type: string
           description: The objection, sealed to the moderation key (`moderation-objection` [epoch, statementId]).
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLW9iamVjdGlvbg==
         decidedAt:
           x-veyq-visibility: time
@@ -2391,7 +2416,7 @@ components:
       type: object
       description: >
         A statement of reasons as an affected member reads it (ADR 0093 § 7) — the clear fields the template is rendered
-        from, and the facts sealed to the reader. It names the host, never the moderator.
+        from, the facts sealed once, and their key wrapped to the reader. It names the host, never the moderator.
       required: [id, caseId, measureKind, targetId, ground, basis, form, sentAt, roles, inForce, endedWithTarget, canObject]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
@@ -2399,7 +2424,7 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The case — the facts' seal is bound to it.
+          description: The case — the facts' seal and the key's wrap are bound to it, and to the statement's `id`.
           example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
         measureKind:
           x-veyq-visibility: enum
@@ -2444,9 +2469,17 @@ components:
           example: [UPLOADER, SCOPE_OWNER]
         sealedFacts:
           type: string
-          description: The facts sealed to the reader's identity (`moderation-facts` [caseId, accountId]); null without facts.
+          description: The facts sealed once under the statement's `K_facts` (`moderation-statement-facts` [caseId, id]); null without facts.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 10964
+          example: null
+        wrappedFactsKey:
+          type: string
+          description: >
+            `K_facts` wrapped to the reader's identity (`moderation-facts-key` [caseId, id, accountId]); null without
+            facts.
+          contentEncoding: base64
+          maxLength: 1576
           example: null
         inForce:
           x-veyq-visibility: flag
@@ -2529,9 +2562,9 @@ components:
           type: string
           description: The objection (`moderation-objection` [epoch, statementId]).
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLW9iamVjdGlvbg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12456) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ModerationCaseOrigin:
       x-veyq-visibility: enum

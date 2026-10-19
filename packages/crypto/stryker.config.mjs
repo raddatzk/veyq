@@ -28,9 +28,11 @@ const config = {
   // NEXT line changes that verdict (emergencyKit.ts's `if (!m)` stayed "Survived" after `m[1]` moved out of the
   // try). Judge a local fix with `--force`, not with the incremental rerun.
   incremental: true,
-  // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-17, the
-  // report bundle joined as report.ts): 848 mutants, 846 killed, 2 timed out (the fingerprint's loop counters turned
-  // into endless loops), 0 survived, 0 without coverage, 6 ignored — 100.00 % on every file. report.ts's first run had
+  // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-19, a
+  // statement's facts sealed once and their key wrapped per member): 956 mutants, 947 killed, 3 timed out (the
+  // fingerprint's loop counters turned into endless loops, and `sharesPwToken`'s body emptied — a v1.ts mutant this
+  // change did not touch, which the 2026-10-17 run killed), 0 survived, 0 without coverage, 6 ignored — 100.00 % on
+  // every file. report.ts's first run had
   // 9 survivors: the refusal's message and name (asserted through `toThrow(new ReportInvalid(…))`, which builds the same
   // mutated text), boxed-String roles and refs, a UUID with a character before or after it, and a last field running
   // past the end (an earlier field's cut was caught by the next length read instead). The moderation key's run had 1

@@ -307,12 +307,19 @@ describe('moderation notes', () => {
 
 describe('statement facts and objections', () => {
   const sk = unhex(vectors.xwing.vectors[0].sk)
-  const facts = vectors.seal.asym['moderation-facts']
+  const facts = vectors.seal.sym['moderation-statement-facts']
+  const wrap = vectors.seal.asym['moderation-facts-key']
   const objection = vectors.seal.asym['moderation-objection']
   const OTHER = '7e8f9a0b-1c2d-4e3f-8a5b-6c7d8e9f0a1b'
+  const STATEMENT = '5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e'
 
-  it('open their vectors: the facts with the recipient identity, the objection with the epoch key', () => {
-    const f = v1.openModerationFacts(facts.context.caseId, facts.context.accountId, sk, unhex(facts.blob))
+  it('open their vectors: the key with the recipient identity, the facts with that key, the objection with the epoch key', () => {
+    // The two facts vectors are one statement: the wrap's plaintext is the facts seal's key.
+    expect(wrap.plaintext).toBe(facts.kek)
+    expect(wrap.context).toEqual({ ...facts.context, accountId: OTHER })
+    const k = v1.unwrapFactsKey(wrap.context.caseId, wrap.context.statementId, wrap.context.accountId, sk, unhex(wrap.blob))
+    expect(hex(k)).toBe(facts.kek)
+    const f = v1.openStatementFacts(facts.context.caseId, facts.context.statementId, k, unhex(facts.blob))
     expect(f).toBe("The photo shows a person's home address next to a threat.")
     expect(hex(v1.encodeModerationNote(f))).toBe(facts.plaintext)
     const o = v1.openObjection(objection.context.epoch, objection.context.statementId, sk, unhex(objection.blob))
@@ -320,19 +327,51 @@ describe('statement facts and objections', () => {
     expect(hex(v1.encodeModerationNote(o))).toBe(objection.plaintext)
   })
 
-  it('facts sealed to one member and case open for no other, and never as a note', () => {
+  it('a fresh facts key per call', () => {
+    const a = v1.newFactsKey()
+    expect(a).toHaveLength(REPORT.keyBytes)
+    expect(hex(a)).not.toBe(hex(v1.newFactsKey()))
+  })
+
+  it('facts sealed once for one statement open for no other statement or case, nor under another key, nor as a note', () => {
+    const k = key(9)
+    const sealed = v1.sealStatementFacts(ID, STATEMENT, k, 'what was found')
+    expect(v1.openStatementFacts(ID, STATEMENT, k, sealed)).toBe('what was found')
+    expect(() => v1.openStatementFacts(ID, ID, k, sealed)).toThrow(new v1.OpenRefused('moderation-statement-facts'))
+    expect(() => v1.openStatementFacts(STATEMENT, STATEMENT, k, sealed)).toThrow(new v1.OpenRefused('moderation-statement-facts'))
+    expect(() => v1.openStatementFacts(ID, STATEMENT, key(8), sealed)).toThrow(new v1.OpenRefused('moderation-statement-facts'))
+    expect(() => v1.open({ purpose: 'report-share', itemKind: 'NODE', itemId: ID }, k, sealed)).toThrow(
+      new v1.OpenRefused('report-share'),
+    )
+    expect(() => v1.sealStatementFacts(ID, STATEMENT, k, ' ')).toThrow(new ReportInvalid('note'))
+  })
+
+  it('a facts key wrapped to one member opens for no other member, statement or case, and never as a note', () => {
     const m = key(9)
     const identity = v1.moderationBundle(m).kem
     const secret = v1.moderationKemSecret(m)
-    const sealed = v1.sealModerationFacts(ID, OTHER, identity, 'what was found')
-    expect(v1.openModerationFacts(ID, OTHER, secret, sealed)).toBe('what was found')
-    expect(() => v1.openModerationFacts(ID, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-facts'))
-    expect(() => v1.openModerationFacts(ID.replace(/1$/, '2'), OTHER, secret, sealed)).toThrow(
-      new v1.OpenRefused('moderation-facts'),
-    )
-    expect(() => v1.openModerationFacts(ID, OTHER, sk, sealed)).toThrow(new v1.OpenRefused('moderation-facts'))
-    expect(() => v1.openModerationNote(0, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-note'))
-    expect(() => v1.sealModerationFacts(ID, OTHER, identity, ' ')).toThrow(new ReportInvalid('note'))
+    const k = key(5)
+    const wrapped = v1.wrapFactsKey(ID, STATEMENT, OTHER, identity, k)
+    expect(wrapped).toHaveLength(1 + 1120 + 12 + REPORT.keyBytes + 16)
+    expect(hex(v1.unwrapFactsKey(ID, STATEMENT, OTHER, secret, wrapped))).toBe(hex(k))
+    const refused = new v1.OpenRefused('moderation-facts-key')
+    expect(() => v1.unwrapFactsKey(ID, STATEMENT, ID, secret, wrapped)).toThrow(refused)
+    expect(() => v1.unwrapFactsKey(ID, ID, OTHER, secret, wrapped)).toThrow(refused)
+    expect(() => v1.unwrapFactsKey(STATEMENT, STATEMENT, OTHER, secret, wrapped)).toThrow(refused)
+    expect(() => v1.unwrapFactsKey(ID, STATEMENT, OTHER, sk, wrapped)).toThrow(refused)
+    expect(() => v1.openModerationNote(0, ID, secret, wrapped)).toThrow(new v1.OpenRefused('moderation-note'))
+  })
+
+  it('only a 32-byte key is sealed under, wrapped, or taken from a wrap', () => {
+    const m = key(9)
+    const identity = v1.moderationBundle(m).kem
+    for (const bad of [new Uint8Array(31), new Uint8Array(33), Array.from(key(1)) as unknown as Uint8Array]) {
+      expect(() => v1.sealStatementFacts(ID, STATEMENT, bad, 'what was found')).toThrow(new ReportInvalid('facts key'))
+      expect(() => v1.wrapFactsKey(ID, STATEMENT, OTHER, identity, bad)).toThrow(new ReportInvalid('facts key'))
+    }
+    // An authentic wrap of something that is not a 32-byte key — the seal's own context, a 31-byte payload.
+    const short = v1.sealTo({ purpose: 'moderation-facts-key', caseId: ID, statementId: STATEMENT, accountId: OTHER }, identity, new Uint8Array(31))
+    expect(() => v1.unwrapFactsKey(ID, STATEMENT, OTHER, v1.moderationKemSecret(m), short)).toThrow(new ReportInvalid('facts key'))
   })
 
   it('a note, the facts or an objection whose text is not UTF-8 is refused by name', () => {
@@ -400,5 +439,70 @@ describe("an authority's order reference", () => {
     expect(() => v1.openModerationNote(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-note'))
     expect(() => v1.openObjection(3, ID, secret, sealed)).toThrow(new v1.OpenRefused('moderation-objection'))
     expect(() => v1.sealOrderReference(3, ID, kem, ' ')).toThrow(new ReportInvalid('note'))
+  })
+})
+
+// Every sealed moderation text's `maxLength` in the contract is what this suite writes at the largest plaintext it
+// takes — 8,000 UTF-8 bytes, `REPORT.noteBytes` — measured from a real seal, not computed beside it: the client's half of
+// the boundary the backend's `SealedTextBoundsTest` holds from the server's side. A bound below it refuses at the server
+// what the client let the moderator write (the 7,677–8,000-byte texts once did, against 12,000); one above it is slack the
+// schema promises and no client sends.
+describe('every sealed moderation text fits its schema at its largest', () => {
+  const api = (spec: string) => readFileSync(resolve(here, `../../../contracts/api/${spec}`), 'utf8').split('\n')
+  /** [schema].[property]'s `maxLength`, read from the house layout (schema at 4 spaces, property at 8, keys at 10). */
+  const maxLength = (spec: string, schema: string, property: string): number => {
+    const lines = api(spec)
+    const start = lines.indexOf(`    ${schema}:`)
+    expect(start, `${spec} has ${schema}`).toBeGreaterThanOrEqual(0)
+    const end = lines.findIndex((l, i) => i > start && /^ {4}\S/.test(l))
+    const prop = lines.findIndex((l, i) => i > start && i < end && l === `        ${property}:`)
+    expect(prop, `${schema}.${property}`).toBeGreaterThan(start)
+    const found = lines.slice(prop + 1, end).findIndex((l) => /^ {8}\S/.test(l))
+    const keys = lines.slice(prop + 1, found < 0 ? end : prop + 1 + found)
+    const m = keys.map((l) => /^ {10}maxLength: (\d+)$/.exec(l)).find((x) => x !== null)
+    expect(m, `${schema}.${property} has a maxLength`).toBeTruthy()
+    return Number(m![1])
+  }
+  const largest = 'a'.repeat(REPORT.noteBytes)
+  const m = key(4)
+  const kem = v1.moderationBundle(m).kem
+  const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64')
+
+  it('a note-encoded seal to a public half: 12,456 characters at 8,000 bytes, in all eight fields that carry one', () => {
+    const sealed = b64(v1.sealModerationNote(1, ID, kem, largest))
+    expect(sealed).toHaveLength(12456)
+    // One byte fewer than the largest bucket still takes it; the bucket below is 512 bytes shorter.
+    expect(b64(v1.sealModerationNote(1, ID, kem, 'a'.repeat(REPORT.noteBytes - 323)))).toHaveLength(12456)
+    expect(b64(v1.sealModerationNote(1, ID, kem, 'a'.repeat(REPORT.noteBytes - 324)))).toHaveLength(11772)
+    // Every other note-encoded seal is the same envelope over the same plaintext.
+    for (const s of [
+      v1.sealObjection(1, ID, kem, largest),
+      v1.sealOrderReference(1, ID, kem, largest),
+      v1.sealStepFacts(1, ID, kem, largest),
+    ]) expect(b64(s)).toHaveLength(sealed.length)
+    for (const [spec, schema, property] of [
+      ['moderation.openapi.yaml', 'SealedModerationNote', 'sealedNote'],
+      ['moderation.openapi.yaml', 'ModerationCaseEvent', 'sealedText'],
+      ['moderation.openapi.yaml', 'ModerationMeasureStatement', 'sealedFacts'],
+      ['moderation.openapi.yaml', 'ModerationObjection', 'sealedObjection'],
+      ['moderation.openapi.yaml', 'ObjectionSubmission', 'sealedObjection'],
+      ['_common.openapi.yaml', 'SealedStepFacts', 'sealedFacts'],
+      ['_common.openapi.yaml', 'SealedOrderReference', 'sealedReference'],
+      ['_common.openapi.yaml', 'AuthorityOrder', 'sealedReference'],
+    ]) expect(maxLength(spec, schema, property), `${schema}.${property}`).toBe(sealed.length)
+  })
+
+  it("the facts sealed once: 10,964 characters at 8,000 bytes, in the measure's input and the member's read", () => {
+    const sealed = b64(v1.sealStatementFacts(ID, ID, key(3), largest))
+    expect(sealed).toHaveLength(10964)
+    expect(maxLength('moderation.openapi.yaml', 'ModerationStatementInput', 'sealedFacts')).toBe(sealed.length)
+    expect(maxLength('moderation.openapi.yaml', 'ModerationStatement', 'sealedFacts')).toBe(sealed.length)
+  })
+
+  it('a wrapped facts key: 1,576 characters whatever the facts, in the input and the read', () => {
+    const wrapped = b64(v1.wrapFactsKey(ID, ID, ID, kem, key(3)))
+    expect(wrapped).toHaveLength(1576)
+    expect(maxLength('moderation.openapi.yaml', 'WrappedFactsKey', 'wrappedFactsKey')).toBe(wrapped.length)
+    expect(maxLength('moderation.openapi.yaml', 'ModerationStatement', 'wrappedFactsKey')).toBe(wrapped.length)
   })
 })
