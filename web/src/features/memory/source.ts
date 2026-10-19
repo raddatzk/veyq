@@ -36,8 +36,6 @@ import {
   openOriginal,
   openBlob,
   chunkProvider,
-  unsealMeta,
-  originalBlobMeta,
   loadMediaExif,
   listMediaPages,
   deleteMedia,
@@ -61,6 +59,7 @@ import {
   type MediaMetaWrite,
   type MediaPage,
 } from './media'
+import { gridFrameOpener, openedBlobMeta, openedMeta } from './openedListing'
 import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { setMemoryParticipants } from './memoryParticipants'
@@ -255,12 +254,12 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       return { items: page.items, revision: { media: page.mediaRevision, delete: page.deleteRevision }, cursor: page.cursor }
     },
     loaders: {
-      grid: (item, key, signal) => openGrid(scope(), key, item, signal),
+      grid: (item, key, signal) => openGrid(scope(), key, item, signal, gridFrameOpener(scope(), key)),
       preview: (item, key) => openLightbox(scope(), key, item),
       original: (item, key) => openOriginal(scope(), key, item),
       chunk: (item, key) => chunkProvider(scope(), key, item),
-      meta: (item, key) => unsealMeta(scope(), key, item),
-      blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
+      meta: (item, key) => openedMeta(scope(), key, item),
+      blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       coverBlob: (ref, key) => openBlob(scope(), key, ref),
       exif: (item, key) => loadMediaExif(scope(), item, key),
     },
@@ -348,12 +347,12 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
       return { items: opened.items.filter((si) => si.nodeId === nodeId).map((si) => si.item), revision: null, cursor: null }
     },
     loaders: {
-      grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal),
+      grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal, gridFrameOpener(scope(), key)),
       preview: (item, key) => openShareLightbox(shareId, shareItem(item, key), access().pwToken),
       original: (item, key) => openShareOriginal(shareId, shareItem(item, key), access().pwToken),
       chunk: (item, key) => shareChunkProvider(shareId, shareItem(item, key), downloadRef(item), access().pwToken),
-      meta: (item, key) => unsealMeta(scope(), key, item),
-      blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
+      meta: (item, key) => openedMeta(scope(), key, item),
+      blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       // The node's uploaded cover through the gated share presign, which serves a cover blob below the share.
       coverBlob: (ref, key) => openBlobVia(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
     },

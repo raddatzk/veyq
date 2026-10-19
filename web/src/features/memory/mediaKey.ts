@@ -51,7 +51,7 @@ const opened = new WeakMap<Uint8Array, Map<string, Uint8Array>>()
 export function mediaKey(scopeId: string, memoryKey: Uint8Array, row: { uploader?: UploaderOrigin }): Uint8Array {
   const o = row.uploader
   if (!o) return memoryKey
-  const cacheKey = `${scopeId}|${o.nodeId}|${o.identityId}|${o.wrappedIdentityKey}|${o.sealedDropPrivateKey}`
+  const cacheKey = mediaKeyId(scopeId, row)
   let byOrigin = opened.get(memoryKey)
   const hit = byOrigin?.get(cacheKey)
   if (hit) return hit
@@ -60,6 +60,13 @@ export function mediaKey(scopeId: string, memoryKey: Uint8Array, row: { uploader
   if (!byOrigin) opened.set(memoryKey, (byOrigin = new Map()))
   byOrigin.set(cacheKey, kUp)
   return kUp
+}
+
+/** WHICH key [mediaKey] resolves a row to, as a name: `node` for `K_node`, else the uploader origin's own — so a holder
+ *  of several of a Memory's keys (the listing opener Worker, `openedListing.ts`) addresses each without the key. */
+export function mediaKeyId(scopeId: string, row: { uploader?: UploaderOrigin }): string {
+  const o = row.uploader
+  return o ? `${scopeId}|${o.nodeId}|${o.identityId}|${o.wrappedIdentityKey}|${o.sealedDropPrivateKey}` : 'node'
 }
 
 // The drop key itself is the platform's (`core/sharing/dropKey.ts`, one copy of the seals): re-exported under the names

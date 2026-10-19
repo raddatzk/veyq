@@ -18,8 +18,9 @@ import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
 import {
-  openBucketName, unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
+  openBucketName, mediaTypeOf, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
+import { openedBlobMeta, openedMeta } from '../openedListing'
 import { useMemoryView } from '../source'
 import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 import { refusalsByReason, sealedMediaName } from '../mediaRefusal'
@@ -199,17 +200,18 @@ const filteredMedia = computed<MediaItem[]>(() => {
   return props.media.filter((m) => m.bucketId === b.id)
 })
 
-// Unseal each tile's listed metadata once (operator-blind, under K_node) for the aspect ratio (cr-0059), and its
-// original's blob meta for the video signal (#105, the sealed type, inbox #397).
+// Each tile's listed metadata for the aspect ratio (cr-0059), and its original's blob meta for the video signal (#105,
+// the sealed type, inbox #397) — read from the opened listing the gallery already opened (`openedListing.ts`, once per
+// seal), never opened again here.
 const layoutItems = computed(() =>
   filteredMedia.value.map((m, index) => {
-    const meta = props.memoryKey ? unsealMeta(props.scopeId, props.memoryKey, m) : null
+    const meta = props.memoryKey ? openedMeta(props.scopeId, props.memoryKey, m) : null
     return {
       id: m.mediaId,
       aspectRatio: galleryDisplayAspectRatio(meta?.w, meta?.h),
       media: m,
       index,
-      isVideo: props.memoryKey ? isVideoMediaType(originalMediaType(props.scopeId, props.memoryKey, m)) : false,
+      isVideo: props.memoryKey ? isVideoMediaType(mediaTypeOf(openedBlobMeta(props.scopeId, props.memoryKey, m))) : false,
     }
   }),
 )

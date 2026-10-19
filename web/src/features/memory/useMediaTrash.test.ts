@@ -26,6 +26,7 @@ import { memberMemorySource } from './source'
 import { listTrash, restoreMedia, purgeMedia, openGrid, hasDerivatives, unsealMeta, originalBlobMeta, type MediaItem } from './media'
 import { realI18n, t } from '../../test/i18n'
 import { mediaItem, treeNode } from '../../test/models'
+import { closeListing } from './openedListing'
 
 const KEY = new Uint8Array(32)
 const item = (id: string): MediaItem => mediaItem({ mediaId: id })
@@ -65,6 +66,7 @@ function setup() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  closeListing('scope-1', KEY) // the opened listing keeps a value per seal; each case's mocks answer anew
   vi.mocked(restoreMedia).mockResolvedValue(undefined)
   vi.mocked(purgeMedia).mockResolvedValue(undefined)
   vi.mocked(openGrid).mockImplementation(async () => new Uint8Array([1, 2, 3]))

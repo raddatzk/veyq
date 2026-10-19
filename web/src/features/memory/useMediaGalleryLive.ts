@@ -7,7 +7,8 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
 import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
-import { hasDerivatives, unsealMeta, effectiveCapturedAt, type MediaItem } from './media'
+import { hasDerivatives, effectiveCapturedAt, type MediaItem } from './media'
+import { closeListing, openListing, openedMeta } from './openedListing'
 import type { MemorySource } from './source'
 import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
@@ -86,7 +87,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // The effective capture time of an item (from its sealed metadata tier), or undefined when it has none.
   function capturedAtOf(item: MediaItem): number | undefined {
     const key = ctx.memoryKey()
-    return key ? effectiveCapturedAt(unsealMeta(ctx.scopeId(), key, item)) : undefined
+    return key ? effectiveCapturedAt(openedMeta(ctx.scopeId(), key, item)) : undefined
   }
   const sortDirection = computed<1 | -1>(() => (sortDir.value === 'newest' ? -1 : 1))
   // The LISTED media in grid order — the lightbox's world: the `index` below and `openLightboxAt`'s snapshot are
@@ -102,7 +103,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     const key = ctx.memoryKey()
     const m = new Map<string, number>()
     for (const item of items.value) {
-      const dims = key ? unsealMeta(ctx.scopeId(), key, item) : null
+      const dims = key ? openedMeta(ctx.scopeId(), key, item) : null
       m.set(item.mediaId, galleryDisplayAspectRatio(dims?.w, dims?.h))
     }
     return m
@@ -257,6 +258,10 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     try {
       const page = await ctx.source.listMedia(nodeId) // every page of it
       if (ctx.node().id !== nodeId) return // navigated away while listing
+      // Every listed seal opened (in the listing opener Worker, once per seal) before a tile is placed: the order is the
+      // sealed capture time, so it is final only now (ADR 0105 decision 4) — until then the loading state stays.
+      await openListing(ctx.scopeId(), key, page.items)
+      if (ctx.node().id !== nodeId) return
       mergeItems(page.items)
       // The live poll continues from the FIRST page's revisions — read before its rows, so a change committed while the
       // pages came in moves the server past them and the next poll pulls it — and from the LAST page's cursor (ADR 0033
@@ -300,6 +305,10 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     },
     isCurrent: (nodeId) => ctx.node().id === nodeId,
     apply: async (change, cursor, signal) => {
+      // A delta's seals are opened before it is merged, so an inserted tile takes its final place at once.
+      const key = ctx.memoryKey()
+      if (key) await openListing(ctx.scopeId(), key, change.items)
+      if (signal.aborted || ctx.node().id !== cursor.key) return
       upsertItems(change.items, change.ids)
       mediaRevision.value = change.revision
       deleteRevision.value = change.deleteRevision
@@ -340,9 +349,17 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and
   // (re)start the poll — but only for an open, unlocked gallery (E4: no K_node ⇒ no polling).
+  // The opened listing this gallery holds (`openedListing.ts`): left when the gallery moves to another node's key or
+  // unmounts, so the listing opener Worker forgets that Memory's keys (ADR 0105 decision 3).
+  let holding: { scopeId: string; key: Uint8Array } | null = null
+  function hold(key: Uint8Array | null) {
+    if (holding && (holding.key !== key || holding.scopeId !== ctx.scopeId())) closeListing(holding.scopeId, holding.key)
+    holding = key ? { scopeId: ctx.scopeId(), key } : null
+  }
   watch(
     () => [ctx.node().id, ctx.memoryKey()] as const,
     () => {
+      hold(ctx.memoryKey())
       lightboxIndex.value = null
       pendingDelete.clear()
       undo.cancel() // a node switch drops any open undo window (the trash stands) + its toast
@@ -358,6 +375,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   onBeforeUnmount(() => {
     stopMediaRevisionPolling() // stop the live poll on close/navigate away
     pipeline.revokeAll()
+    hold(null)
     toast.dismissUndo() // drop any lingering undo-toast (the `useUndo` window tears itself down)
   })
 

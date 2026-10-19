@@ -9,7 +9,8 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
-import { hasDerivatives, unsealMeta, type MediaItem } from './media'
+import { hasDerivatives, type MediaItem } from './media'
+import { openListing, openedMeta } from './openedListing'
 import type { MemorySource } from './source'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { refusalsByReason, sealedMediaName } from './mediaRefusal'
@@ -100,6 +101,8 @@ export function useMediaTrash(ctx: MediaTrashContext) {
     try {
       const list = await trash.list(nodeId)
       if (ctx.node().id !== nodeId) return
+      await openListing(ctx.scopeId(), key, list) // the tiles' aspect, opened off the main thread before they are laid out
+      if (ctx.node().id !== nodeId) return
       trashedItems.value = list
       trashStatus.value = 'ready'
       await Promise.all(
@@ -133,7 +136,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   /** The trashed media as MediaGrid tiles — the same justified layout as the gallery (aspect from the sealed dims). */
   const trashLayoutItems = computed(() =>
     trashedItems.value.map((m, index) => {
-      const dims = ctx.memoryKey() ? unsealMeta(ctx.scopeId(), ctx.memoryKey()!, m) : null
+      const dims = ctx.memoryKey() ? openedMeta(ctx.scopeId(), ctx.memoryKey()!, m) : null
       return { id: m.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h), media: m, index }
     }),
   )
