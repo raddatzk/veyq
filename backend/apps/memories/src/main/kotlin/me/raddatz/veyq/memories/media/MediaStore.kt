@@ -309,16 +309,24 @@ class MediaStore(
     fun purgeMediaRows(media: MediaEntity) {
         val derivatives = MediaDerivativeEntity.find("mediaId = ?1", media.id).list()
         val blobIds = listOf(media.blobId) + derivatives.map { it.blobId }
+        // Its objects, read while its rows still name them: one another row of the node keeps (a cover or a banner sharing
+        // it, ADR 0013 § 5) is what a measure on the medium hangs on once the medium is gone (below).
+        val keys = blobIds.mapNotNull { BlobEntity.findById(it)?.storageKey }.toSet()
         derivatives.forEach { MediaDerivativeEntity.deleteById(it.id) } // FK: the referencing rows go first
         MediaEntity.deleteById(media.id)
         blobIds.forEach { blobs.deleteBlobRow(it) }
+        val surviving = keys.filter { BlobEntity.count("storageKey", it) > 0 }.toSet()
         guestWriteRecords.forget(listOf(media.id)) // a guest's upload record names the medium: it goes with it
         // The erasure ledger's line (ADR 0056 decision 8): a guest's delete of its own upload leaves no trash to re-fire,
         // and a capture older than any of these brings the medium back.
         ledger.erasedByApplication(MemoriesErasures.Kind.MEDIA.name, media.id, media.scopeId)
         // A content block on the medium ends with it (ADR 0093 § 6, GDPR Art. 5(1)(e)) — it would otherwise stand on nothing
         // and hold its case's records forever. After the row's delete, which it flushes (MeasureTargets.erased).
-        measures.erased(listOf(BlockKind.CONTENT_ITEM), listOf(media.id))
+        // ... unless another row still holds its object: then the measure hangs on that object (owner 2026-10-19).
+        measures.erased(
+            listOf(BlockKind.CONTENT_ITEM), listOf(media.id),
+            holding = if (surviving.isEmpty()) emptyMap() else mapOf(media.id to surviving),
+        )
     }
 
     /**

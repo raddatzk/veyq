@@ -209,7 +209,9 @@ Published for readers outside the project in [What the server sees](../../site/s
 - That the node's meta changed and who wrote it last (`meta_editor_*`) — not that the banner was the part that changed.
 - When it plays: ADR 0047's per-chunk fetch pattern, as for any played video.
 - **Never:** the focal point, fit or fill, a pixel or a frame, and no fetch on opening the Memory names a medium. A
-  content block on a gallery medium reaches a banner row on the same stored object (the server serves neither); the
+  content block on a gallery medium reaches a banner row on the same stored object (the server serves neither), and
+  hangs on that object when the medium is erased - the banner stays refused until its own removal or a moderator's lift
+  ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 6); the
   banner is reported with its Memory (a `NODE` report, whose hold copies the Memory's attachment rows and pins their
   blobs).
 

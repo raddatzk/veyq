@@ -237,6 +237,61 @@ class SharedBlobSliceTest {
         assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, cover), "the same bytes under the cover's id")
     }
 
+    /**
+     * A block hangs on the stored object (owner 2026-10-19, ADR 0093 § 6): erasing the blocked medium does not end its
+     * measure while the banner still holds its objects - the banner stays refused - and the measure ends with the object's
+     * last row; a moderator's lift serves the banner again. Bites: `purgeMediaRows` handing no `holding` reddens the first
+     * half (the measure ends with the medium, the banner is served); `deleteBlobRow` not calling `objectsGone` reddens the
+     * second (the measure stands on nothing).
+     */
+    @Test
+    fun aBlockOnAnErasedMediumHangsOnTheBannersObjectUntilItsLastRowGoes() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val m = medium(userId, scopeId, memory)
+        val banner = UUID.randomUUID().toString()
+        val poster = UUID.randomUUID().toString()
+        setBanner(userId, scopeId, memory, shared(m.original.blobId, banner), shared(m.preview.blobId, poster)).statusCode(204)
+        block(scopeId, m.mediaId)
+        assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, banner))
+
+        trashAndPurge(userId, scopeId, m.mediaId)
+        QuarkusTransaction.requiringNew().run {
+            val row = ModerationBlockEntity.find("targetId", m.mediaId).singleResult()
+            assertTrue(row.activeKey != null, "the measure stands while the banner holds the medium's objects")
+            assertEquals(setOf(m.original.storageKey, m.preview.storageKey), row.heldKeys)
+        }
+        assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, banner), "the banner stays refused")
+        assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, poster))
+
+        BannerKit.remove(userId, scopeId, memory, banner, poster, metaRevision = 1).statusCode(204)
+        QuarkusTransaction.requiringNew().run {
+            val row = ModerationBlockEntity.find("targetId", m.mediaId).singleResult()
+            assertEquals(null, row.activeKey, "the object's last row went: the measure ends with it")
+            assertTrue(row.liftedAt != null && row.liftedBy == null, "ended with its target, lifted by no one")
+        }
+    }
+
+    @Test
+    fun aLiftedMeasureServesTheBannerAgain() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val m = medium(userId, scopeId, memory)
+        val banner = UUID.randomUUID().toString()
+        setBanner(userId, scopeId, memory, shared(m.original.blobId, banner), shared(m.preview.blobId)).statusCode(204)
+        block(scopeId, m.mediaId)
+        trashAndPurge(userId, scopeId, m.mediaId)
+        assertEquals("blocked_by_operator", CoverKit.downloadError(userId, scopeId, banner))
+
+        // A moderator's lift, as CaseDecisions writes it: the active key cleared, the lift dated and signed.
+        QuarkusTransaction.requiringNew().run {
+            ModerationBlockEntity.find("targetId", m.mediaId).singleResult().apply {
+                activeKey = null; liftedAt = Instant.now(); liftedBy = UUID.randomUUID().toString()
+            }
+        }
+        assertEquals("store_unavailable", CoverKit.downloadError(userId, scopeId, banner), "lifted: the banner is served")
+    }
+
     @Test
     fun quotaCountsAnObjectOnce() {
         val s = seedMemberScope()

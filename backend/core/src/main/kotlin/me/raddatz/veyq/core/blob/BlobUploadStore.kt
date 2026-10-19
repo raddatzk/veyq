@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.blob
 
 import me.raddatz.veyq.core.blobstore.StoreObjectRef
 import me.raddatz.veyq.core.blobstore.StoreReclaimStore
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -16,7 +17,7 @@ import java.util.UUID
  * caller's `ScopeAccess` gate.
  */
 @ApplicationScoped
-class BlobUploadStore(private val reclaim: StoreReclaimStore) {
+class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measures: MeasureTargets) {
 
     /** Is the client-minted [blobId] already a blob, or promised to another open session — in any scope? */
     fun blobIdTaken(blobId: String): Boolean =
@@ -166,7 +167,11 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore) {
         val onObject = BlobEntity.find("storageKey = ?1 order by id", blob.storageKey)
             .withLock(LockModeType.PESSIMISTIC_WRITE).list()
         if (onObject.none { it.id == blob.id }) return // deleted by a peer that committed while this waited
-        if (onObject.none { it.id != blob.id }) reclaim.record(blob.storageKey, blob.chunkCount)
+        if (onObject.none { it.id != blob.id }) {
+            reclaim.record(blob.storageKey, blob.chunkCount)
+            // The object's last row: a measure that hangs on it since its item was erased ends now (ADR 0093 § 6).
+            measures.objectsGone(listOf(blob.storageKey))
+        }
         BlobEntity.deleteById(blob.id)
     }
 

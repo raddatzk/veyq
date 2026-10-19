@@ -244,8 +244,8 @@ the new slot is a **second blob row on the same stored object** instead of a sec
   reclaim only when its row is the last - deciding under the row locks of every row on the object - and the reclaim
   sweep's selection (`StoreReclaimStore.due`) skips a key a blob row still names, so a path that records a shared key
   directly leaks a record, never deletes a live object. A space's erasure records each key once; the hold pins each
-  key once; the tenant quota counts each object once; a content block reaches every row on the blocked object
-  (ADR 0093 § 6). The reconcile's claims, the backup's `blob_index` and the erasure ledger's `STORAGE_KEY` already key
+  key once; the tenant quota counts each object once; a content block reaches every row on the blocked object and
+  hangs on it once its item is erased, ending with the object's last row or a lift (ADR 0093 § 6). The reconcile's claims, the backup's `blob_index` and the erasure ledger's `STORAGE_KEY` already key
   on the storage key.
 - **What the operator learns:** which existing blob a new row shares - so which medium a cover or a banner shows, or
   which gallery video is the banner. Accepted (inbox #505, [ADR 0102](0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)

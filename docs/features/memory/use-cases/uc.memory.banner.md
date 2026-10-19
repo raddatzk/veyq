@@ -123,7 +123,8 @@ Contributions, Trash) **sticks** below the app's top bar (the compact header on 
   reclaim record per storage key; copies already loaded in other viewers' browsers and unexpired presigned URLs are beyond
   the owner's reach.
 - **Reported with its Memory.** A banner is reported by reporting the Memory; a content block on a gallery medium
-  reaches a banner row on the same stored object.
+  reaches a banner row on the same stored object, and keeps refusing it after the medium is deleted, until the banner is
+  removed or the block lifted (ADR 0093 § 6).
 - **An equal file is stored once.** A video that is both the banner and a gallery medium costs its size once; a banner
   file the gallery does not hold costs its own size.
 
