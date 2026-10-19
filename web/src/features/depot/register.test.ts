@@ -85,7 +85,6 @@ describe('registerDepot', () => {
       cover: {}, // a drop box carries a cover (inbox #411)
       shareable: true,
       detail: DropBoxDetail,
-      liveDetail: true, // its page is tree rows: the host keeps it live (owner decision 2026-10-17)
       deleteTitle: 'depot.dropBox.delete',
       deleteCopy: 'depot.dropBox.deleteConfirm',
       nounWithArticle: 'depot.dropBox.aDropBox',

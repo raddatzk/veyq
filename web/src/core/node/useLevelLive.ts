@@ -1,5 +1,6 @@
-// The level view's live refresh (inbox #408): while a folder level is on screen, pick up what others changed — a share
-// guest's upload into the folder, a peer's new Memory or folder — without a reload. Core's, host-side: the HOST owns
+// The level view's live refresh (inbox #408): while a page of the tree is on screen — a folder level, or an opened node's
+// page (inbox #503) — pick up what others changed — a share guest's upload into the folder, a peer's new Memory or folder,
+// a moderator's block of the node on screen — without a reload. Core's, host-side: the HOST owns
 // where the level's tree comes from (the member's `treeStore`, the guest's re-resolve), so it passes the one read;
 // this composable owns the lifecycle and the cadence, and the level hands the resulting `ticks` on to its row sources.
 //
@@ -19,8 +20,9 @@ import { createLivePoller, type LivePollerOptions } from '../../shared/state/liv
 export const LIVE_POLL: LivePollerOptions = { intervalMs: 5_000, maxBackoffMs: 120_000, jitter: 0.2, minGapMs: 2_000 }
 
 export interface LevelLiveOptions {
-  /** Whether a folder level is on screen now, or an opened node's page drawn from the tree (`KindDescriptor.liveDetail`,
-   *  Depot's drop box): polls only then — not on any other detail, nor on a state. */
+  /** Whether a page of the tree is on screen now — a folder level, or an opened node's page of any kind (inbox #503: a
+   *  block of the node or of a folder above it reaches the page only through this read) — and not a state or another
+   *  page: polls only then. */
   active: () => boolean
   /** The host's "do not refresh over this": a dialog is open, a write is in flight. */
   paused: () => boolean

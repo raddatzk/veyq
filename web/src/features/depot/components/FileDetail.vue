@@ -135,7 +135,7 @@ async function loadBlob(): Promise<void> {
     if (mine === loads) blob.value = undefined // download stays unavailable until the next read
   }
 }
-watch(() => [source.listKey(), props.node.id], () => void loadBlob(), { immediate: true })
+watch([() => source.listKey(), () => props.node.id], () => void loadBlob(), { immediate: true }) // one by one: a re-read tree replaces the node object
 
 /** The scope's current members as read for `key` (a member's key asks for them; a failed read is null and names nobody). */
 const people = ref<{ key: string | null; byId: ReadonlyMap<string, Person> | null }>({ key: null, byId: null })

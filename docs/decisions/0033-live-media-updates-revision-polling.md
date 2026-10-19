@@ -1,6 +1,7 @@
 # ADR 0033 — Live item lists: a per-node revision counter + conditional GET + keyset delta, short-polled
 
-- Status: Accepted (decision 6, the list in pages, and decision 3's keyset on a position: 2026-10-19, `cr-gallery-list-paging`; decision 7, a guest's poll: 2026-10-19, inbox #497)
+- Status: Accepted (decision 6, the list in pages, and decision 3's keyset on a position: 2026-10-19, `cr-gallery-list-paging`; decision 7, a guest's poll: 2026-10-19, inbox #497; a node block is the tree's signal, not this one's: 2026-10-19,
+  inbox #503)
 - Date: 2026-07-09
 
 ## Context
@@ -203,7 +204,10 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   galleries), so a **per-node** revision suffices. A Memory+chapters **subtree** aggregation (inbox #16) would
   need a subtree-max revision — **out of scope**, a later slice. The scope's *node list* is a different signal
   ([ADR 0081](0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)); this one covers the records inside
-  one node.
+  one node. A moderator's block of an **item** moves this revision; a block of the **node**, or of a folder above it,
+  moves the scope's tree revision only, so a member's gallery poll stays a `304` and the open Memory learns it through
+  the host's tree poll, which runs on every opened node's page (ADR 0081 decision 5, inbox #503). A guest's tag, a digest
+  of the rows (decision 7), carries both.
 - **Lock order, and why the table sits where it does.** `bump` runs after the writer's record rows and takes **no scope
   lock** (unlike ADR 0081's `bumpTree`: gallery writers lock a media row, not the scope), so the first-bump insert is
   decided under the **node row's** lock with the UPDATE asked again beneath it — `record rows -> node row -> revision

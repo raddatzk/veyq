@@ -29,7 +29,7 @@ import { setBreadcrumb } from '../app/breadcrumb'
 import { treeStore, loadTree, pollTree } from '../core/node/treeStore'
 import { useLevelLive } from '../core/node/useLevelLive'
 import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/browse'
-import { nodeContentKey, restoreNode } from '../core/node/tree'
+import { nodeContentKey, restoreNode, sameKeyOr } from '../core/node/tree'
 import { useTrashUndo } from '../core/node/trashUndo'
 import { parseHash, resolveSlugPath, hashForNode, personHash, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
@@ -80,7 +80,23 @@ const currentScope = computed(() => parseHash(route.hash).scope)
 const place = computed(() => parseHash(route.hash))
 // The path (application segment included) and its trailing slash resolve together: `…/report` is the file, `…/report/` the folder.
 const resolved = computed(() => resolveSlugPath(treeStore.nodes, place.value.segments, place.value.folder))
-const currentNodeId = computed(() => (typeof resolved.value === 'string' ? resolved.value : null))
+// The node on screen is the one the fragment resolved to, and it STAYS while the fragment stays: a re-read of the tree
+// under an unchanged fragment (a live poll that brought a peer's rename or move of it, or of a folder above it; this tab's
+// own write, before `stayOn`) keeps it on screen as long as it is in the tree, and the fragment follows it below — never
+// a collapse to the scope root and back in between, which would unmount an open Memory and reload its gallery. A
+// fragment the member navigates to resolves as ever (a new one that names nothing is the scope root), and a node gone
+// from the tree (trashed elsewhere) is left to the resolve.
+const onScreen = computed<{ hash: string; id: string | null }>((previous) => {
+  if (previous?.id && previous.hash === route.hash && nodeById(treeStore.nodes, previous.id)) return previous
+  return { hash: route.hash, id: typeof resolved.value === 'string' ? resolved.value : null }
+})
+const currentNodeId = computed(() => onScreen.value.id)
+watch(
+  () => [resolved.value, currentNodeId.value] as const,
+  ([at, id]) => {
+    if (id && at !== id) stayOn(id) // the fragment no longer names the node on screen: it follows the node
+  },
+)
 const currentNode = computed(() => nodeById(treeStore.nodes, currentNodeId.value))
 // Folders and the scope root browse (core's `LevelView`); any other node OPENS, to the detail component its kind
 // registered. A kind with no registered detail is not guessed at: the host shows an explicit unsupported state.
@@ -104,10 +120,15 @@ const epochs = computed(() => (activeSpace.status === 'ready' && activeSpace.epo
 // The current node's content key, whatever its kind, resolved by walking the key chain through every ancestor (the
 // scope-root node opens under its own epoch's K_SC, each node below under its parent's key, folders included —
 // ADR 0080 Decision 1; held on device, the server is blind). A create here wraps the new node's key under it.
-const currentNodeKey = computed(() =>
-  currentNodeId.value && epochs.value
-    ? nodeContentKey(activeSpace.scopeId!, epochs.value, treeStore.nodes, currentNodeId.value)
-    : null,
+// The same object while it is the same key (`sameKeyOr`): the tree is re-read under an open page (the live poll below), and
+// a Memory's gallery reloads on a new key.
+const currentNodeKey = computed<Uint8Array | null>((previous) =>
+  sameKeyOr(
+    previous,
+    currentNodeId.value && epochs.value
+      ? nodeContentKey(activeSpace.scopeId!, epochs.value, treeStore.nodes, currentNodeId.value)
+      : null,
+  ),
 )
 // The open node's K_node: the same key, for a kind that opens (a folder browses and is never opened).
 const memoryKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
@@ -190,18 +211,17 @@ function startCopy(nodes: TreeNode[]) {
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 
-// The level's live refresh (inbox #408): while a folder level is on screen, pick up what others changed (a share guest's
-// upload, a peer's new Memory) without a reload. One read of the scope's tree per tick, applied only when it changed and
-// dropped if a write of this tab re-read the tree meanwhile (`treeStore.pollTree`); skipped while any dialog is open.
-// An opened node's page polls too when its kind's page is drawn from the tree (`KindDescriptor.liveDetail`: Depot's drop
-// box, owner decision 2026-10-17); every other one does not.
-const liveDetail = computed(() => {
-  if (!kindDetail.value || !currentNode.value) return false
-  const info = registry.kind(currentNode.value.kind)
-  return info.supported && !!info.liveDetail
-})
+// The tree's live refresh (inbox #408): while a page of the space's tree is on screen — a folder level, and an opened
+// node's page of any kind (inbox #503) — pick up what others changed (a share guest's upload, a peer's new Memory, a
+// drop box's new guest) without a reload. One read of the scope's tree per tick, applied only when it changed and
+// dropped if a write of this tab re-read the tree meanwhile (`treeStore.pollTree`); skipped while any dialog is open. On
+// an opened node it is how a moderator's block of that node, or of a folder above it, reaches the page: a node block
+// moves the scope's tree revision and no item revision (`CaseDecisions.announce`), so a Memory's own gallery poll stays
+// a `304`; the poll brings the row marked, and the page turns to *Blocked by the operator* (the template), its detail
+// unmounted with every object URL it held; a lift brings it back. An idle tick is a `304` (ADR 0081; measured in
+// `OpenMemoryTreePollSliceTest`: no more statements than the gallery's own idle poll, whatever the tree holds).
 const { ticks: liveTick } = useLevelLive({
-  active: () => activeSpace.status === 'ready' && !treeStore.error && (!isOpenable.value || liveDetail.value) && !place.value.person,
+  active: () => activeSpace.status === 'ready' && !treeStore.error && !place.value.person,
   paused: () =>
     !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),

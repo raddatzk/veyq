@@ -213,7 +213,7 @@ async function onToggleMark(mediaId: string) {
 }
 
 watch(
-  () => [props.node.id, props.scopeKey, can.value.mark] as const,
+  [() => props.node.id, () => props.scopeKey, () => can.value.mark] as const, // one by one (see `useMediaGalleryLive`'s)
   () => {
     if (can.value.mark) clearItemFavorites() // the store is the scope members'; a guest's view never touches it
     markFilter.value = 'all' // a filter is about the Memory you are in, not a mode you carry into the next
@@ -552,7 +552,7 @@ watch(activeTab, (tab) => { if (tab === 'trash') void loadTrash() })
 // On a Memory/chapter switch: reset the tab to the gallery + drop the previous Memory's trash state. (The gallery
 // grid + live-poll lifecycle is owned by `useMediaGalleryLive`, which watches the same node/key + tears down itself.)
 watch(
-  () => [props.node.id, props.memoryKey] as const,
+  [() => props.node.id, () => props.memoryKey] as const, // one by one (see `useMediaGalleryLive`'s)
   () => {
     activeTab.value = 'gallery'
     resetTrash() // cr-0110/0111: drop the previous Memory's trash listing/thumbs/selection

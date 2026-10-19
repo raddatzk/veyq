@@ -56,7 +56,7 @@ import MoveNodesDialog from '../node/MoveNodesDialog.vue'
 import ExportSubtreeDialog from '../export/ExportSubtreeDialog.vue'
 import { nodeMover } from '../node/move'
 import { useLevelLive } from '../node/useLevelLive'
-import type { TreeNode } from '../node/tree'
+import { sameKeyOr, type TreeNode } from '../node/tree'
 import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
 import OrderNotice from './OrderNotice.vue'
 
@@ -148,6 +148,11 @@ const detail = computed(() => {
   const info = registry.kind(current.value.kind)
   return info.supported ? (info.detail ?? null) : null
 })
+// Its key, the same object while it is the same key (`sameKeyOr`): a live poll that swaps `head` re-opens the subtree, and
+// a Memory's gallery reloads on a new key.
+const currentKey = computed<Uint8Array | null>((previous) =>
+  sameKeyOr(previous, tree.value && current.value ? tree.value.keyOf(current.value.id) : null),
+)
 /** The role badge: what this link lets the guest do here — at a folder in the folder's words (add, rename, move), at any
  *  other node the role's. */
 const badge = computed(() => {
@@ -178,17 +183,13 @@ const movingMany = ref<TreeNode[] | null>(null)
 // --- a download as a ZIP (READ / READ_WRITE, ADR 0082 decision 5): core's dialog over the guest's own tree and reads ------
 const downloading = ref<TreeNode | null>(null)
 
-// --- the live refresh (inbox #408): a folder level on screen picks up what others changed, without a reload --------------
-// Paused while a dialog of this page is open; the shell's `poll` swaps `head` (and with it the tree) only on a change.
-// A node's detail polls too when its kind's page is drawn from the tree (`KindDescriptor.liveDetail`: Depot's drop box,
-// owner decision 2026-10-17), as the member's host does — every other detail does not.
-const liveDetail = computed(() => {
-  if (!detail.value || !current.value) return false
-  const info = registry.kind(current.value.kind)
-  return info.supported && !!info.liveDetail
-})
+// --- the live refresh (inbox #408): a page of the link's tree on screen picks up what others changed, without a reload ---
+// A folder level and an opened node's page of any kind, as the member's host does (inbox #503): a moderator's block of the
+// node or of a folder above it reaches the page through it (the re-resolve serves the row marked, and its tag is a digest
+// of what it serves, ADR 0081 decision 4), and so does its lift. Paused while a dialog of this page is open; the shell's
+// `poll` swaps `head` (and with it the tree) only on a change.
 const { ticks: liveTick } = useLevelLive({
-  active: () => (atFolder.value || liveDetail.value) && !!props.access.poll,
+  active: () => !!current.value && !!props.access.poll,
   paused: () => !!creating.value || !!moving.value || !!movingMany.value || !!downloading.value,
   read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(false),
 })
@@ -243,7 +244,7 @@ function createError(e: unknown): string {
       :node="current"
       :scope-id="head.scopeId"
       :epochs="null"
-      :content-key="tree.keyOf(current.id)"
+      :content-key="currentKey"
       :children="level"
       :access="access"
       :tree="tree"

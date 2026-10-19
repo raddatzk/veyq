@@ -11,7 +11,7 @@
 // re-read of the tree never overwrites it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { LIVE_POLL } from '../core/node/useLevelLive'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
@@ -268,7 +268,7 @@ describe('the member level view, live', () => {
 })
 
 // The drop box's own page (owner decision 2026-10-17): its guests' folders and their file counts ARE the scope's tree, so
-// the host keeps the tree live while it is open (`KindDescriptor.liveDetail`), with the level's own poll and its
+// the host's tree poll, which runs on every opened node's page (inbox #503), keeps it live with the level's own
 // condition — a new guest's folder or a new file appears without a reload, an idle drop box is a 304. Real crypto: each
 // guest's folder is sealed under its own identity key, which the member opens through the drop box's drop key
 // (`tree.identityFolder.test.ts`).
@@ -348,16 +348,87 @@ describe("the drop box's page, live", () => {
     await settle(OVER_ONE_INTERVAL * 3)
     expect(listNodes).not.toHaveBeenCalled()
   })
+})
 
-  it("control: an open file's page polls nothing (only a kind whose page is drawn from the tree is live)", async () => {
-    change([...served, rowOf(FILE_ID, 'FILE', 'foto.png')])
+// Every opened node's page polls the tree, whatever its kind (inbox #503): a moderator's block of the node, or of a folder
+// above it, moves the scope's tree revision and no item revision, so this poll is the only read that brings it. The page
+// turns to *Blocked by the operator* at once and its detail is unmounted; a lift brings the detail back. A peer's rename of
+// the node on screen keeps it on screen, the fragment following it. Real crypto: the file is sealed under its folder's key.
+describe("an opened node's page, live", () => {
+  const TRIPS = '5c09e000-0000-4000-8000-0000000000f2'
+  const REPORT = '5c09e000-0000-4000-8000-0000000000a2'
+  const tripsKey = v1.randomBytes(32)
+  const FILE_KEY = v1.randomBytes(32)
+  const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 })
+  /** A folder at the root and a file in it, as the server serves them: sealed once per name, so a block — which changes no
+   *  ciphertext — is the only difference between two worlds (`treeFingerprint` must see it). `blocked` marks both, as the
+   *  server marks every node below a blocked one (`NodeSummary.blockedByOperator`). */
+  const base = { orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), blockedByOperator: false, slugToken: 'c2x1Zw==' }
+  const tripsRow: NodeSummary = {
+    ...base, id: TRIPS, kind: 'FOLDER', encryptedName: sealName(SCOPE_KEY, at(TRIPS), 'Trips'), wrappedContentKey: wrapContentKey(SCOPE_KEY, at(TRIPS), tripsKey),
+  }
+  const fileRows = new Map<string, NodeSummary>()
+  const fileRow = (name: string) => fileRows.get(name) ?? (fileRows.set(name, {
+    ...base, id: REPORT, parentId: TRIPS, kind: 'FILE', encryptedName: sealName(tripsKey, at(REPORT), name), wrappedContentKey: wrapContentKey(tripsKey, at(REPORT), FILE_KEY),
+  }), fileRows.get(name)!)
+  const world = (opts: { blocked?: boolean; fileName?: string } = {}): NodeSummary[] =>
+    [tripsRow, fileRow(opts.fileName ?? 'report.pdf')].map((r) => ({ ...r, blockedByOperator: !!opts.blocked }))
+  const fileTitle = (w: Awaited<ReturnType<typeof mountLevel>>) => w.find('.veyq-node-header-title')
+  async function openFile(rows: NodeSummary[]) {
+    change(rows)
     await loadTree()
     listNodes.mockClear()
-    const w = await mountLevel(hashForNode(treeStore.nodes, FILE_ID, '~me'))
-    expect(w.find('.dropbox-detail').exists()).toBe(false)
-    expect(titlesOf(w), 'no level is on screen').toEqual([])
-    await settle(OVER_ONE_INTERVAL * 2)
+    return mountLevel(hashForNode(treeStore.nodes, REPORT, '~me'))
+  }
+
+  it('turns to the placeholder at once when a folder above it is blocked, and a lift brings the page back', async () => {
+    const w = await openFile(world())
+    expect(fileTitle(w).text(), "the file's page is on screen").toBe('report.pdf')
+    expect(w.find('.node-blocked').exists()).toBe(false)
+
+    await settle(OVER_ONE_INTERVAL)
+    expect(listNodes.mock.calls.map(([r]) => r.ifNoneMatch), "an idle file's page polls, conditionally").toEqual([`"${revision}"`])
+
+    change(world({ blocked: true }))
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('.node-blocked').text()).toBe(t('node.blockedByOperator'))
+    expect(fileTitle(w).exists(), "the file's page is gone").toBe(false)
+
+    change(world())
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('.node-blocked').exists(), 'the lift reaches the page too: it kept polling under the placeholder').toBe(false)
+    expect(fileTitle(w).text()).toBe('report.pdf')
+    w.unmount()
+  })
+
+  it("keeps a peer's renamed node on screen, unmounted at no point, and the fragment follows it", async () => {
+    const w = await openFile(world())
+    const router = w.vm.$router
+    const before = router.currentRoute.value.hash
+    const page = fileTitle(w).element
+    change(world({ fileName: 'summary.pdf' }))
+    await settle(OVER_ONE_INTERVAL)
+    await flushPromises()
+    expect(fileTitle(w).text()).toBe('summary.pdf')
+    expect(fileTitle(w).element, 'the same page: never collapsed to the scope root and back').toBe(page)
+    expect(router.currentRoute.value.hash).toBe(hashForNode(treeStore.nodes, REPORT, '~me'))
+    expect(router.currentRoute.value.hash).not.toBe(before)
+    w.unmount()
+  })
+
+  it('stops with the page', async () => {
+    const w = await openFile(world())
+    w.unmount()
+    await settle(OVER_ONE_INTERVAL * 3)
     expect(listNodes).not.toHaveBeenCalled()
+  })
+
+  it('control: a fragment the member navigates to that names nothing is the scope root, as ever', async () => {
+    const w = await openFile(world())
+    await w.vm.$router.push({ name: 'home', hash: '#~me/nowhere' })
+    await settle(0)
+    expect(fileTitle(w).exists()).toBe(false)
+    expect(titlesOf(w)).toEqual(['Trips'])
     w.unmount()
   })
 })

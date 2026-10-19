@@ -134,6 +134,26 @@ acceptanceCriteria:
           - src/features/memory/useMediaGalleryLive.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
           - src/features/memory/components/MemoryDetail.guest.test.ts
+  - id: node-block-reaches-open-memory
+    # Alternate flow E9, inbox #503 (ADR 0081 decision 5, ADR 0033 § Consequences).
+    text: >-
+      A moderator's block of the open Memory, or of a folder above it, moves the scope's tree revision and no item
+      revision: the member's gallery poll stays a 304 and the listing's conditional read answers 200 with the Memory's row
+      marked, its lift the same. The host's tree poll runs on every opened node's page, so the open Memory's page turns to
+      "Blocked by the operator" on the poll that brings the block, every object URL its gallery decrypted is revoked and
+      its own poll ends; it keeps polling under the placeholder, so a lift brings the page back. A tree change that is not
+      the Memory's reloads nothing and resets no tab. An idle tree poll costs the same statements whatever the tree holds,
+      and no more than the gallery's own. A guest's opened node turns the same way through its re-resolve.
+    coverage:
+      backend:
+        integration:
+          - OpenMemoryTreePollSliceTest.aBlockOfAFolderAboveAnOpenMemoryAndItsLiftReachTheTreePollNotTheGallerys
+          - OpenMemoryTreePollSliceTest.anIdleTreePollIsAFewStatementsWhateverTheTreeHoldsAndNoMoreThanTheGallerys
+      web:
+        unit:
+          - src/views/MemoryHomeView.memoryBlock.test.ts
+          - src/views/MemoryHomeView.live.test.ts
+          - src/views/ShareView.live.test.ts
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/memory-guest-live.spec.ts`) drives `guest-live-poll` in Chromium
