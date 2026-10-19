@@ -13,8 +13,8 @@ enum class RecipientKind {
 }
 
 /**
- * One recipient the Server Owner named (ADR 0035 decision 8): who, what they do as a [kind], where — [country] null
- * when not named; [description] an [RecipientKind.OTHER] one's own words.
+ * One recipient the Server Owner named (ADR 0035 decision 8): who, what they do as a [kind], where — [country] an ISO
+ * 3166-1 alpha-2 code ([RecipientCountries]), null when not named; [description] an [RecipientKind.OTHER] one's own words.
  */
 data class NoticeRecipient(val name: String, val kind: RecipientKind, val description: String?, val country: String?)
 
@@ -144,14 +144,14 @@ object PrivacyNoticeRenderer {
 
     /**
      * `name: what they do (country)`, what they do being the kind's label in this language — an OTHER one's with the
-     * typed description put in, shown as typed on both pages. A country not named shows the gap in the full variant and
-     * is left out in the reduced.
+     * typed description put in, shown as typed on both pages — and the country the code's name in this language too
+     * ([RecipientCountries.name]). A country not named shows the gap in the full variant and is left out in the reduced.
      */
     private fun recipient(r: NoticeRecipient, text: PrivacyNoticeText, en: Boolean, reduced: Boolean): String {
         val name = FixedTextLines.inline(r.name)
         val purpose = text.recipientKinds.getValue(r.kind).pick(en)
             .replace(PrivacyNoticeText.DESCRIPTION, FixedTextLines.inline(r.description.orEmpty()))
-        val country = r.country?.let(FixedTextLines::inline)?.ifEmpty { null }
+        val country = r.country?.let { RecipientCountries.name(it, en) }
         val where = country ?: if (reduced) null else text.gap.pick(en)
         return "$name: $purpose" + (where?.let { " ($it)" } ?: "")
     }

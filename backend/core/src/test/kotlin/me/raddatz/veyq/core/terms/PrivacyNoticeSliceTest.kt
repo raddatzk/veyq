@@ -148,7 +148,7 @@ class PrivacyNoticeSliceTest {
             .body("recipients.name", equalTo(listOf("Example Hosting GmbH", "Mail AG", "SMS AG")))
             .body("recipients.kind", equalTo(listOf("HOSTING", "MAIL_RELAY", "OTHER")))
             .body("recipients.description", equalTo(listOf(null, null, "sends sign-in texts")))
-            .body("recipients[1].country", equalTo(null))
+            .body("recipients.country", equalTo(listOf("DE", null, "FI")))
             .body("dataProtectionOfficer", equalTo("DSB GmbH, dsb@example.org"))
         val recipients = passage("recipients")!!
         assertTrue(recipients.indexOf("Example Hosting GmbH") < recipients.indexOf("Mail AG"), "in the order given: $recipients")
@@ -156,12 +156,16 @@ class PrivacyNoticeSliceTest {
         // Each page names what they do in its own language; only an OTHER one's typed words are the same on both.
         assertTrue(recipients.contains("- Mail AG: relays the mail (not stated by this operator)"), recipients)
         val german = passage("recipients", language = "de")!!
-        assertTrue(german.contains("- Example Hosting GmbH: hostet den Server (Germany)"), german)
-        assertTrue(german.contains("- SMS AG: Sonstiges — „sends sign-in texts“"), german)
+        assertTrue(german.contains("- Example Hosting GmbH: hostet den Server (Deutschland)"), german)
+        assertTrue(german.contains("- SMS AG: Sonstiges — „sends sign-in texts“ (Finnland)"), german)
         assertFalse(german.contains("hosts the server") || german.contains("relays the mail"), "no English kind on the German page: $german")
+        // and the country by its name in the page's language, from the code stored
+        assertTrue(recipients.contains("- Example Hosting GmbH: hosts the server (Germany)"), recipients)
+        assertFalse(german.contains("Germany") || german.contains("Finland"), "no English country on the German page: $german")
 
-        // A row with a blank name, an unknown kind, a description that does not fit its kind, or a value over its bound
-        // is refused: each with nothing stored (control: the list saved above stays).
+        // A row with a blank name, an unknown kind, a description that does not fit its kind, a country that is no code
+        // or no code the JDK knows, or a value over its bound is refused: each with nothing stored (control: the list
+        // saved above stays, its codes accepted).
         put("""{"recipients":[{"name":" ","kind":"HOSTING"}]}""").statusCode(400)
         put("""{"recipients":[{"name":"n"}]}""").statusCode(400)
         put("""{"recipients":[{"name":"n","kind":"hosts the server"}]}""").statusCode(400)
@@ -170,6 +174,11 @@ class PrivacyNoticeSliceTest {
         put("""{"recipients":[{"name":"n","kind":"HOSTING","description":"hosts the server"}]}""").statusCode(400)
             .body("code", equalTo("invalid_request"))
         put("""{"recipients":[{"name":"n","kind":"OTHER","description":"${"x".repeat(121)}"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"HOSTING","country":"Germany"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"HOSTING","country":"de"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"HOSTING","country":" "}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"HOSTING","country":"XX"}]}""").statusCode(400)
+            .body("code", equalTo("invalid_request"))
         put("""{"recipients":[{"name":"${"x".repeat(201)}","kind":"HOSTING"}]}""").statusCode(400)
         put("""{"recipients":[${(1..21).joinToString(",") { """{"name":"n$it","kind":"BACKUP"}""" }}]}""").statusCode(400)
         owner().`when`().get("/api/instance/operator").then()
@@ -254,9 +263,9 @@ class PrivacyNoticeSliceTest {
         const val EXTERNAL_STORE = "https://s3.provider.example"
         const val CONTROL = "privacy-notice capture control"
         val RECIPIENTS = """
-            {"recipients":[{"name":"Example Hosting GmbH","kind":"HOSTING","country":"Germany"},
+            {"recipients":[{"name":"Example Hosting GmbH","kind":"HOSTING","country":"DE"},
                            {"name":"Mail AG","kind":"MAIL_RELAY"},
-                           {"name":"SMS AG","kind":"OTHER","description":"sends sign-in texts"}],
+                           {"name":"SMS AG","kind":"OTHER","description":"sends sign-in texts","country":"FI"}],
              "dataProtectionOfficer":"DSB GmbH, dsb@example.org"}
         """.trimIndent()
     }
