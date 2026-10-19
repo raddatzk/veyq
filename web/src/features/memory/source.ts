@@ -39,7 +39,7 @@ import {
   unsealMeta,
   originalBlobMeta,
   loadMediaExif,
-  listMediaPage,
+  listMediaPages,
   deleteMedia,
   restoreMedia,
   listTrash,
@@ -81,9 +81,10 @@ import { forgetOwnShareMedia, loadOwnShareMedia, rememberOwnShareMedia } from '.
 import type { UploadTarget } from './uploadQueue'
 import type { MemoryRights } from './rights'
 
-/** A node's media as a source lists it: the live media and, where the session polls, the revisions a live poll
- *  continues from (`null`: this source has no live poll). */
-export type MediaListing = { items: MediaItem[]; revision: { media: number; delete: number } | null }
+/** A node's media as a source lists it — every page of it (ADR 0033 decision 6): the live media and, where the session
+ *  polls, the revisions a live poll continues from (the FIRST page's) and the cursor (the LAST page's; `null`: this
+ *  source has no live poll, or the node holds nothing yet). */
+export type MediaListing = { items: MediaItem[]; revision: { media: number; delete: number } | null; cursor: string | null }
 
 /** Where a live poll continues from (uc.memory.live-updates, cr-0107). */
 export type PollCursor = { mediaRevision: number; since?: string; deleteRevision: number }
@@ -183,10 +184,11 @@ export interface MemorySource {
   scopeId(): string
   /** The upload-queue grouping of a node's batches — which in-flight tiles a gallery shows (one per node and session). */
   batchKey(nodeId: string): string
-  /** The live media of `nodeId` in full. Throws what the read throws. */
+  /** The live media of `nodeId` in full, every page read before it answers. Throws what the read throws. */
   listMedia(nodeId: string): Promise<MediaListing>
   readonly loaders: MediaLoaders
-  /** One live poll from `cursor` (a conditional delta read). Absent: no live updates — the view re-reads after its own writes. */
+  /** One live poll from `cursor` (a conditional delta read, every page of it). Absent: no live updates — the view re-reads
+   *  after its own writes. */
   readonly poll?: (nodeId: string, cursor: PollCursor) => Promise<MediaPage>
   /** Upload into a node. Absent: this session uploads nothing. */
   readonly upload?: MemoryUpload
@@ -248,9 +250,9 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     scopeId: scope,
     batchKey: (nodeId) => nodeId,
     async listMedia(nodeId) {
-      const page = await listMediaPage(scope(), nodeId) // full list — no ETag/cursor, so never a 304
-      if (page.notModified) return { items: [], revision: null } // unreachable without an ETag: exhaustiveness
-      return { items: page.items, revision: { media: page.mediaRevision, delete: page.deleteRevision } }
+      const page = await listMediaPages(scope(), nodeId) // every page — no ETag, so never a 304
+      if (page.notModified) return { items: [], revision: null, cursor: null } // unreachable without an ETag: exhaustiveness
+      return { items: page.items, revision: { media: page.mediaRevision, delete: page.deleteRevision }, cursor: page.cursor }
     },
     loaders: {
       grid: (item, key, signal) => openGrid(scope(), key, item, signal),
@@ -262,7 +264,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       coverBlob: (ref, key) => openBlob(scope(), key, ref),
       exif: (item, key) => loadMediaExif(scope(), item, key),
     },
-    poll: (nodeId, c) => listMediaPage(scope(), nodeId, { ifNoneMatch: String(c.mediaRevision), since: c.since, sinceDelete: c.deleteRevision }),
+    poll: (nodeId, c) => listMediaPages(scope(), nodeId, { ifNoneMatch: String(c.mediaRevision), since: c.since, sinceDelete: c.deleteRevision }),
     upload: {
       ready: () => true,
       prepare: async () => true,
@@ -337,12 +339,13 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
     batchKey: (nodeId) => `share:${shareId}:${nodeId}`,
     async listMedia(nodeId) {
       const a = access()
-      if (a.role === ShareRole.WriteOnly) return { items: [], revision: null } // served nothing, holds no key (ADR 0031)
-      // The link's listing is its whole subtree (`listShareMedia`); the walk keys every media by its node, and this
-      // node's are the view's. A media whose node's key did not open is not served (`openSharedMemory`).
-      const listing = await listShareMedia(a.shareId, a.role, a.pwToken)
+      if (a.role === ShareRole.WriteOnly) return { items: [], revision: null, cursor: null } // served nothing, holds no key (ADR 0031)
+      // The guest lists the node it has open, every page of it, as a member does (`listShareMedia` with its node, ADR
+      // 0033 decision 6); the walk keys every media by its node. A media whose node's key did not open is not served
+      // (`openSharedMemory`), and the filter keeps a moderator's review — the whole held subtree — to this node.
+      const listing = await listShareMedia(a.shareId, a.role, a.pwToken, nodeId)
       const opened = openSharedMemory(a.head, listing)
-      return { items: opened.items.filter((si) => si.nodeId === nodeId).map((si) => si.item), revision: null }
+      return { items: opened.items.filter((si) => si.nodeId === nodeId).map((si) => si.item), revision: null, cursor: null }
     },
     loaders: {
       grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal),

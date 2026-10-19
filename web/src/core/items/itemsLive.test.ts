@@ -7,8 +7,9 @@ import { createLivePoller, type LivePoller } from '../../shared/state/livePoller
 import {
   ITEMS_POLL,
   itemsPollTick,
-  newestItemsCursor,
+  readItemPages,
   reconcileItems,
+  type ItemsOnePage,
   type ItemsPollCursor,
   type ItemsPollPage,
 } from './itemsLive'
@@ -70,24 +71,54 @@ describe('reconcileItems', () => {
   })
 })
 
-describe('newestItemsCursor', () => {
-  const cursor = (items: Task[]) => newestItemsCursor(items, (t) => t.id, (t) => t.updatedAt)
-
-  it('is undefined for an empty list or items without an updatedAt', () => {
-    expect(cursor([])).toBeUndefined()
-    expect(cursor([task('a')])).toBeUndefined()
+describe('readItemPages', () => {
+  const idOf = (t: Task) => t.id
+  const page = (items: Task[], more: boolean, extra: Partial<Extract<ItemsOnePage<Task>, { notModified: false }>> = {}): ItemsOnePage<Task> => ({
+    notModified: false, items, revision: 7, deleteRevision: 2, ids: null, more, cursor: items.length ? `c-${items[items.length - 1].id}` : null, ...extra,
   })
 
-  it('is the newest updatedAt as an ISO instant with its id, the larger id on a tie', () => {
-    expect(cursor([task('a', 'a', 1_000), task('b', 'b', 3_000), task('c', 'c', 2_000)])).toBe('1970-01-01T00:00:03.000Z,b')
-    expect(cursor([task('a', 'a', 5_000), task('b', 'b', 5_000)])).toBe('1970-01-01T00:00:05.000Z,b')
+  it('reads every page from the one before\'s cursor, with the first page\'s delete revision, and keeps the first page\'s revisions', async () => {
+    const next = vi.fn(async (cursor: string, deleteRevision: number) => {
+      expect(deleteRevision).toBe(2)
+      return cursor === 'c-b' ? page([task('c')], true, { revision: 9, deleteRevision: 3 }) : page([task('d')], false, { revision: 9 })
+    })
+    const read = await readItemPages(async () => page([task('a'), task('b')], true), next, idOf)
+    expect(next.mock.calls.map((c) => c[0])).toEqual(['c-b', 'c-c'])
+    expect(read).toEqual({ notModified: false, items: [task('a'), task('b'), task('c'), task('d')], revision: 7, deleteRevision: 2, ids: null, cursor: 'c-d' })
+  })
+
+  it('ends at a 304 without a second read', async () => {
+    const next = vi.fn()
+    expect(await readItemPages(async () => ({ notModified: true }), next, idOf)).toEqual({ notModified: true })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('takes a later copy of an item over the earlier one (an edit committed while paging)', async () => {
+    const read = await readItemPages(async () => page([task('a', 'old'), task('b')], true), async () => page([task('a', 'new')], false), idOf)
+    expect(read.notModified ? [] : read.items.map((t) => t.title)).toEqual(['b', 'new'])
+  })
+
+  it('widens the first page\'s id set by every id a later page carried, so an add made while paging survives the reconcile', async () => {
+    const read = await readItemPages(async () => page([task('a')], true, { ids: ['a', 'x'] }), async () => page([task('n')], false, { ids: ['n'] }), idOf)
+    expect(read.notModified ? null : read.ids).toEqual(['a', 'x', 'n'])
+    expect(read.notModified ? [] : reconcileItems([task('x')], read.items, read.ids, { idOf }).map(idOf)).toEqual(['x', 'a', 'n'])
+  })
+
+  it('keeps the cursor of the last page that carried one', async () => {
+    const read = await readItemPages(async () => page([task('a')], true), async () => page([], false), idOf)
+    expect(read.notModified ? null : read.cursor).toBe('c-a')
+  })
+
+  it('refuses a page that says more but does not move on', async () => {
+    await expect(readItemPages(async () => page([task('a')], true), async () => page([task('a')], true), idOf)).rejects.toThrow('items_page_did_not_advance')
+    await expect(readItemPages(async () => page([], true, { cursor: null }), vi.fn(), idOf)).rejects.toThrow('items_page_without_cursor')
   })
 })
 
 describe('itemsPollTick', () => {
   const cursor: ItemsPollCursor<string> = { key: 'node-1', revision: 3, deleteRevision: 1, since: 'S' }
   const changed = (items: Task[], ids: string[] | null = null): ItemsPollPage<Task> => ({
-    notModified: false, items, revision: 4, deleteRevision: 1, ids,
+    notModified: false, items, revision: 4, deleteRevision: 1, ids, cursor: null,
   })
   const signal = () => new AbortController().signal
 
@@ -160,6 +191,7 @@ describe('an item list on the live loop', () => {
   let held: Task[]
   let revision: number
   let deleteRevision: number
+  let since: string | undefined
   let reads: ItemsPollCursor<string>[]
   let poller: LivePoller
   const OPTIONS = { intervalMs: 1_000, maxBackoffMs: 8_000, jitter: 0, minGapMs: 500 }
@@ -169,12 +201,14 @@ describe('an item list on the live loop', () => {
     if (c.revision === server.revision) return { notModified: true } // the conditional GET: If-None-Match = the revision
     const after = c.since
     const delta = server.rows.filter((t) => !after || t.updatedAt!.toISOString() > after.split(',')[0])
+    const last = delta.at(-1)
     return {
       notModified: false,
       items: delta,
       revision: server.revision,
       deleteRevision: server.deleteRevision,
       ids: c.deleteRevision < server.deleteRevision ? server.rows.map((t) => t.id) : null, // only when a delete happened since
+      cursor: last ? `${last.updatedAt!.toISOString()},${last.id}` : null, // the server's cursor: its last row
     }
   }
   const tick = itemsPollTick<Task, string>({
@@ -182,13 +216,14 @@ describe('an item list on the live loop', () => {
       key: 'node-1',
       revision,
       deleteRevision,
-      since: newestItemsCursor(held, (t) => t.id, (t) => t.updatedAt),
+      since,
     }),
     fetch: (c) => read(c),
     apply: (change) => {
       held = reconcileItems(held, change.items, change.ids, { idOf: (t) => t.id })
       revision = change.revision
       deleteRevision = change.deleteRevision
+      since = change.cursor ?? since // a delta with no row keeps the cursor held
     },
   })
 
@@ -199,6 +234,7 @@ describe('an item list on the live loop', () => {
     held = [...server.rows]
     revision = 2
     deleteRevision = 0
+    since = '1970-01-01T00:00:02.000Z,b' // the first load's last page answered it
     reads = []
     poller = createLivePoller(OPTIONS)
   })
@@ -292,7 +328,7 @@ describe('an item list on the live loop', () => {
     poller.start(slow)
     await vi.advanceTimersByTimeAsync(1_000) // the read is out
     poller.stop()
-    release({ notModified: false, items: [task('z')], revision: 9, deleteRevision: 0, ids: null })
+    release({ notModified: false, items: [task('z')], revision: 9, deleteRevision: 0, ids: null, cursor: null })
     await vi.advanceTimersByTimeAsync(10_000)
     expect(apply).not.toHaveBeenCalled()
     expect(reads).toHaveLength(0)

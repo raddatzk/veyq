@@ -64,26 +64,35 @@ keeps live uses the platform's primitive ([ADR 0033](../decisions/0033-live-medi
 (`veyq_node_items_revision`), the bump, the conditional read and the client loop; the application owns its records
 and one query. The steps:
 
-1. **Give each record an `updated_at` (`TIMESTAMP(3)`) and an id.** `updated_at` is set at creation and on every edit;
-   the pair `(updated_at, id)` is the keyset cursor. Index what the delta query filters on.
+1. **Give each record a position and an id.** The position (an `INT`, Memories' `veyq_media.item_position`) is the
+   revision core's bump returned for the record's last change, stamped by every writer that moves the record to the end
+   of the list, in its transaction, after the bump — the bump holds the revision row's lock to the commit, so positions
+   become visible in commit order and the keyset `(position, id)` never lets a record land behind a client's cursor (a
+   timestamp taken before that lock did: ADR 0033 decision 3). Index `(node_id, position, id)`.
 2. **Call core's bump from every writer, in the writer's transaction**: `items.bump(scopeId, nodeId)` for an add, an
-   edit or a restore, `items.bump(scopeId, nodeId, deleted = true)` for a removal (it moves both counters). A writer that
+   edit or a restore, `items.bump(scopeId, nodeId, deleted = true)` for a removal (it moves both counters); it returns
+   the revision it wrote — the record's new position. A writer that
    forgets is a live view that never learns of the change, so add the application's writers to a source guard like
    `NodeItemsRevisionBumpsTest`. Take the record rows' locks first, then call `bump` (it locks the node row on a node's
    first change only); never take a lock after it. Erasure needs nothing from the application: core deletes the
    counter row with the node.
-3. **Serve the list from a `read`.** `NodeItemsRevisions.read(nodeId, ifNoneMatch, sinceDelete, delta, ids)` answers
-   `NotModified` (a `304`, neither lambda runs) or `Changed(revisions, delta, ids)`; `delta` is the application's keyset
-   query past `ItemsCursor.parse(since)` and `ids` the node's current record ids (run only when a removal happened
-   since). `ItemsETag.of(revision)` is the response's `ETag`, `ItemsETag.parse(header)` the request's.
+3. **Serve the list from a `read`, one page at a time.** `NodeItemsRevisions.read(nodeId, ifNoneMatch, sinceDelete, delta, ids)`
+   answers `NotModified` (a `304`, neither lambda runs) or `Changed(revisions, delta, ids)`; `delta` is one page of the
+   application's keyset query past `ItemsCursor.parse(since)` — read `limit + 1` rows (`ItemsPage.limitOf(limit)`) and
+   answer `ItemsPage.of(rows, limit)` with the last row read as its `ItemsCursor` — and `ids` the node's current record ids
+   (run only when a removal happened since). `ItemsETag.of(revision)` is the response's `ETag`, `ItemsETag.parse(header)`
+   the request's. Map a page with a constant number of queries (Memories' `toRows`).
 4. **`$ref` the shared contract pieces** in the list operation: parameters `ItemsIfNoneMatch`, `ItemsSince`,
-   `ItemsSinceDelete`, header `ItemsETag`, response `ItemsNotModified` (all in `_common.openapi.yaml`). The response body
-   is the application's own schema; by convention `<kind>Revision` (the ETag's number), `deleteRevision` and
-   `<kind>Ids` (null unless a removal happened) beside the delta list.
-5. **Build the view on `core/items/itemsLive.ts`.** `itemsPollTick({ cursor, fetch, apply })` is one tick for
-   `createLivePoller(ITEMS_POLL)`: `cursor` reads the view's revisions and `newestItemsCursor`, `fetch` calls the
-   generated client (a `304` is `{ notModified: true }`), `apply` merges with `reconcileItems` and decrypts. A failed
-   fetch rejects so the loop backs off.
+   `ItemsSinceDelete`, `ItemsLimit`, header `ItemsETag`, response `ItemsNotModified` (all in `_common.openapi.yaml`). The
+   response body is the application's own schema; by convention `<kind>Revision` (the ETag's number), `deleteRevision`,
+   `<kind>Ids` (null unless a removal happened), `more` and `cursor` beside the delta list, which declares
+   `maxItems: 1000` (the cap, `ItemsPage.CAP`).
+5. **Build the view on `core/items/itemsLive.ts`.** `readItemPages(first, next, idOf)` is the one page loop of a full read
+   (a first load and a poll alike): it keeps the first page's revisions and the last page's cursor (ADR 0033 decision 6).
+   `itemsPollTick({ cursor, fetch, apply })` is one tick for `createLivePoller(ITEMS_POLL)`: `cursor` reads the view's
+   revisions and the cursor the last read answered, `fetch` runs the page loop (a `304` is `{ notModified: true }`),
+   `apply` merges with `reconcileItems`, keeps the answered cursor and decrypts. A failed fetch rejects so the loop backs
+   off.
 
 The scope's *node list* is not this: it has its own revision ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)).
 

@@ -60,6 +60,20 @@ class NodeItemsRevisionsCoreSliceTest {
     }
 
     @Test
+    fun aBumpAnswersTheRevisionItWroteTheItemsPosition() {
+        val (_, scopeId) = seedMemberScope()
+        val node = folder(scopeId)
+        assertEquals(1, bump(scopeId, node), "the first bump births the row at 1")
+        assertEquals(2, bump(scopeId, node, deleted = true), "a removal's bump answers the revision too")
+        // Inside one transaction a second bump answers its own write, not a copy the session loaded before it.
+        val both = QuarkusTransaction.requiringNew().call {
+            items.revisions(node) // loads the row into the session
+            listOf(items.bump(scopeId, node), items.bump(scopeId, node))
+        }
+        assertEquals(listOf(3, 4), both)
+    }
+
+    @Test
     fun aBumpIsPerNode() {
         val (_, scopeId) = seedMemberScope()
         val a = folder(scopeId)
@@ -144,7 +158,7 @@ class NodeItemsRevisionsCoreSliceTest {
         val (_, scopeId) = seedMemberScope()
         val node = folder(scopeId)
         val first = read(node, ifNoneMatch = null, sinceDelete = 0, delta = listOf("a"), ids = listOf("a"))
-        assertEquals(ItemsRead.Changed(ItemsRevisions(0, 0), listOf("a"), null), first, "first load: the delta, no id set")
+        assertEquals(ItemsRead.Changed(ItemsRevisions(0, 0), ItemsPage(listOf("a"), false), null), first, "first load: the delta, no id set")
         assertEquals(ItemsRead.NotModified, read(node, ifNoneMatch = 0, sinceDelete = 0, delta = listOf("x"), ids = emptyList()), "an echoed 0 matches the absent row")
     }
 
@@ -155,7 +169,7 @@ class NodeItemsRevisionsCoreSliceTest {
         bump(scopeId, node)
         var queried = false
         val answer = QuarkusTransaction.requiringNew().call {
-            items.read(node, ifNoneMatch = 1, sinceDelete = 0, delta = { queried = true; emptyList<String>() }, ids = { queried = true; emptyList() })
+            items.read(node, ifNoneMatch = 1, sinceDelete = 0, delta = { queried = true; ItemsPage(emptyList<String>(), false) }, ids = { queried = true; emptyList() })
         }
         assertEquals(ItemsRead.NotModified, answer)
         assertTrue(!queried, "the idle fast path runs no item query")
@@ -168,14 +182,14 @@ class NodeItemsRevisionsCoreSliceTest {
         bump(scopeId, node)
         bump(scopeId, node) // revision 2, delete revision 0
         val addsOnly = read(node, ifNoneMatch = 1, sinceDelete = 0, delta = listOf("d"), ids = listOf("a", "d"))
-        assertEquals(ItemsRead.Changed(ItemsRevisions(2, 0), listOf("d"), null), addsOnly, "adds and edits stay delta-only")
+        assertEquals(ItemsRead.Changed(ItemsRevisions(2, 0), ItemsPage(listOf("d"), false), null), addsOnly, "adds and edits stay delta-only")
 
         bump(scopeId, node, deleted = true) // revision 3, delete revision 1
         val afterDelete = read(node, ifNoneMatch = 2, sinceDelete = 0, delta = emptyList(), ids = listOf("a"))
-        assertEquals(ItemsRead.Changed(ItemsRevisions(3, 1), emptyList<String>(), listOf("a")), afterDelete, "a client behind the delete gets the id set")
+        assertEquals(ItemsRead.Changed(ItemsRevisions(3, 1), ItemsPage(emptyList<String>(), false), listOf("a")), afterDelete, "a client behind the delete gets the id set")
 
         val synced = read(node, ifNoneMatch = 2, sinceDelete = 1, delta = emptyList(), ids = listOf("a"))
-        assertEquals(ItemsRead.Changed(ItemsRevisions(3, 1), emptyList<String>(), null), synced, "a client that echoed the delete revision is not sent the O(N) set again")
+        assertEquals(ItemsRead.Changed(ItemsRevisions(3, 1), ItemsPage(emptyList<String>(), false), null), synced, "a client that echoed the delete revision is not sent the O(N) set again")
     }
 
     @Test
@@ -187,13 +201,15 @@ class NodeItemsRevisionsCoreSliceTest {
         assertNull(ItemsETag.parse("abc"))
         assertNull(ItemsETag.parse(null))
 
-        val cursor = ItemsCursor.parse("2026-07-09T12:34:56.789Z,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e")
-        assertEquals(ItemsCursor(Instant.parse("2026-07-09T12:34:56.789Z"), "2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"), cursor)
-        assertEquals(cursor, ItemsCursor.parse("2026-07-09T14:34:56.789+02:00,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"), "an offset form reads as the same instant")
+        val cursor = ItemsCursor.parse("17,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e")
+        assertEquals(ItemsCursor(17, "2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"), cursor)
+        assertEquals(cursor, ItemsCursor.parse(cursor!!.wire()), "a page's cursor reads back as itself")
+        assertEquals(cursor, ItemsCursor.parse(" 17 , 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e "), "blanks around the parts are no part of them")
         assertNull(ItemsCursor.parse(null))
         assertNull(ItemsCursor.parse("nonsense"))
-        assertNull(ItemsCursor.parse("2026-07-09T12:34:56Z,"))
-        assertNull(ItemsCursor.parse("not-a-time,abc"))
+        assertNull(ItemsCursor.parse("17,"))
+        assertNull(ItemsCursor.parse("-1,abc"))
+        assertNull(ItemsCursor.parse("2026-07-09T12:34:56Z,abc"), "a timestamp is no position")
     }
 
     // --- erasure ---
@@ -235,13 +251,13 @@ class NodeItemsRevisionsCoreSliceTest {
 
     private fun folder(scopeId: String): String = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
 
-    private fun bump(scopeId: String, nodeId: String, deleted: Boolean = false) =
-        QuarkusTransaction.requiringNew().run { items.bump(scopeId, nodeId, deleted) }
+    private fun bump(scopeId: String, nodeId: String, deleted: Boolean = false): Int =
+        QuarkusTransaction.requiringNew().call { items.bump(scopeId, nodeId, deleted) }
 
     private fun revisions(nodeId: String): ItemsRevisions = QuarkusTransaction.requiringNew().call { items.revisions(nodeId) }
 
     private fun read(node: String, ifNoneMatch: Int?, sinceDelete: Int, delta: List<String>, ids: List<String>): ItemsRead<String> =
-        QuarkusTransaction.requiringNew().call { items.read(node, ifNoneMatch, sinceDelete, delta = { delta }, ids = { ids }) }
+        QuarkusTransaction.requiringNew().call { items.read(node, ifNoneMatch, sinceDelete, delta = { ItemsPage(delta, false) }, ids = { ids }) }
 
     private companion object {
         const val WRITERS = 6

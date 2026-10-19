@@ -213,9 +213,9 @@ A log holds less than the database, never more. The application's lines name acc
 shares, blobs and jobs **by id**, with a domain, an exception's class, a database's SQLState and counts. They never
 carry a key, a token, a sealed value, plaintext metadata, an email address, a network address, a User-Agent, a
 request's URI or what it sent, or text someone else wrote (a database's message, a mail server's reply, a remote
-API's body) — with one path left: when two requests race for the same email address and the database refuses the
-second as it commits, the transaction manager's warning carries the database's message, which names that address.
-An error the server had no answer for is logged by a random error id, its route template and its exception's class
+API's body). That includes the one line the transaction manager writes when the database refuses a write only as it
+commits, as when two requests race for the same email address: it names the error's type and SQLState, not the
+database's message. An error the server had no answer for is logged by a random error id, its route template and its exception's class
 chain; its full text is written only while an operator has raised one category on purpose. The
 admin console's access log keeps no reader's address; the bundled proxy keeps no access log, which a posture check
 holds; the object store logs warnings only. A rate limiter keeps a client's address, or an email address for the

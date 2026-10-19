@@ -12,10 +12,10 @@ acceptanceCriteria:
     text: >-
       A moderator's measure carries its statement — the ground, and the facts sealed to the moderation key and to each
       affected member's identity key — recorded in its transaction; sealed copies that do not name exactly the members
-      it tells are refused.
+      it tells are refused. The list is whole or refused by name, never cut: up to 4,000 members with facts.
     coverage:
       backend:
-        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused]
+        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused, StatementRecipientsBoundSliceTest.aStatementPastTheOldCapReachesEveryMemberWithTheFactsSealedToEach, StatementRecipientsBoundSliceTest.pastTheBoundAStepWithFactsIsRefusedByNameAndWithoutFactsStillTellsEveryone, StatementRecipientsBoundSliceTest.theListAndTheFactsCarryOneBound]
       web:
         unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts]
   - id: the-form-follows-the-operating-mode

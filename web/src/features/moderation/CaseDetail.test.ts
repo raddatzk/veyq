@@ -288,6 +288,7 @@ describe('CaseDetail', () => {
     [400, 'statement_facts_required', 'moderation.errors.factsRequired'],
     [400, 'statement_provision_required', 'moderation.errors.provisionRequired'],
     [409, 'statement_recipients_changed', 'moderation.errors.recipientsChanged'],
+    [422, 'statement_recipients_too_many', 'moderation.errors.recipientsTooMany'],
     [500, undefined, 'moderation.errors.failed'],
   ])('a step refused with %i %s says so', async (status, code, key) => {
     vi.mocked(takeMeasure).mockRejectedValue(httpError(status, code))

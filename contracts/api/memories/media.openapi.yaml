@@ -104,14 +104,19 @@ paths:
         conditional-GET **keyset delta**, not an unconditional full list. The client caches the node's
         `mediaRevision` (an opaque per-node mutation counter) and echoes it as **`If-None-Match`**; when it still
         equals the node's counter ⇒ **`304`** (no body, no media query — the idle fast path). On a change ⇒ `200`
-        with only the media whose `updatedAt` is **past the client's `since` cursor** (`updatedAt,mediaId`) — so an
+        with only the media **past the client's `since` cursor** (the `cursor` of the last page it holds: a media's
+        position, which the server hands out in the order changes commit, then its id) — so an
         active upload streams the few new items, never re-listing the whole gallery. Each row carries its
         `mediaId`, the **original** blob ref (`blobId`, `chunkCount`, total `byteSize`, per-chunk `manifest`,
         `wrappedBlobKey`), its role-tagged `derivatives` (THUMBNAIL, PREVIEW), the sealed `wrappedMeta`, and its
-        `updatedAt` (the cursor's sort key). The `200` also carries **both revisions** and — **only when a delete
+        `updatedAt`. The `200` also carries **both revisions** and — **only when a delete
         advanced `deleteRevision`** past the client's echoed `sinceDelete` — the node's current **`mediaIds`** set,
         so the client drops any id it no longer sees (catching a delete and a net-zero delete+add); pure adds/edits
-        stay delta-only. First load: omit `If-None-Match`/`since` for the full list. The client unwraps each
+        stay delta-only. **Pages (ADR 0033 decision 6):** every answer carries at most `limit` rows (the cap, 1000, is
+        `media`'s `maxItems`) and says `more: true` while rows remain past them; the client asks again with the page's
+        `cursor` as `since`, without `If-None-Match`, until `more` is false. First load: omit `If-None-Match`/`since` and page
+        from the beginning; the revisions it keeps are the first page's (read before its rows, so nothing committed
+        while it pages is lost: the next poll's revision differs and its delta carries the change). The client unwraps each
         `K_blob` under `K_node`, presigns the downloads (`blob-downloads-batch`), and opens the chunks with
         `openFrame`. **Operator-blind** — opaque counters, opaque ids, exact timestamps (`updatedAt` to the millisecond); never
         content, never a key.
@@ -123,14 +128,16 @@ paths:
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsIfNoneMatch"
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSince"
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSinceDelete"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
         - name: state
           in: query
           required: false
           description: >
             Which media to list: **`active`** (default) — the live gallery, the conditional-GET delta above; or
-            **`trashed`** — the node's soft-deleted media for the Trash tab (uc.memory.delete-media), a plain full
-            list (`If-None-Match`/`since`/`sinceDelete` do not apply, `mediaIds` is null), each row carrying
-            `deletedAt` + `deletedBy`. Trashed media never appear in the `active` listing.
+            **`trashed`** — the node's soft-deleted media for the Trash tab (uc.memory.delete-media), a plain list
+            paged by the same `since` / `limit` / `more` (`If-None-Match`/`sinceDelete` do not apply, `mediaIds` is
+            null; the client orders the rows by `deletedAt` once it holds them all), each row carrying `deletedAt` +
+            `deletedBy`. Trashed media never appear in the `active` listing.
           schema: { type: string, default: active, maxLength: 8, example: active }
       responses:
         "200":
@@ -502,8 +509,8 @@ paths:
       operationId: restoreMedia
       summary: Restore a trashed media back into the gallery (uc.memory.delete-media).
       description: >
-        Clear the media's `deleted_at`/`deleted_by` and bump the node's `media_revision` (advancing the media's
-        `updatedAt`) so the tile returns to every open gallery in its date position — a pure flag flip, its blobs
+        Clear the media's `deleted_at`/`deleted_by` and bump the node's `media_revision` (moving the media to the end
+        of the list's keyset and advancing its `updatedAt`) so the tile returns to every open gallery in its date position — a pure flag flip, its blobs
         were never removed. **Any member** of the scope may restore. Idempotent on a live media (`204`). A media
         already **purged** by the retention job is gone (`404`).
       security:
@@ -793,9 +800,9 @@ components:
           type: string
           format: date-time
           description: >
-            When this media last changed — the attach time at attach, bumped on a meta edit (cr-0068). The
-            `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta (cr-0107,
-            ADR 0033); the client advances its `since` cursor to the newest row it has seen.
+            When this media last changed — the attach time at attach, bumped on a meta edit (cr-0068), a restore and a
+            block. Not the list's order: the keyset a page and a poll continue from is the page's `cursor` (ADR 0033
+            decisions 3 and 6), a position the server hands out in commit order.
           example: 2026-07-09T12:34:56.789Z
         deletedAt:
           x-veyq-visibility: time
@@ -851,12 +858,30 @@ components:
         `mediaRevision`/`deleteRevision` are the node's opaque per-node counters (`mediaRevision` doubles as the
         ETag). `mediaIds` — the node's **current** id set for delete-reconcile — is present **only when a delete
         advanced `deleteRevision`** past the client's `sinceDelete`, and is null on pure adds/edits.
-      required: [media, mediaRevision, deleteRevision]
+      required: [media, mediaRevision, deleteRevision, more]
       properties:
         media:
           type: array
-          description: The delta rows — media whose `updatedAt` is past the `since` cursor, each a full read-back view.
+          description: >
+            The delta rows — media past the `since` cursor, each a full read-back view — at most
+            `limit` of them, in cursor order (ADR 0033 decision 6).
+          maxItems: 1000
           items: { $ref: "#/components/schemas/MediaSummary" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Rows remain past this page: ask again with this page's `cursor` as `since` (and no `If-None-Match`) until
+            this is false.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 80
+          description: >
+            The keyset position of this page's last row, opaque to the client: send it as `since` for the next page, and
+            keep the last page's for the next poll. Null when the page carries no row (keep the cursor already held).
+          example: "17,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
         mediaRevision:
           x-veyq-visibility: structure
           type: integer
