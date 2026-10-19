@@ -118,8 +118,10 @@ uploads, retries and decrypts frame by frame, straight to and from the object st
 §3). The frame size is a contract constant in the vectors (`chunk_frame_size`), because the backend derives the
 frame count from the declared size and range streaming seeks on it.
 
-Each `K_blob` is random, so identical files become different ciphertexts; content deduplication is declined
-because it would show the operator which blobs are equal (ADR 0013 §5).
+Each `K_blob` is random, so identical files become different ciphertexts; deduplication across a space is declined
+because it would show the operator which blobs are equal (ADR 0013 §5). The one exception is inside a single Memory or
+chapter: a cover or banner equal to one of its gallery items shares that item's stored object, and the operator sees
+which one ([What the server sees](/veyq/security/what-the-server-sees/)).
 
 ## What a seal binds
 

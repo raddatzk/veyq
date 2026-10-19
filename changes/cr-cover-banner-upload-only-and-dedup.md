@@ -138,6 +138,39 @@ dialogs is owed (named in uc.memory.banner's status).
 The four phases' checks green and recorded; this CR deleted after its lessons moved (decision text into ADR 0102 / 0013 and
 the use-cases, the two-layer rule into the KDoc of `deleteBlobRow` and `due`).
 
+## What the build changed against this text (each carried into the ADRs and use-cases)
+
+- **The seam** is the existing `SharedSubtreeContributor` (the arms a share's blob GET is authorized against) with a
+  `holds(scope, node, blob)` predicate each arm answers as its set does (`eachArmAnswersHoldsAsItsSetDoes`), not a new
+  `BlobReferenceContributor`.
+- **Decision 3 needed locks the text did not name.** "Record only when no other row names the key" read by a plain count
+  leaks an object when the two rows of one object are deleted concurrently (each counts the other), and loses one when a
+  share races the delete of its source. `deleteBlobRow` decides under the row locks of every row on the object (ordered by
+  id) and `SharedBlobs.persist` locks its source the same way; the sweep's skip stays the second layer. A hold pins each key
+  once, too.
+- **Decision 4: the banner's digest also lives in its sealed meta** (`banner.sha256`). A cover's or banner's `Ref` carries no
+  `wrappedBlobMeta` and no route serves an attachment's `blob-meta` to Memories, so the reverse match (a gallery upload equal
+  to the video banner) could not read the `BANNER` blob's digest; decision 7's budget already counted a banner `sha256`.
+- **Decision 6: the delete confirmation keys on the digest** (the medium's original equals the banner's file), which holds for
+  a shared and an unshared equal file alike; a banner without a digest asks nothing.
+- **An older archive's cover by `mediaIndex`** is left out on import, not refused.
+- **A block that ends with its erased target** (ADR 0093 § 6) no longer reaches a shared row that outlived it - as it never
+  reached a copy; written into ADR 0093 § 6.
+
 ## Retrospective
 
-(filled at the end)
+- **Planning: a fact stored for a later match was placed without its read path.** Decision 4 put the digest into the video
+  banner's `blob-meta`, but the client reads an attachment only through the refs the node's meta names, which carry no
+  `blob-meta`; the reverse match had no way to read it. Root cause: the refine traced the writer (where the digest is cheap to
+  seal) and not the reader (who must find it). Fix: a CR that stores a fact for a later comparison names the read that serves
+  it to the comparing client (harvested into `changes/README.md`).
+- **Planning: a set predicate was specified without its lock.** "Only when no other row names it" is a statement about a set
+  that two transactions change; the refine bit each layer alone but did not ask what two concurrent deletes do. Caught while
+  reviewing the half-written WIP, not by a test (H2 slice tests do not race). Next time: a rule of the form "the last one
+  does X" names the lock that makes "last" true, in the decision itself.
+- **Execution / process:** the previous implementer's hard reboot left an uncompiled WIP commit; it was a good save (nothing
+  lost) and was rebased onto main and folded into the backend phase. The machine's load sat at 30-100 from neighbouring
+  sessions for most of the run, so the owner's "wait while > 14" rule stretched every gradle and vitest step; the bite
+  harness ran six mutations in one background job to amortize it.
+- **Next time:** before the first edit of an implement session, grep the CR's "where the fact lives" decisions for their
+  reader (one `grep` of the type that carries the fact to the code that compares it).

@@ -3,18 +3,20 @@ feature: memory
 title: Memory banner — an image or a video above the Memory, framed once for every screen
 # Built by cr-memory-banner (ADR 0102): Memories' setMemoryBanner / removeMemoryBanner over core's attachment slots BANNER
 # and BANNER_POSTER, the `banner` field of the node's sealed meta, the display above the header row with a sticky tab row,
-# the dialog, the lightbox's "Use as banner", export / import / copy. A video banner plays its copied original until the
-# small playback copy (en.memory.playback-derivative, the client worker queue, inbox #23) exists.
+# the dialog, export / import / copy. A video banner plays its original until the small playback copy
+# (en.memory.playback-derivative, the client worker queue, inbox #23) exists. Since 2026-10-19
+# (cr-cover-banner-upload-only-and-dedup) the banner is set only by an upload in its dialog (no gallery source, no
+# description) and an upload equal to a gallery file shares its stored object, both ways for a video (ADR 0013 § 5).
 acceptanceCriteria:
   - id: sealed-banner-in-node-meta
-    text: A MEMORY or CHAPTER node's `wrappedMeta.banner` names the banner's attachments (`BANNER`, and `BANNER_POSTER` for a video) with its medium, a video's type, frame (fill/fit), focal point (0..1) and optional description, sealed in the node-meta field; a reader takes owner and role from the node and the slot, never from the payload, and degrades a malformed value (the centre, `fill`, no banner) without a throw; the worst case still seals under the meta's 8192 characters. The server never sees the focal point, the frame or the description.
+    text: A MEMORY or CHAPTER node's `wrappedMeta.banner` names the banner's attachments (`BANNER`, and `BANNER_POSTER` for a video) with its medium, a video's type, the SHA-256 of the file it was made from, frame (fill/fit) and focal point (0..1) - no description - sealed in the node-meta field; a reader takes owner and role from the node and the slot, never from the payload, and degrades a malformed value (the centre, `fill`, no digest, no banner) without a throw; an older banner's `origin` and `alt` are read by nobody and kept by every writer. The worst case - 100 participants, an uploaded cover, a range date, the place name at its bound of 200 code points in 4-byte characters, a video banner with poster, type and digest - seals under the meta's 8192 characters. The server never sees the focal point or the frame.
     coverage:
       web:
         unit:
           - src/features/memory/banner/bannerModel.test.ts
           - src/features/memory/banner/useMemoryBanner.test.ts
   - id: one-write-for-slots-and-meta
-    text: setMemoryBanner attaches the banner's upload(s) and compare-and-sets the meta in one transaction — both slots are compared first and a stale slot (`banner_stale`) or a stale meta (`stale_revision`) writes nothing and leaves the uploads open; a replaced blob (and a poster an image replaces) is freed with a reclaim record in the same write; removeMemoryBanner frees both slots and writes the meta without the banner, idempotently.
+    text: setMemoryBanner attaches the banner's upload(s) - or, per slot, a shared row on an object the node stores - and compare-and-sets the meta in one transaction — both slots are compared first and a stale slot (`banner_stale`) or a stale meta (`stale_revision`) writes nothing and leaves the uploads open; a replaced blob (and a poster an image replaces) is freed with a reclaim record in the same write; removeMemoryBanner frees both slots and writes the meta without the banner, idempotently.
     coverage:
       backend:
         integration:
@@ -43,21 +45,26 @@ acceptanceCriteria:
           - src/features/memory/components/MemoryDetail.rights.test.ts
           - src/features/memory/components/MemoryDetail.guest.test.ts
   - id: not-in-the-gallery
-    text: A banner's bytes never appear as a medium — not in the media list, the item count, the live-update revision or the media trash — whether uploaded or made from a gallery medium, and an upload started in a banner role is never completed as a medium's blob.
+    text: A banner's bytes never appear as a medium — not in the media list, the item count, the live-update revision or the media trash — whether uploaded or sharing a gallery medium's stored object, and an upload started in a banner role is never completed as a medium's blob.
     coverage:
       backend:
         integration:
           - MemoryBannerSliceTest.eachWriteHoldsTheSlotsItNamesAndFreesWhatItReplacesWithoutTouchingTheGallery
           - MemoryBlobRolesSliceTest.aBannerUploadIsNeverAMediumsOriginal
           - MemoryBlobRolesSliceTest.theCompletionAttachesADerivativeOnlyInARoleMemoriesNamesOne
-  - id: gallery-source-is-a-copy
-    text: A banner made from a gallery medium is copied into the banner's own attachments on the editor's device — an image derived from that medium's original, a video's original read by frame and re-sealed as it is with the poster its upload made; the medium is unchanged, and deleting it keeps the banner (the delete asks first, says so and offers to remove the banner too).
+  - id: upload-shares-an-equal-gallery-file
+    text: The banner is set only by a file picked in its dialog - the lightbox offers no "Use as banner" and the dialog no gallery source. A picked file equal to the original of a gallery medium (the same sealed size, then the same SHA-256 from its `blob-meta`) is not stored again - an image banner is a row on the medium's PREVIEW object, a video banner on its ORIGINAL with the medium's PREVIEW as its poster (a medium without one - the poster decoded and uploaded); a gallery upload equal to the video banner is a medium whose ORIGINAL is a row on the `BANNER` object, its posters derived as always. Another content or a medium without a digest uploads as before. The object goes only with the last row naming it; deleting the gallery medium that is the banner's picture (its digest is the banner's) asks first, says the banner stays and offers to remove it too (ADR 0013 § 5, ADR 0102 decisions 3 and 7).
     coverage:
+      backend:
+        integration: [SharedBlobSliceTest.aVideoBannerSharesTheMediumsOriginalAndPreviewAndKeepsThemPastIt, SharedBlobSliceTest.aGalleryOriginalSharesTheVideoBannersObject, SharedBlobSliceTest.theSweepSkipsARecordedKeyThatABlobRowStillNames, SharedBlobSliceTest.theScopesErasureRecordsAnObjectOnce, SharedBlobSliceTest.eachArmAnswersHoldsAsItsSetDoes]
       web:
         unit:
           - src/features/memory/banner/useBannerEditor.test.ts
+          - src/features/memory/banner/bannerWrite.test.ts
+          - src/features/memory/banner/BannerDialog.test.ts
           - src/features/memory/components/MemoryDetail.banner.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memory/media.test.ts
   - id: lifecycle-follows-the-memory
     text: The banner's attachments are trashed and restored with the Memory, freed by its purge, by the scope's erasure (account erasure, tenant deletion), counted in the tenant's quota, copied and pinned by a hold on a report of the Memory, and exported, imported and copied with the Memory.
     coverage:
@@ -96,7 +103,7 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser pass (`e2e/tests/features/memory-banner.spec.ts`: an uploaded landscape image framed at a wide and a
-    phone width with the tab row stuck under the top bar, a portrait gallery photo fit then fill, the gallery video as the
-    banner with no play before the click and no presign of its original after it, the same Memory through a READ link, the
-    removal, the console free of errors) is written with cr-memory-banner and not yet run: the lane's CI job awaits its
+    phone width with the tab row stuck under the top bar, a portrait photo fit then fill, a video uploaded equal to the
+    gallery's as the banner with no play before the click, the same Memory through a READ link, the removal, the console
+    free of errors) is written with cr-memory-banner and cr-cover-banner-upload-only-and-dedup and not yet run: the lane's CI job awaits its
     first run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed.

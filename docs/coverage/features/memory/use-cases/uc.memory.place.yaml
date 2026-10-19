@@ -42,6 +42,13 @@ acceptanceCriteria:
           - src/features/memory/geocode.test.ts
           - src/features/memory/memoryLocation.test.ts
           - src/features/memory/components/MemoryLocationEditor.test.ts
+  - id: name-bounded-to-fit-the-meta
+    text: A place name is at most 200 code points - the name field's maxlength, and every read, every write and an import's restore cut a longer one without splitting a character - because the place is the one field of the Memory's sealed meta a member types without another bound, and the worst-case meta (100 participants, an uploaded cover, a range date, the name at its bound in 4-byte characters, a video banner with poster, type and digest) must seal under its 8192 characters.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/banner/bannerModel.test.ts
+          - src/features/memory/memoryLocation.test.ts
   - id: reverse-only-veyq-blind-geocoding
     text: Geocoding is reverse-only and opt-in; the request goes client-direct to the provider (never through the veyq backend), carries no veyq identity (a bare coordinate), and sits behind a provider-neutral seam reverse(lat,lng,lang)->level[] (the address hierarchy; reference Nominatim, operator-configurable, off-until-configured — ADR 0016). Opt-in is standing consent (may auto-resolve on the first geotagged media at a default level); it never fires without opt-in, and a member who declined sees a name another member resolved without any request. Every caller also obeys the provider's own usage policy (ADR 0016 Request discipline) — results are cached client-side per PLACE (the key is the coordinate rounded to ~110 m, so repeat photos of one spot are one query) and requests are serialised at >= 1 s rather than merely rate-counted; a failure resolves to nothing and is not retried into a ban.
     # The per-PHOTO resolved name that made this discipline necessary is covered under

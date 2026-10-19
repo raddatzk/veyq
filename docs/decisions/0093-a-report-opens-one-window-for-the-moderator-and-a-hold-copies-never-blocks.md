@@ -254,8 +254,11 @@ erased is **taken and ends at once, not refused** (owner 2026-10-19): the decisi
 stays as the evidence it is. The hold is not ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown —
 the case, the affected's statement, the Art. 18 export — one that ended with its target says so ("ended when the content
 was erased"), never plain "lifted": nobody lifted it. **An address is evidence, never the ground of a block.** A
-copy a member made (Depot's "Copy to…") is a new blob under a new key; with no dedup the server cannot know it, and
-a block reaches only the reported copy.
+copy a member made (Depot's "Copy to…") is a new blob under a new key; the server cannot know it, and a block reaches
+only the reported copy. Where blob rows share one stored object inside a node (a cover, a banner, a gallery original,
+[ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5), a block on one reaches every row on the object - the same
+bytes under another id - while the block stands; one that ends with its erased target no longer reaches a row that
+outlived it, as it never reached a copy.
 
 ### 7. Statement of reasons, and objection
 

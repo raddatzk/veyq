@@ -54,7 +54,12 @@
   **merges** (never replaces) by a `name:size:lastModified:type` signature, and (c) infers a `mediaType` from
   the extension so derivation can still run (HEIC/MOV); a file whose extension names nothing either has its type
   sniffed from its first bytes at upload. That type is what the original's sealed blob meta declares, beside the
-  file's name and modified time (inbox #397). **The window never delays the files already in hand** —
+  file's name and modified time (inbox #397) and its **SHA-256** (base64url), read once more, frame by frame, before the
+  file is planned: by it a later upload of the same file into the Memory's cover or banner dialog shares the stored
+  object instead of storing it again, and a member's upload of a file equal to the node's **video banner** shares the
+  banner's object as its ORIGINAL (its posters derived and uploaded as always; `completeMedia`'s `originalShared`;
+  [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) § 5). A guest's upload is never shared.
+  **The window never delays the files already in hand** —
   each re-read enqueues only what is genuinely new, as an additional batch; gating the first enqueue on it made
   every browser pay for the one this workaround exists for. Underivable bytes upload **original-only** (the
   gallery shows an icon).

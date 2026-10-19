@@ -146,9 +146,9 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
   `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8);
   a Memory's **banner** — that it has one and whether it is a video (its `BANNER` / `BANNER_POSTER` attachment rows and
-  their sizes), never its frame, focal point, description or a pixel; a banner copied from a gallery medium can be
-  matched to that medium by its size (a video banner is the original re-sealed as it is) until the small playback copy
-  replaces it, and choosing one downloads the medium's original once ([ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
+  their sizes), never its frame, focal point or a pixel; a banner (or a cover) uploaded equal to a gallery medium shares
+  that medium's stored object, so its row names the medium, and even unshared a banner's size can match a medium's -
+  accepted (inbox #505, [ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
   § What the server sees);
   the **last editor of each sealed field group** — a node's name and meta, a share's name, note and private label, a
   group's name and icon, a bucket's name, a medium's meta: the member or guest identity whose write the ciphertext is,
@@ -338,13 +338,16 @@ server-blind token makes this work without the server ever seeing a name:
   names. A keyed MAC (not a plain hash), so the operator — lacking the parent's key — cannot reverse low-entropy
   slugs; whoever holds that key (a member, or a guest of the Memory it belongs to) can. It is a **consistency aid,
   not an authenticity control**: the client computes it; the server cannot recompute it.
-- **No content dedup.** Content dedup is **declined**
-  ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)): every blob has a
-  random `K_blob`, so identical bytes are two ciphertexts and two stored objects, and the server learns no content
-  equality inside a scope. Any dedup that saves storage must let one stored object serve several references, which
-  shows the operator that two blobs are the same — the leak that was declined. The suite still pins a keyed
-  `dedupToken` (vector `dedup_token`), but no client calls it; [ADR 0024](../decisions/0024-scope-key-rotation.md)
-  says how a future dedup slice would key it across epochs.
+- **No scope-wide dedup; a shared object only inside one node.** Scope-wide dedup is **declined**
+  ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)): every blob has a
+  random `K_blob`, so identical bytes in two nodes are two ciphertexts and two stored objects, and the server learns
+  no content equality across them. Inside one node, the client shares: an upload into a Memory's cover or banner
+  dialog equal to a gallery original (and a gallery upload equal to the video banner) is a second blob row on the
+  stored object, its `K_blob` wrapped again for the new slot. The client compares a SHA-256 sealed under the blob's
+  own key; the server compares nothing, but **it sees which existing blob the new row shares** - which medium is the
+  cover or the banner. Accepted residual (inbox #505, [ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
+  § What the server sees). The suite still pins a keyed `dedupToken` (vector `dedup_token`), but no client calls it;
+  [ADR 0024](../decisions/0024-scope-key-rotation.md) says how a future scope-wide slice would key it across epochs.
 
 ## Sharing & share-boundary Trust & Safety
 
