@@ -364,9 +364,11 @@ paths:
         every entry are sealed by the client — the head bound to the revision it is stored at, `revision + 1`, an entry
         to its `pinId` (ADR 0072). If the stored revision moved since the client read (another device wrote), the server
         responds `409 stale_revision` and **nothing** of the write lands; the client re-reads, re-applies and retries
-        (en.account.identity-pinning § Sync). The first write of a born-empty store sends `revision: 0`. A write that
-        names one `pinId` twice, puts and removes one `pinId`, removes alongside `replaceAll`, or would leave the store
-        with more than 25,000 entries is `400 invalid_request`. Operator-blind: the server sees opaque ids, one sealed
+        (en.account.identity-pinning § Sync). The first write of a born-empty store sends `revision: 0`. A `remove`
+        alongside `replaceAll` is `400 invalid_request` (the schema's own rule); a write that names one `pinId` twice or
+        puts and removes one `pinId` is `422 pins_contradictory` — rules across the lists no schema states (inbox #507);
+        one that would leave the store with more than 25,000 entries is `422 pin_store_full`, nothing written.
+        Operator-blind: the server sees opaque ids, one sealed
         entry each and a sealed head — never a `userId`, a key, a state or who pinned whom; it does see how many entries
         there are, as it always could (ADR 0104 decision 5).
       security:
@@ -392,8 +394,7 @@ paths:
               schema: { $ref: "#/components/schemas/IdentityPins" }
         "400":
           description: >
-            The request was malformed: a missing or invalid field, a `pinId` named twice, a `pinId` both put and removed,
-            a `remove` alongside `replaceAll`, or more than 25,000 entries after the write.
+            The request was malformed: a missing or invalid field, or a `remove` alongside `replaceAll`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -411,6 +412,15 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: stale_revision }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            Nothing was written. The lists contradict each other — a `pinId` put twice, removed twice, or both put and
+            removed (`pins_contradictory`), rules across the lists no schema states; or the write would leave the store
+            with more than 25,000 entries (`pin_store_full`), an answer about what the store already holds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: pins_contradictory }
 
   /api/account/identity-pins/entries:
     get:
@@ -624,7 +634,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RotateAccountKeysResult" }
         "400":
-          description: The request was malformed (a missing, oversized or non-base64 field).
+          description: >
+            The request was malformed (a missing, oversized or non-base64 field), or `identityPins` is not a whole set:
+            no `replaceAll`, or a `remove` beside it.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -660,6 +672,14 @@ paths:
                 unavailable: { value: { code: rotation_unavailable } }
                 stale: { value: { code: stale_revision } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            `identityPins` contradicts itself — a `pinId` put twice, removed twice, or both put and removed
+            (`pins_contradictory`, as `writeIdentityPins` answers it). **Nothing was written.**
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: pins_contradictory }
 
   /api/account/rotation/scopes:
     get:
@@ -1495,8 +1515,18 @@ components:
         One write of the pin store (ADR 0104 decision 4): entries to remove, entries to store, and the new head, applied
         together and only if `revision` is still the stored one (optimistic concurrency → `409 stale_revision`).
       required: [revision, head, put, remove, replaceAll]
+      # `replaceAll` already removes everything not put, so a `remove` beside it is the shape's 400 (PinWrite). The
+      # conditional sits under `dependentSchemas`, never at the schema's top: there both generators ignore it, while a
+      # top-level `if` turns a property that `$ref`s this schema with a sibling (`RotateAccountKeysRequest.identityPins`)
+      # into `Any` (measured on openapi-generator 7.23.0, Kotlin and TypeScript). The lists' other rules — a pinId
+      # twice, or put and removed — are `422 pins_contradictory`: `uniqueItems` would compare whole entries, and both
+      # generators turn a unique list into a set that drops a repeat silently.
+      dependentSchemas:
+        replaceAll:
+          if: { properties: { replaceAll: { const: true } } }
+          then: { properties: { remove: { maxItems: 0 } } }
       # Whole, because one built from the properties' examples puts and removes the same pin (the items share
-      # `IdentityPinId`'s example), which is the `400` this operation declares — the API fuzzing sent it as valid.
+      # `IdentityPinId`'s example), which this operation refuses — the API fuzzing sent it as valid.
       example:
         revision: 3
         head: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
@@ -1912,7 +1942,7 @@ components:
           description: The new sign-in address. Normalized (trimmed, lower-cased) as every stored address is.
           maxLength: 254
           example: kevin.new@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
         authPublicKey:
           type: string
           description: >

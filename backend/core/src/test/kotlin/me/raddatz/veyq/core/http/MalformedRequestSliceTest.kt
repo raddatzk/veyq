@@ -265,6 +265,17 @@ class MalformedRequestSliceTest {
         assertRefused(claim("""{"capabilityTags":[null]}"""), "capabilityTags")
     }
 
+    /** `format: email` is core's `Mailbox` (inbox #510): Hibernate's `@Email` took both of these — a `*` in a domain
+     *  label, a non-ASCII local part — and the login challenge answered them `200`. The control is an address the
+     *  format admits that `@Email`'s simpler reading would not need to: a quoted local part. */
+    @Test
+    fun anAddressTheEmailFormatRefusesIsInvalidRequest() {
+        for (address in listOf("-@so.test*", "u@t.org*", "ä@x.org")) {
+            assertRefused(post("/api/login/challenge", """{"email":"$address"}"""), address)
+        }
+        post("/api/login/challenge", """{"email":"\"a b\"@example.org"}""").then().statusCode(200)
+    }
+
     /** Only a violation of the request is the caller's: one whose path names no method parameter — an entity checked
      *  as it persists, a return value — is the server's own defect, a `500 internal_error` with no report. */
     @Test

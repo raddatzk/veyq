@@ -33,8 +33,9 @@ declared 401/403 is a correct answer.
 
 **The contracts as the server reads them.** Schemathesis reads a copy of every spec file ([write_enforced_specs], in
 the run directory) in which three of the contracts' own idioms are spelled the way a JSON Schema generator reads them —
-`contentEncoding: base64` as the base64 `pattern`, `@NotBlank`/`@NotEmpty` as a non-empty string, `[T, "null"]` with
-`@NotNull` as `T` ([enforced] says why each is what the contract already means). The contracts are not changed by it.
+`contentEncoding: base64` as the base64 `pattern`, `@NotBlank`/`@NotEmpty` as a non-blank/non-empty string,
+`[T, "null"]` with `@NotNull` as `T` ([enforced] says why each is what the contract already means). The contracts are
+not changed by it.
 
 **What the image checks** is `infra/fuzz/schemathesis.toml` (the checks, the auth) and `infra/fuzz/hooks.py` (veyq's
 three own checks: a refusal by location, a refusal that echoes nothing, and `peer_is_refused` — every positive request
@@ -360,7 +361,10 @@ def enforced(node: object) -> object:
     if re.search(r"constraints\.Not(Blank|Empty)\b", note) and out.get("type") in ("string", ["string", "null"]):
         out["minLength"] = max(int(out.get("minLength") or 0), 1)
         if "NotBlank" in note and "pattern" not in out:
-            out["pattern"] = r"\S"  # not whitespace only: a search, as JSON Schema's `pattern` is
+            # Not blank as Hibernate reads it: `toString().trim()` drops every character up to U+0020, so a control
+            # character alone is blank too — `\S` admitted U+001C and the server refused it (inbox #507). A search, as
+            # JSON Schema's `pattern` is.
+            out["pattern"] = r"[^\x00-\x20]"
     if "constraints.NotNull" in note and isinstance(out.get("type"), list) and "null" in out["type"]:
         rest = [t for t in out["type"] if t != "null"]
         out["type"] = rest[0] if len(rest) == 1 else rest

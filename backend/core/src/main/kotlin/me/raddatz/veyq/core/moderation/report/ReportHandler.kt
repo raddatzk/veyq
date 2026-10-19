@@ -57,6 +57,8 @@ sealed interface Reporter {
 
 object ReportFailures {
     val invalid = httpFailure("invalid_request", FailureStatus.BAD_REQUEST)
+    /** A kind and id named twice: a rule across the items no schema states (inbox #507), so not the shape's `400`. */
+    val itemRepeated = httpFailure("report_item_repeated", FailureStatus.UNPROCESSABLE)
     val itemNotFound = httpFailure("report_item_not_found", FailureStatus.NOT_FOUND)
     val epochChanged = httpFailure("moderation_epoch_changed", FailureStatus.CONFLICT)
     val tooManyOpen = httpFailure("too_many_open_reports", FailureStatus.RATE_LIMITED)
@@ -74,7 +76,10 @@ object ReportFailures {
  *
  * **Check order** (each refusal stores nothing): the reporter's own gate first — a member's scope access (the gate every
  * scope-addressed operation runs first, ADR 0042), a guest's link, password and write proof — so an id is never an
- * oracle before it; then the request's shape, the epoch, the reach of every item, and a member's cap on open reports.
+ * oracle before it; then the request's shape (`400`, the schema's own rule), an item named twice (`422`), the epoch, the
+ * reach of every item — a `LINK` is in reach only of a guest of a `WRITE_ONLY` link, the link it came through, so a
+ * member's or a viewing guest's is `404 report_item_not_found` like any other item they cannot report — and a member's
+ * cap on open reports.
  *
  * **Lock: the item's space row** ([NodesStore.lockScope]), taken before the reach is read and held while the cases are
  * found or opened. Every report of an item is in that item's space, so two reports of one item run one after the other
@@ -113,7 +118,7 @@ class ReportHandler(
             ?.let { return refused(it) }
         // ADR 0093 § 5: a barred member reports nothing — after the space's gate, so the bar is no oracle for a stranger.
         if (blocks.reporterBarred(m.userId, null)) return refused(ReportFailures.reporterBarred)
-        if (!wellFormed(r, guestLink = false)) return refused(ReportFailures.invalid)
+        malformed(r)?.let { return refused(it) }
         if (!currentEpoch(r.epoch)) return refused(ReportFailures.epochChanged)
         nodes.lockScope(m.scopeId)
         val placed = r.items.map { item ->
@@ -145,7 +150,7 @@ class ReportHandler(
         // ADR 0093 § 5: reports through a barred link are refused — after the whole link was proved, so no oracle.
         if (blocks.reporterBarred(null, share.id)) return refused(ReportFailures.reporterBarred)
         val writeOnly = !ShareAccessPolicy.canView(share.role)
-        if (!wellFormed(r, guestLink = writeOnly)) return refused(ReportFailures.invalid)
+        malformed(r)?.let { return refused(it) }
         if (!limiter.allowShare(share.id)) return refused(ReportFailures.rateLimited)
         if (!currentEpoch(r.epoch)) return refused(ReportFailures.epochChanged)
         nodes.lockScope(share.scopeId)
@@ -173,13 +178,15 @@ class ReportHandler(
         if (sharing.findNode(share.nodeId)?.deletedAt != null) emptySet() else sharing.liveSubtreeIds(share.scopeId, share.nodeId).toSet()
 
     /**
-     * Every item once; a NODE or an ITEM names its id, a LINK none. A LINK only from a guest of a `WRITE_ONLY` link
-     * ([guestLink]) — a member reports no link, and a viewing guest reports what the link shows.
+     * The request's shape (`400`) and its items each named once (`422`), or null. A NODE or an ITEM names its id, a
+     * LINK none — `ReportItemSubmission`'s own `if`/`then`/`else`, so a body the contract admits never fails here. Whether
+     * the reporter may report a LINK at all is the reach's question, not the shape's: only a guest of a `WRITE_ONLY` link
+     * has one in reach (`404 report_item_not_found` for everyone else, as for any item outside their reach).
      */
-    private fun wellFormed(r: ReportIn, guestLink: Boolean): Boolean {
-        val shaped = r.items.all { if (it.kind == ReportItemKind.LINK) it.id == null && guestLink else it.id != null }
+    private fun malformed(r: ReportIn): HttpFailure? {
+        if (!r.items.all { if (it.kind == ReportItemKind.LINK) it.id == null else it.id != null }) return ReportFailures.invalid
         val keys = r.items.map { it.kind to it.id }
-        return shaped && keys.toSet().size == keys.size
+        return ReportFailures.itemRepeated.takeIf { keys.toSet().size != keys.size }
     }
 
     private fun currentEpoch(epoch: Int): Boolean =

@@ -3,16 +3,6 @@
   "schemathesis_version": "4.32.0",
   "entries": [
     {
-      "id": "95ded8",
-      "operation": "PATCH /api/scopes/{scopeId}/nodes/{nodeId}",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — a placement write's fields come all together (`UpdateNodeRequest`), and the contract's own example sends them with `placementRevision: null`."
-    },
-    {
       "id": "8d26b3",
       "operation": "PATCH /api/shares/{shareId}",
       "check": "positive_data_acceptance",
@@ -21,36 +11,6 @@
       "first_seen": "2026-10-19",
       "last_seen": "2026-10-19",
       "reason": "Deferred to inbox #507: an `expiresAt` no time column holds (before 1582-10-15, past 9999-12-31, or an offset past ±18:00 that java.time cannot read) is refused 400 while binding — the range the description states, which JSON Schema's date-time does not."
-    },
-    {
-      "id": "f69fd6",
-      "operation": "POST /api/moderation/cases/{caseId}/measures",
-      "check": "negative_data_rejection",
-      "failure": "AcceptedNegativeData",
-      "signature": "413",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #508: a body over the server's 10 MiB request limit (here `factsFor` past its 4,000 items, each with long facts) is refused by the transport with a bare 413 before any shape check — a refusal, but not the contract's 400 ErrorResponse."
-    },
-    {
-      "id": "003cd3",
-      "operation": "POST /api/moderation/cases/{caseId}/measures",
-      "check": "refusal_by_location",
-      "failure": "AcceptedNegativeData",
-      "signature": "413",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #508: the same 413 as this operation's negative_data_rejection entry, reported by veyq's own refusal_by_location (which applies that check per location) — a body over the 10 MiB request limit is refused by the transport before any shape check."
-    },
-    {
-      "id": "cc2e56",
-      "operation": "POST /api/moderation/cases/{caseId}/measures",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "413",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #508: the transport's 413 for a body over the 10 MiB request limit is declared by no operation."
     },
     {
       "id": "b12c0e",
@@ -63,26 +23,6 @@
       "reason": "Accepted by design: `role` is an open token whose admissible set is the applications' (ADR 0079; `BlobRole` in _common), and a role no application declares is the 400 this operation declares — the contract's own example `A` is one."
     },
     {
-      "id": "a8b61b",
-      "operation": "POST /api/scopes/{scopeId}/epochs",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — a rotation's grants, admissions and dropped admissions must agree with the scope's members; which of its rules a generated body breaks is the row's to state."
-    },
-    {
-      "id": "09fd5c",
-      "operation": "POST /api/scopes/{scopeId}/reports",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — `sealedReport` is padded to 512-byte buckets and an item's `id` goes with its `kind`, both in prose only."
-    },
-    {
       "id": "e1cb35",
       "operation": "POST /api/shares",
       "check": "positive_data_acceptance",
@@ -90,17 +30,7 @@
       "signature": "400",
       "first_seen": "2026-10-19",
       "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — which fields a link carries depends on its `role` (the drop keys, the write verifier), and the contract's own example sends a READ link with a WRITE_ONLY link's fields."
-    },
-    {
-      "id": "f2f6df",
-      "operation": "POST /api/shares/{shareId}/media",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — a guest's completion names uploads and tiers that must agree with each other; which rule a generated body breaks is the row's to state."
+      "reason": "Deferred to inbox #509: an `expiresAt` the TIMESTAMP columns cannot hold (before 1970, after 2038-01-19, or an offset past ±18:00 that java.time cannot read) is refused 400 while binding; JSON Schema's date-time admits it. Which keys a link carries for its `role` is the schema's own rule (`CreateShareRequest`'s `if`/`then`/`else`), no longer a 400 the schema admits."
     },
     {
       "id": "4b2298",
@@ -111,16 +41,6 @@
       "first_seen": "2026-10-19",
       "last_seen": "2026-10-19",
       "reason": "Deferred to inbox #507: the stateful sequence re-issues a link with an `expiresAt` in the year 952, before the range a stored time holds (from 1582-10-15, which the description states), refused 400 while binding; JSON Schema's date-time admits it."
-    },
-    {
-      "id": "498423",
-      "operation": "POST /api/tasks/enqueue",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — the contract's own example (a tag and a resource of a scope the caller is no member of) is refused 400; which rule is the row's to state."
     },
     {
       "id": "1c24aa",
@@ -141,16 +61,6 @@
       "first_seen": "2026-10-19",
       "last_seen": "2026-10-19",
       "reason": "Accepted by design: the refresh token travels in the cookie or the body, one of the two required — a rule across locations no schema states, declared as this operation's 400 (`missing token`); and no generated request carries a token the run holds."
-    },
-    {
-      "id": "5118ca",
-      "operation": "PUT /api/account/identity-pins",
-      "check": "positive_data_acceptance",
-      "failure": "RejectedPositiveData",
-      "signature": "400",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #507: the schema admits a body the server refuses `400 invalid_request` for a rule it states only in prose — a `remove` beside `replaceAll: true`, or a pin both put and removed, is the declared 400 the schema cannot say (`IdentityPinsWrite.contradictory`)."
     }
   ]
 }

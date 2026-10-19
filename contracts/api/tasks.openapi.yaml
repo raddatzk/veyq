@@ -134,7 +134,7 @@ paths:
             schema: { $ref: "#/components/schemas/EnqueueRequest" }
             example:
               scopeId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-              capabilityTag: "02f271ff"
+              capabilityTag: "5b1e7c2a"
               resourceRef: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               sealedBody: AQ==
       responses:
@@ -637,6 +637,13 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         capabilityTag:
           $ref: "#/components/schemas/CapabilityTag"
+          description: >
+            Never a tag the registry (`contracts/tasks/tags/v1.json`) marks `server-structural` or `server-event` — the
+            server originates those jobs itself (`400 invalid_request`, the schema's own rule, inbox #507).
+          # The registry's server-originated tags; `TaskTagRegistryContractTest` holds this list to the registry and to
+          # `CapabilityTags.SERVER_ORIGINATED`. The generators ignore `not` (measured on openapi-generator 7.23.0).
+          not: { enum: ["02f271ff", "663157d8"] }
+          example: "5b1e7c2a"
           # The generator inlines the scalar `CapabilityTag` as a String and emits none of its bounds: they hold only
           # through this annotation (`validate_request_bounds.py`, a `$ref`'d scalar).
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[0-9a-f]+")'

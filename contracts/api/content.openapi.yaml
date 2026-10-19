@@ -600,7 +600,27 @@ components:
       description: >
         Partial update — a placement write (move or rename: `parentId`, `wrappedContentKey`, `encryptedName`,
         `slugToken`, `epoch`, `placementRevision`, all together), a reorder (`orderIndex`), a payload re-seal
-        (`wrappedMeta` + `metaRevision`). Omitted fields are unchanged.
+        (`wrappedMeta` + `metaRevision`). Omitted fields are unchanged. The two groups are the schema's own rules
+        (inbox #507): any field of a placement — or a `parentId` that is not null — brings the other five with it, and a
+        `wrappedMeta` that is not null brings its `metaRevision`; a body short of either is `400 invalid_request`.
+      # A placement comes whole (NodesHandler.PlacementRequest.complete). `parentId` is not a key here: its null is the
+      # scope root and is sent alone by nobody, so only a non-null one brings the rest (dependentSchemas below). The
+      # generators ignore both keywords (measured on openapi-generator 7.23.0: the Kotlin and TypeScript models are
+      # the same as without them — a top-level `if` would not be: it turns a sibling-annotated `$ref` to the schema
+      # into `Any`); Schemathesis reads them.
+      dependentRequired:
+        encryptedName: [slugToken, wrappedContentKey, epoch, placementRevision]
+        slugToken: [encryptedName, wrappedContentKey, epoch, placementRevision]
+        wrappedContentKey: [encryptedName, slugToken, epoch, placementRevision]
+        epoch: [encryptedName, slugToken, wrappedContentKey, placementRevision]
+        placementRevision: [encryptedName, slugToken, wrappedContentKey, epoch]
+      dependentSchemas:
+        parentId:
+          if: { properties: { parentId: { type: string } } }
+          then: { required: [encryptedName, slugToken, wrappedContentKey, epoch, placementRevision] }
+        wrappedMeta:
+          if: { properties: { wrappedMeta: { type: string } } }
+          then: { required: [metaRevision] }
       properties:
         encryptedName:
           type: string
@@ -609,16 +629,18 @@ components:
             the scope root), seal purpose `node-name` bound to scope, node, `epoch` and `placementRevision + 1` (ADR
             0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
+          minLength: 1
           maxLength: 4096
           example: cmVuYW1lZA==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         slugToken:
           type: string
           description: Placement write — the blinded slug token recomputed under the destination parent's content key (`K_SC` at `epoch` at the scope root) over the destination slot (opaque base64).
           contentEncoding: base64
+          minLength: 1
           maxLength: 128
           example: bmV3LXNsdWc=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         parentId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -633,12 +655,13 @@ components:
             `epoch` and `placementRevision + 1` (ADR 0080 Decision 3; opaque base64). A rename re-wraps too: the old
             wrap is bound to the old revision.
           contentEncoding: base64
+          minLength: 1
           maxLength: 256
           example: cmUtd3JhcHBlZC1rLW1lbQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         epoch:
           x-veyq-visibility: structure
-          type: [integer, "null"]
+          type: integer
           description: >
             Placement write — the scope content-key epoch the entry was sealed at (ADR 0024). Must be the scope's
             current one when the destination is the scope root (else `409 stale_epoch`); stored on a move into or
@@ -649,7 +672,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         placementRevision:
           x-veyq-visibility: structure
-          type: [integer, "null"]
+          type: integer
           format: int64
           description: >
             Placement write — the `NodeSummary.placementRevision` the placement was built on. The server

@@ -172,7 +172,8 @@ Three structural costs sit on top of those numbers:
      path, query and header parameters included), and every `GET` in **positive** mode with the seeded ids. A
      malformed query or header parameter or body is refused with the contract's `400 invalid_request`; a malformed
      path segment with `400` or `404` — a path id that is no UUID matches no route and answers `404`, as
-     `IdBoundarySliceTest` holds. An operation that takes a credential (a parameter or request-body property marked
+     `IdBoundarySliceTest` holds; a body past the instance's request limit, malformed or not, with the `413
+     request_too_large` every operation with a body declares (inbox #508). An operation that takes a credential (a parameter or request-body property marked
      `x-veyq-visibility: token`) may refuse any of it with its declared `401` or `403`: every request the run sends
      carries a credential it cannot forge, and authentication runs before shape (owner, 2026-10-18). Every answer is a status the operation declares, its body matches the declared
      schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx.
@@ -193,8 +194,13 @@ Three structural costs sit on top of those numbers:
        creates. Hand-kept links would be a second description of what the schemas say.
      - *The contracts as the server reads them:* the positive invocations read a copy of the specs in which the
        contracts' own idioms are spelled for a generator — `contentEncoding: base64` as whole base64 quanta,
-       `@NotBlank` as a non-empty string, `[T, "null"]` with `@NotNull` as `T`, an integer within its generated type.
-       The negative invocations read the contracts as they are.
+       `@NotBlank` as a string with a character above U+0020 (Hibernate's blank is Java's `trim()`), `[T, "null"]` with
+       `@NotNull` as `T`, an integer within its generated type. The negative invocations read the contracts as they
+       are. A rule the server holds beyond these is the contract's to state, not the run's: in the schema where a
+       schema can say it (`dependentRequired`, `not`, and `if`/`then`/`else` under `dependentSchemas` — never at a
+       schema's top, where it turns a sibling-annotated `$ref` to the schema into `Any`; so placed, both generators ignore
+       them, measured on openapi-generator 7.23.0, and Schemathesis reads them), else as a semantic status with a code of
+       its own (`422`), never the shape's `400` (inbox #507).
      - *The second identity:* a member of the same tenant, of none of the owner's scopes. Every positive request the
        owner made in its scope and the server accepted is sent again as that peer and must be answered exactly as a
        scope that does not exist is — the same `404` and `code` (membership is the first guard, ADR 0042); where it

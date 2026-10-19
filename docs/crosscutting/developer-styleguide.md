@@ -172,8 +172,9 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   resources at startup (`core/http/DeclaredMethods.kt`, `UndeclaredMethodFilter`); a literal path wins over its
   templated sibling, an `/api` path no resource declares stays the unknown route for every method, and so, off the
   admin channel, does a Server-Owner path (`UndeclaredMethodSliceTest`, `ApiMethodIndexContractTest`, inbox #494). A body
-  whose `Content-Length` is past the request limit answers `413 ErrorResponse{code: request_too_large}` on the header
-  alone and closes the connection (`RequestTooLargeRoutes`, one route ahead of Quarkus' bare `413`), and every operation
+  past the request limit answers `413 ErrorResponse{code: request_too_large}` and closes the connection — on the
+  `Content-Length` header alone, or, for a body of unknown length (chunked), once the count passes the limit while it is
+  read (`RequestTooLargeRoutes`, one route ahead of Quarkus' bare `413`; `RequestTooLargeSliceTest`), and every operation
   that takes a body declares it as `_common`'s `RequestTooLarge` (`validate_contracts_common.py` assertion 6). Core's
   `core/http/RequestRejectionMappers.kt` holds one mapper per exception type plus one response filter for the empty
   400 Quarkus' body reader answers, so every generated resource — each application's too — answers alike with no
