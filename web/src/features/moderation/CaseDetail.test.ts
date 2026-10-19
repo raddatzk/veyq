@@ -70,9 +70,9 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
   tenantDomain: 'club.example.org',
   category: 'TERMS_BREACH',
   state: 'OPEN',
-  decidedAt: null,
-  closedAt: null,
-  hold: { endsAt: new Date('2027-01-15T09:00:00Z'), trigger: 'CASE_OPEN', floorUntil: null },
+  decidedAt: undefined,
+  closedAt: undefined,
+  hold: { endsAt: new Date('2027-01-15T09:00:00Z'), trigger: 'CASE_OPEN', floorUntil: undefined },
   reports: [
     { id: REPORT, epoch: 2, receivedAt: new Date('2026-10-17T09:00:00Z'), category: 'TERMS_BREACH', sealedReport: 'AQ==', reporter: 'LINK', barred: false },
     { id: REPORT_2, epoch: 1, receivedAt: new Date('2026-10-17T10:00:00Z'), category: 'ILLEGAL_CONTENT', sealedReport: 'Ag==', reporter: 'ACCOUNT', barred: true },
@@ -84,8 +84,8 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
       targetId: BLOCKED_LINK,
       takenBy: MODERATOR,
       takenAt: new Date('2026-10-17T12:00:00Z'),
-      liftedAt: null,
-      liftedBy: null,
+      liftedAt: undefined,
+      liftedBy: undefined,
       statement: {
         id: STATEMENT,
         ground: 'TERMS_BREACH',
@@ -95,7 +95,7 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
         sealedFacts: 'ZmFjdHM=',
         recipients: 2,
         guests: 0,
-        deferredUntil: null,
+        deferredUntil: undefined,
         renewed: false,
       },
     },
@@ -112,11 +112,11 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
     ],
     uploaders: [
       { kind: 'GUEST_IDENTITY', id: GUEST, shareId: OPEN_LINK, blocked: false },
-      { kind: 'ACCOUNT', id: MEMBER, shareId: null, blocked: false },
+      { kind: 'ACCOUNT', id: MEMBER, shareId: undefined, blocked: false },
     ],
   },
   events: [
-    { event: 'RECEIVED', at: new Date('2026-10-17T09:00:00Z'), moderatorId: null, detail: null, epoch: null, sealedText: null, until: null },
+    { event: 'RECEIVED', at: new Date('2026-10-17T09:00:00Z'), moderatorId: undefined, detail: null, epoch: null, sealedText: undefined, until: undefined },
     { event: 'HOLD_EXTENDED', at: new Date('2026-10-17T13:00:00Z'), moderatorId: MODERATOR, detail: null, epoch: 2, sealedText: 'c2VhbGVk', until: new Date('2027-03-01T00:00:00Z') },
   ],
   ...over,
@@ -217,7 +217,7 @@ describe('CaseDetail', () => {
 
   it('extends the hold with a new end and a reason', async () => {
     const until = new Date('2027-03-01T00:00:00Z')
-    vi.mocked(extendHold).mockResolvedValue(caseOf({ hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: null } }))
+    vi.mocked(extendHold).mockResolvedValue(caseOf({ hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: undefined } }))
     const w = await mountCase()
     w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', until)
     await w.find('.moderation-extend-reason').setValue('an authority asked')
@@ -229,7 +229,7 @@ describe('CaseDetail', () => {
 
   it('on a child-sexual-abuse case the extension names an authority or an Art. 18 report, and nothing else is offered', async () => {
     const until = new Date('2027-03-01T00:00:00Z')
-    vi.mocked(extendHold).mockResolvedValue(caseOf({ category: 'CHILD_SEXUAL_ABUSE', hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: null } }))
+    vi.mocked(extendHold).mockResolvedValue(caseOf({ category: 'CHILD_SEXUAL_ABUSE', hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: undefined } }))
     const w = await mountCase(caseOf({ category: 'CHILD_SEXUAL_ABUSE' }))
     const offered = w.findAll('.moderation-extend-type option').map((o) => o.attributes('value')).filter((v) => v)
     expect(offered).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS'])
@@ -350,7 +350,7 @@ describe('CaseDetail', () => {
       expect(statement).toContain(t('moderation.case.statementGround', { ground: t('report.categories.TERMS_BREACH') }))
       expect(w.find('.moderation-measure-facts').text()).toContain('what was found')
       const nobody = caseOf()
-      nobody.measures[0].statement = { ...nobody.measures[0].statement!, sentAt: null, recipients: 0, sealedFacts: null, epoch: null }
+      nobody.measures[0].statement = { ...nobody.measures[0].statement!, sentAt: undefined, recipients: 0, sealedFacts: undefined, epoch: undefined }
       const w2 = await mountCase(nobody)
       expect(w2.find('.moderation-measure-statement').text()).toContain(t('moderation.case.statementNobody'))
       expect(w2.find('.moderation-measure-facts').exists()).toBe(false)
@@ -365,9 +365,9 @@ describe('CaseDetail', () => {
       receivedAt: new Date('2026-10-18T09:00:00Z'),
       epoch: 2,
       sealedObjection: 'b2JqZWN0aW9u',
-      decidedAt: null,
-      decidedBy: null,
-      outcome: null,
+      decidedAt: undefined,
+      decidedBy: undefined,
+      outcome: undefined,
       ownReview: false,
       mayDecide: true,
       ...over,
@@ -427,7 +427,7 @@ describe('CaseDetail', () => {
   })
 
   it('a closed case takes no new step, but a measure in force can still be lifted', async () => {
-    const w = await mountCase(caseOf({ state: 'CLOSED', hold: null }))
+    const w = await mountCase(caseOf({ state: 'CLOSED', hold: undefined }))
     expect(w.find('.moderation-decide-closed').exists()).toBe(true)
     expect(w.find('.moderation-decide').exists()).toBe(false)
     expect(w.find('.moderation-extend').exists()).toBe(false)
@@ -438,7 +438,7 @@ describe('CaseDetail', () => {
     const w = await mountCase(
       caseOf({
         proposals: [
-          { id: 'p1', step: 'TENANT_OFFLINE', targetId: TENANT, proposedBy: MODERATOR, proposedAt: new Date(), outcome: 'OPEN', settledAt: null },
+          { id: 'p1', step: 'TENANT_OFFLINE', targetId: TENANT, proposedBy: MODERATOR, proposedAt: new Date(), outcome: 'OPEN', settledAt: undefined },
         ],
       }),
     )
@@ -497,9 +497,9 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     const held = new Date('2026-11-20T00:00:00Z')
     const c = caseOf()
     const measure = c.measures[0]
-    const deferred = caseOf({ measures: [{ ...measure, statement: { ...measure.statement!, sentAt: null, deferredUntil: held, renewed: false } }] })
+    const deferred = caseOf({ measures: [{ ...measure, statement: { ...measure.statement!, sentAt: undefined, deferredUntil: held, renewed: false } }] })
     vi.mocked(renewDeferral).mockResolvedValue(
-      caseOf({ measures: [{ ...measure, statement: { ...measure.statement!, sentAt: null, deferredUntil: new Date('2026-12-20T00:00:00Z'), renewed: true } }] }),
+      caseOf({ measures: [{ ...measure, statement: { ...measure.statement!, sentAt: undefined, deferredUntil: new Date('2026-12-20T00:00:00Z'), renewed: true } }] }),
     )
     const w = await mountCase(deferred)
     expect(w.find('.moderation-measure-statement').text()).toContain(t('moderation.deferral.deferredUntil', { time: held.toLocaleString('en') }))

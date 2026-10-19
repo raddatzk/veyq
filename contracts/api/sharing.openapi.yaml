@@ -139,6 +139,9 @@ paths:
       parameters:
         - name: nodeId
           in: query
+          # An empty value (`?nodeId=`) is this parameter's absence: Quarkus REST
+          # never converts it (cr-api-fuzzing).
+          allowEmptyValue: true
           required: false
           schema: { type: string, format: uuid }
           description: Scope the listing to one shared node — returns all its shares visible to a scope member.
@@ -150,6 +153,10 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/ShareSummary" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -173,6 +180,10 @@ paths:
       responses:
         "204":
           description: The share is disabled (or was already gone).
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -210,6 +221,10 @@ paths:
       responses:
         "204":
           description: The share is enabled and now owned by the caller.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -418,6 +433,10 @@ paths:
               schema: { $ref: "#/components/schemas/PublicShare" }
         "304":
           description: Not Modified — the guest's `If-None-Match` equals the digest of what this resolve would serve.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
           description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
           content:
@@ -513,6 +532,10 @@ paths:
       responses:
         "204":
           description: The share is deleted.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -564,6 +587,10 @@ paths:
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                   record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
                   objection: { de: "### Dein Widerspruchsrecht …", en: "### Your right to object …" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "404":
           description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case, like `resolveShare`.
           content:
@@ -593,6 +620,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareBlobDownload" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
           description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
           content:
@@ -641,6 +672,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CaseReview" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -1086,6 +1121,10 @@ paths:
       responses:
         "204":
           description: The placeholder was erased.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
           description: The share is a READ link, a WRITE_ONLY link whose identity has no live identity folder, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
           content:
@@ -1195,6 +1234,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ShareOrderNotice" }
               example: { removals: [{ orderReceivedAt: 2026-10-18T07:12:00Z }], contactAddress: abuse@example.org }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "404":
           description: Nothing to tell this token on this link — the link's ordinary unknown answer (`share_not_found`).
           content:
@@ -2129,7 +2172,7 @@ components:
     CaseHeldLink:
       type: object
       description: A link the hold copied — the reported one, or one rooted in the reported subtree.
-      required: [shareId, role, nodeId, sealedName, sealedNote]
+      required: [shareId, role, nodeId]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -2141,13 +2184,13 @@ components:
           $ref: "#/components/schemas/ShareRole"
         nodeId: { type: string, format: uuid, x-veyq-visibility: id, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
         sealedName:
-          type: [string, "null"]
+          type: string
           description: The link's name as held (`share-memory-name`, a field key under `K_share`).
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWU=
         sealedNote:
-          type: [string, "null"]
+          type: string
           description: The link's note as held (`share-note`), or null.
           contentEncoding: base64
           maxLength: 16384
@@ -2618,7 +2661,7 @@ components:
         What a guest uploader is told of an authority's removal order that took its upload down (TCO Art. 11, ADR 0093
         § 12): when each order was received, and where to ask for the reasons or a copy. Never the order's reference,
         the authority, or anything of another identity.
-      required: [removals, contactAddress]
+      required: [removals]
       properties:
         removals:
           type: array
@@ -2627,7 +2670,7 @@ components:
           items: { $ref: "#/components/schemas/ShareOrderRemoval" }
         contactAddress:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           format: email
           description: The instance contact (ADR 0093 § 11), where the reasons or a copy of the order are asked for; null where none is set.
           maxLength: 254

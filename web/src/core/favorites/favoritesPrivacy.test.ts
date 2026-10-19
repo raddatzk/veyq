@@ -41,7 +41,7 @@ beforeEach(() => {
   stored = null
   vi.mocked(masterKey).mockReturnValue(MK)
   fakeApi(favoritesApi, {
-    getFavorites: () => Promise.resolve({ ciphertext: stored }),
+    getFavorites: () => Promise.resolve({ ciphertext: stored ?? undefined }),
     putFavorites: ({ putFavoritesRequest }) => {
       stored = putFavoritesRequest.ciphertext
       return Promise.resolve()

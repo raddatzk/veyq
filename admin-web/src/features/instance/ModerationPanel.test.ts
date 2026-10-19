@@ -74,19 +74,19 @@ function on(over: Partial<InstanceModeration> = {}): InstanceModeration {
   return {
     enabled: true,
     currentEpoch: 2,
-    currentKemPublicKey: null,
-    rotationDueSince: null,
+    currentKemPublicKey: undefined,
+    rotationDueSince: undefined,
     serverOwner: { accountId: 'owner', identityPublicKey: 'AAAA' },
     moderators: [
       moderator({}),
       moderator({ accountId: 'deputy', address: 'deputy@example.com', addressConfirmed: false }),
-      moderator({ accountId: 'new', address: 'new@example.com', state: 'PENDING', acceptedAt: null, identityPublicKey: null, holdsCurrentEpoch: false, addressConfirmed: false }),
+      moderator({ accountId: 'new', address: 'new@example.com', state: 'PENDING', acceptedAt: undefined, identityPublicKey: undefined, holdsCurrentEpoch: false, addressConfirmed: false }),
     ],
     ...over,
   }
 }
 
-const off: InstanceModeration = { ...on(), enabled: false, currentEpoch: null, moderators: [] }
+const off: InstanceModeration = { ...on(), enabled: false, currentEpoch: undefined, moderators: [] }
 
 const noSteps: ModerationSteps = { proposals: [], signInBlocks: [] }
 
@@ -117,7 +117,7 @@ describe('ModerationPanel (uc.moderation.appoint-moderators, admin-web)', () => 
     const w = await mountPanel(on({ moderators: [
       moderator({}),
       moderator({ accountId: 'deputy', address: 'deputy@example.com', holdsCurrentEpoch: false, addressConfirmed: false }),
-      moderator({ accountId: 'new', address: 'new@example.com', state: 'PENDING', acceptedAt: null, identityPublicKey: null, holdsCurrentEpoch: false }),
+      moderator({ accountId: 'new', address: 'new@example.com', state: 'PENDING', acceptedAt: undefined, identityPublicKey: undefined, holdsCurrentEpoch: false }),
     ] }))
     expect(row(w, 'owner@example.com').text()).toContain(t('moderation.stateHolds'))
     expect(row(w, 'owner@example.com').text()).toContain(t('moderation.addressConfirmed'))
@@ -220,13 +220,13 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
   function memberProposal(over: Partial<OpenModerationProposal> = {}): OpenModerationProposal {
     return {
       id: 'p-member', caseId: 'case-1', category: 'ILLEGAL_CONTENT', step: 'MEMBER_SIGN_IN', accountId: 'acc-1',
-      address: 'member@example.com', tenantId: null, tenantDomain: null, proposedAt: PROPOSED, ...over,
+      address: 'member@example.com', tenantId: undefined, tenantDomain: undefined, proposedAt: PROPOSED, ...over,
     }
   }
   function tenantProposal(over: Partial<OpenModerationProposal> = {}): OpenModerationProposal {
     return {
-      id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', accountId: null,
-      address: null, tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: PROPOSED, ...over,
+      id: 'p-tenant', caseId: 'case-2', category: 'TERRORIST_CONTENT', step: 'TENANT_OFFLINE', accountId: undefined,
+      address: undefined, tenantId: 'tn-9', tenantDomain: 'club.example.org', proposedAt: PROPOSED, ...over,
     }
   }
   function signInBlock(over: Partial<AccountSignInBlock> = {}): AccountSignInBlock {
@@ -234,7 +234,7 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
   }
   const open: ModerationSteps = {
     proposals: [memberProposal(), tenantProposal()],
-    signInBlocks: [signInBlock(), signInBlock({ id: 'b-2', accountId: 'acc-3', address: 'ordered@example.com', caseId: null })],
+    signInBlocks: [signInBlock(), signInBlock({ id: 'b-2', accountId: 'acc-3', address: 'ordered@example.com', caseId: undefined })],
   }
   const proposal = (w: Awaited<ReturnType<typeof mountPanel>>, id: string) => w.find(`[data-proposal="${id}"]`)
   const blockRow = (w: Awaited<ReturnType<typeof mountPanel>>, address: string) => w.find(`[data-block="${address}"]`)
@@ -323,7 +323,7 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
   })
 
   it('offers no block for a proposal whose account is gone, and still lets it be declined', async () => {
-    const w = await mountPanel(on(), { proposals: [memberProposal({ address: null })], signInBlocks: [] })
+    const w = await mountPanel(on(), { proposals: [memberProposal({ address: undefined })], signInBlocks: [] })
     expect(proposal(w, 'p-member').find('.mod-proposal__block').exists()).toBe(false)
     expect(proposal(w, 'p-member').find('.mod-proposal__target').text()).toBe(t('moderation.steps.accountGone'))
     expect(proposal(w, 'p-member').find('.mod-proposal__decline').exists()).toBe(true)

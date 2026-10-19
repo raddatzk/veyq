@@ -26,7 +26,7 @@ beforeEach(() => {
 
 describe('loadOrderNotice', () => {
   it('asks nothing when this device holds no session for the link', async () => {
-    const { getShareOrderNotice } = stubApi(publicSharesApi, { getShareOrderNotice: { removals: [{ orderReceivedAt: RECEIVED }], contactAddress: null } })
+    const { getShareOrderNotice } = stubApi(publicSharesApi, { getShareOrderNotice: { removals: [{ orderReceivedAt: RECEIVED }], contactAddress: undefined } })
     expect(await loadOrderNotice(SHARE_ID)).toBeNull()
     expect(getShareOrderNotice).not.toHaveBeenCalled()
   })
@@ -60,7 +60,7 @@ describe('OrderNotice', () => {
 
   it('without an instance contact sends the guest to the people who run the instance', async () => {
     saveGuestSession(SHARE_ID, { identityId: 'id-1', contributorToken: 'tok-1' })
-    stubApi(publicSharesApi, { getShareOrderNotice: { removals: [{ orderReceivedAt: RECEIVED }], contactAddress: null } })
+    stubApi(publicSharesApi, { getShareOrderNotice: { removals: [{ orderReceivedAt: RECEIVED }], contactAddress: undefined } })
     const w = mount(OrderNotice, { props: { shareId: SHARE_ID }, global: { plugins: [realI18n()], stubs } })
     await flushPromises()
     expect(w.find('.order-notice-ask').text()).toBe(t('share.orderNotice.askOperator'))

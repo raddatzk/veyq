@@ -26,8 +26,8 @@ const EPOCH = 2
 function recorded(req: AuthorityOrderRequest): AuthorityOrder {
   return {
     id: req.id, kind: req.kind, shareId: req.shareId, receivedAt: req.receivedAt, enteredAt: new Date(), enteredBy: 'mod',
-    found: true, blockedAt: new Date(), caseId: 'case', holdUntil: new Date(), statementDeferredUntil: null,
-    epoch: req.reference.epoch, sealedReference: req.reference.sealedReference, providerName: null, contactPoint: null,
+    found: true, blockedAt: new Date(), caseId: 'case', holdUntil: new Date(), statementDeferredUntil: undefined,
+    epoch: req.reference.epoch, sealedReference: req.reference.sealedReference, providerName: undefined, contactPoint: undefined,
   }
 }
 

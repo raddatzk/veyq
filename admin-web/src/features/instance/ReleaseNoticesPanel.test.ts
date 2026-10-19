@@ -39,11 +39,11 @@ const stubs = {
 }
 
 function notice(kind: InstanceReleaseNotice['kind'], release: string, date: string | null = null): InstanceReleaseNotice {
-  return { id: `${kind}-${release}`, kind, release, date: date ? new Date(`${date}T00:00:00Z`) : null, daysAhead: null, foundAt: new Date(), mailedAt: null }
+  return { id: `${kind}-${release}`, kind, release, date: date ? new Date(`${date}T00:00:00Z`) : undefined, daysAhead: undefined, foundAt: new Date(), mailedAt: undefined }
 }
 
 function read(over: Partial<InstanceReleaseNotices> = {}): InstanceReleaseNotices {
-  return { releaseLine: true, enabled: true, source: null, lastSuccessAt: new Date('2026-10-16T04:00:00Z'), notices: [], ...over }
+  return { releaseLine: true, enabled: true, source: undefined, lastSuccessAt: new Date('2026-10-16T04:00:00Z'), notices: [], ...over }
 }
 
 async function mountPanel() {
@@ -77,7 +77,7 @@ describe('ReleaseNoticesPanel (uc.admin.learn-of-new-releases, admin-web)', () =
   })
 
   it('says an unstamped build checks nothing, and does not claim nothing newer exists', async () => {
-    vi.mocked(getReleaseNotices).mockResolvedValue(read({ releaseLine: false, lastSuccessAt: null }))
+    vi.mocked(getReleaseNotices).mockResolvedValue(read({ releaseLine: false, lastSuccessAt: undefined }))
     const w = await mountPanel()
     expect(w.text()).toContain(i18n.global.t('releaseCheck.noReleaseLine'))
     expect(w.text()).not.toContain(i18n.global.t('releaseCheck.none'))
@@ -85,7 +85,7 @@ describe('ReleaseNoticesPanel (uc.admin.learn-of-new-releases, admin-web)', () =
 
   it('switches the check off, keeping the source, and says it no longer looks', async () => {
     vi.mocked(getReleaseNotices).mockResolvedValue(read({ source: 'https://mirror.example.com/veyq' }))
-    vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => read({ enabled, source }))
+    vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => read({ enabled, source: source ?? undefined }))
     const w = await mountPanel()
     expect(w.text()).not.toContain(i18n.global.t('releaseCheck.off'))
     await w.find('.check').setValue(false)

@@ -1,6 +1,6 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
-- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the rest is not (§ Consequences), the API fuzzing of decision 9 included — its harness runs locally (`scripts/run_api_fuzz.py`), not yet as a stage (`cr-api-fuzzing`)
+- Status: Accepted 2026-10-16; built: the local skip of `validate_guard_gaps.py` (decision 4), its parallel cases (decision 1), the one workflow (decision 2, `ci.yml`), every job's budget (decision 1), the guard gaps' CI trigger (decision 4), the local run of the pipeline, and lane L1 with its job and the publish waiting on it (decision 3, ADR 0090; run locally only); the API fuzzing of decision 9 with its job `api-fuzz` (run locally only); the rest is not (§ Consequences)
 - Date: 2026-10-16
 
 ## Context
@@ -156,9 +156,13 @@ Three structural costs sit on top of those numbers:
      bundled store, the e2e profile whose rate limits do not refuse a run's volume. Not lane L1: the candidate's
      production limits answer 429 long before a run is through, its lane owns ports 80 and 443, and its budget is
      spent on the browser. What Traefik and the image add is L1's and the pentests' (ADR 0100) to see.
-   - **It runs as an image pinned by digest**, like every other third-party tool here (ADR 0057 §6): Schemathesis
-     needs Python ≥ 3.11 and the scripts run on 3.9, and the image brings its own dependencies, so no Python
-     dependency enters the repository.
+   - **It runs in an image of our own** (`infra/fuzz/Dockerfile`), which the runner builds: a Python base pinned by
+     digest like every other third-party image (ADR 0057 §6, `validate_image_pins.py`), and Schemathesis from PyPI
+     with every package pinned by version and wheel hash (`infra/fuzz/requirements.txt`, installed with
+     `--require-hashes`, written by `infra/fuzz/lock.py`). Schemathesis needs Python ≥ 3.11 and the host scripts run on
+     3.9, so the image carries what they cannot. Not the official `schemathesis/schemathesis` image: it also installs
+     TraceCov, a proprietary, binary-only coverage plugin, and loads it on every run (owner, 2026-10-18); veyq's hooks
+     refuse to load if it is ever imported.
    - **The spec files are read as they are**, one invocation per listener: the operations marked
      `x-veyq-channel: admin` against the admin listener, the rest against the public one. Nothing is bundled.
    - **It signs in the way the client does.** A seeding script births an instance with the real client crypto
@@ -168,7 +172,9 @@ Three structural costs sit on top of those numbers:
      path, query and header parameters included), and every `GET` in **positive** mode with the seeded ids. A
      malformed query or header parameter or body is refused with the contract's `400 invalid_request`; a malformed
      path segment with `400` or `404` — a path id that is no UUID matches no route and answers `404`, as
-     `IdBoundarySliceTest` holds. Every answer is a status the operation declares, its body matches the declared
+     `IdBoundarySliceTest` holds. An operation that takes a credential (a parameter or request-body property marked
+     `x-veyq-visibility: token`) may refuse any of it with its declared `401` or `403`: every request the run sends
+     carries a credential it cannot forge, and authentication runs before shape (owner, 2026-10-18). Every answer is a status the operation declares, its body matches the declared
      schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx. Writes in
      positive mode and stateful sequences (links) come later, each with its own decision about what a run may change.
    - **Deterministic.** A fixed seed lives in the runner; a red re-runs to the same request, and the
@@ -191,7 +197,8 @@ Three structural costs sit on top of those numbers:
   `cr-stack-e2e` (L1, built 2026-10-16: `ci.yml`'s `stack` job, per architecture after the build — a dispatch pulls the
   staged images by the digests the build hands over, a push or a pull request builds them in the job until a push
   publishes the snapshot); promotion and attestations (decision 5); L2 (inbox #453); the archive and
-  L3 (decision 6); the API fuzzing (decision 9, `cr-api-fuzzing`, inbox #486). None is provable in CI before the
+  L3 (decision 6); the API fuzzing (decision 9, built 2026-10-19: `ci.yml`'s `api-fuzz`, measured locally at
+  159 s for a whole run - the image check, the boot, the seed and the four invocations - on 2026-10-19). None is provable in CI before the
   repository has a remote.
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
   hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.
@@ -259,8 +266,7 @@ Three structural costs sit on top of those numbers:
 - **The API fuzzing on lane L1, or only in the pentests.** The candidate's production rate limits refuse a fuzzer's
   volume, and a pentest runs by hand (ADR 0100 decision 1): a contract defect would be found weeks after its commit.
   The pentests point the same harness at the candidate instead.
-- **Schemathesis as a Python library on the host.** It needs Python ≥ 3.11 (`requires_python` of 4.32.0); the scripts
-  run on 3.9, and the repository has no hash-pinned Python dependency to extend. The image is pinned the way every
-  other tool is, and `validate_image_pins.py` already holds it.
+- **Schemathesis as a Python library on the host.** It needs Python ≥ 3.11 (`requires_python` of 4.32.0) and the
+  scripts run on 3.9; the image carries its own interpreter and its own hash-pinned packages, the host none.
 - **A random seed per run.** It finds more over time and makes a red that the next run cannot reproduce; a gate has
   to be deterministic. A seed is bumped by a commit when the owner wants a new sample.

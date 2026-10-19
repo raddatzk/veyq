@@ -67,6 +67,28 @@ class EmptyBadRequestFilter : ContainerResponseFilter {
 }
 
 /**
+ * Every `404` the framework answers with no body of its own, inside a matched route: a path parameter that does not
+ * convert (a segment that is no UUID — `IdBoundarySliceTest`, [StrictParamConverters]). The contract declares every 404
+ * an `ErrorResponse`, so an empty one gets `{code: not_found}` — the generic code, because a segment of the wrong
+ * shape names nothing (a handler's own 404 names what it did not find, `scope_not_found` and its siblings, and has a
+ * body already). The API fuzzing's first run found 86 operations answering it bare (cr-api-fuzzing, mechanism B).
+ *
+ * A response filter for the same reason as [EmptyBadRequestFilter]: a request no route matches never reaches JAX-RS,
+ * so it stays the app shell's fallback or Vert.x' own 404 — which is why no `/api` route miss carries this body.
+ */
+@Provider
+class EmptyNotFoundFilter : ContainerResponseFilter {
+    override fun filter(request: ContainerRequestContext, response: ContainerResponseContext) {
+        if (response.status != FailureStatus.NOT_FOUND.httpStatus || response.hasEntity()) return
+        response.setEntity(httpError(notFound).entity, emptyArray(), MediaType.APPLICATION_JSON_TYPE)
+    }
+
+    private companion object {
+        val notFound = httpFailure("not_found", FailureStatus.NOT_FOUND)
+    }
+}
+
+/**
  * Bean validation refused what the spec's `x-field-extra-annotation` declares (`@NotBlank`, `@Size`, `@Pattern`, the
  * `@Valid` cascade, [EachElement]) — the request is malformed → `400 invalid_request`.
  *

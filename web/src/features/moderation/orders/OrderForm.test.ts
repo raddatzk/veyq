@@ -22,8 +22,8 @@ const SHARE = '3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i'
 const order = (over: Partial<AuthorityOrder> = {}): AuthorityOrder => ({
   id: '3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b', kind: 'REMOVAL', shareId: SHARE, receivedAt: new Date('2026-10-18T07:12:00Z'),
   enteredAt: new Date('2026-10-18T07:20:11Z'), enteredBy: 'mod', found: true, blockedAt: new Date('2026-10-18T07:20:11.734Z'),
-  caseId: 'case-of-order', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: null, epoch: 2,
-  sealedReference: 'c2VhbGVk', providerName: null, contactPoint: 'abuse@example.org', ...over,
+  caseId: 'case-of-order', holdUntil: new Date('2027-04-19T07:20:11Z'), statementDeferredUntil: undefined, epoch: 2,
+  sealedReference: 'c2VhbGVk', providerName: undefined, contactPoint: 'abuse@example.org', ...over,
 })
 
 const stubs = {
@@ -87,7 +87,7 @@ describe('OrderForm', () => {
   })
 
   it('shows the Annex III draft for a share not on this instance, and says an order already recorded', async () => {
-    vi.mocked(enterOrder).mockResolvedValueOnce(order({ found: false, blockedAt: null, caseId: null, holdUntil: null }))
+    vi.mocked(enterOrder).mockResolvedValueOnce(order({ found: false, blockedAt: undefined, caseId: undefined, holdUntil: undefined }))
     const w = await opened()
     await submit(w)
     expect(w.find('.moderation-order-not-found').exists()).toBe(true)

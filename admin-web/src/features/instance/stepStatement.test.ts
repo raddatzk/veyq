@@ -20,7 +20,7 @@ const m = v1.generateModerationKey()
 function api(over: Partial<InstanceModeration> = {}) {
   return fakeApi(instanceModerationApi, {
     getInstanceModeration: async () => ({
-      enabled: true, currentEpoch: 3, currentKemPublicKey: b64std(v1.moderationBundle(m).kem), rotationDueSince: null,
+      enabled: true, currentEpoch: 3, currentKemPublicKey: b64std(v1.moderationBundle(m).kem), rotationDueSince: undefined,
       serverOwner: { accountId: 'owner', identityPublicKey: 'aWRlbnRpdHk=' }, moderators: [], ...over,
     }),
   })
@@ -49,7 +49,7 @@ describe('stepStatement', () => {
   })
 
   it('refuses with moderation off, so nothing unsealed is sent beside facts it cannot log', async () => {
-    api({ currentEpoch: null, currentKemPublicKey: null })
+    api({ currentEpoch: undefined, currentKemPublicKey: undefined })
     await expect(stepStatement({ ground: 'TERMS_BREACH', provision: '', facts: 'x' })).rejects.toEqual(new StepStatementInvalid('moderationOff'))
   })
 })

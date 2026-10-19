@@ -18,7 +18,7 @@ import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
-import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './trustMarks'
+import { openAccountDocument, raiseMarks, servedDocument, type AccountDocumentStore } from './trustMarks'
 
 /** The pin store's seal context at a stored `revision` (ADR 0072, vector `seal.sym.identity-pins`): bound to the
  *  revision the server stores it at, so a blob served under another revision does not open. */
@@ -116,7 +116,7 @@ async function loadStore(): Promise<OpenedStore> {
   if (!mk) throw new Error('identity pin store requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-    return { revision: res.revision, pins: await openPins(mk, res) }
+    return { revision: res.revision, pins: await openPins(mk, servedDocument(res)) }
   } finally {
     mk.fill(0)
   }
@@ -225,7 +225,7 @@ export async function acceptKeyChange(userId: string, identityPublicKeyB64: stri
  */
 export const pinStoreDocument: AccountDocumentStore<PinMap> = {
   document: 'pins',
-  fetch: () => withRefresh(() => accountIdentityPinsApi().getIdentityPins()),
+  fetch: async () => servedDocument(await withRefresh(() => accountIdentityPinsApi().getIdentityPins())),
   open: openPins,
   seal: sealPins,
   empty: (): PinMap => ({}),

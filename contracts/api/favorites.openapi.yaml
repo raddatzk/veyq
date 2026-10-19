@@ -110,10 +110,9 @@ components:
   schemas:
     Favorites:
       type: object
-      required: [ciphertext]
       properties:
         ciphertext:
-          type: [string, "null"]
+          type: string
           description: The caller's pinned-node set, AEAD-sealed under the member's **master key**, context `favorites` (opaque base64); null when unset. Private to the member — `K_SC` does not open it.
           contentEncoding: base64
           maxLength: 65536

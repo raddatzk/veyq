@@ -326,6 +326,62 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  api-fuzz:
+    name: API fuzzing (Schemathesis, from the contracts)
+    # Every operation of contracts/api gets requests nobody wrote by hand (ADR 0091 decision 9): Schemathesis, in our own
+    # image (infra/fuzz/Dockerfile: a pinned base, every package hash-pinned; the runner builds it), against a fresh
+    # %e2e fast-jar booted with run_web_e2e.py's primitives — negative cases on
+    # every operation, positive ones on every GET with the ids a seeder created with the real client crypto. Red on a
+    # 5xx, a status or body the contract does not declare, a malformed request accepted or echoed, a failure not in
+    # infra/fuzz/baseline.json, or an invocation that tested nothing. A stage of its own beside web-e2e, which has no
+    # budget left for it. Like web-e2e it declares no `services:`: the runner brings up the compose stack itself.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Build backend fast-jar
+        working-directory: backend
+        run: ./gradlew --no-daemon quarkusBuild
+
+      - name: Install frontend dependencies
+        # The seeder (web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
+        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+
+      - name: Fuzz the API against a live backend
+        run: python3 scripts/run_api_fuzz.py
+
+      # Each invocation's JUnit (a curl line per failure), NDJSON, VCR cassette and JSON report, the boot log and the
+      # summary. The seed's token and password are a throwaway instance's. `include-hidden-files` because the
+      # directory is dot-named.
+      - name: Keep the fuzz run directory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-out
+          path: .fuzz-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
   version:
     name: Read the veyq version from the tree
     runs-on: ubuntu-latest
@@ -853,6 +909,7 @@ jobs:
       - frontend
       - chart
       - web-e2e
+      - api-fuzz
       - version
       - build
       - stack
@@ -867,6 +924,7 @@ jobs:
       && needs.frontend.result == 'success'
       && needs.chart.result == 'success'
       && needs.web-e2e.result == 'success'
+      && needs.api-fuzz.result == 'success'
       && needs.version.result == 'success'
       && needs.build.result == 'success'
       && needs.stack.result == 'success'

@@ -115,6 +115,57 @@ class SpecSets(val contractsDir: File, private val applicationModules: Set<Strin
                 .ifEmpty { throw GradleException("${commonSpec.name} defines no schema") }
         }
 
+        /**
+         * Every component-schema property spelled `oneOf`/`anyOf` [a schema, `null`] that carries an
+         * `x-field-extra-annotation`, as (schema, property, annotation) — the extensions the `kotlin` generator drops
+         * (see [NullableObjectCascade]).
+         */
+        fun nullableObjectAnnotations(specs: List<File>): List<Triple<String, String, String>> = specs.flatMap { spec ->
+            val api = parse(spec) ?: throw GradleException("${spec.name}: not parseable as OpenAPI")
+            api.components?.schemas.orEmpty().flatMap { (schemaName, schema) ->
+                schema.properties.orEmpty().mapNotNull { (propName, prop) ->
+                    val branches = prop.oneOf ?: prop.anyOf ?: return@mapNotNull null
+                    val annotation = prop.extensions?.get("x-field-extra-annotation") as? String ?: return@mapNotNull null
+                    if (branches.none { it.types?.contains("null") == true || it.type == "null" }) return@mapNotNull null
+                    Triple(schemaName, propName, annotation)
+                }
+            }
+        }
+
+        /**
+         * Every OPTIONAL component-schema property whose schema does not allow `null` — its type, a `oneOf`/`anyOf`
+         * branch, or the scalar component it `$ref`s — as (schema, property): the properties a JSON `null` may not
+         * bind to (see [NullRefused]). A required one needs nothing: its Kotlin type is non-null.
+         */
+        fun nonNullableOptionals(specs: List<File>, commonSpec: File): List<Pair<String, String>> {
+            val common = parse(commonSpec)?.components?.schemas.orEmpty()
+            return specs.flatMap { spec ->
+                val api = parse(spec) ?: throw GradleException("${spec.name}: not parseable as OpenAPI")
+                val own = api.components?.schemas.orEmpty()
+                own.flatMap { (schemaName, schema) ->
+                    val required = schema.required.orEmpty().toSet()
+                    schema.properties.orEmpty().mapNotNull { (propName, prop) ->
+                        if (propName in required || allowsNull(prop, own, common)) null else schemaName to propName
+                    }
+                }
+            }
+        }
+
+        private fun allowsNull(
+            schema: io.swagger.v3.oas.models.media.Schema<*>,
+            own: Map<String, io.swagger.v3.oas.models.media.Schema<*>>,
+            common: Map<String, io.swagger.v3.oas.models.media.Schema<*>>,
+            depth: Int = 0,
+        ): Boolean {
+            if (schema.types?.contains("null") == true || schema.type == "null" || schema.nullable == true) return true
+            if ((schema.oneOf.orEmpty() + schema.anyOf.orEmpty()).any { allowsNull(it, own, common, depth + 1) }) return true
+            val ref = schema.`$ref` ?: return false
+            if (depth > 8) throw GradleException("$ref: a \$ref chain deeper than 8")
+            val name = ref.substringAfterLast('/')
+            val target = (if (ref.startsWith("#")) own[name] else common[name]) ?: common[name] ?: return false
+            return allowsNull(target, own, common, depth + 1)
+        }
+
         /** The `x-veyq-channel` markers of an owner's specs: the operationIds marked `admin`, and what is malformed. */
         fun channelMarkers(owner: String, specs: List<File>, contractsDir: File): Pair<Set<String>, List<String>> {
             val marker = "x-veyq-channel"

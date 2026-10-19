@@ -106,15 +106,17 @@ export function confirmOperatorNotification(code: string): Promise<InstanceOpera
 /** The values as an update that changes nothing — the base a partial change (the CLI's flags) is laid over. */
 export function operatorUpdateOf(op: InstanceOperator): InstanceOperatorUpdate {
   return {
-    contactEmail: op.contactEmail,
+    // A value the read omits (the API sends no `null`) goes back as the `null` that means "none" — the same request
+    // as before the API stopped sending `null`, field for field.
+    contactEmail: op.contactEmail ?? null,
     contactLanguages: op.contactLanguages.length ? op.contactLanguages : null,
-    statementEmail: op.statementEmail,
-    notificationEmail: op.notificationEmail,
-    providerName: op.providerName,
-    providerAddress: op.providerAddress,
-    providerEmail: op.providerEmail,
-    providerRepresentative: op.providerRepresentative,
-    supervisoryAuthority: op.supervisoryAuthority,
+    statementEmail: op.statementEmail ?? null,
+    notificationEmail: op.notificationEmail ?? null,
+    providerName: op.providerName ?? null,
+    providerAddress: op.providerAddress ?? null,
+    providerEmail: op.providerEmail ?? null,
+    providerRepresentative: op.providerRepresentative ?? null,
+    supervisoryAuthority: op.supervisoryAuthority ?? null,
   }
 }
 

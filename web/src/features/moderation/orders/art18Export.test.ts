@@ -17,9 +17,9 @@ const exported = (over: Partial<ModerationCaseExport> = {}): ModerationCaseExpor
   origin: 'REPORT',
   timeZone: 'UTC',
   reportedAt: [new Date('2026-10-17T09:00:00Z')],
-  measures: [{ kind: 'CONTENT', targetId: '4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b', takenAt: new Date('2026-10-17T12:00:05Z'), liftedAt: null }],
+  measures: [{ kind: 'CONTENT', targetId: '4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b', takenAt: new Date('2026-10-17T12:00:05Z'), liftedAt: undefined }],
   uploaders: [
-    { kind: 'ACCOUNT', id: '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a', shareId: null },
+    { kind: 'ACCOUNT', id: '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a', shareId: undefined },
     { kind: 'GUEST', id: '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f', shareId: '3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i' },
   ],
   guestWrites: [
@@ -29,7 +29,7 @@ const exported = (over: Partial<ModerationCaseExport> = {}): ModerationCaseExpor
     },
     {
       identityId: '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f', objectKind: 'NODE', objectId: '7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d',
-      address: '2001:db8::7', port: null, observedAt: new Date('2026-10-17T08:58:00.001Z'),
+      address: '2001:db8::7', port: undefined, observedAt: new Date('2026-10-17T08:58:00.001Z'),
     },
   ],
   held: true,

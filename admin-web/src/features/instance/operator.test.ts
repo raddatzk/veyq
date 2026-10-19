@@ -16,9 +16,9 @@ const entry = (id: string, onInPrivate: boolean, onInOrganisation: boolean, off:
 
 function op(over: Partial<InstanceOperator> = {}): InstanceOperator {
   return {
-    operatingMode: 'ORGANISATION', contactEmail: null, contactLanguages: [], statementEmail: null, notificationEmail: null,
-    notificationConfirmation: 'NOT_SET', notificationConfirmedAt: null, instanceMailReady: false, providerName: null,
-    providerAddress: null, providerEmail: null, providerRepresentative: null, supervisoryAuthority: null, ...over,
+    operatingMode: 'ORGANISATION', contactEmail: undefined, contactLanguages: [], statementEmail: undefined, notificationEmail: undefined,
+    notificationConfirmation: 'NOT_SET', notificationConfirmedAt: undefined, instanceMailReady: false, providerName: undefined,
+    providerAddress: undefined, providerEmail: undefined, providerRepresentative: undefined, supervisoryAuthority: undefined, ...over,
   }
 }
 

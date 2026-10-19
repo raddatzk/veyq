@@ -23,7 +23,7 @@ const kem = b64std(v1.moderationBundle(m).kem)
 
 function moderation(over: Partial<InstanceModeration> = {}): InstanceModeration {
   return {
-    enabled: true, currentEpoch: 3, currentKemPublicKey: kem, rotationDueSince: null,
+    enabled: true, currentEpoch: 3, currentKemPublicKey: kem, rotationDueSince: undefined,
     serverOwner: { accountId: 'owner', identityPublicKey: 'aWRlbnRpdHk=' }, moderators: [], ...over,
   }
 }
@@ -31,8 +31,8 @@ function moderation(over: Partial<InstanceModeration> = {}): InstanceModeration 
 function recorded(req: AuthorityOrderRequest): AuthorityOrder {
   return {
     id: req.id, kind: req.kind, shareId: req.shareId, receivedAt: req.receivedAt, enteredAt: new Date(), enteredBy: 'owner',
-    found: true, blockedAt: new Date(), caseId: 'case', holdUntil: new Date(), statementDeferredUntil: null,
-    epoch: req.reference.epoch, sealedReference: req.reference.sealedReference, providerName: null, contactPoint: null,
+    found: true, blockedAt: new Date(), caseId: 'case', holdUntil: new Date(), statementDeferredUntil: undefined,
+    epoch: req.reference.epoch, sealedReference: req.reference.sealedReference, providerName: undefined, contactPoint: undefined,
   }
 }
 
@@ -85,7 +85,7 @@ describe('enterOrder', () => {
     const mocks = api()
     await expect(enterOrder({ kind: 'REMOVAL', share: 'not a share', reference: 'r', receivedAt: new Date() })).rejects.toEqual(new OrderInvalid('share'))
     await expect(enterOrder({ kind: 'REMOVAL', share: SHARE, reference: '   ', receivedAt: new Date() })).rejects.toEqual(new OrderInvalid('reference'))
-    api({ currentEpoch: null, currentKemPublicKey: null, enabled: false })
+    api({ currentEpoch: undefined, currentKemPublicKey: undefined, enabled: false })
     await expect(enterOrder({ kind: 'REMOVAL', share: SHARE, reference: 'r', receivedAt: new Date() })).rejects.toEqual(new OrderInvalid('moderationOff'))
     expect(mocks.enterInstanceModerationOrder).not.toHaveBeenCalled()
   })

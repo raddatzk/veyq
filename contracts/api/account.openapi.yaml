@@ -504,6 +504,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "404":
+          description: A path id that is no UUID names nothing (`not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_found } }
 
   /api/account/rotation:
     post:
@@ -1396,10 +1400,10 @@ components:
         The caller's sealed identity-pin store + its revision. `blob` is one opaque ciphertext
         (`symWrap(masterKey, blob, "identity-pins")`) the server relays verbatim; `revision` is the monotonic
         optimistic-concurrency counter. A born-empty store is `{ blob: null, revision: 0 }`.
-      required: [blob, revision]
+      required: [revision]
       properties:
         blob:
-          type: [string, "null"]
+          type: string
           description: >
             The pin-store plaintext sealed under the Master Key (opaque base64), or null when the store has
             never been written. The server never interprets it (no `userId`, key, or count).
@@ -1450,10 +1454,10 @@ components:
         The caller's sealed device register + its revision. `blob` is one opaque ciphertext
         (`symWrap(masterKey, blob, "device-register")`) the server relays verbatim; `revision` is the monotonic
         optimistic-concurrency counter. A born-empty register is `{ blob: null, revision: 0 }`.
-      required: [blob, revision]
+      required: [revision]
       properties:
         blob:
-          type: [string, "null"]
+          type: string
           description: >
             The device-register plaintext sealed under the Master Key (opaque base64), or null when the
             register has never been written. The server never interprets it — no device name, no count, and no

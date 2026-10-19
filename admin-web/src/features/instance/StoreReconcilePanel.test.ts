@@ -58,15 +58,15 @@ function reconcile(over: Partial<StoreReconcile> = {}): StoreReconcile {
       startedAt: new Date('2026-10-17T12:00:00Z'), completedAt: new Date('2026-10-17T12:04:31Z'), objects: 18263,
       orphanObjects: 23, orphanBytes: 61_865_984, notVeyqObjects: 1, enqueuedKeys: 0,
     },
-    passInProgress: null,
-    failure: null,
+    passInProgress: undefined,
+    failure: undefined,
     candidates: {
       storageKeys: 9, objects: 23, bytes: 61_865_984, dueKeys: 2, oldestFirstSeenAt: FIRST_SEEN,
       newestFirstSeenAt: new Date('2026-10-17T12:03:40Z'), firstDueAt: FIRST_DUE,
     },
-    exclusiveBucketConfirmedAt: null,
-    pausedAt: null,
-    clocksRestartedAt: null,
+    exclusiveBucketConfirmedAt: undefined,
+    pausedAt: undefined,
+    clocksRestartedAt: undefined,
     clocksRestartReason: null,
     reclaim: { pending: 0, abandoned: 0 },
     ...over,
@@ -175,7 +175,7 @@ describe('StoreReconcilePanel (uc.admin.configure-object-store A7, admin-web)', 
   })
 
   it('offers no switch while no store is in use', async () => {
-    const w = await mountPanel(reconcile({ verdict: StoreReconcileVerdictEnum.NoStore, lastPass: null }))
+    const w = await mountPanel(reconcile({ verdict: StoreReconcileVerdictEnum.NoStore, lastPass: undefined }))
     expect(w.find('button').exists()).toBe(false)
   })
 

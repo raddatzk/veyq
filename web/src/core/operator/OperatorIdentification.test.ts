@@ -20,8 +20,8 @@ import type { OperatorDetails } from '../../api/generated/operator'
 
 function details(over: Partial<OperatorDetails> = {}): OperatorDetails {
   return {
-    contactEmail: null, contactLanguages: [], statementEmail: null, providerName: null,
-    providerAddress: null, providerEmail: null, providerRepresentative: null, supervisoryAuthority: null, ...over,
+    contactEmail: undefined, contactLanguages: [], statementEmail: undefined, providerName: undefined,
+    providerAddress: undefined, providerEmail: undefined, providerRepresentative: undefined, supervisoryAuthority: undefined, ...over,
   }
 }
 

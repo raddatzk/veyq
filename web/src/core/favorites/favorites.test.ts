@@ -25,7 +25,7 @@ describe('favorites data layer', () => {
   it('round-trips the pinned set through seal → store → load → decrypt', async () => {
     let stored: string | null = null
     mockApi(
-      async () => ({ ciphertext: stored }),
+      async () => ({ ciphertext: stored ?? undefined }),
       async ({ putFavoritesRequest }) => { stored = putFavoritesRequest.ciphertext },
     )
 
@@ -45,14 +45,14 @@ describe('favorites data layer', () => {
   })
 
   it('returns an empty set when nothing is stored', async () => {
-    mockApi(async () => ({ ciphertext: null }), async () => {})
+    mockApi(async () => ({}), async () => {})
     expect((await loadFavorites(SCOPE, K)).size).toBe(0)
   })
 
   it('returns an empty set on an unreadable blob (wrong key) instead of throwing', async () => {
     let stored: string | null = null
     mockApi(
-      async () => ({ ciphertext: stored }),
+      async () => ({ ciphertext: stored ?? undefined }),
       async ({ putFavoritesRequest }) => { stored = putFavoritesRequest.ciphertext },
     )
     await saveFavorites(SCOPE, v1.randomBytes(32), new Set(['x'])) // sealed under a DIFFERENT key

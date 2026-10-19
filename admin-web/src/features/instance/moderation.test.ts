@@ -28,7 +28,7 @@ const pubB64 = (id: v1.Identity) => b64std(v1.serializeIdentityPublic(id.pub))
 function moderator(over: Partial<InstanceModerator>): InstanceModerator {
   return {
     accountId: 'acc', address: 'a@example.com', state: 'ACCEPTED', appointedAt: new Date('2026-10-01T00:00:00Z'),
-    acceptedAt: new Date('2026-10-02T00:00:00Z'), identityPublicKey: null, holdsCurrentEpoch: true, addressConfirmed: true,
+    acceptedAt: new Date('2026-10-02T00:00:00Z'), identityPublicKey: undefined, holdsCurrentEpoch: true, addressConfirmed: true,
     ...over,
   }
 }
@@ -37,13 +37,13 @@ function state(over: Partial<InstanceModeration> = {}): InstanceModeration {
   return {
     enabled: true,
     currentEpoch: 3,
-    currentKemPublicKey: null,
-    rotationDueSince: null,
+    currentKemPublicKey: undefined,
+    rotationDueSince: undefined,
     serverOwner: { accountId: 'owner', identityPublicKey: pubB64(owner) },
     moderators: [
       moderator({ accountId: 'owner', address: 'owner@example.com', identityPublicKey: pubB64(owner) }),
       moderator({ accountId: 'second', address: 'second@example.com', identityPublicKey: pubB64(second) }),
-      moderator({ accountId: 'pending', address: 'pending@example.com', state: 'PENDING', acceptedAt: null, holdsCurrentEpoch: false }),
+      moderator({ accountId: 'pending', address: 'pending@example.com', state: 'PENDING', acceptedAt: undefined, holdsCurrentEpoch: false }),
     ],
     ...over,
   }
@@ -130,14 +130,14 @@ describe('removeModerator', () => {
     })
     const mocks = fakeApi(instanceModerationApi, {
       removeModerator: async () => after,
-      mintModerationEpoch: async () => ({ ...after, rotationDueSince: null, currentEpoch: 4 }),
+      mintModerationEpoch: async () => ({ ...after, rotationDueSince: undefined, currentEpoch: 4 }),
     })
     const result = await removeModerator('second')
     expect(mocks.removeModerator).toHaveBeenCalledWith({ accountId: 'second' })
     const req = mocks.mintModerationEpoch.mock.calls[0][0].mintModerationEpochRequest
     expect(req.reason).toBe('REMOVAL')
     expect(req.grants.map((g) => g.accountId)).toEqual(['owner']) // sealed to the roster the removal answered with
-    expect(result.rotationDueSince).toBeNull()
+    expect(result.rotationDueSince).toBeUndefined() // no rotation due: the API omits the field
   })
 
   it('mints nothing when no rotation is due (a pending appointee held no key) — control', async () => {

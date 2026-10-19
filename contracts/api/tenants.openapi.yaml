@@ -640,6 +640,9 @@ paths:
         - { name: userId, in: path, required: true, description: Opaque id of the member to remove., schema: { type: string, format: uuid } }
         - name: revokeLinks
           in: query
+          # An empty value (`?revokeLinks=`) is this parameter's absence: Quarkus REST
+          # never converts it (cr-api-fuzzing).
+          allowEmptyValue: true
           required: false
           description: >
             Also turn off every enabled public share of the TENANT scope in the removal's transaction (ADR 0075).
@@ -648,6 +651,10 @@ paths:
       responses:
         "204":
           description: The member was removed (shared access cut; own scopes grace-tombstoned).
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -719,6 +726,10 @@ paths:
               schema: { $ref: "#/components/schemas/MemberAvatar" }
         "304":
           description: Not Modified - the client's `If-None-Match` equals the member's current `avatarRevision`. No body.
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -1674,6 +1685,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantCapabilitySwitch" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:
@@ -2333,7 +2348,7 @@ components:
 
     TenantSummary:
       type: object
-      required: [tenantId, name, domain, ownerEmail, status, storageUsedBytes, storageQuotaBytes, ownerless, deletionDueAt]
+      required: [tenantId, name, domain, ownerEmail, status, storageUsedBytes, ownerless]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -2381,7 +2396,7 @@ components:
           example: 52428800
         storageQuotaBytes:
           x-veyq-visibility: measure
-          type: [integer, "null"]
+          type: integer
           format: int64
           description: >-
             The tenant's storage quota, set by the Server Owner (`setTenantStorageQuota`, `clearTenantStorageQuota`);
@@ -2397,7 +2412,7 @@ components:
           example: false
         deletionDueAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the purge erases a tenant pending deletion; null for any other.
           example: 2026-11-17T10:00:00Z
@@ -2911,7 +2926,7 @@ components:
         A tenant's storage as its owner reads it (ADR 0073 §4, §6): the tenant's total usage, the quota the Server
         Owner set, and the per-link limit. All are operational byte counts the server already sees — an aggregate,
         never a figure per member, scope or link.
-      required: [usedBytes, quotaBytes, shareLinkLimitBytes]
+      required: [usedBytes, shareLinkLimitBytes]
       properties:
         usedBytes:
           x-veyq-visibility: measure
@@ -2923,7 +2938,7 @@ components:
           example: 52428800
         quotaBytes:
           x-veyq-visibility: measure
-          type: [integer, "null"]
+          type: integer
           format: int64
           description: >
             The tenant's storage quota, set by the Server Owner (ADR 0073 §1); null = none. Read-only: no tenant-owner

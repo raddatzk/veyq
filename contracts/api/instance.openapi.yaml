@@ -757,6 +757,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InstanceCapability" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -902,6 +906,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InstanceExternalService" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -2467,7 +2475,7 @@ components:
     OpenModerationProposal:
       type: object
       description: One open proposal of a moderator.
-      required: [id, caseId, category, step, accountId, address, tenantId, tenantDomain, proposedAt]
+      required: [id, caseId, category, step, proposedAt]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 2c1f2d3e-4a5b-4c7c-8f0e-2a9b1d4a6e8b }
         caseId: { type: string, format: uuid, x-veyq-visibility: id, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
@@ -2485,7 +2493,7 @@ components:
           example: TENANT_OFFLINE
         accountId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The member's account, for `MEMBER_SIGN_IN`; null otherwise.
           example: null
@@ -2494,19 +2502,19 @@ components:
           x-veyq-rationale: >-
             The member's account address, already server-held plaintext — how the Server Owner names an account to
             block (`blockAccountSignIn`), shown back only on the admin channel.
-          type: [string, "null"]
+          type: string
           description: The member's account address, for `MEMBER_SIGN_IN`; null otherwise or once the account is gone.
           maxLength: 254
           example: null
         tenantId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The tenant, for `TENANT_OFFLINE`; null otherwise.
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         tenantDomain:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The tenant's domain, for `TENANT_OFFLINE` — the Server Owner's configuration; null otherwise.
           maxLength: 253
           example: club.example.org
@@ -2520,7 +2528,7 @@ components:
     AccountSignInBlock:
       type: object
       description: A member's sign-in block in force.
-      required: [id, accountId, address, caseId, blockedAt]
+      required: [id, accountId, address, blockedAt]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 9a8b1c2d-3e4f-4a6b-8f2c-9a1e7b3d4e5f }
         accountId: { type: string, format: uuid, x-veyq-visibility: id, example: 6e8b2c1f-2d3e-4a5b-8c7c-3f0e2a9b1d4a }
@@ -2535,7 +2543,7 @@ components:
           example: member@example.com
         caseId:
           x-veyq-visibility: id
-          type: [string, "null"]
+          type: string
           format: uuid
           description: The case the block answers; null when none was named.
           example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b
@@ -2594,6 +2602,9 @@ components:
         release:
           x-veyq-visibility: public
           type: [string, "null"]
+          # The one field the API sends as an explicit `null` (every other null is omitted, the backend's `non_null`
+          # inclusion): the object has no other field, so `{}` would read as a broken read, not as "no stamp".
+          x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS)'
           description: >
             The release version the running image was stamped with at publish, and the tag the image carries
             in the registry (ADR 0057 §1): `<major>.<minor>` for a release, or `<major>.<minor>-SNAPSHOT` for a
@@ -2662,7 +2673,7 @@ components:
       description: >
         The object-store setting as it stands (ADR 0089). Operator configuration and server self-description:
         it describes the operator's own infrastructure, never anything in it, and never carries a secret.
-      required: [bundledAvailable, blobsStored, setting, lastCheck, pending]
+      required: [bundledAvailable, blobsStored]
       properties:
         bundledAvailable:
           x-veyq-visibility: flag
@@ -2682,44 +2693,35 @@ components:
           description: >
             The setting in use — the one the backend signs against — or null when no setting has passed its check
             yet.
-          oneOf:
-            - $ref: "#/components/schemas/InstanceStoreSetting"
-            - type: "null"
+          $ref: "#/components/schemas/InstanceStoreSetting"
         lastCheck:
           description: The last check of the setting in use, or null when there is none.
-          oneOf:
-            - $ref: "#/components/schemas/InstanceStoreCheck"
-            - type: "null"
+          $ref: "#/components/schemas/InstanceStoreCheck"
         pending:
           description: >
             A changed setting saved but not yet in use, with its own last check; null when nothing is pending.
             It replaces `setting` once it passes its check (ADR 0089 decision 5).
-          oneOf:
-            - $ref: "#/components/schemas/InstanceStorePending"
-            - type: "null"
+          $ref: "#/components/schemas/InstanceStorePending"
 
     InstanceStorePending:
       type: object
       description: >
         A store setting saved but not in use until it passes its own check (ADR 0089 decision 5). Operator
         configuration, never a secret.
-      required: [setting, lastCheck]
+      required: [setting]
       properties:
         setting:
           $ref: "#/components/schemas/InstanceStoreSetting"
         lastCheck:
           description: The last check of the pending setting, or null when it has not been checked since it was saved.
-          oneOf:
-            - $ref: "#/components/schemas/InstanceStoreCheck"
-            - type: "null"
+          $ref: "#/components/schemas/InstanceStoreCheck"
 
     InstanceStoreSetting:
       type: object
       description: >
         A store setting as read back. For the bundled store the connection fields are the bundled store's own,
         read from the deployment's hint; the setting itself stores only that the bundled store was chosen.
-      required: [bundled, type, endpoint, publicEndpoint, bucket, region, accessKey, garageAdminEndpoint,
-        secretKeySet, garageAdminTokenSet, unreadable]
+      required: [bundled, type, secretKeySet, garageAdminTokenSet, unreadable]
       properties:
         bundled:
           x-veyq-visibility: flag
@@ -2730,14 +2732,14 @@ components:
           $ref: "#/components/schemas/InstanceStoreType"
         endpoint:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The S3 endpoint the backend reaches the store at (operator infrastructure config). Null only for a bundled store whose deployment no longer passes its hint.
           maxLength: 2048
           example: https://s3.eu-central-1.example.com
         publicEndpoint:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The origin browsers fetch the store's objects from, when it is not `endpoint` itself; null when the
             store is reached by browsers at `endpoint`. Presigned URLs are signed for it.
@@ -2745,28 +2747,28 @@ components:
           example: null
         bucket:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The bucket the blobs are stored in. Null only for a bundled store whose deployment no longer passes its hint.
           maxLength: 63
           example: veyq-blobs
         region:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The region the store signs for. Null only for a bundled store whose deployment no longer passes its hint.
           maxLength: 64
           example: eu-central-1
         accessKey:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The access key id — an identifier, like an SMTP username; the secret key is never returned. Null only for a bundled store whose deployment no longer passes its hint.
           maxLength: 256
           example: AKIAEXAMPLE
         garageAdminEndpoint:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: Garage's admin API endpoint, through which veyq provisions it; null for an S3-compatible store.
           maxLength: 2048
           example: null
@@ -2913,7 +2915,7 @@ components:
 
     InstanceStoreCheckStep:
       type: object
-      required: [step, outcome, detail]
+      required: [step, outcome]
       properties:
         step:
           x-veyq-visibility: enum
@@ -2931,7 +2933,7 @@ components:
           example: PASSED
         detail:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             What the server observed, in its own words (a status code, the missing bucket's name) — about the
             operator's own store, never about anything in it. Null when there is nothing to add.
@@ -3132,7 +3134,7 @@ components:
       description: >
         The release check's setting and state, and what it found (ADR 0097). Server self-description about the
         software and the operator's own choice of source; nothing here is user data.
-      required: [releaseLine, enabled, source, lastSuccessAt, notices]
+      required: [releaseLine, enabled, notices]
       properties:
         releaseLine:
           x-veyq-visibility: flag
@@ -3148,7 +3150,7 @@ components:
           example: true
         source:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: >
             The mirror the check reads, an `http`/`https` URL in the release layout; null = the published GitHub
             Releases of veyq.
@@ -3156,7 +3158,7 @@ components:
           example: null
         lastSuccessAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When a check last read the source successfully; null when none has yet.
           example: 2026-10-16T04:00:00Z
@@ -3174,7 +3176,7 @@ components:
       description: >
         One row of ADR 0097 decision 2: what the check found, and whether it was mailed. About published software,
         never about anything in the instance.
-      required: [id, kind, release, date, daysAhead, foundAt, mailedAt]
+      required: [id, kind, release, foundAt]
       properties:
         id:
           x-veyq-visibility: id
@@ -3203,7 +3205,7 @@ components:
           example: "2.0"
         date:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           format: date
           description: >
             For a planned major and a window reminder, the day the running major leaves a store-shipped client's
@@ -3212,7 +3214,7 @@ components:
           example: 2029-05-01
         daysAhead:
           x-veyq-visibility: measure
-          type: [integer, "null"]
+          type: integer
           description: For a window reminder, 90 or 30 — how many days before `date` it is due. Null for the other kinds.
           example: null
         foundAt:
@@ -3223,7 +3225,7 @@ components:
           example: 2027-05-02T04:00:00Z
         mailedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When it was mailed to the Server Owner; null while it has not been (no confirmed instance mail, or the send failed).
           example: null
@@ -3254,29 +3256,29 @@ components:
         The instance mail settings as read back (ADR 0097 decision 3): the SMTP transport fields, whether a password
         is stored (never the password itself, ADR 0050), the config-secret state, and where the confirmation
         stands. Operator configuration, plus the Server Owner's own address.
-      required: [host, port, from, username, tls, passwordSet, configSecretState, address, confirmation, confirmedAt]
+      required: [tls, passwordSet, configSecretState, address, confirmation]
       properties:
         host:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: SMTP server host (operator infrastructure config). Null = no instance mail.
           maxLength: 253
           example: smtp.example.com
         port:
           x-veyq-visibility: public
-          type: [integer, "null"]
+          type: integer
           format: int32
           description: SMTP server port; null = 587.
           example: 587
         from:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The From address the notices are sent from.
           maxLength: 254
           example: veyq@example.com
         username:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: SMTP auth username; null = an auth-less relay.
           maxLength: 254
           example: veyq
@@ -3323,7 +3325,7 @@ components:
           example: CONFIRMED
         confirmedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the current settings were confirmed; null unless `confirmation` is `CONFIRMED`.
           example: 2026-10-16T12:00:00Z
@@ -3402,7 +3404,7 @@ components:
     InstanceModeration:
       type: object
       description: The moderation roster and the state of the instance moderation key (ADR 0099).
-      required: [enabled, currentEpoch, currentKemPublicKey, rotationDueSince, serverOwner, moderators]
+      required: [enabled, serverOwner, moderators]
       properties:
         enabled:
           x-veyq-visibility: flag
@@ -3410,7 +3412,7 @@ components:
           description: Whether an epoch exists. False = moderation is off, and the report action is off with it.
           example: true
         currentKemPublicKey:
-          type: [string, "null"]
+          type: string
           description: >
             The current epoch's X-Wing public half — what a reporter seals to, and what admin-web and `veyq-admin` seal an
             authority's reference to when the Server Owner enters an order (`moderation-order` [epoch, orderId], ADR 0093
@@ -3420,13 +3422,13 @@ components:
           example: a2VtLXB1YmxpYy1rZXk=
         currentEpoch:
           x-veyq-visibility: structure
-          type: [integer, "null"]
+          type: integer
           format: int32
           description: The epoch reports seal to now; null while moderation is off.
           example: 2
         rotationDueSince:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: >
             When a holder of the current epoch stepped down, was removed or rotated their identity; reports keep
@@ -3460,7 +3462,7 @@ components:
     InstanceModerator:
       type: object
       description: One moderator on the roster.
-      required: [accountId, address, state, appointedAt, acceptedAt, identityPublicKey, holdsCurrentEpoch, addressConfirmed]
+      required: [accountId, address, state, appointedAt, holdsCurrentEpoch, addressConfirmed]
       properties:
         accountId:
           x-veyq-visibility: id
@@ -3491,12 +3493,12 @@ components:
           example: 2026-10-17T10:00:00Z
         acceptedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When they accepted; null while pending.
           example: 2026-10-17T10:30:00Z
         identityPublicKey:
-          type: [string, "null"]
+          type: string
           description: >
             The moderator's current identity public bundle, which a mint seals to; null while pending (a pending
             appointee is sealed nothing).
@@ -3609,18 +3611,9 @@ components:
         mode in effect. Every value may be null.
       required:
         - operatingMode
-        - contactEmail
         - contactLanguages
-        - statementEmail
-        - notificationEmail
         - notificationConfirmation
-        - notificationConfirmedAt
         - instanceMailReady
-        - providerName
-        - providerAddress
-        - providerEmail
-        - providerRepresentative
-        - supervisoryAuthority
       properties:
         operatingMode:
           $ref: "#/components/schemas/OperatingMode"
@@ -3629,7 +3622,7 @@ components:
           x-veyq-rationale: >-
             The instance contact (DSA Art. 11–12, TCO Art. 15) is published by law and served before sign-in; the
             operator typed it for that purpose (ADR 0093 § 11).
-          type: [string, "null"]
+          type: string
           format: email
           description: The single point of contact for users and authorities, and the TCO contact point.
           maxLength: 254
@@ -3649,7 +3642,7 @@ components:
           x-veyq-rationale: >-
             The address statements of reasons and disclosures name (ADR 0093 § 11), published by law and served before
             sign-in; the operator typed it for that purpose.
-          type: [string, "null"]
+          type: string
           format: email
           description: The address a statement of reasons and a disclosure name; may equal the contact.
           maxLength: 254
@@ -3659,7 +3652,7 @@ components:
           x-veyq-rationale: >-
             Where moderation notices go (ADR 0097 decision 3); the server must hold it in the clear to mail it, and
             serves it on the admin channel only, back to the Server Owner who typed it.
-          type: [string, "null"]
+          type: string
           format: email
           description: The private address moderation notices are mailed to, once confirmed. Never public.
           maxLength: 254
@@ -3676,7 +3669,7 @@ components:
           example: CONFIRMED
         notificationConfirmedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the current notification address was confirmed; null unless `CONFIRMED`.
           example: 2026-10-17T12:00:00Z
@@ -3692,7 +3685,7 @@ components:
           x-veyq-rationale: >-
             The provider identification (ADR 0035 decision 7; § 5 DDG, § 18 MStV) names the operator and is published
             on the login and share pages; the operator typed it for that purpose.
-          type: [string, "null"]
+          type: string
           description: The provider's name — a person, or a legal person such as a club.
           maxLength: 200
           example: Example e. V.
@@ -3701,7 +3694,7 @@ components:
           x-veyq-rationale: >-
             The address for service of the provider identification (ADR 0035 decision 7), published by law; the
             operator typed it for that purpose.
-          type: [string, "null"]
+          type: string
           description: The address for service; may span lines.
           maxLength: 500
           example: "Musterstraße 1\n12345 Musterstadt"
@@ -3710,7 +3703,7 @@ components:
           x-veyq-rationale: >-
             The provider identification's email address (ADR 0035 decision 7), published by law; the operator typed
             it for that purpose.
-          type: [string, "null"]
+          type: string
           format: email
           description: The provider's email address.
           maxLength: 254
@@ -3720,13 +3713,13 @@ components:
           x-veyq-rationale: >-
             Who represents a legal person (ADR 0035 decision 7), published by law; the operator typed it for that
             purpose.
-          type: [string, "null"]
+          type: string
           description: For a legal person, who represents it (a club's board).
           maxLength: 200
           example: Erika Mustermann (Vorstand)
         supervisoryAuthority:
           x-veyq-visibility: public
-          type: [string, "null"]
+          type: string
           description: The competent data-protection supervisory authority, as the operator names it (ADR 0035 decision 6).
           maxLength: 500
           example: "Landesbeauftragte für Datenschutz, Musterstadt"
@@ -3745,8 +3738,9 @@ components:
           format: email
           description: The instance contact; null = none.
           maxLength: 254
+          minLength: 1
           example: contact@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         contactLanguages:
           x-veyq-visibility: public
           type: [array, "null"]
@@ -3768,8 +3762,9 @@ components:
           format: email
           description: The address statements and disclosures name; null = none.
           maxLength: 254
+          minLength: 1
           example: moderation@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         notificationEmail:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -3778,8 +3773,9 @@ components:
           format: email
           description: The private address moderation notices go to once confirmed; null = none.
           maxLength: 254
+          minLength: 1
           example: alerts@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         providerName:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -3806,8 +3802,9 @@ components:
           format: email
           description: The provider's email address; null = none.
           maxLength: 254
+          minLength: 1
           example: info@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         providerRepresentative:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -3963,7 +3960,7 @@ components:
       description: >
         The bucket reconcile (ADR 0062 § Consequences): what its passes found, what it would delete and when, and why
         it would or would not. Counts and instants only — no storage key, no scope.
-      required: [verdict, graceSeconds, lastPass, passInProgress, failure, candidates, exclusiveBucketConfirmedAt, pausedAt, clocksRestartedAt, clocksRestartReason, reclaim]
+      required: [verdict, graceSeconds, candidates, reclaim]
       properties:
         verdict:
           x-veyq-visibility: enum
@@ -3982,34 +3979,28 @@ components:
           description: How long a storage key must have been an orphan in every pass, from when it was first seen, before it is due (`veyq.store-reconcile.grace`).
           example: 2592000
         lastPass:
-          oneOf:
-            - $ref: "#/components/schemas/StoreReconcilePass"
-            - type: "null"
+          $ref: "#/components/schemas/StoreReconcilePass"
         passInProgress:
-          oneOf:
-            - $ref: "#/components/schemas/StoreReconcileProgress"
-            - type: "null"
+          $ref: "#/components/schemas/StoreReconcileProgress"
         failure:
-          oneOf:
-            - $ref: "#/components/schemas/StoreReconcileFailure"
-            - type: "null"
+          $ref: "#/components/schemas/StoreReconcileFailure"
         candidates:
           $ref: "#/components/schemas/StoreReconcileCandidates"
         exclusiveBucketConfirmedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the Server Owner confirmed that the bucket in use holds only this instance's objects; null when not confirmed for the store in use.
           example: 2026-10-17T12:10:00Z
         pausedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the Server Owner paused the deletions; null when not paused.
           example: null
         clocksRestartedAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: >
             When every candidate's grace period last restarted, if it did since the last restore (a restore empties the
@@ -4017,7 +4008,7 @@ components:
           example: null
         clocksRestartReason:
           x-veyq-visibility: enum
-          type: [string, "null"]
+          type: string
           description: >
             Why the grace periods last restarted: `GAP` = two consecutive listed pages lay further apart than
             `veyq.store-reconcile.max-gap` — the reconcile counts only time it observed, which also catches a database
@@ -4127,7 +4118,7 @@ components:
       description: >
         Storage keys no row claimed in any pass since they were first seen — each one's objects are orphans. A key is
         due once it has been one for the grace period.
-      required: [storageKeys, objects, bytes, dueKeys, oldestFirstSeenAt, newestFirstSeenAt, firstDueAt]
+      required: [storageKeys, objects, bytes, dueKeys]
       properties:
         storageKeys:
           x-veyq-visibility: measure
@@ -4155,19 +4146,19 @@ components:
           example: 0
         oldestFirstSeenAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the oldest candidate was first seen; null with no candidate.
           example: 2026-10-17T12:01:02Z
         newestFirstSeenAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: When the newest candidate was first seen; null with no candidate.
           example: 2026-10-17T12:03:40Z
         firstDueAt:
           x-veyq-visibility: time
-          type: [string, "null"]
+          type: string
           format: date-time
           description: >
             When the oldest candidate's grace is over. While the verdict is `ARMED`, the first completed pass after it

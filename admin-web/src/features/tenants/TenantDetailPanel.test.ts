@@ -106,7 +106,7 @@ const stubs = {
   Message: { template: '<div class="msg"><slot /></div>' },
 }
 
-const NO_QUOTA = { storageUsedBytes: 0, storageQuotaBytes: null, ownerless: false, deletionDueAt: null }
+const NO_QUOTA = { storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined }
 const PENDING: TenantSummary = { tenantId: 't-1', name: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', status: 'PENDING', ...NO_QUOTA }
 const ACTIVE: TenantSummary = { tenantId: 't-2', name: 'Live', domain: 'live.example', ownerEmail: 'o@live.example', status: 'ACTIVE', ...NO_QUOTA }
 const SUSPENDED: TenantSummary = { tenantId: 't-3', name: 'Offline', domain: 'off.example', ownerEmail: 'o@off.example', status: 'SUSPENDED', ...NO_QUOTA }
@@ -505,7 +505,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
       expect(w.findAll('button').find((b) => b.text() === absent)).toBeUndefined()
     }
 
-    vi.mocked(listTenants).mockResolvedValue([{ ...DELETING, status: 'SUSPENDED', deletionDueAt: null }])
+    vi.mocked(listTenants).mockResolvedValue([{ ...DELETING, status: 'SUSPENDED', deletionDueAt: undefined }])
     await btn(w, 'Stop deletion').trigger('click')
     await flushPromises()
     expect(stopTenantDeletion).toHaveBeenCalledWith('t-4')

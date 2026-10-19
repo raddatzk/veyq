@@ -170,8 +170,8 @@ function fakeServer(
   // The two documents as the server holds them, with the stores' real compare-and-set: a write whose revision is
   // not the stored one is `409 stale_revision`. Their own PUTs answer 500 — the outage a re-seal after the publish
   // used to swallow — so a rotation that still wrote them on their own would leave them under the retired key.
-  const pins: IdentityPins = { ...(opts.pins ?? { blob: null, revision: 0 }) }
-  const register: DeviceRegister = { ...(opts.register ?? { blob: null, revision: 0 }) }
+  const pins: IdentityPins = { ...(opts.pins ?? { revision: 0 }) }
+  const register: DeviceRegister = { ...(opts.register ?? { revision: 0 }) }
   const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async () => {
     throw httpError(500)
   })

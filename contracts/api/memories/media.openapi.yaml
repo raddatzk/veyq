@@ -143,6 +143,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MediaListPage" }
         "304": { $ref: "../_common.openapi.yaml#/components/responses/ItemsNotModified" }
+        "400":
+          description: Malformed request — a parameter or the body outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
           description: Generic authentication failure.
           content:

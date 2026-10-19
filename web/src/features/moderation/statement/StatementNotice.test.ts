@@ -29,7 +29,7 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   caseId: '1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b',
   measureKind: 'CONTENT',
   targetId: NODE,
-  shareId: null,
+  shareId: undefined,
   scopeId: '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c',
   ground: 'TERMS_BREACH',
   provision: '§ 86a StGB',
@@ -39,9 +39,9 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   roles: ['SCOPE_OWNER'],
   sealedFacts: 'c2VhbGVk',
   inForce: true,
-  liftedAt: null,
+  liftedAt: undefined,
   contactAddress: 'abuse@example.org',
-  objection: null,
+  objection: undefined,
   canObject: true,
   ...over,
 })
@@ -87,7 +87,7 @@ describe('StatementNotice', () => {
   })
 
   it('the reduced form leaves out what only the full form carries', async () => {
-    state.list = [statement({ form: 'REDUCED', sealedFacts: null, contactAddress: null, provision: null })]
+    state.list = [statement({ form: 'REDUCED', sealedFacts: undefined, contactAddress: undefined, provision: null })]
     const w = await mountNotice({ targetId: NODE })
     expect(w.findAll('.statement-passage').map((p) => p.attributes('data-passage'))).toEqual(['measure', 'roles', 'ground', 'objection'])
     expect(w.find('.statement-facts').exists()).toBe(false)
@@ -101,7 +101,7 @@ describe('StatementNotice', () => {
 
   it('sends the objection once, and an empty one is not sent', async () => {
     vi.mocked(objectTo).mockImplementation(async (s) => {
-      state.list = [{ ...s, canObject: false, objection: { receivedAt: new Date(), mine: true, outcome: null, ownReview: false, decidedAt: null } }]
+      state.list = [{ ...s, canObject: false, objection: { receivedAt: new Date(), mine: true, outcome: undefined, ownReview: false, decidedAt: undefined } }]
       return state.list[0]
     })
     const w = await mountNotice({ targetId: NODE })
@@ -131,7 +131,7 @@ describe('StatementNotice', () => {
 
   it('shows the objection waiting, then its answer and who reviewed it', async () => {
     const received = new Date('2026-10-18T10:00:00Z')
-    state.list = [statement({ canObject: false, objection: { receivedAt: received, mine: true, outcome: null, ownReview: false, decidedAt: null } })]
+    state.list = [statement({ canObject: false, objection: { receivedAt: received, mine: true, outcome: undefined, ownReview: false, decidedAt: undefined } })]
     let w = await mountNotice({ targetId: NODE })
     expect(w.find('.statement-objection').exists()).toBe(false)
     expect(w.find('.statement-objection-state').text()).toContain(received.toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }))
