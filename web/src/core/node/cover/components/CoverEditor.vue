@@ -11,11 +11,9 @@ defineProps<{ cover: UseNodeCover }>()
 <template>
   <CoverDialog
     v-if="cover.editor.value"
-    :key="cover.editor.value.node.id + ':' + (cover.editor.value.source?.id ?? '')"
+    :key="cover.editor.value.node.id"
     :cover="cover.editor.value.cover"
     :existing-src="cover.editor.value.existingSrc"
-    :source="cover.editor.value.source"
-    :hint="cover.editor.value.hint"
     @save="cover.editor.value && cover.save(cover.editor.value.node, $event)"
     @close="cover.close()"
   />

@@ -5,7 +5,7 @@
 // candidate, and the candidate's `upgrade.b-read.e2e.test.ts` opens what this wrote. In an ordinary run both members
 // are this tree's, which keeps the pair working between proofs.
 //
-// It seals real content of every application there is: a Memory with a date, a place, a cover (one of its photos with
+// It seals real content of every application there is: a Memory with a date, a place, a cover (an uploaded image with
 // a crop) and media, a chapter with media; a Depot folder with a member's files (one of several frames); a drop box
 // with a guest's file in the guest's folder; and a READ link on the Memory. What it wrote goes into the record
 // (`src/test/upgradeRecord.ts`) - the names, the date and place, the cover, and each byte stream's size and SHA-256 -
@@ -24,7 +24,8 @@ import { ScopeKind } from '../../api/generated/scopes'
 import { ShareRole } from '../../api/generated/sharing'
 import { createFolder, listTree, nodeContentKey } from '../../core/node/tree'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
-import { writeNodeCover } from '../../core/node/cover/coverWrite'
+import { uploadCoverBlob, writeNodeCover } from '../../core/node/cover/coverWrite'
+import { uploadedCover } from '../../core/node/cover/coverModel'
 import { CHUNK_SIZE } from '../../core/blob/transport'
 import { registry } from '../../core/applications/registry'
 import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
@@ -33,7 +34,6 @@ import { createChapter, createMemory } from '../memory/memoryNodes'
 import { addMedia } from '../memory/media'
 import { setMemoryDate } from '../memory/memoryDate'
 import { setMemoryLocation } from '../memory/memoryLocation'
-import { memoryPhotoSource, type MemoryCover } from '../memory/memoryCover'
 import { createShare, openShareOriginal, resolveShare } from '../memory/share'
 import { FILE_KIND } from '../depot/kinds'
 import { fileUploadJob } from '../depot/uploadFile'
@@ -93,8 +93,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
 
     let meta = await setMemoryDate(scopeId, memory.nodeId, memory.memoryKey, DATE, { wrappedMeta: null, metaRevision: 0 })
     meta = await setMemoryLocation(scopeId, memory.nodeId, memory.memoryKey, { name: PLACE, nameSource: 'manual', derivedMode: 'fixed' }, meta)
-    const cover = memoryPhotoSource.seal(memoryMedia[0].mediaId, CROP) as MemoryCover
-    await writeNodeCover({ scopeId, nodeId: memory.nodeId, nodeKey: memory.memoryKey, current: meta, cover })
+    // The cover: an uploaded image (a cover is set only by an upload), sealed as it is - no decode in this suite.
+    const coverUp = await uploadCoverBlob(scopeId, memory.nodeId, memory.memoryKey, new Blob([bytesOf(4 * 1024, 7) as BlobPart]), { type: 'image/jpeg' })
+    await writeNodeCover({ scopeId, nodeId: memory.nodeId, nodeKey: memory.memoryKey, current: meta, cover: uploadedCover(coverUp.plan, CROP), uploadId: coverUp.uploadId })
 
     // --- Depot: a folder with two of a member's files, one of several frames ----------------------------------------
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
@@ -132,7 +133,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
       scopeId,
       memory: {
         nodeId: memory.nodeId, name: MEMORY_NAME, date: DATE, place: PLACE,
-        cover: { mediaId: memoryMedia[0].mediaId, crop: CROP },
+        cover: { blobId: coverUp.plan.blobId, crop: CROP },
         media: memoryMedia,
         chapter: { nodeId: chapter.nodeId, name: CHAPTER_NAME, media: chapterMedia },
       },
@@ -142,7 +143,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
     })
 
     // The canaries (ADR 0053): what the server's own responses unseal to - every node name of the tree, the Memory's
-    // meta envelope (its cover's `source` dropped: a media id, legitimately in the database - memoryCover.e2e says why).
+    // meta envelope (its cover's `source` dropped: a blob id, legitimately in the database - memoryCover.e2e says why).
     const tree = await listTree(scopeId, epochs)
     const memoryNode = tree.find((n) => n.id === memory.nodeId)!
     const envelope = unsealNodeMeta(memory.memoryKey, { scopeId, nodeId: memory.nodeId }, memoryNode.wrappedMeta)

@@ -83,7 +83,7 @@ paths:
         "409": { $ref: "#/components/responses/BannerConflict" }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: The node is no MEMORY or CHAPTER (`illegal_target`), or an upload was not started as this node's banner or poster (`upload_mismatch`).
+          description: The node is no MEMORY or CHAPTER (`illegal_target`), an upload was not started as this node's banner or poster (`upload_mismatch`), or `shared` / `posterShared` names no blob this node holds (`shared_source_invalid`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
 
@@ -178,29 +178,50 @@ components:
   schemas:
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
+    SharedBlob:
+      $ref: '../_common.openapi.yaml#/components/schemas/SharedBlob'
 
     SetMemoryBannerRequest:
       type: object
       description: >
-        Make one or two upload sessions the node's banner, and re-seal the node's `wrappedMeta` with the banner that
-        names them (see `setMemoryBanner`).
-      required: [uploadId, wrappedMeta, metaRevision]
+        Make one or two upload sessions - or new rows on objects the node already stores (`shared`, `posterShared`) -
+        the node's banner, and re-seal the node's `wrappedMeta` with the banner that names them (see
+        `setMemoryBanner`). Exactly one of `uploadId` and `shared`, and at most one of `posterUploadId` and
+        `posterShared`, else `400 invalid_request`.
+      required: [wrappedMeta, metaRevision]
       properties:
         uploadId:
           x-veyq-visibility: id
-          type: string
+          type: [string, "null"]
           format: uuid
           description: The upload session of the banner's image or video, opened by `startBlobUploads` with `role` BANNER and `ownerId` = this node.
           example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        shared:
+          description: >
+            In place of `uploadId`: the banner is a new row on the stored object of a blob this node already holds - a
+            medium's PREVIEW (an image) or ORIGINAL (a video) the picked file was found equal to
+            (cr-cover-banner-upload-only-and-dedup). Its wrap is sealed with `role` BANNER and `ownerId` = this node.
+          oneOf:
+            - { $ref: "#/components/schemas/SharedBlob" }
+            - { type: "null" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         posterUploadId:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
           description: >
-            The upload session of a video's poster, opened with `role` BANNER_POSTER and `ownerId` = this node. Present:
-            the poster slot is filled with it. Absent or null: the poster slot is emptied of `expectedPosterBlobId`.
+            The upload session of a video's poster, opened with `role` BANNER_POSTER and `ownerId` = this node. Present
+            (or `posterShared`): the poster slot is filled with it. Both absent or null: the poster slot is emptied of
+            `expectedPosterBlobId`.
           example: 2a3b4c5d-6e7f-4a1b-8c2d-3e4f5a6b7c8d
+        posterShared:
+          description: >
+            In place of `posterUploadId`: the poster is a new row on the stored object of the matched video medium's
+            PREVIEW (its first-frame poster). Its wrap is sealed with `role` BANNER_POSTER and `ownerId` = this node.
+          oneOf:
+            - { $ref: "#/components/schemas/SharedBlob" }
+            - { type: "null" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         expectedBlobId:
           x-veyq-visibility: id
           type: [string, "null"]

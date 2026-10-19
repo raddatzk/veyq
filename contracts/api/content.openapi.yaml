@@ -345,7 +345,7 @@ paths:
         "409": { $ref: "#/components/responses/CoverConflict" }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: The node's kind takes no cover (`illegal_target`), or the upload was not started as this node's cover (`upload_mismatch`).
+          description: The node's kind takes no cover (`illegal_target`), the upload was not started as this node's cover (`upload_mismatch`), or `shared` names no blob this node holds (`shared_source_invalid`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
 
@@ -683,17 +683,26 @@ components:
     SetNodeCoverRequest:
       type: object
       description: >
-        Make one upload session the node's cover, and re-seal the node's `wrappedMeta` with the cover that names it
-        (see `setNodeCover`).
-      required: [uploadId, wrappedMeta, metaRevision]
+        Make one upload session - or a new row on an object the node already stores (`shared`) - the node's cover, and
+        re-seal the node's `wrappedMeta` with the cover that names it (see `setNodeCover`). Exactly one of `uploadId`
+        and `shared`, else `400 invalid_request`.
+      required: [wrappedMeta, metaRevision]
       properties:
         uploadId:
           x-veyq-visibility: id
-          type: string
+          type: [string, "null"]
           format: uuid
           description: The upload session of the cover blob, opened by `startBlobUploads` with `role` COVER and `ownerId` = this node.
           example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        shared:
+          description: >
+            In place of `uploadId`: the cover is a new row on the stored object of a blob this node already holds - a
+            medium's PREVIEW the picked image was found equal to (cr-cover-banner-upload-only-and-dedup). Its wrap is
+            sealed with `role` COVER and `ownerId` = this node.
+          oneOf:
+            - { $ref: "#/components/schemas/SharedBlob" }
+            - { type: "null" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         expectedBlobId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -1012,5 +1021,7 @@ components:
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+    SharedBlob:
+      $ref: '_common.openapi.yaml#/components/schemas/SharedBlob'
     StaleSealedMeta:
       $ref: '_common.openapi.yaml#/components/schemas/StaleSealedMeta'

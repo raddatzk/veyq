@@ -14,7 +14,7 @@ import type { BannerSaveIntent, BannerSaveOpts } from './useBannerEditor'
 
 const stored: Banner = {
   medium: 'image', blob: { blobId: 'b', chunkCount: 1, byteSize: 9, wrappedBlobKey: 'k', ownerId: 'n', role: 'BANNER' },
-  frame: 'fill', focal: { x: 0.3, y: 0.4 }, alt: 'Old',
+  frame: 'fill', focal: { x: 0.3, y: 0.4 },
 }
 
 let mounted: VueWrapper[] = []
@@ -74,11 +74,11 @@ describe('BannerDialog', () => {
     await loaded(wrapper, 1080, 1920)
     expect(wrapper.get('[data-testid="banner-preview-phone"] img.banner-frame-media').classes()).toContain('is-fit')
     await button(wrapper, t('memory.banner.fill')).trigger('click')
-    await wrapper.get('input:not([type="file"])').setValue('  Sunset ')
+    expect(wrapper.find('input:not([type="file"])').exists(), 'no description field: the banner has none').toBe(false)
     await button(wrapper, t('memory.banner.save')).trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'file', type: 'image/jpeg', poster: null, framing: { frame: 'fill', focal: { x: 0.5, y: 0.5 }, alt: '  Sunset ' } }),
+      expect.objectContaining({ kind: 'file', type: 'image/jpeg', poster: null, framing: { frame: 'fill', focal: { x: 0.5, y: 0.5 } } }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(emitted('close')).toHaveLength(1)
@@ -113,11 +113,10 @@ describe('BannerDialog', () => {
   it('re-opens the stored banner as it was framed; Remove removes; a failure is said and the dialog stays', async () => {
     const { wrapper, save, emitted } = await mountDialog({ current: stored, currentSrc: 'blob:current' })
     expect(wrapper.get('img.banner-dialog-image').attributes('src')).toBe('blob:current')
-    expect((wrapper.get('input:not([type="file"])').element as HTMLInputElement).value).toBe('Old')
     save.mockRejectedValueOnce(new BannerStaleError())
     await button(wrapper, t('memory.banner.save')).trigger('click')
     await flushPromises()
-    expect(save.mock.calls[0][0]).toEqual({ kind: 'keep', framing: { frame: 'fill', focal: { x: 0.3, y: 0.4 }, alt: 'Old' } })
+    expect(save.mock.calls[0][0]).toEqual({ kind: 'keep', framing: { frame: 'fill', focal: { x: 0.3, y: 0.4 } } })
     expect(wrapper.get('[role="alert"]').text()).toBe(t('memory.banner.stale'))
     expect(emitted('close')).toBeUndefined()
 
@@ -127,19 +126,21 @@ describe('BannerDialog', () => {
     expect(emitted('close')).toHaveLength(1)
   })
 
-  it('a gallery medium handed over by the lightbox saves as that medium; the arrow keys move the point', async () => {
-    const { wrapper, save } = await mountDialog({ seed: { mediaId: 'm7', src: 'blob:preview', video: false } })
+  it('a picked file is the only source; the arrow keys move the point', async () => {
+    const { wrapper, save } = await mountDialog()
+    expect(wrapper.text(), 'no gallery source is offered').not.toContain('gallery')
+    await pick(wrapper, new File([new Uint8Array(10)], 'wide.jpg', { type: 'image/jpeg' }))
     await loaded(wrapper, 3000, 2000)
     await wrapper.get('.banner-focal-handle').trigger('keydown', { key: 'ArrowRight' })
     await wrapper.get('.banner-focal-handle').trigger('keydown', { key: 'ArrowDown', shiftKey: true })
     await button(wrapper, t('memory.banner.save')).trigger('click')
     await flushPromises()
-    expect(save.mock.calls[0][0]).toMatchObject({ kind: 'medium', mediaId: 'm7', framing: { frame: 'fill', focal: { x: 0.52, y: 0.6 } } })
+    expect(save.mock.calls[0][0]).toMatchObject({ kind: 'file', framing: { frame: 'fill', focal: { x: 0.52, y: 0.6 } } })
   })
 
   it('a save in flight shows its progress and Cancel aborts it, saying nothing', async () => {
     let signal!: AbortSignal
-    const { wrapper, save, emitted } = await mountDialog({ seed: { mediaId: 'm7', src: 'blob:preview', video: true } })
+    const { wrapper, save, emitted } = await mountDialog({ current: stored, currentSrc: 'blob:current' })
     save.mockImplementationOnce(async (_i, opts) => {
       signal = opts.signal!
       opts.onProgress?.(0.42)

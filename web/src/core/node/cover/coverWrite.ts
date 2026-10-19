@@ -8,16 +8,17 @@
 // uploaded cover has always used, no second cover format. The server sees ciphertext chunks, the opaque attachment row and
 // the sealed meta; never the image, the crop, or which source a cover has.
 //
-// One writer for every kind. A cover is `{ source, crop }` (`coverModel.ts`); an application that has another source
-// (Memories: one of its own photos) passes its own `cover` value, and the writer decides the blob step from the meta it is
-// replacing: the old cover's uploaded blob, if any, is the compare value (`expectedBlobId` / the removal's `blobId`), read
-// again from the blob a `409 stale_revision` hands back, so a retry is judged against what the server holds now.
+// One writer for every kind. A cover is `{ source, crop }` (`coverModel.ts`), and the writer decides the blob step from the
+// meta it is replacing: the old cover's uploaded blob, if any, is the compare value (`expectedBlobId` / the removal's
+// `blobId`), read again from the blob a `409 stale_revision` hands back, so a retry is judged against what the server holds
+// now. The new blob is an open upload, or a new row on an object the node already stores (`shared`, ADR 0013 § 5).
 import { contentApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { createBrowserDeriver, type AddMediaSource, type MediaDeriver } from '../../../shared/image/mediaDeriver'
 import { authedReserve, authedWindow, planBlob, reserveAndPump } from '../../blob/transport'
 import type { BlobMeta } from '../../blob/meta'
+import type { SharedBlobRequest } from '../../blob/sharedBlob'
 import type { BlobSource } from '../../blob/types'
 import { editField, unsealNodeMeta } from '../nodeMeta'
 import { writeNodeMeta } from '../nodeMetaWrite'
@@ -34,8 +35,8 @@ export const COVER_SPEC = { maxEdge: 2048, quality: 0.85 }
 /** The largest picked image the client takes as a cover source (decoded in the browser, then downscaled): 40 MB. */
 export const MAX_COVER_SOURCE_BYTES = 40 * 1024 * 1024
 
-/** The sealed blob-meta of a derived cover: the JPEG it was re-encoded as. */
-const DERIVED_META: BlobMeta = { type: 'image/jpeg' }
+/** The sealed blob-meta of a derived cover: the JPEG it was re-encoded as - a shared cover's too (it shares a PREVIEW). */
+export const DERIVED_META: BlobMeta = { type: 'image/jpeg' }
 
 /** The failure code of an image the browser cannot decode, when the caller does not accept the pristine bytes. */
 export const COVER_UNREADABLE = 'cover_unreadable'
@@ -125,6 +126,8 @@ export type WriteNodeCoverArgs = {
   cover: unknown | null
   /** The open upload that becomes the cover (its blob is the one `cover` names); absent when no new blob is attached. */
   uploadId?: string
+  /** In place of `uploadId`: the cover's blob is a new row on an object the node already stores (`core/blob/sharedBlob.ts`). */
+  shared?: SharedBlobRequest
   /** Throw `MetaConflictError` when a peer changed the cover field itself between the writer's read and the write
    *  (an editor re-opens on it). False: this write replaces whatever the cover is now (a set from a picker). Default true. */
   surfaceConflict?: boolean
@@ -136,10 +139,10 @@ export type WriteNodeCoverResult = SealedMetaState & { replaced: unknown | null 
 
 /**
  * Write a node's `cover` field and, in the same request, the blob step it implies:
- *  - an `uploadId`: `setNodeCover` attaches the open upload as the cover, replacing the blob the meta being replaced named
- *    (the compare), and writes the meta;
- *  - no `uploadId`, and the meta being replaced named an uploaded cover blob the new cover does not keep: `removeNodeCover`
- *    frees that blob and writes the meta (a switch to a photo, or no cover);
+ *  - an `uploadId` (or a `shared` row): `setNodeCover` attaches it as the cover, replacing the blob the meta being replaced
+ *    named (the compare), and writes the meta;
+ *  - neither, and the meta being replaced named an uploaded cover blob the new cover does not keep: `removeNodeCover`
+ *    frees that blob and writes the meta (no cover);
  *  - otherwise a plain `updateNode` (a moved crop, a cover without a blob of its own).
  * Revision-checked like every meta write (ADR 0077); the other fields of the meta (a Memory's date and place) are preserved.
  * A cover slot a peer changed meanwhile is a [CoverStaleError]; nothing was written then, and the server freed this upload.
@@ -155,10 +158,13 @@ export async function writeNodeCover(a: WriteNodeCoverArgs): Promise<WriteNodeCo
     const keptBlob = uploadBlobIdOf(a.cover)
     const { scopeId, nodeId } = a
     try {
-      if (a.uploadId) {
+      if (a.uploadId || a.shared) {
         await withRefresh(() =>
           contentApi().setNodeCover({
-            scopeId, nodeId, setNodeCoverRequest: { uploadId: a.uploadId!, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision },
+            scopeId, nodeId,
+            setNodeCoverRequest: a.uploadId
+              ? { uploadId: a.uploadId, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision }
+              : { shared: a.shared, expectedBlobId: oldBlob, wrappedMeta: sealed, metaRevision },
           }),
         )
       } else if (oldBlob && oldBlob !== keptBlob) {

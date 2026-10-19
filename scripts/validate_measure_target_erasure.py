@@ -15,6 +15,11 @@ count for the link). The target set is **derived**, not listed:
   - and, where `lockStanding` reads a flag (`?.deleted == false`, a link's tombstone), the write of that flag on the
     entity — a property assignment `x.deleted = true`, or `XEntity.update("deleted = true …")` — counts as its erasure.
 
+The call is what is held, not that it ends every measure: an item's measure whose stored objects other blob rows still
+name (a cover or a banner sharing a medium's object, ADR 0013 § 5) keeps standing, hanging on those objects
+(`MeasureTargets.erased`'s `holding`, owner 2026-10-19), and ends with the objects' last row (`MeasureTargets.objectsGone`,
+called by `BlobUploadStore.deleteBlobRow` and `ScopePurge`) - that half is `SharedBlobSliceTest`'s, not this guard's.
+
 An erasure is `XEntity.delete(` / `XEntity.deleteById(` (bulk or by id) or the flag write, outside comments. A function
 that erases a target and ends nothing is red, unless `EXEMPT` names it with the reason no measure can stand on what it
 erases. Zero targets, zero `ReportableItems` implementations while `lockStanding` asks one, or zero erasers are red on

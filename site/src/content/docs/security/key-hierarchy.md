@@ -252,9 +252,11 @@ A node's **directory entry** (its sealed name and its blinded slug token) lives 
 whoever holds a folder's key reads every name and opens every key below it, and nothing beside or above it. The
 name, like every field, seals under a key of its own derived from that key (below).
 `K_blob` also seals the blob's type, upload name and modification time (`blob-meta`). Because each `K_blob` is
-random, identical bytes become different ciphertexts. Content dedup is declined
-([ADR 0013](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)),
-so the server learns no content equality. Frame layout:
+random, identical bytes become different ciphertexts. Dedup across a space is declined
+([ADR 0013](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)),
+so the server learns no content equality there. Inside one node, a cover or banner equal to a gallery item is a second
+blob row on that item's stored object, its `K_blob` wrapped again for the new row; the server sees which object it
+shares. Frame layout:
 `sealFrame` / `openFrame` in [`v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts),
 vector `chunk_frame`.
 

@@ -3,6 +3,8 @@ package me.raddatz.veyq.memories.banner
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.SharedBlobSpec
+import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.http.FailureStatus.BAD_REQUEST
@@ -52,6 +54,12 @@ sealed interface MemoryBannerOutcome {
     /** An upload failed declare-then-verify (the request's staged objects are on the reclaim list) - a 400. */
     object Budget : MemoryBannerOutcome, HttpFailure by httpFailure("budget_exceeded", BAD_REQUEST)
 
+    /** Neither or both of `uploadId` and `shared`, or both poster forms - a 400. */
+    object InvalidRequest : MemoryBannerOutcome, HttpFailure by Failures.invalidRequest
+
+    /** A shared row's source is no live blob of this node, is blocked, or its new id is taken (ADR 0013 § 5) - a 422. */
+    object SharedSourceInvalid : MemoryBannerOutcome, HttpFailure by httpFailure("shared_source_invalid", UNPROCESSABLE)
+
     /** A banner slot holds another blob than the request states; NOTHING was written, the uploads are still open - a 409. */
     data class BannerStale(val currentBlobId: String?, val currentPosterBlobId: String?) :
         MemoryBannerOutcome, HttpFailure by httpFailure("banner_stale", CONFLICT)
@@ -75,24 +83,29 @@ class MemoryBannerHandler(
     private val store: MemoryBannerStore,
 ) {
     /**
-     * Make [uploadId] the banner of [nodeId] in place of [expectedBlobId], and [posterUploadId] its poster in place of
+     * Make [uploadId] - or [shared], a new row on an object the node already stores (ADR 0013 § 5) - the banner of
+     * [nodeId] in place of [expectedBlobId], and [posterUploadId] (or [posterShared]) its poster in place of
      * [expectedPosterBlobId] - or, without a poster, empty the poster slot of [expectedPosterBlobId] - and write the
      * node's re-sealed [wrappedMeta] at [metaRevision]: all or nothing ([MemoryBannerStore.set]). Each upload is the
      * caller's own (a session another member opened is not found), verified against its declaration before anything
-     * is attached.
+     * is attached; a shared row's source is checked under the scope lock (`SharedBlobs`).
      */
     fun set(
-        userId: String, scopeId: String, nodeId: String, uploadId: String, posterUploadId: String?,
+        userId: String, scopeId: String, nodeId: String, uploadId: String?, shared: SharedBlobSpec?,
+        posterUploadId: String?, posterShared: SharedBlobSpec?,
         expectedBlobId: String?, expectedPosterBlobId: String?, wrappedMeta: String, metaRevision: Long,
     ): MemoryBannerOutcome {
+        if ((uploadId == null) == (shared == null) || (posterUploadId != null && posterShared != null)) {
+            return MemoryBannerOutcome.InvalidRequest
+        }
         access.check(userId, scopeId, WRITE)
             .refusal(MemoryBannerOutcome.NotFound, MemoryBannerOutcome.Suspended, MemoryBannerOutcome.ScopeDeleting)?.let { return it }
         val node = nodes.findInScope(scopeId, nodeId) ?: return MemoryBannerOutcome.NotFound
         if (node.kind !in MemoryBanner.KINDS) return MemoryBannerOutcome.IllegalTarget
         val opener = UploadOpener.Member(userId)
-        val banner = blobs.findSession(scopeId, uploadId, opener) ?: return MemoryBannerOutcome.NotFound
+        val banner = uploadId?.let { blobs.findSession(scopeId, it, opener) ?: return MemoryBannerOutcome.NotFound }
         val poster = posterUploadId?.let { blobs.findSession(scopeId, it, opener) ?: return MemoryBannerOutcome.NotFound }
-        if (!banner.boundTo(node.id, MemoryBanner.SLOT)) return MemoryBannerOutcome.UploadMismatch
+        if (banner != null && !banner.boundTo(node.id, MemoryBanner.SLOT)) return MemoryBannerOutcome.UploadMismatch
         if (poster != null && !poster.boundTo(node.id, MemoryBanner.POSTER_SLOT)) return MemoryBannerOutcome.UploadMismatch
 
         val sessions = listOfNotNull(banner, poster)
@@ -106,10 +119,15 @@ class MemoryBannerHandler(
                 }
             }
         }
+        fun fill(session: UploadSessionEntity?, spec: SharedBlobSpec?, expected: String?): MemoryBannerStore.Fill? = when {
+            session != null -> MemoryBannerStore.Upload(session, manifests[session.id], expected)
+            spec != null -> MemoryBannerStore.Shared(spec, userId, expected)
+            else -> null
+        }
         return store.set(
             scopeId, node.id,
-            MemoryBannerStore.Upload(banner, manifests[banner.id], expectedBlobId),
-            poster?.let { MemoryBannerStore.Upload(it, manifests[it.id], expectedPosterBlobId) },
+            checkNotNull(fill(banner, shared, expectedBlobId)),
+            fill(poster, posterShared, expectedPosterBlobId),
             expectedPosterBlobId, wrappedMeta, metaRevision, PrincipalKey.User(userId),
         )
     }

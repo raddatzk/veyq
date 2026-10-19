@@ -33,6 +33,9 @@ sealed interface AttachOutcome {
 
     /** The node is live, but not of a kind the caller attaches to. */
     object IllegalTarget : AttachOutcome
+
+    /** [AttachmentStore.attachShared]: the source is no live blob of this node, is blocked, or the new id is taken. */
+    object SharedSourceInvalid : AttachOutcome
 }
 
 /**
@@ -49,7 +52,7 @@ sealed interface AttachOutcome {
  * `upload_mismatch`). A [AttachOutcome.Conflict] is the application's to project — its contract names that code.
  */
 @ApplicationScoped
-class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUploadStore) {
+class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUploadStore, private val shared: SharedBlobs) {
 
     /**
      * Attach the verified [session] as the blob in [slot] of [nodeId] — a live node of [scopeId] of one of [kinds] — in
@@ -104,8 +107,45 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         val kind = liveKind(scopeId, nodeId) ?: return refused(AttachOutcome.NodeNotFound)
         if (kind !in kinds) return refused(AttachOutcome.IllegalTarget)
 
-        val uploader = Uploader.of(session)
-        val blobId = blobs.persistBlob(session, manifest)
+        val outcome = swapIn(scopeId, nodeId, slot, blobs.persistBlob(session, manifest), Uploader.of(session), expectedBlobId)
+        if (outcome is AttachOutcome.Attached) {
+            nodes.bumpTree(scopeId) // a first blob or a replacement is a change of the level view (a file's uploaded state, a cover; ADR 0081)
+            attached(nodeId)
+        }
+        return outcome
+    }
+
+    /**
+     * [attach] for a **shared** row (ADR 0013 § 5): the slot's new blob is a row on the stored
+     * object of a blob [nodeId] already holds ([SharedBlobs.persist]), nothing uploaded. A member's write only - no gate,
+     * no session - so the uploader recorded is [memberUserId]. The same order as [attach] from the scope lock on, with
+     * the shared row's checks ([AttachOutcome.SharedSourceInvalid]) in place of the session's spend; a miss of the swap
+     * frees the new row and leaves the source's object, which another row still names ([BlobUploadStore.deleteBlobRow]).
+     */
+    @Transactional
+    fun attachShared(
+        scopeId: String,
+        nodeId: String,
+        kinds: Set<String>,
+        slot: String,
+        spec: SharedBlobSpec,
+        memberUserId: String,
+        expectedBlobId: String?,
+    ): AttachOutcome {
+        require(SLOT.matches(slot)) { "a slot is an application's token ${SLOT.pattern}" }
+        nodes.lockScope(scopeId)
+        val kind = liveKind(scopeId, nodeId) ?: return refused(AttachOutcome.NodeNotFound)
+        if (kind !in kinds) return refused(AttachOutcome.IllegalTarget)
+        val blobId = shared.persist(scopeId, nodeId, spec) ?: return refused(AttachOutcome.SharedSourceInvalid)
+        val outcome = swapIn(scopeId, nodeId, slot, blobId, Uploader.Member(memberUserId), expectedBlobId)
+        if (outcome is AttachOutcome.Attached) nodes.bumpTree(scopeId) // the level view's change, as [attach]'s
+        return outcome
+    }
+
+    /** Steps 5 to 7 of [attach]: the new row flushed, the swap, the freed predecessor. The caller moves the revision. */
+    private fun swapIn(
+        scopeId: String, nodeId: String, slot: String, blobId: String, uploader: Uploader, expectedBlobId: String?,
+    ): AttachOutcome {
         BlobEntity.flush()
         val swapped = if (expectedBlobId == null) {
             insertIntoEmpty(scopeId, nodeId, slot, blobId, uploader)
@@ -117,8 +157,6 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
             return AttachOutcome.Conflict(currentBlobId(nodeId, slot))
         }
         blobs.deleteBlobRow(expectedBlobId)
-        nodes.bumpTree(scopeId) // a first blob or a replacement is a change of the level view (a file's uploaded state, a cover; ADR 0081)
-        attached(nodeId)
         return AttachOutcome.Attached(blobId, expectedBlobId)
     }
 

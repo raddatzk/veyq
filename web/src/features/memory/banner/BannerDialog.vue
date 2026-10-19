@@ -1,25 +1,24 @@
 <script setup lang="ts">
-// The banner dialog (uc.memory.banner main flow 2-6): choose an image or a video - a picked file, or the gallery medium the
-// lightbox hands over - set the point that stays in view, see it framed as a wide screen and as a phone show it, switch a
-// portrait medium between fit and fill, describe it, and save; or re-frame or remove the current banner. Presentation only:
+// The banner dialog (uc.memory.banner main flow 2-6): choose an image or a video - a file picked here, the banner's only
+// source - set the point that stays in view, see it framed as a wide screen and as a phone show it, switch a portrait medium
+// between fit and fill, and save; or re-frame or remove the current banner. Presentation only:
 // it holds no key and no network - the save is the page's (`useBannerEditor`), awaited here so the dialog can show its
 // progress, cancel it, and say what went wrong.
 //
 // What it refuses before anything is read further (main flow 2, E4, Q5): an image above 40 MB, a file the browser cannot
 // read, and a video of which this browser cannot decode a frame - no video banner where nothing could be drawn before it
-// plays. A video has no length bound (Q4): it is copied as it is, read by frame while it uploads.
+// plays. A video has no length bound (Q4): it is uploaded as it is, read by frame.
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
 import ProgressBar from 'primevue/progressbar'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { createBrowserDeriver, type MediaDeriver } from '../../../shared/image/mediaDeriver'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import { inferMediaType } from '../uploadQueue'
 import BannerFrame from './BannerFrame.vue'
-import { CENTRE, MAX_BANNER_ALT, defaultFrame, isPortrait, type Banner, type BannerFrame as Frame, type FocalPoint } from './bannerModel'
+import { CENTRE, defaultFrame, isPortrait, type Banner, type BannerFrame as Frame, type FocalPoint } from './bannerModel'
 import { BANNER_TOO_LARGE, BANNER_UNREADABLE, BannerStaleError, MAX_BANNER_IMAGE_BYTES } from './bannerWrite'
 import type { BannerSaveIntent, BannerSaveOpts } from './useBannerEditor'
 
@@ -28,8 +27,6 @@ const props = defineProps<{
   current: Banner | null
   /** The current banner's decrypted picture (its image, or a video's poster). */
   currentSrc: string | null
-  /** A gallery medium the lightbox handed over ("Use as banner"): its id, its decrypted preview, whether it is a video. */
-  seed?: { mediaId: string; src: string | null; video: boolean } | null
   /** The page's save (see the header). */
   save: (intent: BannerSaveIntent, opts: BannerSaveOpts) => Promise<void>
   /** The pixel stage (a test hands a stub). */
@@ -38,7 +35,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 
-type Pick = { kind: 'file'; file: File; type: string; poster: Uint8Array | null } | { kind: 'medium'; mediaId: string } | { kind: 'keep' }
+type Pick = { kind: 'file'; file: File; type: string; poster: Uint8Array | null } | { kind: 'keep' }
 const pick = ref<Pick | null>(null)
 const src = ref<string>('')
 const picked = useObjectUrl() // a picked image, or a picked video's decoded first frame (revoked on replace and on close)
@@ -47,29 +44,24 @@ const dims = ref<{ w: number; h: number } | null>(null)
 const frame = ref<Frame>('fill')
 const frameChosen = ref(false) // a stored or a chosen frame stands; a new medium takes its default once its size is known
 const focal = ref<FocalPoint>({ ...CENTRE })
-const alt = ref('')
 const problem = ref<string | null>(null)
 const phase = ref<'idle' | 'preparing' | 'saving'>('idle')
 const progress = ref<number | null>(null)
 let controller: AbortController | null = null
 
-if (props.seed) {
-  pick.value = { kind: 'medium', mediaId: props.seed.mediaId }
-  src.value = props.seed.src ?? ''
-} else if (props.current) {
+if (props.current) {
   pick.value = { kind: 'keep' }
   src.value = props.currentSrc ?? ''
   frame.value = props.current.frame
   frameChosen.value = true
   focal.value = { ...props.current.focal }
 }
-if (props.current) alt.value = props.current.alt ?? ''
 
 const busy = computed(() => phase.value !== 'idle')
 const portrait = computed(() => !!dims.value && isPortrait(dims.value.w, dims.value.h))
 const canSave = computed(() => !busy.value && pick.value !== null && (pick.value.kind !== 'keep' || !!props.current))
 const isVideo = computed(() =>
-  pick.value?.kind === 'file' ? pick.value.type.startsWith('video/') : pick.value?.kind === 'medium' ? !!props.seed?.video : props.current?.medium === 'video',
+  pick.value?.kind === 'file' ? pick.value.type.startsWith('video/') : props.current?.medium === 'video',
 )
 
 function choose() {
@@ -157,7 +149,7 @@ function setFrame(f: Frame) {
 }
 
 // --- save, remove, cancel --------------------------------------------------------------------------------------------
-const framing = () => ({ frame: frame.value, focal: { ...focal.value }, alt: alt.value })
+const framing = () => ({ frame: frame.value, focal: { ...focal.value } })
 
 async function run(intent: BannerSaveIntent) {
   controller = new AbortController()
@@ -189,7 +181,6 @@ function onSave() {
   const p = pick.value
   if (!p || !canSave.value) return
   if (p.kind === 'file') void run({ kind: 'file', file: p.file, type: p.type, poster: p.poster, framing: framing() })
-  else if (p.kind === 'medium') void run({ kind: 'medium', mediaId: p.mediaId, framing: framing() })
   else void run({ kind: 'keep', framing: framing() })
 }
 
@@ -215,7 +206,7 @@ onBeforeUnmount(() => controller?.abort())
     @update:visible="cancel"
   >
     <div class="veyq-form banner-dialog">
-      <p class="banner-dialog-copy">{{ t('memory.banner.hint') }} {{ t('memory.banner.galleryHint') }}</p>
+      <p class="banner-dialog-copy">{{ t('memory.banner.hint') }}</p>
 
       <div class="banner-dialog-sources">
         <Button type="button" :label="t('memory.banner.choose')" icon="pi pi-upload" severity="secondary" outlined :disabled="busy" @click="choose" />
@@ -273,12 +264,6 @@ onBeforeUnmount(() => controller?.abort())
             {{ t(`memory.banner.${f}`) }}
           </button>
         </div>
-
-        <label>
-          {{ t('memory.banner.description') }}
-          <InputText v-model="alt" :maxlength="MAX_BANNER_ALT" autocomplete="off" :disabled="busy" />
-          <small class="banner-dialog-copy">{{ t('memory.banner.descriptionHint') }}</small>
-        </label>
       </template>
 
       <p v-if="problem" class="banner-dialog-problem" role="alert">{{ problem }}</p>

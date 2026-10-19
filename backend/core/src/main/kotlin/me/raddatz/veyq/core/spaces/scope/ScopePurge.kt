@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.blobstore.StoreObjectRef
 import me.raddatz.veyq.core.blobstore.StoreReclaimStore
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -44,6 +45,7 @@ class ScopePurge(
     private val store: ScopesStore,
     private val reclaim: StoreReclaimStore,
     private val ledger: ErasureLedger,
+    private val measures: MeasureTargets,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects an injection point typed kotlin.collections.List with @All (Kotlin's List is
     // a java.util.List<? extends E> wildcard); the explicit phase, not bean order, decides who runs first.
@@ -105,7 +107,10 @@ class ScopePurge(
         val scope = ScopeEntity.lockRow(scopeId) ?: return
         if (cutoff != null && scope.deletedAt?.isBefore(cutoff) != true) return
         val blobs = BlobEntity.find("scopeId", scopeId).list()
-        reclaim.record(blobs.map { StoreObjectRef(it.storageKey, it.chunkCount) })
+        // One record per stored object: rows on one object (a cover sharing a medium's, ADR 0013 § 5) all go here.
+        reclaim.record(blobs.distinctBy { it.storageKey }.map { StoreObjectRef(it.storageKey, it.chunkCount) })
+        // Every object of the space goes with it: a measure that hangs on one (its item erased before, ADR 0093 § 6) ends.
+        measures.objectsGone(blobs.map { it.storageKey })
         // An upload still OPEN in the scope — last windowed inside `veyq.blob.upload.retention`, so its own sweep has
         // not reached it — may already have chunks in the store, and its row is their only pointer. Recorded
         // exactly as `BlobUploadStore.purgeSessionsIdleSince` does; a session a budget rejection already recorded

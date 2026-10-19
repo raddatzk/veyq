@@ -2,28 +2,26 @@
 // and upload them, and write the slots with the meta that names them - through the source's `banner` door, a member's only
 // (`source.ts`). The dialog (`BannerDialog.vue`) holds no network and no key; it hands an intent here and shows the progress.
 //
-// A gallery medium is COPIED (ADR 0102 decision 3), from what its upload sealed, never from the preview a viewer is shown:
-//  - an image: its ORIGINAL decrypted whole on the device (the cover's bound, 40 MB) and derived into the banner's JPEG;
-//  - a video: its original read by frame through its chunk provider and re-sealed as it is (never held whole, whatever its
-//    length - Q4), and the poster its upload made (the gallery's preview tier, the very first-frame JPEG the poster derive
-//    produces) re-sealed as the banner's poster - so no frame is decoded for it here. A video whose upload made no poster
-//    (a browser that could not decode it then) has no frame to show before it plays, and is refused as a banner.
-import { framedPayload } from '../../../core/export/copySource'
-import { CHUNK_SIZE } from '../../../core/blob/transport'
+// A banner is set only by a file picked in its dialog (never from the gallery, so no member overwrites another's choice in
+// passing). Where the Memory's gallery already stores that file, the banner shares the stored object instead of storing it
+// again (ADR 0013 § 5, `storedMatch.ts`): an image banner a medium's PREVIEW (the same spec of the same picture), a video
+// banner the medium's ORIGINAL and its PREVIEW as the poster. The file's SHA-256 is read once here - it is the match key, a
+// video's `blob-meta` and the banner meta's `sha256`.
+import { contentDigest } from '../../../core/blob/sharedBlob'
 import { nodeMetaState } from '../../../core/node/nodeMeta'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import type { TreeNode } from '../../../core/node/tree'
 import { createBrowserDeriver, type MediaDeriver } from '../../../shared/image/mediaDeriver'
-import { hasDerivatives, mediaTypeOf, plaintextSize, type MediaItem } from '../media'
+import type { MediaItem } from '../media'
 import type { MemorySource } from '../source'
+import { findEqualMedium, storedTier } from '../storedMatch'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
 import { reframedBanner, sealedBanner, type BannerFraming } from './bannerModel'
-import { BANNER_UNREADABLE, prepareImage, prepareVideo, type PreparedBanner } from './bannerWrite'
+import { BANNER_UNREADABLE, bannerVideoType, prepareImage, preparePoster, type PreparedBanner } from './bannerWrite'
 
 /** What the dialog asks for. A picked video comes with the poster the dialog already decoded for its preview. */
 export type BannerSaveIntent =
   | { kind: 'file'; file: File; type: string; poster: Uint8Array | null; framing: BannerFraming }
-  | { kind: 'medium'; mediaId: string; framing: BannerFraming }
   | { kind: 'keep'; framing: BannerFraming }
   | { kind: 'remove' }
 
@@ -34,7 +32,7 @@ export interface BannerEditorContext {
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
   source: MemorySource
-  /** The gallery's media (a medium the lightbox hands over is found here). */
+  /** The gallery's media: a medium whose original is the picked file is shared, not stored again. */
   items: () => readonly MediaItem[]
   /** The stored `banner` value (what a re-frame keeps the bytes of). */
   raw: () => unknown
@@ -47,32 +45,26 @@ const isVideoType = (type: string | undefined): boolean => !!type && type.starts
 export function useBannerEditor(ctx: BannerEditorContext) {
   const deriver = () => ctx.deriver ?? createBrowserDeriver()
 
-  /** A gallery medium's bytes as the banner takes them (see the header). */
-  async function fromMedium(mediaId: string, key: Uint8Array): Promise<{ prepared: PreparedBanner; origin: string }> {
-    const item = ctx.items().find((i) => i.mediaId === mediaId)
-    if (!item) throw new Error(BANNER_UNREADABLE)
-    const loaders = ctx.source.loaders
-    const type = mediaTypeOf(loaders.blobMeta(item, key)) ?? ''
+  /**
+   * A picked file's bytes as the banner takes them: the stored tiers of an equal gallery medium where there is one, else an
+   * image derived, a video as it is with the poster already decoded (or decoded now).
+   */
+  async function fromFile(file: File, type: string, poster: Uint8Array | null, key: Uint8Array, signal?: AbortSignal): Promise<PreparedBanner & { sha256: string }> {
+    const sha256 = await contentDigest(file, signal)
+    const equal = await findEqualMedium(ctx.scopeId(), key, ctx.items(), file, signal, sha256)
     if (isVideoType(type)) {
-      if (!hasDerivatives(item)) throw new Error(BANNER_UNREADABLE)
-      const provider = loaders.chunk(item, key)
-      const size = plaintextSize(item.original)
-      const video = framedPayload(
-        { frameSize: CHUNK_SIZE, chunkCount: provider.chunkCount, getPlaintextChunk: (i) => provider.getPlaintextChunk(i) },
-        { size, name: 'banner', type, lastModified: 0, path: 'banner' },
-      )
-      return { prepared: await prepareVideo(video, type, () => loaders.preview(item, key)), origin: mediaId }
+      const original = equal && storedTier(equal, 'ORIGINAL')
+      const preview = equal && storedTier(equal, 'PREVIEW')
+      return {
+        medium: 'video',
+        video: original ? { share: original } : { upload: file },
+        type: bannerVideoType(type),
+        sha256,
+        poster: original && preview ? { share: preview } : await preparePoster(async () => poster ?? deriver().deriveVideoPoster(file)),
+      }
     }
-    const original = await loaders.original(item, key)
-    return { prepared: await prepareImage(new Blob([original as BlobPart], { type }), deriver()), origin: mediaId }
-  }
-
-  /** A picked file's bytes as the banner takes them: an image derived, a video as it is with the poster already decoded. */
-  async function fromFile(file: File, type: string, poster: Uint8Array | null): Promise<PreparedBanner> {
-    if (isVideoType(type)) {
-      return prepareVideo(file, type, async () => poster ?? deriver().deriveVideoPoster(file))
-    }
-    return prepareImage(file, deriver())
+    const preview = equal && storedTier(equal, 'PREVIEW')
+    return { medium: 'image', image: preview ? { share: preview } : await prepareImage(file, deriver()), sha256 }
   }
 
   /** Run one save; the dialog awaits it, shows its progress and cancels it through `signal`. A peer's banner change patches
@@ -101,15 +93,15 @@ export function useBannerEditor(ctx: BannerEditorContext) {
       if (!banner) throw new Error(BANNER_UNREADABLE)
       state = await door.write({ nodeId, nodeKey: key, current, banner })
     } else {
-      const { prepared, origin } = intent.kind === 'file'
-        ? { prepared: await fromFile(intent.file, intent.type, intent.poster), origin: null }
-        : await fromMedium(intent.mediaId, key)
+      const prepared = await fromFile(intent.file, intent.type, intent.poster, key, opts.signal)
       const uploaded = await door.upload(nodeId, key, prepared, opts)
       const banner = sealedBanner({
-        medium: uploaded.medium, blob: uploaded.blob, poster: uploaded.poster, type: uploaded.type, origin, framing: intent.framing,
+        medium: uploaded.medium, blob: uploaded.blob, poster: uploaded.poster, type: uploaded.type, sha256: prepared.sha256,
+        framing: intent.framing,
       })
       state = await door.write({
-        nodeId, nodeKey: key, current, banner, upload: { uploadId: uploaded.uploadId, posterUploadId: uploaded.posterUploadId },
+        nodeId, nodeKey: key, current, banner,
+        upload: { uploadId: uploaded.uploadId, posterUploadId: uploaded.posterUploadId, shared: uploaded.shared, posterShared: uploaded.posterShared },
       })
     }
     ctx.onMetaUpdated({ nodeId, ...state })

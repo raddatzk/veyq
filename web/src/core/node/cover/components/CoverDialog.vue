@@ -1,12 +1,9 @@
 <script setup lang="ts">
 // The cover dialog every node that takes a cover shares (inbox #411, follow-up 2026-10-12): a folder, a drop box, a Memory.
 // It crops ONE source with the shared 16:9 `ImageCropper` and emits a `CoverSaveIntent` - the view seals it. Sources: a NEW
-// image the member picks here (`upload`), the CURRENT cover re-cropped (`keep`, only the crop moves), and - where the kind adds
-// one - the application's own (`source`, e.g. a photo of the Memory chosen in its gallery -> `media`). Remove drops the cover.
+// image the member picks here (`upload`) and the CURRENT cover re-cropped (`keep`, only the crop moves) - a cover is set only by
+// an upload here, never from elsewhere, so no member overwrites another's choice in passing. Remove drops the cover.
 // Presentation only: no crypto, no network. The crop is the cover's stored one, so a cover framed here reopens as it was framed.
-//
-// The application's extra source arrives as DATA (`source`, `hint`), never as a component: core owns the dialog, the application
-// only says what else can be cropped and how to describe it (`KindCover.extraSource`, `registry.ts`).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -21,15 +18,11 @@ const props = defineProps<{
   cover: { crop: CoverCrop } | null
   /** The current cover's decrypted image URL: the crop source when re-cropping it. */
   existingSrc: string | null
-  /** The application's own source to crop at once (a photo picked in its gallery); `crop` is restored only when it already is the cover. */
-  source?: { id: string; src: string; crop: CoverCrop | null } | null
-  /** The application's one line pointing at its source, already translated. */
-  hint?: string | null
 }>()
 const emit = defineEmits<{ save: [CoverSaveIntent]; close: [] }>()
 const { t } = useI18n()
 
-type Pick = { kind: 'upload'; file: File } | { kind: 'keep' } | { kind: 'media'; mediaId: string }
+type Pick = { kind: 'upload'; file: File } | { kind: 'keep' }
 const pick = ref<Pick | null>(null)
 const sourceUrl = ref('')
 const upload = useObjectUrl() // an owned object URL for a freshly picked file (revoked on replace/close by the primitive)
@@ -42,13 +35,9 @@ const problem = ref<string | null>(null)
 
 const canSave = computed(() => loaded.value && pick.value !== null)
 
-// Seed the crop source: the application's own (it takes precedence - the member just chose it), else the current cover
-// re-cropped, else empty (upload only). The crop is applied once the image's natural size is known (the cropper's @load).
-if (props.source) {
-  pick.value = { kind: 'media', mediaId: props.source.id }
-  sourceUrl.value = props.source.src
-  restoreCrop.value = props.source.crop
-} else if (props.cover && props.existingSrc) {
+// Seed the crop source: the current cover re-cropped, else empty (upload only). The crop is applied once the image's
+// natural size is known (the cropper's @load).
+if (props.cover && props.existingSrc) {
   pick.value = { kind: 'keep' }
   sourceUrl.value = props.existingSrc
 }
@@ -80,7 +69,6 @@ function save() {
   const crop = cropper.value?.getCrop()
   if (!p || !crop) return
   if (p.kind === 'upload') emit('save', { kind: 'upload', file: p.file, crop })
-  else if (p.kind === 'media') emit('save', { kind: 'media', mediaId: p.mediaId, crop })
   else emit('save', { kind: 'keep', crop })
   emit('close')
 }
@@ -94,7 +82,7 @@ function remove() {
 <template>
   <Dialog :visible="true" :header="t('node.cover.dialogTitle')" modal @update:visible="emit('close')">
     <div class="veyq-form veyq-cover-dialog">
-      <p class="veyq-cover-copy">{{ hint ? `${t('node.cover.copy')} ${hint}` : t('node.cover.copy') }}</p>
+      <p class="veyq-cover-copy">{{ t('node.cover.copy') }}</p>
 
       <div class="veyq-cover-sources">
         <Button type="button" :label="t('node.cover.choose')" icon="pi pi-upload" severity="secondary" outlined @click="chooseUpload" />

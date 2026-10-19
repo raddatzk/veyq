@@ -11,13 +11,15 @@
 //
 // The dialog's save is ONE write through the atomic core writer (`coverWrite.ts`: `setNodeCover` / `removeNodeCover` / a plain
 // `updateNode`, the blob step and the meta in one request); a new image is a job of the core upload queue, so progress and a
-// failure show in the existing tray. A kind that adds a source of its own (Memories: a photo of the Memory) says so in its
-// descriptor (`KindCover.extraSource`); the application feeds that source into the SAME dialog through `open(node, { source })`.
+// failure show in the existing tray. A cover is set only by an upload in the dialog; where the kind finds the picked image
+// already stored for the node (`KindCover.findStored`: Memories' PREVIEW of an equal photo), the cover is a new row on that
+// stored object instead of a second upload (ADR 0013 § 5).
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { targetOf, type Access, type TreeSource } from '../../access'
 import { registry } from '../../applications/registry'
 import { enqueue, QUOTA_EXCEEDED } from '../../blob/queue'
+import { shareBlob, type SharedBlob } from '../../blob/sharedBlob'
 import type { CoreHeaderAction } from '../nodeHeader'
 import type { CoreRowAction } from '../levelRow'
 import { nodeMetaState, unsealNodeMeta } from '../nodeMeta'
@@ -26,24 +28,20 @@ import { patchNodeMeta, treeStore } from '../treeStore'
 import { useToast } from '../../../shared/state/useToast'
 import { MetaConflictError, MetaUnreadableError, staleMetaOf } from '../sealedMetaWrite'
 import { coverRights } from './rights'
-import { normalizeCoverCrop, uploadedCover, type CoverCrop, type CoverSaveIntent, type LoadedCover } from './coverModel'
+import { COVER_ROLE, normalizeCoverCrop, uploadedCover, type CoverCrop, type CoverSaveIntent, type LoadedCover } from './coverModel'
 import { useCovers } from './coverStore'
-import { COVER_UNREADABLE, CoverStaleError, uploadCoverImage, writeNodeCover } from './coverWrite'
+import { COVER_UNREADABLE, CoverStaleError, DERIVED_META, uploadCoverImage, writeNodeCover } from './coverWrite'
 import { coverFileProblem } from './pickImage'
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
-/** What the dialog is open on: the node and, when the application fed one, its own source (`id` it will get back as `media`). */
+/** What the dialog is open on: the node, and its current cover. */
 export interface CoverEditorState {
   node: TreeNode
   /** The node's current cover, if its sealed meta names one: the crop to restore and the remove button. */
   cover: { crop: CoverCrop } | null
   /** The current cover's decrypted image (the crop source when re-cropping it); null while it is not loaded. */
   existingSrc: string | null
-  /** The application's own source to crop at once, with the stored crop restored when it already is the cover. */
-  source: { id: string; src: string; crop: CoverCrop | null } | null
-  /** The application's one line pointing at its source, translated; null for a kind without one. */
-  hint: string | null
 }
 
 export interface UseNodeCover {
@@ -59,8 +57,8 @@ export interface UseNodeCover {
   rowActions(node: TreeNode | null): CoreRowAction[]
   /** The dialog's state while it is open (mounted by `CoverEditor.vue`), else null. */
   editor: Ref<CoverEditorState | null>
-  /** Open the dialog on `node` (a no-op where the right says no). `source` is the application's own photo to crop first. */
-  open(node: TreeNode, opts?: { source?: { id: string; src: string } }): void
+  /** Open the dialog on `node` (a no-op where the right says no). */
+  open(node: TreeNode): void
   /** Close the dialog without saving. */
   close(): void
   /** Apply what the dialog emitted for `node` (a no-op where the right says no). */
@@ -92,9 +90,9 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
 
   /** The freshest copy of the node: the tree's, which every cover write patches. */
   const latest = (node: TreeNode): TreeNode => treeStore.nodes.find((n) => n.id === node.id) ?? node
-  const extraOf = (node: TreeNode) => {
+  const findStoredOf = (node: TreeNode) => {
     const info = registry.kind(node.kind)
-    return info.supported ? info.cover?.extraSource : undefined
+    return info.supported ? info.cover?.findStored : undefined
   }
 
   function report(code: string): void {
@@ -113,22 +111,17 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     return unsealNodeMeta(key, { scopeId: a.scopeId, nodeId: node.id }, latest(node).wrappedMeta).cover ?? null
   }
 
-  function open(node: TreeNode, opts?: { source?: { id: string; src: string } }): void {
+  function open(node: TreeNode): void {
     if (access().mode !== 'member' || !canSet(node)) return
     const fresh = latest(node)
     const loaded = store.covers.value.get(node.id) ?? null
     const declared = store.declared.has(node.id)
     const stored = declared ? storedCover(fresh) : null
-    const extra = extraOf(node)
     const crop = stored && typeof stored === 'object' ? normalizeCoverCrop((stored as { crop?: unknown }).crop) : (loaded?.crop ?? null)
     editor.value = {
       node: fresh,
       cover: declared ? { crop: crop ?? normalizeCoverCrop(null) } : null,
       existingSrc: loaded?.url ?? null,
-      source: opts?.source && extra
-        ? { ...opts.source, crop: stored && extra.idOf(stored) === opts.source.id ? crop : null }
-        : null,
-      hint: extra ? translate(extra.hintKey) : null,
     }
   }
 
@@ -163,15 +156,24 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
           // A cover another writer changed meanwhile, or an image the browser cannot decode: a retry changes nothing.
           isFinal: (e) => e === 'cover_stale' || e === COVER_UNREADABLE || e === 'meta_unreadable',
           async run({ onProgress, signal }) {
-            const up = await uploadCoverImage(
-              scopeId, node.id, key,
-              { blob: file, mediaType: file.type, lastModified: file.lastModified, name: file.name },
-              undefined, { strict: true, onProgress, signal },
-            )
+            // An equal picture the node already stores is shared, not uploaded again (ADR 0013 § 5); a failure to look is
+            // no match. Its row is minted per attempt: a retry never reuses an id the server may have taken.
+            const stored = await findStoredOf(node)?.({ scopeId, nodeId: node.id, nodeKey: key, file, signal }).catch(() => null)
+            const shared: SharedBlob | null = stored
+              ? shareBlob(scopeId, stored, key, { ownerId: node.id, role: COVER_ROLE }, DERIVED_META)
+              : null
+            const up = shared
+              ? null
+              : await uploadCoverImage(
+                scopeId, node.id, key,
+                { blob: file, mediaType: file.type, lastModified: file.lastModified, name: file.name },
+                undefined, { strict: true, onProgress, signal },
+              )
             // The freshest meta and version, read AFTER the upload: it may have taken a while, and a stale base only costs a retry.
             const state = await writeNodeCover({
               scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)),
-              cover: uploadedCover(up.plan, crop), uploadId: up.uploadId, surfaceConflict: false,
+              cover: uploadedCover(shared ? shared.ref : up!.plan, crop),
+              uploadId: up?.uploadId, shared: shared?.request, surfaceConflict: false,
             })
             patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
             onProgress(1)
@@ -215,12 +217,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
       void writeSealed(node, key, a.scopeId, null, false)
       return
     }
-    if (intent.kind === 'media') {
-      const extra = extraOf(node)
-      if (extra) void writeSealed(node, key, a.scopeId, extra.seal(intent.mediaId, intent.crop), true)
-      return
-    }
-    // keep: the current cover's own value with only the crop moved (its source - an upload or the application's - stays).
+    // keep: the current cover's own value with only the crop moved (its source stays).
     const stored = storedCover(node)
     if (!stored || typeof stored !== 'object') return
     void writeSealed(node, key, a.scopeId, { ...(stored as object), crop: intent.crop }, true)

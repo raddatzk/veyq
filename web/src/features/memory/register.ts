@@ -16,8 +16,7 @@ import type { LevelActionContext, Registry } from '../../core/applications/regis
 import { MEMORY_VIEWS } from './memoryViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import { memoryRows } from './levelRows'
-import { loadMemoryPhotoCover } from './coverLoad'
-import { memoryPhotoSource } from './memoryCover'
+import { findStoredCover } from './storedMatch'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
@@ -47,9 +46,9 @@ export function registerMemories(registry: Registry): void {
   const list = { rows: memoryRows, tabLabel: 'memory.memories', views: MEMORY_VIEWS, emptyText: () => 'memory.memoryEmpty' }
   const memories = {
     detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
-    // Both carry a cover (inbox #411: core's action, dialog, upload and display). Core reads an uploaded cover itself; the
-    // Memory's OTHER source - one of its own photos - is read here and offered to core's dialog as its extra source.
-    cover: { load: loadMemoryPhotoCover, extraSource: memoryPhotoSource },
+    // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
+    // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
+    cover: { findStored: findStoredCover },
     exportContent: exportMemoryContent,
     contentSchema: MEMORIES_CONTENT_SCHEMA,
     validateContent: validateMemoryContent,

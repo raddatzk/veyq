@@ -92,7 +92,7 @@ import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
 import type { LevelRowsFactory } from '../node/levelRow'
-import type { CoverCrop, DecryptedCover } from '../node/cover/coverModel'
+import type { StoredBlob } from '../blob/sharedBlob'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
@@ -188,8 +188,9 @@ export interface KindDescriptor {
   placement?: KindPlacement
   /** A node of this kind can carry a COVER (inbox #411): an image the owner uploads as the node's own, shown as the node's
    *  leading visual wherever one is drawn. Core owns the action ("Set cover" / "Change cover" / "Remove cover"), the
-   *  picker, the upload, the display and the guest read; the kind only opts in - the server's `NodeKindRules.takesCover`
-   *  is the authority and must agree. Omitted: no cover, no action. FOLDER's is core's own, pre-registered. */
+   *  picker, the upload, the display and the guest read; the kind only opts in (and may say where an equal picture is
+   *  stored, `KindCover.findStored`) - the server's `NodeKindRules.takesCover` is the authority and must agree. Omitted: no
+   *  cover, no action. FOLDER's is core's own, pre-registered. */
   cover?: KindCover
   /** Export and import of this kind's CONTENT (ADR 0082): core walks the subtree and writes / reads the archive; the kind
    *  says what its content is. A kind with neither is left out of an export (with its subtree) and reported. FOLDER needs
@@ -227,40 +228,23 @@ export interface KindDescriptor {
   copyLosses?: readonly string[]
 }
 
-/** What a kind that carries a cover may add to core's mechanism (inbox #411). Core reads one source, the uploaded image; a
- *  kind that writes ANOTHER source into the same sealed `cover` field (Memories: one of its own photos) says how to read it. */
+/** What a kind that carries a cover may add to core's mechanism (inbox #411). A cover is set only by an upload in core's
+ *  dialog; a kind whose nodes already store pictures may say where an equal one is, so the cover shares it. */
 export interface KindCover {
-  /** Decrypt the image of a cover whose source core cannot open (any but `upload`). Best-effort: null for none or on any
-   *  failure - the node then shows its icon. A guest gets the same function with `guest` set. */
-  load?(ctx: CoverLoadContext): Promise<DecryptedCover | null>
-  /** ANOTHER source the cover dialog offers beside the upload (Memories: a photo of the Memory, chosen in its gallery). Core owns
-   *  the dialog, the crop and the write; the kind only says how its source is written, read back and described. */
-  extraSource?: CoverExtraSource
+  /** The stored blob the cover may share instead of being uploaded (ADR 0013 § 5): a blob of THIS node that is the picked
+   *  image derived at core's cover spec (Memories: the PREVIEW of a gallery medium whose original equals the file). Null:
+   *  none, and the cover is uploaded. Best-effort - a failure is null. Omitted: every cover is uploaded. */
+  findStored?(ctx: CoverFindContext): Promise<StoredBlob | null>
 }
 
-/** The seam by which an application adds a source to core's cover dialog (inbox #411). */
-export interface CoverExtraSource {
-  /** The i18n key (the application's own namespace, resolved by core's dialog without reading it) of the one line the
-   *  dialog shows to point at the source ("...or open a photo in the gallery and choose Set as cover"). */
-  hintKey: string
-  /** The `cover` value to store for the source `id` the application handed the dialog, framed by `crop`. The shape is the
-   *  application's (core carries it untouched, `coverModel.ts`). */
-  seal(id: string, crop: CoverCrop): unknown
-  /** The id of this source in a stored `cover` value (as `seal` wrote it), or null when the cover is not of this source: the
-   *  dialog restores the stored crop only for the very source already set. */
-  idOf(cover: unknown): string | null
-}
-
-/** What a kind's `cover.load` is handed: the node's cover field as sealed, under the node's own key. */
-export interface CoverLoadContext {
+/** What a kind's `cover.findStored` is handed: the node, its key and the picked file. */
+export interface CoverFindContext {
   scopeId: string
+  nodeId: string
   /** The node's own content key (the chain's), never held reactively. */
   nodeKey: Uint8Array
-  node: { id: string; wrappedMeta: string | null }
-  /** The node's `cover` field value, opened (an object core does not read the source of). */
-  cover: unknown
-  /** The share guest reading it (the link's own reads), or null for a member. */
-  guest: GuestAccess | null
+  file: File
+  signal?: AbortSignal
 }
 
 /** What an entry of the level view's "New" menu is told about the level: who looks, the tree as that session reads it, the

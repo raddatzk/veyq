@@ -136,7 +136,16 @@ describe('writeNodeCover - the blob step and the meta that names it, one request
     expect(done.metaRevision).toBe(4)
   })
 
-  it('a switch from an uploaded cover to another source (a Memory\'s photo) frees the blob in the same request', async () => {
+  it('a shared cover sends its row in place of an upload, replacing the blob the meta named', async () => {
+    const c = api()
+    const shared = { sourceBlobId: 'preview-1', blobId: 'new-row', wrappedBlobKey: 'd3JhcA==', wrappedBlobMeta: null }
+    await writeNodeCover({ ...base(uploadedMeta('old-blob')), cover: uploadedCover(plan('new-row')), shared })
+    const req = c.setNodeCover.mock.calls[0][0].setNodeCoverRequest
+    expect(req).toMatchObject({ shared, expectedBlobId: 'old-blob', metaRevision: 3 })
+    expect(req).not.toHaveProperty('uploadId')
+  })
+
+  it('a switch from an uploaded cover to a value without a blob of its own frees the blob in the same request', async () => {
     const c = api()
     const photo = { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }
     await writeNodeCover({ ...base(uploadedMeta('old-blob')), cover: photo })

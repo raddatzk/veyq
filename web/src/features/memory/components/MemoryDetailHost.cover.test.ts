@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-// The Memory page's cover is core's, with ONE seam for the Memory's own source (inbox #411, follow-up 2026-10-12): the header
-// action (id `cover`, Set/Change), the cover tile and the gallery lightbox's "Set as cover" all open core's cover DIALOG - the
-// one a folder and a drop box get - and the lightbox feeds it the picked photo through the kind's `cover.extraSource`. Saving is core's
-// one atomic write; removal lives in the dialog. A share guest's page shows the cover and carries no action.
+// The Memory page's cover is core's (inbox #411, follow-up 2026-10-12): the header action (id `cover`, Set/Change) and the cover
+// tile open core's cover DIALOG - the one a folder and a drop box get - and a cover is set only by an upload there (the lightbox
+// offers no "Set as cover"). The Memory's one seam is `cover.findStored`: an uploaded image equal to a gallery photo shares that
+// photo's PREVIEW (ADR 0013 § 5). Saving is core's one atomic write; removal lives in the dialog. A share guest's page shows the
+// cover and carries no action.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
@@ -16,12 +17,11 @@ import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import MemoryDetailHost from './MemoryDetailHost.vue'
-import MemoryDetail from './MemoryDetail.vue'
 import { MEMORY_KIND } from '../kinds'
-import { addMedia, type MediaDeriver } from '../media'
+import { addMedia, listMedia, type MediaDeriver } from '../media'
 import { blobApi } from '../../../api/client'
 import { mediaApi, itemFavoritesApi } from '../api'
-import { writeNodeCover } from '../../../core/node/cover/coverWrite'
+import { uploadCoverImage, writeNodeCover } from '../../../core/node/cover/coverWrite'
 import { uploadedCover } from '../../../core/node/cover/coverModel'
 import { resetCovers } from '../../../core/node/cover/coverStore'
 import { ShareRole } from '../../../api/generated/sharing'
@@ -92,10 +92,9 @@ async function seedPhoto(): Promise<string> {
   const { mediaId } = await addMedia(SCOPE, ID, KEY, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
   return mediaId
 }
-const lightboxSetCover = (w: Host) => w.find(`.media-lightbox [aria-label="${t('memory.cover.setFromPhoto')}"]`)
 
 describe('the Memory page\'s cover action opens core\'s dialog', () => {
-  it('"Set cover" opens it; the dialog offers choosing an image and the Memory\'s gallery hint, and nothing to remove', async () => {
+  it('"Set cover" opens it; the dialog offers choosing an image - no other source - and nothing to remove', async () => {
     const w = await mountHost(writer())
     expect(action(w, 'cover').attributes('aria-label')).toBe(t('node.cover.set'))
     expect(action(w, 'cover').find('.pi-image').exists()).toBe(true)
@@ -103,7 +102,7 @@ describe('the Memory page\'s cover action opens core\'s dialog', () => {
     await action(w, 'cover').trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     expect(dialogButton(t('node.cover.choose'))).toBeTruthy()
-    expect(dialog()!.textContent).toContain(t('memory.cover.galleryHint')) // the Memory's own line, passed in by its descriptor
+    expect(dialog()!.textContent).not.toContain('gallery') // a cover is set only by an upload
     expect(dialogButton(t('node.cover.remove'))).toBeUndefined()
   })
 
@@ -127,67 +126,44 @@ describe('the Memory page\'s cover action opens core\'s dialog', () => {
     await vi.waitFor(() => expect(dialog()).toBeNull())
   })
 
-  it('a Memory\'s stored crop is restored when its cover is re-opened (Change -> Save keeps the photo, moves nothing)', async () => {
-    const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
-    const mediaId = await seedPhoto()
-    const w = await mountHost(writer(), sealedMeta({ source: { kind: 'media', mediaId }, crop }))
-    await vi.waitFor(() => expect(w.find('.memory-cover-preview img').exists()).toBe(true)) // the cover has loaded
-    await action(w, 'cover').trigger('click')
-    await vi.waitFor(() => expect(cropperImg()).not.toBeNull())
-    await frame(3200, 1800)
-    dialogButton(t('node.cover.save'))!.click()
-    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    const cover = vi.mocked(writeNodeCover).mock.calls[0][0].cover as { source: { kind: string; mediaId: string }; crop: typeof crop }
-    expect(cover.source).toEqual({ kind: 'media', mediaId }) // the very photo, untouched
-    expect(cover.crop.x).toBeCloseTo(crop.x)
-    expect(cover.crop.width).toBeCloseTo(crop.width)
-  })
 })
 
-describe('the gallery lightbox feeds a photo into the same dialog (the Memory\'s extra source)', () => {
-  it('"Set as cover" opens the dialog on that photo; Save writes the stored photo-cover shape with the crop it was framed with', async () => {
-    await seedPhoto()
-    const w = await mountHost(writer())
-    await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
-    await w.find('[data-media-id] button').trigger('click')
-    await vi.waitFor(() => expect(lightboxSetCover(w).exists()).toBe(true))
-    await vi.waitFor(() => expect(w.findAll('.memory-gallery img, [data-media-id] img').length).toBeGreaterThan(0)) // thumbnail decrypted
-    await lightboxSetCover(w).trigger('click')
-    await vi.waitFor(() => expect(dialog()).not.toBeNull())
+describe('an uploaded image the gallery already stores is shared, not stored again (ADR 0013 § 5)', () => {
+  /** Pick `file` in the open dialog's file input, frame it and save. */
+  async function pickAndSave(file: File) {
+    const input = document.body.querySelector<HTMLInputElement>('[role="dialog"] input[type="file"]')!
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    input.dispatchEvent(new Event('change'))
     await vi.waitFor(() => expect(cropperImg()).not.toBeNull())
-    await frame(1000, 1000) // a square photo: the framed 16:9 window is what is stored
+    await frame(1000, 1000)
     dialogButton(t('node.cover.save'))!.click()
+  }
+
+  it('a picked image equal to a gallery photo\'s original becomes a row on that photo\'s PREVIEW: nothing uploaded', async () => {
+    const mediaId = await seedPhoto()
+    const preview = (await listMedia(SCOPE, ID)).find((m) => m.mediaId === mediaId)!.derivatives.find((d) => d.kind === 'PREVIEW')!.ref
+    const w = await mountHost(writer())
+    await action(w, 'cover').trigger('click')
+    await vi.waitFor(() => expect(dialog()).not.toBeNull())
+    await pickAndSave(new File([new Uint8Array(8).fill(1)], 'same.jpg', { type: 'image/jpeg' }))
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
     const write = vi.mocked(writeNodeCover).mock.calls[0][0]
-    const cover = write.cover as { source: { kind: string; mediaId: string }; crop: { width: number; height: number } }
-    expect(cover.source.kind).toBe('media')
-    expect(cover.source.mediaId).toEqual(expect.any(String))
-    expect(cover.crop.width).toBeCloseTo(1)
-    expect(cover.crop.height).toBeCloseTo(9 / 16)
-    expect(write).toMatchObject({ nodeId: ID, surfaceConflict: true })
-    expect(write.uploadId, 'a photo needs no blob of its own').toBeUndefined()
-    expect(Object.keys(cover)).toEqual(['source', 'crop']) // the stored key order of every Memory cover
+    expect(write.shared?.sourceBlobId).toBe(preview.blobId)
+    expect(write.uploadId).toBeUndefined()
+    expect(vi.mocked(uploadCoverImage)).not.toHaveBeenCalled()
+    const cover = write.cover as { source: { kind: string; ref: { blobId: string } } }
+    expect(cover.source).toMatchObject({ kind: 'upload', ref: { blobId: write.shared!.blobId } })
   })
 
-  it('a photo with no thumbnail yet (nothing to crop) is set as the cover full-frame in one step, no dialog', async () => {
-    const w = await mountHost(writer())
-    w.findComponent(MemoryDetail).vm.$emit('coverFromPhoto', { mediaId: 'm-9', src: null })
-    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    expect(vi.mocked(writeNodeCover).mock.calls[0][0].cover).toEqual({ source: { kind: 'media', mediaId: 'm-9' }, crop: { x: 0, y: 0, width: 1, height: 1 } })
-    expect(dialog()).toBeNull()
-  })
-
-  it('cancelling the dialog writes nothing and leaves the lightbox to its keys again', async () => {
+  it('a picked image of another content is uploaded as before', async () => {
     await seedPhoto()
+    vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-c', plan: { blobId: 'c-1', chunkCount: 1, byteSize: 32, wrappedBlobKey: 'd3JhcA==', ownerId: ID } })
     const w = await mountHost(writer())
-    await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
-    await w.find('[data-media-id] button').trigger('click')
-    await vi.waitFor(() => expect(lightboxSetCover(w).exists()).toBe(true))
-    await lightboxSetCover(w).trigger('click')
+    await action(w, 'cover').trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
-    dialogButton(t('common.cancel'))!.click()
-    await vi.waitFor(() => expect(dialog()).toBeNull())
-    expect(writeNodeCover).not.toHaveBeenCalled()
+    await pickAndSave(new File([new Uint8Array(8).fill(2)], 'other.jpg', { type: 'image/jpeg' }))
+    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
+    expect(vi.mocked(writeNodeCover).mock.calls[0][0]).toMatchObject({ uploadId: 'up-c', shared: undefined })
   })
 })
 

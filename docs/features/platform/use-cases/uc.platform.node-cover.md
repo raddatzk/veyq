@@ -44,13 +44,15 @@
 
 ## Alternate / exception flows
 
-- **A1 — a Memory adds one source to the same dialog:** the Memory's page opens core's dialog from its header action, its cover
-  tile and the gallery lightbox's **Set as cover**; the lightbox hands the picked photo (its decrypted thumbnail) to the dialog,
-  which frames it at once. The seam is the kind's `cover.extraSource` (`hintKey`: the line pointing at the gallery, in the
-  application's own i18n namespace, which core resolves without reading; `seal(id, crop)`: the stored value; `idOf(cover)`: which
-  photo a stored cover already is, so only that photo's stored crop is restored). A cover chosen from the Memory's own photos is a
-  second *source* in the same sealed field that core carries untouched and the Memory's `cover.load` reads. Core's dialog, crop and
-  write are the only ones — the Memory has no dialog of its own.
+- **A1 — a kind that already stores the picture:** a cover is set only by an upload in core's dialog (owner 2026-10-19: no
+  other source, so no member overwrites another's cover in passing). A kind whose nodes store pictures says where an equal one
+  is through its `cover.findStored` (Memories: the PREVIEW of a gallery medium whose original is the picked file, matched by size
+  and a SHA-256 sealed in the medium's `blob-meta`); the upload then becomes a **second blob row on that stored object** - the
+  stored blob's `K_blob` wrapped again bound to the node and `COVER`, sent as `setNodeCover`'s `shared` in place of an upload
+  id, nothing uploaded ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) § 5). A failure to look
+  is no match. A folder and a drop box have no such seam: a Depot file is an original and a cover a derived JPEG, never the same
+  object. The server refuses a source the node does not hold, a blocked one or a taken id (`shared_source_invalid`), and the
+  operator learns which blob the cover shares (accepted, inbox #505).
 - **E1 — a peer changed the cover meanwhile:** `409 cover_stale` — nothing was attached, the old cover is intact, the upload was
   spent and freed; the member is told and may try again. A meta that moved is `409 stale_revision`: nothing written, the upload
   still open, the client re-applies its change on the current meta and sends the same upload again.
@@ -58,7 +60,8 @@
   meta are one transaction); an upload no write ever attached is an unfinished upload like any other, which the server's
   stale-session purge reclaims. Nothing is half-done.
 - **E3 — an image the browser cannot decode:** refused (`cover_unreadable`), never sealed as a cover nothing could draw.
-- **E4 — a cover that fails to load or has no reader:** the node shows its kind's **icon**, silently.
+- **E4 — a cover that fails to load, or any source but the upload** (an older Memory client's photo reference): the node shows
+  its kind's **icon**, silently; every other writer keeps the stored value.
 - **E5 — a share guest:** sees the covers of the nodes in its shared subtree (the node's `wrappedMeta` it already gets, the
   attachment through the share's gated blob route) and gets **no action**: no guest role sets a cover in this step, the server has
   no guest operation for it, and the right says so first. **Share view = member view**, with the function removed.

@@ -28,7 +28,8 @@ seals its name under a field key derived from the folder's key instead of from `
   [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
 - ★ [en.memory.media](enablers/en.memory.media.md) — **built (web + backend)** (the encrypted media data layer: a blob sealed
   as chunked AEAD under a random `K_blob` wrapped under `K_node`, transferred direct-to-store via presigned URLs,
-  attached to a node; **no content dedup** — operator-blind trade-off;
+  attached to a node; **no scope-wide dedup** — operator-blind trade-off; a cover, a banner and a gallery original equal
+  to the video banner share one stored object inside their node;
   [ADR 0013](../../decisions/0013-blob-storage-presigned-direct-to-store.md),
   [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
 - ★ [en.memory.favorites](enablers/en.memory.favorites.md) — **built** (pin a node of any kind - core's since inbox #409 -
@@ -51,7 +52,7 @@ seals its name under a field key derived from the folder's key instead of from `
   [ADR 0034](../../decisions/0034-media-uploader-buckets.md))
 - [en.memory.playback-derivative](enablers/en.memory.playback-derivative.md) — **planned** with the client worker queue
   (inbox #23, not V1): a small playable copy of a video — H.264, long edge 1280 — made by a key-holding worker, never on
-  the server; until then the banner's video plays its copied original and the gallery its original
+  the server; until then the banner's video and the gallery's play their originals
   ([ADR 0047](../../decisions/0047-inline-video-playback-range-streaming.md))
 
 ## Use-cases (on the tree + media enablers)
@@ -84,10 +85,10 @@ seals its name under a field key derived from the folder's key instead of from `
   Favorites section over, inbox #409; a cover for any node is inbox #411)
 - [uc.memory.banner](use-cases/uc.memory.banner.md) — **built**
   ([ADR 0102](../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): one image
-  or video above the Memory's menu bar, independent of the cover — from its gallery (copied: an image derived from its
-  original, a video as it is) or uploaded for it alone, the Memory's own attachment (`BANNER`, `BANNER_POSTER`), framed by a
+  or video above the Memory's menu bar, independent of the cover — uploaded in its own dialog (a file equal to a gallery
+  medium shares that medium's stored object), the Memory's own attachment (`BANNER`, `BANNER_POSTER`), framed by a
   sealed focal point (fill) or fit with blurred sides, the tab row sticking below it; a video is a poster, never
-  autoplays, and plays its copy through the media service worker
+  autoplays, and plays through the media service worker
 - [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **built**
   ([ADR 0077](../../decisions/0077-a-write-carries-the-version-it-read.md)): two members curate one Memory at once —
   every write of a sealed meta blob (a Memory's date/place/cover, a photo's date/place name/type) states the

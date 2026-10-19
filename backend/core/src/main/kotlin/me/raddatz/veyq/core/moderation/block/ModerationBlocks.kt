@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.block
 
+import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
@@ -12,8 +13,14 @@ import jakarta.enterprise.inject.Instance
  * names **and every node below it** (trashed ones included, so a restore can be refused), and every item a
  * `CONTENT_ITEM` block names. [NONE] for a space with no block — the case every listing meets.
  */
-class ContentView internal constructor(val nodeIds: Set<String>, val itemIds: Set<String>) {
-    val isEmpty: Boolean get() = nodeIds.isEmpty() && itemIds.isEmpty()
+class ContentView internal constructor(
+    val nodeIds: Set<String>,
+    val itemIds: Set<String>,
+    /** The stored objects (storage keys) a measure hangs on since its item was erased (ADR 0093 § 6): every row naming
+     *  one is blocked. */
+    val heldKeys: Set<String> = emptySet(),
+) {
+    val isEmpty: Boolean get() = nodeIds.isEmpty() && itemIds.isEmpty() && heldKeys.isEmpty()
 
     /** Whether [nodeId] is blocked, itself or through a node above it. */
     fun nodeBlocked(nodeId: String): Boolean = nodeId in nodeIds
@@ -41,6 +48,7 @@ class ContentView internal constructor(val nodeIds: Set<String>, val itemIds: Se
 @ApplicationScoped
 class ModerationBlocks(
     private val arms: Instance<SharedSubtreeContributor>,
+    private val blobs: BlobUploadStore,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
 ) {
@@ -80,15 +88,24 @@ class ModerationBlocks(
         if (rows.isEmpty()) return ContentView.NONE
         val roots = rows.filter { it.blockKind == BlockKind.CONTENT_NODE }.map { it.targetId }
         val itemIds = rows.filter { it.blockKind == BlockKind.CONTENT_ITEM }.map { it.targetId }.toSet()
-        return ContentView(if (roots.isEmpty()) emptySet() else below(scopeId, roots), itemIds)
+        val held = rows.flatMap { it.heldKeys }.toSet()
+        return ContentView(if (roots.isEmpty()) emptySet() else below(scopeId, roots), itemIds, held)
     }
 
-    /** Whether a byte read of [blobId] in [scopeId] is refused: it hangs under a blocked node or on a blocked item. */
+    /**
+     * Whether a byte read of [blobId] in [scopeId] is refused: it, or another row on the same stored object, hangs under a
+     * blocked node or on a blocked item. A block reaches the **object** (ADR 0013 § 5): a cover sharing a blocked
+     * medium's object serves the same bytes, so it is refused with it - and still after the medium is erased: its measure
+     * then hangs on the object ([ContentView.heldKeys], owner 2026-10-19) until the object's last row goes or a moderator
+     * lifts it.
+     */
     fun blobBlocked(scopeId: String, blobId: String): Boolean {
         val view = contentView(scopeId)
         if (view.isEmpty) return false
-        if (view.nodeIds.isNotEmpty() && arms.any { blobId in it.authorizedBlobIds(scopeId, view.nodeIds.toList()) }) return true
-        return view.itemIds.any { itemId -> items.any { blobId in it.blobIdsOf(itemId) } }
+        if (view.heldKeys.isNotEmpty() && blobs.findBlob(scopeId, blobId)?.storageKey in view.heldKeys) return true
+        val rows = blobs.rowsOnSameObject(scopeId, blobId) + blobId
+        if (view.nodeIds.isNotEmpty() && arms.any { arm -> arm.authorizedBlobIds(scopeId, view.nodeIds.toList()).any { it in rows } }) return true
+        return view.itemIds.any { itemId -> items.any { item -> item.blobIdsOf(itemId).any { it in rows } } }
     }
 
     /** [roots] and every node below them in [scopeId], trashed ones included (the tree by parent, breadth first). */

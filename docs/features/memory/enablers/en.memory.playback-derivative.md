@@ -5,7 +5,7 @@
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Status:** **planned** — with the queue of client worker nodes (inbox #23, the operator-blind background jobs of
   [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)), not V1. Nothing is built: no code in `web/` or
-  `backend/` transcodes. Until it exists a video banner plays its copied original
+  `backend/` transcodes. Until it exists a video banner plays its original
   ([uc.memory.banner](../use-cases/uc.memory.banner.md), [ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
   decision 4), as a gallery video plays its original ([ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md)).
 - **Provides:** from a video a key-holding device can read (a decrypted original), a **small MP4** — H.264, long edge at
@@ -35,7 +35,8 @@
 
 - Which engines and codecs the worker's devices offer (encoder support, AAC or another audio codec in MP4), the muxer,
   and whether a long input lowers the bitrate.
-- Whether the banner's copied original is dropped once the small copy exists (it halves the storage a long video costs).
+- Whether the banner's original is dropped once the small copy exists (it halves the storage a long video costs, where the
+  banner does not share the gallery's object).
 
 ## Related
 

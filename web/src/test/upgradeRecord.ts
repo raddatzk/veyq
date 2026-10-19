@@ -39,13 +39,14 @@ export type UpgradeRecord = {
   owner: { email: string; password: string; secretKey: string; tenantId: string }
   /** The personal scope everything below lives in. */
   scopeId: string
-  /** Memories: a Memory with a date, a place, a cover (one of its photos, with a crop) and media; a chapter in it. */
+  /** Memories: a Memory with a date, a place, a cover (an uploaded image, with a crop) and media; a chapter in it. */
   memory: {
     nodeId: string
     name: string
     date: { mode: 'range'; from: string; to: string }
     place: string
-    cover: { mediaId: string; crop: { x: number; y: number; width: number; height: number } }
+    /** `blobId`: the uploaded cover's blob. `mediaId`: a seed from before covers were set only by an upload (a photo). */
+    cover: { blobId?: string; mediaId?: string; crop: { x: number; y: number; width: number; height: number } }
     media: SealedMedia[]
     chapter: { nodeId: string; name: string; media: SealedMedia[] }
   }
@@ -169,7 +170,7 @@ export function upgradeRecordProblems(raw: unknown): string[] {
     }
     const cover = obj(memory, 'cover', 'memory')
     if (cover) {
-      str(cover, 'mediaId', 'memory.cover')
+      if (typeof cover.blobId !== 'string' && typeof cover.mediaId !== 'string') problems.push('memory.cover names neither a blob nor a medium')
       const crop = obj(cover, 'crop', 'memory.cover')
       if (crop) for (const k of ['x', 'y', 'width', 'height']) num(crop, k, 'memory.cover.crop')
     }
