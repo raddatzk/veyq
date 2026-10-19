@@ -7,7 +7,7 @@ import { renderExport, utc, type ExportLabels } from './art18Export'
 
 const labels: ExportLabels = {
   case: 'Case', category: 'Category', origin: 'Opened by', timeZone: 'All times in', reported: 'Reported', measure: 'Measure',
-  lifted: 'lifted', uploaderAccount: 'Uploaded by account', uploaderGuest: 'Uploaded by guest identity', viaLink: 'via link',
+  lifted: 'lifted', endedWithTarget: 'ended when the content was erased', uploaderAccount: 'Uploaded by account', uploaderGuest: 'Uploaded by guest identity', viaLink: 'via link',
   guestWrite: 'Guest write', address: 'address', port: 'source port', observed: 'at', object: 'object', noHeld: 'Nothing held.',
 }
 
@@ -17,7 +17,7 @@ const exported = (over: Partial<ModerationCaseExport> = {}): ModerationCaseExpor
   origin: 'REPORT',
   timeZone: 'UTC',
   reportedAt: [new Date('2026-10-17T09:00:00Z')],
-  measures: [{ kind: 'CONTENT', targetId: '4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b', takenAt: new Date('2026-10-17T12:00:05Z'), liftedAt: undefined }],
+  measures: [{ kind: 'CONTENT', targetId: '4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b', takenAt: new Date('2026-10-17T12:00:05Z'), endedWithTarget: false, liftedAt: undefined }],
   uploaders: [
     { kind: 'ACCOUNT', id: '5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a', shareId: undefined },
     { kind: 'GUEST', id: '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f', shareId: '3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i' },
@@ -55,5 +55,13 @@ describe('the Art. 18 export block', () => {
     expect(text).toContain('address 2001:db8::7, at 2026-10-17 08:58:00.001')
     expect(text).toContain('Nothing held.')
     expect(utc(new Date('2026-10-17T08:58:00.001Z'))).toBe('2026-10-17 08:58:00')
+  })
+
+  it('a measure that ended with its erased target says so, where one a moderator lifted says lifted (ADR 0093 § 6)', () => {
+    const measure = { kind: 'CONTENT' as const, targetId: 't', takenAt: new Date('2026-10-17T12:00:05Z'), liftedAt: new Date('2026-10-18T08:00:00Z') }
+    const ended = renderExport(exported({ measures: [{ ...measure, endedWithTarget: true }] }), labels, 'c', 'o', (k) => k)
+    expect(ended).toContain('Measure: CONTENT t — 2026-10-17 12:00:05 (ended when the content was erased 2026-10-18 08:00:00)')
+    const lifted = renderExport(exported({ measures: [{ ...measure, endedWithTarget: false }] }), labels, 'c', 'o', (k) => k)
+    expect(lifted).toContain('Measure: CONTENT t — 2026-10-17 12:00:05 (lifted 2026-10-18 08:00:00)')
   })
 })

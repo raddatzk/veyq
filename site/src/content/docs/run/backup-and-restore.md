@@ -154,11 +154,14 @@ and use 30 when they cannot.
 
 A restore of a capture brings back what was erased after it: an account, a tenant, a space, a link, a photo. So the
 instance keeps an **erasure ledger**, `erasures.log`, beside the config-secret key in the app's volume
-(`/var/lib/veyq/`), which no restore and no rollback touches: one line per such erasure, and per moderation block, lift
-and case — kinds, ids and times, never content or a name. **At every start, before it answers a request**, the
-application reads it and erases again every listed thing a restore brought back, blocks again what a moderator or an
-authority's order blocked since, and brings back a case the capture lacked as a stub — **restored**, with no report and
-nothing sealed: a case's sealed parts are lost with a capture older than them. The start's log line says what it did
+(`/var/lib/veyq/`), which no restore and no rollback touches: one line per such erasure, and per moderation block, lift,
+case and ended hold — kinds, ids and times, never content or a name. **At every start, before it answers a request**,
+the application reads it and erases again every listed thing a restore brought back, blocks again what a moderator or an
+authority's order blocked since (and lifts again what was lifted since), ends again a hold that ended since — a
+dismissal's, a handover's — so a held copy is not kept again, moves a case on to the state it had (closed where it was
+closed), and brings back a case the capture lacked as a stub — **restored**, with no report and nothing sealed: a case's
+sealed parts are lost with a capture older than them. A line it cannot apply stops the start: the instance does not
+serve with an erasure undone. The start's log line says what it did
 (`./veyqctl logs app | grep 'erasure ledger'`). Lines older than B are dropped, since no backup is older.
 
 `veyqctl restore` and `rollback` read the ledger out of the app's volume and hand it to the tool, so an object erased

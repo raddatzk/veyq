@@ -383,7 +383,9 @@ onMounted(load)
             <strong class="veyq-row-title">{{ t(`moderation.case.measureKinds.${m.kind}`) }}</strong>
             <span class="veyq-row-subtitle" :title="m.targetId">{{ t('moderation.case.target', { id: short(m.targetId) }) }} · {{ t('moderation.case.takenAt', { time: when(m.takenAt) }) }}</span>
             <div class="veyq-row-meta">
-              <span v-if="m.liftedAt" class="veyq-badge muted">{{ t('moderation.case.liftedAt', { time: when(m.liftedAt) }) }}</span>
+              <!-- Lifted by no one: it ended with its erased target (ADR 0093 § 6, `MeasureTargets.erased`). -->
+              <span v-if="m.liftedAt && !m.liftedBy" class="veyq-badge muted moderation-measure-ended">{{ t('moderation.case.endedWithTarget', { time: when(m.liftedAt) }) }}</span>
+              <span v-else-if="m.liftedAt" class="veyq-badge muted">{{ t('moderation.case.liftedAt', { time: when(m.liftedAt) }) }}</span>
               <span v-else class="veyq-badge warning">{{ t('moderation.case.inForce') }}</span>
             </div>
             <template v-if="m.statement">
@@ -588,7 +590,7 @@ onMounted(load)
       <div class="veyq-list">
         <div v-for="(e, i) in current.events" :key="i" class="veyq-list-row moderation-event">
           <div class="veyq-row-main">
-            <strong class="veyq-row-title">{{ t(`moderation.case.events.${e.event}`) }}</strong>
+            <strong class="veyq-row-title">{{ e.event === 'MEASURE_LIFTED' && !e.moderatorId ? t('moderation.case.measureEnded') : t(`moderation.case.events.${e.event}`) }}</strong>
             <span class="veyq-row-subtitle">
               {{ when(e.at) }}<template v-if="e.detail"> · {{ e.detail }}</template><template v-if="e.until"> · {{ t('moderation.case.eventUntil', { time: when(e.until) }) }}</template>
             </span>

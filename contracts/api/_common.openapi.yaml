@@ -694,20 +694,14 @@ components:
         variant:
           $ref: "#/components/schemas/OperatorSectionVariant"
         text:
-          # The section in both languages, the record's passages left out (they are `record` and `objection`). No
-          # description beside the $ref: the generator would emit an inline copy of LocalizedMarkdown.
+          # The section in both languages, the record's pointer left out (it is `record`). No description beside the
+          # $ref: the generator would emit an inline copy of LocalizedMarkdown.
           $ref: "#/components/schemas/LocalizedMarkdown"
         record:
           description: >
-            The guest-write record's GDPR Art. 13 information, present exactly while
-            `core.public-shares.guest-write-record` is on for the space (either variant); null otherwise.
-          oneOf:
-            - $ref: "#/components/schemas/LocalizedMarkdown"
-            - type: "null"
-        objection:
-          description: >
-            The right to object (GDPR Art. 21), stated apart from the rest (Art. 21(4)) — present exactly when `record`
-            is; null otherwise.
+            The pointer to the guest-write record's GDPR Art. 13 information, which the instance privacy notice holds
+            with its right to object apart (`getPrivacyNotice`, ADR 0035 decision 8; clients link it there) — present
+            exactly while `core.public-shares.guest-write-record` is on for the space (either variant); null otherwise.
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"

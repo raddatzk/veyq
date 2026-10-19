@@ -4,18 +4,26 @@
 //   - *private* is set only with the notice accepted ([operatingModeRequest]); the server records no tick, so this is
 //     the one place it is asked;
 //   - which preset switches a mode would change ([presetChanges]) — from the server's own preset, never a copy;
-//   - the two warnings and when they show ([operatorWarnings]) — only in the organisation mode, never a refusal.
+//   - the warnings and when they show ([operatorWarnings]) — only in the organisation mode, never a refusal;
+//   - the privacy notice's recipients (ADR 0035 decision 8): a row as the CLI types it ([parseRecipient]), and a
+//     suggestion the instance makes turned into a row the Server Owner completes ([suggestionRow]) — never stored as is.
 import { instanceOperatorApi } from '../../api/client'
 import {
   OperatingMode,
+  OperatorRecipientSuggestionKindEnum as SuggestionKind,
   type InstanceOperatingMode,
   type InstanceOperatingModePresetEntry,
   type InstanceOperator,
   type InstanceOperatorUpdate,
+  type OperatorRecipient,
+  type OperatorRecipientSuggestion,
 } from '../../api/generated/instance'
 
-export { OperatingMode, InstanceOperatorNotificationConfirmationEnum } from '../../api/generated/instance'
-export type { InstanceOperatingMode, InstanceOperatingModePresetEntry, InstanceOperator, InstanceOperatorUpdate } from '../../api/generated/instance'
+export { OperatingMode, InstanceOperatorNotificationConfirmationEnum, OperatorRecipientSuggestionKindEnum } from '../../api/generated/instance'
+export type {
+  InstanceOperatingMode, InstanceOperatingModePresetEntry, InstanceOperator, InstanceOperatorUpdate, OperatorRecipient,
+  OperatorRecipientSuggestion,
+} from '../../api/generated/instance'
 
 /** The capability entry a public link needs; the contact warning reads its effective state (ADR 0093 § 11). */
 export const PUBLIC_SHARES_ID = 'core.public-shares'
@@ -54,17 +62,42 @@ export function presetChanges(
 }
 
 /**
- * What admin-web warns about (ADR 0093 §§ 11 and 14, ADR 0035 decision 7). Only in the organisation mode; in private
- * neither shows, whatever is empty. The contact warning shows while public links are on and no contact is set; the
+ * What admin-web warns about (ADR 0093 §§ 11 and 14, ADR 0035 decisions 7 and 8). Only in the organisation mode; in
+ * private none shows, whatever is empty. The contact warning shows while public links are on and no contact is set; the
  * identification warning independently, while its required parts (name, address for service, email) are not all set —
- * the representative is asked only of a legal person, which the console cannot tell, so it is never part of it.
+ * the representative is asked only of a legal person, which the console cannot tell, so it is never part of it; the
+ * privacy warning independently, while the notice names no recipient or no supervisory authority (it then shows "not
+ * stated by this operator") — the data-protection officer is never part of it, since only some controllers need one.
  */
-export function operatorWarnings(op: InstanceOperator, publicSharesOn: boolean): { contact: boolean; identification: boolean } {
-  if (op.operatingMode !== OperatingMode.Organisation) return { contact: false, identification: false }
+export function operatorWarnings(
+  op: InstanceOperator,
+  publicSharesOn: boolean,
+): { contact: boolean; identification: boolean; privacy: boolean } {
+  if (op.operatingMode !== OperatingMode.Organisation) return { contact: false, identification: false, privacy: false }
   return {
     contact: publicSharesOn && !op.contactEmail,
     identification: !op.providerName || !op.providerAddress || !op.providerEmail,
+    privacy: !op.recipients.length || !op.supervisoryAuthority,
   }
+}
+
+/** A row offered for [s], with what the recipient does in the console's language ([purpose]) — for the Server Owner
+ *  to complete with the provider's name and country, and to keep or drop. The host stands in for the name until then. */
+export function suggestionRow(s: OperatorRecipientSuggestion, purpose: (kind: SuggestionKind) => string): OperatorRecipient {
+  return { name: s.host, purpose: purpose(s.kind), country: null }
+}
+
+/** Whether a recipient already names [s]'s host — the console then offers it no more. */
+export function suggestionTaken(s: OperatorRecipientSuggestion, recipients: OperatorRecipient[]): boolean {
+  const host = s.host.toLowerCase()
+  return recipients.some((r) => `${r.name} ${r.purpose}`.toLowerCase().includes(host))
+}
+
+/** A recipient as the CLI takes it: `<name>|<what they do>|<country>`, the country optional; null when malformed. */
+export function parseRecipient(typed: string): OperatorRecipient | null {
+  const [name, purpose, country, ...rest] = typed.split('|').map((x) => x.trim())
+  if (rest.length || !name || !purpose) return null
+  return { name, purpose, country: country || null }
 }
 
 /** The mode in effect, whether one was ever chosen, and the preset with each entry's switch now. */
@@ -117,6 +150,8 @@ export function operatorUpdateOf(op: InstanceOperator): InstanceOperatorUpdate {
     providerEmail: op.providerEmail ?? null,
     providerRepresentative: op.providerRepresentative ?? null,
     supervisoryAuthority: op.supervisoryAuthority ?? null,
+    recipients: op.recipients.map((r) => ({ name: r.name, purpose: r.purpose, country: r.country ?? null })),
+    dataProtectionOfficer: op.dataProtectionOfficer ?? null,
   }
 }
 

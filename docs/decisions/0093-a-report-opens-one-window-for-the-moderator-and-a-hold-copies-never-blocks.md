@@ -45,9 +45,9 @@
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
   N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
   first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
-  operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which is built in both
-  variants (cr-operator-section-of-the-terms, 2026-10-18; its text a draft until a qualified review, its gaps against
-  the law named there). It is on the V1 line (owner
+  instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8, built by cr-instance-privacy-notice,
+  2026-10-19; a draft until a qualified review), to which the operator section of the terms (decision 6, built in both
+  variants by cr-operator-section-of-the-terms, 2026-10-18) points. It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 
@@ -250,7 +250,10 @@ authority's order (§ 12) takes the same steps. **A step ends with its target** 
 when what it stands on is erased — a link deleted, a node or an item purged, a guest identity dropped, a space, an
 account or a tenant purged — the eraser ends it in its own transaction, lifted by no one and logged so; standing on
 nothing it would block nothing and still hold its case's records forever (§ 11). A step taken on a target already
-erased ends at once, the decision and its statement staying. The hold is not ended by it: it keeps its own end (§ 4). **An address is evidence, never the ground of a block.** A
+erased is **taken and ends at once, not refused** (owner 2026-10-19): the decision and its statement stay, and the hold
+stays as the evidence it is. The hold is not ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown —
+the case, the affected's statement, the Art. 18 export — one that ended with its target says so ("ended when the content
+was erased"), never plain "lifted": nobody lifted it. **An address is evidence, never the ground of a block.** A
 copy a member made (Depot's "Copy to…") is a new blob under a new key; with no dedup the server cannot know it, and
 a block reaches only the reported copy.
 
@@ -373,15 +376,18 @@ range and its no-extension rule (§ 2 there).
   EDPB's erasure report asks for (L): a backup retention B, at most 30 days recommended for a backup holding the
   table; access to a backup only to restore it; the startup purge after every restore; and **N + B** in the
   disclosure. B is the instance setting every capture veyq writes is pruned by
-  ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8, decided, not built).
+  ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8, built).
 - **Disclosure (GDPR Art. 13, at collection), from the Server Owner, never from a tenant's terms.** Every guest
   write page carries one first-layer sentence with the value current at the write — "your IP address and source
   port and the time are kept for N days, longer only if a report or an authority's order concerns this content" —
-  and a link to the full text in the operator section of the terms ([ADR 0035](0035-server-terms-of-service.md) decision 6), which names
+  and a link to the full text in the instance's privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8,
+  the one home of every Art. 13 passage; the operator section of the terms, decision 6, points there), which names
   the controller and contact, purpose, basis and legitimate interest, the data, N (and N + B where it applies), the
   hold durations of § 4, the recipients (law enforcement on request or suspicion), the rights and the supervisory
   authority, and that a guest who does not want this can view but not add. **The right to object (Art. 21) is
-  stated separately** from the rest (Art. 21(4)), on the page as in the text.
+  stated separately** from the rest (Art. 21(4)), on the page as in the text; a guest names the identity it objects
+  for by the guest id its own view shows, and an objection erases the rows so far without stopping later writes from
+  being recorded (owner 2026-10-18).
 
 ### 11. The moderation log, and the instance contact
 
@@ -735,5 +741,6 @@ what is built (`CLAUDE.md`).
 11. **Reported content inside a backup capture.** A capture holds the ciphertext of everything stored when it was
     taken, including content later reported, blocked or confirmed as child sexual abuse material. Whether keeping such
     a capture until it expires at B is possession under § 184b(3) StGB, or covered as it is unreadable to the operator
-    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block or loses a case
-    (`cr-backup-erasure-and-retention` decision 7); this item is only about the capture's own existence.
+    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block, loses a case or
+    revives a hold that had ended ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8); this
+    item is only about the capture's own existence.

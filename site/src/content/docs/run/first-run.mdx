@@ -185,8 +185,9 @@ app.
   ([Capabilities](/veyq/run/capabilities/)).
 - **Operating mode** — private, or club, organisation or company, with its notice and the switches choosing the other
   mode would change ([Moderation](/veyq/run/moderation/#the-operating-mode)).
-- **Operator** — the instance contact, the provider identification and the supervisory authority, and the private
-  notification address with its code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)).
+- **Operator** — the instance contact, the provider identification and the supervisory authority, the recipients and a
+  data-protection officer for the privacy notice, and the private notification address with its code
+  ([Moderation](/veyq/run/moderation/#who-runs-the-instance), [The privacy notice](/veyq/run/moderation/#the-privacy-notice)).
 - **Accounts** — erase an account for a request that reached you another way, and stop a pending erasure
   ([below](#accounts)).
 
@@ -248,7 +249,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `store discard` | Drop a saved change that has not passed its check; the store in use stays |
 | `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/veyq/run/capabilities/#switch-an-entry)) |
 | `mode show` / `mode set <private\|organisation> [--accept-notice]` | Print the operating mode, its notice and what the other mode would switch; set it. `set private` prints the notice and is refused without `--accept-notice`; prints text, not JSON |
-| `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details; change the values given (`none` clears one) and keep the rest; clear them all. The notification address's code is typed into the console, never the CLI |
+| `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details; change the values given (`none` clears one) and keep the rest — `--recipients '<name>\|<what they do>\|<country>; …'` replaces the privacy notice's whole list, `--data-protection-officer` sets the officer; clear them all. The notification address's code is typed into the console, never the CLI |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits
 `1`. `veyq-admin --help` prints the usage. Setup is deliberately not a command: it creates key material and an

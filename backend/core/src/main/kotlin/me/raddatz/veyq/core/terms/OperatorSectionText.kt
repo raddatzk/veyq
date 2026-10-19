@@ -6,20 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 /** Which variant of the operator section a space's terms carry (ADR 0035 decision 6, ADR 0093 § 14). */
 enum class SectionVariant { FULL, REDUCED }
 
-/** Where a passage belongs: both variants, the full one only, or the guest-write record's information (either variant). */
+/** Where a passage belongs: both variants, the full one only, or the guest-write record's pointer (either variant). */
 enum class SectionPart { BOTH, FULL, RECORD }
 
-/** One text in each language the section carries. */
-data class SectionTexts(val en: String, val de: String)
-
-/** One markdown line; an [optional] line is left out wherever a value it names is empty. */
-data class SectionLine(val text: SectionTexts, val optional: Boolean)
-
-/** One passage of the section; a [separate] record passage is the right to object, served apart (GDPR Art. 21(4)). */
-data class SectionPassage(val id: String, val part: SectionPart, val separate: Boolean, val lines: List<SectionLine>)
-
-/** N with its unit, per language: the singular for one day, else `{n}` filled in. */
-data class RetentionUnit(val one: SectionTexts, val other: SectionTexts)
+/** One passage of the section. */
+data class SectionPassage(val id: String, val part: SectionPart, val lines: List<SectionLine>)
 
 /**
  * The operator section's fixed text, as `contracts/terms/operator-section.json` holds it (its `note` says the rules).
@@ -47,24 +38,17 @@ data class OperatorSectionText(
         fun parse(root: JsonNode): OperatorSectionText = OperatorSectionText(
             revision = root.required("revision").intValue().also { require(it >= 1) { "the section's revision starts at 1" } },
             draft = root.required("draft").booleanValue(),
-            draftBanner = texts(root.required("draftBanner")),
-            gap = texts(root.required("gap")),
-            retentionUnit = root.required("retentionUnit").let {
-                RetentionUnit(
-                    one = SectionTexts(it.required("en").required("one").textValue(), it.required("de").required("one").textValue()),
-                    other = SectionTexts(it.required("en").required("other").textValue(), it.required("de").required("other").textValue()),
-                )
-            },
+            draftBanner = SectionTexts.of(root.required("draftBanner")),
+            gap = SectionTexts.of(root.required("gap")),
+            retentionUnit = RetentionUnit.of(root.required("retentionUnit")),
             passages = root.required("passages").map { p ->
+                require(!p.has("separate")) { "the section's right to object moved to the privacy notice (Q27): ${p.path("id")}" }
                 SectionPassage(
                     id = p.required("id").textValue(),
                     part = SectionPart.valueOf(p.required("part").textValue().uppercase()),
-                    separate = p.path("separate").asBoolean(false),
-                    lines = p.required("lines").map { l -> SectionLine(texts(l), l.path("optional").asBoolean(false)) },
+                    lines = p.required("lines").map { l -> SectionLine(SectionTexts.of(l), l.path("optional").asBoolean(false)) },
                 )
             },
         )
-
-        private fun texts(node: JsonNode) = SectionTexts(node.required("en").textValue(), node.required("de").textValue())
     }
 }

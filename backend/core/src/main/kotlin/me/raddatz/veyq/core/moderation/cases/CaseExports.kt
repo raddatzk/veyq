@@ -47,7 +47,10 @@ class CaseExports(private val snapshots: CaseSnapshots, private val targets: Cas
             measures = ModerationBlockEntity.list("caseId = ?1 order by takenAt", case.id).mapNotNull { m ->
                 if (m.blockKind.isBar) return@mapNotNull null
                 val kind = m.blockKind.wire ?: return@mapNotNull null
-                ModerationExportMeasure(ModerationMeasureKind.valueOf(kind), m.targetId, m.takenAt.utc(), m.liftedAt?.utc())
+                ModerationExportMeasure(
+                    kind = ModerationMeasureKind.valueOf(kind), targetId = m.targetId, takenAt = m.takenAt.utc(),
+                    endedWithTarget = m.endedWithTarget, liftedAt = m.liftedAt?.utc(),
+                )
             },
             uploaders = known.uploaders.map {
                 ModerationExportUploader(

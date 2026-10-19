@@ -7,11 +7,12 @@
 // the notice follows the switch, never the operating mode.
 //
 // The wording waits on counsel (ADR 0093 § Legal basis, Still open 4: what the port is worth behind an operator's own
-// NAT). The full Art. 13 text — who the controller is, the purpose, the basis, N, the recipients, the rights and the
-// objection — is the operator section of the terms (ADR 0035 decision 6): the notice links its record passage on the
-// public page (`/operator-terms#guest-write-record`), in a tab of its own so the share page keeps its fragment key.
+// NAT). The full Art. 13 text — who the controller is, the purpose, the basis, N and B, the recipients, the rights and
+// the objection — is the instance privacy notice's (ADR 0035 decision 8, the one home of every Art. 13 passage): the
+// notice links its record passage (`/privacy#guest-write-record`), in a tab of its own so the share page keeps its
+// fragment key.
 import { useI18n } from 'vue-i18n'
-import { OPERATOR_TERMS_PATH, RECORD_ANCHOR } from '../terms/operatorSection'
+import { PRIVACY_ANCHOR, privacyLink } from '../privacy/privacyNotice'
 
 defineProps<{ days?: number | null }>()
 const { t } = useI18n()
@@ -26,7 +27,7 @@ const { t } = useI18n()
     <a
       class="guest-write-record-more"
       data-testid="guest-write-record-more"
-      :href="`${OPERATOR_TERMS_PATH}#${RECORD_ANCHOR}`"
+      :href="privacyLink(PRIVACY_ANCHOR.guestWriteRecord)"
       target="_blank"
       rel="noopener"
     >{{ t('share.guest.recordMore') }}</a>

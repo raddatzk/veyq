@@ -71,16 +71,15 @@ acceptanceCriteria:
       backend:
         integration: [TenantTermsOperatorSectionSliceTest.thePrivateModeServesTheReducedVariant]
         unit: [OperatorSectionRendererTest.theReducedVariantLeavesOutTheAuthoritiesAndTheDeferralAndKeepsTheNoticePath, OperatorSectionRendererTest.theFullOnlyPassagesAreExactlyWhatAdr0035ListsUnderDrops, OperatorSectionRendererTest.anEmptyValueIsAVisibleGapInTheFullVariantAndAbsentInTheReducedOne, OperatorSectionRendererTest.anOptionalLineGoesInBothVariantsWhereItsValueIsEmpty, OperatorSectionRendererTest.aValuesNewlinesRenderInlineSoATypedAddressCannotStartAMarkdownBlock]
-  - id: the-record-information-follows-its-switch
+  - id: the-record-pointer-follows-its-switch
     text: >-
-      The guest-write record's GDPR Art. 13 information (controller, purpose, basis, N, recipients, rights) is in the
-      section exactly while core.public-shares.guest-write-record is on, in either variant, with the right to object
-      set apart; an unset value is a visible gap there in the full variant and absent in the reduced one, as everywhere
-      in the section.
+      The section points to the guest-write record's GDPR Art. 13 information — the privacy notice's, with its right to
+      object apart (uc.admin.privacy-notice) — exactly while core.public-shares.guest-write-record is on, in either
+      variant; the section carries no right to object of its own, and the move bumped its revision once.
     coverage:
       backend:
-        integration: [TenantTermsOperatorSectionSliceTest.theRecordPassageFollowsItsSwitchInBothVariants]
-        unit: [OperatorSectionRendererTest.theRecordFollowsItsSwitchNotTheVariant, OperatorSectionRendererTest.theRecordShowsAMissingControllerAsAGapInTheFullVariantAndLeavesItOutInTheReducedOne, OperatorSectionRendererTest.theRetentionCarriesItsUnitPerLanguage]
+        integration: [TenantTermsOperatorSectionSliceTest.theRecordsPointerFollowsItsSwitchInBothVariants]
+        unit: [OperatorSectionRendererTest.theRecordsPointerFollowsItsSwitchNotTheVariant, OperatorSectionRendererTest.theSectionCarriesNoRightToObjectOfItsOwnAnyMore]
       web:
         unit: [src/views/TermsAcceptView.test.ts]
 gaps:
