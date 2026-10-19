@@ -19,14 +19,14 @@ export type DocumentRefusal = { document: AccountDocument; code: TrustStateRefus
  */
 export async function refusedDocuments(): Promise<DocumentRefusal[]> {
   const out: DocumentRefusal[] = []
-  for (const doc of [pinStoreDocument, registerDocument] as AccountDocumentStore<unknown>[]) {
+  for (const doc of [pinStoreDocument, registerDocument] as AccountDocumentStore<unknown, { revision: number }>[]) {
     const code = await refusalOf(doc)
     if (code) out.push({ document: doc.document, code })
   }
   return out
 }
 
-async function refusalOf(doc: AccountDocumentStore<unknown>): Promise<TrustStateRefusal | null> {
+async function refusalOf(doc: AccountDocumentStore<unknown, { revision: number }>): Promise<TrustStateRefusal | null> {
   const mk = masterKey()
   if (!mk) return null
   try {

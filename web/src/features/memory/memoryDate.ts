@@ -9,7 +9,8 @@
 // via `setMemoryLocation`). It is version-checked, so the sibling a PEER wrote since our tree loaded survives too
 // (ADR 0077). The shared envelope and the write loop live in `nodeMeta.ts`.
 import { epochMsToIsoDate } from '../../shared/isoDate'
-import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
+import { effectiveCapturedAt, type MediaItem } from './media'
+import { openedMeta } from './openedListing'
 import { openContentKey, type TreeNode } from '../../core/node/tree'
 import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from '../../core/node/nodeMeta'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
@@ -106,7 +107,7 @@ export async function reconcileMemoryDate(
 export function computeAutoRange(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): MemoryDate {
   const days: number[] = []
   for (const item of items) {
-    const tier = unsealMeta(scopeId, nodeKey, item)
+    const tier = openedMeta(scopeId, nodeKey, item)
     if (!tier) continue
     const trustworthy = tier.capturedAtOverride !== undefined || tier.capturedAtSource === 'exif'
     const ms = effectiveCapturedAt(tier)

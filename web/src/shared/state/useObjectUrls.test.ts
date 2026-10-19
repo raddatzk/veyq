@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { computed, defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import { useObjectUrl, useObjectUrls } from './useObjectUrls'
 
@@ -110,13 +110,16 @@ describe('useObjectUrls', () => {
     expect(revoked).toEqual(['blob:0', 'blob:1'])
   })
 
-  it('setMany mints every key in one map change and revokes each URL it replaces', () => {
+  it('setMany mints every key in place, without copying the map, revokes each URL it replaces, and a reader sees it', async () => {
     const { api } = harness(useObjectUrls)
     api.set('a', blob())
     const before = api.urls.value
+    const read = computed(() => api.urls.value.get('b') ?? null) // a reader that tracks one key, as a tile does
+    expect(read.value).toBeNull()
     api.setMany([['a', blob()], ['b', blob()]])
-    expect(api.urls.value).not.toBe(before) // one churn, so a reader re-renders once
+    expect(api.urls.value).toBe(before) // the same map, changed in place: nothing copies thousands of entries per batch
     expect([...api.urls.value.keys()]).toEqual(['a', 'b'])
+    expect(read.value).toBe('blob:2')
     expect(revoked).toEqual(['blob:0'])
   })
 

@@ -2,22 +2,16 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { fakeApi } from '../../../test/apiMock'
-import type {
-  AccountDeviceRegisterApi,
-  AccountIdentityPinsApi,
-  DeviceRegister,
-  DeviceRegisterUpdate,
-  IdentityPins,
-  IdentityPinsUpdate,
-} from '../../../api/generated/account'
+import { fakePinServer, sealPinStore, type PinServerState } from '../../../test/pinStore'
+import type { AccountDeviceRegisterApi, DeviceRegister } from '../../../api/generated/account'
 import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 
 // ADR 0028 Decision 7's way back has exactly one trigger: the person, through the confirm dialog. The server can
 // cause the REFUSAL whenever it likes — an old copy reads as rolled back, garbage as unreadable — so the property
 // that matters is that no answer it gives reaches a write of either document. This serves every refusal (both
 // codes, both documents) to every path a server response drives into the documents, and anchors on the one
-// observable that means "it was started over": a recorded PUT to either document. Not on "it threw" — a throw is
-// equally a network error. The positive control serves a readable copy to the same paths and sees the PUTs.
+// observable that means "it was started over": a recorded write of either document. Not on "it threw" — a throw is
+// equally a network error. The positive control serves a readable copy to the same paths and sees the writes.
 //
 // Which paths: every importer of the two document modules outside the reset and the rotation, measured with
 //   grep -rn -E "from '[./]*(account/)?(identityPins|deviceRegister)'" web/src | grep -v '\.test\.'
@@ -35,7 +29,8 @@ vi.mock('../../../api/client', () => ({
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.fn() }))
 
-import { acceptKeyChange, checkAndPin, getPin, markVerified, trustStates } from '../identityPins'
+import { acceptKeyChange, checkAndPin, forgetVerifiedPins, getPin, markVerified, trustStates } from '../identityPins'
+import { fingerprintDigestB64 } from '../safetyCode'
 import {
   readRegisterView,
   reconcileWithSessions,
@@ -48,7 +43,7 @@ import { runGrantDeliveryWorker } from '../../tasks/grantDeliveryWorker'
 import { GRANT_DELIVERY } from '../../tasks/capabilityTags'
 import { tagAdmission } from '../../spaces/grant'
 import { raiseMarks } from '../trustMarks'
-import { accountDeviceRegisterApi, accountIdentityPinsApi, tasksApi } from '../../../api/client'
+import { accountDeviceRegisterApi, tasksApi } from '../../../api/client'
 import { identityPrivate, masterKey } from '../../../app/vault'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -61,27 +56,25 @@ const TARGET_ID = '7a26e000-0000-4000-8000-0000000000c1'
 const TARGET_PUB = b64std(v1.serializeIdentityPublic(TARGET.pub))
 const S1 = '5c09e000-0000-4000-8000-0000000000c2'
 
-type Doc = 'pins' | 'register'
-const sealedAt = (doc: Doc, revision: number) => {
-  const plain = doc === 'pins' ? { pins: {} } : { devices: {}, families: {}, wraps: {} }
-  const purpose = doc === 'pins' ? 'identity-pins' : 'device-register'
-  return b64std(v1.seal({ purpose, revision }, MK, enc.encode(JSON.stringify(plain))))
-}
+const OTHER_ID = '7a26e000-0000-4000-8000-0000000000c3'
+const OTHER_KEY = b64std(v1.serializeIdentityPublic(v1.generateIdentity().pub))
+/** The pin store as this account wrote it at `revision`: one contact pinned (ADR 0104: a head plus an entry). */
+const pinsAt = (revision: number) =>
+  sealPinStore(MK, { [OTHER_ID]: { fingerprint: fingerprintDigestB64(OTHER_KEY), state: 'pinned', firstSeenAt: 1 } }, revision)
+const registerAt = (revision: number) =>
+  b64std(v1.seal({ purpose: 'device-register', revision }, MK, enc.encode(JSON.stringify({ devices: {}, families: {}, wraps: {} }))))
 
-/** The two documents' endpoints, recording every PUT; the PUT itself always lands (and is then what is served),
- *  so a write is never masked by a conflict. */
-function fakeServer(served: { pins: IdentityPins; register: DeviceRegister }) {
-  const land = <D extends Doc>(doc: D, update: IdentityPinsUpdate | DeviceRegisterUpdate): (typeof served)[D] => {
-    served[doc] = { blob: update.blob, revision: update.revision! + 1 }
-    return { ...served[doc] }
-  }
-  const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async ({ identityPinsUpdate }) =>
-    land('pins', identityPinsUpdate),
-  )
-  const putDeviceRegister = vi.fn<AccountDeviceRegisterApi['putDeviceRegister']>(async ({ deviceRegisterUpdate }) =>
-    land('register', deviceRegisterUpdate),
-  )
-  fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ ...served.pins }), putIdentityPins })
+/** The two documents' endpoints, recording every write; a write lands whenever it is made against the served revision
+ *  (and is then what is served), so a write is never masked by a conflict. `withhold` serves the pin listing without
+ *  its entries — the per-entry rollback, under an honest head. */
+function fakeServer(served: { pins: PinServerState; register: DeviceRegister }, opts: { withhold?: boolean } = {}) {
+  const pins = fakePinServer(served.pins)
+  if (opts.withhold) pins.tamper(() => new Map())
+  const putIdentityPins = pins.writeIdentityPins
+  const putDeviceRegister = vi.fn<AccountDeviceRegisterApi['putDeviceRegister']>(async ({ deviceRegisterUpdate }) => {
+    served.register = { blob: deviceRegisterUpdate.blob, revision: deviceRegisterUpdate.revision! + 1 }
+    return { ...served.register }
+  })
   fakeApi(accountDeviceRegisterApi, { getDeviceRegister: async () => ({ ...served.register }), putDeviceRegister })
   // The worker's claim: one grant-delivery job to a genuinely admitted target, then drained.
   const K_SC = v1.randomBytes(32)
@@ -110,7 +103,7 @@ async function driveEveryPath(K_SC: Uint8Array) {
     () => checkAndPin(TARGET_ID, TARGET_PUB),
     () => trustStates([{ userId: TARGET_ID, directoryKey: TARGET_PUB }]),
     () => acceptKeyChange(TARGET_ID, TARGET_PUB),
-    () => markVerified(TARGET_ID, TARGET_PUB),
+    () => markVerified(TARGET_ID, fingerprintDigestB64(TARGET_PUB)),
     () => runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 }),
     () => readRegisterView(['fam1'], [], 'me'),
     () => rememberThisDevice('me', 'Firefox', 'fam1', 'w1'),
@@ -126,6 +119,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   globalThis.indexedDB = new IDBFactory()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
+  forgetVerifiedPins()
   vi.mocked(identityPrivate).mockImplementation(() => ({
     kemSeed: WORKER.priv.kemSeed.slice(), sign: WORKER.priv.sign.slice(),
   }))
@@ -133,13 +127,16 @@ beforeEach(() => {
 
 describe('no server response reaches a write of a refused document (ADR 0028 Decision 7)', () => {
   const garbage = () => b64std(v1.randomBytes(64))
+  const none = () => new Map<string, string>()
   it.each([
-    ['trust_state_unreadable', 'both documents', { pins: 3, register: 3 }, () => ({ pins: { blob: garbage(), revision: 3 }, register: { blob: garbage(), revision: 3 } })],
-    ['trust_state_rolled_back', 'both documents (older copy)', { pins: 7, register: 7 }, () => ({ pins: { blob: sealedAt('pins', 4), revision: 4 }, register: { blob: sealedAt('register', 4), revision: 4 } })],
-    ['trust_state_rolled_back', 'both documents (missing after a mark)', { pins: 2, register: 2 }, () => ({ pins: { revision: 0 }, register: { revision: 0 } })],
-  ] as const)('%s, %s: every path is refused, and nothing is written', async (_code, _what, marks, served) => {
+    ['trust_state_unreadable', 'both documents', { pins: 3, register: 3 }, () => ({ pins: { blob: garbage(), revision: 3, entries: none() }, register: { blob: garbage(), revision: 3 } }), false],
+    ['trust_state_rolled_back', 'both documents (older copy)', { pins: 7, register: 7 }, () => ({ pins: pinsAt(4), register: { blob: registerAt(4), revision: 4 } }), false],
+    ['trust_state_rolled_back', 'both documents (missing after a mark)', { pins: 2, register: 2 }, () => ({ pins: { blob: undefined, revision: 0, entries: none() }, register: { revision: 0 } }), false],
+    // ADR 0104: an honest head over a listing that withholds the entry — the register is unreadable beside it.
+    ['trust_state_rolled_back', 'the pin store (an entry withheld)', { pins: 3, register: 3 }, () => ({ pins: pinsAt(3), register: { blob: garbage(), revision: 3 } }), true],
+  ] as const)('%s, %s: every path is refused, and nothing is written', async (_code, _what, marks, served, withhold) => {
     await raiseMarks(MK, marks)
-    const srv = fakeServer(served())
+    const srv = fakeServer(served(), { withhold })
 
     await driveEveryPath(srv.K_SC)
 
@@ -150,10 +147,7 @@ describe('no server response reaches a write of a refused document (ADR 0028 Dec
 
   it('control: the same paths against readable documents DO write — the recorder sees a write when there is one', async () => {
     await raiseMarks(MK, { pins: 3, register: 3 })
-    const srv = fakeServer({
-      pins: { blob: sealedAt('pins', 3), revision: 3 },
-      register: { blob: sealedAt('register', 3), revision: 3 },
-    })
+    const srv = fakeServer({ pins: pinsAt(3), register: { blob: registerAt(3), revision: 3 } })
 
     await driveEveryPath(srv.K_SC)
 

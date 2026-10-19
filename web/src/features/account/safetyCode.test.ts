@@ -49,7 +49,7 @@ describe('the safety-number QR payload', () => {
     const key = bundle()
     const scanned = roundTrip(safetyCodePayload(key))
     expect(scanned).toBe(safetyCodePayload(key))
-    expect(compareScan(scanned!, key)).toBe('match')
+    expect(compareScan(scanned!, fingerprintDigestB64(key))).toBe('match')
   })
 
   it('stays far below the jsqr bound web/CLAUDE.md rests on: a short payload and a low QR version', () => {
@@ -64,8 +64,8 @@ describe('the safety-number QR payload', () => {
   it('a safety code of a DIFFERENT key is a mismatch, never a match', () => {
     const mine = bundle()
     const theirs = bundle()
-    expect(compareScan(safetyCodePayload(theirs), mine)).toBe('mismatch')
-    expect(compareScan(safetyCodePayload(mine), mine)).toBe('match') // control on the same predicate
+    expect(compareScan(safetyCodePayload(theirs), fingerprintDigestB64(mine))).toBe('mismatch')
+    expect(compareScan(safetyCodePayload(mine), fingerprintDigestB64(mine))).toBe('match') // control on the same predicate
   })
 
   it.each([
@@ -80,7 +80,7 @@ describe('the safety-number QR payload', () => {
     const key = bundle()
     const digest = fingerprintDigestB64(key)
     expect(parseSafetyCode(make(digest))).toBeNull()
-    expect(compareScan(make(digest), key)).toBe('foreign')
+    expect(compareScan(make(digest), fingerprintDigestB64(key))).toBe('foreign')
   })
 
   it('control: the well-formed code of the same digest parses (so each refusal above is its own)', () => {

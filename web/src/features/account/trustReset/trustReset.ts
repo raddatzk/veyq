@@ -46,7 +46,7 @@ export async function resetAccountDocument(document: AccountDocument): Promise<R
   return document === 'pins' ? startOver(pinStoreDocument) : startOver(registerDocument)
 }
 
-async function startOver<T>(doc: AccountDocumentStore<T>): Promise<ResetOutcome> {
+async function startOver<T, W extends { revision: number }>(doc: AccountDocumentStore<T, W>): Promise<ResetOutcome> {
   for (let attempt = 1; ; attempt++) {
     const mk = masterKey()
     if (!mk) throw new Error('starting a trust document over requires an unlocked vault')
@@ -55,7 +55,7 @@ async function startOver<T>(doc: AccountDocumentStore<T>): Promise<ResetOutcome>
       if (await opensNow(doc, mk, served)) return 'alreadyReadable'
       const written = served.revision + 1
       try {
-        await doc.write({ blob: doc.seal(mk, doc.empty(), written), revision: served.revision })
+        await doc.write({ ...doc.seal(mk, doc.empty(), written), revision: served.revision } as W)
       } catch (e) {
         if (attempt < MAX_RESET_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_revision'))) continue
         throw e
@@ -69,7 +69,7 @@ async function startOver<T>(doc: AccountDocumentStore<T>): Promise<ResetOutcome>
 }
 
 /** Whether the served copy opens under this device's marks — a refusal is `false`, anything else propagates. */
-async function opensNow<T>(doc: AccountDocumentStore<T>, mk: Uint8Array, served: { blob: string | null; revision: number }) {
+async function opensNow<T, W extends { revision: number }>(doc: AccountDocumentStore<T, W>, mk: Uint8Array, served: { blob: string | null; revision: number }) {
   try {
     await doc.open(mk, served)
     return true

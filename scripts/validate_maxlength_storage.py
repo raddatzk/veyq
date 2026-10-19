@@ -58,8 +58,6 @@ TEXT_MAX_B64 = 65532
 # above TEXT_MAX_B64. Keyed (spec key below contracts/api, schema, property) → the DB column that must be provably MEDIUMTEXT. Adding a
 # field here is a deliberate "this column is wider than TEXT" claim, verified below against the migrations.
 MEDIUMTEXT_BACKED: dict[tuple[str, str, str], str] = {
-    ("account.openapi.yaml", "IdentityPins", "blob"): "sealed_blob",
-    ("account.openapi.yaml", "IdentityPinsUpdate", "blob"): "sealed_blob",
     ("favorites.openapi.yaml", "Favorites", "ciphertext"): "ciphertext",
     ("favorites.openapi.yaml", "PutFavoritesRequest", "ciphertext"): "ciphertext",
     ("memories/item-favorites.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.account.rotation
 
 import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterEntity
+import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
 import me.raddatz.veyq.core.account.login.SessionFamilyEntity
 import me.raddatz.veyq.core.account.login.SessionService
@@ -307,11 +308,13 @@ class RotationSliceTest {
         assertEquals(OLD_REC_WRAP, wrapOf(user, "RECOVERY"))
         assertEquals("ZGV2aWNlLXdyYXA=", wrapOf(user, "DEVICE"), "nothing was deleted either")
         assertEquals(OLD_PINS to 3L, pinsRow(user))
+        assertEquals(mapOf(OLD_PIN_ID to OLD_ENTRY), pinEntries(user), "no entry of the rolled-back write landed")
         assertEquals(OLD_REGISTER to 2L, registerRow(user))
 
         rotate(user, pinsRevision = 3, registerRevision = 2).then().statusCode(200)
         assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "control: the matching revisions rotate")
-        assertEquals(NEW_PINS to 4L, pinsRow(user), "the pin store is the request's blob, one revision up")
+        assertEquals(NEW_PINS to 4L, pinsRow(user), "the pin store's head is the request's, one revision up")
+        assertEquals(mapOf(NEW_PIN_ID to NEW_ENTRY), pinEntries(user), "every entry re-keyed: the old id is gone")
         assertEquals(NEW_REGISTER to 3L, registerRow(user), "and so is the register")
     }
 
@@ -330,6 +333,7 @@ class RotationSliceTest {
         assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is not published")
         assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"))
         assertEquals(OLD_PINS to 3L, pinsRow(user), "the pin write rolled back with the rest")
+        assertEquals(mapOf(OLD_PIN_ID to OLD_ENTRY), pinEntries(user), "its entries too")
         assertEquals(OLD_REGISTER to 2L, registerRow(user))
 
         rotate(user, pinsRevision = 3, registerRevision = 2).then().statusCode(200)
@@ -347,7 +351,26 @@ class RotationSliceTest {
         rotate(user, pinsRevision = 0, registerRevision = 0).then().statusCode(200)
 
         assertEquals(NEW_PINS to 1L, pinsRow(user))
+        assertEquals(mapOf(NEW_PIN_ID to NEW_ENTRY), pinEntries(user))
         assertEquals(NEW_REGISTER to 1L, registerRow(user))
+    }
+
+    @Test
+    fun aRotationThatKeepsAPinEntryIsRefused() {
+        // ADR 0104: a new Master Key is a new pin-index key, so the rotation carries the WHOLE re-keyed set. A write
+        // without replaceAll would keep the old entries under ids and seals of the retired key, which every device
+        // then refuses — so it is a 400 with nothing written. The control is the same request with replaceAll.
+        val user = seedAccount()
+        seedPins(user, OLD_PINS, revision = 3)
+
+        rotate(user, pinsRevision = 3, registerRevision = 0, pinsReplaceAll = false)
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "nothing published")
+        assertEquals(OLD_PINS to 3L, pinsRow(user))
+        assertEquals(mapOf(OLD_PIN_ID to OLD_ENTRY), pinEntries(user))
+
+        rotate(user, pinsRevision = 3, registerRevision = 0).then().statusCode(200)
+        assertEquals(mapOf(NEW_PIN_ID to NEW_ENTRY), pinEntries(user), "control: the whole set is replaced")
     }
 
     @Test
@@ -367,7 +390,7 @@ class RotationSliceTest {
             {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
              "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
              "secretKeyProofSignature":"${PROOF_KEY.sign(rotationStatement())}",
-             "identityPins":{"blob":"$NEW_PINS","revision":0},
+             "identityPins":{"revision":0,"head":"$NEW_PINS","put":[],"remove":[],"replaceAll":true},
              "deviceRegister":{"blob":"$NEW_REGISTER","revision":0}}
         """.trimIndent()
         given().header("Authorization", bearer(user))
@@ -639,19 +662,21 @@ class RotationSliceTest {
         signature: String = PROOF_KEY.sign(rotationStatement()),
         pinsRevision: Long = 0,
         registerRevision: Long = 0,
+        pinsReplaceAll: Boolean = true,
     ) = given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
-        .body(rotationBody(signature, pinsRevision, registerRevision)).`when`().post("/api/account/rotation")
+        .body(rotationBody(signature, pinsRevision, registerRevision, pinsReplaceAll)).`when`().post("/api/account/rotation")
 
     private fun rotationBody(
         signature: String = PROOF_KEY.sign(rotationStatement()),
         pinsRevision: Long = 0,
         registerRevision: Long = 0,
+        pinsReplaceAll: Boolean = true,
     ) = """
         {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
          "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
          "recoveryWrap":{"wrappedKey":"$NEW_REC_WRAP","kdfParams":"$KDF"},
          "secretKeyProofSignature":"$signature",
-         "identityPins":{"blob":"$NEW_PINS","revision":$pinsRevision},
+         "identityPins":{"revision":$pinsRevision,"head":"$NEW_PINS","put":[{"pinId":"$NEW_PIN_ID","entry":"$NEW_ENTRY"}],"remove":[],"replaceAll":$pinsReplaceAll},
          "deviceRegister":{"blob":"$NEW_REGISTER","revision":$registerRevision}}
     """.trimIndent()
 
@@ -860,10 +885,19 @@ class RotationSliceTest {
         MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method).firstResult()?.wrappedKey
     }
 
+    /** A store at `revision`: its head and one entry, as a device wrote them under the OLD Master Key. */
     private fun seedPins(userId: String, blob: String, revision: Long) = QuarkusTransaction.requiringNew().run {
         IdentityPinsEntity().apply {
             accountId = userId; sealedBlob = blob; this.revision = revision
         }.persist()
+        IdentityPinEntryEntity().apply {
+            accountId = userId; pinId = OLD_PIN_ID; sealedEntry = OLD_ENTRY
+        }.persist()
+    }
+
+    /** The stored entries as `pinId to sealed entry`. */
+    private fun pinEntries(userId: String): Map<String, String> = QuarkusTransaction.requiringNew().call<Map<String, String>> {
+        IdentityPinEntryEntity.list("accountId", userId).associate { it.pinId to it.sealedEntry }
     }
 
     private fun seedRegister(userId: String, blob: String, revision: Long) = QuarkusTransaction.requiringNew().run {
@@ -908,6 +942,10 @@ class RotationSliceTest {
 
         const val OLD_PINS = "b2xkLXBpbnM="
         const val NEW_PINS = "bmV3LXBpbnM="
+        const val OLD_PIN_ID = "0101010101010101010101010101010101010101010101010101010101010101"
+        const val OLD_ENTRY = "b2xkLXBpbi1lbnRyeQ=="
+        const val NEW_PIN_ID = "0202020202020202020202020202020202020202020202020202020202020202"
+        const val NEW_ENTRY = "bmV3LXBpbi1lbnRyeQ=="
         const val OLD_REGISTER = "b2xkLXJlZ2lzdGVy"
 
         const val CO_OWNER_PUB = "Y28tb3duZXItaWRlbnRpdHktcHVi"

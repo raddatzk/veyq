@@ -29,11 +29,15 @@ if (index === null) failures.push('dist/index.html not found — run `vite build
 else if (CSP_META.test(index)) failures.push('dist/index.html carries a Content-Security-Policy <meta>')
 const policy = read(POLICY_FILE)
 if (policy === null || policy.trim() === '') failures.push(`dist/${POLICY_FILE} is missing or empty`)
+// Every worker the app starts is a same-origin hashed module (Argon2, the media pixel stage, the gallery's listing
+// opener, pdf.js): the policy must admit 'self' as a worker source and nothing wider (no blob:, no data:, no host).
+// Bite: drop 'self' from `worker-src` in src/shared/security/csp.ts, `npm run build`, and this goes RED.
+else if (!/(^|;)\s*worker-src 'self'\s*(;|$)/.test(policy)) failures.push(`dist/${POLICY_FILE} does not carry exactly "worker-src 'self'"`)
 
 if (failures.length) {
-  console.error('CSP DELIVERY BROKEN — the backend would refuse to boot this dist:')
+  console.error('CSP DELIVERY BROKEN — the backend would refuse to boot this dist, or the policy no longer reads as built:')
   for (const f of failures) console.error('  - ' + f)
   process.exit(1)
 }
 
-console.log(`verify:csp: dist/${POLICY_FILE} present, dist/index.html carries no CSP <meta>.`)
+console.log(`verify:csp: dist/${POLICY_FILE} present with worker-src 'self', dist/index.html carries no CSP <meta>.`)
