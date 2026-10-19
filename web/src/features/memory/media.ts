@@ -813,9 +813,13 @@ export async function purgeMedia(scopeId: string, mediaId: string): Promise<void
 // --- read-back -------------------------------------------------------------
 
 /**
- * How many media one page of the list asks for (ADR 0033 decision 6; the server's cap is 1000, `ItemsLimit`).
+ * How many media one page of the list asks for (ADR 0033 decision 6): the server's cap, `ItemsLimit`'s 1000. Measured on
+ * the production recipe pinned to two cores at 10,000 photos (2026-10-19, a developer Mac, load 4-5, so indicative), the
+ * whole list read warm in 829 ms in pages of 1000, 961 ms in pages of 500 and 1,058 ms in pages of 250 — 13 SELECTs a page
+ * at every size, so a page costs a round trip and little else. A page is no first screen (the gallery's order is the
+ * sealed capture time, read on the device), so a smaller one buys nothing the user sees.
  */
-export const MEDIA_PAGE_LIMIT = 500
+export const MEDIA_PAGE_LIMIT = 1000
 
 /**
  * A node's media read in full — every page of it (uc.memory.live-updates, cr-0107, ADR 0033 decisions 2, 3 and 6). A

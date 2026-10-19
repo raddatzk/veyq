@@ -68,8 +68,9 @@ character at a time. So where compression sits, and which answers it leaves out,
 
 ## Consequences
 
-- **What it buys:** the media list's wire bytes fall to about 0.55 of the body (MEASURED_LIST_BYTES), the tree and the
-  static bundle by more; a household on a slow uplink feels it first.
+- **What it buys:** the media list's wire bytes fall to 0.60 of the body (M: 10,000 photos, 23.05 MB of JSON, 13.84 MB
+  on the wire at level 1, where level 6 would make 13.26 MB), the JavaScript bundle from 2.50 MB to 0.79 MB (M) — the
+  volume harness on the production recipe, 2026-10-19 — and the tree by more; a household on a slow uplink feels it first.
 - **What it costs:** CPU on the host for every compressible answer. On a two-core ARM host a 23 MB list is the worst
   case; paging the list (ADR 0033 § 6) bounds one answer, the level bounds the rate. The CR records both numbers.
 - **The operator still sees sizes, now compressed sizes.** A compressed length is a function of what the server already
