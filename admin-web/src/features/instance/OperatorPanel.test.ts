@@ -36,11 +36,12 @@ const stubs = {
     emits: ['update:modelValue'],
     template: '<textarea :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
+  // Honours option-value / option-label as PrimeVue does, so a panel that sent the label would send it here too.
   Select: {
-    props: ['modelValue', 'options'],
+    props: ['modelValue', 'options', 'optionValue', 'optionLabel'],
     emits: ['update:modelValue'],
     template:
-      '<select class="select" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
+      '<select class="select" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o[optionValue]" :value="o[optionValue]">{{ o[optionLabel] }}</option></select>',
   },
   Button: {
     props: ['label', 'disabled', 'type'],
@@ -142,7 +143,7 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
     vi.mocked(getOperator).mockResolvedValue(operator())
     expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(true)
     vi.mocked(getOperator).mockResolvedValue(operator({
-      supervisoryAuthority: 'LfD', recipients: [{ name: 'Example Hosting GmbH', kind: 'HOSTING', country: 'Germany' }],
+      supervisoryAuthority: 'LfD', recipients: [{ name: 'Example Hosting GmbH', kind: 'HOSTING', country: 'DE' }],
     }))
     expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(false)
     vi.mocked(getOperator).mockResolvedValue(operator({ operatingMode: 'PRIVATE' }))
@@ -168,15 +169,38 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
     expect((row.find('.operator-recipient__name').element as HTMLInputElement).value).toBe('smtp.example.org')
     expect((row.find('.operator-recipient__kind').element as HTMLSelectElement).value).toBe('MAIL_RELAY') // the suggestion's kind
     await row.find('.operator-recipient__name').setValue('Mail AG')
-    await row.find('.operator-recipient__country').setValue('Germany')
+    await row.find('.operator-recipient__country').setValue('DE')
     await w.find('.operator-add-recipient').trigger('click') // an empty row is not sent
     await w.find('.operator-dpo').setValue(' DSB GmbH ')
     await w.find('.operator-save').trigger('click')
     await flushPromises()
     expect(vi.mocked(setOperator).mock.lastCall![0]).toMatchObject({
-      recipients: [{ name: 'Mail AG', kind: 'MAIL_RELAY', description: null, country: 'Germany' }],
+      recipients: [{ name: 'Mail AG', kind: 'MAIL_RELAY', description: null, country: 'DE' }],
       dataProtectionOfficer: 'DSB GmbH',
     })
+  })
+
+  it('a country is picked by its name in the console’s language and sent as its code, never as the name', async () => {
+    i18n.global.locale.value = 'de'
+    vi.mocked(getOperator).mockResolvedValue(operator())
+    vi.mocked(setOperator).mockImplementation(async (u) => operator({ recipients: u.recipients ?? [] }))
+    const w = await mountPanel()
+    await w.find('.operator-add-recipient').trigger('click')
+    const row = w.find('[data-testid="operator-recipient"]')
+    const names = row.findAll('.operator-recipient__country option').map((o) => o.text())
+    expect(names).toContain('Deutschland')
+    expect(names).not.toContain('Germany') // the German console names it in German
+    await row.find('.operator-recipient__name').setValue('Example Hosting GmbH')
+    await row.find('.operator-recipient__kind').setValue('HOSTING')
+    // pick the option the reader sees as "Deutschland": whatever value it carries is what goes out
+    const picked = row.findAll('.operator-recipient__country option').find((o) => o.text() === 'Deutschland')!
+    await row.find('.operator-recipient__country').setValue((picked.element as HTMLOptionElement).value)
+    await w.find('.operator-save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setOperator).mock.lastCall![0].recipients)
+      .toEqual([{ name: 'Example Hosting GmbH', kind: 'HOSTING', description: null, country: 'DE' }])
+    // the saved code reads back as the same choice
+    expect((w.find('.operator-recipient__country').element as HTMLSelectElement).value).toBe('DE')
   })
 
   it('what a recipient does is a kind from the list; only Other asks for words, and only Other sends them', async () => {

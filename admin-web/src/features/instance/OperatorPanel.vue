@@ -11,6 +11,8 @@
 //     row of its kind the Server Owner completes, and nothing is published until the row is saved (cr-instance-privacy-notice 3);
 //   - what a recipient does is a kind chosen from a list, which the notice names in its own words on each language's page;
 //     only *Other* asks for the operator's words, and a description is never sent with another kind;
+//   - where they are is a country picked from a searchable list, named in the console's language and sent as its ISO
+//     3166-1 alpha-2 code (`./countries`) — the notice names it in each page's own language, never in the one typed;
 //   - the confirmation is the server's answer after each save; this panel never claims an address is confirmed.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -26,6 +28,7 @@ import {
   suggestionRow, suggestionTaken, type InstanceOperator, type OperatorRecipientSuggestion,
 } from './operator'
 import { listInstanceCapabilities } from './capabilities'
+import { countryOptions as countriesIn } from './countries'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useConfirm } from '../../shared/state/useConfirm'
@@ -49,9 +52,9 @@ const providerAddress = ref('')
 const providerEmail = ref('')
 const providerRepresentative = ref('')
 const supervisoryAuthority = ref('')
-/** The recipients as edited: a row's fields as typed, its kind null until chosen, the description and the country
- *  empty where not given. */
-const recipients = ref<{ name: string; kind: OperatorRecipientKind | null; description: string; country: string }[]>([])
+/** The recipients as edited: a row's fields as typed, its kind and its country (a code) null until chosen, the
+ *  description empty where not given. */
+const recipients = ref<{ name: string; kind: OperatorRecipientKind | null; description: string; country: string | null }[]>([])
 const dataProtectionOfficer = ref('')
 const code = ref('')
 const actionError = ref('')
@@ -68,12 +71,15 @@ function apply(o: InstanceOperator) {
   providerEmail.value = o.providerEmail ?? ''
   providerRepresentative.value = o.providerRepresentative ?? ''
   supervisoryAuthority.value = o.supervisoryAuthority ?? ''
-  recipients.value = o.recipients.map((r) => ({ name: r.name, kind: r.kind, description: r.description ?? '', country: r.country ?? '' }))
+  recipients.value = o.recipients.map((r) => ({ name: r.name, kind: r.kind, description: r.description ?? '', country: r.country ?? null }))
   dataProtectionOfficer.value = o.dataProtectionOfficer ?? ''
 }
 
 /** The kinds as the console names them, in its own language — the notice names them in each of its own. */
 const kindOptions = computed(() => RECIPIENT_KINDS.map((k) => ({ value: k, label: t(`operator.recipientKind.${k}`) })))
+
+/** The countries by their names in the console's language, each sending its code. */
+const countryOptions = computed(() => countriesIn(locale.value))
 
 /** The suggestions no row names yet — what the instance itself knows of, for the Server Owner to confirm. */
 const openSuggestions = computed(() => {
@@ -81,12 +87,12 @@ const openSuggestions = computed(() => {
 })
 
 function addRecipient() {
-  recipients.value.push({ name: '', kind: null, description: '', country: '' })
+  recipients.value.push({ name: '', kind: null, description: '', country: null })
 }
 
 function adoptSuggestion(s: OperatorRecipientSuggestion) {
   const row = suggestionRow(s)
-  recipients.value.push({ name: row.name, kind: row.kind, description: '', country: '' })
+  recipients.value.push({ name: row.name, kind: row.kind, description: '', country: null })
 }
 
 function removeRecipient(i: number) {
@@ -126,7 +132,7 @@ const { run: runSave, pending: saving } = useAsyncAction(
         .filter((r) => r.name.trim() && r.kind)
         .map((r) => ({
           name: r.name.trim(), kind: r.kind!,
-          description: r.kind === OperatorRecipientKind.Other ? blank(r.description) : null, country: blank(r.country),
+          description: r.kind === OperatorRecipientKind.Other ? blank(r.description) : null, country: r.country || null,
         })),
       dataProtectionOfficer: blank(dataProtectionOfficer.value),
     }))
@@ -300,8 +306,10 @@ const confirmation = computed(() => {
                     class="operator-recipient__kind" />
           </label>
           <label>
-            <span>{{ t('operator.recipientCountry') }}</span>
-            <InputText v-model="r.country" class="operator-recipient__country" autocomplete="off" maxlength="100" />
+            <span :id="`operator-recipient-country-${i}`">{{ t('operator.recipientCountry') }}</span>
+            <Select v-model="r.country" :options="countryOptions" option-label="label" option-value="value" filter show-clear
+                    :aria-labelledby="`operator-recipient-country-${i}`" :placeholder="t('operator.recipientCountryPick')"
+                    class="operator-recipient__country" />
           </label>
           <Button type="button" severity="secondary" text icon="pi pi-times" class="operator-recipient__remove"
                   :aria-label="t('operator.recipientRemove')" @click="removeRecipient(i)" />
