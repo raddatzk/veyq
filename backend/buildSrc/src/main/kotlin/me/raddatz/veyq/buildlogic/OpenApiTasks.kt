@@ -110,6 +110,8 @@ abstract class OpenApiGenerate : DefaultTask() {
         )
         // The cascade of a generated list moves onto its element type (HV000271) — see ModelCascade.
         ModelCascade.apply(modelsDir.get().asFile.resolve("src/main/kotlin"))
+        // An answer that carries a token is never compressed (ADR 0103) — see TokenAnswersUncompressed.
+        TokenAnswersUncompressed.apply(apiDir.get().asFile, set.specs)
         if (set.owner == SpecSets.coreOwner) return
         // Every schema has ONE generated type. An application model named like a core one is a second definition of a
         // shared schema — the schema mapping did not apply (a schema copied instead of aliased to `_common`, or the

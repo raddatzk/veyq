@@ -1,11 +1,11 @@
 # ADR 0103 — The application compresses its answers, except the ones that carry a token
 
-- Status: Proposed 2026-10-19. Its decisions carry `cr-gallery-list-paging`'s recommendations; it becomes Accepted with
-  the owner's go on that CR. Nothing is built.
+- Status: Accepted 2026-10-19 (built by `cr-gallery-list-paging`: `quarkus.http.enable-compression` and its neighbours in
+  `:core`'s `application.properties`, `@Uncompressed` written by the build on every token answer's generated endpoint,
+  `TokenAnswersAreNotCompressedTest`).
 - Date: 2026-10-19
 
-Provenance: **(M)** measured in the worktree the CR names — the command is in `cr-gallery-list-paging`'s grounding
-table; **(R)** remembered, measured by the CR before it binds.
+Provenance: **(M)** measured — by the commands this ADR or the test it names carries; **(R)** remembered, not measured.
 
 ## Context
 
@@ -29,19 +29,32 @@ character at a time. So where compression sits, and which answers it leaves out,
    One place covers both targets and the static bundle, and the application knows which operation returns what. Traefik's
    `compress` middleware would cover Compose only, and the chart's Gateway is the cluster operator's choice
    ([ADR 0064](0064-kubernetes-helm-deployment-target.md)) — veyq cannot rely on its behaviour there.
-   A proxy that compresses again finds a `Content-Encoding` already set and passes the body on (R, verified by the CR).
+   A proxy that compresses again finds a `Content-Encoding` already set and passes the body on (R: Compose's Traefik has
+   no `compress` middleware to try it against, and the chart's Gateway is the operator's). The admin listener (ADR 0065)
+   is a second Vert.x server on default options and compresses nothing (M: its options are Vert.x defaults,
+   `AdminListener`); its answers are small and loopback-only.
 2. **By media type: JSON, HTML, CSS, JavaScript, SVG and the web manifest.** Never `application/octet-stream`, never a
    blob: blobs travel directly between the browser and the store ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md)),
    and ciphertext does not compress. Gzip only: brotli needs a JNI library in the image (Quarkus's
-   `quarkus.http.compressors`), which the measured gain does not justify. The level is the one the CR measures as the
-   best trade on two cores at the 10,000-item list (CPU time against bytes), written into the property with its reading.
-3. **An answer that carries a token is never compressed.** Every operation whose response schema holds a field marked
+   `quarkus.http.compressors`), which the measured gain does not justify. **Level 1**: on a 500-item page of the media
+   list (1.18 MB of mostly base64 ciphertext) native zlib — the deflate Netty runs — makes 0.549 of the body in 14.8 ms
+   of CPU at level 1, 0.536 in 19.3 ms at 4 and 0.529 in 21.5 ms at 6, Netty's default (M, a developer Mac; indicative):
+   base64 of ciphertext leaves deflate little past its first pass, and CPU is the scarcer resource on a two-core host.
+   The reading sits beside the property. All of it is build-time in Quarkus 3.36: a change is a new image.
+3. **An answer that carries a token is never compressed.** Every operation whose success response holds a field marked
    `x-veyq-visibility: token` — today the session's `accessToken` (`verifyLogin`, `refreshSession`, `adoptSession`), the
-   pairing's `refreshToken` (`delegatePairingSession`), a guest's `contributorToken` (`createShareIdentity`) and a tenant
+   pairing's `refreshToken` (`delegatePairingSession`), a guest's `contributorToken` (`createShareIdentity`), a tenant
    invite's `bootstrapSecret` (`createTenant`, `resendTenantInvite`, `reassignTenantInvite`, `inviteTenantOwner`, which
-   also echo the owner address the operator typed) — is answered uncompressed (`@Uncompressed`). The set is derived from
-   the contracts by a test, not listed by hand, so a token added to a response later is covered without anyone
-   remembering it.
+   also echo the owner address the operator typed), and the **presigned URLs**, whose signature is a bearer capability
+   (`startBlobUploads`, `startShareBlobUploads`, `presignBlobUploadWindows`, `presignShareBlobUploadWindows`,
+   `presignBlobDownloads`, `resolveShareBlob`, `presignCaseBlobs`; the refine's list missed them, the derivation did not)
+   — is answered uncompressed. **The build writes it**: `buildSrc`'s `TokenAnswersUncompressed` derives the set from the
+   specs it generates from and puts `@Uncompressed` on each generated interface method — Quarkus REST reads the
+   annotation from the method that declares the endpoint, and the same annotation on an implementing `override` is not
+   read (M: a `refreshSession` refusal went out gzip-encoded with it there). `TokenAnswersAreNotCompressedTest` derives
+   the set again from the YAML on its own, holds that exactly those endpoints carry the annotation, and calls each with
+   `Accept-Encoding: gzip`, beside a control that is compressed. So a token added to a response later is left
+   uncompressed by the build that generates it, without anyone remembering it.
 
    **Why this is defence in depth, not the only wall.** BREACH needs the attacker to drive the victim's requests, and no
    veyq request with a secret in its answer can be driven cross-site (M): the API authenticates with an
@@ -50,12 +63,13 @@ character at a time. So where compression sits, and which answers it leaves out,
    response reflects request input beside a token except the invite's address, which only the Server Owner types. There
    is no CSRF token to protect (M: none exists). The ciphertext in every other answer is not a BREACH secret: the
    network attacker BREACH models learns nothing from a wrapped key it cannot open, and the operator, the party veyq
-   blinds, holds every byte of it anyway. Token answers are a few hundred bytes, so leaving them out costs nothing.
+   blinds, holds every byte of it anyway. Most token answers are a few hundred bytes; a presign batch is larger (up to
+   256 signed URLs), and is left uncompressed by the same rule — the exclusion is the rule, not a size judgement.
 
 ## Consequences
 
-- **What it buys, measured by the CR:** the 10,000-item media list falls from 23.4 MB toward 13.3 MB on the wire, the tree
-  and the static bundle by more; a household on a slow uplink feels it first.
+- **What it buys:** the media list's wire bytes fall to about 0.55 of the body (MEASURED_LIST_BYTES), the tree and the
+  static bundle by more; a household on a slow uplink feels it first.
 - **What it costs:** CPU on the host for every compressible answer. On a two-core ARM host a 23 MB list is the worst
   case; paging the list (ADR 0033 § 6) bounds one answer, the level bounds the rate. The CR records both numbers.
 - **The operator still sees sizes, now compressed sizes.** A compressed length is a function of what the server already
