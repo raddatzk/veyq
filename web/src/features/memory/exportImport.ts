@@ -42,7 +42,7 @@ import type { BlobMeta } from '../../core/blob/meta'
 import type { MediaDerivativeKind } from '../../api/generated/media'
 import type { NodeKind } from '../../core/node/kind'
 import {
-  addCopiedMedia, addMedia, backfillPlaceName, effectiveCapturedAt, listMedia, mediaTypeOf, originalMediaType, plaintextSize, rawMediaMeta, readByChunk,
+  addCopiedMedia, addMedia, backfillPlaceName, effectiveCapturedAt, listMedia, mediaTypeOf, plaintextSize, rawMediaMeta, readByChunk,
   setMediaMeta, tierChunkProviders, type MediaExif, type MediaItem, type ReadByChunk,
 } from './media'
 import { guestMemorySource, memberMemorySource, type MemorySource } from './source'
@@ -124,7 +124,7 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
     const provider = source.loaders.chunk(item, nodeKey)
     const file = ctx.addPayload(name, {
       size: plaintextSize(item.original),
-      mediaType: originalMediaType(scopeId, nodeKey, item) ?? 'application/octet-stream',
+      mediaType: mediaTypeOf(blobMeta) ?? 'application/octet-stream',
       // The upload falls back to the modified time for a capture time the file lacks: carry the capture time there.
       modifiedAt: captured ?? (typeof blobMeta?.modifiedAt === 'number' ? blobMeta.modifiedAt : undefined),
       chunks: () => iterateBlob(provider, { signal: ctx.signal }),

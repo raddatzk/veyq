@@ -1,7 +1,8 @@
 # ADR 0105 — A gallery renders what is near the viewport, and opens its listing off the main thread
 
-- Status: Proposed 2026-10-19 with `cr-gallery-virtualization`, whose owner questions Q1–Q2 (keyboard model, targets)
-  it does not decide. Nothing is built.
+- Status: Accepted 2026-10-19 — decided by the owner (the keyboard model of decision 5, the targets below) and built
+  in the web client the same day. The targets are **to be measured** with the volume harness at the V1 heavy stage;
+  until that reading they are targets, not results.
 - Date: 2026-10-19
 
 Provenance: **(M)** measured in the worktree `cr-gallery-virtualization` names — the command is in its grounding table;
@@ -35,17 +36,35 @@ need not be: a tile far from the viewport is never seen until the user scrolls t
    and dropped from the queue when its tile leaves the window. Its object URL lives in a store of bounded size and is
    revoked when evicted; a tile that comes back opens again.
 3. **The listing is opened in a dedicated worker** — the sealed metas (capture time, aspect, GPS), the originals' blob
-   meta (the media type), and the thumbnail frames — memoised per `(mediaId, metaRevision)`, so a sort, a filter or a
-   resize never opens anything twice. The worker receives the open Memory's content keys (`K_node`, and the keys of its
+   meta (the media type), and the thumbnail frames — memoised per seal (a listed tier by its `wrappedMeta`, a blob meta
+   by its blob and its `wrappedBlobMeta`, so a meta edit at a new `metaRevision` is opened anew and a share guest's
+   rows, which carry no revision, are kept as well), so a sort, a filter or a resize never opens anything twice
+   (`web/src/features/memory/openedListing.ts`). The worker receives the open Memory's content keys (`K_node`, and the keys of its
    uploaders' buckets, derived on the page as today) and forgets them when the Memory closes. It is the page's own
    origin and the page's own code, so it is the page's trust tier ([ADR 0026](0026-client-trust-tiers.md)) — no key
    leaves the browser, and no new party sees one.
 4. **The grid appears when its order is final** — every page listed and every meta opened — and never reflows a placed
    tile because a later page arrived; until then it shows the existing loading state. This is the gallery's "one
    order, no privileged front" obligation applied to loading.
-5. **One tab stop, and the arrow keys move through the grid** (Q1's recommendation): a virtualized grid cannot offer a tab
-   stop per item, because the item is not in the DOM. A screen reader is told the grid's size and each tile's position,
-   not only the rendered tiles. Closing the lightbox scrolls its item into view and returns focus to it.
+5. **One tab stop, and the arrow keys move through the grid** (the owner's choice, 2026-10-19): a virtualized grid cannot
+   offer a tab stop per item, because the item is not in the DOM. The WAI-ARIA grid: the tab order holds one tile —
+   its open button first, then its own mark, checkbox or menu, so no control of a tile loses its keyboard path — and
+   the arrows, Home/End and PageUp/PageDown move that stop. A screen reader is told the grid's size and each tile's
+   position, not only the rendered tiles. The lightbox takes the focus while it is open; closing it scrolls the item it
+   showed last into view and returns focus to it.
+
+## Targets
+
+On the volume harness's local recipe (two cores), Chromium; the reading is taken at the V1 heavy stage.
+
+- Desktop, at 1,000 and 3,000 photos: the grid shown (its order final) within 2 s of the list, *viewport complete*
+  (every mounted tile in the viewport shows its image) within 3 s of navigation, *end complete* within 2 s of a jump to
+  the end; at 10,000: within 4 s, 5 s and 2 s.
+- Under a 4× CPU throttle (a mid-range phone), at 1,000 and 3,000: *viewport complete* within 8 s, no long task over
+  500 ms after it, under 5 s of long tasks in a scroll through the whole Chapter; 10,000 is reported, not judged.
+- Every stage: fewer than 3,000 DOM nodes at both moments, independent of the Chapter's size; no failed request.
+
+The judge that applies them is `scripts/measure_volume.py judge` while the harness exists.
 
 ## Consequences
 
@@ -55,7 +74,9 @@ need not be: a tile far from the viewport is never seen until the user scrolls t
   windowing and the same opened listing; a new view over media that renders every item, or opens a meta on the page,
   is a defect against this record.
 - The worker is a second place content keys live in the tab; it holds those of the open Memory only and drops them on
-  close. A build check proves it is bundled (as `verify:media-worker` does for the deriving worker).
+  close, refusing every later request for it. A build check proves it is bundled (`verify:listing-worker`, as
+  `verify:media-worker` does for the deriving worker), and `verify:csp` that the policy admits it (`worker-src 'self'`).
+  Without a worker, or when it fails, everything opens on the page thread as before — slower, never wrong.
 - **Rejected:** decrypt-on-visible for the metas too (the order needs them all, decision 4); a library grid (decision 1);
   a thumbnail cache across Memories (the store is bounded per open Memory; caching across them keeps keys and pixels
   past their view).

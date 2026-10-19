@@ -6,6 +6,8 @@ import me.raddatz.veyq.core.generated.model.RotateAccountKeysRequest
 import me.raddatz.veyq.core.generated.model.RotateAccountKeysResult
 import me.raddatz.veyq.core.generated.model.RotatedWrap
 import me.raddatz.veyq.core.generated.model.RotationScopeState
+import me.raddatz.veyq.core.account.identitypins.toPinWrite
+import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -40,8 +42,12 @@ class AccountRotationResource(
     private val identity: SecurityIdentity,
 ) : AccountRotationApi {
 
-    override fun rotateAccountKeys(rotateAccountKeysRequest: RotateAccountKeysRequest): Response =
-        when (
+    override fun rotateAccountKeys(rotateAccountKeysRequest: RotateAccountKeysRequest): Response {
+        // The pins ride as the whole re-keyed set (ADR 0104): a write that keeps any entry would leave it under the
+        // retired Master Key's id and seal, which every device then refuses.
+        val pins = rotateAccountKeysRequest.identityPins.toPinWrite()
+        if (!pins.replaceAll || pins.contradictory()) return httpError(Failures.invalidRequest)
+        return when (
             val outcome = handler.rotate(
                 userId = identity.principal.name,
                 // The family to spare is resolved by the SERVER from the presented token, never named by the
@@ -53,7 +59,7 @@ class AccountRotationResource(
                 passwordWrap = rotateAccountKeysRequest.passwordWrap.toRewritten(),
                 recoveryWrap = rotateAccountKeysRequest.recoveryWrap.toRewritten(),
                 secretKeyProofSignature = rotateAccountKeysRequest.secretKeyProofSignature,
-                pins = rotateAccountKeysRequest.identityPins.let { ResealedDocument(it.blob, it.revision.validated()) },
+                pins = pins,
                 register = rotateAccountKeysRequest.deviceRegister.let { ResealedDocument(it.blob, it.revision.validated()) },
             )
         ) {
@@ -65,6 +71,7 @@ class AccountRotationResource(
             ).build()
             is HttpFailure -> httpError(outcome)
         }
+    }
 
     override fun listRotationScopeStates(): Response =
         Response.ok(handler.scopeStates(identity.principal.name).map { RotationScopeState(UUID.fromString(it.scopeId), it.state.toWire()) }).build()

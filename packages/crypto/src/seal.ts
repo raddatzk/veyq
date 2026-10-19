@@ -34,9 +34,9 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/revision), or a blob role (a bounded token). Statements (below) add six kinds a seal never binds: an id that may be absent
- * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, a
- * six-digit pairing code (its ASCII digits), and a contract operation id (its UTF-8 name).
+ * (epoch/revision), a blob role (a bounded token), or a 32-byte digest (an identity pin's id). Statements (below) add five
+ * kinds a seal never binds: an id that may be absent (encoded as the empty field), a scope kind, an opaque byte string
+ * bound whole, a six-digit pairing code (its ASCII digits), and a contract operation id (its UTF-8 name).
  */
 type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest' | 'bytes' | 'pairingCode' | 'operationId'
 
@@ -78,7 +78,11 @@ export const SEAL_PURPOSES = {
   'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
+  // The pin store's HEAD (ADR 0104): its version, entry count and the digest of the whole entry set, at its revision.
   'identity-pins': [['revision', 'uint']],
+  // One pin of that store, sealed under the Master Key at the opaque id it is stored at (v1.ts `identityPinId`), so the
+  // server cannot serve one contact's entry in another's slot.
+  'identity-pin': [['pinId', 'digest']],
   'device-register': [['revision', 'uint']],
   // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
   'share-key': [],

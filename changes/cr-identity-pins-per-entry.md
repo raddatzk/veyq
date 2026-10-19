@@ -1,7 +1,7 @@
 ---
 id: cr-identity-pins-per-entry
 title: The identity-pin store as one sealed entry per pin under a sealed head — no ceiling at 444 members
-status: planned
+status: in-progress
 satisfies: ["uc.spaces.verify-identity", "uc.spaces.enforce-verified-identities", "uc.account.rotate-keys", "uc.spaces.add-member"]
 adrs: ["0104", "0028", "0072", "0060", "0101", "0023", "0085", "0077", "0026"]
 invariants:
@@ -149,46 +149,34 @@ ADR 0104 decisions 1–7 are the design; what follows is how this CR builds them
 
 ## Phases
 
-- [ ] **0 docs** — ADR 0104 written at refine (proposed), ADR 0028's status line points at it. Here: coverage criteria
-  under `uc.spaces.verify-identity.yaml` (`a-key-holder-pins-past-the-old-ceiling`, `a-withheld-or-rolled-back-entry-is-refused`,
-  `a-version-1-store-converts-on-unlock`) and `uc.account.rotate-keys.yaml` (`rotation-rekeys-every-pin-entry`),
-  gapped until their phases. · Done when: `validate_coverage.py`, `validate_feature_format.py` green.
-- [ ] **1 crypto** — decision 2, vectors first (generated out of tree, the generator's script left in the implementer's
-  scratch, its provenance one line in `v1.json`'s notes). · Done when: `npm run check` in `packages/crypto` green; the
-  conformance test bitten: a wrong `pinId` in the new vector's context → red, the purpose without its vector → red;
-  `validate_*` contracts guards green.
-- [ ] **2 contracts** — decision 1; `validate_rotation_shape.py` follows the new body; `OperatorBlindProbeTest` gains the
-  two operations. Predicted reds: `AccountIdentityPinsResource` (the generated interface loses `putIdentityPins` and gains two
-  operations), `AccountRotationResource` (the request shape), and in `web/` every `putIdentityPins` / `identityPins:` call
-  (`grep -rn 'putIdentityPins\|identityPins:' web/src backend/*/src`). · Done when: `generate:api`; the guards
-  (`validate_rotation_shape.py`, `validate_write_concurrency.py`, `validate_request_bounds.py`,
-  `validate_field_visibility.py`, `validate_maxlength_storage.py`) green; `validate_guard_gaps.py --force` green after
-  case 82 (*`putIdentityPins` re-spelled as `version`*) is re-anchored on `writeIdentityPins` — the rename removes its
-  anchor; the predicted reds and no others, named.
-- [ ] **3 backend** — decision 3 and decision 6's measurement (a slice test writing 25,000 entries in one request passes,
-  25,001 is refused by the contract). · Done when: `./gradlew check` green; `validate_account_erasure_arity.py` green
-  — bitten first by leaving the new table's delete out (red naming it); slice tests: the CAS (a stale head refuses the
-  whole write, nothing of it lands), `replaceAll`, two racing first writes → one `409`, the per-account isolation, the
-  listing's keyset, the rotation's rollback on a stale head (`RotationSliceTest`'s two stale cases re-pointed, each
-  bitten).
-- [ ] **4 web** — decisions 4 and 5. · Done when: `npm run check` green; `identityPins.test.ts` grows the per-entry
-  cases, each with its positive control: a withheld entry, an added entry, an entry rolled back to an older ciphertext,
-  an entry moved to another `pinId`, each → refused (bitten by skipping the digest check → all four green-when-they-must-
-  not-be); a head that moved between head and list → re-read, not refused; a version-1 store converts once and the next
-  read is version 2; the rotation re-keys every entry (`rotateKeys.test.ts`); the reset leaves no entry. Stryker's
-  exclusion of `identityPins.ts` (74 %, `web/stryker.mutate.json`) is re-measured and the note updated.
-- [ ] **5 live proof** — dev stack with S3: an owner with a version-1 store of 444 pins (the volume seeder's member stage,
-  `web/scripts/seed-volume.mts`) unlocks — the store converts; the seeder adds members to 1,000 and every one receives
-  the grant; the member list shows the verified mark set before the conversion; a verify on a profile and a changed-key
-  accept still work; a rotation on the 1,000-pin store succeeds; the trust reset leaves an empty store. **Browser pass**
-  named: the profile's safety number and QR compare, the changed-key review, the settings hub's *Start a list over*.
-  · Done when: each step observed, the request sizes of the rotation and one pin write recorded.
-- [ ] **6 docs** — ADR 0104 accepted with the answers; ADR 0028 Decisions 1 and 7 edited in place; the enabler's "What it
-  is", "Sync & merge" and Quality notes rewritten to the per-entry store and the count; the contract's descriptions;
-  `docs/crosscutting/security-model.md` § Key-directory trust; the Security pages the locator above lists
-  (*What the server sees*, *Key hierarchy*, *Protocols*, *Threat model*, *Known limitations*, *Start here* — each only
-  where it states what the store holds or hides). Inbox #491 done. · Done when: every `scripts/validate_*.py` except
-  `validate_guard_gaps.py` green, `npm run check` in `site/` green.
+Phases 0-4 and 6 are built (2026-10-19, branch `worktree-agent-a8762061df59dffb9`); what each proved is in its commit.
+**Phase 5 stays open: the rest of the live proof is to be proven live at the V1 heavy stage** (owner, 2026-10-19:
+harness measurements, L1, web-e2e, api-fuzz and the MariaDB race suite wait for the end of V1).
+
+- [x] **0 docs** — nothing to write: ADR 0104 existed, and coverage criteria cannot be written gapped (a criterion of a
+  built use-case needs a ref, `validate_coverage.py`), so they landed with phases 3-4. `a-version-1-store-converts-on-unlock`
+  was dropped with Q3.
+- [x] **1 crypto** — the `identity-pin` purpose, the index key, the pin id, the set digest, `fingerprintDigits`; vectors
+  from an independent Python implementation; both bites red; mutation 100 %.
+- [x] **2 contracts** — three operations; pin ids are 64 hex characters, not base64 (the case-insensitive collation);
+  case 82 re-anchored; `delete` became `remove` in phase 3 (the TS generator's reserved word).
+- [x] **3 backend** — the entry table, the one-transaction write under the account lock, the 25,000 bound measured
+  (9,600,083 bytes against 10,485,760), every listed bite red; `./gradlew check`, the MariaDB race run green.
+- [x] **4 web** — the per-entry store, the four refusals bitten by skipping the digest; no version-1 conversion (Q3);
+  `identityPins.ts` re-measured at 72.90 %.
+- [ ] **5 live proof** — measured on a local production-recipe instance with `measure_volume.py` (the dev stack is the
+  owner's and was not touched): the member seeder added 999 members, every one invited, accepted and granted through
+  the product's flow by the owner's own grant-delivery worker; the owner's store then held 999 entries of 296 base64
+  characters each under a head at revision 999 (148 characters), and the 445th and the 1,000th member's tenant grant
+  were written (`wrapped_grant` set) — read off the instance's database before teardown. The profile stage was stopped
+  at 722 of 999 on the owner's word, and the instance torn down. **Still owed at the V1 heavy stage:** the rotation on
+  a 1,000-pin store (with the request sizes of the rotation and one pin write), the trust reset leaving an empty store
+  on it, and the browser pass — the profile's safety number and QR compare, the changed-key review, the settings hub's
+  *Start a list over*. A throwaway proof script for the rotation and the reset exists in the implementer's scratch,
+  not in the tree. There is no version-1 store to convert any more (Q3).
+- [x] **6 docs** — ADR 0104 accepted, ADR 0028 edited in place, the enabler, the security model, the use-cases, five
+  Security pages (*Start here* states nothing the change moves); `npm run check` in `site/` green. Inbox #491 is
+  `built`, not `done`, while phase 5 is open.
 
 ## Definition of done
 
@@ -197,4 +185,19 @@ Every phase's Done-when; a key-holder admits a 1,000th member on the dev stack; 
 
 ## Retrospective
 
-_Filled at implementation._
+- **Planning — phase 0 asked for something the trust chain refuses.** It wanted gapped coverage criteria under built
+  use-cases; `validate_coverage.py` rejects a criterion with no ref, and `changes/README.md` § Coverage already says so
+  (cr-guest-write-record's phase 0 hit the same wall). Root cause: the refine wrote phase 0 from the usual shape, not
+  from that rule. Next time: a CR that adds criteria to a built use-case writes them in the phase that brings their tests.
+- **Execution — the contracts phase skipped a rule that was already written.** "A contracts phase that adds a schema
+  writes one use of it in each generated language" was in the README; I did not, and met `entries` (Kotlin) and
+  `delete` (TypeScript, a model that did not compile) a phase later, renaming the contract inside the backend phase.
+  Also a bite I first trusted (`REQUIRES_NEW` as the rollback's lever) was red for a deadlock, not for the rollback; only
+  reading the failing messages showed it. Both are now in `changes/README.md`.
+- **Process — a shared machine shaped the run more than the code did.** Load averages of 20-170 from neighbours for
+  most of the session, a neighbour's api-fuzz run on the same fixed `veyq_fuzz` database turning my run red (inbox
+  #501), two L1/volume stacks taking ports 80/443 in turn, and the owner's scope for heavy checks narrowing three times
+  mid-run — the third after the 1,000-member seeding had reached 999 members, so it was stopped there. What worked:
+  one heavy step at a time, a background wait on load and ports rather than polling. **Next time:** a brief that names
+  heavy stages states them as decided before the run starts, and the CR's live proof names the instance it runs on
+  (the dev stack it named is the owner's and off limits to an implementer).

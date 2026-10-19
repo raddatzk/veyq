@@ -22,6 +22,7 @@ import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
+import { blobKeyContext } from '../core/blob/keys'
 
 /** What the guest page touched of the member's world (see the header). */
 const touched = vi.hoisted(() => [] as string[])
@@ -224,6 +225,27 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       w.unmount()
     })
   }
+
+  // ADR 0105 decision 2: a guest's gallery is the same windowed grid; the thumbnail of a tile in its window is read through
+  // the link's own presign (`resolveShareBlob`), opened under the Memory's key — never a member's client.
+  it('READ: the windowed grid reads a tile\'s thumbnail through the link\'s own presign, and calls no authenticated client', async () => {
+    const PHOTO = '6e5a0000-0000-4000-8000-000000000901' // seals bind canonical ids
+    const THUMB_BLOB = '6e5a0000-0000-4000-8000-000000000902'
+    const thumbnail = {
+      kind: 'THUMBNAIL', blobId: THUMB_BLOB, chunkCount: 1, byteSize: 40,
+      wrappedBlobKey: b64std(v1.seal(blobKeyContext(SCOPE, { blobId: THUMB_BLOB, ownerId: PHOTO, role: 'THUMBNAIL' }), keys.memory, v1.randomBytes(32))),
+    }
+    stubApi(publicShareMediaApi, { listShareMedia: { media: [{ ...row(PHOTO, MEMORY), derivatives: [thumbnail] } as ShareMedia], identities: [], more: false } })
+    const presign = vi.fn(async () => { throw new Error('no store here') })
+    fakeApi(publicSharesApi, { resolveShareBlob: presign })
+    const w = await mountPage(head(ShareRole.Read))
+    await vi.waitFor(() => expect(tiles(w)).toEqual([PHOTO]))
+    await vi.waitFor(() => expect(presign).toHaveBeenCalled())
+    expect(JSON.stringify(presign.mock.calls[0])).toContain(THUMB_BLOB)
+    await vi.waitFor(() => expect(w.find(`[data-media-id="${PHOTO}"] .media-tile-failed`).exists()).toBe(true)) // no store here: its error tile
+    expectGuestOnly(w)
+    w.unmount()
+  })
 
   it('READ_WRITE: inside the chapter it navigated to, an upload names THAT chapter and seals under its key', async () => {
     saveGuestSession(SHARE, GUEST)

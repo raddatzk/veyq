@@ -7,7 +7,7 @@ import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { argon2id } from '@noble/hashes/argon2.js'
 import { aeadOpen, aeadSeal, concat, kemPublic, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
-import { encodeStatement, type ScopeKind, type StatementContext } from './seal'
+import { encodeStatement, SealContextInvalid, type ScopeKind, type StatementContext } from './seal'
 
 export { concat, lp, utf8, type HybridPublic, type HybridSecret }
 export {
@@ -444,6 +444,60 @@ export const itemMarkSelfTag = (key: Uint8Array, m: ItemMarks): Uint8Array =>
 export const itemMarkSelfTagVerifies = (key: Uint8Array, m: ItemMarks, tag: Uint8Array): boolean =>
   macEquals(itemMarkSelfTag(key, m), tag)
 
+// ── Identity-pin store (ADR 0104) ───────────────────────────────────────────────────────────────────────
+// The pin store is one sealed entry per pin under a sealed head. An entry is stored, and sealed (`identity-pin`), at an
+// opaque id only the account can compute: `pinId = HMAC-SHA256(K_pinIndex, utf8(userId))`, the key derived from the
+// Master Key under its own label, so the server sees one stable 32-byte id per contact, unlinkable across accounts.
+// The head binds the whole set by a digest over every entry, so a withheld, added, rolled-back or moved entry changes it
+// (ADR 0028 Decision 7 per entry). Never an incremental digest: the server keeps every ciphertext an account ever wrote,
+// and an XOR or sum over a few hundred of them can be matched by linear algebra. Conformance: v1.json#identity_pin.
+
+/** `HKDF-SHA256(masterKey, salt = "", info = "veyq/v1/identity-pin-index", 32)` — the key a pin's id derives under. */
+export const identityPinIndexKey = (masterKey: Uint8Array): Uint8Array =>
+  hkdf(sha256, masterKey, new Uint8Array(0), utf8('veyq/v1/identity-pin-index'), 32)
+
+const CANONICAL_USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** The id `userId`'s pin is stored at: `HMAC-SHA256(key, utf8(userId))`, 32 bytes. Canonical lowercase UUIDs only —
+ *  a second spelling of one contact would address a second slot. */
+export function identityPinId(key: Uint8Array, userId: string): Uint8Array {
+  if (typeof userId !== 'string' || !CANONICAL_USER_ID.test(userId)) {
+    throw new SealContextInvalid('identity-pin userId is not a canonical lowercase UUID')
+  }
+  return hmac(sha256, key, utf8(userId))
+}
+
+/** One stored entry as the set digest reads it: its 32-byte id and its sealed bytes. */
+export type IdentityPinEntryBytes = { pinId: Uint8Array; entry: Uint8Array }
+
+const PIN_ID_BYTES = 32
+
+/** Byte order of two 32-byte ids — the canonical order of the set. */
+function comparePinIds(a: Uint8Array, b: Uint8Array): number {
+  for (let i = 0; i < PIN_ID_BYTES; i++) {
+    const d = a[i] - b[i]
+    if (d !== 0) return d
+  }
+  return 0
+}
+
+/**
+ * The digest of a whole pin set: `SHA-256(utf8("veyq/v1/identity-pin-set") ‖ lp(pinId) ‖ lp(SHA-256(entry)) …)` over
+ * the entries in ascending `pinId` byte order, whatever order they are handed in. Refuses an id that is not 32 bytes and
+ * a second entry at one id — a set holds one pin per contact.
+ */
+export function identityPinSetDigest(entries: Iterable<IdentityPinEntryBytes>): Uint8Array {
+  const listed = [...entries]
+  if (listed.some((e) => e.pinId.length !== PIN_ID_BYTES)) throw new SealContextInvalid('identity-pin pinId is not 32 bytes')
+  const sorted = listed.sort((a, b) => comparePinIds(a.pinId, b.pinId))
+  const parts: Uint8Array[] = [utf8('veyq/v1/identity-pin-set')]
+  sorted.forEach((e, i) => {
+    if (i > 0 && comparePinIds(sorted[i - 1].pinId, e.pinId) === 0) throw new SealContextInvalid('identity-pin set holds one id twice')
+    parts.push(lp(e.pinId), lp(sha256(e.entry)))
+  })
+  return sha256(concat(...parts))
+}
+
 // ── Pairing channel (ADR 0059 §11) ──────────────────────────────────────────────────────────────────────
 // The pairing relay sees both halves of each binding step, so the QR carries a secret the relay never sees: 32
 // random bytes, from which both devices derive the routing handle (the ONLY value the server receives) and a
@@ -634,7 +688,16 @@ export const serializeIdentityPublic = (pub: Identity['pub']): Uint8Array => con
  * end-state. Conformance: contracts/crypto/vectors/v1.json#fingerprint.
  */
 export function fingerprint(pub: Identity['pub']): string {
-  const h = fingerprintHash(pub)
+  return fingerprintDigits(fingerprintHash(pub))
+}
+
+/**
+ * The safety number's digits rendered from a {@link fingerprintHash} alone — what an identity-pin entry stores in place
+ * of the bundle (ADR 0104 decision 3), so a pinned contact's safety number renders from the pin. Refuses anything but a
+ * 32-byte digest: digits from a shorter input would be a number nobody else can compute.
+ */
+export function fingerprintDigits(h: Uint8Array): string {
+  if (h.length !== 32) throw new Error('fingerprint hash: not a 32-byte digest')
   const groups: string[] = []
   for (let i = 0; i < 6; i++) {
     let v = 0

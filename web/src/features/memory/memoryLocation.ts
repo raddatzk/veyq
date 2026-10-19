@@ -10,7 +10,8 @@
 // A location is **never auto-created from GPS presence** — it is a deliberate per-Memory "set location" choice.
 // This module is the pure model + seal; the map editor (Leaflet) and the medoid-over-media self-heal live in the
 // UI layer (cr-0069 phase 2), reusing `computeMedoid` here.
-import { unsealMeta, type MediaItem } from './media'
+import type { MediaItem } from './media'
+import { openedMeta } from './openedListing'
 import { editField, unsealNodeMeta } from '../../core/node/nodeMeta'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
@@ -174,7 +175,7 @@ export function computeMedoid(points: LatLng[]): LatLng | null {
 export function mediaGpsPoints(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): LatLng[] {
   const points: LatLng[] = []
   for (const item of items) {
-    const tier = unsealMeta(scopeId, nodeKey, item)
+    const tier = openedMeta(scopeId, nodeKey, item)
     if (tier && tier.gpsLat !== undefined && tier.gpsLng !== undefined) {
       points.push({ lat: tier.gpsLat, lng: tier.gpsLng })
     }

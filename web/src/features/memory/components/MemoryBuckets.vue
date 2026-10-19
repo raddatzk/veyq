@@ -18,8 +18,9 @@ import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
 import {
-  openBucketName, unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
+  openBucketName, mediaTypeOf, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
+import { openedBlobMeta, openedMeta } from '../openedListing'
 import { useMemoryView } from '../source'
 import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 import { refusalsByReason, sealedMediaName } from '../mediaRefusal'
@@ -38,6 +39,8 @@ const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
   openLightbox: [{ items: MediaItem[]; index: number }]
   uploadBucket: [string | null] // open the upload scoped to this bucket (null = your primary)
+  /** The tiles its grid mounts, nearest first: the parent gallery reads their thumbnails (ADR 0105 decision 2). */
+  window: [ids: string[]]
 }>()
 
 const { t, locale } = useI18n()
@@ -199,17 +202,18 @@ const filteredMedia = computed<MediaItem[]>(() => {
   return props.media.filter((m) => m.bucketId === b.id)
 })
 
-// Unseal each tile's listed metadata once (operator-blind, under K_node) for the aspect ratio (cr-0059), and its
-// original's blob meta for the video signal (#105, the sealed type, inbox #397).
+// Each tile's listed metadata for the aspect ratio (cr-0059), and its original's blob meta for the video signal (#105,
+// the sealed type, inbox #397) — read from the opened listing the gallery already opened (`openedListing.ts`, once per
+// seal), never opened again here.
 const layoutItems = computed(() =>
   filteredMedia.value.map((m, index) => {
-    const meta = props.memoryKey ? unsealMeta(props.scopeId, props.memoryKey, m) : null
+    const meta = props.memoryKey ? openedMeta(props.scopeId, props.memoryKey, m) : null
     return {
       id: m.mediaId,
       aspectRatio: galleryDisplayAspectRatio(meta?.w, meta?.h),
       media: m,
       index,
-      isVideo: props.memoryKey ? isVideoMediaType(originalMediaType(props.scopeId, props.memoryKey, m)) : false,
+      isVideo: props.memoryKey ? isVideoMediaType(mediaTypeOf(openedBlobMeta(props.scopeId, props.memoryKey, m))) : false,
     }
   }),
 )
@@ -383,6 +387,10 @@ async function undoDelete() {
 }
 onBeforeUnmount(() => { toast.dismissUndo() }) // drop any lingering undo-toast (the `useUndo` window tears itself down)
 
+// The windowed grid (ADR 0105): the detail hands the focus back here when a lightbox opened from this view closes.
+const grid = ref<{ focusItem: (id: string) => Promise<void> } | null>(null)
+defineExpose({ focusItem: (id: string) => grid.value?.focusItem(id) })
+
 // --- upload / drag-drop into the active bucket ------------------------------
 
 function onDrop(event: DragEvent) {
@@ -481,7 +489,14 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
 
       <!-- the grid -->
       <p v-if="!filteredMedia.length" class="veyq-empty">{{ t('memory.buckets.emptyBucket') }}</p>
-      <MediaGrid v-else :items="layoutItems" :aria-label="activeBucket?.displayName ?? t('memory.buckets.title')">
+      <MediaGrid
+        v-else
+        ref="grid"
+        :items="layoutItems"
+        :aria-label="activeBucket?.displayName ?? t('memory.buckets.title')"
+        :select-on-space="toggleSelect"
+        @window="(ids) => emit('window', ids)"
+      >
         <template #tile="{ tile, item }">
           <MediaTile
             :style="{ transform: `translate(${tile.left}px, ${tile.top}px)`, width: `${tile.renderedWidth}px`, height: `${tile.renderedHeight}px` }"

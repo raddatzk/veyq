@@ -7,6 +7,10 @@
   background: var(--app-backdrop-strong);
   color: var(--app-text);
 }
+/* The dialog itself holds the focus when it opens (so the keys reach it); it is no control, so it draws no ring. */
+.media-lightbox:focus {
+  outline: none;
+}
 
 .media-lightbox-topbar {
   position: absolute;

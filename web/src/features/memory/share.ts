@@ -37,7 +37,7 @@ import {
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
 import { createGuestIdentity, identityNameContext, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import { guestReserve, guestWindow, shareChunkUrls, type GuestUploadTarget } from '../../core/sharing/guestBlob'
-import type { ReadOpts } from '../../core/blob/readScheduler'
+import type { FrameOpener, OpenOpts } from '../../core/blob/transport'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { EpochKeys } from '../spaces/epochs'
 import {
@@ -436,7 +436,7 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_node`.
  *  A password-protected share needs the same guest token (cr-0118) as the resolve. A moderator's review presigns the
  *  held object instead (`core/sharing/review.ts`). */
-async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string, opts: ReadOpts = {}): Promise<Uint8Array> {
+async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string, opts: OpenOpts = {}): Promise<Uint8Array> {
   return openBlobVia(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, (o) => shareChunkUrls(shareId, ref.blobId, pwToken, o), opts)
 }
 
@@ -451,8 +451,8 @@ export function shareChunkProvider(shareId: string, si: ShareItem, ref: BlobRef,
 
 /** Open a shared media's grid (thumbnail) tier — a grid's bulk read (`readScheduler.ts`), dropped while it waits once
  *  `signal` aborts. */
-export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string, signal?: AbortSignal) =>
-  openShareBlob(shareId, si, gridRef(si.item), pwToken, { lane: 'bulk', signal })
+export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string, signal?: AbortSignal, openFrames?: FrameOpener) =>
+  openShareBlob(shareId, si, gridRef(si.item), pwToken, { lane: 'bulk', signal, openFrames })
 /** Open a shared media's lightbox (preview) tier. */
 export const openShareLightbox = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, lightboxRef(si.item), pwToken)
 /** Open a shared media's pristine original (download). */

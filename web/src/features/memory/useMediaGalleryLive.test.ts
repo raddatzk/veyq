@@ -89,24 +89,27 @@ function setup() {
 }
 
 describe('useMediaGalleryLive', () => {
-  it('loads the media list on mount, decrypts thumbnails, lands ready, and settles', async () => {
+  it('loads the media list on mount, lands ready and settles; a thumbnail is read once its grid wants it', async () => {
     vi.mocked(listMediaPages).mockResolvedValue(page([item('a'), item('b')]))
     const { vm, onSettle } = setup()
     await flushPromises()
     expect(vm.items.map((i) => i.mediaId)).toEqual(['a', 'b'])
     expect(vm.status).toBe('ready')
-    expect(vm.thumbs.get('a')).toBe('blob:x')
     expect(onSettle).toHaveBeenCalled()
+    expect(openGrid).not.toHaveBeenCalled() // listing reads no thumbnail: the grid asks for its window (ADR 0105)
+    vm.wantThumbs('gallery', ['a'])
+    await flushPromises()
+    expect(vm.thumbs.get('a')).toBe('blob:x')
+    expect(vm.thumbs.has('b')).toBe(false)
   })
 
-  // inbox #488: the read scheduler serves a lane in the order asked, so the gallery asks in grid order — the tiles on
-  // screen when it opens first, not the server's listing order
-  it('asks for the thumbnails in grid order (newest first), not in listing order', async () => {
-    const taken: Record<string, number> = { a: 1, b: 3, c: 2 } // capture times: the grid shows b, c, a
-    vi.mocked(unsealMeta).mockImplementation((_s, _k, m) => ({ v: 1, w: 100, h: 100, capturedAt: taken[m.mediaId] }))
-    vi.mocked(effectiveCapturedAt).mockImplementation((meta) => meta?.capturedAt)
+  // ADR 0105 decision 2 (and inbox #488: the read scheduler serves a lane in the order asked): the thumbnails are asked
+  // for in the order the grid announces its window — nearest to the viewport's centre first
+  it('asks for the thumbnails in the order the grid wants them, not in listing order', async () => {
     vi.mocked(listMediaPages).mockResolvedValue(page([item('a'), item('b'), item('c')]))
-    setup()
+    const { vm } = setup()
+    await flushPromises()
+    vm.wantThumbs('gallery', ['b', 'c', 'a'])
     await flushPromises()
     expect(vi.mocked(openGrid).mock.calls.map(([, , m]) => m.mediaId)).toEqual(['b', 'c', 'a'])
   })

@@ -29,10 +29,13 @@ const config = {
   // try). Judge a local fix with `--force`, not with the incremental rerun.
   incremental: true,
   // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-19, a
-  // statement's facts sealed once and their key wrapped per member): 956 mutants, 947 killed, 3 timed out (the
-  // fingerprint's loop counters turned into endless loops, and `sharesPwToken`'s body emptied — a v1.ts mutant this
-  // change did not touch, which the 2026-10-17 run killed), 0 survived, 0 without coverage, 6 ignored — 100.00 % on
-  // every file. report.ts's first run had
+  // statement's facts sealed once and their key wrapped per member, on top of the identity-pin store's id, set digest and
+  // fingerprint digits in v1.ts): 1,020 mutants, 1,012 killed, 2 timed out (the fingerprint's loop counters turned into
+  // endless loops), 0 survived, 0 without coverage, 6 ignored — 100.00 % on every file. The identity-pin run had 4
+  // timeouts, two of them static report.ts mutants at a load average above 30 (read as unproven below); at the same
+  // load this run killed both. The identity-pin store's first run had 3 survivors, all in a
+  // byte compare that tolerated ids of two lengths: the ids are checked to be 32 bytes BEFORE the sort now, so the
+  // compare runs over a fixed 32 and a test orders two ids that differ only in their last byte. report.ts's first run had
   // 9 survivors: the refusal's message and name (asserted through `toThrow(new ReportInvalid(…))`, which builds the same
   // mutated text), boxed-String roles and refs, a UUID with a character before or after it, and a last field running
   // past the end (an earlier field's cut was caught by the next length read instead). The moderation key's run had 1

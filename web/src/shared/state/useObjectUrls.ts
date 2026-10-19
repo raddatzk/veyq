@@ -3,7 +3,7 @@
 // Decrypted media/cover bytes are shown as `blob:` object URLs; each MUST be revoked exactly once — on replace,
 // on drop, on unmount — or the tab leaks the decrypted blob. Hand-rolling that dance at every call site was the
 // bug surface this replaces: the URL is minted ONLY inside here, and the composable auto-revokes on unmount.
-import { ref, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue'
+import { ref, reactive, shallowRef, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue'
 
 /**
  * Register the auto-revoke **only when there is a component to unmount**. A module-level store (the cover cache)
@@ -35,8 +35,10 @@ export function useObjectUrl(): {
 }
 
 /** A keyed collection of owned object URLs (e.g. a thumbnail map): `set` revokes a replaced key, `drop` revokes
- *  one, `clear` revokes all, unmount revokes all. Exposes a `Ref<Map<string,string>>` and reassigns it on every
- *  mutation, preserving the Map-churn reactivity consumers + templates read (`urls.value.get(id)`). */
+ *  one, `clear` revokes all, unmount revokes all. Exposes a `Ref<Map<string,string>>` whose map is REACTIVE and changed
+ *  in place — a reader of `urls.value.get(id)` (a template, a computed, a child handed the map as a prop) re-renders
+ *  when that key changes, and nothing copies the map: a gallery installing thumbnails one batch after another used to
+ *  copy a map of thousands on every insert (inbox #489). Its identity never changes. */
 export function useObjectUrls(): {
   urls: Ref<Map<string, string>>
   get: (key: string) => string | undefined
@@ -46,38 +48,31 @@ export function useObjectUrls(): {
   drop: (key: string) => void
   clear: () => void
 } {
-  const urls = ref<Map<string, string>>(new Map())
-  const get = (key: string) => urls.value.get(key)
-  // Store `url` under `key`, revoking whatever was there (unless it IS `url`), then churn the Map for reactivity.
+  const map = reactive(new Map<string, string>()) as Map<string, string>
+  const urls = shallowRef(map) as Ref<Map<string, string>>
+  const get = (key: string) => map.get(key)
+  // Store `url` under `key`, revoking whatever was there (unless it IS `url`).
   function put(key: string, url: string) {
-    const prev = urls.value.get(key)
+    const prev = map.get(key)
     if (prev && prev !== url) URL.revokeObjectURL(prev)
-    urls.value.set(key, url)
-    urls.value = new Map(urls.value)
+    map.set(key, url)
   }
   const set = (key: string, blob: Blob) => put(key, URL.createObjectURL(blob))
-  /** `set` for many keys with ONE Map churn — one re-render of whatever reads the map, not one per key (a gallery
-   *  installing thousands of thumbnails, inbox #488). */
+  /** `set` for many keys at once: each replaced URL revoked, the readers re-rendered once (Vue batches the change). */
   function setMany(entries: Iterable<[string, Blob]>) {
-    const next = new Map(urls.value)
-    for (const [key, blob] of entries) {
-      const prev = next.get(key)
-      if (prev) URL.revokeObjectURL(prev)
-      next.set(key, URL.createObjectURL(blob))
-    }
-    urls.value = next
+    for (const [key, blob] of entries) set(key, blob)
   }
   // Take ownership of an **externally-minted** URL (e.g. an optimistic-preview donation): same single-owner
   // lifecycle as `set` (revoke on replace/drop/clear/unmount), but for a URL the caller already created.
   const adopt = (key: string, url: string) => put(key, url)
   function drop(key: string) {
-    const prev = urls.value.get(key)
+    const prev = map.get(key)
     if (prev) URL.revokeObjectURL(prev)
-    if (urls.value.delete(key)) urls.value = new Map(urls.value)
+    map.delete(key)
   }
   function clear() {
-    for (const u of urls.value.values()) URL.revokeObjectURL(u)
-    urls.value = new Map()
+    for (const u of map.values()) URL.revokeObjectURL(u)
+    map.clear()
   }
   revokeOnUnmount(clear)
   return { urls, get, set, setMany, adopt, drop, clear }

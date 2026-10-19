@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished, type Mock } from 'vitest'
 
 vi.mock('../../../api/client', () => ({
   blobApi: vi.fn(),
@@ -355,6 +355,42 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     expect(wrapper.find('.media-lightbox').exists()).toBe(true)
   })
+
+  // ADR 0105 decision 5: the dialog takes the focus while it is open, and closing it hands the focus to the tile of the
+  // item it showed last — not the one it was opened on — scrolled into view.
+  it('the lightbox takes the focus, and closing it focuses the tile of the item it showed last', async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    for (let i = 0; i < 3; i++) {
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(i) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+    }
+    const wrapper = mount(MemoryDetail, {
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
+      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await flushPromises()
+    const order = wrapper.findAll('.media-tile').map((tile) => tile.attributes('data-media-id'))
+    expect(order).toHaveLength(3)
+
+    await wrapper.find(`[data-media-id="${order[0]}"] .media-tile-open`).trigger('click')
+    await flushPromises()
+    expect(document.activeElement?.classList.contains('media-lightbox')).toBe(true) // the arrows are the dialog's now
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 10))
+    await flushPromises()
+
+    expect(wrapper.find('.media-lightbox').exists()).toBe(false)
+    expect(document.activeElement?.closest('[data-media-id]')?.getAttribute('data-media-id')).toBe(order[1])
+    expect((document.activeElement as HTMLElement).tabIndex).toBe(0) // and the grid's one tab stop moved with it
+  })
 })
 
 // inbox #488: a Chapter of many photos used to send one presign POST per tile and every GET at once, which Chromium
@@ -388,6 +424,14 @@ describe('MemoryDetail (a Chapter of many photos, inbox #488)', () => {
       }
     })
     store.blob.presignBlobDownloads.mockClear()
+    // A viewport tall enough to hold the whole Chapter: the windowed grid (ADR 0105) then wants every tile at once, which
+    // is the load #488's batching and caps exist for. The window itself is MediaGrid.test.ts's.
+    const innerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    Object.defineProperty(window, 'innerHeight', { value: 1_000_000, configurable: true })
+    onTestFinished(() => {
+      if (innerHeight) Object.defineProperty(window, 'innerHeight', innerHeight)
+      else delete (window as { innerHeight?: number }).innerHeight
+    })
 
     const wrapper = mountDetail(memoryKey)
     await vi.waitFor(() => expect(wrapper.findAll('.media-tile img').length + wrapper.findAll('.media-tile-failed').length).toBe(count), { timeout: 20_000 })
