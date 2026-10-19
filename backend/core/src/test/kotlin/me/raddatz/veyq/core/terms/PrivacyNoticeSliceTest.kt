@@ -89,7 +89,7 @@ class PrivacyNoticeSliceTest {
         val before = rows()
         val logs = capture {
             given().header("X-Forwarded-For", CALLER).`when`().get(PATH).then().statusCode(200)
-                .body("revision", equalTo(2)).body("draftBanner.en", equalTo("*Draft: this privacy notice has not yet been reviewed by a lawyer.*"))
+                .body("revision", equalTo(3)).body("draftBanner.en", equalTo("*Draft: this privacy notice has not yet been reviewed by a lawyer.*"))
         }
         assertEquals(before, rows(), "reading the notice writes no row")
         assertFalse(logs.contains(CALLER), "the caller's address is in no log line")

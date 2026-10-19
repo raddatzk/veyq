@@ -19,12 +19,15 @@
   [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md),
   [Data protection](../../site/src/content/docs/run/data-protection.md),
   [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) and
-  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md). **Open, found by the build:** a
-  constraint violation raised at **commit** (not at an explicit flush) is logged once more by Narayana —
-  `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with the converted exception whose text carries the driver's
-  message: measured in `./gradlew check`'s output, where two racing email changes (`EmailChangeSliceTest`) put the
-  colliding address in that line. Its category also carries the transaction reaper's timeout warnings, so silencing it
-  as § 4 silences Hibernate's is a trade the owner decides. **Acceptance commits to:** §§ 1–8
+  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md). **Closed after the build
+  found it (2026-10-19):** a constraint violation raised at **commit** (not at an explicit flush) is logged once more
+  by Narayana — `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with the converted exception whose text carried the
+  driver's message (measured in `./gradlew check`'s output: two racing email changes in `EmailChangeSliceTest` put the
+  colliding address there). The category is not silenced, since it also carries the transaction reaper's timeout
+  warnings; `CommitFailureLogFilter`, a filter on that logger (so every handler gets the rewritten record), writes
+  that one message as its class chain, SQLState and vendor code and lets every other record pass — held by
+  `CommitFailureLogSliceTest` (a duplicate committed without a flush leaves no address in any record; the reaper's
+  warning keeps its parameters). **Acceptance commits to:** §§ 1–8
   as the rule for every log veyq writes or its recipes configure, on both deployment targets; § 6's Still open taken
   as met until veyq is offered as a service. It does not commit to JSON logs, a request id, a static log guard or a
   time-bounded retention. The owner's answers: the admin console's access log keeps no reader (Q29); no Traefik access
@@ -130,6 +133,9 @@ always for an unexpected error, it is logged by its class chain.
   `UnexpectedErrorLogSliceTest`.
 - **Hibernate's statement error log is silenced**: `org.hibernate.orm.jdbc.error` is set to ERROR, so the WARN line
   that carries the driver's message is not written (M7). The catch-all keeps the SQLState and vendor code.
+- **Narayana's commit-failure warning is rewritten, not silenced**: `ARJUNA012125` on `com.arjuna.ats.arjuna` loses
+  its exception and keeps the class chain, SQLState and vendor code (`CommitFailureLogFilter`, on the logger); the
+  category's other warnings — the reaper's timeouts among them — pass unchanged.
 - **The e2e sweep, widened.** `scripts/e2e_sweeps.py` already fails a run on any sealed value or token in any log
   (M17). It gains a third needle set, `pii`: every email address the run's suites signed up with, searched in every
   boot and container log and nowhere else, since the database dump, the statement log, the HTTP recording and the

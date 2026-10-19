@@ -53,6 +53,20 @@ class StatementRecipients {
         }
     }
 
+    companion object {
+        /**
+         * How many members one step can seal its facts to. The moderator's browser seals one copy per member and sends
+         * them all in the one `takeModerationMeasure` body (`factsFor`, which must name exactly these members), under the
+         * server's request limit (`quarkus.http.limits.max-body-size` is unset: Quarkus' 10,240 KiB). A copy at the
+         * smallest padding bucket is 512 bytes of plaintext plus 1,149 of X-Wing envelope, about 2.3 KB as a JSON entry,
+         * so 4,000 leave room for the rest of the body; longer facts reach the body limit sooner. The list is never cut
+         * to fit — a statement reaches every affected member (ADR 0093 § 7) — so past it a step with facts is refused
+         * (`statement_recipients_too_many`). `ModerationStatementRecipients.accounts` and
+         * `ModerationStatementInput.factsFor` carry the same number.
+         */
+        const val MAX_SEALED = 4000
+    }
+
     /** A link's creator: the live row's, or the held copy's once the link was deleted. */
     private fun creatorOf(shareId: String, held: List<HeldRow>?): String? =
         ShareEntity.findById(shareId)?.ownerAccount
