@@ -735,5 +735,6 @@ what is built (`CLAUDE.md`).
 11. **Reported content inside a backup capture.** A capture holds the ciphertext of everything stored when it was
     taken, including content later reported, blocked or confirmed as child sexual abuse material. Whether keeping such
     a capture until it expires at B is possession under § 184b(3) StGB, or covered as it is unreadable to the operator
-    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block or loses a case
-    (`cr-backup-erasure-and-retention` decision 7); this item is only about the capture's own existence.
+    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block, loses a case or
+    revives a hold that had ended ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8); this
+    item is only about the capture's own existence.

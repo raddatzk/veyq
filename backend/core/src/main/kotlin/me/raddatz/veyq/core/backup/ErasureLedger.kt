@@ -29,9 +29,14 @@ import java.util.concurrent.atomic.AtomicLong
  * - [STORAGE_KEY] — a store object the reclaim sweep deleted: it erases nothing by itself; it tells a restore's object
  *   check that the key was erased, not lost, and the start counts a row that still names it.
  * - [BLOCK], [LIFT], [CASE] — moderation survives a restore (the owner, 2026-10-18; TCO Art. 3, DSA Art. 17): per item
- *   the last block or lift wins, and a case the database lacks comes back as a stub.
+ *   the last block or lift wins, a case the database lacks comes back as a stub, and one it holds moves on to the state
+ *   its last line names (closed where it was closed).
+ * - [HOLD_ENDED] — a hold that ended (a dismissal, the cleanup, a child-sexual-abuse case's handover, the lift of a case's
+ *   last measure; the owner, 2026-10-19): a restore brings its snapshot and pins back with an end still ahead, so without
+ *   its line a dismissed child-sexual-abuse case's copy would be kept again to the hold's own bound — longer than
+ *   § 184b(5) StGB allows (ADR 0093 § 4).
  */
-enum class ErasureKind { ACCOUNT, TENANT, SCOPE, NODE, SHARE, STORAGE_KEY, BLOCK, LIFT, CASE }
+enum class ErasureKind { ACCOUNT, TENANT, SCOPE, NODE, SHARE, STORAGE_KEY, BLOCK, LIFT, CASE, HOLD_ENDED }
 
 /** On what a block stands: a moderator's or the Server Owner's measure, or an authority's order (ADR 0093 §§ 6, 12). */
 enum class BlockBasis { MEASURE, ORDER }
@@ -109,7 +114,8 @@ interface ApplicationErasures {
 /**
  * Writes the ledger's lines (ADR 0056 decision 8) — into the outbox, **in the caller's transaction** (`MANDATORY`): the
  * erasure and its line commit together or not at all. Every hard erasure no restored row would trigger again calls one
- * of these at the place it erases ([ErasureKind] lists them); a moderation block, its lift and a case's change too.
+ * of these at the place it erases ([ErasureKind] lists them); a moderation block, its lift, a case's change and a
+ * hold's end too.
  */
 @ApplicationScoped
 class ErasureLedger : ReclaimedKeys {
@@ -121,9 +127,7 @@ class ErasureLedger : ReclaimedKeys {
     /** A hard erasure of core's [kind] (never a moderation kind) of [id], in [scopeId] where it has one. */
     @Transactional(Transactional.TxType.MANDATORY)
     fun erased(kind: ErasureKind, id: String, scopeId: String? = null) {
-        require(kind != ErasureKind.BLOCK && kind != ErasureKind.LIFT && kind != ErasureKind.CASE) {
-            "a moderation line is written by blockTaken, blockLifted or caseChanged"
-        }
+        require(kind !in MODERATION) { "a moderation line is written by blockTaken, blockLifted, caseChanged or holdEnded" }
         write(kind.name, id, linkedMapOf("scope" to scopeId))
     }
 
@@ -151,6 +155,12 @@ class ErasureLedger : ReclaimedKeys {
     @Transactional(Transactional.TxType.MANDATORY)
     fun blockLifted(row: ModerationBlockEntity) {
         write(ErasureKind.LIFT.name, row.id, linkedMapOf("item" to row.kind, "target" to row.targetId), at = row.liftedAt)
+    }
+
+    /** The hold [holdId] ended — its snapshot and pins dropped — on [caseId] where it has one. */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun holdEnded(holdId: String, caseId: String?) {
+        write(ErasureKind.HOLD_ENDED.name, holdId, linkedMapOf("case" to caseId))
     }
 
     /**
@@ -198,4 +208,8 @@ class ErasureLedger : ReclaimedKeys {
     }
 
     private val lastMillis = AtomicLong(0)
+
+    private companion object {
+        val MODERATION = setOf(ErasureKind.BLOCK, ErasureKind.LIFT, ErasureKind.CASE, ErasureKind.HOLD_ENDED)
+    }
 }
