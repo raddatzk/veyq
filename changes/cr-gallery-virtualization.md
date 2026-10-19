@@ -1,7 +1,7 @@
 ---
 id: cr-gallery-virtualization
 title: The gallery mounts only what is near the viewport and opens its listing in a worker
-status: planned
+status: in-progress
 satisfies: ["uc.memory.gallery", "uc.memory.buckets", "uc.memory.delete-media"]
 adrs: ["0105", "0047", "0026", "0068", "0033"]
 invariants:
