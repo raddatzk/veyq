@@ -309,7 +309,7 @@ can retract content a recipient already downloaded and decrypted; rotation prote
 ## Metadata the server sees
 
 The server never sees content, but it does see structure: ids, scope and membership, sizes, server timestamps to the
-second (some to the millisecond), the node `kind`, and per-parent blinded tokens. Several concessions are deliberate:
+millisecond, the node `kind`, and per-parent blinded tokens. Several concessions are deliberate:
 a member's per-tenant username and identity public key are enumerable by any fellow tenant member; the account email
 is plaintext (it is the login identifier); range-streamed video playback shows the object store which chunks a
 playing client fetches and when; a public share's guest learns the shared node's scope id, so two links into one

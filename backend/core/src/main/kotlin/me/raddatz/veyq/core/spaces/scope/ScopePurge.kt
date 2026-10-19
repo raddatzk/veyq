@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.spaces.scope
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.tasks.JobDeclineEntity
@@ -109,8 +110,6 @@ class ScopePurge(
         val blobs = BlobEntity.find("scopeId", scopeId).list()
         // One record per stored object: rows on one object (a cover sharing a medium's, ADR 0013 § 5) all go here.
         reclaim.record(blobs.distinctBy { it.storageKey }.map { StoreObjectRef(it.storageKey, it.chunkCount) })
-        // Every object of the space goes with it: a measure that hangs on one (its item erased before, ADR 0093 § 6) ends.
-        measures.objectsGone(blobs.map { it.storageKey })
         // An upload still OPEN in the scope — last windowed inside `veyq.blob.upload.retention`, so its own sweep has
         // not reached it — may already have chunks in the store, and its row is their only pointer. Recorded
         // exactly as `BlobUploadStore.purgeSessionsIdleSince` does; a session a budget rejection already recorded
@@ -120,6 +119,12 @@ class ScopePurge(
 
         // Phases below BLOB_ROWS_PHASE: rows that reference veyq_blob (an application's, e.g. Memories' media) go first.
         beforeBlobRows.forEach { it.eraseScope(scopeId) }
+        // Every object of the space goes with it: a measure that hangs on one (its item erased before, ADR 0093 § 6)
+        // ends. Its rows locked first - after the item rows above, all at once, in the one lock order
+        // (StoredObjectLocks) - so a measure-taker that locked one before has committed its measure, read here, and one
+        // that comes after finds the rows gone and ends its measure at once (`MeasureTargets.survivingObjects`).
+        StoredObjectLocks.lock(blobs.map { it.storageKey })
+        measures.objectsGone(blobs.map { it.storageKey })
         BlobEntity.delete("scopeId", scopeId)
         UploadSessionEntity.delete("scopeId", scopeId)
         // Phases above it: favorites, item favorites, nodes, the group's links (ADR 0029 §6/§7).

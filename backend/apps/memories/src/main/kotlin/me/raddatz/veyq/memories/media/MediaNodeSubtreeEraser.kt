@@ -38,4 +38,8 @@ class MediaNodeSubtreeEraser(
         BucketEntity.delete("nodeId in ?1", nodeIds)
         return guests
     }
+
+    /** Its media rows locked first, as [erase] locks them (item rows before blob rows), and every blob they name. */
+    override fun blobIdsOf(scopeId: String, nodeIds: List<String>): Collection<String> =
+        mediaStore.blobIdsOf(MediaEntity.find("nodeId in ?1 order by id", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list())
 }

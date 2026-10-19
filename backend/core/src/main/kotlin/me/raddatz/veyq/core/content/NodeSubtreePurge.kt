@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
+import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.node.NodeEntity
@@ -136,6 +137,9 @@ class NodeSubtreePurge(
         //    blob is still reclaimed here, at the purge, never at the trash (a restore gets its cover back). Each
         //    returns the guest identities its rows named, read while they still did; the last step drops the ones
         //    nothing references any more.
+        //    Every eraser's stored objects locked first, all at once, in the one lock order (StoredObjectLocks): in
+        //    phase order, one eraser's would be locked before the next's, crosswise to a measure-taker's.
+        StoredObjectLocks.lockOf(scopeId, sorted.flatMap { it.blobIdsOf(scopeId, nodeIds) })
         val guests = HashSet<String>()
         sorted.forEach { guests += it.erase(scopeId, nodeIds) }
 

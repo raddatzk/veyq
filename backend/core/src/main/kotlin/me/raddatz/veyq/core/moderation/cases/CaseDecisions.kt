@@ -269,7 +269,8 @@ class CaseDecisions(
         val taken = createOrConflict(conflict = { Taken(refused(CaseFailures.measureExists)) }) {
             takeIn(moderatorId, caseId, step, shareId, targetId, note, statement, now)
         }
-        // A measure that ended at once (its target was gone) changed no live view.
+        // A measure that ended at once (its target was gone) changed no live view; one hung on a surviving object
+        // announces an item no list holds any more — a no-op.
         taken.changed?.takeIf { it.activeKey != null }?.let { row -> row.scopeId?.let { announce(row.blockKind, row.targetId, it) } }
         taken.statementId?.let { id ->
             mail.statementSent(id)
@@ -284,7 +285,8 @@ class CaseDecisions(
     /**
      * [take]'s writes, **in the caller's transaction** — the race test holds them uncommitted while the target is erased
      * (`MeasureTargetErasureRacesSliceTest`). The target's row is locked before the measure is written
-     * ([MeasureTargets.lockStanding]); a target already erased gets its measure ended at once, as its eraser would have.
+     * ([MeasureTargets.lockStanding]); a target already erased gets its measure ended at once, as its eraser would have —
+     * or, an item whose stored object another row still holds, hung on that object ([MeasureTargets.survivingObjects]).
      */
     @Transactional(Transactional.TxType.MANDATORY)
     fun takeIn(
@@ -324,6 +326,9 @@ class CaseDecisions(
         if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return Taken(refused(CaseFailures.measureExists))
         // The target's row lock, the one its eraser takes: an erasure either committed before (gone, ended below) or waits.
         val standing = measureTargets.lockStanding(row.blockKind, row.targetId)
+        // An item already erased whose stored object another row still holds (a cover, a banner): the measure hangs on
+        // that object, as it would had the item been erased after it (ADR 0093 § 6) — read from the case's hold.
+        val surviving = if (standing) emptySet() else measureTargets.survivingObjects(row.blockKind, row.targetId, held)
         row.persist()
         ledger.blockTaken(row, BlockBasis.MEASURE)
         log.appendCase(
@@ -366,8 +371,14 @@ class CaseDecisions(
             deferrals.defer(written, case.id, d.until, DeferralReason(moderatorId, null, d.reason.epoch, d.reason.sealed), renewal = false, now)
         }
         // A measure never stands on an erased target (MeasureTargets): one that is gone ends at once, lifted by no one —
-        // the decision and its statement stay, and the hold runs to its own end (ADR 0093 § 4).
-        if (!standing) measureTargets.erased(listOf(row.blockKind), listOf(row.targetId), now)
+        // the decision and its statement stay, and the hold runs to its own end (ADR 0093 § 4) — unless it hangs on an
+        // object that survives its item (above), and ends with that object's last row or a lift.
+        if (!standing) {
+            measureTargets.erased(
+                listOf(row.blockKind), listOf(row.targetId), now,
+                holding = if (surviving.isEmpty()) emptyMap() else mapOf(row.targetId to surviving),
+            )
+        }
         return Taken(DecisionOutcome.Done, row, written.id)
     }
 

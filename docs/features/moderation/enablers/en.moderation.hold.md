@@ -93,8 +93,8 @@ operator pays for the held bytes. When the last pin of a key has expired, its re
 | Child sexual abuse material | at the recorded handover to an authority (`HANDED_OVER` or `INFORMATION_GIVEN`), at the latest 90 days (`Holds.CHILD_SEXUAL_ABUSE`) after the report that took the hold or made the case one of this category — its `ceiling_until`: a measure or a statement moves the end at most to it, and a report that makes a decided case one of this category brings a later end back to it. A logged extension may pass it, the handover still ends it; an order's floor always wins (§ 184b(5) StGB: keeping it serves only the report). A hold that runs until the handover past 90 days is not built (ADR 0093 § Legal basis, Still open 1) | the moderation-retention follow-up of #462 (`Holds`, `ReportHandler`, `CaseDecisions.handoverIn`) |
 
 A hold's rows are copied as the database returns them, but a time column as the instant it is (ISO-8601, UTC,
-`HoldSnapshot.text`): a `TIMESTAMP` holds the wall clock of the zone its writer ran in, and the Art. 18 export read a
-guest's write two hours off on a machine in Berlin until a time was kept as an instant.
+`HoldSnapshot.text`): a time column holds a UTC wall clock with no zone of its own, and the Art. 18 export read a guest's
+write two hours off on a machine in Berlin while that text was read in the JVM's zone.
 
 The moderation cleanup (`ModerationPurge`, hourly, which also runs at its first trigger after startup) deletes a hold
 past its end with its snapshot and pins (`Holds.purgeExpired`); the sweep catches up on its own — already from the pin's

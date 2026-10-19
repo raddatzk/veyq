@@ -45,6 +45,17 @@ class MismatchedInputExceptionMapper : ExceptionMapper<MismatchedInputException>
 }
 
 /**
+ * A date-time of the right shape that no time column holds ([DateTimeOutOfRange], thrown while binding): the contract's
+ * `422 date_time_out_of_range`, which each operation carrying a request date-time declares. The more specific type, so
+ * this mapper answers before [MismatchedInputExceptionMapper] (`StoredTimeSliceTest`). Jackson adds the property's path
+ * to a `JsonMappingException` without wrapping it, so a nested date-time (a measure's deferral) reaches it as well.
+ */
+@Provider
+class DateTimeOutOfRangeMapper : ExceptionMapper<DateTimeOutOfRange> {
+    override fun toResponse(exception: DateTimeOutOfRange): Response = httpError(Failures.dateTimeOutOfRange)
+}
+
+/**
  * Every `400` the framework answers with no body of its own. Quarkus' body reader wraps every Jackson refusal but the
  * one above in a bare `WebApplicationException(400)` — a body that is no JSON at all (`StreamReadException`), and a
  * missing or null field the Kotlin model holds non-null: no Jackson Kotlin module is on the classpath, so Jackson

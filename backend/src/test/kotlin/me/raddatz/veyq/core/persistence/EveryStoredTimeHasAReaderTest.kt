@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
  * evidence). #318 measured nineteen written-never-read times and dropped them (the owner brought the terms
  * acceptance time back on 2026-10-09 as that evidence); #398 turned the share tombstone's time into a flag and dropped
  * the medium's creation time, which was only `updated_at`'s fallback. The trap is the default
- * (`created_at TIMESTAMP NOT NULL` on every new table), so this reads Hibernate's own mapping of every entity, in any
+ * (`created_at DATETIME(3) NOT NULL` on every new table), so this reads Hibernate's own mapping of every entity, in any
  * module on the classpath, and holds the set of `Instant` columns to [READERS] both ways: a new time column with no
  * entry is red until someone names its reader, and an entry whose column is gone is red until it is struck.
  *

@@ -25,7 +25,9 @@ applied both baselines, every `:core` class failed Flyway's validate on the Memo
 
 **Also the schema check.** The default run adds `*EntitySchemaValidationTest` ([schema_classes]): Hibernate's own
 `validate` of every entity against the migrated MariaDB schema (a `UUID` column an entity maps without
-`columnDefinition = "uuid"` is red there and in a dev boot's log, nowhere else).
+`columnDefinition = "uuid"` is red there and in a dev boot's log, nowhere else) — and `*StoredTimeSliceTest`, whose
+column-type and session-zone checks only the production engine can answer (inbox #509: H2 has no `TIMESTAMP` range and
+no session zone that moves a value).
 
 **The race user may read lock waits.** The throwaway user gets `PROCESS` beside its databases: the race harness
 proves each round's order from InnoDB's lock-wait record (`holdForOverlap` in `testing/Race.kt`, inbox #512), which
@@ -91,15 +93,20 @@ def race_classes() -> list[str]:
     return found
 
 
+# The schema checks the default run adds: Hibernate's `validate` per project, and the stored time's type and zone.
+ENGINE_SUFFIXES = ("EntitySchemaValidationTest", "StoredTimeSliceTest")
+
+
 def schema_classes() -> list[str]:
     """The schema-validation classes (`*EntitySchemaValidationTest`, one per project that holds entities): Hibernate's
     `validate` against what Flyway built. They are no race, but the default run is the one place the production engine
     is asked whether an entity still matches its column (H2 names column types differently, and `%prod` runs
     `schema-management.strategy=none`, so a drift would otherwise show only as an ERROR in a dev boot)."""
     found = [f"*{f.stem}" for f in backend_tree.kotlin_files(backend_tree.test_roots())
-             if f.stem.endswith("EntitySchemaValidationTest")]
-    if not found:
-        sys.exit("no EntitySchemaValidationTest found — the engine's schema check would silently not run")
+             if f.stem.endswith(ENGINE_SUFFIXES)]
+    for suffix in ENGINE_SUFFIXES:
+        if not any(f.endswith(suffix) for f in found):
+            sys.exit(f"no {suffix} found — the engine's schema check would silently not run")
     return found
 
 

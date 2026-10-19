@@ -59,7 +59,7 @@ routes stay history-mode.**
   disambiguates, by one rule for building and resolving a path (`web/src/core/node/location.ts` `segmentsOf`):
   among siblings of one plain segment **and one class** (amended 2026-10-11, below) the first in **creation order** keeps it, the others get `-2`, `-3`, …
   skipping a number whose segment a sibling holds as its own name. Creation order is the server-observed
-  `NodeSummary.createdAt` (to the millisecond, `veyq_node.created_at TIMESTAMP(3)`), then the node id for two born
+  `NodeSummary.createdAt` (to the millisecond, `veyq_node.created_at DATETIME(3)`), then the node id for two born
   in one millisecond (`compareByCreation`) — an order no client can steer: the instant is the server's, set once and
   kept by every rename, move, trash and restore, and node ids are client-minted random UUIDv4 that only break a tie.
   (Node ids alone, the first rule, let a later sibling whose id happened to sort first take an earlier one's path;

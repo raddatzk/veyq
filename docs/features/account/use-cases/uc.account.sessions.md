@@ -227,7 +227,7 @@ Key again.
   guarding it: with no per-family ciphertext there is nothing to correlate. **This is why a per-family name
   field must not come back**, however convenient it looks.
 - **Metadata the operator sees is unchanged:** a family count, two timestamps per family (created, last used —
-  stored to the second, not rounded), opaque ids. The count was
+  stored to the millisecond, not rounded), opaque ids. The count was
   already accepted ([uc.account.trust-device](uc.account.trust-device.md) makes the same trade for wraps).
 - **The current session is marked by the server**, not guessed by the client. The server knows which family
   the request arrived on; that is self-knowledge about the caller, not a new fact about the account. The flag

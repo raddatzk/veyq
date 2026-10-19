@@ -151,8 +151,8 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measur
      * caller deleted its own reference to [blobId] first (`fk_*_blob` refuses otherwise). The row is the only thing that
      * knows the `storage_key`, so the record and the delete are one step, not two.
      *
-     * **Every row on the object is read under its row lock** (ordered by id, so two of these never wait on each other in
-     * a cycle), and that lock is the decision: not every caller holds the scope row's lock (the trash purges lock media
+     * **Every row on the object is read under its row lock** (in the one lock order, [StoredObjectLocks]; a caller that
+     * deletes the rows of several objects goes through [deleteBlobRows]), and that lock is the decision: not every caller holds the scope row's lock (the trash purges lock media
      * rows only), and two deletes of the two rows of one object that each counted the other by a plain read would both
      * keep the object - a leak. Locked, the second waits for the first and reads what it committed. [SharedBlobs.persist]
      * locks its source the same way, so a new row on an object being deleted is either refused or seen.
@@ -164,8 +164,9 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measur
      */
     fun deleteBlobRow(blobId: String?) {
         val blob = blobId?.let { BlobEntity.findById(it) } ?: return
-        val onObject = BlobEntity.find("storageKey = ?1 order by id", blob.storageKey)
-            .withLock(LockModeType.PESSIMISTIC_WRITE).list()
+        // One object's rows, in the one lock order (StoredObjectLocks): a caller deleting rows of several objects locked
+        // them all before ([deleteBlobRows]), so this waits for nothing new.
+        val onObject = StoredObjectLocks.lock(listOf(blob.storageKey))
         if (onObject.none { it.id == blob.id }) return // deleted by a peer that committed while this waited
         if (onObject.none { it.id != blob.id }) {
             reclaim.record(blob.storageKey, blob.chunkCount)
@@ -173,6 +174,16 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore, private val measur
             measures.objectsGone(listOf(blob.storageKey))
         }
         BlobEntity.deleteById(blob.id)
+    }
+
+    /**
+     * [deleteBlobRow] for each of [blobIds] of [scopeId], their objects locked **all at once first**, in the one lock order
+     * ([StoredObjectLocks]): one by one, the second object's lock would be taken while the first's is held, in the order
+     * the caller named them - crosswise to a transaction that takes the same two the other way round.
+     */
+    fun deleteBlobRows(scopeId: String, blobIds: Collection<String?>) {
+        StoredObjectLocks.lockOf(scopeId, blobIds)
+        blobIds.forEach { deleteBlobRow(it) }
     }
 
     // Manifest = a JSON array of per-chunk ciphertext sizes; tiny and integer-only, so encoded by hand.

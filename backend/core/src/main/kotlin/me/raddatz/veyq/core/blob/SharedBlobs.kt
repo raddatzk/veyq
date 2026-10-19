@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.persistence.LockModeType
 
 /**
  * A blob row on the stored object of an existing blob, in place of an upload - the contract's `SharedBlob` (ADR 0013
@@ -44,8 +43,9 @@ class SharedBlobs(
      */
     fun persist(scopeId: String, nodeId: String, spec: SharedBlobSpec): String? {
         if (blobs.blobIdTaken(spec.blobId)) return null
-        val source = BlobEntity.find("id = ?1 and scopeId = ?2", spec.sourceBlobId, scopeId)
-            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() ?: return null
+        // Every row on the source's object, in the one lock order (StoredObjectLocks) - deleteBlobRow's lock.
+        val source = StoredObjectLocks.lockOf(scopeId, listOf(spec.sourceBlobId)).firstOrNull { it.id == spec.sourceBlobId }
+            ?: return null
         if (arms.none { it.holds(scopeId, nodeId, source.id) }) return null
         if (blocks.blobBlocked(scopeId, source.id)) return null
         return blobs.persistSharedRow(source, spec)

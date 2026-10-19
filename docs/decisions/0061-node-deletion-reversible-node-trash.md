@@ -127,7 +127,7 @@ against.
   live node hanging under a dead one — present in no listing at all, because the client assembles the tree by
   `parentId` and the parent is filtered out. It is the reason the trash lists roots only, enforced on the write
   side as well as the read side.
-- **Operator-blindness is unchanged.** The added state is a lifecycle timestamp (`deleted_at`, to the second) and a
+- **Operator-blindness is unchanged.** The added state is a lifecycle timestamp (`deleted_at`, to the millisecond) and a
   slug token swapped for an opaque id — operational metadata of the kind already disclosed for the media trash.
   No name, no key, no content.
 
