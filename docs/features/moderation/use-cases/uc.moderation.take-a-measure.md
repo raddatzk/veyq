@@ -26,7 +26,9 @@
    blob below it, a medium's original and derivatives — is refused to everyone, members included, as `451
    blocked_by_operator`; every listing that names it keeps it and marks it blocked, so members and guests see the
    placeholder *Blocked by the operator* with no reason. The uploader can still delete it; replacing a blocked file's
-   content and restoring a blocked item from the trash are refused.
+   content and restoring a blocked item from the trash are refused. A gallery open on a blocked medium turns its tile,
+   and an open lightbox on it, to the placeholder on its next live poll and revokes what it had decrypted of it; a lift
+   shows it again ([uc.memory.live-updates](../../memory/use-cases/uc.memory.live-updates.md) E8).
 4. **Block a guest uploader.** The moderator blocks a guest identity the held rows name as an uploader: its token is
    refused on every write, and the link it came through is blocked with it (a guest could mint a new identity on the same
    link). The link's creator may re-issue the link: the new link is a member's new decision.

@@ -117,6 +117,23 @@ acceptanceCriteria:
         unit:
           - src/features/memory/source.test.ts
           - src/features/memory/components/MemoryDetail.guest.test.ts
+  - id: block-and-lift-live
+    # Alternate flow E8 (uc.moderation.take-a-measure, ADR 0093 § 6).
+    text: >-
+      A poll that carries a shown medium blocked by a moderator patches the held item's block state in place: its tile
+      turns to "Blocked by the operator" at once without moving, its decrypted thumbnail is revoked and dropped from the
+      URL cache and not read again, and an open lightbox on it shows the placeholder with its decrypted preview revoked. A
+      poll that carries the lift shows the medium again through the thumbnail and preview reads. Members and guests alike.
+    coverage:
+      backend:
+        integration:
+          - ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes
+          - ShareMediaLivePollSliceTest.aGuestsPollIsA304UntilWhatTheLinkServesChanges
+      web:
+        unit:
+          - src/features/memory/useMediaGalleryLive.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memory/components/MemoryDetail.guest.test.ts
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/memory-guest-live.spec.ts`) drives `guest-live-poll` in Chromium
