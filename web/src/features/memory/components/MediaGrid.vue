@@ -114,14 +114,17 @@ function rowAt(y: number): number {
   return lo
 }
 
-/** The mounted rows: the viewport's, an overscan each way, and the active tile's. */
+/** The mounted rows: the viewport's, an overscan each way, and the active tile's. The same range is the same value, so a
+ *  scroll inside it re-renders nothing (a computed whose value is unchanged triggers no reader). */
+let range: [number, number] = [0, -1]
 const windowRows = computed<[number, number]>(() => {
   const rs = rows.value
-  if (!rs.length) return [0, -1]
+  if (!rs.length) return (range = [0, -1])
   const { top, height } = view.value
   const from = rowAt(top - OVERSCAN * height)
   const to = Math.min(rs.length - 1, Math.max(from, rowAt(top + height + OVERSCAN * height)))
-  return [from, to]
+  if (range[0] !== from || range[1] !== to) range = [from, to]
+  return range
 })
 const mountedRows = computed(() => {
   const rs = rows.value
@@ -154,11 +157,13 @@ const windowIds = computed(() => {
     .sort((a, b) => a.d - b.d)
     .map((c) => c.id)
 })
+// Announced when the SET of mounted tiles changes, in the nearest-first order of that moment: a scroll inside the same
+// window asks for nothing new.
 let announced = ''
 watch(
   windowIds,
   (ids) => {
-    const key = ids.join('\n')
+    const key = [...ids].sort().join('\n')
     if (key === announced) return
     announced = key
     emit('window', ids)
@@ -264,9 +269,8 @@ watch(
   [view, layout],
   () => {
     if (!previous) return
-    const top = view.value.top
-    const first = layout.value.tiles.find((t) => t.top + t.renderedHeight > top)
-    previous.anchor = first?.id ?? null
+    const row = rows.value[rowAt(view.value.top)]
+    previous.anchor = row ? layout.value.tiles[row.start].id : null
   },
   { flush: 'post' },
 )
