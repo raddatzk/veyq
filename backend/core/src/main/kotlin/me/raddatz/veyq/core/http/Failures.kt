@@ -119,6 +119,10 @@ object Failures {
     /** The subject's username collides with an existing one → 409. */
     val usernameTaken: HttpFailure = httpFailure("username_taken", CONFLICT)
 
+    /** A date-time of the right shape that no time column holds (`StrictJsonTypes.STORABLE`, inbox #509) → 422: a bound
+     *  no date-time schema can state, so a semantic refusal of its own, not the shape's 400 (ADR 0091 decision 9). */
+    val dateTimeOutOfRange: HttpFailure = httpFailure("date_time_out_of_range", UNPROCESSABLE)
+
     /** A structurally-valid request whose cross-field/state preconditions fail → 400. */
     val invalidRequest: HttpFailure = httpFailure("invalid_request", BAD_REQUEST)
 

@@ -179,15 +179,24 @@ class MalformedRequestSliceTest {
      *  reach the `UPDATE` and answer 500, as `updateShare` with an `expiresAt` in 2577 did while the columns were
      *  `TIMESTAMP` (the API fuzzing's positive writes, ADR 0091 decision 9; inbox #509). Refused while binding, as any
      *  date-time that is not one ([StrictJsonTypes]); H2 stores such an instant, so this reds on the missing refusal, not
-     *  on the database. An offset past ±18:00 is RFC 3339 but no `java.time` offset: refused the same way. */
+     *  on the database. An offset past ±18:00 is RFC 3339 but no `java.time` offset: refused the same way. Each is a
+     *  [DateTimeOutOfRange] — on the wire `422 date_time_out_of_range` (`StoredTimeSliceTest`), a bound no date-time
+     *  schema states — while a string that is no date-time at all stays the shape's refusal. */
     @Test
-    fun aDateTimeNoTimeColumnCanHoldIsInvalidRequest() {
+    fun aDateTimeNoTimeColumnCanHoldIsOutOfRange() {
         val order = """"id":"${UUID.randomUUID()}","kind":"REMOVAL","shareId":"${"a".repeat(43)}","receivedAt":"2026-10-18T07:12:00Z","reference":{"epoch":2,"sealedReference":"cmVm"}"""
         for (bad in listOf("1582-10-14T23:59:59.999Z", "1582-10-15T00:30:00+01:00", "0952-06-01T00:00:00Z", "0001-01-01T00:00:00Z",
                 "9999-12-31T23:59:59.9991Z", "9999-12-31T23:00:00-01:00", "2577-12-11T13:05:27+19:00")) {
-            assertThrows<MismatchedInputException>(bad) {
+            assertThrows<DateTimeOutOfRange>(bad) {
                 mapper.readValue("""{$order,"deferStatementUntil":"$bad"}""", AuthorityOrderRequest::class.java)
             }
+        }
+        // A string that is no date-time is malformed, not out of range.
+        for (malformed in listOf("2577-12-11", "2577-12-11T13:05:27+01:60", "soon")) {
+            val e = assertThrows<MismatchedInputException>(malformed) {
+                mapper.readValue("""{$order,"deferStatementUntil":"$malformed"}""", AuthorityOrderRequest::class.java)
+            }
+            assertFalse(e is DateTimeOutOfRange, malformed)
         }
         // The controls: the edges of the range, in any offset, bind — and so do the ends of the old TIMESTAMP range.
         for (ok in listOf("1582-10-15T00:00:00Z", "1582-10-15T01:00:00+01:00", "9999-12-31T23:59:59.999Z",

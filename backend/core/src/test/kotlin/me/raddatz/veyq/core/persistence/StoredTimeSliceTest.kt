@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -62,6 +63,25 @@ class StoredTimeSliceTest {
         val stored = QuarkusTransaction.requiringNew().call { ShareEntity.findById(share)!!.expiresAt }
         assertEquals(Instant.parse("2577-12-11T12:05:27Z"), stored)
         assertTrue(text("veyq_share", "id", share, "expires_at").startsWith("2577-12-11 12:05:27"), "the column holds the UTC wall clock")
+    }
+
+    /** Outside the range is the contract's `422 date_time_out_of_range` — a bound no date-time schema states (ADR 0091
+     *  decision 9) — and changes nothing; a string that is no date-time stays the shape's `400 invalid_request`. */
+    @Test
+    fun aDateTimeOutsideTheRangeIsA422OfItsOwnAndChangesNothing() {
+        val space = seedMemberScope()
+        val folder = seedNode(space.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val share = GuestTreeShare.seed(space.userId, space.scopeId, folder).shareId
+        val patch = { at: String ->
+            given().header("Authorization", bearer(space.userId)).contentType(ContentType.JSON)
+                .body("""{"expiresAt":"$at"}""").`when`().patch("/api/shares/$share").then()
+        }
+        for (out in listOf("0952-06-01T00:00:00Z", "1582-10-14T23:59:59Z", "9999-12-31T23:00:00-01:00", "2577-12-11T13:05:27+19:00")) {
+            patch(out).statusCode(422).body("code", equalTo("date_time_out_of_range"))
+        }
+        patch("soon").statusCode(400).body("code", equalTo("invalid_request"))
+        assertEquals(null, QuarkusTransaction.requiringNew().call { ShareEntity.findById(share)!!.expiresAt }, "nothing was stored")
+        patch("2577-12-11T13:05:27+18:00").statusCode(204)
     }
 
     @Test

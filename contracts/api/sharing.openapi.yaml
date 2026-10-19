@@ -108,7 +108,7 @@ paths:
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
-            Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
+            Unprocessable. Its codes: `capability_disabled` — the sharing capability this role needs
             (`core.public-shares` for READ, `core.public-shares.contribute` for READ_WRITE,
             `core.public-shares.drop-box` for WRITE_ONLY) is not active instance-wide: its own entry is switched
             off, or `core.public-shares` above it is (the AND along the path, ADR 0088). It is checked first, before
@@ -119,6 +119,7 @@ paths:
             (ADR 0088 decision 8, the strictest of the instance's and the tenant's): `link_password_required` — the
             link carries no password while every link needs one; `link_expiry_required` — it has no end date, or one
             more than `linkMaxDays` days after the link was made, while links must end within that.
+            `date_time_out_of_range` = a date-time outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00) — a bound no date-time schema states.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
     get:
@@ -334,6 +335,7 @@ paths:
             The instance capability the share's role needs is disabled (`capability_disabled`, ADR 0032) — a
             re-issue publishes a link, so it checks what `createShare` checks, the requirements included
             (`link_password_required`, `link_expiry_required`, as `createShare`; the new link is made now).
+            `date_time_out_of_range` = a date-time outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00) — a bound no date-time schema states.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
@@ -498,7 +500,7 @@ paths:
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
-            Unprocessable. Two codes: `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
+            Unprocessable. Its codes: `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
             whose current role is WRITE_ONLY, or a role the shared node's kind may not be a share root with
             (`ShareRoots`, ADR 0080); the write-only drop-box is a separate action and its role is not editable in
             place. `capability_disabled` — a change INTO a role whose instance capability is not active (READ →
@@ -507,6 +509,7 @@ paths:
             role changes no role and is not refused for it. `link_password_required` — the update would leave the link
             without a password while every link needs one; `link_expiry_required` — the end date it sets (a full
             replace) is absent or more than `linkMaxDays` days after the link was made (ADR 0088 decision 8).
+            `date_time_out_of_range` = a date-time outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00) — a bound no date-time schema states.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
     delete:
@@ -1455,7 +1458,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: Optional expiry; a share past this instant resolves `404` (same shape as an unknown id). Null = no expiry. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
+          description: Optional expiry; a share past this instant resolves `404` (same shape as an unknown id). Null = no expiry. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `422 date_time_out_of_range`.
           example: null
         sealedNote:
           type: [string, "null"]
@@ -1579,7 +1582,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: New expiry instant (full replace, cr-share-link-expiry-edit); `null`/absent clears it. Send the current value to preserve it. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
+          description: New expiry instant (full replace, cr-share-link-expiry-edit); `null`/absent clears it. Send the current value to preserve it. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `422 date_time_out_of_range`.
           example: null
         passwordRequired:
           x-veyq-visibility: flag
@@ -1658,7 +1661,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: The new share's expiry — the old one's carried, or changed in the re-issue dialog. Null = no expiry. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
+          description: The new share's expiry — the old one's carried, or changed in the re-issue dialog. Null = no expiry. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `422 date_time_out_of_range`.
           example: null
         sealedNote:
           type: [string, "null"]
