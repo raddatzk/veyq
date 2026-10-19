@@ -1,7 +1,7 @@
 ---
 id: cr-gallery-list-paging
 title: The media list in bounded pages, a constant number of queries per page, and compressed answers
-status: planned
+status: done
 satisfies: ["uc.memory.gallery", "uc.memory.live-updates"]
 adrs: ["0033", "0103", "0105", "0081", "0069", "0013", "0064", "0078"]
 invariants:
@@ -175,4 +175,23 @@ recorded in the retrospective; inbox #490 done.
 
 ## Retrospective
 
-_Filled at implementation._
+- **Planning — three decisions contradicted a rule the CR did not read.** Decision 4 gave the guest `ItemsSince`
+  (`updatedAt,id`), but a guest is served no time of the Memory's activity (ADR 0081 decision 4; `ShareMedia` has no
+  `updatedAt`): the guest pages by media id (`after`). `media.maxItems: 1000` on `MediaListPage` contradicted "the trash
+  keeps one answer" (a trash can exceed 1000): the trash pages on the same keyset and is sorted on the client. And
+  `ShareMediaListing` is also `listCaseMedia`'s answer, an unbounded hold snapshot: it got its own `CaseMediaListing`.
+  Root cause: the refine read the operations' code but not the rules on their other readers. Next time: for every schema
+  a decision caps or reshapes, grep every operation that answers it (`grep -rn 'schemas/<Name>' contracts/api`).
+- **Planning — the token set was listed, not derived (9 found by grep, 16 by the derivation: the presigned URLs), and the
+  CR's mechanism (`@Uncompressed` on the resource method) does nothing in Quarkus REST, which reads the generated
+  interface.** The wire test caught it on its first run; the build now writes the annotation from the contracts. Phase 0's
+  "criteria with their refs gapped" was unbuildable against `validate_coverage.py` (a criterion needs a test; a gap names
+  only a surface with refs) — the criteria came with their tests. Phase 1 predicted web green; a required response field
+  reddened 23 fixtures. Two rules harvested into changes/README.md.
+- **Execution — load 25-200 from parallel sessions for most of the run**: the brief's wait-while-above-14 could not be
+  kept, so heavy steps ran one at a time; `SetupServerSliceTest`'s setup race was red twice on H2 under that load and
+  green alone on MariaDB and in the final check, and `MeasureTargetErasureRacesSliceTest` was red once on MariaDB — both
+  untouched by this CR. The phase 4 browser pass ran on the volume harness's production instance rather than the dev
+  stack the CR named (the dev stack is the owner's); a second member's upload arriving by poll was not clicked.
+- **Next time:** a refine that decides a mechanism on a framework (an annotation, a config key) runs one request against
+  it before the CR freezes it — the cheapest place to find that the framework reads it somewhere else.
