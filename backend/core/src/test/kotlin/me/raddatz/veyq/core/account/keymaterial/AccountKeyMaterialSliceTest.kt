@@ -8,6 +8,7 @@ import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
+import me.raddatz.veyq.core.testing.LogCapture
 import me.raddatz.veyq.core.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -19,6 +20,8 @@ import org.hamcrest.Matchers.containsInAnyOrder
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.hasItems
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -121,6 +124,30 @@ class AccountKeyMaterialSliceTest {
             .body("wraps[0].method", equalTo("PASSWORD"))
     }
 
+    /**
+     * The skip is logged by the method's length and the account, never verbatim (ADR 0092 § 3): the stored value is
+     * input nobody vetted. Bites with the method back in the line; the control is the line itself, on the same capture.
+     * The column holds 16 characters, so the person's value is a short address after a line break.
+     */
+    @Test
+    fun anUnknownWrapMethodIsLoggedByItsLengthNeverVerbatim() {
+        val userId = "6b65796d-6174-4000-8000-00000000b066"
+        QuarkusTransaction.requiringNew().run {
+            if (VeyqUser.findById(userId) == null) {
+                newUser(id = userId, email = "echo-keymat@example.com", wrappedIdentityPrivateKey = A_PRIV).persist()
+                persistWrap(userId, "PASSWORD", A_PW_WRAP)
+                persistWrap(userId, UNKNOWN_METHOD, A_REC_WRAP)
+            }
+        }
+        val records = LogCapture().use { capture ->
+            get(issueToken(userId)).then().statusCode(200).body("wraps.size()", equalTo(1))
+            capture.records()
+        }
+        val line = records.single { "unrecognised method" in it.text }
+        assertTrue("account $userId" in line.text && "length ${UNKNOWN_METHOD.length}" in line.text, "the line: <$line>")
+        records.forEach { assertFalse(PERSON in it.text, "the stored method is in a log record: <$it>") }
+    }
+
     @Test
     fun missingTokenIsGeneric401() {
         given().`when`().get(PATH)
@@ -211,5 +238,7 @@ class AccountKeyMaterialSliceTest {
         private const val B_REC_WRAP = "Qi1yZWNvdmVyeS13cmFw"
         private const val B_PRIV = "Qi1pZGVudGl0eS1wcml2"
         private const val KDF = "a2RmLXBhcmFtcw=="
+        private const val PERSON = "q@example.org"
+        private const val UNKNOWN_METHOD = "x\n$PERSON"
     }
 }

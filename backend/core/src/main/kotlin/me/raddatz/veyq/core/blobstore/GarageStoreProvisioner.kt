@@ -178,12 +178,24 @@ class GarageStoreProvisioner(
 
     private fun parse(res: HttpResponse<String>, path: String): JsonNode {
         // The token is never in the message: a failure here is read by whoever runs the instance, and the
-        // admin token is an operator secret like the store credentials beside it.
-        check(res.statusCode() in 200..299) { "Garage admin API $path answered ${res.statusCode()}: ${res.body().take(300)}" }
+        // admin token is an operator secret like the store credentials beside it. Nor is the body: it is a remote
+        // API's text, and a log carries a remote body by its status and its error code only (ADR 0092 § 3) — the
+        // retry line writes this message (`StoreProvisioningRunner`). `GarageStoreProvisionerTest` holds it.
+        check(res.statusCode() in 200..299) {
+            "Garage admin API $path answered ${res.statusCode()}" + (errorCode(res.body())?.let { " ($it)" } ?: "")
+        }
         return if (res.body().isBlank()) mapper.createObjectNode() else mapper.readTree(res.body())
     }
 
+    /** Garage's error `code` (`NoSuchBucket`, `InternalError`), when the body carries one of [ERROR_CODE]'s shape. */
+    private fun errorCode(body: String): String? =
+        runCatching { mapper.readTree(body)?.get("code")?.takeIf { it.isTextual }?.asText() }.getOrNull()
+            ?.takeIf { ERROR_CODE.matches(it) }
+
     companion object {
+        /** The only shape of a Garage error code a log may carry: a word, never a sentence that could hold a value. */
+        private val ERROR_CODE = Regex("^[A-Za-z]{1,64}$")
+
         /**
          * The name the access key is imported under. `scripts/run_web_e2e.py` grants against this exact alias
          * (an undocumented contract that used to belong to `garage-init.sh:47`), so it is part of this class's

@@ -37,6 +37,9 @@ class FakeGarageAdminApi(
     /** Grants recorded as `bucketId/accessKeyId`. */
     val grants = mutableListOf<String>()
 
+    /** When set, every call answers this status and body — how a failing store's error log is driven. */
+    var failWith: Pair<Int, String>? = null
+
     /** Paths the provisioner asked for that this fake does not implement — always a test failure. */
     val unknownPaths = mutableListOf<String>()
 
@@ -60,7 +63,7 @@ class FakeGarageAdminApi(
         val query = ex.requestURI.query
         calls += path
         val body = ex.requestBody.readBytes().decodeToString()
-        val (status, response) = route(path, query, body)
+        val (status, response) = failWith ?: route(path, query, body)
         val bytes = response.toByteArray()
         ex.responseHeaders.add("Content-Type", "application/json")
         ex.sendResponseHeaders(status, bytes.size.toLong())

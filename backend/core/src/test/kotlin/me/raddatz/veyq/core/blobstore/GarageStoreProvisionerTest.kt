@@ -1,11 +1,14 @@
 package me.raddatz.veyq.core.blobstore
 
+import me.raddatz.veyq.core.testing.LogCapture
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.Duration
 
 /**
  * The bring-up's two hard properties (ADR 0067 Decision 3), asserted on the **call sequence** against
@@ -130,7 +133,40 @@ class GarageStoreProvisionerTest {
         garage = FakeGarageAdminApi().also { it.start() } // so @AfterEach's stop() has something to stop
     }
 
+    /**
+     * A failing call carries Garage's status and its error code, never its body (ADR 0092 § 3): the body is a remote
+     * API's text, and the runner's retry line writes this exception whole. Bites with the body back in the message;
+     * the controls are the status and the code in both the exception and the retry line on the same capture.
+     */
+    @Test
+    fun aFailingCallCarriesTheStatusAndTheCodeNeverTheBody() {
+        garage.failWith = 500 to """{"code":"InternalError","message":"Internal error: $MARKER"}"""
+        val e = assertThrows(IllegalStateException::class.java) { provisioner().provision() }
+        assertTrue("answered 500 (InternalError)" in e.message.orEmpty(), "the status and the code: <${e.message}>")
+        assertFalse(MARKER in e.toString(), "the body is in the exception: <$e>")
+
+        val records = LogCapture().use { capture ->
+            StoreProvisioningRunner.runBounded(provisioner(), maxAttempts = 2, firstBackoff = Duration.ofMillis(1))
+            capture.records()
+        }
+        val retry = records.single { "attempt 1 failed" in it.text }
+        assertTrue("answered 500 (InternalError)" in retry.text, "the retry line carries the status and the code: <$retry>")
+        records.forEach { assertFalse(MARKER in it.text, "the body is in a log record: <$it>") }
+    }
+
+    @Test
+    fun aBodyWithNoCodeOfTheFixedShapeYieldsTheStatusAlone() {
+        garage.failWith = 503 to """{"code":"not a code: $MARKER","message":"$MARKER"}"""
+        val e = assertThrows(IllegalStateException::class.java) { provisioner().provision() }
+        assertTrue(e.message.orEmpty().endsWith("answered 503"), "the status alone: <${e.message}>")
+
+        garage.failWith = 502 to "<html>$MARKER</html>"
+        val html = assertThrows(IllegalStateException::class.java) { provisioner().provision() }
+        assertTrue(html.message.orEmpty().endsWith("answered 502"), "no JSON, the status alone: <${html.message}>")
+    }
+
     private companion object {
+        const val MARKER = "someone@example.org"
         const val BUCKET = "veyq"
         const val ACCESS_KEY = "GK0123456789abcdef01234567"
         val WRITE_PATHS = setOf("/v2/UpdateClusterLayout", "/v2/ApplyClusterLayout", "/v2/CreateBucket", "/v2/ImportKey", "/v2/AllowBucketKey")
