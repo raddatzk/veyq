@@ -2,6 +2,7 @@ package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
@@ -9,6 +10,9 @@ import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.banner.BannerKit
+import me.raddatz.veyq.memories.banner.MemoryBannerOutcome
+import me.raddatz.veyq.memories.banner.MemoryBannerStore
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -39,12 +43,18 @@ import org.junit.jupiter.api.Test
  * held one waits to take its second. In the order above both finish; with the pinned writer's two locks swapped each
  * holds what the other wants, every round. Deterministic, not likely: the interleaving is forced. Each has a control:
  * the same production write with nothing held lands the same way.
+ *
+ * The same holds for blob rows across stored objects (`StoredObjectLocks`): every transaction that locks the rows of
+ * several objects locks them all at once, ascending by storage key - the banner's removal against a measure-taker below.
+ * Bite (run 2026-10-19, then restored): the removal's lock-all taken out of `MemoryBannerStore.remove` reddens
+ * [aBannerRemovalAndAMeasureTakerOnItsTwoObjectsBothFinish].
  */
 @QuarkusTest
 class MediaLockOrderRaceSliceTest {
 
     @Inject lateinit var store: MediaStore
     @Inject lateinit var items: NodeItemsRevisions
+    @Inject lateinit var banners: MemoryBannerStore
 
     /**
      * A trash's order (media → node) against a sub-bucket delete: the reparent must lock its media BEFORE the
@@ -89,6 +99,31 @@ class MediaLockOrderRaceSliceTest {
         }
         val f = fixture()
         assertEquals(true, store.moveMedia(f.scopeId, f.nodeId, listOf(f.mediaId), f.subBucketId), "control")
+    }
+
+    /**
+     * The one lock order on stored objects (`StoredObjectLocks`: ascending storage key, every object at once): a
+     * measure-taker (`MeasureTargets.survivingObjects`, the one locker of blob rows that holds no scope lock) holding the
+     * lower of a banner's two objects and about to take the higher, against the banner's removal, whose slot order
+     * deletes the banner's row (the higher object) before the poster's (the lower). Slot by slot, the removal held the
+     * higher while it waited for the lower, which the taker held while it waited for the higher: a deadlock, every round.
+     * Locked at once in the one order, the removal waits on the lower holding nothing, and both finish.
+     */
+    @Test
+    fun aBannerRemovalAndAMeasureTakerOnItsTwoObjectsBothFinish() {
+        repeat(RACE_ROUNDS) { round ->
+            val f = bannerOnTwoObjects()
+            val (held, other) = between(
+                first = { StoredObjectLocks.lock(listOf(f.low)) }, // the taker's first lock
+                second = { StoredObjectLocks.lock(listOf(f.high)) }, // ...and its second
+                other = { check(removeBanner(f) == MemoryBannerOutcome.Done) { "the removal refused" } },
+            )
+            assertNull(held, "round $round: the taker's side failed: $held")
+            assertNull(other, "round $round: the banner's removal failed: $other")
+            assertEquals(null to null, BannerKit.slots(f.memory), "round $round: the banner is gone")
+        }
+        val f = bannerOnTwoObjects()
+        assertEquals(MemoryBannerOutcome.Done, removeBanner(f), "control")
     }
 
     // --- helpers ---
@@ -163,4 +198,26 @@ class MediaLockOrderRaceSliceTest {
     }
 
     private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)
+
+    /** A banner on the higher of a medium's two objects and its poster on the lower, so the slot order is the reverse. */
+    private data class BannerFixture(
+        val userId: String, val scopeId: String, val memory: String, val banner: String, val poster: String,
+        val high: String, val low: String,
+    )
+
+    private fun bannerOnTwoObjects(): BannerFixture {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val m = SharedObjectKit.medium(userId, scopeId, memory)
+        val (high, low) = listOf(m.original, m.preview).sortedByDescending { it.storageKey }
+        val banner = UUID.randomUUID().toString()
+        val poster = UUID.randomUUID().toString()
+        SharedObjectKit.setBanner(
+            userId, scopeId, memory, SharedObjectKit.shared(high.blobId, banner), SharedObjectKit.shared(low.blobId, poster),
+        ).statusCode(204)
+        return BannerFixture(userId, scopeId, memory, banner, poster, high.storageKey, low.storageKey)
+    }
+
+    private fun removeBanner(f: BannerFixture): MemoryBannerOutcome =
+        banners.remove(f.scopeId, f.memory, f.banner, f.poster, "bWV0YQ==", 1, PrincipalKey.User(f.userId))
 }

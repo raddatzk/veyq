@@ -25,7 +25,11 @@ class AttachmentNodeSubtreeEraser(
         if (attachments.isEmpty()) return emptySet()
         val guests = attachments.mapNotNull { it.shareIdentityId }.toSet()
         NodeAttachmentEntity.delete("scopeId = ?1 and nodeId in ?2", scopeId, nodeIds)
-        attachments.forEach { blobs.deleteBlobRow(it.blobId) }
+        blobs.deleteBlobRows(scopeId, attachments.map { it.blobId })
         return guests
     }
+
+    /** The attachments' blobs: no row lock of its own (the scope lock, above). */
+    override fun blobIdsOf(scopeId: String, nodeIds: List<String>): Collection<String> =
+        NodeAttachmentEntity.find("scopeId = ?1 and nodeId in ?2", scopeId, nodeIds).list().map { it.blobId }
 }

@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.SharedBlobSpec
 import me.raddatz.veyq.core.blob.SharedBlobs
+import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.items.ItemsCursor
@@ -314,7 +315,7 @@ class MediaStore(
         val keys = blobIds.mapNotNull { BlobEntity.findById(it)?.storageKey }.toSet()
         derivatives.forEach { MediaDerivativeEntity.deleteById(it.id) } // FK: the referencing rows go first
         MediaEntity.deleteById(media.id)
-        blobIds.forEach { blobs.deleteBlobRow(it) }
+        blobs.deleteBlobRows(media.scopeId, blobIds) // its objects locked at once, in the one order (StoredObjectLocks)
         val surviving = keys.filter { BlobEntity.count("storageKey", it) > 0 }.toSet()
         guestWriteRecords.forget(listOf(media.id)) // a guest's upload record names the medium: it goes with it
         // The erasure ledger's line (ADR 0056 decision 8): a guest's delete of its own upload leaves no trash to re-fire,
@@ -356,8 +357,18 @@ class MediaStore(
         val expired = MediaEntity.find("deletedAt is not null and deletedAt < ?1", cutoff)
             .withLock(LockModeType.PESSIMISTIC_WRITE).list()
             .filter { it.deletedAt?.isBefore(cutoff) == true }
+        // Every object of every expired medium locked at once, in the one lock order, before the first is deleted:
+        // one medium at a time, they would be locked crosswise to a measure-taker's (StoredObjectLocks).
+        expired.groupBy { it.scopeId }.forEach { (scopeId, media) -> StoredObjectLocks.lockOf(scopeId, blobIdsOf(media)) }
         expired.forEach { purgeMediaRows(it) }
         return expired.size
+    }
+
+    /** Every blob [media] name: their originals and their derivatives'. */
+    fun blobIdsOf(media: List<MediaEntity>): List<String> {
+        if (media.isEmpty()) return emptyList()
+        val derivatives = media.map { it.id }.chunked(500).flatMap { MediaDerivativeEntity.list("mediaId in ?1", it) }
+        return media.map { it.blobId } + derivatives.map { it.blobId }
     }
 
     /**

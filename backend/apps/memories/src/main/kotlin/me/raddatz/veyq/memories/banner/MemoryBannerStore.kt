@@ -3,6 +3,7 @@ package me.raddatz.veyq.memories.banner
 import me.raddatz.veyq.core.blob.AttachOutcome
 import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.SharedBlobSpec
+import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.identity.PrincipalKey
@@ -56,6 +57,12 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
         nodes.lockScope(scopeId)
         val current = slots(nodeId)
         if (current != (banner.expectedBlobId to expectedPosterBlobId)) return MemoryBannerOutcome.BannerStale(current.first, current.second)
+        // Every object both slots touch - the predecessors and the shared sources - locked at once, in the one lock
+        // order (StoredObjectLocks): slot by slot, they would be locked crosswise to a measure-taker's.
+        StoredObjectLocks.lockOf(
+            scopeId,
+            listOf(banner.expectedBlobId, expectedPosterBlobId, (banner as? Shared)?.spec?.sourceBlobId, (poster as? Shared)?.spec?.sourceBlobId),
+        )
 
         attach(scopeId, nodeId, MemoryBanner.SLOT, banner)?.let { return it }
         if (poster != null) {
@@ -84,6 +91,7 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
         if ((bannerNow != null && bannerNow != blobId) || (posterNow != null && posterNow != posterBlobId)) {
             return MemoryBannerOutcome.BannerStale(bannerNow, posterNow)
         }
+        StoredObjectLocks.lockOf(scopeId, listOf(bannerNow, posterNow)) // both objects at once, in the one lock order
         if (bannerNow != null) detachHeld(scopeId, nodeId, MemoryBanner.SLOT, bannerNow)?.let { return it }
         if (posterNow != null) detachHeld(scopeId, nodeId, MemoryBanner.POSTER_SLOT, posterNow)?.let { return it }
         return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
