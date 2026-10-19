@@ -317,7 +317,7 @@ class CredentialResetRaceSliceTest {
                    "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
                    "recoveryWrap":{"wrappedKey":"$NEW_REC_WRAP","kdfParams":"$KDF"},
                    "secretKeyProofSignature":"${PROOF_KEY.sign(statement)}",
-                   "identityPins":{"blob":"$DOC","revision":0},"deviceRegister":{"blob":"$DOC","revision":0}}""",
+                   "identityPins":{"revision":0,"head":"$DOC","put":[],"remove":[],"replaceAll":true},"deviceRegister":{"blob":"$DOC","revision":0}}""",
             )
             .`when`().post("/api/account/rotation").then().extract().statusCode()
     }

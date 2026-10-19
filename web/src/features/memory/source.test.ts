@@ -282,7 +282,7 @@ describe("the member's source is today's calls, with its scope", () => {
   // [what the view calls, the module function it must reach, the arguments it must reach it with]
   const doors: [string, () => unknown, (...a: never[]) => unknown, unknown[]][] = [
     ['listMedia', () => src.listMedia('n'), media.listMediaPages, [S, 'n']],
-    ['loaders.grid', () => src.loaders.grid(item, key, gridSignal), media.openGrid, [S, key, item, gridSignal]],
+    ['loaders.grid', () => src.loaders.grid(item, key, gridSignal), media.openGrid, [S, key, item, gridSignal, expect.any(Function)]], // + the grid's frame opener (openedListing.ts)
     ['loaders.preview', () => src.loaders.preview(item, key), media.openLightbox, [S, key, item]],
     ['loaders.original', () => src.loaders.original(item, key), media.openOriginal, [S, key, item]],
     ['loaders.chunk', () => src.loaders.chunk(item, key), media.chunkProvider, [S, key, item]],

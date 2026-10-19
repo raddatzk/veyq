@@ -19,7 +19,7 @@ import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate, setUnlocked } from '../../../app/vault'
 import { isCodedError, HttpStatus } from '../../../shared/httpError'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
-import { pinStoreDocument } from '../identityPins'
+import { pinStoreDocument, type PinStoreWrite } from '../identityPins'
 import { registry } from '../../../core/applications/registry'
 import { registerDocument } from '../deviceRegister'
 import { carryMarks, raiseMarks, TrustStateRefused, type AccountDocumentStore } from '../trustMarks'
@@ -176,11 +176,13 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     // documents are re-read and re-sealed against what is now stored, and the same keys go up again under the
     // same signature (the documents are not part of the proof's statement). A document this device refuses —
     // older than its mark, missing after it held one, unreadable — refuses the rotation before any write.
-    const sealed = { pins: { blob: '', revision: 0 }, register: { blob: '', revision: 0 } }
+    let sealed!: { pins: PinStoreWrite; register: { blob: string; revision: number } }
     let result: Awaited<ReturnType<ReturnType<typeof accountRotationApi>['rotateAccountKeys']>>
     for (let attempt = 1; ; attempt++) {
-      sealed.pins = await resealUnderNewKey(pinStoreDocument, oldMasterKey, newMasterKey)
-      sealed.register = await resealUnderNewKey(registerDocument, oldMasterKey, newMasterKey)
+      sealed = {
+        pins: await resealUnderNewKey(pinStoreDocument, oldMasterKey, newMasterKey),
+        register: await resealUnderNewKey(registerDocument, oldMasterKey, newMasterKey),
+      }
       try {
         result = await withRefresh(() =>
           accountRotationApi().rotateAccountKeys({
@@ -245,11 +247,11 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
  * mark, unreadable — is a refusal of the rotation: re-sealing a rolled-back copy under MK' would make the rollback
  * the rotation's own, and the honest way back from a refused document is the user's reset, not this.
  */
-async function resealUnderNewKey<T>(
-  doc: AccountDocumentStore<T>,
+async function resealUnderNewKey<T, W extends { revision: number }>(
+  doc: AccountDocumentStore<T, W>,
   oldMk: Uint8Array,
   newMk: Uint8Array,
-): Promise<{ blob: string; revision: number }> {
+): Promise<W> {
   const served = await doc.fetch()
   let value: T
   try {
@@ -258,7 +260,7 @@ async function resealUnderNewKey<T>(
     if (e instanceof TrustStateRefused) throw new RotationRefused('trustStateRefused')
     throw e
   }
-  return { blob: doc.seal(newMk, value, served.revision + 1), revision: served.revision }
+  return { ...doc.seal(newMk, value, served.revision + 1), revision: served.revision } as W
 }
 
 /**

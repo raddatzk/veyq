@@ -2,10 +2,11 @@
 // Another member's safety number on their profile page, and the compare that marks them verified
 // (uc.spaces.enforce-verified-identities main flow 1-3, A1, E1; ADR 0028 Decision 3).
 //
-// The number shown is the key this device would TRUST: the pin's when there is one, else the directory's. Two ways to
+// The number shown is the key this device would TRUST: the pin's when there is one, else the directory's - as a
+// fingerprint, which is what a pin holds (ADR 0104 decision 3), so the digits render from it alone. Two ways to
 // compare it with the number the other member's own device shows (`MySafetyNumber`): SCAN their QR - a code that is not a
 // veyq safety code, or one of a different key, is said as such and never accepted - or COMPARE the digits read aloud.
-// A match is one user action: `markVerified` on the compared key, which for an unpinned member pins it already verified
+// A match is one user action: `markVerified` on the compared fingerprint, which for an unpinned member pins it verified
 // in the same sealed write (`pinIfUnpinned`). A key that moved under the compare (`IdentityMovedError`) writes nothing
 // and says so. A mismatch never writes; where the pin differs from the directory the changed-key review is one click.
 //
@@ -14,8 +15,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import { getPin, foldTrust, markVerified, safetyNumber, IdentityMovedError, type TrustState } from '../../features/account/identityPins'
-import { compareScan } from '../../features/account/safetyCode'
+import { getPin, foldTrust, markVerified, safetyNumberOfFingerprint, IdentityMovedError, type TrustState } from '../../features/account/identityPins'
+import { compareScan, fingerprintDigestB64 } from '../../features/account/safetyCode'
 import { TrustStateRefused, refusalMessageKey } from '../../features/account/trustMarks'
 import TrustResetLink from '../../features/account/trustReset/TrustResetLink.vue'
 import KitScanner from '../../features/account/emergencyKit/KitScanner.vue'
@@ -35,14 +36,15 @@ type View =
   | {
       kind: 'ready'
       directoryKey: string
-      /** The key the compare is about: the pin's, else the directory's. */
-      compareKey: string
+      /** The fingerprint the compare is about: the pin's, else the directory key's; null when this device cannot decode
+       *  the directory key (nothing to compare then). */
+      compareFingerprint: string | null
       /** Whether a pin existed when this was read - a match on an unpinned member pins it (ADR 0028 Decision 3). */
       pinned: boolean
       state: TrustState
       /** The pin is `verified` - on `changed`, a verified contact's key changed (ADR 0028 Decision 3). */
       pinVerified: boolean
-      /** The compared key's digits, or null when this device cannot decode it (nothing to compare then). */
+      /** The compared fingerprint's digits, or null when there is none to compare. */
       number: string | null
     }
 const view = ref<View>({ kind: 'loading' })
@@ -60,17 +62,28 @@ async function load() {
     }
     const pin = await getPin(props.userId)
     if (mine !== token) return
-    const compareKey = pin?.key ?? directoryKey
-    view.value = { kind: 'ready', directoryKey, compareKey, pinned: Boolean(pin), state: foldTrust(pin, directoryKey), pinVerified: pin?.state === 'verified', number: numberOf(compareKey) }
+    const compareFingerprint = pin?.fingerprint ?? fingerprintOf(directoryKey)
+    view.value = {
+      kind: 'ready', directoryKey, compareFingerprint, pinned: Boolean(pin), state: foldTrust(pin, directoryKey),
+      pinVerified: pin?.state === 'verified', number: compareFingerprint === null ? null : numberOf(compareFingerprint),
+    }
   } catch (e) {
     if (mine !== token) return
     view.value = e instanceof TrustStateRefused ? { kind: 'refused', messageKey: refusalMessageKey(e) } : { kind: 'error' }
   }
 }
 
-function numberOf(keyB64: string): string | null {
+function fingerprintOf(keyB64: string): string | null {
   try {
-    return safetyNumber(keyB64)
+    return fingerprintDigestB64(keyB64)
+  } catch {
+    return null
+  }
+}
+
+function numberOf(fingerprintB64: string): string | null {
+  try {
+    return safetyNumberOfFingerprint(fingerprintB64)
   } catch {
     return null
   }
@@ -89,8 +102,8 @@ const ready = computed(() => (view.value.kind === 'ready' ? view.value : null))
 const { run: runVerify, pending: verifying } = useAsyncAction(
   async () => {
     const v = ready.value
-    if (!v) return
-    await markVerified(props.userId, v.compareKey, { pinIfUnpinned: !v.pinned })
+    if (!v?.compareFingerprint) return
+    await markVerified(props.userId, v.compareFingerprint, { pinIfUnpinned: !v.pinned })
     outcome.value = 'verified'
     await load()
   },
@@ -127,8 +140,8 @@ function theyDiffer() {
 async function onScanned(text: string) {
   scanOpen.value = false
   const v = ready.value
-  if (!v) return
-  const verdict = compareScan(text, v.compareKey)
+  if (!v?.compareFingerprint) return
+  const verdict = compareScan(text, v.compareFingerprint)
   if (verdict === 'match') await runVerify()
   else outcome.value = verdict
 }

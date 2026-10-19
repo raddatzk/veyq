@@ -527,7 +527,7 @@ describe('the register never goes backwards on this device (ADR 0028 Decision 7)
     // Control: at the mark it opens, and what it seals for v5 the ordinary read opens at v5.
     const server = fakeServer({ blob, revision: 4 })
     const opened = await registerDocument.open(MK.slice(), await registerDocument.fetch())
-    await registerDocument.write({ blob: registerDocument.seal(MK.slice(), opened, 5), revision: 4 })
+    await registerDocument.write({ ...registerDocument.seal(MK.slice(), opened, 5), revision: 4 })
     expect(server.state.revision).toBe(5)
     expect(await namesOf(['fam1'])).toEqual({ fam1: 'Work laptop' })
   })

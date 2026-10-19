@@ -20,35 +20,44 @@
   the account must be **unlocked** for any of this to run.
 - **Postconditions:** after wrapping to a contact for the first time, the client holds a **pin** of that contact's
   identity public key (state *pinned*); a later wrap to a **changed** key is surfaced (UI) or refused (worker),
-  never silently trusted. The server saw only an opaque ciphertext — never a `userId`, a pinned key, or the count.
+  never silently trusted. The server saw opaque ids, sealed entries and a sealed head — never a `userId`, a pinned
+  key or a state; it does see how many pins there are.
 
 ## What it is — the sealed pin store
 
-A single **pin-store blob**, sealed under the Master Key (`symWrap(masterKey, blob, "identity-pins")`) and synced
-with the account exactly like the other Master-Key-sealed material — the server stores + relays **one opaque
-ciphertext** and never interprets it. The plaintext is a small map:
+**One sealed entry per pin, held together by a sealed head**
+([ADR 0104](../../../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)),
+synced with the account like the other Master-Key-sealed material. The server stores and relays opaque rows and
+never interprets them:
 
 ```
-{ pins: { <userId>: { key, state, firstSeenAt } } }
+entry at pinId = HMAC-SHA256(K_pinIndex, userId):   seal("identity-pin" ‖ pinId, { userId, fingerprint, state, firstSeenAt } padded to 192 bytes)
+head at revision n:                                 seal("identity-pins" ‖ n,     { version: 2, count, digest })
 ```
 
-- **`key`** — the contact's full identity public bundle (`lp(kem) || lp(sign)`: the 1216-byte X-Wing encapsulation key and the
-  Ed25519 key, base64), the exact
-  bytes a wrap targets. A change is detected by comparing the directory-returned key against this.
+- **`pinId`** — an opaque 32-byte id (64 hex characters), keyed by a Master-Key-derived key: stable while the Master
+  Key is, unlinkable across accounts. A reader refuses an entry whose `userId` does not derive its id.
+- **`fingerprint`** — the contact's identity **fingerprint hash** (the SHA-256 over their full identity public bundle
+  that the safety number and its QR already are), not the bundle: every reader compares it with a served key's or
+  shows its safety number, both functions of the hash. A change is detected by comparing the directory key's
+  fingerprint against this.
 - **`state`** — `pinned` (trust-on-first-use, unverified) or `verified` (a human compared the safety-number
   out-of-band, [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)).
 - **`firstSeenAt`** — when this key was first pinned (for the review surface).
+- **The head's `digest`** — SHA-256 over every entry in `pinId` order, so the set is one object the device can check
+  (§ Sync & merge). Vector-pinned: `contracts/crypto/vectors/v1.json#identity_pin`.
 
 **Account-global, keyed by `userId`.** Identity is one keypair per account across all tenants
 ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)), so there is **one pin per contact** — a person
-you verified in one space is verified everywhere.
+you verified in one space is verified everywhere. A store holds at most 25,000 pins: the rotation and the reset
+write the whole set in one request, and that request must fit the server's body limit.
 
 ## Main flow — the TOFU check before every foreign wrap
 
 1. A client is about to `asymWrap` to a directory-returned identity key for `userId` (a grant re-wrap, a
    grant-delivery job, or an invite name-key).
 2. **Open the pin store** (unseal under the Master Key) and look up `userId`:
-   - **No pin** → **pin it** (`state = pinned`, record the key + `firstSeenAt`), then proceed with the wrap
+   - **No pin** → **pin it** (`state = pinned`, record the key's fingerprint + `firstSeenAt`), then proceed with the wrap
      (trust-on-first-use — the bootstrap; blocking first contact would be a chicken-and-egg).
    - **Pin exists, key matches** → proceed.
    - **Pin exists, key differs** → **change response** (ADR 0028): a **UI notice** (the user reviews; on **accept**
@@ -57,8 +66,8 @@ you verified in one space is verified everywhere.
      a human, never auto-trusted.
 3. **Verification** ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md))
    elevates a pin `pinned → verified` on a member's profile, after a safety-number compare (a scanned QR or the
-   digits read aloud). `markVerified` stamps `verified` **only** if the pinned key still equals the compared key
-   (else `IdentityMovedError`, nothing written); for a member with no pin it pins the compared key **already
+   digits read aloud). `markVerified` stamps `verified` **only** if the pinned fingerprint still equals the compared
+   one (else `IdentityMovedError`, nothing written); for a member with no pin it pins the compared fingerprint **already
    verified** in the same one write (`pinIfUnpinned`, ADR 0028 Decision 3) — so no profile view and no compare that
    failed ever pins. It ships without strict mode on purpose (ADR 0028 Decision 3): TOFU cannot see a key substituted
    at first contact, and a compare out-of-band can. A **changed** key still opens the side-by-side review; **accept**
@@ -80,29 +89,36 @@ sequenceDiagram
   C->>S: GET directory → identityPublicKey(userId)
   C->>P: open (unseal MK) → lookup userId
   alt no pin
-  C->>P: pin { key, state=pinned, firstSeenAt } #59; re-seal
+  C->>P: pin { fingerprint, state=pinned, firstSeenAt } #59; seal one entry + the head
   C->>C: proceed with asymWrap (TOFU)
   else key == pin
   C->>C: proceed with asymWrap
   else key != pin
   C->>C: UI → notice (accept ⇒ repin) #59; worker ⇒ block + decline job + flag
   end
-  Note right of S: sees ONE opaque ciphertext blob<br>(no userId, no key, no count)
+  Note right of S: sees opaque ids, sealed entries, a sealed head<br>(no userId, no key, no state)
 ```
 
 ## Sync & merge
 
-The blob carries a monotonic **`revision`**, beside the ciphertext and bound into its seal
-([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) rather than stored inside it. A write is
-optimistic-concurrency: if the server's stored revision moved since the client opened it, the client **re-opens and
-union-merges** before re-sealing. Pins are **append-heavy** (a new contact), so real conflicts are rare; a
-same-contact conflict resolves to **`verified` wins**, else the later `firstSeenAt`. A **new device** pulls + opens
-the blob and inherits every pin — so the trust state is shared across the account, not re-TOFU'd per device.
+The head carries the store's one monotonic **`revision`**, beside the ciphertext and bound into its seal
+([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)). Every write — a pin, an accept, a verify — is **one
+entry plus a new head** in one compare-and-set on that revision; the reset and the rotation write the whole set with
+`replaceAll`. If the stored revision moved, nothing of the write lands (`409 stale_revision`), and the client
+**re-reads and re-applies** its change before re-sealing. Pins are **append-heavy** (a new contact), so real
+conflicts are rare; a same-contact conflict resolves to **`verified` wins**. A **new device** lists the entries and
+inherits every pin — so the trust state is shared across the account, not re-TOFU'd per device.
+
+A device lists the entries once per head revision, checks them against the head's digest and keeps them for the
+session; a later read is the head alone while its revision and digest stay the ones it checked. A mismatch while the
+head stayed put is a rollback (below); a head that moved during the listing is read again.
 
 **Which copy a device reads is the server's choice, so the device keeps its own mark**
 ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7): the highest revision
-it has opened, held locally and never synced. A served copy below the mark, a missing store after one was held,
-or a blob that does not open is refused — on read and before every write — never read as empty. A linked
+it has opened, held locally and never synced. A served head below the mark, a missing store after one was held,
+or a head that does not open is refused — on read and before every write — never read as empty; and an entry set
+the head's digest does not describe (one withheld, added, rolled back or moved) is refused the same way
+(`trust_state_rolled_back`). A linked
 device starts from its linker's marks, and an account-key rotation carries them to the new Master Key; the
 marks, their slot and what refuses live in `web/src/features/account/trustMarks.ts`.
 
@@ -117,9 +133,12 @@ revision reads the new store with no action; one whose mark sat above it is offe
 
 ## Quality notes
 
-- **Operator-blind.** One Master-Key-sealed ciphertext; the server never learns whom you pinned or verified, nor
-  the count. A per-contact-row store keyed by `userId` would leak the trust set; even blinded rows leak the count —
-  rejected ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
+- **Operator-blind, except the count.** Opaque ids and Master-Key-sealed entries; the server never learns whom you
+  pinned or verified. It does learn how many pins there are — as it always could from the single blob's length, and
+  from the grant rows it holds anyway — and which entry a write touched
+  ([ADR 0104](../../../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
+  decisions 5 and § Consequences). A store keyed by plain `userId` would leak the trust set — rejected
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
 - **The first-use gap (honest).** A pin can only catch a key that *changes* after first sight. If the operator
   substitutes a contact's key **before** this client ever pinned the real one, nothing looks wrong until manual
   verification or Key Transparency (the end-state).

@@ -2,6 +2,7 @@
 title: Key hierarchy
 description: Every key veyq uses, layer by layer — how it is made, what wraps it, who holds it, when it rotates and what losing it means.
 sources:
+  - docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md
   - docs/crosscutting/security-model.md
   - docs/features/account/enablers/en.account.key-model.md
   - docs/decisions/0012-content-key-hierarchy.md
@@ -133,8 +134,10 @@ What each account key is for:
 The identity key's two halves do different work. Others seal scope grants to its encryption key; its signing key
 signs every grant this user issues. Its public bundle is what TOFU pins and what the safety number is computed over
 ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md);
-[Protocols](/veyq/security/protocols/)). The Master Key also seals the account's **identity-pin store** and **device
-register**, which is why a rotation re-seals both in the same transaction.
+[Protocols](/veyq/security/protocols/)). The Master Key also seals the account's **identity-pin store** — one entry
+per pin, at an id derived under a key of its own (`veyq/v1/identity-pin-index`), and a head over all of them — and the
+**device register**, which is why a rotation re-seals both in the same transaction, every pin entry moving to the new
+key's ids.
 
 ### Unlock methods
 

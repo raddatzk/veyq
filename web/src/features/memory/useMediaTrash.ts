@@ -5,15 +5,18 @@
 // lifecycle (revoked on unmount). Two outward effects go back to the host via callbacks: a restore/purge lifts the
 // gallery's optimistic-delete tombstone (`liftTombstone`) and a restore re-lists the gallery (`reloadGallery`). A
 // refused restore is named with its reason, as the organizer's delete and Undo name theirs (inbox #427, #429, #432).
+// Its thumbnails go through the gallery's own pipeline (`useThumbnailPipeline`, ADR 0105 decision 2): read for the tiles
+// its windowed grid announces, nearest first, through the same read scheduler — never every one of a long trash at once.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
-import { hasDerivatives, unsealMeta, type MediaItem } from './media'
+import { hasDerivatives, type MediaItem } from './media'
+import { openListing, openedMeta } from './openedListing'
 import type { MemorySource } from './source'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { refusalsByReason, sealedMediaName } from './mediaRefusal'
-import { useObjectUrls } from '../../shared/state/useObjectUrls'
+import { useThumbnailPipeline } from './useThumbnailPipeline'
 import { useToast } from '../../shared/state/useToast'
 import type { TreeNode } from '../../core/node/tree'
 
@@ -35,10 +38,17 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   const toast = useToast()
 
   const trashedItems = ref<MediaItem[]>([])
-  // Per-tile decrypted thumbnails — the object-URL lifecycle (replace/drop/reset/unmount) is owned by the primitive.
-  const thumbs = useObjectUrls()
-  // mediaIds whose thumbnail read failed for good: the tile's error state (inbox #488), reassigned on every change.
-  const failed = ref<ReadonlySet<string>>(new Set())
+  // The tiles' thumbnails: the gallery's pipeline over the trash's own list — read for what its grid wants, each URL
+  // revoked on replace, drop, reset and unmount, a read that failed for good the tile's error state (inbox #488).
+  const thumbs = useThumbnailPipeline<MediaItem>({
+    idOf: (m) => m.mediaId,
+    isDerivable: hasDerivatives,
+    decryptTile: (m, signal) => {
+      const key = ctx.memoryKey()
+      return key ? ctx.source.loaders.grid(m, key, signal) : Promise.resolve(null)
+    },
+    donorPreviewFor: () => null, // nothing in the trash is still uploading
+  })
   const trashStatus = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   // Trash tab (cr-0111): batch selection + the per-tile overflow menu + the irreversible-purge confirm.
   const selectedTrash = ref<Set<string>>(new Set())
@@ -79,7 +89,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
 
   /** Drop a media from the Trash tab locally (revoke its thumb + deselect) — the optimistic half of restore/purge. */
   function dropFromTrash(mediaId: string) {
-    thumbs.drop(mediaId)
+    thumbs.dropThumb(mediaId)
     trashedItems.value = trashedItems.value.filter((it) => it.mediaId !== mediaId)
     if (selectedTrash.value.has(mediaId)) {
       const n = new Set(selectedTrash.value)
@@ -95,24 +105,15 @@ export function useMediaTrash(ctx: MediaTrashContext) {
     if (!key || !trash) return
     const nodeId = ctx.node().id
     trashStatus.value = 'loading'
-    thumbs.clear()
-    failed.value = new Set()
+    thumbs.revokeAll()
     try {
       const list = await trash.list(nodeId)
       if (ctx.node().id !== nodeId) return
+      await openListing(ctx.scopeId(), key, list) // the tiles' aspect, opened off the main thread before they are laid out
+      if (ctx.node().id !== nodeId) return
       trashedItems.value = list
+      thumbs.reconcile(list) // the thumbnails its grid wants are read now ([wantTrashThumbs])
       trashStatus.value = 'ready'
-      await Promise.all(
-        list.map(async (m) => {
-          if (!hasDerivatives(m)) return
-          try {
-            const bytes = await ctx.source.loaders.grid(m, key)
-            if (ctx.node().id === nodeId) thumbs.set(m.mediaId, new Blob([bytes as BlobPart]))
-          } catch {
-            if (ctx.node().id === nodeId) failed.value = new Set([...failed.value, m.mediaId]) // the tile's error state
-          }
-        }),
-      )
     } catch {
       if (ctx.node().id === nodeId) trashStatus.value = 'error'
     }
@@ -120,8 +121,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
 
   /** Drop the previous Memory's trash state when a different Memory/chapter opens (cr-0110/0111). */
   function resetTrash() {
-    thumbs.clear()
-    failed.value = new Set()
+    thumbs.revokeAll()
     trashedItems.value = []
     trashStatus.value = 'idle'
     selectedTrash.value = new Set()
@@ -133,7 +133,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   /** The trashed media as MediaGrid tiles — the same justified layout as the gallery (aspect from the sealed dims). */
   const trashLayoutItems = computed(() =>
     trashedItems.value.map((m, index) => {
-      const dims = ctx.memoryKey() ? unsealMeta(ctx.scopeId(), ctx.memoryKey()!, m) : null
+      const dims = ctx.memoryKey() ? openedMeta(ctx.scopeId(), ctx.memoryKey()!, m) : null
       return { id: m.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h), media: m, index }
     }),
   )
@@ -208,8 +208,10 @@ export function useMediaTrash(ctx: MediaTrashContext) {
 
   return {
     trashedItems, // read-only to the host (its empty-state check); mutated only inside this composable
-    trashThumbs: thumbs.urls,
-    trashThumbFailed: failed,
+    trashThumbs: thumbs.thumbs,
+    trashThumbFailed: thumbs.failed,
+    /** The tiles the trash's grid mounts, nearest first: their thumbnails are read (ADR 0105 decision 2). */
+    wantTrashThumbs: (ids: readonly string[]) => thumbs.want('trash', ids),
     trashStatus,
     selectedTrash,
     trashMenu,

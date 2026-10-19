@@ -8,7 +8,7 @@
 // an owner does with its blobs — which roles it declares, how the upload completes, what metadata rides along — is the
 // application's, which calls in here; this module imports no application (`validate_web_core_imports_no_applications`).
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { b64std } from '@veyq/crypto/base64'
 import { HttpStatus } from '../../shared/httpError'
 import { blobApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -16,38 +16,12 @@ import type { PresignedUrl } from '../../api/generated/blob'
 import type { ChunkProvider } from '../../sw/protocol'
 import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, BlobSource, ChunkPut, ReservedUpload, WindowFn } from './types'
 import { openBlobMetaOf, type BlobMeta, type OpenedBlobMeta } from './meta'
+import { blobKeyContext, openFrames, unwrapBlobKey } from './keys'
 import { PRESIGN_BATCH_MAX, PRESIGN_REFRESH_MS, PresignExpired, readScheduler, type Presigned, type ReadOpts } from './readScheduler'
 
-/**
- * Every `K_blob` wrap is bound to the object it is stored as (ADR 0072): (scope, owner, blob, role). A server that
- * attaches a blob under another owner, or serves one role's blob in another's slot, gets a wrap that does not open
- * there.
- */
-const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: BlobRole }) =>
-  ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
-
-/** Unwrap a ref's `K_blob` under `key`, bound to the ref's (scope, owner, blob, role): `OpenRefused` for a ref the
- *  server moved to another owner or slot. Exported for a report, which hands a medium's `K_blob`s over
- *  (uc.moderation.report). */
-export const unwrapBlobKey = (scopeId: string, key: Uint8Array, ref: BlobRef): Uint8Array =>
-  v1.open(blobKeyContext(scopeId, ref), key, fromB64std(ref.wrappedBlobKey))
-
-/**
- * A listed blob's sealed metadata, **for display** (inbox #397): its `K_blob` unwrapped under `key`, then its
- * `wrappedBlobMeta` opened (`meta.ts` `openBlobMetaOf`). Null when the ref carries none, or when either the wrap or the
- * meta does not open — a ref moved to another owner, another blob's meta in its place. Never throws. For a blob about
- * to be read, the chunk provider's `meta()` reuses the key it already unwrapped.
- */
-export function readBlobMeta(scopeId: string, key: Uint8Array, ref: BlobRef): OpenedBlobMeta | null {
-  if (!ref.wrappedBlobMeta) return null
-  let blobKey: Uint8Array
-  try {
-    blobKey = unwrapBlobKey(scopeId, key, ref)
-  } catch {
-    return null
-  }
-  return openBlobMetaOf(ref, blobKey)
-}
+// The wrap's binding, its unwrap, a listed blob's meta and the frames' open are pure, and live in `keys.ts` so a Worker
+// can import them; re-exported here for the callers that always imported them from the transport.
+export { unwrapBlobKey, readBlobMeta, openFrames } from './keys'
 
 /** Plaintext bytes per full chunk before sealing — the contract's frame size (ADR 0013 §3), not a choice made here:
  *  the server derives `chunkCount` from `byteSize` on exactly this and refuses any other. */
@@ -218,6 +192,15 @@ export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: s
 /** A blob's presigned per-chunk GET URLs, in chunk order, scheduled as `opts` says. */
 export type PresignUrls = (opts: ReadOpts) => Promise<string[]>
 
+/** Opens a whole blob's fetched frames under its `K_blob` somewhere other than this thread (a grid's thumbnails in
+ *  Memories' listing opener, inbox #489); rejects as `openFrames` would. Absent: opened here, by [openFrames]. */
+export type FrameOpener = (blobKey: Uint8Array, frames: Uint8Array[]) => Promise<Uint8Array>
+
+/** How a whole-blob read is scheduled ([ReadOpts]) and where its frames are opened. */
+export interface OpenOpts extends ReadOpts {
+  openFrames?: FrameOpener
+}
+
 /** How often one read re-presigns its blob after an expired URL (a store `403`, or one that aged in the queue) before
  *  it fails: twice covers a queue that outlived one TTL and a clock skew on top. */
 const MAX_RENEWS = 2
@@ -255,9 +238,10 @@ async function readFrames(presign: PresignUrls, opts: ReadOpts): Promise<Uint8Ar
  * Open a blob whose `K_blob` the caller already holds — a moderator's review of a reported medium, whose report share
  * hands over each blob's key itself rather than the key it is wrapped under (uc.moderation.review-a-case).
  */
-export async function openBlobWithKey(blobKey: Uint8Array, presign: PresignUrls, opts: ReadOpts = {}): Promise<Uint8Array> {
-  const frames = await readFrames(presign, opts)
-  return v1.concat(...frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame)))
+export async function openBlobWithKey(blobKey: Uint8Array, presign: PresignUrls, opts: OpenOpts = {}): Promise<Uint8Array> {
+  const { openFrames: open, ...read } = opts
+  const frames = await readFrames(presign, read)
+  return open ? open(blobKey, frames) : openFrames(blobKey, frames)
 }
 
 /**
@@ -266,7 +250,7 @@ export async function openBlobWithKey(blobKey: Uint8Array, presign: PresignUrls,
  * back to plaintext (the AAD position check still applies). Shared by the authed [openBlob] and an anonymous share
  * viewer (presign via the gated share endpoint, cr-0100) — the decrypt is identical; only who presigns differs.
  */
-export async function openBlobVia(scopeId: string, key: Uint8Array, ref: BlobRef, presign: PresignUrls, opts: ReadOpts = {}): Promise<Uint8Array> {
+export async function openBlobVia(scopeId: string, key: Uint8Array, ref: BlobRef, presign: PresignUrls, opts: OpenOpts = {}): Promise<Uint8Array> {
   const blobKey = unwrapBlobKey(scopeId, key, ref)
   return openBlobWithKey(blobKey, presign, opts)
 }
@@ -302,7 +286,7 @@ export async function presignAllChunks(scopeId: string, blobId: string, opts: Re
  * Open a blob: unwrap its `K_blob` under `key`, presign the chunk GETs, fetch the ciphertext frames
  * direct-from-store, and `openFrame` them back to plaintext (the AAD position check still applies).
  */
-export async function openBlob(scopeId: string, key: Uint8Array, ref: BlobRef, opts: ReadOpts = {}): Promise<Uint8Array> {
+export async function openBlob(scopeId: string, key: Uint8Array, ref: BlobRef, opts: OpenOpts = {}): Promise<Uint8Array> {
   return openBlobVia(scopeId, key, ref, (o) => presignAllChunks(scopeId, ref.blobId, o), opts)
 }
 

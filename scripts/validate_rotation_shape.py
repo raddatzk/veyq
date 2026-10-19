@@ -14,7 +14,7 @@
      {wrappedKey, kdfParams} — no `method`. Which cold wrap is being rewritten is the *field it arrives in*,
      never a value inside it, so a `wraps: [{method, …}]` array cannot come back one level down and carry a
      subset again.
-  4. `identityPins` and `deviceRegister` are `$ref`s to the documents' own `IdentityPinsUpdate` /
+  4. `identityPins` and `deviceRegister` are `$ref`s to the documents' own writes, `IdentityPinsWrite` /
      `DeviceRegisterUpdate`. The rotation re-seals both inside its one transaction (ADR 0060 § Consequences):
      re-sealed after the publish, a failed re-seal left a document under a key that no longer exists, which every
      device then refuses (ADR 0028 Decision 7). Required like the rest — "this rotation leaves the pin store
@@ -85,7 +85,7 @@ REQUEST_PROPS = {
 WRAP_PROPS = {"wrappedKey", "kdfParams"}
 WRAP_REFS = ("passwordWrap", "recoveryWrap")
 # Each document arrives in its own named field, as the shape its own PUT already takes.
-DOCUMENT_REFS = {"identityPins": "IdentityPinsUpdate", "deviceRegister": "DeviceRegisterUpdate"}
+DOCUMENT_REFS = {"identityPins": "IdentityPinsWrite", "deviceRegister": "DeviceRegisterUpdate"}
 
 # Spellings a mode would plausibly arrive under. Not the enforcement — the property-set pin above is — but a
 # named hit earns a message that says *why* rather than "unexpected field".

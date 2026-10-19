@@ -12,6 +12,7 @@ import { PRODUCTION_ARGON_TIMEOUT_MS } from './testArgon'
 
 const unhex = (s: string) => Uint8Array.from(Buffer.from(s, 'hex'))
 const hex = (u: Uint8Array) => Buffer.from(u).toString('hex')
+const compareHex = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 const here = dirname(fileURLToPath(import.meta.url))
 // repo contracts/crypto/vectors/v1.json (3 levels up from packages/crypto/src/)
@@ -217,8 +218,14 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     const asymVectors: Record<string, AsymVector> = vectors.seal.asym
     // The recipient of every asym vector is X-Wing vector 0 (seal.note): its sk decapsulates their ct.
     const sk = unhex(vectors.xwing.vectors[0].sk)
+    // A vector spells a digest field (an identity pin's id) as hex; the context carries its bytes.
+    const symKinds: Record<string, readonly (readonly [string, string])[]> = SEAL_PURPOSES
+    const symField = (purpose: string, field: string, value: string | number): unknown =>
+      symKinds[purpose].some(([name, kind]) => name === field && kind === 'digest') ? unhex(value as string) : value
+    const symFields = (purpose: string, context: Record<string, string | number>) =>
+      Object.fromEntries(Object.entries(context).map(([field, value]) => [field, symField(purpose, field, value)]))
     const symCtx = (purpose: string): v1.SealContext =>
-      ({ purpose, ...symVectors[purpose].context }) as v1.SealContext
+      ({ purpose, ...symFields(purpose, symVectors[purpose].context) }) as v1.SealContext
     const asymCtx = (purpose: string): v1.SealToContext =>
       ({ purpose, ...asymVectors[purpose].context }) as v1.SealToContext
     const refusal = (purpose: string) => new v1.OpenRefused(purpose)
@@ -257,7 +264,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       })
       // Every binding field is load-bearing: the same blob, opened at an address one field away, is refused.
       it.each(Object.keys(v.context))('does not open with a different %s', (field) => {
-        const moved = { ...symCtx(purpose), [field]: otherValue(v.context[field]) } as v1.SealContext
+        const moved = { ...symCtx(purpose), [field]: symField(purpose, field, otherValue(v.context[field])) } as v1.SealContext
         expect(() => v1.open(moved, unhex(v.kek), unhex(v.blob))).toThrow(refusal(purpose))
       })
       it('does not open as any other purpose', () => {
@@ -885,6 +892,122 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('identity-pin store (ADR 0104)', () => {
+    const p = vectors.identity_pin
+    type Entry = { pinId: string; entry: string }
+    const masterKey = unhex(p.master_key)
+    const kIndex = unhex(p.k_pin_index)
+    const bytesOf = (es: Entry[]) => es.map((e) => ({ pinId: unhex(e.pinId), entry: unhex(e.entry) }))
+    const two: Entry[] = p.set.two.entries
+
+    it('derives the index key from the Master Key under its own info string', () => {
+      expect(hex(v1.identityPinIndexKey(masterKey))).toBe(p.k_pin_index)
+      expect(hex(v1.hkdfSha256(masterKey, new Uint8Array(0), v1.utf8('veyq/v1/identity-pin-index'), 32))).toBe(p.k_pin_index)
+      // Its own label: the item-mark self-tag key of the same Master Key is another key.
+      expect(hex(v1.identityPinIndexKey(masterKey))).not.toBe(hex(v1.itemMarkSelfKey(masterKey)))
+    })
+
+    type PinIdCase = { userId: string; pinId: string }
+    const pinIdCases: [string, PinIdCase][] = p.pin_ids.map((c: PinIdCase) => [c.userId, c])
+    it.each(pinIdCases)('%s: its pinId', (_u, c) => {
+      expect(hex(v1.identityPinId(kIndex, c.userId))).toBe(c.pinId)
+      // Another account's index key addresses the same contact elsewhere — ids do not link across accounts.
+      expect(hex(v1.identityPinId(v1.identityPinIndexKey(unhex('71'.repeat(32))), c.userId))).not.toBe(c.pinId)
+    })
+
+    it.each([
+      ['an upper-case id', (u: string) => u.toUpperCase()],
+      ['an extra character in front', (u: string) => `a${u}`],
+      ['an extra character behind', (u: string) => `${u}a`],
+      ['not a UUID', () => 'root'],
+      ['a boxed String', (u: string) => new String(u) as unknown as string],
+    ])('a userId that is %s is refused', (_name, spell) => {
+      expect(() => v1.identityPinId(kIndex, spell(p.pin_ids[0].userId))).toThrow(
+        new v1.SealContextInvalid('identity-pin userId is not a canonical lowercase UUID'),
+      )
+    })
+
+    it('the entry seal vector is pin_ids[0]\'s entry under the Master Key, padded to entry_bytes', () => {
+      const v = vectors.seal.sym['identity-pin']
+      expect(v.context.pinId).toBe(p.pin_ids[0].pinId)
+      expect(v.kek).toBe(p.master_key)
+      const pt = unhex(v.plaintext)
+      expect(pt.length).toBe(p.entry_bytes)
+      const text = new TextDecoder().decode(pt)
+      const entry = JSON.parse(text)
+      expect(Object.keys(entry)).toEqual(['userId', 'fingerprint', 'state', 'firstSeenAt'])
+      expect(entry.userId).toBe(p.pin_ids[0].userId)
+      expect(hex(Uint8Array.from(Buffer.from(entry.fingerprint, 'base64')))).toBe(vectors.fingerprint.hash)
+      expect(text.slice(text.lastIndexOf('}') + 1)).toMatch(/^ +$/)
+      // set.two carries this very ciphertext, so the stored entry and the digest over it cannot drift apart unseen.
+      expect(two.find((e) => e.pinId === v.context.pinId)?.entry).toBe(v.blob)
+    })
+
+    it('the head seal vector carries the empty set\'s head', () => {
+      const head = JSON.parse(new TextDecoder().decode(unhex(vectors.seal.sym['identity-pins'].plaintext)))
+      expect(head).toEqual({ version: 2, count: 0, digest: Buffer.from(unhex(p.set.empty.digest)).toString('base64') })
+    })
+
+    it('the set digest of the empty set and of two entries', () => {
+      expect(hex(v1.identityPinSetDigest([]))).toBe(p.set.empty.digest)
+      expect(hex(v1.identityPinSetDigest(bytesOf(two)))).toBe(p.set.two.digest)
+    })
+
+    it('the digest is over the SET in pinId order — the order the entries are handed in does not move it', () => {
+      expect(compareHex(two[0].pinId, two[1].pinId)).toBeGreaterThan(0) // listed opposite to pinId order
+      expect(hex(v1.identityPinSetDigest(bytesOf([...two].reverse())))).toBe(p.set.two.digest)
+      expect(hex(v1.identityPinSetDigest(new Set(bytesOf(two))))).toBe(p.set.two.digest)
+    })
+
+    // ADR 0028 Decision 7 per entry: each thing a server could do to one row moves the digest the head carries.
+    it('a withheld, added, rolled-back, moved or swapped entry each changes the digest', () => {
+      const base = bytesOf(two)
+      const flipped = base[0].entry.slice()
+      flipped[flipped.length - 1] ^= 1
+      const variants: [string, { pinId: Uint8Array; entry: Uint8Array }[]][] = [
+        ['withheld', base.slice(1)],
+        ['added', [...base, { pinId: unhex('ab'.repeat(32)), entry: base[0].entry }]],
+        ['rolled back (another ciphertext at the same id)', [{ ...base[0], entry: flipped }, base[1]]],
+        ['moved to another id', [{ ...base[0], pinId: unhex('ab'.repeat(32)) }, base[1]]],
+        ['swapped between two ids', [{ pinId: base[0].pinId, entry: base[1].entry }, { pinId: base[1].pinId, entry: base[0].entry }]],
+      ]
+      for (const [name, entries] of variants) expect(hex(v1.identityPinSetDigest(entries)), name).not.toBe(p.set.two.digest)
+    })
+
+    it('ids that share their leading bytes are ordered by the first byte that differs', () => {
+      // Every byte counts, not only the first: two ids equal up to their last byte are two ids, in the order of that byte.
+      const near = (last: number) => v1.concat(new Uint8Array(31).fill(0xab), Uint8Array.of(last))
+      const [lo, hi] = [{ pinId: near(1), entry: Uint8Array.of(1) }, { pinId: near(2), entry: Uint8Array.of(2) }]
+      const lpb = (b: Uint8Array) => Buffer.concat([Buffer.from([0, 0, 0, b.length]), Buffer.from(b)])
+      const expected = createHash('sha256').update(Buffer.from('veyq/v1/identity-pin-set', 'utf8'))
+      for (const e of [lo, hi]) expected.update(Buffer.concat([lpb(e.pinId), lpb(createHash('sha256').update(e.entry).digest())]))
+      const want = expected.digest('hex')
+      expect(hex(v1.identityPinSetDigest([hi, lo]))).toBe(want)
+      expect(hex(v1.identityPinSetDigest([lo, hi]))).toBe(want)
+    })
+
+    it('the digest is the note\'s formula, recomputed with node', () => {
+      const lpb = (b: Uint8Array) =>
+        Buffer.concat([Buffer.from([b.length >>> 24, (b.length >>> 16) & 0xff, (b.length >>> 8) & 0xff, b.length & 0xff]), Buffer.from(b)])
+      const sorted = bytesOf(two).sort((a, b) => compareHex(hex(a.pinId), hex(b.pinId)))
+      const h = createHash('sha256').update(Buffer.from('veyq/v1/identity-pin-set', 'utf8'))
+      for (const e of sorted) h.update(Buffer.concat([lpb(e.pinId), lpb(createHash('sha256').update(e.entry).digest())]))
+      expect(h.digest('hex')).toBe(p.set.two.digest)
+    })
+
+    it('refuses an id that is not 32 bytes, and one id twice', () => {
+      const [a, b] = bytesOf(two)
+      const short = new v1.SealContextInvalid('identity-pin pinId is not 32 bytes')
+      expect(() => v1.identityPinSetDigest([a, { ...b, pinId: b.pinId.slice(0, 31) }])).toThrow(short)
+      expect(() => v1.identityPinSetDigest([{ ...b, pinId: v1.concat(b.pinId, Uint8Array.of(0)) }])).toThrow(short)
+      expect(() => v1.identityPinSetDigest([a, b, { ...a, entry: b.entry }])).toThrow(
+        new v1.SealContextInvalid('identity-pin set holds one id twice'),
+      )
+      // An id that is a PREFIX of another sorts right before it: still refused by its length, not by the twin check.
+      expect(() => v1.identityPinSetDigest([{ ...a, pinId: a.pinId.slice(0, 31) }, a])).toThrow(short)
+    })
+  })
+
   describe('grant signature (ADR 0028 Decision 6)', () => {
     const g = vectors.grant_signature
     type Case = {
@@ -1154,6 +1277,13 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(v1.sealFrame(unhex(f.contentKey), 0, 1, new Uint8Array(0), unhex(f.nonce)).length).toBe(v1.FRAME_OVERHEAD)
   })
 
+  it('the digits render from a 32-byte hash only', () => {
+    const h = unhex(vectors.fingerprint.hash)
+    for (const bad of [h.slice(0, 31), v1.concat(h, Uint8Array.of(0)), new Uint8Array(0)]) {
+      expect(() => v1.fingerprintDigits(bad)).toThrow(new Error('fingerprint hash: not a 32-byte digest'))
+    }
+  })
+
   it('identity fingerprint / safety number', () => {
     const f = vectors.fingerprint
     expect(v1.fingerprint({ kem: unhex(f.kem), sign: unhex(f.sign) })).toBe(f.digits)
@@ -1170,6 +1300,8 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       .digest('hex')
     const h = v1.fingerprintHash(pub)
     expect(hex(h)).toBe(expected)
+    expect(hex(h)).toBe(f.hash)
+    expect(v1.fingerprintDigits(unhex(f.hash))).toBe(f.digits)
     const groups = [0, 1, 2, 3, 4, 5].map((i) => String(Number(BigInt('0x' + hex(h.subarray(i * 5, i * 5 + 5))) % 100000n)).padStart(5, '0'))
     expect(groups.join(' ')).toBe(f.digits)
   })

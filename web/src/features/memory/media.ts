@@ -29,12 +29,14 @@ import {
   reserveAndPump,
   throwIfAborted,
   unwrapBlobKey,
+  type FrameOpener,
 } from '../../core/blob/transport'
 import type { BlobDeclare, BlobRef, BlobSource, ReservedUpload, WindowFn } from '../../core/blob/types'
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
 import { sniffMediaType } from './download'
 import { readItemPages, type ItemsOnePage } from '../../core/items/itemsLive'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
+import { cleanStr, finiteNum, mediaMetaContext, normalizeMediaMeta, openMediaMeta, type RawMediaMeta } from './mediaOpen'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from '../../core/node/sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
@@ -63,12 +65,6 @@ export type { BlobRef, BlobDeclare, ChunkPut, ReservedUpload, WindowFn } from '.
 // key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
 // or a blob ref is handed the key, which its caller asks [mediaKey] for.
 
-/**
- * The sealed **listed-metadata** tier of one media (cr-0068), bound to (scope, media). This one blob carries the
- * geometry (`w,h`), the capture time (`capturedAt*`), and the GPS (`gpsLat,gpsLng`) — everything the grid, the
- * date sort, and the place medoid need at list-level. Consolidates the former `media-layout` + `media-capturedat`.
- */
-const mediaMetaContext = (scopeId: string, mediaId: string) => ({ purpose: 'media-meta', scopeId, mediaId }) as const
 /** The sealed heavy EXIF tier of one media (cr-0064) — its own purpose, bound to (scope, media). */
 const mediaExifContext = (scopeId: string, mediaId: string) => ({ purpose: 'media-exif', scopeId, mediaId }) as const
 
@@ -241,15 +237,13 @@ function pageItems(nodeId: string, page: MediaListPage): MediaItem[] {
  */
 export function unsealMeta(scopeId: string, memoryKey: Uint8Array, item: MediaItem): MediaMeta | null {
   if (!item.wrappedMeta) return null
+  let key: Uint8Array
   try {
-    const key = mediaKey(scopeId, memoryKey, item)
-    const json = new TextDecoder().decode(v1.openField(mediaMetaContext(scopeId, item.mediaId), key, fromB64std(item.wrappedMeta)))
-    const parsed = JSON.parse(json) as unknown
-    if (parsed && typeof parsed === 'object') return normalizeMediaMeta(parsed as RawMediaMeta)
+    key = mediaKey(scopeId, memoryKey, item)
   } catch {
-    /* not openable / malformed → treated as no metadata */
+    return null // an uploader row whose chain does not open: no metadata, as an unopenable seal
   }
-  return null
+  return openMediaMeta(scopeId, key, item.mediaId, item.wrappedMeta)
 }
 
 /**
@@ -263,33 +257,6 @@ export function rawMediaMeta(scopeId: string, memoryKey: Uint8Array, item: Media
     return openMediaMetaForWrite(scopeId, memoryKey, item, item.wrappedMeta)
   } catch {
     return null
-  }
-}
-
-/**
- * A listed tier exactly as it was sealed — every field, known or not. Writers start from THIS, never from
- * [unsealMeta]'s normalized copy: that copy is a display projection, and re-sealing a projection drops whatever it
- * does not carry. It once left out the resolved place name, so every date correction erased it (ADR 0077 point 4).
- */
-type RawMediaMeta = { v: number } & Record<string, unknown>
-
-/** The display projection of a raw tier: numbers coerced, geometry validated, unknown fields left out. */
-function normalizeMediaMeta(m: RawMediaMeta): MediaMeta {
-  const w = finiteNum(m.w)
-  const h = finiteNum(m.h)
-  const geo = w !== undefined && h !== undefined && w > 0 && h > 0
-  const source = m.capturedAtSource === 'exif' || m.capturedAtSource === 'file' ? m.capturedAtSource : undefined
-  return {
-    v: finiteNum(m.v) ?? 1,
-    w: geo ? w : undefined,
-    h: geo ? h : undefined,
-    capturedAt: finiteNum(m.capturedAt),
-    capturedAtOverride: finiteNum(m.capturedAtOverride),
-    capturedAtSource: source,
-    gpsLat: finiteNum(m.gpsLat),
-    gpsLng: finiteNum(m.gpsLng),
-    placeName: cleanStr(m.placeName),
-    placeLevel: cleanStr(m.placeLevel),
   }
 }
 
@@ -365,15 +332,6 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
 function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.FieldContext): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
   return b64std(v1.sealField(context, memoryKey, bytes))
-}
-
-function finiteNum(n: unknown): number | undefined {
-  return typeof n === 'number' && Number.isFinite(n) ? n : undefined
-}
-
-function cleanStr(s: unknown): string | undefined {
-  const t = typeof s === 'string' ? s.trim() : ''
-  return t.length ? t : undefined
 }
 
 /** The EXIF capture date, by its one precedence rule. Both readers of an image's date go through here. */
@@ -1156,8 +1114,8 @@ export function downloadRef(item: MediaItem): BlobRef {
 
 /** Open the grid tier (thumbnail) of a media — under the key its origin fixes ([mediaKey]). A grid's bulk read
  *  (`core/blob/readScheduler.ts`): behind anything the user opened, dropped while it waits once `signal` aborts. */
-export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem, signal?: AbortSignal) =>
-  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), gridRef(item), { lane: 'bulk', signal })
+export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem, signal?: AbortSignal, openFrames?: FrameOpener) =>
+  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), gridRef(item), { lane: 'bulk', signal, openFrames })
 /** Open the lightbox tier (preview) of a media. */
 export const openLightbox = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
   openBlob(scopeId, mediaKey(scopeId, memoryKey, item), lightboxRef(item))

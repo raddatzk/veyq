@@ -248,9 +248,11 @@ key), and the server.
    key), and member lists show the mark. A *verified* contact whose key later changes is flagged as such. Accepting
    the change re-pins it as only *pinned*, and *verified* comes back only through a new compare.
 
-The pin store lives on the client, is synced across the user's devices, and is sealed under the Master Key. Each
-device also keeps a local high-water mark of the highest pin-store revision it has opened, and refuses an older,
-missing or unopenable store ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
+The pin store lives on the client, is synced across the user's devices, and is sealed under the Master Key: one
+entry per pin holding the contact's identity **fingerprint** (the digest the safety number is), at an opaque id
+only the account computes, and a head that carries a digest of every entry ([ADR 0104](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)). Each
+device also keeps a local high-water mark of the highest revision of that head it has opened, and refuses an older,
+missing or unopenable store, and an entry set the head's digest does not describe ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)
 Decision 7). That way, rolling back the store cannot turn a detected key change into a silent first use.
 
 <Mermaid code={`

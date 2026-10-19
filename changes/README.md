@@ -81,7 +81,9 @@ cr-instance-privacy-notice's `PrivacyNotice`, served by the operator spec, reach
 spec's `_common` alias (and, moved into `_common`, through `_common` itself), and both generators named its parts inline
 either way (`PrivacyNoticePassageText`, `PrivacyNoticePassagesInner`, `OperatorSectionRecord`) — the other specs' runs
 happen to overwrite `OperatorSection` with the right names, and nothing did for the new schema. The rule above was
-skipped, so the backend phase found it and gave the notice a text type of its own; one constructor call would have.
+skipped, so the backend phase found it and gave the notice a text type of its own; one constructor call would have. And cr-identity-pins-per-entry met both generators' reserved property names a phase
+later: Kotlin reserves `entries` (the field is `propertyEntries` there) and TypeScript `delete` (`_delete`, in a model
+that did not even compile), so the write's `delete` became `remove` in the backend phase.
 a client red names the typed line it expects to fail — and runs `npm run check` once to see it. **It finds those lines
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
@@ -1325,7 +1327,12 @@ at refine — whatever form is cheapest that is LIVE, not offline — and asks t
 
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
-**Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a
+**Assert the expected test goes red by name — and for the assertion the bite is about — never that "something failed".**
+cr-identity-pins-per-entry bit "the rotation's rollback reaches the pin write" by moving that write into a transaction of
+its own (`REQUIRES_NEW`): twenty rotation tests went red, every one on a 500, because the new transaction deadlocked on
+the account row the rotation had locked — and the test about the rollback was red on its status line, never reaching
+the assertion it exists for. The lever that bit it was returning the conflict without the rollback. Read the failing
+assertion's message, not the count. An injection can break compilation instead of the assertion, and a
 harness that greps for a failing test name then reads *no match* as **green** reports the exact false negative
 **And it reaches the harness a CR uses to PROVE itself, which nothing else in this file guards.** The
 trust-chain job runs `for f in scripts/validate_*.py` behind a `count == 0` backstop, for exactly this reason;

@@ -69,6 +69,19 @@ acceptanceCriteria:
         integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName]
       web:
         unit: [src/features/memory/media.buckets.test.ts]
+  - id: contributors-grid-is-windowed
+    text: >-
+      The contributors' view is the same windowed grid: a bucket of thousands mounts about a window and announces it to
+      the gallery's thumbnail pipeline; its select-all still selects every item of the bucket by id, and Space on a
+      focused tile toggles its checkbox as a click does (ADR 0105 decisions 1, 2 and 5).
+    coverage:
+      web:
+        unit: [src/features/memory/components/MemoryBuckets.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The real grid at 2,000 items in happy-dom, boxes given by hand. Not yet seen in a browser — the browser pass
+          waits for the V1 heavy stage.
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/field-seal.spec.ts`) drives `sub-bucket-endpoints`,

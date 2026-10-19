@@ -48,9 +48,9 @@ tags:
     description: The caller's per-tenant identity profile (username + sealed real name) in the tenant resolved
       from the Host (ADR 0023). Separate tag → its own resource interface.
   - name: account-identity-pins
-    description: The caller's operator-blind identity-pin store — one Master-Key-sealed blob remembering each
-      contact's identity key for TOFU change-detection (ADR 0028, en.account.identity-pinning). Separate tag →
-      its own resource interface.
+    description: The caller's operator-blind identity-pin store — one Master-Key-sealed entry per contact, remembering
+      their identity key's fingerprint hash for TOFU change-detection, under a sealed head that binds the set (ADR 0028,
+      ADR 0104, en.account.identity-pinning). Separate tag → its own resource interface.
   - name: account-device-register
     description: The caller's operator-blind device register — one Master-Key-sealed blob holding a stable
       client-side device id, its display label, and the device↔session-family join, so unnamed families
@@ -323,18 +323,19 @@ paths:
     get:
       tags: [account-identity-pins]
       operationId: getIdentityPins
-      summary: Fetch the caller's sealed identity-pin store.
+      summary: Fetch the head of the caller's identity-pin store.
       description: >
-        Returns the authenticated caller's identity-pin store — one opaque blob sealed under the Master Key
-        (`symWrap(masterKey, blob, "identity-pins")`, ADR 0028 / en.account.identity-pinning) plus its
-        monotonic `revision` for optimistic concurrency. The server stores + relays the ciphertext verbatim and
-        never interprets it (no `userId`, no key, no count). Born empty: an account that has never written the
-        store gets `{ blob: null, revision: 0 }`. Keyed off the bearer token — only the caller's own store.
+        Returns the **head** of the authenticated caller's identity-pin store (ADR 0104, en.account.identity-pinning):
+        one opaque blob sealed under the Master Key, bound to its `revision`, that carries the store's version, the
+        number of entries and a digest of the whole entry set — plus that `revision`, the store's one counter for
+        optimistic concurrency. The pins themselves are the entries (`listIdentityPinEntries`). The server stores and
+        relays the ciphertext verbatim and never interprets it. Born empty: an account that has never written the store
+        gets `{ revision: 0 }` with no `blob`. Keyed off the bearer token — only the caller's own store.
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: The caller's sealed pin store (ciphertext only) + its revision. `blob` is null when never written.
+          description: The caller's sealed head (ciphertext only) + its revision. `blob` is absent when never written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IdentityPins" }
@@ -346,39 +347,50 @@ paths:
               example: { code: authentication_failed }
     put:
       tags: [account-identity-pins]
-      operationId: putIdentityPins
+      operationId: writeIdentityPins
       x-veyq-concurrency:
         mode: revision
         fields:
           - field: revision
-      summary: Store the caller's sealed identity-pin store (optimistic concurrency).
+      summary: Write entries and the head of the caller's identity-pin store, in one compare-and-set.
       description: >
-        Replaces the caller's sealed pin-store blob. `revision` is the revision the client last read; the write
-        succeeds only if it still matches the server's stored revision, which is then bumped by one and returned.
-        The blob is sealed bound to the revision it is stored at — `revision + 1` (ADR 0072) — so a blob served
-        under another revision does not open. If the
-        stored revision moved since the client read (another device wrote), the server responds `409
-        stale_revision` and the client re-reads, union-merges, and retries (en.account.identity-pinning §Sync).
-        The first write of a born-empty store sends `revision: 0`. Operator-blind: the server never sees the
-        plaintext pins.
+        The one write of the pin store (ADR 0104 decision 4): the entries in `remove` are removed, the entries in `put`
+        are stored (an existing `pinId` is replaced), and `head` becomes the new head — in **one** transaction, and only
+        if `revision` is still the stored revision, which is then bumped by one and returned. `replaceAll` removes every
+        other entry first (the trust reset and the rotation write the whole set; `remove` is then empty). The head and
+        every entry are sealed by the client — the head bound to the revision it is stored at, `revision + 1`, an entry
+        to its `pinId` (ADR 0072). If the stored revision moved since the client read (another device wrote), the server
+        responds `409 stale_revision` and **nothing** of the write lands; the client re-reads, re-applies and retries
+        (en.account.identity-pinning § Sync). The first write of a born-empty store sends `revision: 0`. A write that
+        names one `pinId` twice, puts and removes one `pinId`, removes alongside `replaceAll`, or would leave the store
+        with more than 25,000 entries is `400 invalid_request`. Operator-blind: the server sees opaque ids, one sealed
+        entry each and a sealed head — never a `userId`, a key, a state or who pinned whom; it does see how many entries
+        there are, as it always could (ADR 0104 decision 5).
       security:
         - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/IdentityPinsUpdate" }
+            schema: { $ref: "#/components/schemas/IdentityPinsWrite" }
             example:
-              blob: c2VhbGVkLXBpbi1zdG9yZQ==
               revision: 3
+              head: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
+              put:
+                - pinId: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7
+                  entry: c2VhbGVkLXBpbi1lbnRyeQ==
+              remove: []
+              replaceAll: false
       responses:
         "200":
-          description: The store was written; the new (bumped) revision is returned.
+          description: The write landed; the head as stored and its new (bumped) revision are returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IdentityPins" }
         "400":
-          description: The request was malformed (missing/invalid blob or revision).
+          description: >
+            The request was malformed: a missing or invalid field, a `pinId` named twice, a `pinId` both put and removed,
+            a `remove` alongside `replaceAll`, or more than 25,000 entries after the write.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -390,11 +402,57 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "409":
-          description: The stored revision moved since the client read it — re-read, union-merge, and retry.
+          description: The stored revision moved since the client read it — nothing was written; re-read, re-apply and retry.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: stale_revision }
+
+  /api/account/identity-pins/entries:
+    get:
+      tags: [account-identity-pins]
+      operationId: listIdentityPinEntries
+      summary: List the entries of the caller's identity-pin store, one page at a time.
+      description: >
+        The caller's pin entries in ascending `pinId` order, at most `limit` per page, starting after `after` (keyset
+        paging; absent = from the first). `more` says whether a next page exists — the client asks again with the last
+        `pinId` it got. A device lists every entry once per head revision and checks them against the head's digest
+        (ADR 0104 decisions 4 and 6): an entry withheld, added, rolled back or moved is refused there, not here. Keyed
+        off the bearer token — only the caller's own entries. Operator-blind: opaque ids and sealed entries.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: after
+          in: query
+          # An empty value (`?after=`) is this parameter's absence: Quarkus REST
+          # never converts it (cr-api-fuzzing).
+          allowEmptyValue: true
+          required: false
+          description: List the entries after this `pinId`; absent = from the first.
+          schema: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-f]{64}$" }
+        - name: limit
+          in: query
+          required: false
+          description: The most entries one page holds; absent = 1000.
+          schema: { type: integer, format: int32, minimum: 1, maximum: 1000, default: 1000 }
+      responses:
+        "200":
+          description: One page of the caller's sealed entries.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityPinEntryPage" }
+        "400":
+          description: An `after` that is not a `pinId`, or a `limit` outside 1-1000.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
 
   /api/account/device-register:
     get:
@@ -1397,45 +1455,36 @@ components:
     IdentityPins:
       type: object
       description: >
-        The caller's sealed identity-pin store + its revision. `blob` is one opaque ciphertext
-        (`symWrap(masterKey, blob, "identity-pins")`) the server relays verbatim; `revision` is the monotonic
-        optimistic-concurrency counter. A born-empty store is `{ blob: null, revision: 0 }`.
+        The head of the caller's identity-pin store + its revision (ADR 0104). `blob` is one opaque ciphertext sealed
+        under the Master Key, bound to `revision`, that the server relays verbatim; `revision` is the store's monotonic
+        optimistic-concurrency counter. A born-empty store is `{ revision: 0 }` with no `blob`.
       required: [revision]
       properties:
         blob:
           type: string
           description: >
-            The pin-store plaintext sealed under the Master Key (opaque base64), or null when the store has
-            never been written. The server never interprets it (no `userId`, key, or count).
+            The head — the store's version, its entry count and the digest of every entry — sealed under the Master Key
+            (opaque base64), or absent when the store has never been written.
           contentEncoding: base64
-          maxLength: 1048576
-          example: c2VhbGVkLXBpbi1zdG9yZQ==
+          maxLength: 1024
+          example: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
         revision:
           x-veyq-visibility: structure
           type: integer
           format: int64
           description: >
             Monotonic revision for optimistic concurrency. `0` for a born-empty store; bumped by one on every
-            successful write. A `PUT` must send the revision it last read.
+            successful write. A write must send the revision it last read.
           minimum: 0
           example: 3
 
-    IdentityPinsUpdate:
+    IdentityPinsWrite:
       type: object
       description: >
-        A new sealed pin-store blob to store, guarded by the `revision` the client last read (optimistic
-        concurrency → `409 stale_revision` on a mismatch).
-      required: [blob, revision]
+        One write of the pin store (ADR 0104 decision 4): entries to remove, entries to store, and the new head, applied
+        together and only if `revision` is still the stored one (optimistic concurrency → `409 stale_revision`).
+      required: [revision, head, put, remove, replaceAll]
       properties:
-        blob:
-          type: string
-          description: >
-            The pin-store plaintext sealed under the Master Key (opaque base64 ciphertext the server stores
-            verbatim).
-          contentEncoding: base64
-          maxLength: 1048576
-          example: c2VhbGVkLXBpbi1zdG9yZQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1048576) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         revision:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
@@ -1447,6 +1496,86 @@ components:
           minimum: 0
           example: 3
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        head:
+          type: string
+          description: >
+            The new head sealed under the Master Key for the revision it will be stored at (opaque base64 ciphertext the
+            server stores verbatim).
+          contentEncoding: base64
+          maxLength: 1024
+          example: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        put:
+          type: array
+          description: >
+            Entries to store, each at its `pinId` (an existing one is replaced). At most 25,000 — the one write that
+            carries every entry, a rotation's or a reset's, is bounded by it (ADR 0104 § Consequences).
+          maxItems: 25000
+          items: { $ref: "#/components/schemas/IdentityPinEntry" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 25000)'
+        remove:
+          type: array
+          # Not `delete`: the TypeScript generator reserves the word and emits a model that does not compile.
+          description: The `pinId`s of entries to remove; one that is not stored is ignored. Empty with `replaceAll`.
+          maxItems: 25000
+          items: { $ref: "#/components/schemas/IdentityPinId" }
+          example: []
+          # The generator types the list `List<String>` and cannot annotate its type argument, so the elements' bounds
+          # (`IdentityPinId`'s) ride on the list as `EachElement` (inbox #354; `validate_request_bounds.py` holds them).
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 25000) @field:me.raddatz.veyq.core.http.EachElement(minLength = 64, maxLength = 64, pattern = "^[0-9a-f]{64}$")'
+        replaceAll:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [boolean, "null"]
+          description: >
+            Remove every entry this write does not `put` — the trust reset (an empty set) and the rotation (every entry
+            re-keyed under the new Master Key).
+          example: false
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+
+    IdentityPinEntry:
+      type: object
+      description: One sealed pin, at the opaque id it is stored at (ADR 0104 decisions 1 and 2).
+      required: [pinId, entry]
+      properties:
+        pinId:
+          $ref: "#/components/schemas/IdentityPinId"
+        entry:
+          type: string
+          description: >
+            The pin sealed under the Master Key, bound to its `pinId` (opaque base64). Every entry seals to one length.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXBpbi1lbnRyeQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    IdentityPinId:
+      x-veyq-visibility: id
+      type: string
+      description: >
+        The opaque id a pin is stored at — `HMAC-SHA256(K_pinIndex, utf8(userId))` under a key derived from the Master
+        Key, 32 bytes as 64 lowercase hex characters (ADR 0104 decision 1). Stable while the Master Key is, unlinkable
+        across accounts; the server cannot tell whose pin it is.
+      minLength: 64
+      maxLength: 64
+      pattern: "^[0-9a-f]{64}$"
+      example: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7
+      x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 64, max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "^[0-9a-f]{64}$")'
+
+    IdentityPinEntryPage:
+      type: object
+      description: One page of the caller's pin entries, in ascending `pinId` order.
+      required: [entries, more]
+      properties:
+        entries:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/IdentityPinEntry" }
+        more:
+          x-veyq-visibility: structure
+          type: boolean
+          description: Whether entries follow this page — ask again with the last `pinId` as `after`.
+          example: false
 
     DeviceRegister:
       type: object
@@ -1553,7 +1682,8 @@ components:
 
         **The two Master-Key-sealed account documents ride in the same body** (`identityPins`,
         `deviceRegister`), re-sealed under the new Master Key and written by the same transaction as everything
-        above. Written after the publish they could be left under a key that no longer exists, and every device
+        above. The pin store rides as its own write (`writeIdentityPins`' body) with `replaceAll`: a new Master Key is
+        a new pin-index key, so every entry moves to a new `pinId` and is re-sealed, with a new head (ADR 0104). Written after the publish they could be left under a key that no longer exists, and every device
         refuses a document that does not open (ADR 0028 Decision 7) — so a rotation that cannot re-seal them does
         not happen. Both are required: an account that never wrote one sends it empty, sealed for revision 1
         against `revision: 0`. **They are not bound into `secretKeyProofSignature`, on purpose.** The proof
@@ -1598,7 +1728,7 @@ components:
           example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         identityPins:
-          $ref: "#/components/schemas/IdentityPinsUpdate"
+          $ref: "#/components/schemas/IdentityPinsWrite"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
         deviceRegister:
           $ref: "#/components/schemas/DeviceRegisterUpdate"

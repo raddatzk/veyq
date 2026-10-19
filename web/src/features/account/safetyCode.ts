@@ -15,7 +15,7 @@ const MARKER = 'veyqid:'
 const VERSION = 1
 const DIGEST_BYTES = 32
 
-/** The digest of a serialized identity bundle (the directory's / the pin's base64), as the QR carries it. */
+/** The digest of a serialized identity bundle (the directory's base64), as the QR carries it and a pin stores it. */
 export function fingerprintDigestB64(identityPublicKeyB64: string): string {
   return b64std(v1.fingerprintHash(v1.deserializeIdentityPublic(fromB64std(identityPublicKeyB64))))
 }
@@ -38,14 +38,15 @@ export function parseSafetyCode(text: string): string | null {
   }
 }
 
-/** What a scan says about the key the caller would trust:
+/** What a scan says about the key the caller would trust, given as its fingerprint digest (`fingerprintDigestB64` of the
+ *  directory key, or the pin's stored one — ADR 0104 decision 3):
  *  - `foreign`: not a veyq safety code at all (another QR in the room, an Emergency Kit, a pairing code);
  *  - `mismatch`: a safety code of a DIFFERENT key - never accepted;
- *  - `match`: the scanned digest is the digest of `expectedKeyB64`. */
+ *  - `match`: the scanned digest is `expectedFingerprintB64`. */
 export type ScanVerdict = 'foreign' | 'mismatch' | 'match'
 
-export function compareScan(text: string, expectedKeyB64: string): ScanVerdict {
+export function compareScan(text: string, expectedFingerprintB64: string): ScanVerdict {
   const scanned = parseSafetyCode(text)
   if (scanned === null) return 'foreign'
-  return scanned === fingerprintDigestB64(expectedKeyB64) ? 'match' : 'mismatch'
+  return scanned === expectedFingerprintB64 ? 'match' : 'mismatch'
 }
