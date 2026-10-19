@@ -243,8 +243,12 @@ class ErasureReapplication(
         val target = line["target"] ?: return false
         val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, target)).firstResult() ?: return false
         row.liftedAt = line.at
+        // Who lifted it, as the line says — none when it ended with its erased target, which is how it reads then.
+        row.liftedBy = line["by"]
         row.activeKey = null
-        row.caseId?.let { log.appendCase(ModerationEvent.MEASURE_LIFTED, line.at, it, reason = kind.name, targetId = target) }
+        row.caseId?.let {
+            log.appendCase(ModerationEvent.MEASURE_LIFTED, line.at, it, moderatorId = row.liftedBy, reason = kind.name, targetId = target)
+        }
         return true
     }
 

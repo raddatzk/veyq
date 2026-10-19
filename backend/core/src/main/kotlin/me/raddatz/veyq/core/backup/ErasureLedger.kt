@@ -151,10 +151,16 @@ class ErasureLedger : ReclaimedKeys {
         )
     }
 
-    /** A block was lifted — by a person, a decided objection, or the erasure of what it stood on. */
+    /**
+     * A block was lifted — by a person or a decided objection (`by`, who lifted it), or by the erasure of what it stood on
+     * (no `by`: it ended with its target, ADR 0093 § 6) — so a re-applied lift reads as the lift it was.
+     */
     @Transactional(Transactional.TxType.MANDATORY)
     fun blockLifted(row: ModerationBlockEntity) {
-        write(ErasureKind.LIFT.name, row.id, linkedMapOf("item" to row.kind, "target" to row.targetId), at = row.liftedAt)
+        write(
+            ErasureKind.LIFT.name, row.id, linkedMapOf("item" to row.kind, "target" to row.targetId, "by" to row.liftedBy),
+            at = row.liftedAt,
+        )
     }
 
     /** The hold [holdId] ended — its snapshot and pins dropped — on [caseId] where it has one. */

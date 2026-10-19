@@ -250,7 +250,10 @@ authority's order (§ 12) takes the same steps. **A step ends with its target** 
 when what it stands on is erased — a link deleted, a node or an item purged, a guest identity dropped, a space, an
 account or a tenant purged — the eraser ends it in its own transaction, lifted by no one and logged so; standing on
 nothing it would block nothing and still hold its case's records forever (§ 11). A step taken on a target already
-erased ends at once, the decision and its statement staying. The hold is not ended by it: it keeps its own end (§ 4). **An address is evidence, never the ground of a block.** A
+erased is **taken and ends at once, not refused** (owner 2026-10-19): the decision and its statement stay, and the hold
+stays as the evidence it is. The hold is not ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown —
+the case, the affected's statement, the Art. 18 export — one that ended with its target says so ("ended when the content
+was erased"), never plain "lifted": nobody lifted it. **An address is evidence, never the ground of a block.** A
 copy a member made (Depot's "Copy to…") is a new blob under a new key; with no dedup the server cannot know it, and
 a block reaches only the reported copy.
 

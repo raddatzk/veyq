@@ -328,6 +328,7 @@ class ErasureLedgerSliceTest {
         start.run()
         assertNull(read { VeyqUser.findById(member) })
         assertEquals(0L, read { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", member) })
+        assertTrue(read { ModerationBlockEntity.findById(block)!!.endedWithTarget }, "still a measure that ended with its target")
     }
 
     @Test
@@ -344,6 +345,8 @@ class ErasureLedgerSliceTest {
         }
         assertEquals(1, start.run().relifted)
         assertEquals(0L, read { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", member) })
+        // Lifted by the Server Owner, as the line says — never read as a measure that ended with its erased target.
+        assertEquals(owner, read { ModerationBlockEntity.findById(row)!!.liftedBy })
     }
 
     @Test

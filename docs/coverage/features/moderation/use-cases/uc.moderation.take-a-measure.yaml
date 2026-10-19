@@ -85,10 +85,13 @@ acceptanceCriteria:
       space's, an account's and a tenant's purge — ends the measures on it in its own transaction, lifted by no one and
       logged, so the case's records go at their date; a trashed target's measure stands. A measure or a bar taken on a
       target already erased ends at once, also when the erasure races the decision; every function that erases a
-      target is held to the call (scripts/validate_measure_target_erasure.py).
+      target is held to the call (scripts/validate_measure_target_erasure.py). Such a measure reads as ended when the
+      content was erased — on the case, in the affected's statement, in the Art. 18 export — never as lifted.
     coverage:
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/orders/art18Export.test.ts]
       backend:
-        integration: [MeasureOnErasedTargetSliceTest.theTrashPurgeEndsTheMeasuresOnWhatItErasesAndTheCaseThenGoesAtItsDate, MeasureOnErasedTargetSliceTest.deletingALinkEndsItsBlockAndItsReportersBarAndTheUploadersBlockEndsWithItsIdentity, MeasureOnErasedTargetSliceTest.aSpacesPurgeEndsEveryMeasureOnItsNodesLinksAndGuests, MeasureOnErasedTargetSliceTest.aMeasureTakenOnATargetAlreadyErasedEndsAtOnce, ModerationMemoriesSliceTest.aContentBlockOnAMediumEndsWhenTheMediumIsPurged, ModerationMemoriesSliceTest.aContentBlockOnAMediumEndsWithItsSpacesPurge, ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate, MeasureTargetErasureRacesSliceTest.aPurgeInsideAnUncommittedContentBlockEndsIt, MeasureTargetErasureRacesSliceTest.aContentBlockInsideAnUncommittedPurgeEndsAtOnce, MeasureTargetErasureRacesSliceTest.aLinkBlockInsideAnUncommittedDeleteOfTheLinkEndsAtOnce]
+        integration: [MeasureOnErasedTargetSliceTest.aMeasureEndedWithItsTargetReadsSoWhereOneAModeratorLiftedReadsLifted, MeasureOnErasedTargetSliceTest.theTrashPurgeEndsTheMeasuresOnWhatItErasesAndTheCaseThenGoesAtItsDate, MeasureOnErasedTargetSliceTest.deletingALinkEndsItsBlockAndItsReportersBarAndTheUploadersBlockEndsWithItsIdentity, MeasureOnErasedTargetSliceTest.aSpacesPurgeEndsEveryMeasureOnItsNodesLinksAndGuests, MeasureOnErasedTargetSliceTest.aMeasureTakenOnATargetAlreadyErasedEndsAtOnce, ModerationMemoriesSliceTest.aContentBlockOnAMediumEndsWhenTheMediumIsPurged, ModerationMemoriesSliceTest.aContentBlockOnAMediumEndsWithItsSpacesPurge, ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate, MeasureTargetErasureRacesSliceTest.aPurgeInsideAnUncommittedContentBlockEndsIt, MeasureTargetErasureRacesSliceTest.aContentBlockInsideAnUncommittedPurgeEndsAtOnce, MeasureTargetErasureRacesSliceTest.aLinkBlockInsideAnUncommittedDeleteOfTheLinkEndsAtOnce]
 gaps:
   admin-web: >-
     Built and tested (features/instance/ModerationPanel.test.ts — the proposals, a sign-in block and its lift, a decline
