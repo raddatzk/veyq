@@ -261,7 +261,11 @@ only the reported copy. Where blob rows share one stored object inside a node (a
 erasing the blocked item does not end it while another row still holds the object. It then stands on that object alone
 (`veyq_moderation_block.held_objects`) and ends when the object's last row goes (`MeasureTargets.objectsGone`, from
 `BlobUploadStore.deleteBlobRow` and `ScopePurge`) or a moderator lifts it. So deleting a blocked photo never serves it
-again as the Memory's cover or banner.
+again as the Memory's cover or banner. The same holds for a step taken **after** the item was erased (owner 2026-10-19):
+it does not end at once where another row still holds the item's object — it hangs on that object, read from its
+case's hold since the item's own rows are gone (`MeasureTargets.survivingObjects`), so deleting a reported photo before
+the decision does not leave its bytes served as the banner either. Where no hold holds the item, nothing names its
+objects, and the step ends at once.
 
 ### 7. Statement of reasons, and objection
 

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.items.NodeItemsRevisions
+import me.raddatz.veyq.core.moderation.hold.HeldRow
 import me.raddatz.veyq.core.moderation.report.ReportableItem
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import jakarta.enterprise.context.ApplicationScoped
@@ -40,4 +41,12 @@ class MediaReportableItems(private val revisions: NodeItemsRevisions) : Reportab
     /** The medium's row, locked as every purge of it locks it (`MediaStore.purgeMedia`, the retention purge, a guest's delete). */
     override fun lockExisting(itemId: String): Boolean =
         MediaEntity.find("id", itemId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
+
+    /** The held medium's original and every held derivative, through their held blob rows (`MediaHoldSnapshot`). */
+    override fun heldObjectsOf(itemId: String, held: List<HeldRow>): Set<String> {
+        val blobIds = held.filter { it.table == "veyq_media" && it.sourceId == itemId }.mapNotNull { it["blob_id"] } +
+            held.filter { it.table == "veyq_media_derivative" && it["media_id"] == itemId }.mapNotNull { it["blob_id"] }
+        if (blobIds.isEmpty()) return emptySet()
+        return held.filter { it.table == "veyq_blob" && it.sourceId in blobIds }.mapNotNullTo(LinkedHashSet()) { it["storage_key"] }
+    }
 }

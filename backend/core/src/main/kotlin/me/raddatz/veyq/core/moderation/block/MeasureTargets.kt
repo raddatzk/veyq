@@ -1,9 +1,11 @@
 package me.raddatz.veyq.core.moderation.block
 
 import me.raddatz.veyq.core.backup.ErasureLedger
+import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
+import me.raddatz.veyq.core.moderation.hold.HeldRow
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -61,6 +63,27 @@ class MeasureTargets(
             VeyqUser.find("id", targetId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
         BlockKind.TENANT_OFFLINE, BlockKind.TENANT_DELETED ->
             TenantEntity.find("id", targetId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
+    }
+
+    /**
+     * A measure of [kind] taken on [targetId] **already erased** ([lockStanding] answered false), **in the taker's
+     * transaction**: the stored objects of the erased item that another blob row still names — what the measure hangs on
+     * instead of ending at once (owner 2026-10-19, ADR 0093 § 6), handed to [erased] as its `holding`. The item's own rows
+     * are gone, so its objects are read from its case's hold ([held], `CaseSnapshots.rowsOf`): an application names them
+     * ([ReportableItems.heldObjectsOf]). None for any other kind, or where no hold holds the item.
+     *
+     * Each surviving object's blob rows are locked, as `BlobUploadStore.deleteBlobRow` locks them (by id, key by key): the
+     * race with the object's last row going is the one with the target's — either that delete committed first and the
+     * object is not surviving (the measure ends at once), or it waits for this commit and its [objectsGone] then reads the
+     * measure. Two such that cross on two keys are a deadlock the database breaks by rolling one back whole.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun survivingObjects(kind: BlockKind, targetId: String, held: List<HeldRow>?): Set<String> {
+        if (kind != BlockKind.CONTENT_ITEM || held.isNullOrEmpty()) return emptySet()
+        val keys = items.flatMapTo(sortedSetOf()) { it.heldObjectsOf(targetId, held) }
+        return keys.filterTo(LinkedHashSet()) { key ->
+            BlobEntity.find("storageKey = ?1 order by id", key).withLock(LockModeType.PESSIMISTIC_WRITE).list().isNotEmpty()
+        }
     }
 
     /**
