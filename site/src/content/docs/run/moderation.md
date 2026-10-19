@@ -413,8 +413,10 @@ Everything else expires.
   subscriber quickly, and a clock minutes off names the wrong one.
 - **Backups.** `veyqctl backup` (the instance backup) dumps the table's schema and none of its rows, so a capture never
   keeps a guest past N. If you back up otherwise — volume snapshots, a dump of your own — those copies hold the rows:
-  keep such a backup at most 30 days (call it B), open it only to restore it, and let the restored instance start once
-  (its cleanup then deletes what is past N at boot). A guest's data can then live N + B days, and what you tell guests
+  keep such a backup at most B days — the instance's own backups are deleted at B, 30 until you set it under **Server →
+  Moderation → Backups** ([Backup and restore](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)) — open it
+  only to restore it, and let the restored instance start once (its cleanup then deletes what is past N at boot). A
+  guest's data can then live N + B days, and what you tell guests
   has to say so.
 - **A guest objects** (GDPR Art. 21(1)): unless you have compelling reasons to keep what was kept, delete it —
   `veyq-admin guest-write-record forget <identity-id>`. It deletes every kept write of that guest identity at once and

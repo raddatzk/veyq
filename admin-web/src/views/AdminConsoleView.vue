@@ -29,6 +29,7 @@ import ExternalServicesPanel from '../features/instance/ExternalServicesPanel.vu
 import ReleaseNoticesPanel from '../features/instance/ReleaseNoticesPanel.vue'
 import InstanceMailPanel from '../features/instance/InstanceMailPanel.vue'
 import GuestWriteRecordPanel from '../features/instance/GuestWriteRecordPanel.vue'
+import BackupRetentionPanel from '../features/instance/BackupRetentionPanel.vue'
 import ModerationPanel from '../features/instance/ModerationPanel.vue'
 import OrderPanel from '../features/instance/OrderPanel.vue'
 import OperatingModePanel from '../features/instance/OperatingModePanel.vue'
@@ -250,11 +251,12 @@ async function signOut() {
         <InstanceMailPanel v-else-if="serverPanel === 'mail'" />
         <!-- The roster, the key and the Server Owner's steps, an authority's order (uc.moderation.authority-order), then how
              long a guest's write keeps its address
-             (en.moderation.guest-write-record). -->
+             (en.moderation.guest-write-record), and beside it how long a backup keeps it all (ADR 0056 decision 8). -->
         <div v-else-if="serverPanel === 'moderation'" class="admin-shell__stack">
           <ModerationPanel @open-tenant="selected = $event; serverPanel = null" />
           <OrderPanel />
           <GuestWriteRecordPanel />
+          <BackupRetentionPanel />
         </div>
         <!-- An erasure can leave a tenant ownerless (a stop, owned again): the list's marker is read again. -->
         <AccountsPanel v-else-if="serverPanel === 'accounts'" @changed="onTenantsChanged" />

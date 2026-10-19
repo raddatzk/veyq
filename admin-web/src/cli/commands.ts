@@ -123,6 +123,7 @@ import {
   type GuestWriteRecordErasure,
   type InstanceGuestWriteRecord,
 } from '../features/instance/guestWriteRecord'
+import * as backupRetention from '../features/instance/backupRetention'
 import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 import { enterOrder, OrderInvalid, type AuthorityOrder, type OrderKind } from '../features/instance/orders'
 import { GROUNDS, stepStatement, StepStatementInvalid, type ServerOwnerStatementInput, type StepStatementDraft } from '../features/instance/stepStatement'
@@ -668,6 +669,27 @@ export const COMMANDS: Record<string, Command> = {
     },
     render: (r, f) => renderErasure(r as GuestWriteRecordErasure, (f['identity-id'] ?? '').trim()),
   },
+  'backup-retention show': {
+    usage: 'backup-retention show',
+    summary:
+      'Print how many days every backup veyq’s tools take is kept, the newest too (default 30, whether you set it): veyqctl’s captures on the host, the cluster gate’s on its volume.',
+    flags: {},
+    run: () => backupRetention.getBackupRetention(),
+    render: (r) => renderBackupRetention(r as backupRetention.InstanceBackupRetention),
+  },
+  'backup-retention set': {
+    usage: 'backup-retention set <days>',
+    summary:
+      'Set how many days a backup is kept, 7 to 365. The next backup, start or daily prune deletes every backup older than that. More than 30 needs a reason in your record of processing.',
+    flags: {},
+    operand: { name: 'days', describe: `whole days, ${backupRetention.MIN_DAYS} to ${backupRetention.MAX_DAYS}` },
+    run: (f) => {
+      const days = backupRetention.parseRetentionDays(f.days ?? '')
+      if (days === undefined) throw new CliError(`backup-retention set takes whole days from ${backupRetention.MIN_DAYS} to ${backupRetention.MAX_DAYS} (got '${f.days}'); nothing was set`)
+      return backupRetention.setBackupRetention(days)
+    },
+    render: (r) => renderBackupRetention(r as backupRetention.InstanceBackupRetention),
+  },
   'operator show': {
     usage: 'operator show',
     summary: 'Print the instance contact, the provider identification, the supervisory authority and the notification address with its confirmation.',
@@ -855,6 +877,13 @@ function renderOrder(r: unknown, flags: Record<string, string>, env: Record<stri
 function renderGuestWriteRecord(r: InstanceGuestWriteRecord): string {
   const lines = [`guest-write-record ${r.retentionDays} days${r.chosen ? '' : ' (the default)'}`]
   if (needsReason(r.retentionDays)) lines.push('More than 7 days needs a reason, which you write into your record of processing.')
+  return lines.join('\n')
+}
+
+/** B in words, with the reason owed above thirty days (ADR 0056 decision 8) — the console's warning, here. */
+function renderBackupRetention(r: backupRetention.InstanceBackupRetention): string {
+  const lines = [`backup-retention ${r.retentionDays} days${r.chosen ? '' : ' (the default)'}`]
+  if (backupRetention.needsReason(r.retentionDays)) lines.push('More than 30 days needs a reason, which you write into your record of processing.')
   return lines.join('\n')
 }
 

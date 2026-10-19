@@ -30,8 +30,8 @@ handling of reported shares.
 - [Delete a tenant](use-cases/uc.admin.delete-tenant.md) — **built** (cr-account-erasure;
   [ADR 0101](../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 10):
   an active or suspended tenant, offline at once and erased after the retention, its members mailed and their accounts
-  kept; an ownerless tenant's two ways on — an owner invite to a member, or the deletion. The erasure ledger's entry is
-  open.
+  kept; an ownerless tenant's two ways on — an owner invite to a member, or the deletion; a restore deletes it again
+  (the erasure ledger, ADR 0056 decision 8).
 - ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built**: both transitions,
   the `Host` filter on the tenant's own domain, step 4's routing withdrawal, which
   [tenant-reachability](use-cases/uc.admin.tenant-reachability.md) owns and this transition triggers, and the

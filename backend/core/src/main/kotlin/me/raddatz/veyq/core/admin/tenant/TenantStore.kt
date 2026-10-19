@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.membership.MembershipEntity
@@ -84,7 +86,11 @@ data class MailSettingsRow(
  * EXPIRED) — nothing is hard-deleted inline; a scheduled purge removes terminal rows later.
  */
 @ApplicationScoped
-class TenantStore(private val membership: MembershipStore, private val hosts: TenantHostResolver) {
+class TenantStore(
+    private val membership: MembershipStore,
+    private val hosts: TenantHostResolver,
+    private val ledger: ErasureLedger,
+) {
 
     /** Whether some tenant already claims [domain] — through the one Host→tenant lookup, so "taken" and "resolves"
      *  can never disagree about what a domain names. */
@@ -440,10 +446,12 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         TenantEntity.update("ownerEmail = ?1 where ownerEmail = ?2", "", address)
     }
 
-    /** Revoke a pending tenant: delete its invite history then the tenant itself. */
+    /** Revoke a pending tenant: delete its invite history — the address its owner invite went to — then the tenant
+     *  itself, with its erasure ledger line (ADR 0056 decision 8): a restore of an earlier capture would bring both back. */
     @Transactional
     fun deleteTenant(tenantId: String) {
         TenantInviteEntity.delete("tenantId", tenantId)
+        ledger.erased(ErasureKind.TENANT, tenantId)
         TenantEntity.deleteById(tenantId)
     }
 

@@ -38,7 +38,13 @@ This asserts, with no daemon and no root:
      kept captures' indexes name and never running on a ledger without the new entry, the builder's shape (copy --immutable, a read, or the prune's delete),
      no pool credential in the manifest, and the restore's empty-store gate, source check and copy-before-load.
   10. the guest-write record's rows stay out of every dump and its schema in (ADR 0093 § 10): the dump's argv and the
-     table's migration.
+     table's migration;
+  11. B, the retention (R1–R6, ADR 0056 decision 8), on a fake clock: every capture older than B pruned — complete,
+     failed or interrupted, the newest too — a `.partial` in flight and a directory pool spared, `keep` still a second
+     bound, B read from the database and 30 when it cannot be, the gate's prune at every start and never on a refusal,
+     a pool's ledger entries past B dropped with the objects only they named, and the `prune` and `retention` commands;
+  12. the erasure ledger in the object check (L1–L3): a key the ledger lists is erased, not missing, in `restore` and
+     in `verify --against-store`; with no ledger, today's refusal, and the restore says that none was given.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -315,7 +321,9 @@ def not_data_cases() -> None:
           seeded <= set(ib.NOT_DATA), str(sorted(seeded - set(ib.NOT_DATA))))
     check("the gate excludes the bucket reconcile's tables, which a fresh install's first pass fills",
           set(ib.RECONCILE_TABLES) <= set(ib.NOT_DATA), str(ib.RECONCILE_TABLES))
-    check("the exclusion list is the nine named tables, no pattern", len(ib.NOT_DATA) == 9, str(ib.NOT_DATA))
+    check("the gate excludes B, which a Server Owner may set before a restore (ADR 0056 decision 8)",
+          ib.RETENTION_TABLE in ib.NOT_DATA)
+    check("the exclusion list is the ten named tables, no pattern", len(ib.NOT_DATA) == 10, str(ib.NOT_DATA))
 
 
 def schema_only_cases(tmp: pathlib.Path) -> None:
@@ -426,8 +434,10 @@ KEY_BYTES = b"the-config-secret-key-bytes\n"
 class World:
     """What the fakes answer: a database that holds data or not, its blob rows, its store setting, the live listing."""
 
-    def __init__(self, data: bool = True, blobs=(("sk1", 2),), listing=None, setting=None, dump_fails=False):
+    def __init__(self, data: bool = True, blobs=(("sk1", 2),), listing=None, setting=None, dump_fails=False,
+                 retention=(30, "the default, none set")):
         self.data = data
+        self.retention = retention  # what `retention_days` answers: B and where it came from
         self.blobs = [list(b) for b in blobs]
         self.listing = [list(e) for e in (listing if listing is not None else
                                           [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]])]
@@ -457,6 +467,9 @@ class FakeDatabase:
 
     def store_setting(self):
         return self.w.setting
+
+    def retention_days(self):
+        return self.w.retention
 
     def dump(self, target):
         if self.w.dump_fails:
@@ -683,13 +696,13 @@ def index_capture(tmp: pathlib.Path, name: str, index) -> pathlib.Path:
     return backup
 
 
-def restore_index(tmp: pathlib.Path, name: str, listing, accept=False, record=None):
+def restore_index(tmp: pathlib.Path, name: str, listing, accept=False, record=None, erasures=None):
     """`cmd_restore` of a format-3 capture against a fake live listing: (outcome, calls, closing log)."""
     backup = index_capture(tmp, name, [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]])
     world = World(data=False, listing=listing)
     args = argparse.Namespace(backup=str(backup), domain="veyq.test", key_from=None, without_key=True,
                               config_secret_file=str(tmp / f"{name}.key"), accept_missing_objects=accept,
-                              record=record)
+                              record=record, erasures=erasures)
     out = io.StringIO()
     with Seams(world):
         try:
@@ -1254,6 +1267,224 @@ def p9_format2_and_the_empty_store(tmp: pathlib.Path) -> None:
           "--objects-from s3:pbucket/pre with VEYQ_BACKUP_POOL_ENDPOINT=http://pool.example:9000" in outcome, outcome)
 
 
+# --------------------------------------------------------------------------------------------------------
+# B, the retention (ADR 0056 decision 8) — R1–R6, on a fake clock
+# --------------------------------------------------------------------------------------------------------
+
+def aged_capture(folder: pathlib.Path, name: str, days_old: float, now, manifest: bool = True) -> pathlib.Path:
+    """A capture directory whose manifest says it finished `days_old` days before `now` (or, without a manifest, a dump
+    whose directory was last changed then — an interrupted or failed capture)."""
+    path = folder / name
+    path.mkdir(parents=True)
+    when = now - ib.timedelta(days=days_old)
+    if manifest:
+        stamp = when.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        (path / ib.MANIFEST_NAME).write_text(json.dumps({"capture": {"finishedAt": stamp}}))
+    elif not name.endswith(ib.PARTIAL):
+        (path / ib.DUMP_NAME).write_text("-- a dump\n")
+    os.utime(path, (when.timestamp(), when.timestamp()))
+    return path
+
+
+@guarded
+def r1_prune_at_b(tmp: pathlib.Path) -> None:
+    now = ib.datetime.now(ib.timezone.utc)
+    folder = tmp / "r1"
+    aged_capture(folder, "c-50", 50, now)
+    aged_capture(folder, "c-40", 40, now)
+    aged_capture(folder, "c-31", 31, now)
+    aged_capture(folder, "failed-35", 35, now, manifest=False)
+    aged_capture(folder, "young-29", 29, now)
+    old_partial = aged_capture(folder, "x" + ib.PARTIAL, 45, now, manifest=False)
+    young_partial = aged_capture(folder, "y" + ib.PARTIAL, 1, now, manifest=False)
+    pool = folder / "a-pool"
+    pool.mkdir()
+    os.utime(pool, (0, 0))  # a directory pool inside the captures folder, older than anything: never a capture
+    gone = ib.prune_older_than(folder, 30, now)
+    left = sorted(p.name for p in folder.iterdir())
+    check("R1 prune: every capture older than B goes — complete, failed and interrupted — oldest first",
+          gone == ["c-50", "x" + ib.PARTIAL, "c-40", "failed-35", "c-31"], str(gone))
+    check("R1 prune (control): a capture younger than B stays, a .partial in flight stays, a pool is never a capture",
+          left == sorted(["young-29", young_partial.name, "a-pool"]) and not old_partial.exists(), str(left))
+    newest_only = tmp / "r1-newest"
+    aged_capture(newest_only, "only", 31, now)
+    check("R1 prune: the newest is pruned at B too (owner Q22) — a folder whose one capture is past B is empty after",
+          ib.prune_older_than(newest_only, 30, now) == ["only"] and not any(newest_only.iterdir()))
+
+
+@guarded
+def r2_keep_still_bounds(tmp: pathlib.Path) -> None:
+    now = ib.datetime.now(ib.timezone.utc)
+    folder = tmp / "r2"
+    for n in (4, 3, 2, 1):
+        aged_capture(folder, f"c-{n}", n, now)
+    aged_capture(folder, "p" + ib.PARTIAL, 5, now, manifest=False)
+    gone = ib.prune_beyond_keep(folder, 2)
+    check("R2 keep: the complete captures beyond the newest `keep` go, a .partial is not keep's",
+          gone == ["c-4", "c-3"] and sorted(p.name for p in folder.iterdir()) == ["c-1", "c-2", "p" + ib.PARTIAL],
+          str(gone))
+
+
+@guarded
+def r3_b_from_the_database(tmp: pathlib.Path) -> None:
+    db = ib.Database.__new__(ib.Database)
+    answers = {"set": [["90"]], "none": [],
+               "unreadable": ib.BackupError("Table 'veyq.veyq_backup_retention' doesn't exist")}
+    seen = {}
+    for label, answer in answers.items():
+        def query(sql, answer=answer, label=label):
+            seen[label] = sql
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        db.query = query
+        seen[label + "-result"] = db.retention_days()
+    check("R3 B: the Server Owner's value, read from the row id 1 of the retention table",
+          seen["set-result"][0] == 90 and ib.RETENTION_TABLE in seen["set"] and "id = 1" in seen["set"], str(seen))
+    check("R3 B: no row is the default, 30", seen["none-result"][0] == 30, str(seen["none-result"]))
+    check("R3 B: an unreadable database (an older instance, a connection that failed) is 30 too, said so",
+          seen["unreadable-result"][0] == 30 and "unreadable" in seen["unreadable-result"][1],
+          str(seen["unreadable-result"]))
+
+
+@guarded
+def r4_the_gate_prunes_at_every_start(tmp: pathlib.Path) -> None:
+    now = ib.datetime.now(ib.timezone.utc)
+
+    def old(root: pathlib.Path) -> None:
+        aged_capture(root / ib.CAPTURES_DIR, "2020-01-01T00-00-00Z", 40, now)
+        aged_capture(root / ib.CAPTURES_DIR, "2020-01-02T00-00-00Z", 10, now)
+    same = {"release": "0.5", "request": "", "capture": None, "writtenAt": "2020-01-01T00:00:00Z"}
+    outcome, root, _ = gate(tmp, "r4-same", World(), record=same, prepare=old)
+    check("R4 gate: a restart that captures nothing still prunes the capture past B, and keeps the younger one",
+          outcome == "ok 0" and captures(root) == ["2020-01-02T00-00-00Z"], f"{outcome} {captures(root)}")
+    outcome, root, _ = gate(tmp, "r4-b7", World(retention=(7, "set by the Server Owner")), record=same, prepare=old)
+    check("R4 gate: B is the database's — at 7 days both go", outcome == "ok 0" and captures(root) == [], outcome)
+    outcome, root, before = gate(tmp, "r4-refused", World(), target="0.5", record={"release": "0.6"}, prepare=old)
+    check("R4 gate: a refusal prunes nothing — it writes nothing",
+          outcome.startswith("refused:") and volume_state(root) == before, outcome)
+
+
+@guarded
+def r5_the_pool_ledger_drops_entries_past_b(tmp: pathlib.Path) -> None:
+    root = str(tmp / "r5-pool")
+    rclone = Rclone(a_store())
+    rclone.pool(root)
+    pool_capture(tmp, World(), rclone, "r5-c1", root, "--pool-keep", "3")
+    # The first capture's entry is 40 days old now, and the store purged sk1/1 since.
+    entry = ledger_of(rclone, root)[0]
+    body = json.loads(rclone.pool(root)[entry][2])
+    body["recordedAt"] = (ib.datetime.now(ib.timezone.utc) - ib.timedelta(days=40)).replace(microsecond=0).isoformat()
+    rclone.pool(root)[entry] = obj((json.dumps(body) + "\n").encode())
+    del rclone.store["sk1/1"]
+    outcome, _, _ = pool_capture(tmp, World(blobs=(("sk1", 1),)), rclone, "r5-c2", root, "--pool-keep", "3")
+    check("R5 pool: an entry older than B goes although keep (3) would keep it, and the object only it named with it",
+          outcome == "ok 0" and entry not in rclone.pool(root) and "sk1/1" not in rclone.pool(root)
+          and "sk1/0" in rclone.pool(root) and len(ledger_of(rclone, root)) == 1,
+          f"{outcome} {sorted(rclone.pool(root))}")
+    outcome, _, _ = pool_capture(tmp, World(blobs=(("sk1", 1),)), rclone, "r5-c3", root, "--pool-keep", "3")
+    check("R5 pool (control): entries younger than B stay within keep",
+          outcome == "ok 0" and len(ledger_of(rclone, root)) == 2, str(ledger_of(rclone, root)))
+
+
+@guarded
+def r6_the_prune_and_retention_commands(tmp: pathlib.Path) -> None:
+    now = ib.datetime.now(ib.timezone.utc)
+    folder = tmp / "r6"
+    aged_capture(folder, "old", 10, now)
+    aged_capture(folder, "new", 2, now)
+
+    def run(argv, world):
+        out = io.StringIO()
+        with Seams(world), contextlib.redirect_stdout(out):
+            rc = ib.main(argv)
+        return rc, out.getvalue()
+
+    def answer(text):
+        return json.loads(text.strip().splitlines()[-1])
+    rc, text = run(["retention", "--captures", str(folder)], World())
+    check("R6 retention: B and the newest capture, as JSON; fresh while it is younger than B",
+          rc == 0 and answer(text).get("days") == 30 and answer(text).get("youngest") == "new"
+          and answer(text).get("fresh") is True, text)
+    rc, text = run(["prune", "--captures", str(folder)], World(retention=(7, "set by the Server Owner")))
+    check("R6 prune: B read from the database (7) prunes the 10-day capture and keeps the 2-day one",
+          rc == 0 and sorted(p.name for p in folder.iterdir()) == ["new"], text)
+    rc, text = run(["retention", "--captures", str(folder)], World(retention=(1, "set by the Server Owner")))
+    check("R6 retention: with no capture younger than B it is not fresh — `veyqctl status` warns on that",
+          rc == 0 and answer(text).get("fresh") is False, text)
+    rc, text = run(["prune", "--dir", str(tmp / "r6-claim"), "--keep", "1"], World())
+    check("R6 prune: the cluster's layout (--dir's captures/) with nothing in it prunes nothing and passes", rc == 0, text)
+
+
+def retention_cases(tmp: pathlib.Path) -> None:
+    r1_prune_at_b(tmp)
+    r2_keep_still_bounds(tmp)
+    r3_b_from_the_database(tmp)
+    r4_the_gate_prunes_at_every_start(tmp)
+    r5_the_pool_ledger_drops_entries_past_b(tmp)
+    r6_the_prune_and_retention_commands(tmp)
+
+
+# --------------------------------------------------------------------------------------------------------
+# The erasure ledger in the object check (ADR 0056 decision 8) — L1–L3
+# --------------------------------------------------------------------------------------------------------
+
+def a_ledger(tmp: pathlib.Path, name: str, *keys: str) -> str:
+    path = tmp / name
+    lines = [json.dumps({"at": "2026-10-18T12:00:00Z", "kind": "STORAGE_KEY", "id": k}) for k in keys]
+    lines += [json.dumps({"at": "2026-10-18T12:00:00Z", "kind": "SCOPE", "id": "a-scope", "scope": "a-scope"}), "{torn"]
+    path.write_text("\n".join(lines) + "\n")
+    return str(path)
+
+
+@guarded
+def l1_an_erased_key_is_erased_not_missing(tmp: pathlib.Path) -> None:
+    whole = [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]]
+    outcome, calls, log = restore_index(tmp, "l1-erased", whole[:1], erasures=a_ledger(tmp, "l1.log", "sk1"))
+    check("L1 restore: an object whose storage key the ledger lists is reported as erased, not missing, and loads",
+          outcome == "ok 0" and "load" in calls and "erased, not missing  sk1/1" in log
+          and "missing object" not in log, f"{outcome} {log[-500:]}")
+    outcome, calls, _ = restore_index(tmp, "l1-other", whole[:1], erasures=a_ledger(tmp, "l1b.log", "sk9"))
+    check("L1 control: a ledger listing another key leaves the missing object missing — refused before the load",
+          outcome.startswith("refused:") and "missing object  sk1/1" in outcome and "load" not in calls, outcome)
+
+
+@guarded
+def l2_no_ledger_is_todays_check(tmp: pathlib.Path) -> None:
+    whole = [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]]
+    outcome, calls, _ = restore_index(tmp, "l2-missing", whole[:1])
+    check("L2 restore without a ledger: today's refusal, naming the missing object",
+          outcome.startswith("refused:") and "missing object  sk1/1" in outcome and "load" not in calls, outcome)
+    outcome, _, log = restore_index(tmp, "l2-whole", whole)
+    check("L2 restore without a ledger says so", outcome == "ok 0" and "no erasure ledger was given" in log, log[-400:])
+    outcome, _, _ = restore_index(tmp, "l2-absent", whole, erasures=str(tmp / "no-such.log"))
+    check("L2 restore: a ledger named that is not there is refused before anything, naming the flag",
+          outcome.startswith("refused:") and "--erasures" in outcome, outcome)
+
+
+@guarded
+def l3_verify_honours_the_ledger(tmp: pathlib.Path) -> None:
+    backup = index_capture(tmp, "l3", [["sk1/0", 10, "a" * 32], ["sk1/1", 20, "b" * 32]])
+    world = World(listing=[["sk1/0", 10, "a" * 32]])
+    results = {}
+    for label, extra in (("with", ["--erasures", a_ledger(tmp, "l3.log", "sk1")]), ("without", [])):
+        out = io.StringIO()
+        with Seams(world), contextlib.redirect_stdout(out):
+            rc = ib.main(["verify", str(backup), "--against-store", *extra, *STORE_ARGS[2:]])
+        results[label] = (rc, out.getvalue())
+    check("L3 verify --against-store: an erased key reads as erased with the ledger",
+          results["with"][0] in (0, 2) and "1 erased after the capture" in results["with"][1], results["with"][1][-400:])
+    check("L3 verify --against-store (control): without it, the same key is missing",
+          results["without"][0] == 1 and "missing object  sk1/1" in results["without"][1],
+          results["without"][1][-400:])
+
+
+def ledger_cases(tmp: pathlib.Path) -> None:
+    l1_an_erased_key_is_erased_not_missing(tmp)
+    l2_no_ledger_is_todays_check(tmp)
+    l3_verify_honours_the_ledger(tmp)
+
+
 @guarded
 def p10_empty_database(tmp: pathlib.Path) -> None:
     """The in-place rollback's first write drops every table — only with --yes."""
@@ -1289,6 +1520,8 @@ def main() -> int:
         os.umask(ib.OWNER_ONLY_UMASK)
         gate_cases(tmp_path)
         pool_cases(tmp_path)
+        retention_cases(tmp_path)
+        ledger_cases(tmp_path)
     version_cases()
     not_data_cases()
     with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-dump-") as tmp:

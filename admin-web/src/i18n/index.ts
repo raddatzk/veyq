@@ -183,6 +183,21 @@ const en = {
     "effect": "Guests are told the number of days in effect when they write; no guest is kept longer than the page told them.",
     "save": "Save"
   },
+  "backupRetention": {
+    "title": "Backups",
+    "sub": "Every backup veyq's tools take is deleted once it is older than this many days, the newest one too: the backups veyqctl keeps on this host and the ones the cluster's backup gate keeps on its volume. What was erased since a backup is erased again when it is restored.",
+    "loading": "Reading the backup retention…",
+    "loadFailed": "Couldn’t read the backup retention.",
+    "saveFailed": "Couldn’t save the number of days.",
+    "saved": "Saved. The next backup, start or daily prune deletes every backup older than this.",
+    "invalid": "Enter a whole number of days from {min} to {max}.",
+    "days": "Keep backups for (days, {min} to {max})",
+    "default": "Not set yet: {days} days, the default.",
+    "chosen": "Set by you.",
+    "reasonOwed": "More than thirty days needs a reason, which you write into your record of processing.",
+    "effect": "A copy you moved off the host is yours to delete by then. If no backup is younger than this, veyqctl status warns: take one daily.",
+    "save": "Save"
+  },
   "orders": {
     "title": "An authority's order",
     "sub": "A removal order for terrorist content must be acted on within one hour of reaching your contact point. Enter it here: the link and what it gives access to are blocked at once, by id, without opening anything. A preservation order or a request for information keeps the data without blocking it.",
@@ -813,6 +828,21 @@ const de: typeof en = {
     "chosen": "Von dir festgelegt.",
     "reasonOwed": "Mehr als sieben Tage brauchen eine Begründung, die du in dein Verzeichnis von Verarbeitungstätigkeiten schreibst.",
     "effect": "Gäste erfahren die Zahl der Tage, die gilt, wenn sie schreiben; kein Gast wird länger aufbewahrt, als die Seite ihm gesagt hat.",
+    "save": "Speichern"
+  },
+  "backupRetention": {
+    "title": "Sicherungen",
+    "sub": "Jede Sicherung, die die Werkzeuge von veyq anlegen, wird gelöscht, sobald sie älter als so viele Tage ist, auch die neueste: die Sicherungen, die veyqctl auf diesem Host aufbewahrt, und die, die das Sicherungs-Gate des Clusters auf seinem Volume aufbewahrt. Was seit einer Sicherung gelöscht wurde, wird beim Wiederherstellen erneut gelöscht.",
+    "loading": "Aufbewahrung der Sicherungen wird gelesen…",
+    "loadFailed": "Die Aufbewahrung der Sicherungen konnte nicht gelesen werden.",
+    "saveFailed": "Die Zahl der Tage konnte nicht gespeichert werden.",
+    "saved": "Gespeichert. Die nächste Sicherung, der nächste Start oder die tägliche Bereinigung löscht jede Sicherung, die älter ist.",
+    "invalid": "Gib eine ganze Zahl von Tagen von {min} bis {max} ein.",
+    "days": "Sicherungen aufbewahren für (Tage, {min} bis {max})",
+    "default": "Noch nicht festgelegt: {days} Tage, die Voreinstellung.",
+    "chosen": "Von dir festgelegt.",
+    "reasonOwed": "Mehr als dreißig Tage brauchen eine Begründung, die du in dein Verzeichnis von Verarbeitungstätigkeiten schreibst.",
+    "effect": "Eine Kopie, die du vom Host weggebracht hast, löschst du bis dahin selbst. Ist keine Sicherung jünger, warnt veyqctl status: lege täglich eine an.",
     "save": "Speichern"
   },
   "orders": {

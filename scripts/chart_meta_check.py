@@ -75,10 +75,12 @@ render, asserts — deriving every anchor from the source rather than listing it
   xv.  **A default-deny selects every rendered pod.** Some NetworkPolicy has both `Ingress` and `Egress` in
        `policyTypes`, no rule in either, and a `podSelector.matchLabels` that selects every workload's pod
        template — so every other policy is an allow-list rather than a widening of an open default.
-  xvi. **The database's only peer is the app.** Every ingress rule of every policy selecting the bundled MariaDB
-       pod (the container whose image repository is `mariadb`) admits only a bare `podSelector` matching the app
-       pod and no other; and, the positive control, at least one rule does, or the default-deny cut the app off
-       its database. A render without the bundled database (an operator's own) has no pod to check.
+  xvi. **The database's peers are the app and, with the backup gate on, the daily prune.** Every ingress rule of
+       every policy selecting the bundled MariaDB pod (the container whose image repository is `mariadb`) admits only
+       bare `podSelector`s each matching exactly one of those pods and no other — the prune reads B there (ADR 0056
+       decision 8) and nothing else may; and, the positive control, at least one rule admits the app, or the
+       default-deny cut the app off its database. A render without the bundled database (an operator's own) has no
+       pod to check.
   xvii.**`networkPolicy.enabled=false` renders no NetworkPolicy at all,** the admin listener's included — the
        operator who turns it off owns reachability, and a policy left behind would be one they do not know they
        have. The positive control: the same file's default render carries some.
@@ -138,6 +140,11 @@ render, asserts — deriving every anchor from the source rather than listing it
        (`--set backup.enabled=…`) flips the gate: every file is rendered both ways.
   xxvi. **The schema refuses an install that makes neither backup choice, naming `/backup`** (the gate on with no
        claim), and accepts each of the two (a claim named; `enabled: false`) — ADR 0098's explicit choice (owner 2b).
+  xxviii.**With `backup.enabled`, exactly one CronJob, `veyq-backup-prune`, prunes the backup claim on the tools
+       image, its pod mounting the claim `backup.existingClaim` names and no other claim — never the config-secret
+       claim — its one container running `prune` (ADR 0056 decision 8: the daily prune of every capture older than B;
+       a capture on the claim can never hold the KEK, and nothing the prune writes is anywhere else); with the gate off,
+       no CronJob at all.
   xxvii.**The bundled store keeps no request log.** Every container whose image repository is `garage` sets
        `RUST_LOG`, and no directive in it is `info`, `debug` or `trace` (ADR 0092 § 5): unset, the image's own
        `garage=info` logs every S3 and admin request with the peer's address and the URI with its query. The compose
@@ -273,6 +280,8 @@ VERBOSE_LEVELS = {"info", "debug", "trace"}
 # (xxiv)–(xxvi) the backup gate (ADR 0098): its container name and the variable its target release travels in.
 GATE_NAME = "backup-gate"
 GATE_TARGET_ENV = "VEYQ_BACKUP_TARGET_RELEASE"
+# (xxviii) the daily prune of every capture older than B (ADR 0056 decision 8).
+PRUNE_NAME = "veyq-backup-prune"
 WORKLOADS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 # Kinds that exist only cluster-wide. The chart installs into one namespace and holds nothing beyond it.
 CLUSTER_SCOPED = {
@@ -337,9 +346,8 @@ def label_maps(obj: dict) -> list[tuple[str, dict]]:
             found.append(("spec.selector.matchLabels", selector["matchLabels"]))
         elif obj.get("kind") == "Service":
             found.append(("spec.selector", selector))
-    template_meta = ((spec.get("template") or {}).get("metadata") or {})
-    if isinstance(template_meta.get("labels"), dict):
-        found.append(("spec.template.metadata.labels", template_meta["labels"]))
+    if pod_spec(obj) is not None and pod_labels(obj):
+        found.append(("the pod template's metadata.labels", pod_labels(obj)))
     return found
 
 
@@ -350,6 +358,14 @@ def pod_spec(obj: dict) -> dict | None:
     if obj["kind"] == "CronJob":
         spec = ((spec.get("jobTemplate") or {}).get("spec") or {})
     return ((spec.get("template") or {}).get("spec")) or None
+
+
+def pod_labels(obj: dict) -> dict:
+    """The labels of a workload's pod template — under `jobTemplate` for a CronJob, as [pod_spec] reads its spec."""
+    spec = obj.get("spec") or {}
+    if obj.get("kind") == "CronJob":
+        spec = ((spec.get("jobTemplate") or {}).get("spec") or {})
+    return ((spec.get("template") or {}).get("metadata") or {}).get("labels") or {}
 
 
 def route_backends(obj: dict) -> list[str]:
@@ -514,6 +530,35 @@ def check_backup_gate(tag: str, enabled: bool, claim: str | None, rendered: list
             f"{app_release!r} — the gate would judge a release change that is not the one about to migrate"
         )
     return True
+def check_backup_prune(tag: str, enabled: bool, claim: str | None, rendered: list[dict]) -> bool:
+    """(xxviii) with the gate on, one CronJob `veyq-backup-prune` on the tools image, mounting the named claim and no
+    other — the config-secret claim never — its one container running `prune`; with it off, none. Returns whether one
+    is rendered."""
+    jobs = [o for o in rendered if o.get("kind") == "CronJob"]
+    if not enabled:
+        if jobs:
+            errors.append(f"(xxviii) {tag}: backup.enabled is false and the chart still renders {[name_of(o) for o in jobs]}")
+        return bool(jobs)
+    prunes = [o for o in jobs if name_of(o) == f"CronJob/{PRUNE_NAME}"]
+    if len(prunes) != 1:
+        errors.append(f"(xxviii) {tag}: with backup.enabled, exactly one CronJob `{PRUNE_NAME}`; rendered {[name_of(o) for o in jobs]}")
+        return bool(prunes)
+    spec = pod_spec(prunes[0]) or {}
+    containers = spec.get("containers") or []
+    claims = sorted(((v.get("persistentVolumeClaim") or {}).get("claimName") or "") for v in spec.get("volumes") or []
+                    if v.get("persistentVolumeClaim"))
+    if claims != [claim]:
+        errors.append(f"(xxviii) {tag}: `{PRUNE_NAME}` mounts the claims {claims} — exactly backup.existingClaim "
+                      f"`{claim}`, and never the config-secret claim: a prune on the KEK's claim could reach the key")
+    if len(containers) != 1 or not TOOLS_IMAGE.search(str(containers[0].get("image") or "").split("@", 1)[0]) \
+            or (containers[0].get("args") or [None])[0] != "prune":
+        errors.append(f"(xxviii) {tag}: `{PRUNE_NAME}` must run one container, the veyq-tools image's `prune`; it runs "
+                      f"{[(c.get('image'), c.get('args')) for c in containers]}")
+    if spec.get("initContainers"):
+        errors.append(f"(xxviii) {tag}: `{PRUNE_NAME}` runs init containers, which nothing asked of it")
+    return True
+
+
 def check_client_port(tag: str, values: dict, rendered: list[dict]) -> None:
     """(xxiii) PROXY env iff probes on the admin listener iff app.clientPort.source is proxyProtocol."""
     source = ((values.get("app") or {}).get("clientPort") or {}).get("source") or "none"
@@ -569,12 +614,12 @@ def check_store_log(tag: str, rendered: list[dict]) -> None:
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
     """(xii) and (xiii): the admin listener's Service, the routes that must not name it, and the policy."""
     workloads = [(o, s) for o in rendered if (s := pod_spec(o))]
-    pod_labels = {name_of(o): ((o.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {} for o, _ in workloads}
+    labels_of = {name_of(o): pod_labels(o) for o, _ in workloads}
     app = next(((o, c) for o, s in workloads for c in s.get("containers") or [] if is_app_container(c)), None)
     admin = next(((o, c) for o, s in workloads for c in s.get("containers") or [] if ADMIN_IMAGE.search(str(c.get("image") or ""))), None)
     if app is None or admin is None or default_admin_port is None:
         return  # reported elsewhere: no app container, no admin container, or no port anchor
-    app_labels, admin_labels = pod_labels[name_of(app[0])], pod_labels[name_of(admin[0])]
+    app_labels, admin_labels = labels_of[name_of(app[0])], labels_of[name_of(admin[0])]
     env = {e.get("name"): e.get("value") for e in app[1].get("env") or []}
     admin_port = int(env.get(ADMIN_PORT_ENV) or default_admin_port)
     declared = next((p for p in app[1].get("ports") or [] if p.get("containerPort") == admin_port), None)
@@ -618,7 +663,7 @@ def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, in
     # (xiii) the policy
     if not policy_enabled:
         return  # (xvii) asserts that a disabled render carries no policy at all
-    others = [labels for n, labels in pod_labels.items() if n != name_of(admin[0])]
+    others = [labels for n, labels in labels_of.items() if n != name_of(admin[0])]
     public_from_ingress = False
     for policy, rule in ingress_rules(rendered, app_labels):
         ports = rule.get("ports")
@@ -671,8 +716,7 @@ def only_pod(peers, target: dict, others: list[dict]) -> bool:
 
 def check_network_policies(tag: str, rendered: list[dict]) -> None:
     """(xv) the default-deny selects every pod, and (xvi) the database admits the app alone."""
-    pods = {name_of(o): ((o.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {}
-            for o in rendered if pod_spec(o)}
+    pods = {name_of(o): pod_labels(o) for o in rendered if pod_spec(o)}
     policies = [o for o in rendered if o.get("kind") == "NetworkPolicy"]
     deny = [
         o for o in policies
@@ -692,14 +736,24 @@ def check_network_policies(tag: str, rendered: list[dict]) -> None:
     database = next((o for o, c in workloads if DB_IMAGE.search(str(c.get("image") or "").split("@", 1)[0])), None)
     if database is None or app is None:
         return  # an operator-managed database renders no pod here, and a missing app is reported elsewhere
-    app_labels = pods[name_of(app)]
-    others = [labels for name, labels in pods.items() if name not in {name_of(app), name_of(database)}]
+    prune = next((o for o in rendered if o.get("kind") == "CronJob" and name_of(o) == f"CronJob/{PRUNE_NAME}"), None)
+    allowed = [o for o in (app, prune) if o is not None]
     rules = ingress_rules(rendered, pods[name_of(database)])
     for policy, rule in rules:
-        if not only_pod(rule.get("from"), app_labels, others):
-            errors.append(f"(xvi) {tag}: {name_of(policy)} admits the database from {rule.get('from')!r} — its only peer is the app pod (ADR 0071 §3)")
-    if not rules:
+        peers = rule.get("from") or []
+        if not peers or not all(
+            any(only_pod([peer], pods[name_of(target)],
+                         [labels for name, labels in pods.items() if name not in {name_of(target), name_of(database)}])
+                for target in allowed)
+            for peer in peers
+        ):
+            errors.append(f"(xvi) {tag}: {name_of(policy)} admits the database from {rule.get('from')!r} — its only "
+                          f"peers are the app pod and the daily backup prune (ADR 0071 §3, ADR 0056 decision 8)")
+    if not any(only_pod([peer], pods[name_of(app)], []) for _, rule in rules for peer in rule.get("from") or []):
         errors.append(f"(xvi) {tag}: no NetworkPolicy rule admits the app to the database — the default-deny would cut the app off it")
+    if prune is not None and not any(only_pod([peer], pods[name_of(prune)], []) for _, rule in rules for peer in rule.get("from") or []):
+        errors.append(f"(xvi) {tag}: no NetworkPolicy rule admits the daily backup prune to the database — it would read "
+                      f"no B and prune at the default 30 days (ADR 0056 decision 8)")
 
 
 def app_properties(rendered: list[dict]) -> str | None:
@@ -991,11 +1045,16 @@ def check(values_file: pathlib.Path) -> list[dict]:
     enabled = backup_enabled(values)
     if first:
         check_backup_gate(tag, enabled, (values.get("backup") or {}).get("existingClaim"), rendered)
+        check_backup_prune(tag, enabled, (values.get("backup") or {}).get("existingClaim"), rendered)
         # (xxv) and its positive control on the same file: the other choice renders the other shape.
         flip = ["--set", "backup.enabled=false"] if enabled else ["--set", "backup.enabled=true", "--set", "backup.existingClaim=flipped-backup"]
         flipped = render(values_file, flip)
         has_gate = check_backup_gate(f"{tag} {' '.join(flip)}", not enabled, None if enabled else "flipped-backup",
                                      objects(flipped) if flipped else [])
+        has_prune = check_backup_prune(f"{tag} {' '.join(flip)}", not enabled, None if enabled else "flipped-backup",
+                                       objects(flipped) if flipped else [])
+        if flipped and has_prune == enabled:
+            errors.append(f"(xxviii) {tag}: flipping backup.enabled did not flip the daily prune")
         if not flipped:
             errors.append(f"(xxv) {tag}: the render with {' '.join(flip)} failed, so the other backup choice is unchecked")
         elif has_gate == enabled:
@@ -1158,13 +1217,13 @@ print(
     f"twice; every container restricted-compliant with a read-only root; the admin surface on a ClusterIP Service and "
     f"no route; the admin listener on a Service of its own that no route names and the admin surface points at, "
     f"admitted by policy from the admin pod alone; a default-deny over every pod, the public port admitted from "
-    f"ingressFrom exactly and the database from the app alone, no policy when switched off, and no install without "
+    f"ingressFrom exactly and the database from the app and the daily backup prune alone, no policy when switched off, and no install without "
     f"ingressFrom; the ACME "
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on the Gateway and in the properties file, "
     f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs; no Ingress, every "
     f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
     f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "
     f"listener, in {', '.join(sorted(proxy_rendered))}, and a port source outside the enum refused; the backup gate on the tools image where on — the named claim, "
-    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice; "
+    f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice; the daily prune of every capture past B on that claim alone, and none where off; "
     f"the store's RUST_LOG below info"
 )

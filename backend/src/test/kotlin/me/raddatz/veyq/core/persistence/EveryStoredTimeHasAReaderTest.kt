@@ -149,6 +149,11 @@ class EveryStoredTimeHasAReaderTest {
             // --- the guest-write record (ADR 0093 § 10, en.moderation.guest-write-record)
             "veyq_guest_write_record.observed_at" to "GuestWriteRecordPurge deletes a row older than N as it stands now (GuestWriteRecords.purge)",
             "veyq_guest_write_record.expires_at" to "GuestWriteRecordPurge deletes a row past it, at startup and on its interval",
+            // --- the erasure ledger (ADR 0056 decision 8)
+            "veyq_erasure_outbox.recorded_at" to "ErasureLedgerFile.sweep appends the unsent rows oldest first and deletes a " +
+                "sent row older than B",
+            "veyq_erasure_outbox.sent_at" to "ErasureLedgerFile.sweep appends only the rows without one and deletes a row " +
+                "that has one once it is older than B",
             // --- tasks
             "veyq_job.created_at" to "TasksStore claims the oldest job first and picks the newest covering rotation",
             "veyq_job.lease_expires_at" to "TasksStore re-offers a job whose lease ran out",

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.moderation.order
 
+import me.raddatz.veyq.core.backup.BlockBasis
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsHandler
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.generated.model.AuthorityOrder
@@ -105,6 +107,7 @@ class AuthorityOrderHandler(
     private val mail: StatementMail,
     private val notices: CaseNotices,
     private val operator: OperatorDetailsHandler,
+    private val ledger: ErasureLedger,
     private val measureTargets: MeasureTargets,
 ) {
 
@@ -248,6 +251,7 @@ class AuthorityOrderHandler(
             activeKey = ModerationBlockEntity.activeKeyOf(kind, target)
         }.also { row ->
             row.persist()
+            ledger.blockTaken(row, BlockBasis.ORDER)
             log.appendCase(ModerationEvent.MEASURE_TAKEN, now, case.id, moderatorId = by, reason = row.kind, targetId = row.targetId)
             if (!standing) measureTargets.erased(listOf(kind), listOf(target), now)
         }

@@ -163,8 +163,17 @@ backup:
   # A PersistentVolumeClaim you created in this namespace (ReadWriteOnce is enough: one pod mounts it). The chart
   # creates none, so `helm uninstall` cannot take the backups with it; its size, class and encryption are yours.
   existingClaim: ""
-  # Complete captures kept; the newest is never pruned, and a full claim fails the gate rather than pruning to make room.
+  # Complete captures kept — a second bound beside B: the gate prunes the captures beyond it after each capture, and a
+  # full claim fails the gate rather than pruning to make room.
   keep: 3
+  # B (ADR 0056 decision 8): every capture on the claim is deleted once it is older than B, the newest too — the days
+  # the Server Owner sets in admin-web or with `veyq-admin backup-retention set` (30 until set), read from the database.
+  # The gate prunes at every start, and a daily CronJob, `veyq-backup-prune`, runs the same prune on the gate's image
+  # and claim: it reaches the database (to read B) and writes only this claim, never the config-secret claim. It runs
+  # on the app pod's node (the claim is ReadWriteOnce: never ReadWriteOncePod), and waits while the app pod is not
+  # scheduled. A copy you move off the claim is yours to delete by B.
+  prune:
+    schedule: "17 3 * * *"
   # An opaque value: change it (a commit, by a person or a bot) to ask for a capture without a release change — a
   # new pod-template revision, so Kubernetes stops the old pod first and the capture is cold.
   request: ""

@@ -39,8 +39,9 @@ cd /opt/veyq
 ```
 
 It stops the application, captures the database and the store's **index** into `backups/<UTC stamp>/` and leg (c)
-to the file `--key-into` names, checks the capture, starts the application again — also when the capture failed — and
-prints the downtime. `upgrade` takes the same capture first.
+to the file `--key-into` names, checks the capture, deletes every capture older than B ([below](#how-long-a-backup-is-kept--b)),
+starts the application again — also when the capture failed — and prints the downtime. `upgrade` takes the same capture
+first.
 
 **A capture holds the database and the store's index, not the objects** (ADR 0056 §3). The index — every object's key,
 size and MD5 — is what lets a restore check the objects before it writes anything; the objects themselves stay in the
@@ -65,8 +66,8 @@ downtime grows by the new uploads only. Every copy is `rclone copy --immutable`:
 again, and one whose bytes differ fails the capture instead of replacing the pool's copy. The capture records the pool
 in its manifest (`store.pool.target`), and a restore onto a fresh instance names it (below). **The pool keeps what its
 newest captures need, and nothing more:** each capture writes its index's keys into the pool's ledger
-(`veyq-pool/captures/`), the newest `VEYQ_BACKUP_POOL_KEEP` (default 3) are kept, and every object none of them names
-is deleted from the pool — so an object erased on the instance leaves the pool within that many captures, and one a
+(`veyq-pool/captures/`), the newest `VEYQ_BACKUP_POOL_KEEP` (default 3) younger than B are kept, and every object none
+of them names is deleted from the pool — so an object erased on the instance leaves the pool within that many captures, and one a
 kept capture needs is never deleted. A pool serves one instance; `--objects-to` names another one for a single run. A
 directory pool is created `0700`, its files are yours. Without a pool, and with a store of your own, the objects stay
 where they are, and the store's own durability is what keeps them. The other way to keep the bundled store's objects
@@ -111,6 +112,67 @@ python3 "releases/${release}/instance_backup.py" verify backups/<stamp> --key-fr
 # 6. Start the application again.
 docker compose -f "$recipe" --env-file .env start app
 ```
+
+### How long a backup is kept — B
+
+**Every backup veyq's tools took is deleted once it is older than B days, the newest one too**
+([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md)
+decision 8). Backups are not exempt from erasure: what a member erased, or a guest's address past its days, must not
+live on in them (GDPR Art. 17 and 5(1)(e)). B is an instance setting, **Server → Moderation → Backups** in the admin
+console or `veyq-admin backup-retention set <days>`: 7 to 365, 30 until you set one. Thirty is what this area
+recommends; above it, write the reason into your record of processing. The tools read B from the database they back up,
+and use 30 when they cannot.
+
+- **Compose.** `veyqctl backup`, `upgrade` and `start` delete every capture under `backups/` older than B;
+  `veyqctl backup prune` does only that. Run it daily, so an instance that is rarely restarted keeps nothing past B —
+  and take a backup daily too, because the newest is deleted at B as well: an instance not backed up for B days has
+  none, and `veyqctl status` warns while no capture is younger than B. With systemd:
+
+  ```ini
+  # /etc/systemd/system/veyq-backup.service — a backup, which prunes as it goes (a key file per day: name a new one)
+  [Service]
+  Type=oneshot
+  ExecStart=/bin/sh -c '/opt/veyq/veyqctl backup --key-into /media/usb-stick/veyq-$(date -u +%%Y%%m%%d).key'
+  # /etc/systemd/system/veyq-backup.timer
+  [Timer]
+  OnCalendar=daily
+  Persistent=true
+  [Install]
+  WantedBy=timers.target
+  ```
+
+  A day you cannot take one, `veyqctl backup prune` alone keeps the bound.
+- **Kubernetes.** The gate deletes every capture on its claim older than B at every start, and the chart's CronJob
+  `veyq-backup-prune` does the same daily (`backup.prune.schedule`, `17 3 * * *`) on the gate's image and claim; it reads
+  B from the database and writes nothing but that claim — never the key's.
+- **An object pool** drops its captures older than B too, whatever `VEYQ_BACKUP_POOL_KEEP` says, and the objects only
+  they named with them.
+- **A copy you moved off the host** — an encrypted archive, a second disk — is yours to delete by B. Open it only to
+  restore from it.
+
+### The erasure ledger — carried with leg (c)
+
+A restore of a capture brings back what was erased after it: an account, a tenant, a space, a link, a photo. So the
+instance keeps an **erasure ledger**, `erasures.log`, beside the config-secret key in the app's volume
+(`/var/lib/veyq/`), which no restore and no rollback touches: one line per such erasure, and per moderation block, lift
+and case — kinds, ids and times, never content or a name. **At every start, before it answers a request**, the
+application reads it and erases again every listed thing a restore brought back, blocks again what a moderator or an
+authority's order blocked since, and brings back a case the capture lacked as a stub — **restored**, with no report and
+nothing sealed: a case's sealed parts are lost with a capture older than them. The start's log line says what it did
+(`./veyqctl logs app | grep 'erasure ledger'`). Lines older than B are dropped, since no backup is older.
+
+`veyqctl restore` and `rollback` read the ledger out of the app's volume and hand it to the tool, so an object erased
+after the capture is reported as erased, not missing. **On a new host the instance re-applies only the ledger you bring:
+keep `erasures.log` with leg (c)**, copied the same way and as often as you take a backup:
+
+```sh
+docker cp "$(docker compose -f "$recipe" --env-file .env ps -aq app)":/var/lib/veyq/erasures.log \
+  /media/usb-stick/veyq-erasures.log
+```
+
+and put it back beside the key on the new install before its first start after the restore (as step 3 below puts the
+key, with `erasures.log` for the file name). Erasures of the last minute before a crash that also lost the file are not
+in it.
 
 **A store of your own.** The store is a setting in the admin console, not an environment variable, and the capture is
 cold — no app is running to sign for the tool — so you give the tool the store's credentials for this run, the ones you
@@ -226,7 +288,7 @@ cd /opt/veyq
 ```
 
 `--objects-from` is never implied by `.env`: a restore writes objects only when you say where from. It stops the
-application, loads all three legs with the running release's tool, puts leg (c) into the app's volume as
+application, reads the erasure ledger from the app's volume, loads all three legs with the running release's tool, puts leg (c) into the app's volume as
 the application's own user, and starts the application again. `--domain` is required and never defaulted: the
 capture holds its **tenants'** domains, and `.env`'s `VEYQ_DOMAIN` is the instance's bootstrap domain, not one of
 them. A restore the tool refuses at its gates wrote nothing, and the application stays stopped until `veyqctl start`.
@@ -236,12 +298,15 @@ By hand, after the capture's steps 2 and the `recipe` line above:
 # 1. STOP the application of the freshly installed instance.
 docker compose -f "$recipe" --env-file .env stop app
 
-# 2. Load all three legs; the tool writes leg (c) to a file you own.
+# 2. Load all three legs; the tool writes leg (c) to a file you own. The erasure ledger out of the app's volume
+#    first (absent on a fresh host: leave --erasures out, or name the copy you carried).
 (umask 077; mkdir .key)
+docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint /bin/sh app \
+  -c 'cat "$1"' read-ledger /var/lib/veyq/erasures.log > .key/erasures.log
 python3 "releases/${release}/instance_backup.py" restore /media/restore/<stamp> \
     --domain <the tenant's domain> --compose-file "$recipe" --docker-network veyq_edge \
     --config-secret-file .key/config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key \
-    --objects-from /mnt/backup-disk/veyq-objects
+    --objects-from /mnt/backup-disk/veyq-objects --erasures .key/erasures.log
 
 # 3. Leg (c) into the app's volume, written by the image's own user, the key on stdin; then drop the copy.
 docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint /bin/sh app \
@@ -299,8 +364,10 @@ Your part:
   (`ReadWriteOnce` is enough). The chart creates none, so `helm uninstall` leaves the captures behind, and its size,
   class and encryption at rest are yours. The gate writes `captures/<UTC>/` there, beside its record `state.json`;
   a capture interrupted midway stays as `captures/<UTC>.partial/` until the next complete one removes it.
-  `backup.keep` (3) complete captures are kept, the newest never pruned. A full claim fails the gate and keeps the
-  app down; it is never pruned to make room.
+  At most `backup.keep` (3) complete captures are kept, and none older than B: the gate deletes those at every start
+  and the CronJob `veyq-backup-prune` daily, the newest too ([above](#how-long-a-backup-is-kept--b)) — it runs on the
+  app pod's node, so the claim must be `ReadWriteOnce`, not `ReadWriteOncePod`. A full claim fails the gate and keeps
+  the app down; it is never pruned to make room.
 - **A capture without a release change** is a commit: change `backup.request` to any new value. That is a new
   revision of the pod, so the old pod stops first and the capture is cold. The gate never captures because one is
   "due".
@@ -404,7 +471,7 @@ spec:
           args: ["restore", "/backup/captures/<capture>", "--domain", "<your domain>",
                  "--key-from", "/restore-key/config-secret.key",
                  "--config-secret-file", "/var/lib/veyq/config-secret.key", "--key-as-runtime-user",
-                 "--record", "/backup"]
+                 "--erasures", "/var/lib/veyq/erasures.log", "--record", "/backup"]
           env:
             - {name: VEYQ_BACKUP_DB_URL, value: "jdbc:mariadb://veyq-mariadb:3306/veyq"}
             - {name: VEYQ_BACKUP_DB_USER, value: veyq}
@@ -433,7 +500,9 @@ spec:
           emptyDir: {}
 ```
 
-`--record /backup` is the Job's last step: it writes the backup's release into the gate's record, so the next start
+`--erasures` reads the erasure ledger from the config-secret claim the Job mounts anyway, so an object erased after
+the capture is reported as erased, not missing; on a claim that holds none yet (a new cluster), leave it out. The app's
+next start re-applies the ledger itself. `--record /backup` is the Job's last step: it writes the backup's release into the gate's record, so the next start
 of that release passes instead of capturing the restored database again or refusing it as a downgrade. The config
 secret is read last, as on Compose. **Run once on a kind cluster** (2026-10-17): this Job, this order and these
 commands, with the images loaded by tag rather than pulled by digest; the database and the store were the chart's

@@ -99,7 +99,8 @@ spec:
         - port: rpc
 {{- if .Values.mariadb.enabled }}
 ---
-# The database: from the app alone, and it dials nothing but DNS.
+# The database: from the app, and — with the backup gate on — from the daily prune, which reads B there (ADR 0056
+# decision 8); it dials nothing but DNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -117,10 +118,45 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 14 }}
+        {{- if .Values.backup.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "backup-prune") | nindent 14 }}
+        {{- end }}
       ports:
         - port: mysql
   egress:
     - {{- toYaml $dns | nindent 6 }}
+{{- end }}
+{{- if .Values.backup.enabled }}
+---
+# The daily backup prune (ADR 0056 decision 8): reachable from no pod; it dials the database to read B — the bundled
+# one by its pod, an operator's own wherever it is (as the app's open egress allows) — and DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-backup-prune
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-prune
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "backup-prune") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - {{- toYaml $dns | nindent 6 }}
+    {{- if .Values.mariadb.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "mariadb") | nindent 14 }}
+      ports:
+        - port: mysql
+    {{- else }}
+    - {}
+    {{- end }}
 {{- end }}
 ---
 # The admin surface: reachable from the gateway's data plane only when admin.domain exposes it; by default from no

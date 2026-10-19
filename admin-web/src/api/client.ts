@@ -15,6 +15,7 @@ import {
   InstanceAccountsApi,
   InstanceApi,
   InstanceGuestWriteRecordApi,
+  InstanceBackupRetentionApi,
   InstanceModerationApi,
   InstanceOperatorApi,
   InstanceStoreReconcileApi,
@@ -77,6 +78,12 @@ export function instanceOperatorApi(): InstanceOperatorApi {
 // instance spec: one more client CLASS, still four contracts.
 export function instanceGuestWriteRecordApi(): InstanceGuestWriteRecordApi {
   return new InstanceGuestWriteRecordApi(new InstanceConfiguration(bearerParams()))
+}
+
+// How long a backup is kept, B (ADR 0056 decision 8) — the `instance-backup-retention` tag of the same instance spec:
+// one more client CLASS, still four contracts.
+export function instanceBackupRetentionApi(): InstanceBackupRetentionApi {
+  return new InstanceBackupRetentionApi(new InstanceConfiguration(bearerParams()))
 }
 
 // The Server Owner's door to an account erasure and its stop (ADR 0101 decisions 1-3, uc.account.erase-account) — the

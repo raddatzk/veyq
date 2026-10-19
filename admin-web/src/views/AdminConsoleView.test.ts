@@ -48,6 +48,7 @@ vi.mock('../features/instance/ModerationPanel.vue', () => ({
   default: { emits: ['openTenant'], template: '<button class="stub-moderation" @click="$emit(\'openTenant\', \'tn-9\')" />' },
 }))
 vi.mock('../features/instance/GuestWriteRecordPanel.vue', () => ({ default: { template: '<div class="stub-guest-write-record" />' } }))
+vi.mock('../features/instance/BackupRetentionPanel.vue', () => ({ default: { template: '<div class="stub-backup-retention" />' } }))
 vi.mock('../features/instance/OrderPanel.vue', () => ({ default: { template: '<div class="stub-orders" />' } }))
 vi.mock('../features/instance/AccountsPanel.vue', () => ({
   default: { emits: ['changed'], template: '<button class="stub-accounts" @click="$emit(\'changed\')" />' },
@@ -220,6 +221,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     expect(w.find('.stub-moderation').exists()).toBe(true)
     expect(w.find('.stub-orders').exists()).toBe(true) // an authority's order, below the roster
     expect(w.find('.stub-guest-write-record').exists()).toBe(true) // the record's retention, below the roster
+    expect(w.find('.stub-backup-retention').exists()).toBe(true) // B, beside it (ADR 0056 decision 8)
     expect(w.find('.stub-mail').exists()).toBe(false)
   })
 

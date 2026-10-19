@@ -1175,12 +1175,14 @@ def production_compose_env() -> dict[str, str]:
 
 
 def seed_project_decoy(name: str) -> None:
-    """The five tables `capture` reads BEFORE it dumps — the smallest thing the tool accepts as an instance.
+    """The six tables `capture` reads — the smallest thing the tool accepts as an instance.
 
     Not a copy of veyq's schema and not a claim about one. Every column here exists because
     `instance_backup.Database` selects it: `veyq_tenant.domain`, the flyway history's three, `veyq_blob`'s two
-    and `veyq_hold_pin`'s same two (the blob index reads both), and a row count off `veyq_upload_session`. If the
-    tool learns to read a sixth table, this stops satisfying
+    and `veyq_hold_pin`'s same two (the blob index reads both), a row count off `veyq_upload_session`, and B's row
+    (`veyq_backup_retention`, ADR 0056 decision 8 — read for a pool's prune, and 30 where the table is missing, so its
+    absence would not fail the capture; it is here so the decoy stays what the tool reads). If the
+    tool learns to read a seventh table, this stops satisfying
     the capture and the **control** below goes red — which is the right failure, because a decoy that quietly
     stopped being instance-shaped would turn the control into "nothing ran" while it still reported green.
     """
@@ -1193,7 +1195,8 @@ def seed_project_decoy(name: str) -> None:
         "INSERT INTO flyway_schema_history (installed_rank, version, success) VALUES (1, '1', 1); "
         "CREATE TABLE veyq_blob (storage_key VARCHAR(255), chunk_count INT); "
         "CREATE TABLE veyq_hold_pin (storage_key VARCHAR(255), chunk_count INT); "
-        "CREATE TABLE veyq_upload_session (id BIGINT);"
+        "CREATE TABLE veyq_upload_session (id BIGINT); "
+        "CREATE TABLE veyq_backup_retention (id INT, retention_days INT);"
     )
 
 

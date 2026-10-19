@@ -109,8 +109,9 @@ asks for it.
 **5. The volume is the operator's.** `backup.existingClaim` names a PersistentVolumeClaim the operator created; the
 chart creates none, so `helm uninstall` cannot take the backups with it, and its size, class and encryption at rest
 are the operator's. ReadWriteOnce suffices: one pod mounts it. A capture is written to `captures/<UTC>.partial/` and
-renamed when complete; after a complete capture the gate prunes complete ones beyond `backup.keep` (default 3, the
-newest never) and every `.partial` left by an interrupted run. A full volume fails the gate (decision 6) — it never
+renamed when complete; after a complete capture the gate prunes complete ones beyond `backup.keep` (default 3) and
+every `.partial` left by an interrupted run, and at every start every capture older than B, the newest too (ADR 0056
+decision 8; a daily CronJob on the same image and claim runs that prune between starts). A full volume fails the gate (decision 6) — it never
 prunes to make room.
 
 **6. A failed or refused gate keeps the app from starting, and that is the failure mode.** Nothing has migrated, the

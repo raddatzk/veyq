@@ -1,7 +1,7 @@
 # ADR 0101 — An account is erased on request, a tenant can be deleted while active, and only what the law keeps stays
 
-- Status: Accepted 2026-10-18 for its duty, **built** (the erasure ledger of decision 8 is the open part: until
-  `cr-backup-erasure-and-retention` lands, a restore does not re-apply an erasure). That an account and an active tenant can be erased is
+- Status: Accepted 2026-10-18 for its duty, **built**, the erasure ledger of decision 8 with it
+  (cr-backup-erasure-and-retention, ADR 0056 decision 8). That an account and an active tenant can be erased is
   not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a legal duty and what veyq decided or built disagree,
   the duty decides (owner rule, `CLAUDE.md`). The shape is this ADR's; the decisions marked **(Q)** were owner
   questions in `cr-account-erasure`, answered 2026-10-18 (Q16, Q17, Q19 as recommended; Q18 and Q20 as decisions 9
@@ -155,8 +155,9 @@ user id without a foreign key classified in the eraser's code as erased or kept,
   stopped erasure gives back an account that can sign in, keeps its own scopes in the scope trash until their retention
   ends, and needs a new invite to the shared scopes and tenants it was cut from; a tenant deleted along is stopped on its
   own (`stopTenantDeletion`).
-- **Open:** the erasure ledger (decision 8) waits for `cr-backup-erasure-and-retention`; each purge marks the one
-  place its entry is written (`AccountPurge.eraseRows`, `TenantPurge.eraseTenant`). The statement of reasons a
+- **The erasure ledger** (decision 8): `AccountPurge.eraseRows` and `TenantPurge.eraseTenant` write the line, before
+  the row goes; at a start after a restore, `AccountPurge.reapply` and `TenantPurge.reapply` erase the account or tenant
+  again (a pending row made again, due now), mailing nobody. The statement of reasons a
   deletion over content carries (decision 10) is built on `cr-statement-legal-gaps`' Server Owner path.
 
 ## Rejected alternatives

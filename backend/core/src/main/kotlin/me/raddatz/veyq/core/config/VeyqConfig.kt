@@ -50,6 +50,7 @@ interface VeyqConfig {
     fun bundledStore(): BundledStore
     fun storeReclaim(): StoreReclaim
     fun storeReconcile(): StoreReconcile
+    fun erasureLedger(): ErasureLedger
     fun tasks(): Tasks
     fun ratelimit(): RateLimit
     fun share(): Share
@@ -825,6 +826,24 @@ interface VeyqConfig {
             @WithDefault("3600")
             fun windowSeconds(): Long
         }
+    }
+
+    /**
+     * `veyq.erasure-ledger.*` — the erasure ledger (ADR 0056 decision 8): the outbox's sweep into `erasures.log`, and the
+     * file itself, which lives beside leg (c)'s key ([Security.configSecretFile]) unless [file] names another path.
+     */
+    interface ErasureLedger {
+        /** How often the sweep appends the outbox's unsent rows to the file: the window an erasure is not yet in it. */
+        fun sweep(): Interval
+
+        /** The ledger's path; unset, `erasures.log` in the directory of the config-secret key file — the state
+         *  directory both deployment targets persist and no restore touches. The tests give each boot its own. */
+        fun file(): java.util.Optional<String>
+
+        /** Whether the start re-applies the file (`ErasureLedgerStart`). Off only in `%test`, whose database outlives a
+         *  boot: a boot would re-apply every earlier test's lines to fixtures other tests left behind. */
+        @WithDefault("true")
+        fun applyAtStart(): Boolean
     }
 
     /** `veyq.security.*` — operator-side security knobs. */

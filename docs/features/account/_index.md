@@ -60,7 +60,8 @@ holds only **public** keys and ciphertext, never the password and never a conten
 - [Erase an account](use-cases/uc.account.erase-account.md) — **built** (cr-account-erasure;
   [ADR 0101](../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), GDPR Art. 17):
   self-service and on the Server Owner's door, pending for the scope trash's retention, then erased with only what the
-  law keeps staying; the last owner's choice per tenant. The erasure ledger's entry is open.
+  law keeps staying; the last owner's choice per tenant; a restore erases it again (the erasure ledger, ADR 0056
+  decision 8).
 - [Rotate my keys after a compromise](use-cases/uc.account.rotate-keys.md) — **built (backend + web)**
   (`cr-account-key-rotation-after-compromise`; end a compromise: the Master Key **and** the identity are replaced together and every scope re-keyed; gated
   on the Secret Key, because that is the one thing a phished device never received; forward secrecy, **not**

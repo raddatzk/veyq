@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.block
 
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
@@ -35,6 +36,7 @@ import java.time.Instant
 @ApplicationScoped
 class MeasureTargets(
     private val log: ModerationLog,
+    private val ledger: ErasureLedger,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
 ) {
@@ -76,6 +78,9 @@ class MeasureTargets(
                 .forEach { row ->
                     row.liftedAt = now
                     row.activeKey = null
+                    // The lift's line in the erasure ledger (ADR 0056 decision 8): an item's last line is a lift, so a
+                    // restore of a capture before the erasure never blocks it again.
+                    ledger.blockLifted(row)
                     val caseId = row.caseId
                     if (caseId != null) {
                         log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = row.targetId)

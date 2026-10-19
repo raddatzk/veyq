@@ -311,10 +311,12 @@ onMounted(load)
         <h3>{{ t(`report.categories.${current.category}`) }}</h3>
         <span class="veyq-badge" :class="{ warning: open, muted: closed }">{{ t(`moderation.states.${current.state}`) }}</span>
         <span v-if="current.origin === 'ORDER'" class="veyq-badge moderation-case-order-badge">{{ t('moderation.caseRow.order') }}</span>
+        <span v-if="current.origin === 'RESTORED'" class="veyq-badge muted moderation-case-restored-badge">{{ t('moderation.caseRow.restored') }}</span>
       </div>
       <p class="veyq-form-copy">{{ t(`moderation.itemKinds.${current.itemKind}`) }} · {{ current.tenantDomain ?? t('moderation.caseRow.noDomain') }}</p>
-      <!-- An order's case has no report and so no report share to review: the order acted on ids. -->
-      <div v-if="current.origin !== 'ORDER'" class="veyq-form">
+      <!-- Only a report's case has a report share to review: an order acted on ids, and a case a restore brought back
+           as a stub (ADR 0056 decision 8) lost its reports and everything sealed with the capture. -->
+      <div v-if="current.origin === 'REPORT'" class="veyq-form">
         <Button class="moderation-case-review" icon="pi pi-eye" :label="t('moderation.case.review')" :disabled="busy" @click="review" />
         <p class="veyq-form-copy">{{ t('moderation.case.reviewHint') }}</p>
       </div>

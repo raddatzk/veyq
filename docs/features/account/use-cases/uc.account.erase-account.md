@@ -50,9 +50,8 @@
   own scopes are still in the scope trash, restorable by it as before. The shared scopes and tenants it was cut from
   need a new invite, and a tenant deleted along stays pending deletion until the Server Owner stops that too.
 - **A6 — No instance mail:** the erasure runs all the same; admin-web already warns that mail is missing.
-- **A7 — Restored from a backup:** the instance re-applies the ledger before it serves, and the account is erased again
-  — once the erasure ledger is built (`cr-backup-erasure-and-retention`); until then a restore brings back an account
-  erased after its capture.
+- **A7 — Restored from a backup:** the instance re-applies the erasure ledger before it serves, and the account is
+  erased again, mailing nobody (ADR 0056 decision 8); a backup itself is kept at most B days.
 - **A8 — The last holder of the moderation key** is refused at both doors (`moderation_last_holder`), as a step-down
   is: the key, and every report and hold sealed to it, would be lost with them. Another moderator holds it first.
 

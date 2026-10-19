@@ -1287,7 +1287,13 @@ directory's owner. Its restore Job inherited both conclusions unexamined; the ki
 cut off from the database by the default-deny set, and a claim's directory root-owned (`fsGroup` gives a group, never an
 owner), so the owner rule refused the key. Both were stated in ADR 0098's own Context ("a component that dials the
 database … needs a policy change"). So a refine lists, for each pod, Job or container it adds, the peers it dials
-against the policy set and the owner of every directory it writes, rather than once for the design.
+against the policy set and the owner of every directory it writes, rather than once for the design. **And it greps the
+chart's own guards for what the new peer breaks**: `cr-backup-erasure-and-retention` planned a daily CronJob that reads
+B from the database, and `scripts/chart_meta_check.py` (xvi) held *"the database's only peer is the app"* — a guard
+change the CR never named; the same CronJob mounts the gate's `ReadWriteOnce` claim, so it must run on the app pod's
+node (`podAffinity`), which nothing asked either. The same refine had the *gate* read the ledger from the key's claim,
+which ADR 0098 decision 4c and (xxiv) forbid; the restore Job, which already mounts that claim, was the pod that needed
+it. Name the pod that does each reading, not the subsystem.
 
 ### A CR that adds a gate runs it once at refine, against the untouched tree
 
@@ -1744,7 +1750,12 @@ CR whose body and appendix disagree hands the implementer a choice that was the 
 had no referent on one target: *"captures rotate by `keep`"* is the cluster gate's rule, while Compose rotated no
 capture at all, so what a "retained capture" is there was decided at implement (the pool's own ledger) and handed
 back as such. So an answer that reverses a settled decision rewrites, in the edit that records it, every decision,
-bite and step it reverses, and names what each new term refers to on every target the CR touches.
+bite and step it reverses, and names what each new term refers to on every target the CR touches. **The same holds for
+an answer that adds a decision**: `cr-backup-erasure-and-retention`'s decision 7 (moderation survives a restore) was
+added after its phases were written, and none of them owned what it needed — a contract enum value (`RESTORED`), a
+moderation queue that silently dropped a case with neither report nor order, and a web badge and a hidden review
+button; the implementer found each by following the decision through the code. An added decision names, in the same
+edit, the phase and the surface each of its effects lands in.
 
 
 ### Two CRs that write the same page name each other, and split it by section

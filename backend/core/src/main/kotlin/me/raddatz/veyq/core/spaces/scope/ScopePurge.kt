@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.spaces.scope
 
+import me.raddatz.veyq.core.backup.ErasureKind
+import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
@@ -41,6 +43,7 @@ import org.jboss.logging.Logger
 class ScopePurge(
     private val store: ScopesStore,
     private val reclaim: StoreReclaimStore,
+    private val ledger: ErasureLedger,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects an injection point typed kotlin.collections.List with @All (Kotlin's List is
     // a java.util.List<? extends E> wildcard); the explicit phase, not bean order, decides who runs first.
@@ -124,6 +127,9 @@ class ScopePurge(
         if (jobIds.isNotEmpty()) JobDeclineEntity.delete("jobId in ?1", jobIds)
         JobEntity.delete("scopeId", scopeId)
 
+        // The erasure ledger's line (ADR 0056 decision 8): nothing in a restored row re-triggers a forced erase (an
+        // account's, a tenant's), and a restore of a capture before the trash brings the scope back live.
+        ledger.erased(ErasureKind.SCOPE, scopeId, scopeId)
         ScopeEntity.deleteById(scopeId)
     }
 }

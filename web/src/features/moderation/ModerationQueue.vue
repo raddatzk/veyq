@@ -106,6 +106,7 @@ onMounted(load)
                 <span v-if="c.objectionOpen" class="veyq-badge warning moderation-objection-badge">{{ t('moderation.caseRow.objection') }}</span>
                 <span v-if="c.overdue" class="veyq-badge danger moderation-overdue-badge">{{ t('moderation.caseRow.overdue') }}</span>
                 <span v-if="c.origin === 'ORDER'" class="veyq-badge moderation-order-badge">{{ t('moderation.caseRow.order') }}</span>
+                <span v-if="c.origin === 'RESTORED'" class="veyq-badge muted moderation-restored-badge">{{ t('moderation.caseRow.restored') }}</span>
                 <span v-if="c.statementDeferredUntil" class="veyq-badge moderation-deferred-badge" :class="{ warning: endsSoon(c.statementDeferredUntil) }">
                   {{ t('moderation.caseRow.deferred', { time: when(c.statementDeferredUntil) }) }}<template v-if="endsSoon(c.statementDeferredUntil)"> · {{ t('moderation.caseRow.deferralEndsSoon') }}</template>
                 </span>

@@ -79,6 +79,12 @@
         "enabled": { "type": "boolean" },
         "existingClaim": { "type": "string", "maxLength": 253 },
         "keep": { "type": "integer", "minimum": 1 },
+        "prune": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "ADR 0056 decision 8: the daily prune of every capture older than B, on a cron schedule.",
+          "properties": { "schedule": { "type": "string", "minLength": 9 } }
+        },
         "request": { "type": "string" },
         "image": { "$ref": "#/$defs/imageRef" },
         "store": {
