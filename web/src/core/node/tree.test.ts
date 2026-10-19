@@ -11,7 +11,7 @@ vi.mock('../../api/client', () => ({
 
 import {
   listTree, listTrash, restoreNode, renameNode, moveNode, createFolder, nodeContentKey, contentKeyChain, openName, slugTokenFor,
-  PlacementConflictError, PLACEMENT_RETRIES, sameKeyOr, type TreeNode,
+  PlacementConflictError, PLACEMENT_RETRIES, sameKeyOr, treeFingerprint, type TreeNode,
 } from './tree'
 import { httpError } from '../../test/httpError'
 import { FOLDER_KIND } from './kind'
@@ -115,6 +115,19 @@ describe('sameKeyOr — the key of the node on screen stays the same object whil
     expect(sameKeyOr(previous, null)).toBeNull()
     const first = new Uint8Array(32)
     expect(sameKeyOr(undefined, first)).toBe(first)
+  })
+})
+
+describe('treeFingerprint — a poll that changes only a drop key is not "nothing changed" (inbox #506)', () => {
+  const row = (over: Partial<NodeSummary> = {}): NodeSummary => ({
+    id: PARENT, kind: 'DEPOT_DROPBOX', epoch: 0, encryptedName: 'bmFtZQ==', slugToken: 's', orderIndex: 0, wrappedContentKey: 'a2V5',
+    metaRevision: 0, placementRevision: 0, createdAt: new Date(0), blockedByOperator: false, ...over,
+  })
+  it("differs when only a node's drop key, or an identity folder's wrapped K_up, does — and not for the same rows", () => {
+    expect(treeFingerprint([row()]), 'the control').toBe(treeFingerprint([row()]))
+    expect(treeFingerprint([row({ sealedDropPrivateKey: 'ZHJvcA==' })]), "the first WRITE_ONLY link's drop key").not.toBe(treeFingerprint([row()]))
+    expect(treeFingerprint([row({ shareIdentityId: 'id-1', wrappedIdentityKey: 'b3RoZXI=' })]))
+      .not.toBe(treeFingerprint([row({ shareIdentityId: 'id-1', wrappedIdentityKey: 'a3Vw' })]))
   })
 })
 

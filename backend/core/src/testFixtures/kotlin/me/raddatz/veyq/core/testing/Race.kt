@@ -37,12 +37,24 @@ const val RACE_ROUNDS = 5
 const val OVERLAP_HOLD_MS = 300L
 
 /**
+ * How long [whileUncommitted] waits for either side before it calls the round hung — a hang guard, never a speed bound:
+ * what a round asserts is the order the hold forces, not how fast either side ran. A side that waits on the other's row
+ * lock is ended by the engine before this (H2's lock timeout is 2 s, InnoDB's `innodb_lock_wait_timeout` 50 s), so the
+ * guard sits above the slower engine's ceiling and only a hang outside the engine reaches it. It was 10 s, which
+ * slow-but-healthy work crossed: under CPU load a side's first call in the JVM loads its classes, each class file read
+ * waits on the host's file scanner, and an HTTP take was measured still in `CaseViews.case`'s class loading 10 s after
+ * the change had committed (2026-10-19, load ~60) — `MeasureTargetErasureRacesSliceTest` red with a bare `TimeoutException`.
+ */
+const val OVERLAP_BOUND_S = 60L
+
+/**
  * Run [change] in a transaction of its own, flush it so its row locks are taken, and hold its commit back
  * [OVERLAP_HOLD_MS]; inside that window run [overlapping] on another thread, and return what it returned once both
  * are done. A plain read does not wait for a row lock, so [overlapping] reads the row as it was before [change] and
  * its own write then waits for [change]'s commit — the shape of every managed write that can revert another
- * writer's column (developer-styleguide §12). Deterministic, not likely: the order is forced, so one round already
- * shows the defect; the callers still run [RACE_ROUNDS] rounds on fresh rows.
+ * writer's column (developer-styleguide §12). The order is forced only while [overlapping] reaches its lock inside the
+ * hold: under heavy load a side's first call can take longer, and that round then races the other order, green (inbox
+ * #512). The callers run [RACE_ROUNDS] rounds on fresh rows.
  *
  * [change] must write in the transaction this opens. A writer that opens its own (`QuarkusTransaction.requiringNew`,
  * as `TenantHandler.removeMember` does) commits inside the hold, and the race overlaps nothing — green for the wrong
@@ -60,7 +72,7 @@ fun <T> whileUncommitted(change: () -> Unit, overlapping: () -> T): T {
                 Thread.sleep(OVERLAP_HOLD_MS) // the change's commit, held back
             }
         }
-        if (!changed.await(10, TimeUnit.SECONDS)) holder.get(1, TimeUnit.SECONDS) // surfaces the change's own failure
+        if (!changed.await(OVERLAP_BOUND_S, TimeUnit.SECONDS)) holder.get(1, TimeUnit.SECONDS) // surfaces the change's own failure
         val other = pool.submit(
             Callable {
                 // A handler reads outside a transaction, which needs the request context a pool thread lacks.
@@ -73,8 +85,8 @@ fun <T> whileUncommitted(change: () -> Unit, overlapping: () -> T): T {
                 }
             },
         )
-        holder.get(10, TimeUnit.SECONDS)
-        return other.get(10, TimeUnit.SECONDS)
+        holder.get(OVERLAP_BOUND_S, TimeUnit.SECONDS)
+        return other.get(OVERLAP_BOUND_S, TimeUnit.SECONDS)
     } finally {
         pool.shutdownNow()
     }
