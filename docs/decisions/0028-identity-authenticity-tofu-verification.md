@@ -1,7 +1,9 @@
 # ADR 0028 — Identity authenticity: TOFU pinning + safety-number verification
 
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the pin store's and the device
-  register's counter is a **revision** (`revision`, was `version`).
+  register's counter is a **revision** (`revision`, was `version`). [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
+  (proposed 2026-10-19) changes the pin store's shape — one sealed entry per pin under a sealed head — and, with it,
+  what Decision 1 pins and which revision Decision 7 marks; this record is edited when that lands.
 - Date: 2026-07-07
 
 ## Context
