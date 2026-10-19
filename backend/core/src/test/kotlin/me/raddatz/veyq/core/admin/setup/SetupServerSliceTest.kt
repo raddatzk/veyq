@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.admin.setup
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_GUEST_WRITE_RECORD
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
+import me.raddatz.veyq.core.admin.operator.OperatingMode
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.identity.ModeratorEntity
@@ -17,18 +18,25 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
+import jakarta.persistence.PersistenceException
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
+import org.junit.jupiter.api.assertThrows
 import java.util.UUID
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class SetupServerSliceTest {
+
+    @Inject
+    lateinit var setupStore: SetupStore
 
     private fun ownerBody(
         email: String = "kevin@example.com",
@@ -287,6 +295,41 @@ class SetupServerSliceTest {
             assertEquals(201 to null, createOwner("restore-${UUID.randomUUID()}@example.com"))
         }
     }
+
+    /**
+     * The interleaving [concurrentSetupsCreateOneOwnerAndTheLoserAnswersAsAReplay] meets only under load, forced: the
+     * loser read "not complete", then the winner committed, and only then does the loser's write begin. Its first
+     * statement must be the one the winner's commit makes fail — the setup row's key, a persistence failure the
+     * handler's replay question answers as the 409. Written last, the loser instead reached the moderation epoch's
+     * "already enabled" first and answered 400 (seen in full suite runs under load; this test is red on that order).
+     * The control: setup is complete.
+     */
+    @Test
+    @Order(18)
+    fun aSetupThatEntersAfterAnotherCommittedFailsOnTheSetupRowFirst() {
+        assertEquals(1L, setupRows(), "control: the class's ordering left the instance set up")
+        val email = "stale-${UUID.randomUUID()}@example.com"
+        val failure = assertThrows<RuntimeException> {
+            QuarkusTransaction.requiringNew().call { setupStore.persistOwner(registration(email)) }
+        }
+        val causes = generateSequence<Throwable>(failure) { it.cause }.toList()
+        assertTrue(causes.any { it is PersistenceException }, "a persistence failure the replay question reads, got $causes")
+        assertTrue(causes.none { it is ModerationEpochInvalid }, "no refusal of its own, got $causes")
+        assertEquals(1L, setupRows())
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { VeyqUser.count("email", email) }, "the loser wrote nothing")
+    }
+
+    private fun registration(email: String) = OwnerRegistration(
+        email = email,
+        suiteId = "v1",
+        identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ==",
+        wrappedIdentityPrivateKey = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
+        authPublicKey = "ZWQyNTUxOS1hdXRoLXB1Yg==",
+        secretKeyProofPublicKey = "c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
+        wraps = listOf(WrapInput("PASSWORD", "d3JhcHBlZC1tYXN0ZXIta2V5", "AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz")),
+        moderationEpoch = ModerationEpochOne(KEM_PUBLIC_KEY, SIGN_PUBLIC_KEY, "c2VhbGVkLWdyYW50"),
+        operatingMode = OperatingMode.ORGANISATION,
+    )
 
     private fun createOwner(email: String): Pair<Int, String?> =
         givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(email = email))

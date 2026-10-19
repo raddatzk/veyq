@@ -19,7 +19,14 @@ import java.time.LocalDate
 class ReleaseFeedTest {
 
     private val source = FakeReleaseSource()
-    private val http = BoundedGet(Duration.ofMillis(500))
+
+    /**
+     * The bound of every read that must succeed — or fail for a reason other than time: generous, because those cases
+     * assert what was read, never how fast. It was the slow case's 500 ms (an exchange gives up after twice that), while a
+     * passing twin read its local server in 0.27 s cold on a lightly loaded machine: a margin a full suite under heavy
+     * load overran ("did not answer within 1000 ms").
+     */
+    private val http = BoundedGet(Duration.ofSeconds(30))
 
     @AfterEach
     fun stop() = source.close()
@@ -78,10 +85,12 @@ class ReleaseFeedTest {
         assertTrue(e.message!!.contains("answered 500"), e.message)
     }
 
+    /** The one case about time: a short bound against an answer that comes far later, so even a starved timer fires first. */
     @Test
     fun aSlowAnswerIsAFailedRead(): Unit {
-        source.route("/m/releases.json", FakeReleaseSource.Route(body = """{"releases":[]}""".toByteArray(), delayMs = 2_000))
-        val e = assertThrows<ReleaseSourceException> { ReleaseFeed.Mirror(URI.create("${source.base}/m"), http).list() }
+        source.route("/m/releases.json", FakeReleaseSource.Route(body = """{"releases":[]}""".toByteArray(), delayMs = 10_000))
+        val impatient = BoundedGet(Duration.ofMillis(500))
+        val e = assertThrows<ReleaseSourceException> { ReleaseFeed.Mirror(URI.create("${source.base}/m"), impatient).list() }
         assertTrue(e.message!!.contains("could not be read") || e.message!!.contains("did not answer"), e.message)
     }
 

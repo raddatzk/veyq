@@ -440,6 +440,26 @@ class StoreReconcileSliceTest {
         assertNull(state().passStartedAt)
     }
 
+    /**
+     * A pass starts at every tick here (period zero) — also when the last one started earlier in the same millisecond.
+     * The start is stored to the millisecond and H2 rounds the digits past it (MariaDB drops them), so an uncut start
+     * landed up to half a millisecond late, and a tick that came sooner — a hot JVM's next pass, late in a full suite —
+     * read "the last pass started after now" and started none: every case here that steps through passes went red at
+     * random. Its control is the same predicate refusing while a period runs. Lever: drop the cut in
+     * `StoreReconcileStore.open` → the second open is refused.
+     */
+    @Test
+    fun aPassStartsAgainWithinTheMillisecondTheLastOneStarted() {
+        val first = Instant.parse("2026-10-19T12:00:00.000600Z")
+        val soon = first.plusNanos(300_000)
+        val pass = reconcile.open(bucket.digest, first, Duration.ZERO)!!
+        val empty = JudgedPage(0, 0, 0, 0, emptyMap(), emptySet())
+        assertTrue(reconcile.writePage(pass, empty, null, t0, false, first, Duration.ofHours(2), Duration.ofHours(6)) is PageWrite.Completed)
+
+        assertNull(reconcile.open(bucket.digest, soon, Duration.ofMillis(1)), "the control: a period not over starts no pass")
+        assertNotNull(reconcile.open(bucket.digest, soon, Duration.ZERO), "0.3 ms after the last start, with no period")
+    }
+
     /** The read the console renders: the candidates with their first deletion date, beside the verdict. */
     @Test
     fun theReadCarriesTheCandidatesAndTheirDueDate() {
