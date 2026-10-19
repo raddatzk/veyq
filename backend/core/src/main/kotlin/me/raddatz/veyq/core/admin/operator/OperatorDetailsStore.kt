@@ -109,8 +109,9 @@ data class OperatorValues(
 
 /**
  * One recipient the privacy notice names (ADR 0035 decision 8): who, what they do as a [kind] the notice names in each
- * language, where — [country] null when not named. [description] is an [RecipientKind.OTHER] recipient's own words, null
- * for every other kind ([RecipientKind.accepts]).
+ * language, where — [country] an ISO 3166-1 alpha-2 code the notice names in each language too
+ * (`core/terms/RecipientCountries`), null when not named. [description] is an [RecipientKind.OTHER] recipient's own
+ * words, null for every other kind ([RecipientKind.accepts]).
  */
 data class PublishedRecipient(val name: String, val kind: RecipientKind, val description: String?, val country: String?)
 
@@ -136,7 +137,8 @@ class OperatorRecipientEntity : PanacheEntityBase {
     @Column(name = "description", length = 120)
     var description: String? = null
 
-    @Column(name = "country", length = 100)
+    /** An ISO 3166-1 alpha-2 code (`core/terms/RecipientCountries`), null when not named. */
+    @Column(name = "country", length = 2)
     var country: String? = null
 
     companion object : PanacheCompanionBase<OperatorRecipientEntity, Int>

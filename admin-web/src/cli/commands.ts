@@ -320,13 +320,13 @@ const OPERATOR_FLAGS: Record<string, keyof InstanceOperatorUpdate> = {
 /** The kinds `--recipients` takes, as the CLI spells them. */
 const RECIPIENT_KIND_WORDS = Object.keys(CLI_RECIPIENT_KINDS).join(', ')
 
-/** `--recipients` as typed: rows `<name>|<kind>|<country>` separated by `;`, the country optional and an `other` kind
- *  with its words (`other:<what they do>`) — the whole list, replacing the one there. A malformed row is refused, naming
- *  it, rather than half-stored. */
+/** `--recipients` as typed: rows `<name>|<kind>|<country>` separated by `;`, the country an ISO 3166-1 alpha-2 code
+ *  and optional, and an `other` kind with its words (`other:<what they do>`) — the whole list, replacing the one there.
+ *  A malformed row is refused, naming it, rather than half-stored. */
 function parseRecipients(typed: string): NonNullable<InstanceOperatorUpdate['recipients']> {
   return typed.split(';').map((x) => x.trim()).filter(Boolean).map((row) => {
     const r = parseRecipient(row)
-    if (!r) throw new CliError(`--recipients: '${row}' is not <name>|<kind>|<country> — the kind one of ${RECIPIENT_KIND_WORDS}, other with its words as other:<what they do>, the country may be left out`)
+    if (!r) throw new CliError(`--recipients: '${row}' is not <name>|<kind>|<country> — the kind one of ${RECIPIENT_KIND_WORDS}, other with its words as other:<what they do>, the country a two-letter ISO 3166-1 code such as DE and may be left out`)
     return r
   })
 }
@@ -715,7 +715,7 @@ export const COMMANDS: Record<string, Command> = {
     run: () => getOperator(),
   },
   'operator set': {
-    usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<hosting|object-storage|mail-relay|backup|other:<what they do>>|<country>; …\'] [--data-protection-officer <n>]',
+    usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<hosting|object-storage|mail-relay|backup|other:<what they do>>|<country code, e.g. DE>; …\'] [--data-protection-officer <n>]',
     summary: 'Change the given values (none clears one) and keep the rest; --recipients replaces the privacy notice’s whole list. A new notification address gets a code by instance mail, typed into the console’s Server → Operator.',
     flags: Object.fromEntries(
       Object.keys(OPERATOR_FLAGS).map((k) => [k, { describe: `${k.replace(/-/g, ' ')}, or none to clear it`, required: false }]),

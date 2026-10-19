@@ -906,14 +906,14 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
     vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', kind: 'BACKUP', country: undefined }] }))
     vi.mocked(setOperator).mockResolvedValueOnce(op())
     const r = await invoke(['operator', 'set', '--recipients',
-      'Example Hosting GmbH|hosting|Germany; Mail AG|mail-relay; SMS AG|other:sends sign-in texts|Germany',
+      'Example Hosting GmbH|hosting|DE; Mail AG|mail-relay; SMS AG|other:sends sign-in texts|fi',
       '--data-protection-officer', 'DSB GmbH'])
     expect(r.code).toBe(0)
     expect(vi.mocked(setOperator).mock.lastCall![0]).toMatchObject({
       recipients: [
-        { name: 'Example Hosting GmbH', kind: 'HOSTING', description: null, country: 'Germany' },
+        { name: 'Example Hosting GmbH', kind: 'HOSTING', description: null, country: 'DE' },
         { name: 'Mail AG', kind: 'MAIL_RELAY', description: null, country: null },
-        { name: 'SMS AG', kind: 'OTHER', description: 'sends sign-in texts', country: 'Germany' },
+        { name: 'SMS AG', kind: 'OTHER', description: 'sends sign-in texts', country: 'FI' },
       ],
       dataProtectionOfficer: 'DSB GmbH',
     })
@@ -929,6 +929,13 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
     expect(bad.code).toBe(1)
     expect(bad.err).toContain("'Example AG|hosts the server' is not <name>|<kind>|<country>")
     expect(bad.err).toContain('hosting, object-storage, mail-relay, backup, other')
+    expect(setOperator).not.toHaveBeenCalled()
+
+    // a country by its name is no code: refused, naming the shape it takes
+    vi.mocked(getOperator).mockResolvedValueOnce(op())
+    const named = await invoke(['operator', 'set', '--recipients', 'Example AG|hosting|Germany'])
+    expect(named.code).toBe(1)
+    expect(named.err).toContain('the country a two-letter ISO 3166-1 code such as DE')
     expect(setOperator).not.toHaveBeenCalled()
   })
 

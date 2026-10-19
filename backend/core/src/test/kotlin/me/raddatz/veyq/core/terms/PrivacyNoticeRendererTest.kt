@@ -30,7 +30,7 @@ class PrivacyNoticeRendererTest {
         privacyContact = "privacy@example.org",
         dataProtectionOfficer = "DSB Beispiel GmbH, dsb@example.org",
         supervisoryAuthority = "LfD Musterland",
-        recipients = listOf(NoticeRecipient("Example Hosting GmbH", RecipientKind.HOSTING, null, "Germany")),
+        recipients = listOf(NoticeRecipient("Example Hosting GmbH", RecipientKind.HOSTING, null, "DE")),
         retentionDays = 7,
         backupRetentionDays = 30,
         erasureWindowDays = 30,
@@ -148,11 +148,26 @@ class PrivacyNoticeRendererTest {
     }
 
     @Test
+    fun aRecipientsCountryIsNamedInThePagesOwnLanguage() {
+        val r = render(values = all.copy(recipients = listOf(
+            NoticeRecipient("Example Hosting GmbH", RecipientKind.HOSTING, null, "DE"),
+            NoticeRecipient("Mail Inc.", RecipientKind.MAIL_RELAY, null, "US"),
+        ))).passage("recipients")!!
+        assertTrue(r.text.en.contains("- Example Hosting GmbH: hosts the server (Germany)"), r.text.en)
+        assertTrue(r.text.en.contains("- Mail Inc.: relays the mail (United States)"), r.text.en)
+        assertTrue(r.text.de.contains("- Example Hosting GmbH: hostet den Server (Deutschland)"), r.text.de)
+        assertTrue(r.text.de.contains("- Mail Inc.: versendet die E-Mails (Vereinigte Staaten)"), r.text.de)
+        // never the other language's word, and never the bare code
+        assertFalse(r.text.de.contains("Germany") || r.text.de.contains("United States"), "no English country on the German page: ${r.text.de}")
+        assertFalse(r.text.en.contains("Deutschland") || r.text.en.contains("(DE)"), r.text.en)
+    }
+
+    @Test
     fun anOtherRecipientsDescriptionIsShownAsTypedAndQuotedOnBothPages() {
-        val r = render(values = all.copy(recipients = listOf(NoticeRecipient("SMS AG", RecipientKind.OTHER, "sends sign-in texts", "Germany"))))
+        val r = render(values = all.copy(recipients = listOf(NoticeRecipient("SMS AG", RecipientKind.OTHER, "sends sign-in texts", "FI"))))
             .passage("recipients")!!
-        assertTrue(r.text.en.contains("- SMS AG: other — “sends sign-in texts” (Germany)"), r.text.en)
-        assertTrue(r.text.de.contains("- SMS AG: Sonstiges — „sends sign-in texts“ (Germany)"), r.text.de)
+        assertTrue(r.text.en.contains("- SMS AG: other — “sends sign-in texts” (Finland)"), r.text.en)
+        assertTrue(r.text.de.contains("- SMS AG: Sonstiges — „sends sign-in texts“ (Finnland)"), r.text.de)
     }
 
     @Test
@@ -224,10 +239,10 @@ class PrivacyNoticeRendererTest {
 
     @Test
     fun aValuesNewlinesRenderInlineSoATypedValueCannotStartAMarkdownBlock() {
-        val r = render(values = all.copy(providerAddress = "Musterstraße 1\n# 12345\n- x", recipients = listOf(NoticeRecipient("A\n## B", RecipientKind.OTHER, "c\n# {storeHost}", "D"))))
+        val r = render(values = all.copy(providerAddress = "Musterstraße 1\n# 12345\n- x", recipients = listOf(NoticeRecipient("A\n## B", RecipientKind.OTHER, "c\n# {storeHost}", "DE"))))
         assertTrue(r.passage("controller")!!.text.en.contains("- Address: Musterstraße 1, # 12345, - x"))
         // the description inline too, and put in as typed: a placeholder in it is text, never a value
-        assertTrue(r.passage("recipients")!!.text.en.contains("- A, ## B: other — “c, # {storeHost}” (D)"), r.passage("recipients")!!.text.en)
+        assertTrue(r.passage("recipients")!!.text.en.contains("- A, ## B: other — “c, # {storeHost}” (Germany)"), r.passage("recipients")!!.text.en)
     }
 
     @Test
