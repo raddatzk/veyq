@@ -1520,6 +1520,7 @@ const en = {
     nameLabel: 'Name',
     favorite: 'Favorite',
     unfavorite: 'Remove favorite',
+    favoriteFailed: 'The favorite could not be saved. Try again.',
     rename: 'Rename',
     delete: 'Delete',
     slugTaken: 'Something with a similar name already exists here.',
@@ -2206,6 +2207,9 @@ const en = {
       },
       emptyMine: 'You have not marked anything in this Memory yet.',
       emptyEveryone: 'Nobody has marked anything in this Memory yet.',
+      // inbox #500: the heart springs back, and these say why
+      tooMany: 'You have marked as many photos in this Memory as one list of marks can hold (12,284). Remove a mark to add another.',
+      saveFailed: 'Your mark could not be saved. Try again.',
     },
   },
   share: {
@@ -3885,6 +3889,7 @@ const de: typeof en = {
     nameLabel: 'Name',
     favorite: 'Favorit',
     unfavorite: 'Favorit entfernen',
+    favoriteFailed: 'Der Favorit konnte nicht gespeichert werden. Versuche es noch einmal.',
     rename: 'Umbenennen',
     delete: 'Löschen',
     slugTaken: 'Hier gibt es bereits etwas mit ähnlichem Namen.',
@@ -4496,6 +4501,8 @@ const de: typeof en = {
       },
       emptyMine: 'Du hast in dieser Erinnerung noch nichts markiert.',
       emptyEveryone: 'Niemand hat in dieser Erinnerung bisher etwas markiert.',
+      tooMany: 'Du hast in dieser Erinnerung so viele Fotos markiert, wie eine Liste von Markierungen fassen kann (12.284). Entferne eine Markierung, um eine weitere zu setzen.',
+      saveFailed: 'Deine Markierung konnte nicht gespeichert werden. Versuche es noch einmal.',
     },
   },
   share: {
