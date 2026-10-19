@@ -29,7 +29,7 @@ vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
   isFavorite: vi.fn(),
-  toggleFavorite: vi.fn(),
+  toggleFavorite: vi.fn(async () => {}),
 }))
 // Depot's row factory lists the blobs of the level's files; here there are none (the rows read "not uploaded yet").
 vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))

@@ -44,6 +44,7 @@ import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
 import { isMarkedByMe, markCount, markedByAnyone, clearItemFavorites } from '../itemFavoritesStore'
+import { ItemMarksTooMany } from '../itemFavorites'
 import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
@@ -209,7 +210,12 @@ async function onToggleMark(mediaId: string) {
   const key = props.scopeKey
   const marks = props.source.marks
   if (!key || !can.value.mark || !marks) return
-  await marks.toggle(mediaId, props.node.id, key)
+  try {
+    await marks.toggle(mediaId, props.node.id, key)
+  } catch (e) {
+    // the heart is already back where it was; this says why (inbox #500)
+    toast.error(t(e instanceof ItemMarksTooMany ? 'media.marks.tooMany' : 'media.marks.saveFailed'))
+  }
 }
 
 watch(

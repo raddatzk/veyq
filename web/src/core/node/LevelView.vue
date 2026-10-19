@@ -98,6 +98,7 @@ import { downloadHeaderActions, downloadRowActions } from '../export/downloadAct
 import { canCopy, copyHeaderActions, copyRowActions } from '../export/copyActions'
 import { canReport, reportHeaderActions, reportNodes, reportRowActions } from '../report/reportActions'
 import { useReportOffered } from '../report/report'
+import { useToast } from '../../shared/state/useToast'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
   directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry, type ImportOffer,
@@ -148,6 +149,7 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
+const toast = useToast()
 const { viewMode } = useViewMode()
 const { levelTab } = useLevelTab()
 
@@ -454,7 +456,7 @@ const coreRowActions = (item: Item): CoreRowAction[] =>
   item.unsupported || item.node.blockedByOperator
     ? []
     : [
-        ...favoriteRowActions(t, props.access, item.node),
+        ...favoriteRowActions(t, toast.error, props.access, item.node),
         ...cover.rowActions(item.node),
         ...copyRowActions(t, props.access, item.node, () => emit('copyNodes', [item.node])),
         ...downloadRowActions(t, props.access, item.node, () => emit('downloadNode', item.node)),
@@ -463,7 +465,7 @@ const coreRowActions = (item: Item): CoreRowAction[] =>
 // The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
 // has neither).
 const folderCoreActions = computed(() => [
-  ...favoriteHeaderActions(t, props.access, props.folder),
+  ...favoriteHeaderActions(t, toast.error, props.access, props.folder),
   ...cover.headerActions(props.folder),
   ...copyHeaderActions(t, props.access, props.folder, () => props.folder && emit('copyNodes', [props.folder])),
   ...downloadHeaderActions(t, props.access, props.folder, () => props.folder && emit('downloadNode', props.folder)),

@@ -38,7 +38,7 @@ vi.mock('../../../app/activeSpace', () => {
     termsStale: read('termsStale'),
   }
 })
-vi.mock('../../../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
+vi.mock('../../../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), isFavorite: vi.fn(), toggleFavorite: vi.fn(async () => {}) }))
 vi.mock('../itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
 // The guest's upload is recorded at the share helper (its wire is `source.wire.test.ts`'s).
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), addSharePhoto: vi.fn() }))

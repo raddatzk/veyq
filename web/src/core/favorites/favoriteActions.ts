@@ -14,9 +14,11 @@ import type { CoreHeaderAction } from '../node/nodeHeader'
 import type { CoreRowAction } from '../node/levelRow'
 
 type Translate = (key: string) => string
+/** Shows a failure the user must hear about (the host's `useToast().error`): a pin that did not land says so (inbox #500). */
+type Failed = (summary: string) => void
 
 /** The heart of `node` for `access`, or none (a guest, the scope root, a kind this client cannot draw). */
-function heart(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null): (CoreHeaderAction & CoreRowAction)[] {
+function heart(t: Translate, failed: Failed, access: Access, node: { id: string; kind: NodeKind } | null): (CoreHeaderAction & CoreRowAction)[] {
   if (!node || !favoriteRights(access, node).favorite || access.mode !== 'member') return []
   const pinned = isFavorite(node.id)
   return [
@@ -27,17 +29,17 @@ function heart(t: Translate, access: Access, node: { id: string; kind: NodeKind 
       pressed: pinned,
       first: true,
       placement: 'before',
-      onClick: () => void toggleFavorite(node.id, access.scopeId),
+      onClick: () => void toggleFavorite(node.id, access.scopeId).catch(() => failed(t('node.favoriteFailed'))),
     },
   ]
 }
 
 /** The header's core actions for `node` (a node page's, or the folder a level shows). */
-export function favoriteHeaderActions(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null): CoreHeaderAction[] {
-  return heart(t, access, node)
+export function favoriteHeaderActions(t: Translate, failed: Failed, access: Access, node: { id: string; kind: NodeKind } | null): CoreHeaderAction[] {
+  return heart(t, failed, access, node)
 }
 
 /** A row's core actions for `node`. */
-export function favoriteRowActions(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null): CoreRowAction[] {
-  return heart(t, access, node)
+export function favoriteRowActions(t: Translate, failed: Failed, access: Access, node: { id: string; kind: NodeKind } | null): CoreRowAction[] {
+  return heart(t, failed, access, node)
 }
