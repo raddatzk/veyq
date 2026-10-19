@@ -110,6 +110,8 @@ it. Paging does not widen it; ADR 0033 has it today. See Q1.
 
 ## Open questions (owner)
 
+**Decided (Q1–Q2).** Owner 2026-10-19, both as recommended: if phase 2's race test is red, a per-node sequence under the existing revision row lock, no overlap window; the guest's missing live poll is an inbox row of its own, not this CR. Implementation has the owner's go.
+
 - **Q1: If phase 2's race test is red, what fixes it?** (a) a **per-node sequence**: each media write stamps the row with
   the node's next item revision, taken under the revision row's lock that `NodeItemsRevisions.bump` already holds to the
   commit, so rows become visible in sequence order and the keyset becomes `(seq, id)`; or (b) an **overlap**: the server

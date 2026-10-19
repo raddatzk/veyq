@@ -132,6 +132,8 @@ ADR 0104 decisions 1–7 are the design; what follows is how this CR builds them
 
 ## Open questions (owner)
 
+**Decided (Q1–Q3).** Owner 2026-10-19: Q1 the fingerprint hash, Q2 the pin count named openly — both as recommended. **Q3 differs: no legacy read path.** veyq is not live, so no instance holds pins worth migrating: the old single-blob format is dropped, a dev instance is reset (the migration may simply clear the old rows), and ADR 0085's major rule does not apply yet. Implementation has the owner's go.
+
 - **Q1: Does an entry pin the bundle or its `fingerprintHash`?** The hash keeps the security claim (ADR 0104 decision 3:
   every reader is an equality check or a safety number, both functions of the hash; equality of the hash is equality of
   the bundle up to a SHA-256 second preimage; it is the digest the QR compare already trusts). It costs ADR 0028

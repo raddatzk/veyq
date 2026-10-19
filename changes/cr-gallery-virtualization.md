@@ -103,6 +103,8 @@ focus returned from the lightbox. Measured with the volume harness at 1,000 / 3,
 
 ## Open questions (owner)
 
+**Decided (Q1–Q2).** Owner 2026-10-19, both as recommended: the WAI-ARIA grid keyboard model with one tab stop, and the targets as listed. Implementation has the owner's go.
+
 - **Q1: Keyboard model.** (a) The WAI-ARIA grid: one tab stop, arrows, Home/End, PageUp/Down (decision 4); (b) keep a tab
   stop per tile, which under windowing reaches only the mounted ones — a keyboard user could not get past the overscan.
   **Recommendation:** (a). It changes what the keyboard does on this screen, so the Use page *Look through the gallery*
