@@ -19,7 +19,10 @@
 
 1. From the shell ([uc.memory.browse](uc.memory.browse.md)) the user clicks a Memory → it **opens**: the
    client unwraps the Memory's **`K_node`** (already held from the tree).
-2. The client **lists the Memory's media** ([en.memory.media](../enablers/en.memory.media.md)) and fetches each
+2. The client **lists the Memory's media** ([en.memory.media](../enablers/en.memory.media.md)) — in pages of a bounded
+   size, every page before the grid is drawn, because the order below is only final once every item's sealed capture
+   time is in hand ([ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) decision 6); a share
+   guest lists the node it has open, by the same paging rule, never the whole shared subtree — and fetches each
    item's **thumbnail** ([en.memory.derivatives](../enablers/en.memory.derivatives.md)) via presigned GET,
    decrypts on device, and renders a **grid** under a header (title, item count, pin toggle, and — in a group
    scope — the favorites filter). The grid is

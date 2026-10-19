@@ -374,6 +374,12 @@ class OperatorBlindProbeTest {
                 "values — publicly available as DSA Art. 14(1) asks, instance-wide; it names no space and no account.",
             "getOperatorTerms",
         )
+        reason(
+            "public: the instance privacy notice (ADR 0035 decision 8, GDPR Art. 13), fixed text rendered with the " +
+                "published values and the switches active for the host's space — information owed at collection, so " +
+                "before any account; it reads the host's space only to pick its switches and names no account.",
+            "getPrivacyNotice",
+        )
     }
 
     /**

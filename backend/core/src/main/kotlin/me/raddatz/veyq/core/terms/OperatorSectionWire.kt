@@ -10,7 +10,6 @@ fun RenderedSection.toWire(): OperatorSection = OperatorSection(
     variant = variant.toWire(),
     text = text.toWire(),
     record = record?.toWire(),
-    objection = objection?.toWire(),
 )
 
 // The generator inlines the `$ref`'d OperatorSectionVariant as a nested enum per model; both carry its two names.

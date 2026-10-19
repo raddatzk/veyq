@@ -1,10 +1,11 @@
 ---
 title: Troubleshooting
-description: What to check when uploads are refused, a certificate does not come, the config-secret key reads ABSENT or MISMATCH, the console cannot be reached, a tenant's domain does not answer, or mail is refused.
+description: What to check when uploads are refused, a certificate does not come, the config-secret key reads ABSENT or MISMATCH, the console cannot be reached, a tenant's domain does not answer, mail is refused, or a user reports an error id.
 sources:
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/features/admin/use-cases/uc.admin.configure-object-store.md
   - docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md
+  - docs/decisions/0092-logs-are-operational-and-name-no-person.md
 ---
 
 Most failures in veyq are loud by design: a refusal names its reason, and a missing setting stops the thing that
@@ -89,6 +90,30 @@ affected ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key
 - **`mail_send_failed`** — the relay is set up but did not accept the mail within 10 seconds. The invitation is
   withdrawn and can be sent again. The log names the mail's kind and the relay's reply code — or the error's class when
   the relay never answered —, never the recipient; check that the application may reach the relay's host and port.
+
+## A user reports an error id
+
+An answer of `500` carries `"code": "internal_error"` and `"message": "error id <id>"`. Find its line:
+
+```sh
+./veyqctl logs app | grep '<id>'                       # in /opt/veyq
+kubectl -n veyq logs deploy/veyq-app | grep '<id>'
+```
+
+The line names the method, the route template, the exception's class chain, the database's SQLState where the
+database refused, and the first line of veyq's own code the error passed — never the error's text, which can carry a
+person's data ([Operations](/veyq/run/operations/#logs)). When that is not enough to act on, log the full text for a
+while by raising one category to `DEBUG`:
+
+- **Docker Compose:** add `services: app: environment: QUARKUS_LOG_CATEGORY__ME_RADDATZ_VEYQ_CORE_HTTP_UNEXPECTED_DETAIL__LEVEL: DEBUG`
+  to `compose.override.yml` and run `./veyqctl start`.
+- **Kubernetes:** `kubectl -n veyq set env deploy/veyq-app QUARKUS_LOG_CATEGORY__ME_RADDATZ_VEYQ_CORE_HTTP_UNEXPECTED_DETAIL__LEVEL=DEBUG`.
+
+Each unexpected error then writes a second line under the same id with the whole exception, messages included. A
+database's message names the values it was given — on a colliding sign-up, the email address — so this logs personal
+data on purpose. **Set it back** as soon as you have what you need: remove the line from `compose.override.yml` and
+run `./veyqctl start`, or `kubectl -n veyq set env deploy/veyq-app QUARKUS_LOG_CATEGORY__ME_RADDATZ_VEYQ_CORE_HTTP_UNEXPECTED_DETAIL__LEVEL-`
+(the next `helm upgrade` drops it too).
 
 ## How far this is proven
 

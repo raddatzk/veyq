@@ -49,6 +49,25 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [OperatorDetailsSliceTest.theValuesAreSetAndClearedAndEveryOneMayStayEmpty, OperatorDetailsSliceTest.anOutOfBoundsValueIsRefusedAndNothingIsStored]
+  - id: the-privacy-notice-values-are-set-and-never-published-unsaved
+    text: >-
+      The Server Owner sets and clears the privacy notice's recipients (name, what they do as a kind from a fixed list,
+      country; in order, at most 20) and a data-protection officer; only an OTHER recipient carries a description, and
+      it needs one. A blank name, an unknown kind, a description that does not fit its kind and a value over its bound
+      are refused with nothing stored. The instance suggests a recipient of its kind for what it knows (an external
+      store's host, the instance mail relay's host), which is never stored or published until the Server Owner saves it
+      as a row.
+    coverage:
+      backend:
+        integration: [PrivacyNoticeSliceTest.theRecipientsAndTheOfficerAreSetServedInOrderAndCleared, PrivacyNoticeSliceTest.theInstanceSuggestsTheRecipientsItKnowsOf]
+        unit: [PrivacyNoticeRendererTest.onlyAnOtherRecipientTakesADescriptionAndItNeedsOne]
+    gaps:
+      - surface: backend
+        reason: >-
+          The suggested row's adoption, the kind list with Other's description, the officer field, the privacy warning
+          and `--recipients` are admin-web's
+          (`OperatorPanel.test.ts`, `operator.test.ts`, `cli.test.ts`), waiting under the use-case gap; lane L1 sets them
+          at first-run setup (the `stack` gap).
   - id: the-notification-address-is-confirmed-by-a-code
     text: >-
       A saved, unconfirmed notification address gets a one-time code through confirmed instance mail; typing it into

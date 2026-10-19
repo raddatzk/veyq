@@ -1,16 +1,57 @@
 useCase: uc.admin.privacy-notice
 feature: admin
 title: Read the instance's privacy notice
-status: planned
-# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 13); the work order is cr-instance-privacy-notice.
+# Refined 2026-10-18 from the legal audit of that day (GDPR Art. 13); built by cr-instance-privacy-notice. The text and
+# its rendering are the backend's (one public read per host); the page and every link to it are the web's. The values it
+# renders are set on the admin channel (uc.admin.operator-details). Every text is a draft until a qualified legal review.
 acceptanceCriteria:
   - id: public-without-signing-in
-    text: The rendered notice is served without a session on every tenant host and linked from the login page, the share page, the app's footer, the invite acceptance, the report dialog and a guest's first-write notice.
+    text: The rendered notice is served without a session on every tenant host, and reading it writes nothing; it is linked from the login page, the share page, the app's footer, the invite acceptance, the report dialog and a guest's first-write notice, each at the passage that concerns it and in a tab of its own.
+    coverage:
+      backend:
+        integration: [PrivacyNoticeSliceTest.theNoticeIsServedWithoutASessionAndTheReadWritesNothing]
+        unit: [PrivacyNoticeRendererTest.theAnchorsTheClientsLinkExistAndAreStable]
+      web:
+        unit: [src/views/PrivacyNoticeView.test.ts, src/core/operator/OperatorIdentification.test.ts, src/views/TenantJoinView.passwordPolicy.test.ts, src/core/report/ReportDialog.test.ts, src/core/sharing/GuestWriteRecordNotice.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          Each link is its component's, mounted alone; that the login page, the share page and the shell place the footer
+          is their templates, walked by lane L1 (e2e/tests/features/privacy-notice.spec.ts and first-run.setup.ts, the
+          `stack` gap) and by no web suite.
   - id: fixed-text-with-instance-values
-    text: The notice is veyq's fixed text in DE and EN, filled with the instance's current values, its passages following the switches that are on.
+    text: The notice is veyq's fixed text in DE and EN, filled with the instance's current values (the provider, the contact, a data-protection officer, the supervisory authority, the recipients — what each does named in the page's own language, an OTHER one's description shown as typed and quoted on both —, N, B, the erasure's window, an external store's host), its passages following the switches that are on for the host's space, and each outside service named by the address the instance calls — a mirror never by HIBP's name; each right to object stands apart.
+    coverage:
+      backend:
+        integration: [PrivacyNoticeSliceTest.theRecordsPassageFollowsItsSwitchWithTheNServedNow, PrivacyNoticeSliceTest.aMirrorReplacesHibpsNameAndTheSwitchDropsThePassage, PrivacyNoticeSliceTest.aSpacesOwnSwitchDropsItsServiceOnItsHostOnly, PrivacyNoticeSliceTest.theInstanceSuggestsTheRecipientsItKnowsOf, PrivacyNoticeSliceTest.theRecipientsAndTheOfficerAreSetServedInOrderAndCleared]
+        unit: [PrivacyNoticeRendererTest.theJarCarriesTheContractFileUnchanged, PrivacyNoticeRendererTest.everyPlaceholderTheFileNamesIsOneTheRendererKnows, PrivacyNoticeRendererTest.anUnknownPlaceholderIsRefusedRatherThanPrinted, PrivacyNoticeRendererTest.theRecordsPassageFollowsItsSwitchWithNAndBAndItsRightToObjectApart, PrivacyNoticeRendererTest.theBreachedPasswordCheckNamesTheServiceTheInstanceCalls, PrivacyNoticeRendererTest.theOtherBrowserServicesAreListedWhileOneIsOnAndAbsentWhileNoneIs, PrivacyNoticeRendererTest.theStorePassageSaysWhereEncryptedContentIs, PrivacyNoticeRendererTest.theErasureAndTheBackupsRenderTheInstancesOwnValues, PrivacyNoticeRendererTest.aValuesNewlinesRenderInlineSoATypedValueCannotStartAMarkdownBlock, PrivacyNoticeRendererTest.aDraftSaysSoAndOnlyWhileItIsOne, PrivacyNoticeRendererTest.bothRightsToObjectAreSetApartAndNothingElseIs, PrivacyNoticeRendererTest.theFileIsRefusedWithAPassageIdThatIsNoAnchorOrTwiceTheSame, PrivacyNoticeRendererTest.eachRecipientKindIsNamedInThePagesOwnLanguage, PrivacyNoticeRendererTest.anOtherRecipientsDescriptionIsShownAsTypedAndQuotedOnBothPages, PrivacyNoticeRendererTest.theFileIsRefusedWithoutALabelPerKindOrWithTheDescriptionOutsideOther]
+      web:
+        unit: [src/views/PrivacyNoticeView.test.ts]
   - id: a-missing-value-follows-the-mode
-    text: An unset value shows as not stated and is warned about in the organisation mode, and is absent without a warning in the private mode.
+    text: An unset value shows as not stated and is warned about in the organisation mode, and is absent without a warning in the private mode; the recipients' passage itself is absent in the private mode while none is named.
+    coverage:
+      backend:
+        integration: [PrivacyNoticeSliceTest.theRecipientsFollowTheModeWhenNoneIsNamed]
+        unit: [PrivacyNoticeRendererTest.anEmptyValueIsAVisibleGapInTheFullVariantAndAbsentInTheReducedOne, PrivacyNoticeRendererTest.theRecipientsFollowTheModeWhenNoneIsNamed, PrivacyNoticeRendererTest.aRecipientsMissingCountryIsAGapInTheFullVariantAndLeftOutInTheReducedOne, PrivacyNoticeRendererTest.theOfficerIsOptionalInBothVariants]
+    gaps:
+      - surface: backend
+        reason: >-
+          The warning is admin-web's (`operator.test.ts`, `OperatorPanel.test.ts`, the privacy warning), waiting under
+          the use-case's admin-web gap; the server serves the mode it reads.
+  - id: a-guest-names-its-id-to-object
+    text: While a link's writes are recorded, a guest's session line shows its guest id with a copy button, and the record's right to object asks for it; an objection erases the rows so far and does not stop later writes from being recorded, and the notice says so.
+    coverage:
+      backend:
+        unit: [PrivacyNoticeRendererTest.theRecordsPassageFollowsItsSwitchWithNAndBAndItsRightToObjectApart]
+      web:
+        unit: [src/core/sharing/GuestNaming.test.ts]
 gaps:
-  backend: "Not built: there is no privacy notice (audit 2026-10-18, A5); cr-instance-privacy-notice builds it."
-  web: "Not built: no page or link exists; cr-instance-privacy-notice builds it."
-  admin-web: "Not built: the recipients and the data-protection officer are not instance values yet; cr-instance-privacy-notice adds them."
+  admin-web: >-
+    The values the notice renders are set in admin-web (`OperatorPanel.test.ts`, `operator.test.ts`, `cli.test.ts`:
+    the recipients with their kinds, the suggested rows, the officer, the privacy warning per mode, `veyq-admin operator set --recipients`),
+    built and passing locally; admin-web's job has never executed, so ADR 0040 admits it nowhere.
+  stack: >-
+    Lane L1 walks the notice in a browser — from the sign-in page's footer without an account, in English and German, in
+    both modes, from the invite acceptance, the report dialog and a guest's first-write notice, and the guest id copied
+    (e2e/tests/features/privacy-notice.spec.ts, terms-operator-section.spec.ts, setup/first-run.setup.ts), tagged per
+    criterion; green only in local runs of `scripts/run_stack_e2e.py`, the lane's CI job awaits its first run.

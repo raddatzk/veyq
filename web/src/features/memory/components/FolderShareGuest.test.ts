@@ -71,7 +71,7 @@ beforeEach(async () => {
   localStorage.clear()
   authenticatedCalls.length = 0
   setViewMode('grid')
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
+  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [], more: false } })
   stubApi(publicShareFilesApi, { listShareFiles: { items: [{ nodeId: FILE, fileBlob: { blobId: 'b-1', chunkCount: 1, byteSize: 100, wrappedBlobKey: 'eA==' } }] } })
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await router.push(`/s/${SHARE_ID}${HASH}`)

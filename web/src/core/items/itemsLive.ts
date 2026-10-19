@@ -1,12 +1,15 @@
 // The platform's live refresh of an item list inside a node (inbox #410, ADR 0033): the client half of core's
 // revisioned item list. An application's list endpoint answers a conditional GET (`If-None-Match` = the node's item
-// revision → `304`, nothing to do), a keyset delta past the cursor `(updatedAt, id)`, and — only when a removal
-// happened since the client last synced — the node's current id set; this module is everything the client does
+// revision → `304`, nothing to do), a keyset delta past the cursor the server answered last — in pages of a bounded
+// size — and, only when a removal happened since the client last synced, the node's current id set; this module is
+// everything the client does
 // with that, so an application supplies only its FETCH (its generated client) and its REDUCER (what its view does
 // with a delta). Memories' gallery is the first user (`features/memory/useMediaGalleryLive.ts`); core names no application.
 //
-// Three pieces, none holding state of their own:
+// Four pieces, none holding state of their own:
 //
+// - {@link readItemPages} — the one page loop of a full read (a first load or a poll): the pages, merged into one
+//   delta with the first page's revisions and the last page's cursor (ADR 0033 decision 6).
 // - {@link itemsPollTick} — one tick of the loop: read the caller's cursor, fetch conditionally, and apply a change.
 //   A `304`, a stopped run and a node that moved on apply nothing. A failed fetch REJECTS, so the poller backs off.
 // - {@link reconcileItems} — the delta merge: upsert by id (a new item inserts, a known one is patched in place so a
@@ -23,8 +26,8 @@ import type { LivePollerOptions, LiveTick } from '../../shared/state/livePoller'
 export const ITEMS_POLL: LivePollerOptions = { intervalMs: 20_000, maxBackoffMs: 120_000, jitter: 0.2, minGapMs: 2_000 }
 
 /** What the next poll echoes: the revision it holds (the `If-None-Match`), the delete revision (the `sinceDelete`
- *  gate) and the keyset cursor `"updatedAt,id"` of its newest item (undefined: none yet). `key` names what the poll was
- *  made for (a node id) so a result for a view that has moved on is dropped. */
+ *  gate) and the keyset cursor the server answered with the last page it read (undefined: none yet). `key` names what
+ *  the poll was made for (a node id) so a result for a view that has moved on is dropped. */
 export interface ItemsPollCursor<K = unknown> {
   key: K
   revision: number
@@ -32,14 +35,66 @@ export interface ItemsPollCursor<K = unknown> {
   since?: string
 }
 
-/** One conditional read of the list: nothing changed (`304`), or the delta with both revisions and — only when a
- *  removal advanced past the echoed `sinceDelete` — the current id set. */
+/** One conditional read of the list, after every page of it ([readItemPages]): nothing changed (`304`), or the delta
+ *  with the first page's revisions and — only when a removal advanced past the echoed `sinceDelete` — the id set, and
+ *  the cursor the next poll continues from (null: no page carried a row, keep the one held). */
 export type ItemsPollPage<T> =
   | { notModified: true }
-  | { notModified: false; items: T[]; revision: number; deleteRevision: number; ids: string[] | null }
+  | { notModified: false; items: T[]; revision: number; deleteRevision: number; ids: string[] | null; cursor: string | null }
 
 /** A page that changed something, as the reducer sees it. */
 export type ItemsChange<T> = Extract<ItemsPollPage<T>, { notModified: false }>
+
+/** ONE page of the list as the server answers it (ADR 0033 decision 6): at most a limit of items, `more` while items
+ *  remain past them, and the keyset `cursor` of its last item. */
+export type ItemsOnePage<T> = { notModified: true } | (ItemsChange<T> & { more: boolean })
+
+/**
+ * Read an item list in pages — a first load and a poll alike (ADR 0033 decision 6), the one loop every full read of a
+ * revisioned list goes through. [first] is the caller's read (conditional for a poll; a `304` ends it at once); every
+ * later page is [next] from the page before's cursor, which the caller asks without `If-None-Match` and with the FIRST
+ * page's delete revision. The answer keeps the first page's revisions — read before its rows, so a change committed
+ * while the client pages moves the server's revision past them and the next poll pulls it — and the last page's cursor.
+ *
+ * The pages are one delta: an item a later page carries again (an edit committed while paging) replaces the earlier copy,
+ * and the id set is the first page's plus every id a later page carried — those were read after it, so dropping them by
+ * the first page's set would lose an add made while the client paged; a removal after the first page is the next poll's
+ * (its delete revision moved past the kept one). A later page's own id set is not used, for the same reason.
+ */
+export async function readItemPages<T>(
+  first: () => Promise<ItemsOnePage<T>>,
+  next: (cursor: string, deleteRevision: number) => Promise<ItemsOnePage<T>>,
+  idOf: (item: T) => string,
+): Promise<ItemsPollPage<T>> {
+  const head = await first()
+  if (head.notModified) return head
+  const items = new Map<string, T>(head.items.map((item) => [idOf(item), item] as const))
+  const later: string[] = []
+  let page: ItemsOnePage<T> = head
+  let cursor = head.cursor
+  while (page.more) {
+    const from = page.cursor
+    if (!from) throw new Error('items_page_without_cursor') // a page that says more must say where it ends
+    page = await next(from, head.deleteRevision)
+    if (page.notModified) throw new Error('items_page_not_modified') // a later page is never conditional
+    if (page.more && page.cursor === from) throw new Error('items_page_did_not_advance')
+    for (const item of page.items) {
+      const id = idOf(item)
+      items.delete(id) // the later copy is the newer one
+      items.set(id, item)
+      later.push(id)
+    }
+    cursor = page.cursor ?? cursor
+  }
+  return {
+    notModified: false,
+    items: [...items.values()],
+    revision: head.revision,
+    deleteRevision: head.deleteRevision,
+    ids: head.ids ? [...new Set([...head.ids, ...later])] : null,
+    cursor,
+  }
+}
 
 export interface ItemsPollTickOptions<T, K> {
   /** The poll's starting point from the caller's live state, or null when there is nothing to poll (not loaded, locked,
@@ -104,25 +159,4 @@ export function reconcileItems<T>(held: readonly T[], delta: readonly T[], ids: 
     }
   }
   return [...byId.values()]
-}
-
-/** The newest `(updatedAt, id)` keyset cursor across [items] - what a poll echoes as `since`; undefined when none
- *  carries an `updatedAt` (an empty list). Milliseconds by construction (a JS `Date`), which round-trips losslessly
- *  against the server's `TIMESTAMP(3)`, so the same rows are never fetched twice. */
-export function newestItemsCursor<T>(items: readonly T[], idOf: (item: T) => string, updatedAtOf: (item: T) => Date | undefined): string | undefined {
-  let bestT = -Infinity
-  let bestId = ''
-  let found = false
-  for (const item of items) {
-    const at = updatedAtOf(item)
-    if (!at) continue
-    const t = at.getTime()
-    const id = idOf(item)
-    if (t > bestT || (t === bestT && id > bestId)) {
-      bestT = t
-      bestId = id
-      found = true
-    }
-  }
-  return found ? `${new Date(bestT).toISOString()},${bestId}` : undefined
 }

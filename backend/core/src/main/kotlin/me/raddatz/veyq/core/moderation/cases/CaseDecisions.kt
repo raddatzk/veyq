@@ -102,6 +102,7 @@ object CaseFailures {
     val factsRequired = httpFailure("statement_facts_required", FailureStatus.BAD_REQUEST)
     val provisionRequired = httpFailure("statement_provision_required", FailureStatus.BAD_REQUEST)
     val recipientsChanged = httpFailure("statement_recipients_changed", FailureStatus.CONFLICT)
+    val recipientsTooMany = httpFailure("statement_recipients_too_many", FailureStatus.UNPROCESSABLE)
     val objectionNotFound = httpFailure("objection_not_found", FailureStatus.NOT_FOUND)
     val objectionDecided = httpFailure("objection_decided", FailureStatus.CONFLICT)
     val needsAnotherModerator = httpFailure("objection_needs_another_moderator", FailureStatus.CONFLICT)
@@ -252,6 +253,7 @@ class CaseDecisions(
         if (resolved == null) return@call null to refusal
         val found = recipients.of(case, resolved, known, held)
         val members = found.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }
+        if (members.size > StatementRecipients.MAX_SEALED) return@call null to CaseFailures.recipientsTooMany
         val keys = if (members.isEmpty()) emptyMap() else VeyqUser.list("id in ?1", members).associate { it.id to it.identityPublicKey }
         found.map { it to keys[it.id] } to null
     }
@@ -305,6 +307,7 @@ class CaseDecisions(
         val told = recipients.of(case, resolved, known, held)
         val members = told.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }.toSet()
         if (statement.facts == null && statement.factsFor.isNotEmpty()) return Taken(refused(CaseFailures.invalid))
+        if (statement.facts != null && members.size > StatementRecipients.MAX_SEALED) return Taken(refused(CaseFailures.recipientsTooMany))
         if (statement.facts != null && statement.factsFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
         val row = block(resolved.kind, resolved.targetId, case, moderatorId, now).apply {
             if (resolved.kind == BlockKind.CONTENT_NODE || resolved.kind == BlockKind.CONTENT_ITEM) scopeId = case.scopeId

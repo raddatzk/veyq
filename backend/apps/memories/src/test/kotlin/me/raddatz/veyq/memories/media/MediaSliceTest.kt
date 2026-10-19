@@ -460,14 +460,12 @@ class MediaSliceTest {
             .extract().path("results[0].mediaId")
     }
 
-    /** The node's newest `(updatedAt, mediaId)` keyset cursor, read from a full list (the media are ordered oldest-first). */
-    private fun newestCursor(userId: String, scopeId: String, nodeId: String): String {
-        val list = given().header("Authorization", bearer(userId))
+    /** The node's keyset cursor as a full list (one page here) answers it: the position of its last row. */
+    private fun newestCursor(userId: String, scopeId: String, nodeId: String): String =
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$nodeId/media")
-            .then().statusCode(200).extract()
-        val last = list.path<Int>("media.size()") - 1
-        return "${list.path<String>("media[$last].updatedAt")},${list.path<String>("media[$last].mediaId")}"
-    }
+            .then().statusCode(200).body("more", equalTo(false))
+            .extract().path("cursor")
 
     /** Start one blob upload (in-memory store: presignedPuts come back null) and return its uploadId. */
     // The request-body bounds are enforced at the boundary, not in the handler: a violation answers core's

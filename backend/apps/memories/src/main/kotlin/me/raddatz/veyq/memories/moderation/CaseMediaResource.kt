@@ -12,7 +12,7 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.memories.generated.api.CaseMediaApi
 import me.raddatz.veyq.memories.generated.model.ShareMedia
 import me.raddatz.veyq.memories.generated.model.ShareMediaDerivative
-import me.raddatz.veyq.memories.generated.model.ShareMediaListing
+import me.raddatz.veyq.memories.generated.model.CaseMediaListing
 import me.raddatz.veyq.memories.generated.model.UploaderKey
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.security.Authenticated
@@ -47,7 +47,7 @@ class CaseMediaResource(
         return Response.ok(listingOf(held)).build()
     }
 
-    private fun listingOf(held: List<HeldRow>): ShareMediaListing {
+    private fun listingOf(held: List<HeldRow>): CaseMediaListing {
         val blobRows = held.filter { it.table == "veyq_blob" }.associateBy { it.sourceId }
         val derivatives = held.filter { it.table == "veyq_media_derivative" }.groupBy { it["media_id"] }
         val identities = held.filter { it.table == "veyq_share_identity" }.associateBy { it.sourceId }
@@ -83,7 +83,7 @@ class CaseMediaResource(
         val keys = media.mapNotNull { it.identityId?.toString() }.distinct().mapNotNull { id ->
             identities[id]?.get("wrapped_identity_key")?.let { UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = it) }
         }
-        return ShareMediaListing(media = media, identities = keys)
+        return CaseMediaListing(media = media, identities = keys)
     }
 }
 

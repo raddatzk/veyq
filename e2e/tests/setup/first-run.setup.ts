@@ -122,18 +122,21 @@ test(
     tag: [
       '@uc.admin.operator-details:admin-web-warns-in-the-organisation-mode-only',
       '@uc.admin.operator-details:the-notice-comes-before-the-mode',
+      '@uc.admin.operator-details:the-privacy-notice-values-are-set-and-never-published-unsaved',
     ],
   },
   async () => {
     const warnContact = page.getByText('Public links are on and no instance contact is set.', { exact: false })
     const warnIdentification = page.getByText('The provider identification is incomplete.', { exact: false })
+    const warnPrivacy = page.getByText('The privacy notice names no recipient or no supervisory authority', { exact: false })
     const operatorPanel = () => page.getByRole('button', { name: 'Operator', exact: true }).click()
     const modePanel = () => page.getByRole('button', { name: 'Operating mode', exact: true }).click()
 
-    // Organisation (chosen at setup), nothing published, public links on: both warnings, never a refusal.
+    // Organisation (chosen at setup), nothing published, public links on: every warning, never a refusal.
     await operatorPanel()
     await expect(warnContact).toBeVisible()
     await expect(warnIdentification).toBeVisible()
+    await expect(warnPrivacy).toBeVisible()
 
     // Private, on the operator's own assessment: the notice, the tick, and then neither warning, every value empty.
     await modePanel()
@@ -148,6 +151,7 @@ test(
     await expect(page.getByRole('heading', { name: 'Operator', level: 2 })).toBeVisible()
     await expect(warnContact).toHaveCount(0)
     await expect(warnIdentification).toHaveCount(0)
+    await expect(warnPrivacy).toHaveCount(0)
 
     // Back to organisation: the warnings return until the contact and the identification are published.
     await modePanel()
@@ -161,9 +165,19 @@ test(
     await page.getByLabel('Name', { exact: true }).fill('E2E Operator e. V.')
     await page.getByLabel('Address for service').fill('Teststraße 1\n12345 Teststadt')
     await page.getByLabel('Email', { exact: true }).fill(`info@${stack().domain}`)
+    // The privacy notice's values (ADR 0035 decision 8): the authority, and one recipient whose country is left open,
+    // so the full notice shows that gap and the reduced one leaves it out (terms-operator-section.spec.ts reads both).
+    await page.getByLabel('Data-protection supervisory authority').fill('E2E Datenschutzaufsicht')
+    await page.getByRole('button', { name: 'Add a recipient' }).click()
+    const recipient = page.getByTestId('operator-recipient')
+    await recipient.getByLabel('Name').fill('E2E Hosting GmbH')
+    await recipient.locator('.operator-recipient__kind').click() // what they do: a kind from the list
+    await page.getByRole('option', { name: 'Hosts the server' }).click()
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(warnContact).toHaveCount(0)
     await expect(warnIdentification).toHaveCount(0)
+    await expect(warnPrivacy).toHaveCount(0)
+    await expect(recipient.getByLabel('Name')).toHaveValue('E2E Hosting GmbH') // the server's answer, re-read
   },
 )
 
@@ -199,7 +213,13 @@ test(
 
 test(
   'the invite link opens on the new tenant domain, over a certificate from the run\'s ACME server',
-  { tag: ['@uc.admin.tenant-reachability:domain-actually-routes', '@uc.admin.operator-details:the-identification-appears-on-the-login-and-share-pages'] },
+  {
+    tag: [
+      '@uc.admin.tenant-reachability:domain-actually-routes',
+      '@uc.admin.operator-details:the-identification-appears-on-the-login-and-share-pages',
+      '@uc.admin.privacy-notice:public-without-signing-in',
+    ],
+  },
   async ({ browser }) => {
     // The invited owner's browser, not the Server Owner's: a context of its own, confined the same way. Only the
     // preview is opened — accepting is the Memory round trip's (cr-stack-e2e phase 3).
@@ -215,6 +235,15 @@ test(
       await tab.goto(inviteLink)
     }).toPass({ timeout: 60_000, intervals: [1_000] })
     await expect(tab.getByText(`You have been invited to own “E2E Family” (${tenantDomain}).`)).toBeVisible()
+
+    // GDPR Art. 13 applies where the account is born: the invite links the privacy notice's account passage, in a tab
+    // of its own (the invitation's secret rides this page's fragment), readable with no account at all.
+    const opened = invitee.waitForEvent('page')
+    await tab.getByRole('link', { name: 'What this instance keeps about your account, and why' }).click()
+    const notice = await opened
+    expect(new URL(notice.url()).pathname + new URL(notice.url()).hash).toBe('/privacy#account')
+    await expect(notice.locator('#account')).toContainText('the server keeps your email address', { timeout: 60_000 })
+    await notice.close()
 
     // The provider identification the Server Owner published, on the tenant's sign-in page (ADR 0035 decision 7):
     // read before sign-in, the same on every host, behind a footer link.

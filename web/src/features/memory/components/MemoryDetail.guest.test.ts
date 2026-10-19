@@ -110,7 +110,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   setViewMode('grid')
   stubApi(publicShareMediaApi, {
-    listShareMedia: { media: [row('m-1', MEMORY), row('m-own', MEMORY), row('c-1', CHAPTER)], identities: [] },
+    listShareMedia: { media: [row('m-1', MEMORY), row('m-own', MEMORY), row('c-1', CHAPTER)], identities: [], more: false },
     deleteShareMedia: undefined,
   })
   // A tier read (the lightbox's preview) is refused: the stage shows its error, the download stays.

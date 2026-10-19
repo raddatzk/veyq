@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.generated.model.DeliveryResult
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.terms.RecipientKind
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
@@ -23,7 +24,19 @@ data class OperatorDetailsView(
     val confirmedAt: Instant?,
     /** Whether a code can be mailed at all: instance mail configured and the Server Owner's own address confirmed. */
     val instanceMailReady: Boolean,
+    /** The recipients the instance knows of by its own configuration, for the console to offer ([RecipientSuggestions]). */
+    val suggestions: List<RecipientSuggestion> = emptyList(),
 )
+
+sealed interface OperatorSetOutcome {
+    data class Ok(val view: OperatorDetailsView) : OperatorSetOutcome
+
+    /**
+     * A recipient whose description does not fit its kind ([RecipientKind.accepts]): an OTHER one without one, or any
+     * other kind with one. The contract cannot say it field by field, so the handler does; nothing is stored.
+     */
+    data object RecipientMalformed : OperatorSetOutcome, HttpFailure by httpFailure("invalid_request", FailureStatus.BAD_REQUEST)
+}
 
 sealed interface OperatorConfirmOutcome {
     data class Ok(val view: OperatorDetailsView) : OperatorConfirmOutcome
@@ -54,6 +67,7 @@ sealed interface OperatorConfirmOutcome {
 class OperatorDetailsHandler(
     private val store: OperatorDetailsStore,
     private val mailer: InstanceNoticeMailer,
+    private val suggestions: RecipientSuggestions,
 ) {
 
     fun read(now: Instant = Instant.now()): OperatorDetailsView =
@@ -63,9 +77,13 @@ class OperatorDetailsHandler(
     fun publicValues(): OperatorValues =
         (QuarkusTransaction.joiningExisting().call { store.find() }?.values ?: OperatorValues()).copy(notificationEmail = null)
 
-    /** A full replace of the values (a value omitted is cleared); then a code for an unconfirmed notification address. */
-    fun set(values: OperatorValues, now: Instant = Instant.now()): OperatorDetailsView {
+    /**
+     * A full replace of the values (a value omitted is cleared); then a code for an unconfirmed notification address.
+     * Refused whole, storing nothing, where a recipient's description does not fit its kind.
+     */
+    fun set(values: OperatorValues, now: Instant = Instant.now()): OperatorSetOutcome {
         val clean = values.cleaned()
+        if (clean.recipients.any { !it.kind.accepts(it.description) }) return OperatorSetOutcome.RecipientMalformed
         val ready = mailer.ready(now)
         val minted = QuarkusTransaction.requiringNew().call {
             val e = store.lockedRow()
@@ -78,6 +96,8 @@ class OperatorDetailsHandler(
             e.providerEmail = clean.providerEmail
             e.providerRepresentative = clean.providerRepresentative
             e.supervisoryAuthority = clean.supervisoryAuthority
+            e.dataProtectionOfficer = clean.dataProtectionOfficer
+            store.replaceRecipients(clean.recipients)
             // A failed send describes the last save's mail; this save is a new attempt, or none.
             e.codeFailed = false
             val address = clean.notificationEmail
@@ -94,7 +114,7 @@ class OperatorDetailsHandler(
         if (minted != null && mailer.sendOperatorCode(minted.address, minted.code, minted.expiresAt, now) != DeliveryResult.SENT) {
             QuarkusTransaction.requiringNew().run { store.markCodeFailed(minted.hash) }
         }
-        return read(now)
+        return OperatorSetOutcome.Ok(read(now))
     }
 
     /** Clear every value, the notification address with its code and confirmation included. The mode stays. */
@@ -110,6 +130,8 @@ class OperatorDetailsHandler(
             e.providerEmail = null
             e.providerRepresentative = null
             e.supervisoryAuthority = null
+            e.dataProtectionOfficer = null
+            store.replaceRecipients(emptyList())
             e.codeHash = null
             e.codeAddress = null
             e.codeExpiresAt = null
@@ -168,6 +190,7 @@ class OperatorDetailsHandler(
             confirmation = state,
             confirmedAt = row?.confirmedAt.takeIf { state == NotificationConfirmationState.CONFIRMED },
             instanceMailReady = mailer.ready(now),
+            suggestions = suggestions.list(),
         )
     }
 
@@ -183,6 +206,11 @@ class OperatorDetailsHandler(
         providerEmail = providerEmail.blankToNull(),
         providerRepresentative = providerRepresentative.blankToNull(),
         supervisoryAuthority = supervisoryAuthority.blankToNull(),
+        dataProtectionOfficer = dataProtectionOfficer.blankToNull(),
+        // The contract refuses a blank name (`OperatorRecipient`'s @NotBlank); a blank description or country is none.
+        recipients = recipients.map {
+            PublishedRecipient(it.name.trim(), it.kind, it.description.blankToNull(), it.country.blankToNull())
+        },
     )
 
     private fun String?.blankToNull(): String? = this?.trim()?.takeUnless { it.isEmpty() }

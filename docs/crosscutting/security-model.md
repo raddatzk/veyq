@@ -207,6 +207,17 @@ changes nothing about content, which the server still never reads. A **file down
 key-free Service Worker ([ADR 0047 § The download route](../decisions/0047-inline-video-playback-range-streaming.md#the-download-route))
 but reads every chunk in order, so it shows the operator no more than a whole-blob read.
 
+**A log carries ids, never what the operator could not otherwise read** ([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md)
+§ 3). The app's lines name accounts, tenants, scopes, nodes, shares, blobs and jobs by id, a domain, an exception's
+class, a SQLState and counts — never a key, a token, a sealed value or plaintext metadata, an email address, a network
+address, a User-Agent, a request's URI or input, or a message someone else wrote (a database driver's, a mail
+server's, a remote API's body); a constraint violation at commit, which Narayana logs, is rewritten to its class chain
+and SQLState (`CommitFailureLogFilter`). An unexpected error is logged by its route template and class chain under a random
+error id; its full text needs a DEBUG category raised on purpose. The admin console's access log keeps no reader's
+address, the bundled proxy keeps no access log, and the e2e sweep fails a run whose logs hold a sealed value, a token
+or an address a suite signed up with ([cc.security.wire-assertion](cc.security.wire-assertion.md)). A log is
+operational, bounded by size, and never evidence: the evidence a report needs is a database record (ADR 0093 § 10).
+
 This split is written in *kinds*; the contracts are written in *field names*. [ADR 0044](../decisions/0044-field-visibility-declared-at-the-field.md)
 is what connects them: every field in `contracts/api/` declares which of these kinds it is, or the build fails.
 This section stays the reason; the ADR carries the mechanism and does not restate it.
@@ -397,9 +408,12 @@ server-blind token makes this work without the server ever seeing a name:
   moderation path has run on a deployed instance.
   The fixed **operator section** every space's terms carry
   states all this to members and guests — the notice path, what is kept, the measures, the statement and the
-  objection, in the club, organisation or company mode the authorities, and while the guest-write record is on its
-  GDPR Art. 13 information — veyq's text filled with the operator's published values, public without an account
-  ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6); it is a draft until a qualified legal review.
+  objection, and in the club, organisation or company mode the authorities — veyq's text filled with the operator's
+  published values, public without an account ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6).
+  The fixed **instance privacy notice** states the GDPR Art. 13 information for members, reporters and guests — what
+  the server keeps in the clear, why, how long, who receives it, the rights — from what the running instance does and
+  the operator's published values, public at `/privacy` on every tenant host (decision 8). Both are public operational
+  content, never E2EE content, and both are drafts until a qualified legal review.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

@@ -644,7 +644,8 @@ def server_leg(inst: Instance, axis: str, out: Path, calls: int = 5) -> dict:
     finally:
         client.close()
     for k, r in enumerate(warm):
-        say(f"  warm {k + 1}: {r['status']} ttfb {r['ttfbMs']} ms, total {r['totalMs']} ms, {r['selects']} SELECTs")
+        say(f"  warm {k + 1}: {r['status']} ttfb {r['ttfbMs']} ms, total {r['totalMs']} ms, {r['selects']} SELECTs"
+            f" in {r.get('pages', 1)} page(s)")
     say(f"  304: {conditional['status']} total {conditional['totalMs']} ms, {conditional['selects']} SELECTs; "
         f"drift {pre} / {post} SELECTs per {window:.0f}s (tolerance {tolerance})")
     failed = [r["status"] for r in cold + warm + [conditional] if r["status"] not in (200, 304)]
@@ -660,6 +661,9 @@ def server_leg(inst: Instance, axis: str, out: Path, calls: int = 5) -> dict:
         "selects": {"cold": [r["selects"] for r in cold], "warm": [r["selects"] for r in warm],
                     "conditional": conditional["selects"]},
         "bytes": {k: warm[-1][k] for k in ("wireBytes", "bodyBytes", "gzipBytes", "contentEncoding")},
+        # A media list is read in pages (cr-gallery-list-paging): its SELECTs per page, the reading that must not grow.
+        "pages": warm[-1].get("pages", 1), "pageLimit": warm[-1].get("pageLimit"),
+        "selectsPerPage": [round(r["selects"] / r.get("pages", 1), 1) for r in warm],
         "drift": {"pre": pre, "post": post, "windowSecs": window, "tolerance": tolerance},
         "failedStatuses": failed, "refused": refused,
     }

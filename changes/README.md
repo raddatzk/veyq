@@ -76,7 +76,12 @@ a client red names the typed line it expects to fail — and runs `npm run check
 **And a new model's property names are the generator's to keep or change**: cr-bucket-reconcile's `keys` became
 `propertyKeys` in the Kotlin model (a name the generator reserves), found only when phase 2 wrote the first constructor
 call, so the contract was renamed after its phase had committed. A contracts phase that adds a schema writes one use of
-it in each generated language before it commits. cr-identity-pins-per-entry did not, and met both generators a phase
+it in each generated language before it commits. **So are its type names, where a schema crosses into `_common`**:
+cr-instance-privacy-notice's `PrivacyNotice`, served by the operator spec, reached `LocalizedMarkdown` through the
+spec's `_common` alias (and, moved into `_common`, through `_common` itself), and both generators named its parts inline
+either way (`PrivacyNoticePassageText`, `PrivacyNoticePassagesInner`, `OperatorSectionRecord`) — the other specs' runs
+happen to overwrite `OperatorSection` with the right names, and nothing did for the new schema. The rule above was
+skipped, so the backend phase found it and gave the notice a text type of its own; one constructor call would have. And cr-identity-pins-per-entry met both generators' reserved property names a phase
 later: Kotlin reserves `entries` (the field is `propertyEntries` there) and TypeScript `delete` (`_delete`, in a model
 that did not even compile), so the write's `delete` became `remove` in the backend phase.
 a client red names the typed line it expects to fail — and runs `npm run check` once to see it. **It finds those lines
@@ -1281,6 +1286,17 @@ library's sources would have read the wrong layer; the Quarkus extension's sourc
 answered it. So a claim about a library's default names the layer the app reaches it through and is measured there —
 the extension's config mapping, or a run.
 
+### A handler registered for a supertype answers for every subtype the framework asks about
+
+**"Catch everything" is a registration for every type below it, including the ones the framework looks up to decide
+its own routing.** `cr-logging` decided an `ExceptionMapper<Throwable>` beside a Vert.x failure handler. Quarkus REST
+asks for a mapper of `NotFoundException` before it passes an unmatched route on, and finds the `Throwable` one by
+walking the hierarchy — so the app shell's SPA fallback and the admin channel's unknown-route refusal would have
+stopped answering. The trap was already written at `EmptyBadRequestFilter`, two files from the decision's locator,
+and the build moved to one failure handler that Quarkus REST reaches through `RoutingContext.fail`. So a refine that
+registers a handler for a broad type reads which lookups the framework makes for the types under it (the
+framework's sources, at the line that asks), and greps the code for the trap notes beside the layer it adds to.
+
 ### Every pod a CR adds is asked again what it reaches and what it writes
 
 **A property argued for one component does not carry to its neighbour.** `cr-kubernetes-backup-gate` settled that the
@@ -1999,6 +2015,24 @@ three mid-implementation. Code and ADRs cannot answer for a duty they never enco
 text lists, per duty it serves, the surface and the content the law names, and only then fits the built surfaces to
 it; where the build cannot back a sentence the law asks, the CR names it as a legal blocker with an owner rather than
 leave the implementer to choose between the code and the law.
+
+### A new required response field is a fixture change wherever that response is built
+
+A contracts phase that adds a required field to a RESPONSE predicts its reds where the server constructs it — and misses
+the clients' test fixtures, which construct the same object to stub the server. cr-gallery-list-paging's phase 1 said
+"web check green: only optional request parameters were added"; its required `more` reddened 23 web fixtures, and its new
+query parameters changed the generated JAX-RS signature the CR had not named either. At refine, grep the tests for a
+literal of the response (`identities: [`, `mediaRevision:`) as well as the server's constructor.
+
+### A set the CR says is derived is derived at refine too, and an annotation is proved on the wire
+
+When a decision says "the set is derived from the contracts, never listed", the refine's own hand list of it is the
+estimate the derivation exists to replace: cr-gallery-list-paging listed nine operations whose answers carry a token, and
+its derivation found sixteen — the refine's grep stopped at top-level schemas and missed the presigned URLs nested in
+items. Run the derivation's predicate at refine, not a grep that paraphrases it. And a framework annotation is a claim
+about the framework until a request shows it: `@Uncompressed` on an implementing `override` is not read by Quarkus REST
+(it reads the method that declares the endpoint — here the generated interface), and only the wire test's refusal that
+the method answered itself showed it.
 
 ### Every CR closes with a short, honest retrospective
 

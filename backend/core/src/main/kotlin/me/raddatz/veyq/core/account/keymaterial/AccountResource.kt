@@ -54,9 +54,10 @@ class AccountResource(
             if (method == null) {
                 // Forward-compatible skip, but never silent: a method the current enum doesn't know is
                 // either a newer-client wrap (fine) or data corruption (e.g. a dropped PASSWORD wrap would
-                // lock the account out) — surface it so an operator can tell the two apart. The method
-                // string is low-sensitivity (a small known set), no ciphertext or secret is logged.
-                log.warnf("Skipping master-key wrap with unrecognised method '%s'", wrap.method)
+                // lock the account out) — surface it so an operator can tell the two apart. By its length and
+                // the account, never verbatim: an unknown value is input nobody vetted, and a log echoes no
+                // input (ADR 0092 § 3). `AccountKeyMaterialSliceTest` holds it.
+                log.warnf("Skipping master-key wrap of account %s with an unrecognised method of length %d", identity.principal.name, wrap.method.length)
                 null
             } else {
                 MasterKeyWrap(id = UUID.fromString(wrap.id), method = method, wrappedKey = wrap.wrappedKey, kdfParams = wrap.kdfParams)

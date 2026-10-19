@@ -366,6 +366,17 @@ acceptanceCriteria:
           Proven in happy-dom over a fake store and fake clocks; in a real browser only by the volume harness (2026-10-19, the
           production recipe on this Mac): a Chapter of 3,000 photos loaded every thumbnail with 12 presign calls and no failed
           request. No real browser has yet seen the error tile, a re-presign after an expired URL, or a retry.
+  - id: guest-lists-its-node-in-pages
+    text: A share guest's gallery lists only the node it has open (`listShareMedia` with `nodeId`), every page of it by the same paging rule as a member's, keyed on the media id (`after`) because a guest is told no time or order of the Memory's activity; a node outside the shared subtree is the share's ordinary 404, the same answer as an unknown link.
+    coverage:
+      backend:
+        integration:
+          - MediaListPagingSliceTest.aGuestPagesTheNodeItHasOpenByIdAndANodeOutsideTheShareIsTheShares404
+          - MediaListQueryCountSliceTest.aGuestsPageOfOnePhotoAndOfSixtyIssueTheSameStatements
+      web:
+        unit:
+          - src/features/memory/share.test.ts
+          - src/features/memory/source.test.ts
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040

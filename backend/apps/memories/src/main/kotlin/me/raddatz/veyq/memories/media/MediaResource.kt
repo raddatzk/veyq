@@ -16,6 +16,7 @@ import me.raddatz.veyq.memories.generated.model.UploaderKey
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.items.ItemsCursor
 import me.raddatz.veyq.core.items.ItemsETag
+import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.http.httpStaleSealedMeta
@@ -78,11 +79,12 @@ class MediaResource(
         }
     }
 
-    override fun listNodeMedia(scopeId: UUID, nodeId: UUID, ifNoneMatch: String?, since: String?, sinceDelete: Int?, state: String?): Response =
+    override fun listNodeMedia(scopeId: UUID, nodeId: UUID, ifNoneMatch: String?, since: String?, sinceDelete: Int?, limit: Int?, state: String?): Response =
         when (
             val o = handler.listMedia(
                 identity.principal.name, scopeId.toString(), nodeId.toString(),
-                ItemsETag.parse(ifNoneMatch), ItemsCursor.parse(since), sinceDelete ?: 0, trashed = state == "trashed",
+                ItemsETag.parse(ifNoneMatch), ItemsCursor.parse(since), sinceDelete ?: 0, ItemsPage.limitOf(limit),
+                trashed = state == "trashed",
             )
         ) {
             is ListMediaOutcome.Page -> Response.ok(
@@ -93,6 +95,8 @@ class MediaResource(
                     mediaRevision = o.mediaRevision,
                     deleteRevision = o.deleteRevision,
                     mediaIds = o.mediaIds?.map(UUID::fromString),
+                    more = o.more,
+                    cursor = o.cursor,
                     sealedDropPrivateKey = o.sealedDropPrivateKey,
                     uploaderKeys = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
                 ),

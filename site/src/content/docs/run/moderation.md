@@ -19,6 +19,7 @@ sources:
   - docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md
   - docs/features/moderation/use-cases/uc.moderation.appoint-moderators.md
   - docs/features/admin/use-cases/uc.admin.operator-details.md
+  - docs/features/admin/use-cases/uc.admin.privacy-notice.md
   - docs/decisions/0035-server-terms-of-service.md
   - docs/features/moderation/use-cases/uc.moderation.report.md
   - docs/features/moderation/enablers/en.moderation.hold.md
@@ -403,7 +404,7 @@ Everything else expires.
   shorter N reaches every kept row at the next cleanup, a longer one only rows written from then on, so no guest is
   kept longer than the page told them.
 - **Guests are told** before their first write, on the page itself, with the N in effect and the right to object as a
-  sentence of its own, and a link to the full information in [the terms of the instance](#the-terms-of-the-instance).
+  sentence of its own, and a link to the full information in [the privacy notice of the instance](#the-privacy-notice).
   You are the controller, not a space's owner.
 - **The address is the one the network vouches for**, never one the client wrote ([Networking](/veyq/run/networking/)).
   On Compose it is strong by construction; on Kubernetes it is only as strong as an enforced NetworkPolicy. The source
@@ -416,15 +417,15 @@ Everything else expires.
   keep such a backup at most B days — the instance's own backups are deleted at B, 30 until you set it under **Server →
   Moderation → Backups** ([Backup and restore](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)) — open it
   only to restore it, and let the restored instance start once (its cleanup then deletes what is past N at boot). A
-  guest's data can then live N + B days, and what you tell guests
-  has to say so.
+  guest's data can then live N + B days, and the privacy notice says so with your B.
 - **A guest objects** (GDPR Art. 21(1)): unless you have compelling reasons to keep what was kept, delete it —
   `veyq-admin guest-write-record forget <identity-id>`. It deletes every kept write of that guest identity at once and
   prints how many went and how many a hold keeps: rows a report's or an authority's hold copied **stay until that hold
   ends**, because a report or an order concerns them — tell the guest so. Answer within a month (Art. 12(3)). A later
   write by the same identity is recorded again; a guest who does not want that can view the link but not add to it.
-  The command takes the identity's id, as a moderation case names it; the guest page does not show a guest its own id
-  yet, so a guest who objects cannot name it themselves.
+  The command takes the identity's id: a guest finds it on the link's page next to its name while writes are recorded
+  (*Your guest id, to name if you object*, with a copy button), and the privacy notice asks a guest who objects to
+  give it; a moderation case names it too.
 
 ## Who runs the instance
 
@@ -436,11 +437,23 @@ empty:
 - **the address statements of reasons name** — may be the same as the contact;
 - **the provider identification** — **Name**, **Address for service**, **Email**, and for a club or a company who
   represents it;
-- **the data-protection supervisory authority**.
+- **the data-protection supervisory authority**;
+- for [the privacy notice](#the-privacy-notice): the **recipients** — everyone who processes data for you, each with
+  what they do and the country they do it in — and a **data-protection officer** where you have appointed one. What
+  they do you pick from a list the notice words in each of its languages: *hosts the server*, *stores the encrypted
+  files*, *relays the mail*, *keeps the backups*, or *other* with a short description of yours, which both language
+  versions show as you typed it, in quotes. The panel suggests a row of its kind for what the instance itself knows — an
+  external store's host, the instance mail relay's host — which you complete with the provider's name and country and
+  keep or drop; nothing is published until you save it as a row. With the CLI:
+  `veyq-admin operator set --recipients 'Example Hosting GmbH|hosting|Germany; Mail AG|mail-relay; SMS AG|other:sends sign-in texts'
+  --data-protection-officer 'DSB GmbH, dsb@example.org'` (the kinds `hosting`, `object-storage`, `mail-relay`,
+  `backup` and `other:<what they do>`; `--recipients` replaces the whole list, `none` empties it).
 
 These are public: the app reads them before sign-in on every address of the instance, and shows the identification
 and the contact with its languages, where they are set, behind **Legal notice** on the sign-in and share pages and at
-the bottom of the signed-in app, beside **Terms of this instance**. The **notification address** is not public:
+the bottom of the signed-in app, beside **Terms of this instance** and **Privacy**; the recipients and the officer are
+public only through the privacy notice. In the *club, organisation or company* mode the panel warns while the notice
+names no recipient or no supervisory authority. The **notification address** is not public:
 new moderation cases will be mailed there. Saving it mails a code to it through the instance mail, once Server → Mail
 is set up and confirmed (the panel says so until then); you type the code into the same panel, and nothing is mailed
 to the address before. A changed address asks again. **Clear all** removes every value and keeps the mode.
@@ -522,20 +535,55 @@ What it says depends on the operating mode:
 | The statement's further content (facts, report or order, that a person decided, the ground with the law or clause, where and how long it applies, the courts) | no | yes |
 | That an authority can defer the statement | no | yes |
 | Authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your contact with its languages | no | yes |
-| The guest-write record's information (controller, purpose, legal basis, N, recipients, rights, the supervisory authority) and the right to object apart | while *Record guests' writes* is on | while it is on |
+| A pointer to the guest-write record's information, which is [the privacy notice](#the-privacy-notice)'s | while *Record guests' writes* is on | while it is on |
 
-In the record's part too an empty value reads *not stated by this operator* in the second mode and is left out in
-*private*. The values it uses are the instance contact and its languages, the address statements name (else the
-contact), the provider identification, the supervisory authority and N.
+The values it uses are the instance contact and its languages, the address statements name (else the contact) and the
+provider identification.
 
 **When members and guests are asked again.** A space's owner changing their terms, a veyq release that changes the
 section's text, or you switching the operating mode asks every member and guest of every space again. Changing a value,
 N or the record switch asks nobody.
 
 **It is a draft.** No lawyer has reviewed the text yet, and every rendering starts by saying so. Before you publish an
-instance, have it checked. Known gaps against the law, also named in ADR 0035 decision 6: it states no backup period B
-for backups you make another way (it says such a backup holds the record until it is deleted); and your members' own
-privacy information (their account, their acceptances) is in no text yet. Each has a change of its own planned.
+instance, have it checked. A known question, also named in ADR 0035 decision 6: whether a space's own terms must be
+public before sign-in.
+
+## The privacy notice
+
+veyq also ships a fixed **privacy notice** — the information GDPR Art. 13 asks of you, the controller, for everyone
+whose data the instance processes: members, reporters and the guests of links
+([ADR 0035](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0035-server-terms-of-service.md) decision 8).
+Anyone reads it without an account under **Privacy** at the bottom of every page, at `/privacy` on every space's
+address (served by `GET /api/operator/privacy-notice`); the invitation page, the report dialog's contact field and a
+guest's first write link the passage that concerns them. Nobody edits its text, you included; nothing accepts it and
+reading it records nothing.
+
+It states what **this** instance does, from what it is set to, so keeping it true is keeping those settings true:
+
+- **you**: the provider identification as the controller, the address statements name (else the contact) for data
+  protection, a data-protection officer where set, the supervisory authority, and the recipients you named
+  ([Who runs the instance](#who-runs-the-instance));
+- **one passage per processing**, each with its purpose, legal basis and period: the account and its address, signing
+  in and the one cookie, what the browser keeps, the terms a member accepted, reports and moderation, a reporter's
+  contact, mail (yours, and a space's own relay as its owner's), where encrypted content is stored (an external store by
+  its host), backups with your B, logs, and the account erasure with its window and what outlives it;
+- **passages that follow a switch**, on the space's own address: the guest-write record with N and N + B and its own
+  right to object (*Record guests' writes*), the breached-password check naming the address it calls — a mirror you set
+  is named, HIBP is not (*Breached-password check*), and the services a member's browser calls, each by its address
+  (*Place names*, *Maps*; a space's owner can switch these off for their space);
+- **the rights**, the complaint to the supervisory authority, and the right to object to everything resting on a
+  legitimate interest, set apart.
+
+In the *club, organisation or company* mode an empty value reads *not stated by this operator* (the recipients' passage
+too, while you name none); in *private* it is left out — you may need no notice there, but every passage is still true
+of your instance. It is shown in both modes.
+
+**It is a draft too**, and says so on every rendering. Questions only counsel answers, and that the notice answers as
+veyq is built until then: whether each space's owner is a joint controller with you for its members' accounts (the
+notice names you alone), whether the breached-password check may run by default (the notice states it as it runs, its
+recipient and its switch), whether one sentence plus this link meets Art. 13 on a guest's page, and what Art. 14 asks
+towards a person a report names. The record of processing, your contracts with processors, a breach and an access
+request are [Data protection](/veyq/run/data-protection/)'s.
 
 ## Not built
 

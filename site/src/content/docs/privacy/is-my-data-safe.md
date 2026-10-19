@@ -9,6 +9,7 @@ sources:
   - docs/features/account/use-cases/uc.account.recover-access.md
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
+  - docs/features/admin/use-cases/uc.admin.privacy-notice.md
 ---
 
 **In one sentence:** veyq is **end-to-end encrypted** — your photos, videos, journal text and the
@@ -49,6 +50,13 @@ allowed in — the server sees a few **low-sensitivity, operational** facts:
 
 It's like seeing **labelled boxes on a shelf and who holds a key** — never the contents. Those few
 facts are what let the server be useful without ever decrypting.
+
+**What *your* instance keeps, and who runs it.** Every veyq instance is run by someone — a family member, a club, a
+company — and each one has its own **privacy notice**: **Privacy**, at the bottom of every page, before you sign in too.
+It names who is responsible, what that instance keeps about your account, your sign-in and a report you make, for how
+long, who else receives anything (the company hosting it, a mail service), and what you can ask for. veyq writes its
+text; the instance fills in its own details, so it says what *that* instance does. The invitation page, the report
+form and a link you add something through point you to the part that concerns you.
 
 ## The one check that leaves your device by itself
 

@@ -36,6 +36,12 @@ const stubs = {
     emits: ['update:modelValue'],
     template: '<textarea :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
+  Select: {
+    props: ['modelValue', 'options'],
+    emits: ['update:modelValue'],
+    template:
+      '<select class="select" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
+  },
   Button: {
     props: ['label', 'disabled', 'type'],
     emits: ['click'],
@@ -47,7 +53,8 @@ function operator(over: Partial<InstanceOperator> = {}): InstanceOperator {
   return {
     operatingMode: 'ORGANISATION', contactEmail: undefined, contactLanguages: [], statementEmail: undefined, notificationEmail: undefined,
     notificationConfirmation: 'NOT_SET', notificationConfirmedAt: undefined, instanceMailReady: true, providerName: undefined,
-    providerAddress: undefined, providerEmail: undefined, providerRepresentative: undefined, supervisoryAuthority: undefined, ...over,
+    providerAddress: undefined, providerEmail: undefined, providerRepresentative: undefined, supervisoryAuthority: undefined,
+    recipients: [], recipientSuggestions: [], ...over,
   }
 }
 
@@ -127,8 +134,83 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
     expect(setOperator).toHaveBeenCalledWith({
       contactEmail: 'contact@example.org', contactLanguages: ['de', 'en'], statementEmail: null, notificationEmail: null,
       providerName: null, providerAddress: 'Musterstraße 1\n12345 Musterstadt', providerEmail: null,
-      providerRepresentative: null, supervisoryAuthority: null,
+      providerRepresentative: null, supervisoryAuthority: null, recipients: [], dataProtectionOfficer: null,
     })
+  })
+
+  it('organisation: the privacy warning shows while no recipient or no authority is named; private: never', async () => {
+    vi.mocked(getOperator).mockResolvedValue(operator())
+    expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(true)
+    vi.mocked(getOperator).mockResolvedValue(operator({
+      supervisoryAuthority: 'LfD', recipients: [{ name: 'Example Hosting GmbH', kind: 'HOSTING', country: 'Germany' }],
+    }))
+    expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(false)
+    vi.mocked(getOperator).mockResolvedValue(operator({ operatingMode: 'PRIVATE' }))
+    expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(false)
+  })
+
+  it('a suggested recipient becomes a row only when added, and is saved only as that row; the officer is saved', async () => {
+    const suggested = operator({ recipientSuggestions: [{ kind: 'MAIL_RELAY', host: 'smtp.example.org' }] })
+    vi.mocked(getOperator).mockResolvedValue(suggested)
+    vi.mocked(setOperator).mockResolvedValue(suggested)
+    const w = await mountPanel()
+    expect(w.findAll('[data-testid="operator-recipient"]')).toHaveLength(0)
+    expect(w.find('.operator-suggestion').attributes('data-kind')).toBe('MAIL_RELAY')
+
+    // Saved without adopting it: nothing is published unconfirmed.
+    await w.find('.operator-save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setOperator).mock.lastCall![0].recipients).toEqual([])
+
+    await w.find('.operator-suggestion__add').trigger('click')
+    expect(w.find('.operator-suggestion').exists()).toBe(false) // a row names its host now
+    const row = w.find('[data-testid="operator-recipient"]')
+    expect((row.find('.operator-recipient__name').element as HTMLInputElement).value).toBe('smtp.example.org')
+    expect((row.find('.operator-recipient__kind').element as HTMLSelectElement).value).toBe('MAIL_RELAY') // the suggestion's kind
+    await row.find('.operator-recipient__name').setValue('Mail AG')
+    await row.find('.operator-recipient__country').setValue('Germany')
+    await w.find('.operator-add-recipient').trigger('click') // an empty row is not sent
+    await w.find('.operator-dpo').setValue(' DSB GmbH ')
+    await w.find('.operator-save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setOperator).mock.lastCall![0]).toMatchObject({
+      recipients: [{ name: 'Mail AG', kind: 'MAIL_RELAY', description: null, country: 'Germany' }],
+      dataProtectionOfficer: 'DSB GmbH',
+    })
+  })
+
+  it('what a recipient does is a kind from the list; only Other asks for words, and only Other sends them', async () => {
+    vi.mocked(getOperator).mockResolvedValue(operator())
+    // The server's answer is what was sent, so the panel keeps the rows it shows across a save.
+    vi.mocked(setOperator).mockImplementation(async (u) => operator({ recipients: u.recipients ?? [] }))
+    const w = await mountPanel()
+    await w.find('.operator-add-recipient').trigger('click')
+    const row = () => w.find('[data-testid="operator-recipient"]')
+    expect(row().findAll('.operator-recipient__kind option').map((o) => o.text()))
+      .toEqual(['Hosts the server', 'Stores the encrypted files', 'Relays the mail', 'Keeps the backups', 'Other'])
+    await row().find('.operator-recipient__name').setValue('SMS AG')
+    expect(row().find('.operator-recipient__description').exists()).toBe(false)
+    await row().find('.operator-recipient__kind').setValue('OTHER')
+    await row().find('.operator-recipient__description').setValue(' sends sign-in texts ')
+    await w.find('.operator-save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setOperator).mock.lastCall![0].recipients)
+      .toEqual([{ name: 'SMS AG', kind: 'OTHER', description: 'sends sign-in texts', country: null }])
+
+    // The kind changed: the field goes, and the words typed for Other are not sent with the new kind.
+    await row().find('.operator-recipient__kind').setValue('BACKUP')
+    expect(row().find('.operator-recipient__description').exists()).toBe(false)
+    await w.find('.operator-save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setOperator).mock.lastCall![0].recipients)
+      .toEqual([{ name: 'SMS AG', kind: 'BACKUP', description: null, country: null }])
+
+    // A row with no kind chosen says nothing a reader could use and is not sent.
+    await w.find('.operator-add-recipient').trigger('click')
+    await w.findAll('[data-testid="operator-recipient"]')[1].find('.operator-recipient__name').setValue('No Kind AG')
+    await w.find('.operator-save').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setOperator).mock.lastCall![0].recipients?.map((r) => r.name)).toEqual(['SMS AG'])
   })
 
   it('a code sent to the notification address is entered here and confirms it; a wrong one is refused in words', async () => {

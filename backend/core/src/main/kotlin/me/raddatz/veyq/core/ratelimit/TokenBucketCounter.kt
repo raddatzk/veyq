@@ -26,10 +26,29 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * A full bucket is indistinguishable from an absent one (a never-seen key starts full), so the eviction is free
  * of behavioural cost — the caller cannot tell whether its key was kept or re-created.
+ *
+ * **And the map forgets by time, whatever its size** (ADR 0092 § 5): every counter registers with its
+ * [TokenBucketSweeper] when it is made, and the sweeper's pass every minute ([TokenBucketSweep]) drops every full
+ * bucket. A key is a client address or, for the recovery and invite mails, an email address; before the pass it stayed
+ * in heap until 100 000 keys were tracked or the process restarted, and now it lives only while its bucket refills.
+ * The keys are not hashed: a hash would sit in the same heap for the same time and answer nothing more. Registration
+ * is here, not at the counters' users, so every counter has it and none can forget it.
  */
-class TokenBucketCounter(private val maxTrackedKeys: Int = MAX_TRACKED_KEYS) {
+class TokenBucketCounter(
+    private val maxTrackedKeys: Int = MAX_TRACKED_KEYS,
+    sweeper: TokenBucketSweeper = TokenBucketSweeper.instance,
+) {
 
-    private val buckets = ConcurrentHashMap<String, TokenBucket.State>()
+    /** A bucket and the rate it was last spent at — what a pass needs to tell whether it is full with no caller asking. */
+    private class Tracked(val state: TokenBucket.State, val capacityMilli: Long, val nanosPerMilliToken: Long) {
+        fun isFullAt(nowNanos: Long): Boolean = TokenBucket.isFullAt(state, nowNanos, capacityMilli, nanosPerMilliToken)
+    }
+
+    private val buckets = ConcurrentHashMap<String, Tracked>()
+
+    init {
+        sweeper.register(this)
+    }
 
     /**
      * Spends one token of [key]'s budget at [nowNanos] (`System.nanoTime()`), and returns the `Retry-After`
@@ -39,26 +58,33 @@ class TokenBucketCounter(private val maxTrackedKeys: Int = MAX_TRACKED_KEYS) {
         val capacityMilli = TokenBucket.capacityMilli(maxRequests)
         val nanosPerMilliToken = TokenBucket.nanosPerMilliToken(maxRequests, windowSeconds)
 
-        if (buckets.size > maxTrackedKeys) {
-            buckets.entries.removeIf {
-                TokenBucket.isFullAt(it.value, nowNanos, capacityMilli, nanosPerMilliToken)
-            }
-        }
+        if (buckets.size > maxTrackedKeys) dropFull(nowNanos)
 
         // compute() is atomic per key, so the refill-and-spend is too; the verdict rides out in a captured local.
         var retryAfterSeconds: Long? = null
         buckets.compute(key) { _, existing ->
             val outcome = TokenBucket.consume(
-                state = existing ?: TokenBucket.full(capacityMilli, nowNanos),
+                state = existing?.state ?: TokenBucket.full(capacityMilli, nowNanos),
                 nowNanos = nowNanos,
                 capacityMilli = capacityMilli,
                 nanosPerMilliToken = nanosPerMilliToken,
             )
             retryAfterSeconds = outcome.retryAfterSeconds
-            outcome.state
+            Tracked(outcome.state, capacityMilli, nanosPerMilliToken)
         }
         return retryAfterSeconds
     }
+
+    /**
+     * Drops every bucket that is full at [nowNanos], each judged at the rate it was last spent at. `removeIf` on the
+     * map's entries removes an entry only while it still holds the value it judged, so a spend racing a pass is kept.
+     */
+    internal fun dropFull(nowNanos: Long) {
+        buckets.entries.removeIf { it.value.isFullAt(nowNanos) }
+    }
+
+    /** How many keys this counter holds — the observable of the eviction tests. */
+    internal fun trackedKeys(): Int = buckets.size
 
     private companion object {
         const val MAX_TRACKED_KEYS = 100_000

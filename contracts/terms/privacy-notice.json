@@ -1,0 +1,490 @@
+{
+  "revision": 3,
+  "draft": true,
+  "note": "The instance privacy notice (ADR 0035 decision 8, GDPR Art. 13; uc.admin.privacy-notice): fixed text veyq ships, DE and EN, filled with the values the Server Owner sets and with what the running instance does, served without an account at GET /api/operator/privacy-notice and shown at /privacy on every tenant host. Read by the backend alone (core/terms/PrivacyNoticeRenderer.kt renders it, sharing the placeholder rules of the operator section, contracts/terms/operator-section.json); clients render what the endpoint serves. Nobody edits it at runtime. 'revision' moves with the text and only with it; nothing accepts it, so a bump reopens nothing. 'draft' is true until a qualified legal review; while it is, the endpoint serves 'draftBanner'. Every passage has an 'id' — its anchor on the page (/privacy#<id>): the invite acceptance links 'account', the report dialog 'reporter-contact', a guest's first-write notice 'guest-write-record'. A passage renders when all of its conditions hold: 'part' 'both' (either operating mode) or 'full' (the club, organisation or company mode only); 'switch' a capability id, rendered exactly while it is active for the host's space (ADR 0088); 'ifValue' / 'ifNoValue' a value, rendered exactly while it is set / not set; 'about' a value, absent while it is empty in the private mode's reduced variant and rendered with its gap in the full one. A passage with 'separate': true is a right to object, served apart from the rest (GDPR Art. 21(4)). Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line naming an empty value is left out where the line is 'optional' and in the reduced variant (an unset value is simply absent, owner Q26); otherwise the value renders as 'gap'. A line that is a list placeholder alone ({recipients}, {browserServices}) becomes one bullet per item. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {privacyContact} (the address the disclosures name, else the contact), {dataProtectionOfficer}, {supervisoryAuthority}, {recipients} (the Server Owner's list: name, what they do, country — what they do is the recipient's kind in 'recipientKinds', one label per kind of the contract's OperatorRecipientKind, so neither language's page carries the other's words; OTHER's label holds {description}, the one text the operator types for it, shown as typed and quoted on both pages), {retention} (the guest-write record's N), {backupRetention} (B, ADR 0056 decision 8), {erasureWindow} (the account erasure's window, ADR 0101 decision 3), {breachedPasswordService} (the address the check calls; HIBP by its name), {browserServices} (every other outside service a browser calls on this host, with its address), {storeHost} (an external object store's host; empty for the bundled store). A typed value never carries prose of veyq's: a newline in it renders as ', '. The 'logs' passage states what ADR 0092 lets a log and a rate limiter keep (§§ 3, 5: ids only, an unexpected error by its error id and kind, buckets in memory until they refill): a change to what either keeps rewrites that passage in the same commit and moves 'revision' with it, or the notice no longer says what the instance does — no test holds the passage to the logs.",
+  "draftBanner": {
+    "en": "*Draft: this privacy notice has not yet been reviewed by a lawyer.*",
+    "de": "*Entwurf: Diese Datenschutzerklärung ist noch nicht anwaltlich geprüft.*"
+  },
+  "gap": {
+    "en": "not stated by this operator",
+    "de": "von der Betreiberseite nicht angegeben"
+  },
+  "dayUnit": {
+    "en": {
+      "one": "1 day",
+      "other": "{n} days"
+    },
+    "de": {
+      "one": "1 Tag",
+      "other": "{n} Tage"
+    }
+  },
+  "recipientKinds": {
+    "HOSTING": {
+      "en": "hosts the server",
+      "de": "hostet den Server"
+    },
+    "OBJECT_STORAGE": {
+      "en": "stores the encrypted files",
+      "de": "speichert die verschlüsselten Dateien"
+    },
+    "MAIL_RELAY": {
+      "en": "relays the mail",
+      "de": "versendet die E-Mails"
+    },
+    "BACKUP": {
+      "en": "keeps the backups",
+      "de": "bewahrt die Sicherungen auf"
+    },
+    "OTHER": {
+      "en": "other — “{description}”",
+      "de": "Sonstiges — „{description}“"
+    }
+  },
+  "passages": [
+    {
+      "id": "about-this-notice",
+      "part": "both",
+      "lines": [
+        {
+          "en": "This notice says what this veyq instance processes about you, why, on which legal basis, for how long, who receives it and what your rights are (Art. 13 GDPR). veyq provides its text, whoever runs the instance (the operator) provides the details in it, and the owner of a space can neither change nor remove it.",
+          "de": "Diese Erklärung sagt, was diese veyq-Instanz über dich verarbeitet, warum, auf welcher Rechtsgrundlage, wie lange, wer es erhält und welche Rechte du hast (Art. 13 DSGVO). Den Text stellt veyq bereit, die Angaben darin macht, wer die Instanz betreibt (die Betreiberseite), und wem ein Bereich gehört, kann ihn weder ändern noch entfernen."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "What members keep in veyq — photos, files, names, notes, everything in a space — is end-to-end encrypted: the server stores it only in a form it cannot read, and the operator cannot read it either. This notice is about the rest: what the server needs in the clear to run, and what leaves it.",
+          "de": "Was Mitglieder in veyq aufbewahren — Fotos, Dateien, Namen, Notizen, alles in einem Bereich —, ist Ende-zu-Ende-verschlüsselt: Der Server speichert es nur in einer Form, die er nicht lesen kann, und die Betreiberseite kann es auch nicht lesen. Diese Erklärung handelt vom Rest: was der Server im Klartext braucht, um zu laufen, und was ihn verlässt."
+        }
+      ]
+    },
+    {
+      "id": "controller",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Who is responsible",
+          "de": "## Wer verantwortlich ist"
+        },
+        {
+          "en": "Responsible for the processing on this instance (the controller) is its operator:",
+          "de": "Verantwortlich für die Verarbeitung auf dieser Instanz ist ihre Betreiberseite:"
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "- Name: {providerName}",
+          "de": "- Name: {providerName}"
+        },
+        {
+          "en": "- Address: {providerAddress}",
+          "de": "- Anschrift: {providerAddress}"
+        },
+        {
+          "en": "- Email: {providerEmail}",
+          "de": "- E-Mail: {providerEmail}"
+        },
+        {
+          "en": "- Represented by: {providerRepresentative}",
+          "de": "- Vertreten durch: {providerRepresentative}",
+          "optional": true
+        },
+        {
+          "en": "- Contact for data protection: {privacyContact}",
+          "de": "- Kontakt für den Datenschutz: {privacyContact}"
+        },
+        {
+          "en": "- Data-protection officer: {dataProtectionOfficer}",
+          "de": "- Datenschutzbeauftragte Stelle: {dataProtectionOfficer}",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Your account",
+          "de": "## Dein Konto"
+        },
+        {
+          "en": "When you accept an invitation and create an account, the server keeps your email address, whether you confirmed it, the username you have in each space and the public keys of your account. Your name and your profile picture are stored encrypted, unreadable to the server.",
+          "de": "Wenn du eine Einladung annimmst und ein Konto anlegst, speichert der Server deine E-Mail-Adresse, ob du sie bestätigt hast, deinen Benutzernamen in jedem Bereich und die öffentlichen Schlüssel deines Kontos. Dein Name und dein Profilbild werden verschlüsselt gespeichert und sind für den Server unlesbar."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Purpose: your account, signing in, and the mails your account needs — confirming your address, invitations, recovering access, notices about your account. Legal basis: Art. 6(1)(b) GDPR, providing the service you signed up for. Without an email address no account can be created.",
+          "de": "Zweck: dein Konto, die Anmeldung und die E-Mails, die dein Konto braucht — deine Adresse bestätigen, Einladungen, den Zugang wiederherstellen, Hinweise zu deinem Konto. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO, die Bereitstellung des Dienstes, für den du dich angemeldet hast. Ohne E-Mail-Adresse lässt sich kein Konto anlegen."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Your account is kept until you erase it (see below). A link in a mail that confirms an address is valid for 24 hours and one that recovers access for 1 hour; both are deleted 7 days later. An invitation is valid for 7 days and deleted 30 days later.",
+          "de": "Dein Konto bleibt bestehen, bis du es löschst (siehe unten). Ein Link in einer E-Mail, der eine Adresse bestätigt, gilt 24 Stunden, einer, der den Zugang wiederherstellt, 1 Stunde; beide werden 7 Tage später gelöscht. Eine Einladung gilt 7 Tage und wird 30 Tage später gelöscht."
+        }
+      ]
+    },
+    {
+      "id": "signing-in",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Signing in, and what your browser keeps",
+          "de": "## Anmeldung und was dein Browser speichert"
+        },
+        {
+          "en": "While you are signed in, the server keeps a record of each session: when it started and when it was last used — no IP address and no description of your browser. A session lasts 30 days from its last use; expired records are deleted within the hour.",
+          "de": "Solange du angemeldet bist, speichert der Server zu jeder Sitzung, wann sie begann und wann sie zuletzt genutzt wurde — keine IP-Adresse und keine Beschreibung deines Browsers. Eine Sitzung hält 30 Tage ab ihrer letzten Nutzung; abgelaufene Einträge werden binnen einer Stunde gelöscht."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Your browser keeps one cookie, only to keep you signed in: `veyq_refresh` for 30 days if you chose to stay signed in, otherwise `veyq_refresh_session` until the browser closes. It is sent only to this instance, only to renew your session, and deleted when you sign out.",
+          "de": "Dein Browser speichert ein Cookie, nur damit du angemeldet bleibst: `veyq_refresh` für 30 Tage, wenn du angemeldet bleiben wolltest, sonst `veyq_refresh_session` bis zum Schließen des Browsers. Es wird nur an diese Instanz geschickt, nur um deine Sitzung zu verlängern, und beim Abmelden gelöscht."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Your browser also keeps, on your device only: your session's key while you are signed in, a device key if you chose to remember the device, the identities you checked, an id for the device, a guest's session on a link you added something through, and which terms you accepted on a link. None of it tracks you or serves advertising, and none of it is sent anywhere but to this instance.",
+          "de": "Außerdem speichert dein Browser, nur auf deinem Gerät: den Schlüssel deiner Sitzung, solange du angemeldet bist, einen Geräteschlüssel, wenn du das Gerät merken lassen wolltest, die Identitäten, die du geprüft hast, eine Kennung des Geräts, die Sitzung als Gast auf einem Link, über den du etwas hinzugefügt hast, und welche Nutzungsbedingungen du auf einem Link angenommen hast. Nichts davon verfolgt dich oder dient der Werbung, und nichts davon wird anderswohin geschickt als an diese Instanz."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Legal basis: Art. 6(1)(b) GDPR; keeping these on your device is strictly necessary for the service you asked for (§ 25(2) no. 2 TDDDG).",
+          "de": "Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO; das Speichern auf deinem Gerät ist für den Dienst, den du nutzen willst, unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG)."
+        }
+      ]
+    },
+    {
+      "id": "terms-accepted",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## The terms you accepted",
+          "de": "## Die Nutzungsbedingungen, die du angenommen hast"
+        },
+        {
+          "en": "When you accept the terms of a space as a member, the server records which revision you accepted and when, to the second. Purpose: proof of which terms applied, should a breach or a dispute arise. Legal basis: Art. 6(1)(f) GDPR, the operator's legitimate interest in being able to show which terms were agreed. Kept as long as the space exists; erasing your account deletes them, unless a moderation case concerns your account — then they stay until that case's records go (below). As a guest of a link, your acceptance stays on your device; the server records nothing.",
+          "de": "Wenn du als Mitglied die Nutzungsbedingungen eines Bereichs annimmst, hält der Server fest, welche Fassung du angenommen hast und wann, auf die Sekunde. Zweck: nachweisen zu können, welche Bedingungen galten, falls es zu einem Verstoß oder Streit kommt. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse der Betreiberseite, zeigen zu können, was vereinbart war. Aufbewahrt, solange der Bereich besteht; löschst du dein Konto, werden sie gelöscht, es sei denn, ein Moderationsfall betrifft dein Konto — dann bleiben sie, bis die Unterlagen dieses Falls gelöscht werden (unten). Als Gast eines Links bleibt deine Annahme auf deinem Gerät; der Server hält nichts fest."
+        }
+      ]
+    },
+    {
+      "id": "moderation",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Reports and moderation",
+          "de": "## Meldungen und Moderation"
+        },
+        {
+          "en": "When you report something, or something you shared or uploaded is reported, the server keeps what handling it needs: the report's category and time, the reporter's account or link, an encrypted copy of what was reported, the decision, the measures, the statements of reasons, objections, authority orders and a log of these steps. A report's reason and every note of the moderators are encrypted so that only the moderators of this instance can read them.",
+          "de": "Wenn du etwas meldest oder etwas, das du geteilt oder hochgeladen hast, gemeldet wird, speichert der Server, was die Bearbeitung braucht: die Kategorie und den Zeitpunkt der Meldung, das Konto oder den Link der meldenden Person, eine verschlüsselte Kopie des Gemeldeten, die Entscheidung, die Maßnahmen, die Begründungen, Widersprüche, behördliche Anordnungen und ein Protokoll dieser Schritte. Der Grund einer Meldung und jede Notiz der Moderation werden so verschlüsselt, dass nur die Moderation dieser Instanz sie lesen kann."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Purpose: handling reports and authority orders as the law asks of a host, and defending against misuse. Legal basis: Art. 6(1)(c) GDPR with the Digital Services Act and the Terrorist Content Online Regulation, and Art. 6(1)(f) GDPR. A case's records are kept until 31 December of the third year after the case closed, and never deleted while one of its measures is in force; how long a copy of reported content is kept, the terms of this instance say. Recipients: the moderators of this instance, and authorities on their order or when the operator reports a suspected offence.",
+          "de": "Zweck: Meldungen und behördliche Anordnungen so bearbeiten, wie das Gesetz es von einem Hosting-Dienst verlangt, und Missbrauch abwehren. Rechtsgrundlage: Art. 6 Abs. 1 lit. c DSGVO mit dem Gesetz über digitale Dienste und der Verordnung über terroristische Online-Inhalte sowie Art. 6 Abs. 1 lit. f DSGVO. Die Unterlagen eines Falls werden bis zum 31. Dezember des dritten Jahres nach seinem Abschluss aufbewahrt und nie gelöscht, solange eine seiner Maßnahmen gilt; wie lange eine Kopie gemeldeter Inhalte bleibt, sagen die Nutzungsbedingungen dieser Instanz. Empfänger: die Moderation dieser Instanz und Behörden auf deren Anordnung oder wenn die Betreiberseite den Verdacht einer Straftat meldet."
+        }
+      ]
+    },
+    {
+      "id": "reporter-contact",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Your contact when you report",
+          "de": "## Dein Kontakt, wenn du etwas meldest"
+        },
+        {
+          "en": "A contact is optional when you report something. If you leave one, it is encrypted apart from the report so that only the moderators can read it, used only to confirm your report and to tell you the decision, and deleted six months after you were told (where you could not be told, six months after the decision). Legal basis: Art. 6(1)(c) GDPR with Art. 16(4) and (5) of the Digital Services Act.",
+          "de": "Ein Kontakt ist freiwillig, wenn du etwas meldest. Gibst du einen an, wird er getrennt von der Meldung so verschlüsselt, dass nur die Moderation ihn lesen kann, nur dafür verwendet, deine Meldung zu bestätigen und dir die Entscheidung mitzuteilen, und sechs Monate, nachdem sie dir mitgeteilt wurde (wo das nicht ging, sechs Monate nach der Entscheidung), gelöscht. Rechtsgrundlage: Art. 6 Abs. 1 lit. c DSGVO mit Art. 16 Abs. 4 und 5 des Gesetzes über digitale Dienste."
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Mail",
+          "de": "## E-Mail"
+        },
+        {
+          "en": "Mails go out through a mail relay: mails about your account and about moderation through the instance's own, named among the recipients below; a space's invitations and notices through the relay the space's owner set up for it, if they did — ask them who runs it. A relay receives the recipient's address and the mail's text.",
+          "de": "E-Mails gehen über ein Mail-Relay hinaus: E-Mails zu deinem Konto und zur Moderation über das der Instanz, das unten bei den Empfängern genannt ist; Einladungen und Hinweise eines Bereichs über das Relay, das die Person, der der Bereich gehört, dafür eingerichtet hat, falls sie das getan hat — frag sie, wer es betreibt. Ein Relay erhält die Adresse der Empfängerin oder des Empfängers und den Text der E-Mail."
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "part": "both",
+      "ifNoValue": "storeHost",
+      "lines": [
+        {
+          "en": "## Where encrypted content is stored",
+          "de": "## Wo verschlüsselte Inhalte gespeichert werden"
+        },
+        {
+          "en": "Encrypted content is stored on this instance's own server, and your browser fetches it from this instance.",
+          "de": "Verschlüsselte Inhalte werden auf dem eigenen Server dieser Instanz gespeichert, und dein Browser lädt sie von dieser Instanz."
+        }
+      ]
+    },
+    {
+      "id": "storage-external",
+      "part": "both",
+      "ifValue": "storeHost",
+      "lines": [
+        {
+          "en": "## Where encrypted content is stored",
+          "de": "## Wo verschlüsselte Inhalte gespeichert werden"
+        },
+        {
+          "en": "Encrypted content is stored in an object store outside this server, at {storeHost}. Your browser fetches it from there directly, so the store's provider sees your IP address and what your browser sends with a request — never what the content is. The operator names the provider among the recipients below.",
+          "de": "Verschlüsselte Inhalte werden in einem Objektspeicher außerhalb dieses Servers gespeichert, unter {storeHost}. Dein Browser lädt sie direkt von dort, daher sieht der Anbieter des Speichers deine IP-Adresse und was dein Browser mit einer Anfrage schickt — nie, was der Inhalt ist. Die Betreiberseite nennt den Anbieter unten bei den Empfängern."
+        }
+      ]
+    },
+    {
+      "id": "breached-password-check",
+      "part": "both",
+      "switch": "core.breached-password",
+      "lines": [
+        {
+          "en": "## The breached-password check",
+          "de": "## Die Prüfung auf geleakte Passwörter"
+        },
+        {
+          "en": "When you choose a new password, your browser asks {breachedPasswordService} whether it appears in a known leak. It sends the first five characters of the password's SHA-1 hash — never the password, and nothing that would reveal it — and with the request your IP address and the address of this instance. The check only warns you; nothing about it is stored. Purpose: keeping your account from a password attackers already know. Legal basis: Art. 6(1)(f) GDPR, the legitimate interest in protecting accounts. The operator can switch the check off.",
+          "de": "Wenn du ein neues Passwort wählst, fragt dein Browser {breachedPasswordService}, ob es in einem bekannten Leck vorkommt. Er schickt die ersten fünf Zeichen des SHA-1-Hashes des Passworts — nie das Passwort und nichts, was es verraten würde — und mit der Anfrage deine IP-Adresse und die Adresse dieser Instanz. Die Prüfung warnt dich nur; gespeichert wird dazu nichts. Zweck: dein Konto vor einem Passwort zu schützen, das Angreifenden schon bekannt ist. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse am Schutz der Konten. Die Betreiberseite kann die Prüfung abschalten."
+        }
+      ]
+    },
+    {
+      "id": "browser-services",
+      "part": "both",
+      "ifValue": "browserServices",
+      "lines": [
+        {
+          "en": "## Other services your browser contacts",
+          "de": "## Weitere Dienste, die dein Browser anfragt"
+        },
+        {
+          "en": "Some features have your browser contact an outside service directly; the server sends them nothing:",
+          "de": "Manche Funktionen lassen deinen Browser einen äußeren Dienst direkt anfragen; der Server schickt ihnen nichts:"
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "{browserServices}",
+          "de": "{browserServices}"
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Each sees your IP address and what your browser sends with a request (for place names, a place's coordinates; for a map, the area shown). Legal basis: Art. 6(1)(f) GDPR, the legitimate interest in offering these features. The operator, and for a space its owner, can switch each off.",
+          "de": "Jeder sieht deine IP-Adresse und was dein Browser mit einer Anfrage schickt (bei Ortsnamen die Koordinaten eines Orts, bei einer Karte den gezeigten Ausschnitt). Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse, diese Funktionen anzubieten. Die Betreiberseite und für einen Bereich die Person, der er gehört, können jeden abschalten."
+        }
+      ]
+    },
+    {
+      "id": "guest-write-record",
+      "part": "both",
+      "switch": "core.public-shares.guest-write-record",
+      "lines": [
+        {
+          "en": "## Your IP address when you add something as a guest",
+          "de": "## Deine IP-Adresse, wenn du als Gast etwas hinzufügst"
+        },
+        {
+          "en": "When you add something through a link as a guest (upload a file, name yourself, create or rename a folder, change its details), the server records that write: your IP address, the source port where it is known, the exact time, which guest identity wrote, and which item it wrote to — never what you wrote or uploaded. Nothing is recorded while you only look.",
+          "de": "Wenn du als Gast über einen Link etwas hinzufügst (eine Datei hochlädst, dir einen Namen gibst, einen Ordner anlegst oder umbenennst, seine Angaben änderst), zeichnet der Server diesen Schreibvorgang auf: deine IP-Adresse, den Quellport, wo er bekannt ist, die genaue Uhrzeit, welche Gast-Identität geschrieben hat und in welches Element — nie, was du geschrieben oder hochgeladen hast. Solange du nur ansiehst, wird nichts aufgezeichnet."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Purpose: tracing the misuse of a guest link once it is reported. Legal basis: Art. 6(1)(f) GDPR, the operator's legitimate interest in tracing such misuse and in answering authorities. Responsible is the operator named above.",
+          "de": "Zweck: den Missbrauch eines Gast-Links nachverfolgen zu können, wenn er gemeldet wird. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse der Betreiberseite, einen solchen Missbrauch nachzuverfolgen und Behörden Auskunft geben zu können. Verantwortlich ist die oben genannte Betreiberseite."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Each record is deleted {retention} after the write. It is kept longer only when a report or an authority's order concerns what was written: then a copy stays with what is kept after a report, as long as the terms of this instance say. The instance's own backup leaves these records out; a backup the operator makes another way can hold them up to {backupRetention} longer.",
+          "de": "Jede Aufzeichnung wird {retention} nach dem Schreibvorgang gelöscht. Länger bleibt sie nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was geschrieben wurde: Dann bleibt eine Kopie bei dem, was nach einer Meldung aufbewahrt wird, so lange, wie die Nutzungsbedingungen dieser Instanz sagen. Die instanzeigene Sicherung lässt diese Aufzeichnungen aus; eine Sicherung, die die Betreiberseite auf anderem Weg macht, kann sie bis zu {backupRetention} länger enthalten."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Recipients: the moderators of this instance, and law enforcement authorities on their request or order, or when the operator reports a suspected offence. If you do not want this, you can still look at what a link shows, without adding anything.",
+          "de": "Empfänger: die Moderation dieser Instanz und Strafverfolgungsbehörden auf deren Ersuchen oder Anordnung, oder wenn die Betreiberseite den Verdacht einer Straftat meldet. Wenn du das nicht möchtest, kannst du weiterhin ansehen, was ein Link zeigt, ohne etwas hinzuzufügen."
+        }
+      ]
+    },
+    {
+      "id": "guest-write-record-objection",
+      "part": "both",
+      "switch": "core.public-shares.guest-write-record",
+      "separate": true,
+      "lines": [
+        {
+          "en": "### Your right to object to this record",
+          "de": "### Dein Widerspruchsrecht gegen diese Aufzeichnung"
+        },
+        {
+          "en": "You have the right to object at any time, on grounds relating to your particular situation, to this processing of your data (Art. 21 GDPR). The operator then no longer processes it, unless there are compelling legitimate grounds that override your interests, rights and freedoms, or it is needed to establish, exercise or defend legal claims.",
+          "de": "Du hast das Recht, aus Gründen, die sich aus deiner besonderen Situation ergeben, jederzeit gegen diese Verarbeitung deiner Daten Widerspruch einzulegen (Art. 21 DSGVO). Die Betreiberseite verarbeitet sie dann nicht mehr, es sei denn, sie kann zwingende schutzwürdige Gründe nachweisen, die deine Interessen, Rechte und Freiheiten überwiegen, oder die Verarbeitung dient der Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "Write to {privacyContact} and give your guest id, which the link's page shows next to your name: without an account, it is how the operator finds what was recorded about you. An objection erases what was recorded so far; it does not stop a later write from being recorded.",
+          "de": "Schreib dazu an {privacyContact} und gib deine Gast-Kennung an, die die Seite des Links neben deinem Namen zeigt: Ohne Konto findet die Betreiberseite nur so, was über dich aufgezeichnet wurde. Ein Widerspruch löscht, was bis dahin aufgezeichnet wurde; er verhindert nicht, dass ein späterer Schreibvorgang aufgezeichnet wird."
+        }
+      ]
+    },
+    {
+      "id": "backups",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Backups",
+          "de": "## Sicherungen"
+        },
+        {
+          "en": "The operator keeps backups so the instance can be restored. A backup holds what the server holds, as this notice describes it, and the encrypted content; the instance's own backup leaves the guest-write record out. Every backup is deleted at the latest {backupRetention} after it was made, and used only to restore the instance. When the instance is restored, every account, space and item erased after the backup was made is erased again before it serves anyone. Legal basis: Art. 6(1)(f) GDPR with Art. 32 GDPR, keeping the service available.",
+          "de": "Die Betreiberseite bewahrt Sicherungen auf, damit sich die Instanz wiederherstellen lässt. Eine Sicherung enthält, was der Server enthält, wie diese Erklärung es beschreibt, und die verschlüsselten Inhalte; die instanzeigene Sicherung lässt die Aufzeichnung von Gast-Schreibvorgängen aus. Jede Sicherung wird spätestens {backupRetention} nach ihrer Erstellung gelöscht und nur zum Wiederherstellen der Instanz verwendet. Wird die Instanz wiederhergestellt, wird jedes Konto, jeder Bereich und jedes Element, das nach der Sicherung gelöscht wurde, erneut gelöscht, bevor sie jemandem antwortet. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO mit Art. 32 DSGVO, die Verfügbarkeit des Dienstes."
+        }
+      ]
+    },
+    {
+      "id": "logs",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Logs",
+          "de": "## Protokolle"
+        },
+        {
+          "en": "The server writes operational logs. They name an account, a space or an item by its id, never by a name, an email address or an IP address, and never with what a request or the database held: an unexpected error is logged with a random error id, the kind of request and the type of the error only. They are limited by size: the oldest lines are overwritten. To protect the service against abuse, the server keeps an IP address — and, for password-recovery and invitation mails, the email address — in memory only, until the request limit for it has refilled. Legal basis: Art. 6(1)(f) GDPR, operating and securing the service.",
+          "de": "Der Server schreibt Betriebsprotokolle. Sie nennen ein Konto, einen Bereich oder ein Element bei seiner Kennung, nie bei einem Namen, einer E-Mail-Adresse oder einer IP-Adresse, und nie mit dem, was eine Anfrage oder die Datenbank enthielt: Ein unerwarteter Fehler wird nur mit einer zufälligen Fehlerkennung, der Art der Anfrage und der Art des Fehlers protokolliert. Sie sind der Größe nach begrenzt: Die ältesten Zeilen werden überschrieben. Zum Schutz des Dienstes vor Missbrauch hält der Server eine IP-Adresse – und bei E-Mails zur Passwortwiederherstellung und zu Einladungen die E-Mail-Adresse – nur im Arbeitsspeicher, bis das Anfragelimit dafür wieder aufgefüllt ist. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, Betrieb und Sicherheit des Dienstes."
+        }
+      ]
+    },
+    {
+      "id": "erasure",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Erasing your account",
+          "de": "## Dein Konto löschen"
+        },
+        {
+          "en": "You can erase your account in its settings, or ask the operator to. Signing in stops at once and every session ends; {erasureWindow} later your account and everything that names it is deleted — your address, your keys, your profile in every space, your memberships and the terms you accepted. Until then the operator can stop an erasure made by mistake.",
+          "de": "Du kannst dein Konto in seinen Einstellungen löschen oder die Betreiberseite darum bitten. Die Anmeldung endet sofort und jede Sitzung auch; {erasureWindow} später wird dein Konto mit allem gelöscht, was es nennt — deine Adresse, deine Schlüssel, dein Profil in jedem Bereich, deine Mitgliedschaften und die Nutzungsbedingungen, die du angenommen hast. Bis dahin kann die Betreiberseite eine versehentliche Löschung aufhalten."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "What stays: what you put into a space you did not own alone stays with that space, shown as from a former member; the records of a moderation case that concerns you stay until that case's records go, and a reporter's contact for its six months (Art. 17(3)(b) and (e) GDPR); and a backup holds your account until it is deleted, at the latest {backupRetention} after it was made.",
+          "de": "Was bleibt: Was du in einen Bereich gelegt hast, der nicht dir allein gehörte, bleibt bei diesem Bereich und erscheint als von einem früheren Mitglied; die Unterlagen eines Moderationsfalls, der dich betrifft, bleiben, bis die Unterlagen dieses Falls gelöscht werden, und der Kontakt einer meldenden Person für ihre sechs Monate (Art. 17 Abs. 3 lit. b und e DSGVO); und eine Sicherung enthält dein Konto, bis sie gelöscht wird, spätestens {backupRetention} nach ihrer Erstellung."
+        }
+      ]
+    },
+    {
+      "id": "recipients",
+      "part": "both",
+      "about": "recipients",
+      "lines": [
+        {
+          "en": "## Who receives data",
+          "de": "## Wer Daten erhält"
+        },
+        {
+          "en": "Besides the moderators and, where named above, authorities and the services your browser contacts, these receive data for the operator — each with what they do and where:",
+          "de": "Neben der Moderation und, wo oben genannt, Behörden und den Diensten, die dein Browser anfragt, erhalten diese Daten für die Betreiberseite — jeweils mit dem, was sie tun, und wo:"
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "{recipients}",
+          "de": "{recipients}"
+        }
+      ]
+    },
+    {
+      "id": "rights",
+      "part": "both",
+      "lines": [
+        {
+          "en": "## Your rights",
+          "de": "## Deine Rechte"
+        },
+        {
+          "en": "You have the right to access the data about you (Art. 15 GDPR), to have it corrected (Art. 16), erased (Art. 17) or its processing restricted (Art. 18), and to receive the data you provided in a portable format (Art. 20). Write to {privacyContact}; the operator answers within a month. What you keep in veyq yourself you read and download in the app: it is encrypted, and the operator cannot hand it over. No decision about you is made by automated means alone (Art. 22 GDPR).",
+          "de": "Du hast das Recht auf Auskunft über die Daten zu dir (Art. 15 DSGVO), auf Berichtigung (Art. 16), Löschung (Art. 17) oder Einschränkung der Verarbeitung (Art. 18) und darauf, die Daten, die du bereitgestellt hast, in einem übertragbaren Format zu erhalten (Art. 20). Schreib an {privacyContact}; die Betreiberseite antwortet binnen eines Monats. Was du selbst in veyq aufbewahrst, liest und lädst du in der App: Es ist verschlüsselt, und die Betreiberseite kann es nicht herausgeben. Keine Entscheidung über dich wird ausschließlich automatisiert getroffen (Art. 22 DSGVO)."
+        },
+        {
+          "en": "",
+          "de": ""
+        },
+        {
+          "en": "You may lodge a complaint with a supervisory authority, in particular in the country where you live or work or where you believe your data was misused. The authority competent for the operator: {supervisoryAuthority}.",
+          "de": "Du kannst dich bei einer Aufsichtsbehörde beschweren, insbesondere in dem Land, in dem du lebst oder arbeitest oder in dem deine Daten nach deiner Ansicht missbraucht wurden. Für die Betreiberseite zuständig ist: {supervisoryAuthority}."
+        }
+      ]
+    },
+    {
+      "id": "right-to-object",
+      "part": "both",
+      "separate": true,
+      "lines": [
+        {
+          "en": "### Your right to object",
+          "de": "### Dein Widerspruchsrecht"
+        },
+        {
+          "en": "Where a processing in this notice rests on Art. 6(1)(f) GDPR — the terms you accepted, the breached-password check, the services your browser contacts, backups and logs — you have the right to object at any time, on grounds relating to your particular situation (Art. 21 GDPR). The operator then no longer processes it, unless there are compelling legitimate grounds that override your interests, rights and freedoms, or it is needed to establish, exercise or defend legal claims. Write to {privacyContact}.",
+          "de": "Wo eine Verarbeitung in dieser Erklärung auf Art. 6 Abs. 1 lit. f DSGVO beruht — die Nutzungsbedingungen, die du angenommen hast, die Prüfung auf geleakte Passwörter, die Dienste, die dein Browser anfragt, Sicherungen und Protokolle —, hast du das Recht, aus Gründen, die sich aus deiner besonderen Situation ergeben, jederzeit Widerspruch einzulegen (Art. 21 DSGVO). Die Betreiberseite verarbeitet die Daten dann nicht mehr, es sei denn, sie kann zwingende schutzwürdige Gründe nachweisen, die deine Interessen, Rechte und Freiheiten überwiegen, oder die Verarbeitung dient der Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen. Schreib dazu an {privacyContact}."
+        }
+      ]
+    }
+  ]
+}

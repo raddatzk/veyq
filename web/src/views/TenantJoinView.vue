@@ -28,6 +28,7 @@ import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { identityPrivate, vaultState } from '../app/vault'
 import { account } from '../app/account'
 import { setupApi } from '../api/client'
+import { PRIVACY_ANCHOR, privacyLink } from '../core/privacy/privacyNotice'
 import { fromB64std } from '@veyq/crypto/base64'
 import { identityPublicFromPrivate } from '@veyq/crypto/v1'
 import { HttpStatus, isUnauthorized } from '../shared/httpError'
@@ -318,6 +319,7 @@ async function mapError(e: unknown): Promise<string> {
       <template v-else-if="phase === 'register'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
         <p class="veyq-form-copy">{{ jcopy('registerSub', { email: ownerEmail }) }}</p>
+        <p class="join-privacy"><a :href="privacyLink(PRIVACY_ANCHOR.account)" target="_blank" rel="noopener">{{ t('privacyNotice.atInvite') }}</a></p>
         <form class="veyq-form" @submit.prevent="prepareRegistration">
           <label>{{ t('tenant.join.username') }}
             <InputText v-model="username" name="username" autocomplete="username" required />
@@ -355,6 +357,7 @@ async function mapError(e: unknown): Promise<string> {
 
       <template v-else-if="phase === 'signin'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
+        <p class="join-privacy"><a :href="privacyLink(PRIVACY_ANCHOR.account)" target="_blank" rel="noopener">{{ t('privacyNotice.atInvite') }}</a></p>
 
         <!-- The per-tenant handle (ADR 0023): an existing account still picks a username for THIS tenant — unless it is
              handed the space it is a member of already, which keeps its handle. -->
@@ -423,4 +426,8 @@ async function mapError(e: unknown): Promise<string> {
 
 <style scoped>
 .muted { opacity: 0.7; }
+/* GDPR Art. 13 applies here, where an account is born: the notice's account passage, in a tab of its own (the invite's
+   secret rides this page's fragment). */
+.join-privacy { margin: 0 0 0.75rem; font-size: 0.85rem; }
+.join-privacy a { color: var(--app-accent); }
 </style>

@@ -6,7 +6,9 @@ info:
     Who runs this instance, readable by anyone before sign-in: the instance contact and the languages it answers in,
     the address statements and disclosures name, the provider identification and the competent data-protection
     supervisory authority ([ADR 0093](../../docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-    § 11, [ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) decisions 6–7, uc.admin.operator-details).
+    § 11, [ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) decisions 6–7, uc.admin.operator-details),
+    and the two fixed texts they fill: the operator section of the terms (decision 6) and the privacy notice (decision
+    8, uc.admin.privacy-notice), which alone publishes the recipients and a data-protection officer.
     They are public operational data like the terms, set by the Server Owner on the admin channel
     (`instance.openapi.yaml`, tag `instance-operator`), and instance-wide: the answer is the same on every host. The
     notification address and the operating mode are never served here.
@@ -60,10 +62,10 @@ paths:
       description: >
         The fixed operator section of the terms ([ADR 0035](../../docs/decisions/0035-server-terms-of-service.md)
         decision 6) as every space's terms carry it, rendered in the operating mode's variant with the values the
-        Server Owner set, and with the guest-write record's information (its right to object apart) while that record
-        is on for the instance. DSA Art. 14(1) asks for the terms to be publicly available and easily accessible, so
-        this read needs no account: web/ shows it at a page of its own, linked from the login page, the share page and
-        the signed-in shell, and the guest-write record's first-layer sentence links its record passage. The same
+        Server Owner set, and with the pointer to the guest-write record's information (`getPrivacyNotice`) while that
+        record is on for the instance. DSA Art. 14(1) asks for the terms to be publicly available and easily
+        accessible, so this read needs no account: web/ shows it at a page of its own, linked from the login page, the
+        share page and the signed-in shell. The same
         section rides each space's terms (`getTenantTerms`, `getShareTerms`) after the space's own text; only there is
         it accepted. Host-independent: instance-wide like `getOperatorDetails`. Unauthenticated; rate-limited per
         client address. Every text is a draft until a qualified legal review and says so.
@@ -75,11 +77,54 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OperatorSection" }
               example:
-                revision: 1
+                revision: 2
                 variant: FULL
                 text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                 record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
-                objection: { de: "### Dein Widerspruchsrecht …", en: "### Your right to object …" }
+        "429":
+          description: Too many requests from this address; retry after the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+
+  /api/operator/privacy-notice:
+    get:
+      tags: [operator]
+      operationId: getPrivacyNotice
+      summary: Read the instance's privacy notice — public, without sign-in, as this host's space runs it.
+      description: >
+        The fixed privacy notice ([ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) decision 8, GDPR
+        Art. 13; uc.admin.privacy-notice), rendered from `contracts/terms/privacy-notice.json` in the operating mode's
+        variant, with the values the Server Owner set (the provider identification, the contact, the supervisory
+        authority, the recipients, a data-protection officer), the instance's own values (the guest-write record's N,
+        the backup period B, the account erasure's window, an external object store's host) and one passage per
+        processing the instance runs: a passage bound to a capability switch is present exactly while that switch is
+        active for the space this host serves (the bootstrap domain and an unknown host read the instance level), and
+        a service's passage names the address the instance actually calls. Art. 13 applies at collection, so the read
+        needs no account: web/ shows it at `/privacy` on every tenant host, linked from the login page, the share
+        page, the signed-in shell, the invite acceptance, the report dialog and a guest's first-write notice, each at
+        the passage that concerns it. Information, not consent: nothing accepts it and reading it records nothing.
+        Unauthenticated; rate-limited per client address. Every text is a draft until a qualified legal review and
+        says so.
+      security: []
+      responses:
+        "200":
+          description: The rendered notice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivacyNotice" }
+              example:
+                revision: 1
+                variant: FULL
+                draftBanner: { de: "*Entwurf: …*", en: "*Draft: …*" }
+                passages:
+                  - id: account
+                    separate: false
+                    text: { de: "## Dein Konto …", en: "## Your account …" }
+                  - id: right-to-object
+                    separate: true
+                    text: { de: "### Dein Widerspruchsrecht …", en: "### Your right to object …" }
         "429":
           description: Too many requests from this address; retry after the window.
           content:
@@ -174,3 +219,79 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
     OperatorSectionVariant:
       $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
+
+    # The privacy notice's schemas are this spec's own, its text type included, with no $ref into _common: a _common
+    # schema this spec serves at the response level comes out of the generator under inline names of its own
+    # (`OperatorSectionRecord`, `PrivacyNoticePassagesInner`, measured), which the other specs' runs happen to overwrite
+    # for OperatorSection and nothing would for these. The text has LocalizedMarkdown's shape.
+    PrivacyNotice:
+      type: object
+      description: >
+        The instance privacy notice as this host serves it (ADR 0035 decision 8): veyq's fixed text, its passages in
+        order, each with its anchor. Public operational content, never E2EE: every value in it is the operator's own,
+        typed to be published, or a fact of the running instance.
+      required: [revision, variant, passages]
+      properties:
+        revision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 1
+          description: The notice's revision — it moves with its text, that is with a veyq release, never with a value.
+          example: 1
+        variant:
+          x-veyq-visibility: enum
+          type: string
+          enum: [FULL, REDUCED]
+          description: >
+            The operating mode's variant, as the operator section's (ADR 0093 § 14): REDUCED in the private mode, where
+            an unset value is absent; FULL otherwise, where it shows as "not stated by this operator".
+          example: FULL
+        draftBanner:
+          description: >
+            The banner every rendering opens with while the text awaits a qualified legal review; absent once reviewed.
+          oneOf:
+            - $ref: "#/components/schemas/PrivacyNoticeText"
+            - type: "null"
+        passages:
+          type: array
+          description: The passages that apply on this host, in the order the text gives them.
+          maxItems: 64
+          items: { $ref: "#/components/schemas/PrivacyNoticePassage" }
+
+    PrivacyNoticePassage:
+      type: object
+      description: One passage of the notice.
+      required: [id, separate, text]
+      properties:
+        id:
+          x-veyq-visibility: structure
+          type: string
+          description: >
+            The passage's anchor on the page (`/privacy#<id>`), stable across releases: the invite acceptance links
+            `account`, the report dialog `reporter-contact`, a guest's first-write notice `guest-write-record`.
+          maxLength: 64
+          example: account
+        separate:
+          x-veyq-visibility: flag
+          type: boolean
+          description: A right to object, shown apart from the rest (GDPR Art. 21(4)).
+          example: false
+        text:
+          $ref: "#/components/schemas/PrivacyNoticeText"
+
+    PrivacyNoticeText:
+      type: object
+      description: Markdown in each language the notice carries; the client shows the page's language, else the other.
+      required: [de, en]
+      properties:
+        de:
+          x-veyq-visibility: public
+          type: string
+          description: German markdown (neutral-first inclusive language, cc.inclusive-language).
+          example: "## Dein Konto\n…"
+        en:
+          x-veyq-visibility: public
+          type: string
+          description: English markdown.
+          example: "## Your account\n…"

@@ -13,8 +13,11 @@
 # `$host`/`$uri` variables survive. (Named here without the dollar-brace form on purpose: envsubst rewrites
 # comments too, so spelling them that way would print their rendered values into this text.)
 
-# The request log keeps WHO reached the highest-privilege origin, WHEN, WHAT method on WHICH path, and the
-# answer — and never a query string. The base image's `main` format logs `$request` (the whole request line,
+# The request log keeps WHEN, WHAT method on WHICH path, and the answer — never WHO, and never a query string
+# (ADR 0092 § 5, owner Q29). Not the client's address, its User-Agent or X-Forwarded-For: on the recipe's loopback
+# binding (Compose) and a port-forward (Helm) the address names the bridge or 127.0.0.1, never a person, and where an
+# operator exposes the console it would name one with no time bound, since a quiet console's log rotates by size
+# almost never. `accessLog.test.ts` reds on any of them in a log format. The base image's `main` format logs `$request` (the whole request line,
 # query included) and the Referer (another page's full URL) to stdout, where the operator's log driver keeps
 # them and no wire sweep reads them (cc.security.wire-assertion). No admin flow puts a token in a URI today:
 # the SPA's routes take no query, the Admin API's path parameters are opaque ids, its one query is a boolean,
@@ -22,13 +25,13 @@
 # nothing legitimate uses, so that a token a future change — or a stray request — puts in a query cannot land
 # in a log. `$request_uri` is the raw target as sent; the map keeps everything before the first `?`.
 # NOT covered, and it cannot be: when nginx logs an error (the backend unresolvable or down, a 502), the error log
-# names the whole request line, query included — measured on 1.30.5. nginx has no knob for that context, and
-# that log line is the one diagnostic this container exists to give, so it stays.
+# names the whole request line, query included — measured on 1.30.5 — and the hop that reached it: loopback or the
+# container bridge on the recipe's binding (ADR 0092 § 5 and its Still open 2). nginx has no knob for that context,
+# and that log line is the one diagnostic this container exists to give, so it stays at nginx's default.
 map $request_uri $veyq_request_path {
     "~^(?<veyq_path>[^?]*)" $veyq_path;
 }
-log_format veyq '$remote_addr [$time_local] "$request_method $veyq_request_path $server_protocol" '
-                '$status $body_bytes_sent "$http_user_agent" "$http_x_forwarded_for"';
+log_format veyq '[$time_local] "$request_method $veyq_request_path $server_protocol" $status $body_bytes_sent';
 
 server {
     # Replaces the base image's http-level `access_log … main`: a server that declares its own inherits none.

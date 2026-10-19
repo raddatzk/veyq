@@ -4,7 +4,8 @@
 - **Primary actor:** The **Server Owner**, in the admin console and in `veyq-admin`
 - **Goal:** Say how the instance is run — *private* (family, circle of friends) or *club, organisation or company* —
   on the operator's own assessment, and set the values a host publishes about itself: the instance contact, the
-  provider identification and the competent data-protection supervisory authority
+  provider identification, the competent data-protection supervisory authority, and for the privacy notice the
+  recipients and a data-protection officer
   ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   §§ 11 and 14, [ADR 0035](../../../decisions/0035-server-terms-of-service.md) decisions 6–7,
   [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 14).
@@ -27,14 +28,23 @@
 3. The Server Owner opens Server → Operator and enters, each optional: the instance contact (an address and the
    languages it answers in), the address statements and disclosures name (may equal the contact), the notification
    address, the provider identification (name, address for service, email, and for a legal person its
-   representative), and the supervisory authority. Saving stores them.
+   representative), the supervisory authority, the **recipients** the privacy notice names — each a name, what they
+   do for the instance as a kind from a fixed list (hosts the server, stores the encrypted files, relays the mail,
+   keeps the backups, or *other* with a short description of the Server Owner's own, which both language versions show
+   as typed) and their country — and a **data-protection officer** where one is appointed
+   ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8). The panel offers a suggested recipient
+   row of its kind for what the instance itself knows — an external store's host, the instance mail relay's host —
+   which the Server Owner completes and keeps or drops; a suggestion is never published until it is saved as a row. Saving
+   stores them.
 4. A saved notification address that is not confirmed gets a one-time code through instance mail; typing it into the
    same panel confirms it. Moderation notices reach it only once confirmed.
 5. The contact with its languages, the statement address, the identification and the supervisory authority are served
    before sign-in, the same on every host; the web app shows the identification and the contact with its languages
    (the point of contact DSA Art. 11–12 and TCO Art. 15 ask to be public) on the login page, the share page and in
    the signed-in shell, beside a link to the public terms of the instance (the operator section of the terms,
-   [ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6), which the same values fill.
+   [ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6) and to its privacy notice
+   ([uc.admin.privacy-notice](uc.admin.privacy-notice.md)), which the same values fill; the recipients and the
+   officer are public only through that notice.
 
 ```mermaid
 ---
@@ -58,15 +68,19 @@ sequenceDiagram
 - **A1 — Values left empty.** Nothing is refused, in either mode. In *club, organisation or company* the admin console
   warns while public links (`core.public-shares`) are on and no contact is set, and, independently, while the
   identification lacks its name, its address for service or its email (a half-filled identification is as
-  incomplete as an empty one; the representative is never asked for, since the console cannot tell a legal person).
-  In *private* neither warning shows; a value that is set is still published.
+  incomplete as an empty one; the representative is never asked for, since the console cannot tell a legal person),
+  and, independently, while the privacy notice lacks its recipients or the supervisory authority (it then shows "not
+  stated by this operator"; the officer is never asked for, since only some controllers must appoint one).
+  In *private* no warning shows; a value that is set is still published.
 - **A2 — Instance mail not ready.** A notification address saved while instance mail is not configured and confirmed
   gets no code; the panel says so, and saving again once instance mail is confirmed sends one.
 - **A3 — A wrong or stale code.** It is refused and spends one of a few attempts; a code expires; a changed
   notification address unconfirms the old confirmation without any further write, and asks again.
 - **A4 — `veyq-admin`.** `mode show` prints the mode, the notice and the preset; `mode set private` refuses without
-  `--accept-notice` and prints the notice either way. `operator show|set|clear` sets the values; the code is typed in
-  the console only, as instance mail's is.
+  `--accept-notice` and prints the notice either way. `operator show|set|clear` sets the values — `--recipients
+  '<name>|<kind>|<country>; …'` replaces the whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup`
+  or `other:<what they do>`; the country may be left out, `none` empties it) and
+  `--data-protection-officer` sets the officer; the code is typed in the console only, as instance mail's is.
 - **A5 — The public read fails.** The login and share pages show no identification and block nothing.
 
 ## User impact

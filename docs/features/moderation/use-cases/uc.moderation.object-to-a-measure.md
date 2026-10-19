@@ -23,7 +23,13 @@
    clear, "§ 86a StGB", "Space terms, clause 4"), and the facts, which explain why the content falls under it. The moderator's browser seals the facts twice: to the moderation key, for the
    log, and to each affected member's identity key, which the server lists for that measure before it is taken. The
    server records the statement with the measure, in one transaction, and refuses the measure when the sealed copies do
-   not name exactly the members it would tell (`statement_recipients_changed`).
+   not name exactly the members it would tell (`statement_recipients_changed`). The list is whole or refused, never
+   cut: all the sealed copies travel in the measure's one request, so with facts a step reaches at most 4,000 members
+   (what one request body holds at the smallest sealed facts, `StatementRecipients.MAX_SEALED`), and past that it is
+   refused by name (`statement_recipients_too_many`). In the full form, which requires the facts, such a step cannot be
+   taken at all — the open wall. Longer facts reach the request limit sooner (about 870 members at the longest); sealing
+   the facts once and wrapping only a key per member would make each member's share a fixed 1.6 KB or so whatever the
+   facts' length, and only paging the upload removes the wall.
 2. **Who is told.** The creator of a blocked link, or of the link a blocked guest came through; the uploaders the held
    rows name (a blocked guest: that guest); and, on a content block, every owner of the space. A guest is told nothing
    in veyq and has no address: a guest uploader counts as *nobody can be told*.

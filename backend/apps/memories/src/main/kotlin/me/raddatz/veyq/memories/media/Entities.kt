@@ -79,13 +79,22 @@ class MediaEntity : PanacheEntityBase {
     @Column(name = "created_by", length = 64)
     var createdBy: String? = null
 
-    /** When this media last changed — the attach time at attach, bumped to `now` on a meta edit (cr-0068) and a
-     *  restore (cr-0110). The `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta
-     *  (cr-0107, ADR 0033): a poll pulls only media past its cursor. The medium's only stored time besides
-     *  [deletedAt]: a separate creation time was read only as this column's fallback, so it is not stored
-     *  (inbox #398). */
+    /** When this media last changed — the attach time at attach, bumped to `now` on a meta edit (cr-0068), a restore
+     *  (cr-0110) and a block or its lift. Served as the summary's `updatedAt`; NOT the keyset's order any more — that
+     *  is [position]. The medium's only stored time besides [deletedAt]: a separate creation time was read only as this
+     *  column's fallback, so it is not stored (inbox #398). */
     @Column(name = "updated_at", nullable = false)
     lateinit var updatedAt: Instant
+
+    /**
+     * Where this medium sits in its node's list (ADR 0033 decisions 3 and 6): the node's item revision its last change
+     * bumped to (core's `NodeItemsRevisions.bump` returns it, under the revision row's lock held to the commit), stamped
+     * by every writer that moves the medium to the list's end — the ones that stamp [updatedAt]. `(position, mediaId)` is
+     * the keyset a gallery pages and polls on: positions become visible in commit order, which a timestamp taken before
+     * the lock does not (`MediaKeysetRaceSliceTest`).
+     */
+    @Column(name = "item_position", nullable = false)
+    var position: Int = 0
 
     /** When this media was trashed (soft-deleted), or null for a live media (uc.memory.delete-media, cr-0110). A
      *  trashed row is excluded from listNodeMedia (the active delta + the id-set); the MediaTrashPurge job

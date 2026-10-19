@@ -41,11 +41,11 @@ a dedicated **guest** endpoint keyed on the (already non-enumerable) `shareId`:
 
 **The operator section comes with them** ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6):
 the same endpoint serves, after the space's text, the fixed section the Server Owner fills with values, in the variant
-the operating mode picks, with the guest-write record's information and its right to object (set apart) while that
-record is on. What is accepted is the **triple** of the space's `termsRevision`, the section's revision and its variant,
+the operating mode picks, with a pointer to the guest-write record's information — the instance privacy notice's, with
+its right to object apart (ADR 0035 decision 8) — while that record is on. What is accepted is the **triple** of the space's `termsRevision`, the section's revision and its variant,
 as for a member ([uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)). A space with no terms
-(revision 0) does not gate: the visitor reads the section behind the page's *Terms* link, which the guest-write
-record's first-layer sentence opens at the record's passage.
+(revision 0) does not gate: the visitor reads the section behind the page's *Terms* link, and the privacy notice behind
+its *Privacy* link, which the guest-write record's first-layer sentence opens at the record's passage.
 
 **Acceptance is client-only.** On accept, the client adds the accepted triple to those kept in **localStorage keyed
 by `tenantId`** — so accepting on one share of a tenant clears the gate on **every** share of that tenant (you accept

@@ -25,13 +25,15 @@ plugins {
 
 veyqOpenApi { generateOwnSpecs() } // `contracts/api/*.openapi.yaml`, by its path `:core`
 
-// The operator section of the terms (ADR 0035 decision 6) ships in the jar from its one source in `contracts/terms/`,
-// read at startup by `core/terms/OperatorSections` (`OperatorSectionText.RESOURCE`). A missing file fails the build here
-// rather than a started server, since `from` alone copies nothing silently; the Dockerfile copies the file too.
-val operatorSection = rootDir.resolve("../contracts/terms/operator-section.json")
+// veyq's two fixed texts — the operator section of the terms (ADR 0035 decision 6) and the instance privacy notice
+// (decision 8) — ship in the jar from their one source in `contracts/terms/`, read at startup by `core/terms/
+// OperatorSections` and `PrivacyNotices` (`OperatorSectionText.RESOURCE`, `PrivacyNoticeText.RESOURCE`). A missing file
+// fails the build here rather than a started server, since `from` alone copies nothing silently; the Dockerfile copies
+// the files too.
+val fixedTexts = listOf("operator-section.json", "privacy-notice.json").map { rootDir.resolve("../contracts/terms/$it") }
 tasks.processResources {
-    inputs.file(operatorSection)
-    from(operatorSection) { into("veyq/terms") }
+    inputs.files(fixedTexts)
+    from(fixedTexts) { into("veyq/terms") }
 }
 
 dependencies {

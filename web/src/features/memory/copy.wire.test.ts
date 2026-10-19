@@ -32,6 +32,7 @@ import { memberAccessOf, treeNode } from '../../test/models'
 import { registry } from '../../core/applications/registry'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 import { MEMORIES_CONTENT_SCHEMA, exportMemoryContent, importMemoryContent } from './exportImport'
+import { MEDIA_PAGE_LIMIT } from './media'
 
 const SCOPE = '44444444-4444-4444-8444-444444444444'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
@@ -235,7 +236,7 @@ describe('a folder holding a Memory with a chapter, copied to the scope root, on
     // …and the reads: the two listings, the two EXIF tiers, the tree twice (each cover write reads its node), and every
     // original blob presigned ONCE with each of its frames fetched ONCE - by chunk, never whole
     expect(requests.filter(isRead).map((r) => `${r.method} ${r.path}`).sort()).toEqual([
-      `GET /api/scopes/${SCOPE}/nodes/${MEMORY}/media`, `GET /api/scopes/${SCOPE}/nodes/${CHAPTER}/media`,
+      `GET /api/scopes/${SCOPE}/nodes/${MEMORY}/media?limit=${MEDIA_PAGE_LIMIT}`, `GET /api/scopes/${SCOPE}/nodes/${CHAPTER}/media?limit=${MEDIA_PAGE_LIMIT}`,
       `GET /api/scopes/${SCOPE}/media/${M1}/exif`, `GET /api/scopes/${SCOPE}/media/${M2}/exif`,
       `GET /api/scopes/${SCOPE}/nodes`, `GET /api/scopes/${SCOPE}/nodes`,
       ...all.map(() => `POST /api/scopes/${SCOPE}/blob-downloads-batch`),

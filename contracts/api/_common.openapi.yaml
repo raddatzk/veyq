@@ -15,9 +15,10 @@
 #
 # The shared `parameters`, `headers` and the `ItemsNotModified` response are the platform's revisioned item list
 # (ADR 0033, inbox #410): the conditional-GET and keyset-delta pieces every application's "list the records inside a
-# node" operation `$ref`s, so the wire rules (the ETag, the 304, the `since` cursor, the `sinceDelete` gate) are written
-# once. The response FIELDS cannot be shared by reference (a primitive schema is no generated type, and an
-# application names its own: `mediaRevision`, `mediaIds`); docs/apps/README.md lists the recipe and the names.
+# node" operation `$ref`s, so the wire rules (the ETag, the 304, the `since` cursor, the `sinceDelete` gate, the `limit`
+# of one page) are written once. The response FIELDS cannot be shared by reference (a primitive schema is no generated
+# type, and an application names its own: `mediaRevision`, `mediaIds`, `more`); docs/apps/README.md lists the recipe and
+# the names.
 #
 # The two shared `responses` are the scope-access gate's answers (uc.spaces.scope-access). An operation that
 # declares no other 403/409 points at them; one that already has a 403/409 names the code in its own description
@@ -44,10 +45,11 @@ components:
       in: query
       required: false
       description: >
-        The client's keyset cursor `updatedAt,id` (an RFC3339 timestamp, a `,`, then the item uuid). On a `200` the
-        server returns only items strictly past it (`updatedAt > ts`, id as the tie-break). Omitted on first load
-        => the full list.
-      schema: { type: string, maxLength: 80, example: "2026-07-09T12:34:56.789Z,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
+        The client's keyset cursor: the `cursor` the last page it holds answered, echoed verbatim (opaque to the
+        client; the server's position of that page's last item, then its id). On a `200` the server returns only items
+        strictly past it, in the order the items' changes committed. Omitted on first load => the list from its
+        beginning; a later page of the same load, and every poll, send the last page's `cursor`.
+      schema: { type: string, maxLength: 80, example: "17,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
     ItemsSinceDelete:
       name: sinceDelete
       in: query
@@ -59,6 +61,17 @@ components:
         The client's last-seen `deleteRevision`. The server includes the node's current item-id set (for
         delete-reconcile) **only when it lags** the node's delete revision, i.e. a removal happened since. Defaults to 0.
       schema: { type: integer, format: int32, minimum: 0, default: 0, example: 0 }
+    ItemsLimit:
+      name: limit
+      in: query
+      # An empty value (`?limit=`) is this parameter's absence, as for `sinceDelete` (cr-api-fuzzing).
+      allowEmptyValue: true
+      required: false
+      description: >
+        The most items one answer carries (ADR 0033 decision 6). Absent => the cap, 1000, which the response's item
+        array declares as its `maxItems`. When items remain past the page the response says `more: true`, and the
+        client asks again from the last item it was given, until `more` is false.
+      schema: { type: integer, format: int32, minimum: 1, maximum: 1000, default: 1000, example: 500 }
   headers:
     ItemsETag:
       x-veyq-visibility: structure
@@ -681,20 +694,14 @@ components:
         variant:
           $ref: "#/components/schemas/OperatorSectionVariant"
         text:
-          # The section in both languages, the record's passages left out (they are `record` and `objection`). No
-          # description beside the $ref: the generator would emit an inline copy of LocalizedMarkdown.
+          # The section in both languages, the record's pointer left out (it is `record`). No description beside the
+          # $ref: the generator would emit an inline copy of LocalizedMarkdown.
           $ref: "#/components/schemas/LocalizedMarkdown"
         record:
           description: >
-            The guest-write record's GDPR Art. 13 information, present exactly while
-            `core.public-shares.guest-write-record` is on for the space (either variant); null otherwise.
-          oneOf:
-            - $ref: "#/components/schemas/LocalizedMarkdown"
-            - type: "null"
-        objection:
-          description: >
-            The right to object (GDPR Art. 21), stated apart from the rest (Art. 21(4)) — present exactly when `record`
-            is; null otherwise.
+            The pointer to the guest-write record's GDPR Art. 13 information, which the instance privacy notice holds
+            with its right to object apart (`getPrivacyNotice`, ADR 0035 decision 8; clients link it there) — present
+            exactly while `core.public-shares.guest-write-record` is on for the space (either variant); null otherwise.
           oneOf:
             - $ref: "#/components/schemas/LocalizedMarkdown"
             - type: "null"
