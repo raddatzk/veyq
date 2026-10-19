@@ -51,7 +51,7 @@ export { openBucketName, listBuckets, createBucket, renameBucket, deleteBucket, 
 // The neutral blob transport — plan, pump, the authed reserve/window, the read side and the chunk provider — is core's
 // (`core/blob/`, cr-files-application B1). Re-exported here so existing importers of `./media` (share.ts, the cover
 // store, tests) keep their import path unchanged.
-export { CHUNK_SIZE, PUMP_IN_FLIGHT, windowPuts, openBlobFromUrls, openBlob, makeChunkProvider } from '../../core/blob/transport'
+export { CHUNK_SIZE, PUMP_IN_FLIGHT, windowPuts, openBlobVia, openBlob, makeChunkProvider } from '../../core/blob/transport'
 export type { BlobRef, BlobDeclare, ChunkPut, ReservedUpload, WindowFn } from '../../core/blob/types'
 
 // Every seal in this layer binds the object it is stored as (ADR 0072). A `K_blob` wrap is bound to (scope, owner,
@@ -1098,9 +1098,10 @@ export function downloadRef(item: MediaItem): BlobRef {
   return item.original
 }
 
-/** Open the grid tier (thumbnail) of a media — under the key its origin fixes ([mediaKey]). */
-export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
-  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), gridRef(item))
+/** Open the grid tier (thumbnail) of a media — under the key its origin fixes ([mediaKey]). A grid's bulk read
+ *  (`core/blob/readScheduler.ts`): behind anything the user opened, dropped while it waits once `signal` aborts. */
+export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem, signal?: AbortSignal) =>
+  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), gridRef(item), { lane: 'bulk', signal })
 /** Open the lightbox tier (preview) of a media. */
 export const openLightbox = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
   openBlob(scopeId, mediaKey(scopeId, memoryKey, item), lightboxRef(item))

@@ -19,7 +19,7 @@ vi.mock('./share', async (orig) => ({
   deleteSharePhoto: vi.fn(),
 }))
 vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/0']) }))
-vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobFromUrls: vi.fn(async () => new Uint8Array([9])) }))
+vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobVia: vi.fn(async (_s: unknown, _k: unknown, _r: unknown, presign: (o: object) => Promise<string[]>) => (await presign({}), new Uint8Array([9]))) }))
 // The member's doors, each a recorder: the source must hand every call on with the scope it was built for.
 vi.mock('./media', async (orig) => {
   const real = await orig<typeof import('./media')>()
@@ -52,7 +52,7 @@ import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import { listScopeMembers } from '../spaces/members'
 import { publicShareMediaApi } from './api'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
-import { openBlobFromUrls } from '../../core/blob/transport'
+import { openBlobVia } from '../../core/blob/transport'
 import { saveGuestSession, forgetGuestSession } from '../../core/sharing/guestIdentity'
 import { loadOwnShareMedia } from './ownShareMedia'
 import { sealName, wrapContentKey } from '../../core/node/tree'
@@ -169,7 +169,7 @@ describe("the guest's source reads the link, and only the link", () => {
     const ref = { blobId: 'b-cover', chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==', ownerId: MEMORY, role: 'COVER' as const }
     expect(await source.loaders.coverBlob(ref, keys.memory)).toEqual(new Uint8Array([9]))
     expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, 'b-cover', PW)
-    expect(openBlobFromUrls).toHaveBeenCalledWith(SCOPE, keys.memory, ref, ['https://store.test/0'])
+    expect(openBlobVia).toHaveBeenCalledWith(SCOPE, keys.memory, ref, expect.any(Function))
   })
 
   it('its upload batches never group with a member\'s of the same node', () => {
@@ -249,10 +249,11 @@ describe("the member's source is today's calls, with its scope", () => {
   const state = { wrappedMeta: null, metaRevision: 0 }
   const src = memberMemorySource({ scopeId: () => S })
   const edit = () => null
+  const gridSignal = new AbortController().signal // a grid's read can be dropped while it waits (inbox #488)
   // [what the view calls, the module function it must reach, the arguments it must reach it with]
   const doors: [string, () => unknown, (...a: never[]) => unknown, unknown[]][] = [
     ['listMedia', () => src.listMedia('n'), media.listMediaPage, [S, 'n']],
-    ['loaders.grid', () => src.loaders.grid(item, key), media.openGrid, [S, key, item]],
+    ['loaders.grid', () => src.loaders.grid(item, key, gridSignal), media.openGrid, [S, key, item, gridSignal]],
     ['loaders.preview', () => src.loaders.preview(item, key), media.openLightbox, [S, key, item]],
     ['loaders.original', () => src.loaders.original(item, key), media.openOriginal, [S, key, item]],
     ['loaders.chunk', () => src.loaders.chunk(item, key), media.chunkProvider, [S, key, item]],

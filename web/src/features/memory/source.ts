@@ -18,7 +18,7 @@
 // hands in (the node's `K_node` from the tree's chain); the sources move ids, wraps and ciphertext.
 import { computed, inject, provide, ref, type ComputedRef, type InjectionKey } from 'vue'
 import type { GuestAccess } from '../../core/access'
-import { openBlobFromUrls } from '../../core/blob/transport'
+import { openBlobVia } from '../../core/blob/transport'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { contentKeyChain } from '../../core/node/tree'
 import { treeStore } from '../../core/node/treeStore'
@@ -90,8 +90,8 @@ export type PollCursor = { mediaRevision: number; since?: string; deleteRevision
 
 /** How a media's bytes and its listed seals open — every one under `key`, the node's `K_node` from the chain. */
 export interface MediaLoaders {
-  /** The grid tier (thumbnail). */
-  grid(item: MediaItem, key: Uint8Array): Promise<Uint8Array>
+  /** The grid tier (thumbnail): a grid's bulk read, dropped while it still waits once `signal` aborts (inbox #488). */
+  grid(item: MediaItem, key: Uint8Array, signal?: AbortSignal): Promise<Uint8Array>
   /** The lightbox tier (preview). */
   preview(item: MediaItem, key: Uint8Array): Promise<Uint8Array>
   /** The whole original (the lightbox's video fallback without a service worker). */
@@ -253,7 +253,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       return { items: page.items, revision: { media: page.mediaRevision, delete: page.deleteRevision } }
     },
     loaders: {
-      grid: (item, key) => openGrid(scope(), key, item),
+      grid: (item, key, signal) => openGrid(scope(), key, item, signal),
       preview: (item, key) => openLightbox(scope(), key, item),
       original: (item, key) => openOriginal(scope(), key, item),
       chunk: (item, key) => chunkProvider(scope(), key, item),
@@ -345,14 +345,14 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
       return { items: opened.items.filter((si) => si.nodeId === nodeId).map((si) => si.item), revision: null }
     },
     loaders: {
-      grid: (item, key) => openShareGrid(shareId, shareItem(item, key), access().pwToken),
+      grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal),
       preview: (item, key) => openShareLightbox(shareId, shareItem(item, key), access().pwToken),
       original: (item, key) => openShareOriginal(shareId, shareItem(item, key), access().pwToken),
       chunk: (item, key) => shareChunkProvider(shareId, shareItem(item, key), downloadRef(item), access().pwToken),
       meta: (item, key) => unsealMeta(scope(), key, item),
       blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
       // The node's uploaded cover through the gated share presign, which serves a cover blob below the share.
-      coverBlob: async (ref, key) => openBlobFromUrls(scope(), key, ref, await shareChunkUrls(shareId, ref.blobId, access().pwToken)),
+      coverBlob: (ref, key) => openBlobVia(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
     },
     ...(contributes ? guestWrites(access, tree, shareId, scope) : {}),
   }

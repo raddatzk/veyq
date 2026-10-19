@@ -35,6 +35,9 @@ defineProps<{
   markLabel?: string
   /** A moderator blocked it (uc.moderation.take-a-measure): the placeholder "Blocked by the operator", no image. */
   blocked?: boolean
+  /** Its thumbnail could not be read, after the read scheduler's retries (inbox #488): an error tile instead of a
+   *  placeholder that would shimmer forever. A thumbnail already shown (a donated upload preview) stays. */
+  failed?: boolean
 }>()
 defineEmits<{ open: []; 'toggle-mark': [] }>()
 const { t } = useI18n()
@@ -46,6 +49,7 @@ const { t } = useI18n()
       <span v-if="blocked" class="media-tile-blocked"><span class="pi pi-ban" aria-hidden="true" />{{ t('node.blockedByOperator') }}</span>
       <img v-else-if="src" class="media-tile-img" :src="src" alt="" />
       <span v-else-if="!hasDerivatives" class="media-grid-icon pi pi-file" aria-hidden="true" />
+      <span v-else-if="failed" class="media-tile-failed"><span class="pi pi-exclamation-triangle" aria-hidden="true" />{{ t('media.thumbnailFailed') }}</span>
       <span v-else class="media-grid-tile-placeholder" aria-hidden="true" />
     </button>
     <span v-if="isVideo" class="media-tile-play" aria-hidden="true"><span class="pi pi-play" /></span>
@@ -66,8 +70,10 @@ const { t } = useI18n()
 </template>
 
 <style scoped>
-/* A blocked medium (uc.moderation.take-a-measure): the tile's own surface, the reason-less text centred on it. */
-.media-tile-blocked {
+/* A blocked medium (uc.moderation.take-a-measure), or a thumbnail that could not be read (inbox #488): the tile's own
+   surface, the text centred on it. */
+.media-tile-blocked,
+.media-tile-failed {
   display: flex;
   flex-direction: column;
   gap: 4px;

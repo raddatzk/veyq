@@ -8,14 +8,14 @@ import { effectScope, nextTick } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
-vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(), openBlobFromUrls: vi.fn() }))
+vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(), openBlobVia: vi.fn() }))
 vi.mock('../../sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/c0']) }))
 
 import { createCoverStore, memberCoverStore, resetCovers, useCovers } from './coverStore'
 import { FULL_FRAME, uploadedCover } from './coverModel'
 import { FOLDER_KIND } from '../kind'
 import { registry } from '../../applications/registry'
-import { openBlob, openBlobFromUrls } from '../../blob/transport'
+import { openBlob, openBlobVia } from '../../blob/transport'
 import { shareChunkUrls } from '../../sharing/guestBlob'
 import { guestAccessOf } from '../../../test/models'
 import type { PublicShareHead } from '../../sharing/resolvePublicShare'
@@ -42,7 +42,8 @@ beforeEach(() => {
     revokeObjectURL: vi.fn((u: string) => void revoked.push(u)),
   })
   vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
-  vi.mocked(openBlobFromUrls).mockResolvedValue(new Uint8Array([4, 5, 6]))
+  // like the real one, it asks its presign (the link's gated read) before it reads
+  vi.mocked(openBlobVia).mockImplementation(async (_s, _k, _r, presign) => (await presign({}), new Uint8Array([4, 5, 6])))
   resetCovers()
 })
 afterEach(() => vi.restoreAllMocks())
@@ -197,11 +198,11 @@ describe('a share guest\'s covers', () => {
     await settle()
     expect(shareChunkUrls).toHaveBeenCalledWith(access.shareId, 'b-1', 'pw-1')
     expect(openBlob, 'no authenticated presign').not.toHaveBeenCalled()
-    const [scope, openedWith, ref, urls] = vi.mocked(openBlobFromUrls).mock.calls[0]
+    const [scope, openedWith, ref, presign] = vi.mocked(openBlobVia).mock.calls[0]
     expect(scope).toBe(SCOPE)
     expect(Array.from(openedWith)).toEqual(Array.from(key))
     expect(ref).toMatchObject({ blobId: 'b-1', ownerId: NODE, role: 'COVER' })
-    expect(urls).toEqual(['https://store.test/c0'])
+    expect(await presign({})).toEqual(['https://store.test/c0'])
     expect(store.covers.value.has(NODE)).toBe(true)
   })
 

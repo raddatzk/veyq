@@ -32,6 +32,7 @@ const props = defineProps<{
   memoryKey: Uint8Array | null
   media: MediaItem[] // all live media in the Memory (each carrying ownerKey/bucketId)
   thumbs: Map<string, string> // mediaId → decrypted thumbnail object-url (owned by the parent gallery)
+  failed?: ReadonlySet<string> // mediaIds whose thumbnail read failed for good (the parent gallery's, inbox #488)
 }>()
 const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
@@ -485,6 +486,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
           <MediaTile
             :style="{ transform: `translate(${tile.left}px, ${tile.top}px)`, width: `${tile.renderedWidth}px`, height: `${tile.renderedHeight}px` }"
             :src="thumbs.get(item.media.mediaId)"
+            :failed="failed?.has(item.media.mediaId)"
             :has-derivatives="hasDerivatives(item.media)"
             :is-video="item.isVideo"
             :open-label="t('media.openItem', { index: item.index + 1 })"

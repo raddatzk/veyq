@@ -177,6 +177,7 @@ watch(
 const {
   items,
   thumbs,
+  thumbFailed,
   layoutItems,
   hasContent,
   status,
@@ -204,6 +205,7 @@ const {
 const {
   trashedItems,
   trashThumbs,
+  trashThumbFailed,
   trashStatus,
   selectedTrash,
   trashMenu,
@@ -602,6 +604,7 @@ watch(
                     height: `${tile.renderedHeight}px`,
                   }"
                   :src="thumbs.get(item.media.mediaId)"
+                  :failed="thumbFailed.has(item.media.mediaId)"
                   :blocked="item.media.blocked"
                   :has-derivatives="hasDerivatives(item.media)"
                   :is-video="galleryVideoIds.has(item.media.mediaId)"
@@ -673,6 +676,7 @@ watch(
             :memory-key="memoryKey"
             :media="items"
             :thumbs="thumbs"
+            :failed="thumbFailed"
             @open-lightbox="openBucketLightbox"
             @changed="onBucketChanged"
             @upload-bucket="onBucketUpload"
@@ -715,6 +719,7 @@ watch(
                     height: `${tile.renderedHeight}px`,
                   }"
                   :src="trashThumbs.get(item.media.mediaId)"
+                  :failed="trashThumbFailed.has(item.media.mediaId)"
                   :blocked="item.media.blocked"
                   :has-derivatives="hasDerivatives(item.media)"
                   :is-video="trashVideoIds.has(item.media.mediaId)"

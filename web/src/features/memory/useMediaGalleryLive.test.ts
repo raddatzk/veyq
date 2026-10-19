@@ -102,6 +102,18 @@ describe('useMediaGalleryLive', () => {
     expect(onSettle).toHaveBeenCalled()
   })
 
+  // inbox #488: the read scheduler serves a lane in the order asked, so the gallery asks in grid order — the tiles on
+  // screen when it opens first, not the server's listing order
+  it('asks for the thumbnails in grid order (newest first), not in listing order', async () => {
+    const taken: Record<string, number> = { a: 1, b: 3, c: 2 } // capture times: the grid shows b, c, a
+    vi.mocked(unsealMeta).mockImplementation((_s, _k, m) => ({ v: 1, w: 100, h: 100, capturedAt: taken[m.mediaId] }))
+    vi.mocked(effectiveCapturedAt).mockImplementation((meta) => meta?.capturedAt)
+    vi.mocked(listMediaPage).mockResolvedValue(page([item('a'), item('b'), item('c')]))
+    setup()
+    await flushPromises()
+    expect(vi.mocked(openGrid).mock.calls.map(([, , m]) => m.mediaId)).toEqual(['b', 'c', 'a'])
+  })
+
   it('an optimistic delete removes the tile, arms undo, soft-deletes, and a stale poll cannot re-add it', async () => {
     vi.mocked(listMediaPage).mockResolvedValue(page([item('a'), item('b')]))
     const { vm } = setup()

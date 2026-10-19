@@ -339,6 +339,33 @@ acceptanceCriteria:
         reason: >-
           A blocked node's level row is held with a stub kind (LevelView.blocked.test.ts), and its page opened by its
           address with a stub detail (MemoryHomeView.registry.test.ts), not with the Memory kind itself.
+  - id: thousands-of-photos-load-bounded
+    # Exception flow E7 (inbox #488).
+    text: >-
+      A gallery asks for its thumbnails in grid order, its presigns batched up to the contract's maxItems (256) with at
+      most two requests in flight and at most sixteen store reads in flight across the page; an opened preview, video,
+      download or cover goes before the grid's thumbnails, and a reset drops the reads still waiting; thumbnails arriving
+      within 100 ms are installed in one map change (one grid render, not one per tile). A transient failure
+      (no answer, 5xx, 408, 429) is retried up to four times with a growing, jittered pause; a presigned URL that expired
+      before its read is presigned again, at most twice, and only the missing chunks are read again. A thumbnail that
+      still cannot be read is an error tile ("Could not load") in the gallery, the buckets and the trash, for members and
+      guests alike.
+    coverage:
+      web:
+        unit:
+          - src/core/blob/readScheduler.test.ts
+          - src/core/blob/transport.test.ts
+          - src/features/memory/useThumbnailPipeline.test.ts
+          - src/shared/state/useObjectUrls.test.ts
+          - src/features/memory/useMediaGalleryLive.test.ts
+          - src/features/memory/components/MediaTile.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          Proven in happy-dom over a fake store and fake clocks; in a real browser only by the volume harness (2026-10-19, the
+          production recipe on this Mac): a Chapter of 3,000 photos loaded every thumbnail with 12 presign calls and no failed
+          request. No real browser has yet seen the error tile, a re-presign after an expired URL, or a retry.
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040

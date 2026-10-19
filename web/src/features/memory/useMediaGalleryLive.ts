@@ -55,13 +55,14 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const pipeline = useThumbnailPipeline<MediaItem>({
     idOf: (m) => m.mediaId,
     isDerivable: hasDerivatives,
-    decryptTile: (m) => {
+    decryptTile: (m, signal) => {
       const key = ctx.memoryKey()
-      return key ? ctx.source.loaders.grid(m, key) : Promise.resolve(null)
+      return key ? ctx.source.loaders.grid(m, key, signal) : Promise.resolve(null)
     },
     donorPreviewFor,
   })
   const thumbs = pipeline.thumbs // mediaId → thumbnail object URL (derivable items only)
+  const thumbFailed = pipeline.failed // mediaIds whose thumbnail read failed for good: the tile's error state
   const status = ref<'loading' | 'ready' | 'error'>('loading')
   // live media updates (uc.memory.live-updates, cr-0107): the cached per-node counters — mediaRevision (the ETag
   // echoed as If-None-Match; null until the first load) + deleteRevision (echoed as sinceDelete to gate the id-set).
@@ -222,6 +223,14 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
 
   // `reset` (a Memory/chapter switch) clears the grid up front; an incremental reload (post-upload batch) merges
   // the fresh list into place so existing tiles don't blink empty — jarring next to the optimistic tiles (cr-0074).
+  /** `list` in grid order, so the tiles on screen when a gallery opens are asked for first (the read scheduler serves a
+   *  lane in the order asked, inbox #488); a media the grid does not show (a mark filter) comes after them. */
+  function inGridOrder(list: readonly MediaItem[]): MediaItem[] {
+    const rank = new Map(sortedItems.value.map((it, i) => [it.mediaId, i]))
+    const at = (m: MediaItem) => rank.get(m.mediaId) ?? Number.MAX_SAFE_INTEGER
+    return [...list].sort((a, b) => at(a) - at(b))
+  }
+
   async function load({ reset = false }: { reset?: boolean } = {}) {
     const key = ctx.memoryKey()
     const nodeId = ctx.node().id
@@ -247,7 +256,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       mediaRevision.value = page.revision?.media ?? null // cache the ETag + delete gate for the live poll (none: no poll)
       deleteRevision.value = page.revision?.delete ?? 0
       status.value = 'ready'
-      await pipeline.decrypt(page.items, () => ctx.node().id === nodeId)
+      await pipeline.decrypt(inGridOrder(page.items), () => ctx.node().id === nodeId)
       if (ctx.node().id === nodeId) await ctx.onSettle() // settle: auto-date, then auto-location (RMW-safe)
     } catch {
       if (ctx.node().id === nodeId) status.value = 'error'
@@ -345,6 +354,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   return {
     items,
     thumbs,
+    thumbFailed,
     layoutItems,
     hasContent,
     status,

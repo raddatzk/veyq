@@ -37,6 +37,8 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   const trashedItems = ref<MediaItem[]>([])
   // Per-tile decrypted thumbnails — the object-URL lifecycle (replace/drop/reset/unmount) is owned by the primitive.
   const thumbs = useObjectUrls()
+  // mediaIds whose thumbnail read failed for good: the tile's error state (inbox #488), reassigned on every change.
+  const failed = ref<ReadonlySet<string>>(new Set())
   const trashStatus = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   // Trash tab (cr-0111): batch selection + the per-tile overflow menu + the irreversible-purge confirm.
   const selectedTrash = ref<Set<string>>(new Set())
@@ -94,6 +96,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
     const nodeId = ctx.node().id
     trashStatus.value = 'loading'
     thumbs.clear()
+    failed.value = new Set()
     try {
       const list = await trash.list(nodeId)
       if (ctx.node().id !== nodeId) return
@@ -106,7 +109,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
             const bytes = await ctx.source.loaders.grid(m, key)
             if (ctx.node().id === nodeId) thumbs.set(m.mediaId, new Blob([bytes as BlobPart]))
           } catch {
-            // a failed tile stays a placeholder
+            if (ctx.node().id === nodeId) failed.value = new Set([...failed.value, m.mediaId]) // the tile's error state
           }
         }),
       )
@@ -118,6 +121,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   /** Drop the previous Memory's trash state when a different Memory/chapter opens (cr-0110/0111). */
   function resetTrash() {
     thumbs.clear()
+    failed.value = new Set()
     trashedItems.value = []
     trashStatus.value = 'idle'
     selectedTrash.value = new Set()
@@ -205,6 +209,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   return {
     trashedItems, // read-only to the host (its empty-state check); mutated only inside this composable
     trashThumbs: thumbs.urls,
+    trashThumbFailed: failed,
     trashStatus,
     selectedTrash,
     trashMenu,

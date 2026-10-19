@@ -24,4 +24,23 @@ describe('MediaTile', () => {
     expect(w.find('.media-tile-blocked').exists()).toBe(false)
     expect(w.find('img.media-tile-img').attributes('src')).toBe('blob:thumb')
   })
+
+  // inbox #488: a thumbnail whose read failed for good is an error tile, never a placeholder that shimmers forever
+  it('a thumbnail that could not be read is the error tile, not the loading placeholder', () => {
+    const w = mount(MediaTile, {
+      props: { src: undefined, hasDerivatives: true, openLabel: 'Open item 1', failed: true },
+      global: { plugins: [realI18n()] },
+    })
+    expect(w.find('.media-tile-failed').text()).toBe(t('media.thumbnailFailed'))
+    expect(w.find('.media-grid-tile-placeholder').exists()).toBe(false)
+  })
+
+  it('a failed read under a thumbnail already shown (a donated upload preview) keeps the image', () => {
+    const w = mount(MediaTile, {
+      props: { src: 'blob:preview', hasDerivatives: true, openLabel: 'Open item 1', failed: true },
+      global: { plugins: [realI18n()] },
+    })
+    expect(w.find('img.media-tile-img').attributes('src')).toBe('blob:preview')
+    expect(w.find('.media-tile-failed').exists()).toBe(false)
+  })
 })

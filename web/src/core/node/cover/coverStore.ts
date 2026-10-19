@@ -21,7 +21,7 @@
 import { computed, onBeforeUnmount, getCurrentInstance, reactive, type Ref } from 'vue'
 import type { GuestAccess } from '../../access'
 import { registry } from '../../applications/registry'
-import { openBlob, openBlobFromUrls } from '../../blob/transport'
+import { openBlob, openBlobVia } from '../../blob/transport'
 import { shareChunkUrls } from '../../sharing/guestBlob'
 import { useObjectUrls } from '../../../shared/state/useObjectUrls'
 import type { NodeKind } from '../kind'
@@ -50,7 +50,7 @@ export interface CoverStore {
 /** Open an uploaded cover blob: the member's presign, or the link's own gated one for a guest. */
 async function openUploaded(scopeId: string, key: Uint8Array, ref: Parameters<typeof openBlob>[2], guest: GuestAccess | null): Promise<Uint8Array> {
   if (!guest) return openBlob(scopeId, key, ref)
-  return openBlobFromUrls(scopeId, key, ref, await shareChunkUrls(guest.shareId, ref.blobId, guest.pwToken))
+  return openBlobVia(scopeId, key, ref, () => shareChunkUrls(guest.shareId, ref.blobId, guest.pwToken))
 }
 
 /** One node's cover image from its sealed meta, or null. */
