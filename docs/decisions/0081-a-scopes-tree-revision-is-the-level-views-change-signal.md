@@ -1,6 +1,7 @@
 # ADR 0081 — A scope's tree revision is the level view's change signal: the live refresh is a conditional GET
 
-- Status: Accepted (decision 4 reaches a guest's media listing too: 2026-10-19, inbox #497)
+- Status: Accepted (decision 4 reaches a guest's media listing too: 2026-10-19, inbox #497; decision 5's poll runs on every
+  opened node's page too, member and guest, and its fingerprint sees an operator's block: 2026-10-19, inbox #503)
 - Date: 2026-10-12
 
 ## Context
@@ -72,6 +73,20 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
    and not this level's rows) and tells the sections the scope **moved** — Depot re-reads its blob listing then, which is
    how an upload completing, a change in no row, reaches an open level. A guest's first poll after a load is a full read
    (the load's response keeps no tag), after which it is conditional; so is the first after the guest's own write.
+   **The poll runs on every page of the tree, not on levels alone** (inbox #503): a folder level and an opened node's
+   page of any kind — a Memory, a file, a drop box — for a member and a guest alike. A moderator's block of a node, or of
+   a folder above it, bumps this revision and no item revision (`CaseDecisions.announce`), so on a Memory's page the
+   gallery's own poll ([ADR 0033](0033-live-media-updates-revision-polling.md)) stays a `304` and this one is the read that
+   carries it: the row comes back marked, and the host turns the page to *Blocked by the operator* at once, its detail
+   unmounted with every object URL it held; a lift brings the page back. A block changes no ciphertext, so the fingerprint
+   counts the row's `blockedByOperator` too (it did not, and a block on a level was dropped as "nothing changed"). The
+   alternative — a node block bumping the item revision of every node below it — was not taken: a write per node of the
+   subtree, where the poll already on the page costs nothing new. Measured (`OpenMemoryTreePollSliceTest`): an idle tree
+   poll is the same count of statements whatever the scope holds (one node or 201), and no more than the gallery's own
+   idle poll; it runs every ~5 s where the gallery's runs every ~20 s, the cadence a level view already had. A re-read
+   tree replaces the node objects under an open page, so the host keeps the page's node on screen by id while the
+   fragment stays (a peer's rename follows to the new path, never a collapse to the scope root), and the node's key the
+   same object while it is the same key (`sameKeyOr`), so nothing keyed on it reloads.
 
 ## Consequences
 

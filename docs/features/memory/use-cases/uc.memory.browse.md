@@ -95,9 +95,9 @@
   to the account (a synced preference would need a sealed per-user store of its own). A stored tab that a level does not have is shown as `All` without overwriting the setting, so
   the next level that has it shows it again. The view switch offers the presentations of what the tab shows. A share
   guest gets the same bar: the guest's page is this very view.
-- <a id="live-refresh"></a>**An open level stays current** (inbox #408). While a folder level is on screen and the tab is
-  visible — or an opened node's page that is drawn from the tree, which only Depot's drop box is (its guests' folders and
-  their files; `KindDescriptor.liveDetail`, owner decision 2026-10-17) — core re-reads the level about every 5 s (jittered; doubling to 2 min after errors; at once when the tab
+- <a id="live-refresh"></a>**An open level stays current** (inbox #408). While a page of the tree is on screen and the tab
+  is visible — a folder level, or an opened node's page of any kind (a Memory, a file, Depot's drop box with its guests'
+  folders and their files; inbox #503) — core re-reads the level about every 5 s (jittered; doubling to 2 min after errors; at once when the tab
   becomes visible or focused; nothing while hidden or unmounted), so a share guest's upload or a peer's new Memory or
   folder appears without a reload — for a member (`MemoryHomeView`, one `listNodes` per tick) and a share guest
   (`ShareView`, one `resolveShare` per tick) alike. Both reads are conditional ([ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)):
@@ -105,7 +105,10 @@
   file included), restore and purge and every blob attached to or removed from a node (a file's upload or replace), and
   an idle level is a `304` — nothing parsed, decrypted or compared. A guest's tag is a digest of what its link serves,
   not that revision, so it never tells a guest when something outside the link changed. A `200` replaces the page's
-  tree only when the ciphertext rows' fingerprint differs. A refresh never overwrites a write of this tab (a read that
+  tree only when the rows' fingerprint differs (their ciphertext and the operator's block, which changes no ciphertext). An
+  opened node's page stays on screen while its fragment does: a peer's rename or move of it, or of a folder above it,
+  keeps it there and the fragment follows to the new path, and a moderator's block of it turns the page to *Blocked by
+  the operator* at once, a lift back (uc.moderation.take-a-measure step 3). A refresh never overwrites a write of this tab (a read that
   began before the write's own re-read is dropped) and pauses while a dialog is open. When the scope moved, Depot's
   section re-reads its blob listing (an upload completes after its node is listed); a `304` re-reads nothing. A guest
   whose link was revoked, expired or deleted meets the same non-enumerable `404` as ever and the page shows its

@@ -67,6 +67,15 @@
   when it lands. A lift shows the medium again through the normal thumbnail and preview reads. A member's poll carries an
   **item** block (it bumps the node's item revision); a guest's carries every block that reaches the node, its tag being
   a digest of the rows (E7).
+- **E9 — a moderator blocks the open Memory, or a folder above it, or lifts that block** (inbox #503): a **node** block
+  moves the scope's tree revision and no item revision, so the member's gallery poll stays a `304`; the host's tree poll,
+  which runs on every opened node's page ([uc.memory.browse](uc.memory.browse.md#live-refresh), ADR 0081 decision 5),
+  brings the Memory's row marked within one interval (~5 s). The page turns to *Blocked by the operator* at once: the
+  gallery, its lightbox and its poll are gone, and every thumbnail, preview and original it had decrypted is revoked. The
+  tree poll keeps running under the placeholder, so a lift brings the Memory back, reloaded. A guest with the Memory open
+  sees the same: its tree poll is the link's re-resolve, whose digest moves with the block. A tree change that is not the
+  Memory's — a peer's new folder, a rename elsewhere — reloads nothing: the Memory's key stays the same object while it
+  is the same key, and the gallery resets only on another node or another key.
 
 ## Quality notes
 

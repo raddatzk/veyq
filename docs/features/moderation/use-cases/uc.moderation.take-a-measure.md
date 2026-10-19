@@ -28,7 +28,10 @@
    placeholder *Blocked by the operator* with no reason. The uploader can still delete it; replacing a blocked file's
    content and restoring a blocked item from the trash are refused. A gallery open on a blocked medium turns its tile,
    and an open lightbox on it, to the placeholder on its next live poll and revokes what it had decrypted of it; a lift
-   shows it again ([uc.memory.live-updates](../../memory/use-cases/uc.memory.live-updates.md) E8).
+   shows it again ([uc.memory.live-updates](../../memory/use-cases/uc.memory.live-updates.md) E8). A page open on a
+   blocked node — a Memory, a file, a drop box, the node or a folder above it — turns to the placeholder on the next poll
+   of the space's tree, which runs on every opened node's page, unmounting what it showed and revoking what it had
+   decrypted; a lift brings it back (uc.memory.live-updates E9, inbox #503). Members and guests alike.
 4. **Block a guest uploader.** The moderator blocks a guest identity the held rows name as an uploader: its token is
    refused on every write, and the link it came through is blocked with it (a guest could mint a new identity on the same
    link). The link's creator may re-issue the link: the new link is a member's new decision.
