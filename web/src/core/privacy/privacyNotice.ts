@@ -6,23 +6,11 @@
 // (`guest-write-record`) — and the footer of every page (`OperatorIdentification`) to the top. Information, not consent:
 // nothing here is accepted, and reading it records nothing. The client renders what it is served and never edits it.
 import { publicOperatorApi } from '../../api/client'
-import type { SectionText, SectionVariant } from '../terms/operatorSection'
+import type { PrivacyNotice } from '../../api/generated/operator'
 
-/** One passage, as the endpoint serves it; `id` is its anchor, a `separate` one a right to object (GDPR Art. 21(4)). */
-export interface PrivacyNoticePassage {
-  id: string
-  separate: boolean
-  text: SectionText
-}
-
-/** The notice as the endpoint serves it. */
-export interface PrivacyNotice {
-  revision: number
-  variant: SectionVariant
-  /** The banner while the text awaits a qualified legal review; absent once reviewed. */
-  draftBanner?: SectionText | null
-  passages: PrivacyNoticePassage[]
-}
+// The notice as the endpoint serves it: each passage's `id` is its anchor, a `separate` one a right to object (GDPR
+// Art. 21(4)); `draftBanner` is there while the text awaits a qualified legal review.
+export type { PrivacyNotice, PrivacyNoticePassage } from '../../api/generated/operator'
 
 /** The public page of the notice. */
 export const PRIVACY_PATH = '/privacy'
@@ -45,7 +33,7 @@ export function privacyLink(anchor?: (typeof PRIVACY_ANCHOR)[keyof typeof PRIVAC
 /** The notice as this host serves it, or null when the read failed (fail-open: nothing waits on it). */
 export async function loadPrivacyNotice(): Promise<PrivacyNotice | null> {
   try {
-    return (await publicOperatorApi().getPrivacyNotice()) as PrivacyNotice
+    return await publicOperatorApi().getPrivacyNotice()
   } catch {
     return null
   }
