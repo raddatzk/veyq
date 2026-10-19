@@ -30,6 +30,8 @@ data class PrivacyNoticeText(
     val draftBanner: SectionTexts,
     val gap: SectionTexts,
     val dayUnit: RetentionUnit,
+    /** What each [RecipientKind] does, per language; [RecipientKind.OTHER]'s carries [DESCRIPTION], no other one does. */
+    val recipientKinds: Map<RecipientKind, SectionTexts>,
     val passages: List<NoticePassage>,
 ) {
     companion object {
@@ -67,8 +69,28 @@ data class PrivacyNoticeText(
                 draftBanner = SectionTexts.of(root.required("draftBanner")),
                 gap = SectionTexts.of(root.required("gap")),
                 dayUnit = RetentionUnit.of(root.required("dayUnit")),
+                recipientKinds = recipientKinds(root.required("recipientKinds")),
                 passages = passages,
             )
+        }
+
+        /** Where an OTHER recipient's typed description goes in its kind's label. */
+        const val DESCRIPTION = "{description}"
+
+        /** One label per [RecipientKind], no more and no fewer; [DESCRIPTION] in OTHER's, in both languages, and only there. */
+        private fun recipientKinds(node: JsonNode): Map<RecipientKind, SectionTexts> {
+            val named = node.fieldNames().asSequence().toSet()
+            val kinds = RecipientKind.entries.map { it.name }.toSet()
+            require(named == kinds) { "the notice names a label for each recipient kind $kinds, not $named" }
+            return RecipientKind.entries.associateWith { kind ->
+                SectionTexts.of(node.required(kind.name)).also { t ->
+                    listOf(t.en, t.de).forEach {
+                        require(it.contains(DESCRIPTION) == (kind == RecipientKind.OTHER)) {
+                            "only the OTHER recipient kind's label carries $DESCRIPTION: $kind '$it'"
+                        }
+                    }
+                }
+            }
         }
 
         private val ANCHOR = Regex("^[a-z][a-z0-9-]{0,63}$")
