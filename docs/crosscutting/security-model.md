@@ -377,13 +377,15 @@ server-blind token makes this work without the server ever seeing a name:
   on the admin channel, taken or declined from a moderator's proposal
   ([uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). Measures are clear
   metadata, since the server must refuse what they name; notes and reasons are sealed (`moderation-note` [epoch,
-  caseId]). A moderator's measure carries its **statement of reasons**: the ground in the clear, the facts sealed twice
-  in the moderator's browser — to the moderation key, and to each affected member's identity (`moderation-facts`
-  [caseId, accountId]) — so the affected read them on the placeholder and the server holds neither in the clear; the
+  caseId]). A moderator's measure carries its **statement of reasons**: the ground in the clear, the facts sealed in the
+  moderator's browser to the moderation key for the log, and once more under a fresh `K_facts` bound to the statement
+  (`moderation-statement-facts` [caseId, statementId]) whose key alone is wrapped to each affected member's identity
+  (`moderation-facts-key` [caseId, statementId, accountId]) — so the affected read them on the placeholder and the
+  server holds neither in the clear; the
   instance mail tells them it is there, never the facts. An affected member **objects** once per measure, sealed to the
   moderation key (`moderation-objection` [epoch, statementId]); the server refuses its decision from the moderator who
   took the measure while another holds the key ([uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
-  The identity a moderator seals the facts to is the one the server serves, unpinned — the moderation surface holds no
+  The identity a moderator wraps the facts' key to is the one the server serves, unpinned — the moderation surface holds no
   Master Key to read a pin store — which costs nothing against the operator: the Server Owner holds the moderation key
   and reads the log's copy of the same facts anyway. **A Server Owner's own step over content** (a sign-in block, a
   tenant offline) carries a statement too, and it is the one place facts reach a mail: the blocked member cannot sign in

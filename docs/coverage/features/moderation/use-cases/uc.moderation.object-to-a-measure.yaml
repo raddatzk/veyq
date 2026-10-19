@@ -4,15 +4,16 @@ title: Object to a measure
 # Built by cr-statement-of-reasons-and-objection: core/moderation/statement (the statement, its recipients, the objection,
 # the mails, the template pinned from contracts/moderation/statement-of-reasons.json) and CaseDecisions' measure and
 # objection decision on the backend; features/moderation's decision panel and features/moderation/statement (the notice
-# on the lightbox, a blocked node's page and the share lists) on web; the moderation-facts and moderation-objection seals
-# in packages/crypto. Lane L1's browser pass is e2e/tests/features/statement-and-objection.spec.ts, tagged per criterion;
-# `stack` waits under gaps until a run admits it.
+# on the lightbox, a blocked node's page and the share lists) on web; the moderation-statement-facts,
+# moderation-facts-key and moderation-objection seals in packages/crypto. Lane L1's browser pass is
+# e2e/tests/features/statement-and-objection.spec.ts, tagged per criterion; `stack` waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: the-statement-is-sent-with-the-measure
     text: >-
-      A moderator's measure carries its statement — the ground, and the facts sealed to the moderation key and to each
-      affected member's identity key — recorded in its transaction; sealed copies that do not name exactly the members
-      it tells are refused. The list is whole or refused by name, never cut: up to 4,000 members with facts.
+      A moderator's measure carries its statement — the ground, and the facts sealed to the moderation key and once
+      more under a key wrapped to each affected member's identity key — recorded in its transaction; wrapped keys that
+      do not name exactly the members it tells are refused. The list is whole or refused by name, never cut: up to
+      6,000 members with facts, whatever their length.
     coverage:
       backend:
         integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused, StatementRecipientsBoundSliceTest.aStatementPastTheOldCapReachesEveryMemberWithTheFactsSealedToEach, StatementRecipientsBoundSliceTest.pastTheBoundAStepWithFactsIsRefusedByNameAndWithoutFactsStillTellsEveryone, StatementRecipientsBoundSliceTest.theListAndTheFactsCarryOneBound]
@@ -123,7 +124,8 @@ gaps:
     ModerationPanel.test.ts, src/features/tenants/TenantDetailPanel.test.ts and src/cli/cli.test.ts, but admin-web's
     refs wait until its job is admitted (ADR 0040).
   crypto: >-
-    The moderation-facts and moderation-objection seals are pinned by their vectors and the purposes' tests
+    The moderation-statement-facts, moderation-facts-key and moderation-objection seals are pinned by their vectors and
+    the purposes' tests
     (packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).
   stack: >-
     e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,

@@ -269,6 +269,19 @@ a block reaches only the reported copy.
   rest of Art. 17(3)'s list — the facts as a required part (the moderator may still write them), whether a report
   or an order led to it, that no automated means decided, the courts, the territorial sentence, and the provision
   or clause as a required part (the moderator may still name it). Who receives it does not change.
+- **The facts are sealed once, and per affected member only their key** (owner 2026-10-19). The moderator's browser
+  seals the facts under a fresh 32-byte `K_facts`, bound to the case and to the statement, whose id that browser mints
+  (`moderation-statement-facts` [caseId, statementId]; [ADR 0072](0072-a-seal-binds-its-object.md) Decision 3), and
+  wraps `K_facts` to each affected member's identity (`moderation-facts-key` [caseId, statementId, accountId]): a
+  fixed 1,181 bytes per member whatever the facts' length, where a copy of the facts per member was up to 9,341. The
+  wrap binds the statement as well as the member because the member addresses it by both (ADR 0072 Decision 1). The
+  log keeps its own copy sealed to the moderation key (`moderation-note` [epoch, caseId]) rather than a wrap of
+  `K_facts`: it stays with the case's records for their whole retention (§ 11) and opens as every other note does,
+  independent of the members' copy, and one more copy per measure costs nothing beside the wraps. All wraps travel in
+  the measure's one request, taken whole or refused: at most **6,000 members** (`StatementRecipients.MAX_SEALED`, what
+  the server's 10,240 KiB request limit holds at 1,645 bytes a member beside every other field of the request at its
+  largest), past which a step with facts is refused by name, never cut. That wall no longer moves with the facts'
+  length; only paging the upload would remove it.
 - **The Server Owner's own steps carry a statement too** where they are taken over content — a member's sign-in
   block (Art. 17(1)(d)), a tenant taken offline or deleted (Art. 17(1)(c)) — in the same template and form, entered
   with the step in admin-web or `veyq-admin` (a step from a case's proposal always; a step without a case, when the
