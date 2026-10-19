@@ -1,7 +1,22 @@
 package me.raddatz.veyq.core.terms
 
-/** One recipient the Server Owner named (ADR 0035 decision 8): who, what they do, where — [country] null when not named. */
-data class NoticeRecipient(val name: String, val purpose: String, val country: String?)
+/**
+ * What a recipient does for the instance (ADR 0035 decision 8): a fixed kind the notice names in each language
+ * (`recipientKinds` in `contracts/terms/privacy-notice.json`), so the German page never carries the operator's English
+ * or the reverse. Only [OTHER] says what it is in the operator's own words, a short description.
+ */
+enum class RecipientKind {
+    HOSTING, OBJECT_STORAGE, MAIL_RELAY, BACKUP, OTHER;
+
+    /** Whether [description] fits this kind: required (non-blank) for [OTHER], absent for every other kind. */
+    fun accepts(description: String?): Boolean = (this == OTHER) == !description.isNullOrBlank()
+}
+
+/**
+ * One recipient the Server Owner named (ADR 0035 decision 8): who, what they do as a [kind], where — [country] null
+ * when not named; [description] an [RecipientKind.OTHER] one's own words.
+ */
+data class NoticeRecipient(val name: String, val kind: RecipientKind, val description: String?, val country: String?)
 
 /** An outside service a member's browser calls on this host, by its register title and the address it is set to. */
 data class BrowserService(val title: SectionTexts, val label: String)
@@ -127,10 +142,15 @@ object PrivacyNoticeRenderer {
         else -> error("the privacy notice names an unknown value {$name}")
     }
 
-    /** `name: purpose (country)`; a country not named shows the gap in the full variant and is left out in the reduced. */
+    /**
+     * `name: what they do (country)`, what they do being the kind's label in this language — an OTHER one's with the
+     * typed description put in, shown as typed on both pages. A country not named shows the gap in the full variant and
+     * is left out in the reduced.
+     */
     private fun recipient(r: NoticeRecipient, text: PrivacyNoticeText, en: Boolean, reduced: Boolean): String {
         val name = FixedTextLines.inline(r.name)
-        val purpose = FixedTextLines.inline(r.purpose)
+        val purpose = text.recipientKinds.getValue(r.kind).pick(en)
+            .replace(PrivacyNoticeText.DESCRIPTION, FixedTextLines.inline(r.description.orEmpty()))
         val country = r.country?.let(FixedTextLines::inline)?.ifEmpty { null }
         val where = country ?: if (reduced) null else text.gap.pick(en)
         return "$name: $purpose" + (where?.let { " ($it)" } ?: "")

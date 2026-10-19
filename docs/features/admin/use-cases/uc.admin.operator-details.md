@@ -29,11 +29,12 @@
    languages it answers in), the address statements and disclosures name (may equal the contact), the notification
    address, the provider identification (name, address for service, email, and for a legal person its
    representative), the supervisory authority, the **recipients** the privacy notice names — each a name, what they
-   do for the instance and their country (who hosts the server, an external object store, a mail relay, a backup
-   host) — and a **data-protection officer** where one is appointed
+   do for the instance as a kind from a fixed list (hosts the server, stores the encrypted files, relays the mail,
+   keeps the backups, or *other* with a short description of the Server Owner's own, which both language versions show
+   as typed) and their country — and a **data-protection officer** where one is appointed
    ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8). The panel offers a suggested recipient
-   row for what the instance itself knows — an external store's host, the instance mail relay's host — which the
-   Server Owner completes and keeps or drops; a suggestion is never published until it is saved as a row. Saving
+   row of its kind for what the instance itself knows — an external store's host, the instance mail relay's host —
+   which the Server Owner completes and keeps or drops; a suggestion is never published until it is saved as a row. Saving
    stores them.
 4. A saved notification address that is not confirmed gets a one-time code through instance mail; typing it into the
    same panel confirms it. Moderation notices reach it only once confirmed.
@@ -77,7 +78,8 @@ sequenceDiagram
   notification address unconfirms the old confirmation without any further write, and asks again.
 - **A4 — `veyq-admin`.** `mode show` prints the mode, the notice and the preset; `mode set private` refuses without
   `--accept-notice` and prints the notice either way. `operator show|set|clear` sets the values — `--recipients
-  '<name>|<what they do>|<country>; …'` replaces the whole list (the country may be left out, `none` empties it) and
+  '<name>|<kind>|<country>; …'` replaces the whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup`
+  or `other:<what they do>`; the country may be left out, `none` empties it) and
   `--data-protection-officer` sets the officer; the code is typed in the console only, as instance mail's is.
 - **A5 — The public read fails.** The login and share pages show no identification and block nothing.
 

@@ -2,15 +2,16 @@ package me.raddatz.veyq.core.admin.operator
 
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsStore
 import me.raddatz.veyq.core.blobstore.StoreSettingStore
+import me.raddatz.veyq.core.terms.RecipientKind
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.net.URI
 
-/** What kind of recipient the instance knows of by its own configuration. The wire enum's two values. */
-enum class SuggestionKind { OBJECT_STORE, MAIL_RELAY }
-
-/** A recipient row the console offers for the Server Owner to complete — never stored, never published by itself. */
-data class RecipientSuggestion(val kind: SuggestionKind, val host: String)
+/**
+ * A recipient row the console offers for the Server Owner to complete — never stored, never published by itself. [kind]
+ * is the row's recipient kind: [RecipientKind.OBJECT_STORAGE] or [RecipientKind.MAIL_RELAY], the wire enum's two values.
+ */
+data class RecipientSuggestion(val kind: RecipientKind, val host: String)
 
 /**
  * The recipients the instance itself knows of (cr-instance-privacy-notice decision 3): an external object store's host
@@ -24,8 +25,8 @@ class RecipientSuggestions(
     private val mail: InstanceMailSettingsStore,
 ) {
     fun list(): List<RecipientSuggestion> = listOfNotNull(
-        storeHost()?.let { RecipientSuggestion(SuggestionKind.OBJECT_STORE, it) },
-        mail.find()?.transport?.host?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { RecipientSuggestion(SuggestionKind.MAIL_RELAY, it) },
+        storeHost()?.let { RecipientSuggestion(RecipientKind.OBJECT_STORAGE, it) },
+        mail.find()?.transport?.host?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { RecipientSuggestion(RecipientKind.MAIL_RELAY, it) },
     )
 
     /** The external store's host as browsers reach it — its public endpoint, else its endpoint; null for the bundled one. */

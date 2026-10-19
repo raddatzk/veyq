@@ -95,7 +95,8 @@ test(
       await page.goto(`${tenantOrigin()}/privacy`)
       await expect(page.getByText('Entwurf: Diese Datenschutzerklärung ist noch nicht anwaltlich geprüft.')).toBeVisible({ timeout: 60_000 })
       await expect(page.getByRole('heading', { name: 'Wer verantwortlich ist' })).toBeVisible()
-      await expect(page.locator('#recipients')).toContainText('E2E Hosting GmbH: hosts the server (von der Betreiberseite nicht angegeben)')
+      // the kind in the page's own language: the German notice carries no English
+      await expect(page.locator('#recipients')).toContainText('E2E Hosting GmbH: hostet den Server (von der Betreiberseite nicht angegeben)')
       await expect(page.locator('#guest-write-record')).toContainText('7 Tage nach dem Schreibvorgang')
       confinement.assertConfined()
     } finally {

@@ -145,20 +145,35 @@ class PrivacyNoticeSliceTest {
     @Test
     fun theRecipientsAndTheOfficerAreSetServedInOrderAndCleared() {
         put(RECIPIENTS).statusCode(200)
-            .body("recipients.name", equalTo(listOf("Example Hosting GmbH", "Mail AG")))
+            .body("recipients.name", equalTo(listOf("Example Hosting GmbH", "Mail AG", "SMS AG")))
+            .body("recipients.kind", equalTo(listOf("HOSTING", "MAIL_RELAY", "OTHER")))
+            .body("recipients.description", equalTo(listOf(null, null, "sends sign-in texts")))
             .body("recipients[1].country", equalTo(null))
             .body("dataProtectionOfficer", equalTo("DSB GmbH, dsb@example.org"))
         val recipients = passage("recipients")!!
         assertTrue(recipients.indexOf("Example Hosting GmbH") < recipients.indexOf("Mail AG"), "in the order given: $recipients")
         assertTrue(passage("controller")!!.contains("Data-protection officer: DSB GmbH, dsb@example.org"))
+        // Each page names what they do in its own language; only an OTHER one's typed words are the same on both.
+        assertTrue(recipients.contains("- Mail AG: relays the mail (not stated by this operator)"), recipients)
+        val german = passage("recipients", language = "de")!!
+        assertTrue(german.contains("- Example Hosting GmbH: hostet den Server (Germany)"), german)
+        assertTrue(german.contains("- SMS AG: Sonstiges — „sends sign-in texts“"), german)
+        assertFalse(german.contains("hosts the server") || german.contains("relays the mail"), "no English kind on the German page: $german")
 
-        // A row with a blank name or purpose says nothing a reader can use, and a value over its bound is refused: each
-        // with nothing stored (control: the list saved above stays).
-        put("""{"recipients":[{"name":" ","purpose":"x"}]}""").statusCode(400)
-        put("""{"recipients":[{"name":"n","purpose":" "}]}""").statusCode(400)
-        put("""{"recipients":[{"name":"${"x".repeat(201)}","purpose":"x"}]}""").statusCode(400)
-        put("""{"recipients":[${(1..21).joinToString(",") { """{"name":"n$it","purpose":"p"}""" }}]}""").statusCode(400)
-        owner().`when`().get("/api/instance/operator").then().body("recipients.name", equalTo(listOf("Example Hosting GmbH", "Mail AG")))
+        // A row with a blank name, an unknown kind, a description that does not fit its kind, or a value over its bound
+        // is refused: each with nothing stored (control: the list saved above stays).
+        put("""{"recipients":[{"name":" ","kind":"HOSTING"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"hosts the server"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"OTHER"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"OTHER","description":" "}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"n","kind":"HOSTING","description":"hosts the server"}]}""").statusCode(400)
+            .body("code", equalTo("invalid_request"))
+        put("""{"recipients":[{"name":"n","kind":"OTHER","description":"${"x".repeat(121)}"}]}""").statusCode(400)
+        put("""{"recipients":[{"name":"${"x".repeat(201)}","kind":"HOSTING"}]}""").statusCode(400)
+        put("""{"recipients":[${(1..21).joinToString(",") { """{"name":"n$it","kind":"BACKUP"}""" }}]}""").statusCode(400)
+        owner().`when`().get("/api/instance/operator").then()
+            .body("recipients.name", equalTo(listOf("Example Hosting GmbH", "Mail AG", "SMS AG")))
 
         owner().`when`().delete("/api/instance/operator").then().statusCode(200)
             .body("recipients.size()", equalTo(0)).body("dataProtectionOfficer", equalTo(null))
@@ -174,7 +189,7 @@ class PrivacyNoticeSliceTest {
             InstanceMailSettingsEntity().apply { host = "SMTP.Example.org" }.persist()
         }
         owner().`when`().get("/api/instance/operator").then().statusCode(200)
-            .body("recipientSuggestions.kind", equalTo(listOf("OBJECT_STORE", "MAIL_RELAY")))
+            .body("recipientSuggestions.kind", equalTo(listOf("OBJECT_STORAGE", "MAIL_RELAY")))
             .body("recipientSuggestions.host", equalTo(listOf("s3.provider.example", "smtp.example.org")))
             .body("recipients.size()", equalTo(0)) // a suggestion is never stored, nor published
         assertNull(passage("recipients")!!.takeIf { it.contains("s3.provider.example") }, "nothing is published unconfirmed")
@@ -191,10 +206,10 @@ class PrivacyNoticeSliceTest {
     }
 
     /** The English text of passage [id] on [host]'s read, or null where it is absent. */
-    private fun passage(id: String, host: String? = null): String? {
+    private fun passage(id: String, host: String? = null, language: String = "en"): String? {
         val n = notice(host)
         val i = n.getList<String>("passages.id").indexOf(id)
-        return if (i < 0) null else n.getString("passages[$i].text.en")
+        return if (i < 0) null else n.getString("passages[$i].text.$language")
     }
 
     private fun owner() = givenAdminChannel().header("Authorization", bearer(OWNER_ID))
@@ -239,8 +254,9 @@ class PrivacyNoticeSliceTest {
         const val EXTERNAL_STORE = "https://s3.provider.example"
         const val CONTROL = "privacy-notice capture control"
         val RECIPIENTS = """
-            {"recipients":[{"name":"Example Hosting GmbH","purpose":"hosts the server","country":"Germany"},
-                           {"name":"Mail AG","purpose":"relays the mail"}],
+            {"recipients":[{"name":"Example Hosting GmbH","kind":"HOSTING","country":"Germany"},
+                           {"name":"Mail AG","kind":"MAIL_RELAY"},
+                           {"name":"SMS AG","kind":"OTHER","description":"sends sign-in texts"}],
              "dataProtectionOfficer":"DSB GmbH, dsb@example.org"}
         """.trimIndent()
     }
