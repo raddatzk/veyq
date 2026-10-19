@@ -136,6 +136,15 @@ class NodeItemsRevisions {
     fun revisions(nodeId: String): ItemsRevisions =
         NodeItemsRevisionEntity.findById(nodeId)?.let { ItemsRevisions(it.revision, it.deleteRevision) } ?: ItemsRevisions(0, 0)
 
+    /** The counters of every node of [nodeIds] in one read (`(0, 0)` for a node without a change yet) — for a reader
+     *  that keys something on several nodes' lists at once, e.g. a cache of a digest over them. Each pair is consistent;
+     *  the read as a whole is no snapshot across the nodes, which a key read before its rows does not need. */
+    fun revisionsOf(nodeIds: Collection<String>): Map<String, ItemsRevisions> {
+        if (nodeIds.isEmpty()) return emptyMap()
+        val held = NodeItemsRevisionEntity.list("nodeId in ?1", nodeIds.distinct()).associateBy { it.nodeId }
+        return nodeIds.associateWith { id -> held[id]?.let { ItemsRevisions(it.revision, it.deleteRevision) } ?: ItemsRevisions(0, 0) }
+    }
+
     /**
      * One conditional poll of a node's item list. Reads the counters as a consistent pair; when [ifNoneMatch] still
      * equals the revision ⇒ [ItemsRead.NotModified] (the idle fast path: neither lambda runs). Otherwise [delta] — one
