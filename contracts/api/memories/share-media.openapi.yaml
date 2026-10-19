@@ -53,12 +53,36 @@ paths:
         **Password-protected shares (cr-0118, ADR 0037):** the valid `X-Share-Password` token is required — a
         missing token is `404` (the password challenge is `resolveShare`'s locked response; this read has none to
         serve), a wrong one `403 share_password_incorrect`.
+        **Pages (ADR 0033 decision 6):** at most `limit` media per answer, ordered by `mediaId`, `more: true` while
+        media remain past them; the guest asks again with the last `mediaId` it was given as `after`. The order is
+        the id's, not the member list's `(updatedAt, id)`: a guest is told no time of the Memory's activity (ADR 0081
+        decision 4), and an id is all it holds. `nodeId` narrows the read to one node of the shared subtree — the
+        gallery of the node a guest has open; a node outside the live subtree is this read's ordinary `404`.
       parameters:
         - $ref: "#/components/parameters/ShareId"
         - $ref: "#/components/parameters/SharePassword"
+        - name: nodeId
+          x-veyq-visibility: id
+          in: query
+          required: false
+          description: >
+            One node of the shared subtree to list (its own media only). Omitted => every node of the subtree. A node
+            outside the live subtree answers the same `404` as an unknown share.
+          schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+        - name: after
+          x-veyq-visibility: id
+          in: query
+          required: false
+          description: >
+            The last `mediaId` of the page before; the answer continues with the media past it in `mediaId` order.
+            Omitted => from the beginning.
+          schema: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
       responses:
         "200":
-          description: The sealed media under the shared subtree and the uploader keys that open them (both empty for a `WRITE_ONLY` link).
+          description: >
+            One page of the sealed media under the shared subtree (or the one node) and the uploader keys that open
+            them (both empty for a `WRITE_ONLY` link).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareMediaListing" }
@@ -192,7 +216,7 @@ paths:
           description: The held media and the identities that open them.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ShareMediaListing" }
+              schema: { $ref: "#/components/schemas/CaseMediaListing" }
         "400":
           description: Malformed request — a parameter or the body outside its contract.
           content:
@@ -279,14 +303,22 @@ components:
     ShareMediaListing:
       type: object
       description: >
-        What a guest is served of the Memory's media under a shared subtree. `identities` is everything a guest is
-        told about any identity: never a name, never a `READ_WRITE` identity (ADR 0030 point 8).
-      required: [media, identities]
+        One page of what a guest is served of the Memory's media under a shared subtree. `identities` is everything a
+        guest is told about any identity: never a name, never a `READ_WRITE` identity (ADR 0030 point 8).
+      required: [media, identities, more]
       properties:
         media:
           type: array
-          description: The live media attached under the live shared subtree, each tagged with its owning `nodeId`.
+          description: >
+            The live media attached under the live shared subtree (or the asked node), each tagged with its owning
+            `nodeId`, in `mediaId` order — at most `limit` of them.
+          maxItems: 1000
           items: { $ref: "#/components/schemas/ShareMedia" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Media remain past this page — ask again with the last `mediaId` as `after` until this is false.
+          example: false
         identities:
           type: array
           description: >
@@ -295,6 +327,22 @@ components:
             which that identity's rows cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
             not even this share's own, whatever its access mode is now: a guest's name is for the Memory's members, who
             read it through the bucket list (ADR 0030 point 8). The member list's `uploaderKeys` items, the same shape.
+          items: { $ref: "#/components/schemas/UploaderKey" }
+
+    CaseMediaListing:
+      type: object
+      description: >
+        A moderator's review of a case's held media, in the guest listing's row shape: what the hold copied, in one
+        answer — a hold is a snapshot, not a growing list, and it is read by the Server Owner's moderators only.
+      required: [media, identities]
+      properties:
+        media:
+          type: array
+          description: The held media that were live when the hold was taken, each tagged with its owning `nodeId`.
+          items: { $ref: "#/components/schemas/ShareMedia" }
+        identities:
+          type: array
+          description: The held WRITE_ONLY identities with a row in `media`, each with its wrapped identity key (ADR 0031 point 7).
           items: { $ref: "#/components/schemas/UploaderKey" }
 
     UploaderKey:

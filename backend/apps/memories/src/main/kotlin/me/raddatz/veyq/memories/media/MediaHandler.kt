@@ -38,6 +38,10 @@ sealed interface ListMediaOutcome {
         val mediaRevision: Int,
         val deleteRevision: Int,
         val mediaIds: List<String>?,
+        /** Rows remain past [rows] (ADR 0033 decision 6): the client asks again from the last one. */
+        val more: Boolean,
+        /** The keyset position of the last row read — the `since` of the next page or poll; null for an empty page. */
+        val cursor: String?,
         /** The node's sealed drop private key and the wrapped key of every WRITE_ONLY identity among [rows]' owners:
          *  what opens a row a WRITE_ONLY guest added, served with the rows (ADR 0031 point 7). */
         val sealedDropPrivateKey: String? = null,
@@ -174,7 +178,8 @@ class MediaHandler(
      * revision + delete revision as a **consistent pair** (one row). When the client's [ifNoneMatch] still equals the revision ⇒ **NotModified**
      * (a 304 — no media query, the idle fast path). Otherwise a **keyset delta** past the [since] cursor, plus both
      * revisions and — **only when [sinceDelete] lags `delete_revision`** (a real delete since) — the current
-     * `mediaId` set for delete-reconcile. Non-member / unknown node ⇒ NoNode (a 404, no reveal).
+     * `mediaId` set for delete-reconcile. Every answer is one page of at most [limit] rows (ADR 0033 decision 6), `more`
+     * while rows remain past it. Non-member / unknown node ⇒ NoNode (a 404, no reveal).
      */
     fun listMedia(
         userId: String,
@@ -183,32 +188,34 @@ class MediaHandler(
         ifNoneMatch: Int?,
         since: ItemsCursor?,
         sinceDelete: Int,
+        limit: Int,
         trashed: Boolean,
     ): ListMediaOutcome {
         access.check(userId, scopeId, READ)
             .refusal(ListMediaOutcome.NoNode, ListMediaOutcome.Suspended)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return ListMediaOutcome.NoNode
-        // The Trash tab (cr-0110): a plain full list of the node's trashed media (carrying deletedAt/deletedBy), no
-        // conditional-GET/delta — the trash isn't live-polled, so the ETag/since/id-set machinery doesn't apply.
+        // The Trash tab (cr-0110): the node's trashed media (carrying deletedAt/deletedBy) in pages on the same keyset, no
+        // conditional-GET — the trash isn't live-polled, so the ETag and the id-set machinery don't apply.
         if (trashed) {
-            val rows = store.listNodeTrashed(scopeId, nodeId)
             val (revision, deleteRevision) = itemsRevisions.revisions(nodeId)
+            val page = store.listNodeTrashed(scopeId, nodeId, since, limit)
             return ListMediaOutcome.Page(
-                rows, revision, deleteRevision, null, node.sealedDropPrivateKey, store.uploaderKeys(rows),
+                page.items, revision, deleteRevision, null, page.more, page.cursor?.wire(), node.sealedDropPrivateKey, store.uploaderKeys(page.items),
             )
         }
-        // The platform's conditional read (core's NodeItemsRevisions, inbox #410): compare -> 304, else Memories' own
-        // keyset query, and the id set only when a delete advanced past the client's sinceDelete.
+        // The platform's conditional read (core's NodeItemsRevisions, inbox #410): compare -> 304, else one page of
+        // Memories' own keyset query, and the id set only when a delete advanced past the client's sinceDelete.
         return when (
             val r = itemsRevisions.read(
                 nodeId, ifNoneMatch, sinceDelete,
-                delta = { store.listNodeMediaSince(scopeId, nodeId, since) },
+                delta = { store.listNodeMediaSince(scopeId, nodeId, since, limit) },
                 ids = { store.listNodeMediaIds(scopeId, nodeId) },
             )
         ) {
             ItemsRead.NotModified -> ListMediaOutcome.NotModified
             is ItemsRead.Changed -> ListMediaOutcome.Page(
-                r.delta, r.revisions.revision, r.revisions.deleteRevision, r.ids, node.sealedDropPrivateKey, store.uploaderKeys(r.delta),
+                r.delta.items, r.revisions.revision, r.revisions.deleteRevision, r.ids, r.delta.more, r.delta.cursor?.wire(),
+                node.sealedDropPrivateKey, store.uploaderKeys(r.delta.items),
             )
         }
     }

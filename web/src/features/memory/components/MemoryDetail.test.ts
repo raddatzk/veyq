@@ -21,7 +21,7 @@ import exifr from 'exifr'
 import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
-import { addMedia, type MediaDeriver } from '../media'
+import { addMedia, MEDIA_PAGE_LIMIT, type MediaDeriver } from '../media'
 import { GETS_IN_FLIGHT, PRESIGN_BATCH_MAX } from '../../../core/blob/readScheduler'
 import { sealMemoryDate, unsealMemoryDate, type MemoryDate } from '../memoryDate'
 import { unsealMemoryLocation, type MemoryLocation } from '../memoryLocation'
@@ -179,7 +179,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(imgs).toHaveLength(2)
     expect(imgs[0].attributes('src')).toBeTruthy()
     // operator-blind: each thumbnail came back through a presigned GET + on-device decrypt
-    expect(store.api.listNodeMedia).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID })
+    expect(store.api.listNodeMedia).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, limit: MEDIA_PAGE_LIMIT })
     expect(store.blob.presignBlobDownloads).toHaveBeenCalled()
   })
 
