@@ -26,15 +26,15 @@ class MediaReportableItems(private val revisions: NodeItemsRevisions) : Reportab
     }
 
     /**
-     * A block or a lift changed what the medium's row is served as (`blockedByOperator`): its `updatedAt` moves, so the
-     * gallery's keyset delta carries it, and its node's item revision, so the conditional poll answers with that delta
-     * (ADR 0033) — the order every gallery writer takes (item row, then the node's revision).
+     * A block or a lift changed what the medium's row is served as (`blockedByOperator`): it moves to its list's end — the
+     * revision its node's bump wrote is its new position — so the gallery's keyset delta carries it, and the conditional
+     * poll answers with that delta (ADR 0033) — the order every gallery writer takes (item row, then the node's revision).
      */
     @Transactional
     override fun blockChanged(itemId: String) {
         val medium = MediaEntity.findById(itemId) ?: return
         medium.updatedAt = Instant.now()
-        revisions.bump(medium.scopeId, medium.nodeId)
+        medium.position = revisions.bump(medium.scopeId, medium.nodeId) // its new place: the list's end (ADR 0033 decision 3)
     }
 
     /** The medium's row, locked as every purge of it locks it (`MediaStore.purgeMedia`, the retention purge, a guest's delete). */

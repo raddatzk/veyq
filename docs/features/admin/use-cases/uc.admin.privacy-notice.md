@@ -18,7 +18,8 @@
    acceptance, the report dialog, or a guest's first-write notice.
 2. web/ fetches the rendered notice without a session and shows it on its own page (`/privacy`), the passage the link
    named in view: the controller and contact, any data-protection officer, then one passage per processing — what,
-   why, on which basis, for how long, who receives it — then the recipients the Server Owner named, the rights and the
+   why, on which basis, for how long, who receives it — then the recipients the Server Owner named, each with what they
+   do in the page's own language (an *other* one with the Server Owner's description as typed), the rights and the
    supervisory authority, with each right to object set apart (GDPR Art. 21(4)).
 3. The passages follow the instance and the host: a switch that is off there (the guest-write record, the
    breached-password check, an external service a member's browser calls) drops its passage, a service's passage names

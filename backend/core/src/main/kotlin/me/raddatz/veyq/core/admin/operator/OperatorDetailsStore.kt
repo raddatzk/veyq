@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.operator
 
 import me.raddatz.veyq.core.instance.VeyqInstance
+import me.raddatz.veyq.core.terms.RecipientKind
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.enterprise.context.ApplicationScoped
@@ -106,8 +107,12 @@ data class OperatorValues(
     val recipients: List<PublishedRecipient> = emptyList(),
 )
 
-/** One recipient the privacy notice names (ADR 0035 decision 8): who, what they do, where — [country] null when not named. */
-data class PublishedRecipient(val name: String, val purpose: String, val country: String?)
+/**
+ * One recipient the privacy notice names (ADR 0035 decision 8): who, what they do as a [kind] the notice names in each
+ * language, where — [country] null when not named. [description] is an [RecipientKind.OTHER] recipient's own words, null
+ * for every other kind ([RecipientKind.accepts]).
+ */
+data class PublishedRecipient(val name: String, val kind: RecipientKind, val description: String?, val country: String?)
 
 /**
  * The recipients, one row each, `list_index` their order (0-based) and their key: the list is replaced whole on every
@@ -124,8 +129,12 @@ class OperatorRecipientEntity : PanacheEntityBase {
     @Column(name = "name", nullable = false, length = 200)
     lateinit var name: String
 
-    @Column(name = "purpose", nullable = false, length = 300)
-    lateinit var purpose: String
+    /** A [RecipientKind]'s name. */
+    @Column(name = "kind", nullable = false, length = 20)
+    lateinit var kind: String
+
+    @Column(name = "description", length = 120)
+    var description: String? = null
 
     @Column(name = "country", length = 100)
     var country: String? = null
@@ -161,14 +170,17 @@ class OperatorDetailsStore {
 
     /** The recipients in their order. */
     fun recipients(): List<PublishedRecipient> =
-        OperatorRecipientEntity.listAll().sortedBy { it.position }.map { PublishedRecipient(it.name, it.purpose, it.country) }
+        OperatorRecipientEntity.listAll().sortedBy { it.position }
+            .map { PublishedRecipient(it.name, RecipientKind.valueOf(it.kind), it.description, it.country) }
 
     /** Replace the recipients with [list], in its order. Call under [lockedRow]. */
     fun replaceRecipients(list: List<PublishedRecipient>) {
         OperatorRecipientEntity.deleteAll()
         OperatorRecipientEntity.flush()
         list.forEachIndexed { i, r ->
-            OperatorRecipientEntity().apply { position = i; name = r.name; purpose = r.purpose; country = r.country }.persist()
+            OperatorRecipientEntity().apply {
+                position = i; name = r.name; kind = r.kind.name; description = r.description; country = r.country
+            }.persist()
         }
     }
 

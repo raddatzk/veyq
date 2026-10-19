@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./media', async (orig) => ({
   ...(await orig<typeof import('./media')>()),
-  listMedia: vi.fn(), listMediaPage: vi.fn(), unsealMeta: vi.fn(), originalBlobMeta: vi.fn(), originalMediaType: vi.fn(), loadMediaExif: vi.fn(),
+  listMedia: vi.fn(), listMediaPages: vi.fn(), unsealMeta: vi.fn(), originalBlobMeta: vi.fn(), originalMediaType: vi.fn(), loadMediaExif: vi.fn(),
   chunkProvider: vi.fn(), plaintextSize: vi.fn(), addMedia: vi.fn(), setMediaMeta: vi.fn(), backfillPlaceName: vi.fn(), openBlob: vi.fn(),
   addCopiedMedia: vi.fn(), tierChunkProviders: vi.fn(), rawMediaMeta: vi.fn(), readByChunk: vi.fn(),
 }))
@@ -13,7 +13,7 @@ vi.mock('../../core/node/cover/coverWrite', () => ({ uploadCoverBlob: vi.fn(), u
 
 import * as v1 from '@veyq/crypto/v1'
 import {
-  addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPage, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
+  addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPages, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
   rawMediaMeta, setMediaMeta, tierChunkProviders, unsealMeta, type MediaItem,
 } from './media'
 import { listShareMedia, openSharedMemory, shareChunkProvider } from './share'
@@ -58,7 +58,7 @@ function exportCtx(meta: Record<string, unknown> = {}, kind = MEMORY_KIND, acces
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(loadTenantPeople).mockResolvedValue(new Map([[U1, person('Anna Meyer')], [U2, person('Ben')]]))
-  vi.mocked(listMediaPage).mockResolvedValue({ notModified: false, items: [item('a'), item('b')], mediaRevision: 1, deleteRevision: 0, mediaIds: null })
+  vi.mocked(listMediaPages).mockResolvedValue({ notModified: false, items: [item('a'), item('b')], mediaRevision: 1, deleteRevision: 0, mediaIds: null, cursor: null })
   vi.mocked(plaintextSize).mockReturnValue(100)
   vi.mocked(originalMediaType).mockReturnValue('image/jpeg')
   vi.mocked(chunkProvider).mockReturnValue({ chunkCount: 0, getPlaintextChunk: async () => new Uint8Array(0) } as unknown as ReturnType<typeof chunkProvider>)
@@ -114,7 +114,7 @@ describe('exportMemoryContent', () => {
     vi.mocked(shareChunkProvider).mockReturnValue({ chunkCount: 0, getPlaintextChunk: async () => new Uint8Array(0) } as unknown as ReturnType<typeof shareChunkProvider>)
     const { ctx, payloads } = exportCtx(meta, MEMORY_KIND, guest)
     const c = (await exportMemoryContent(ctx))!
-    expect(listMediaPage).not.toHaveBeenCalled()
+    expect(listMediaPages).not.toHaveBeenCalled()
     expect(loadTenantPeople).not.toHaveBeenCalled()
     expect(loadMediaExif).not.toHaveBeenCalled()
     expect(payloads.map((p) => p.name)).toEqual(['a.jpg']) // this node's media only

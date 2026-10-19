@@ -23,7 +23,13 @@ sealed interface ShareMediaListOutcome {
     /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity. Every
      *  [media] row's `identityId` is one of its keys or null. */
     /** [blocked] holds the media a moderator blocked (uc.moderation.take-a-measure): kept in [media], marked. */
-    data class Listed(val media: List<ShareMediaRow>, val uploaderKeys: Map<String, String>, val blocked: Set<String> = emptySet()) : ShareMediaListOutcome
+    /** [more]: media remain past this page (ADR 0033 decision 6) — the guest asks again after the last one. */
+    data class Listed(
+        val media: List<ShareMediaRow>,
+        val uploaderKeys: Map<String, String>,
+        val blocked: Set<String> = emptySet(),
+        val more: Boolean = false,
+    ) : ShareMediaListOutcome
     /** Unknown, disabled, expired or deleted share, a space that serves no guests, or password-protected with no token
      *  — the non-enumerable 404 (the password challenge is the resolve's locked shell; this read serves none). */
     object NotFound : ShareMediaListOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
@@ -95,8 +101,12 @@ class ShareMediaHandler(
      * needs it to find that key (ADR 0031 point 7) — a READ_WRITE guest's opens under the node's content key, and its
      * id would only tell a guest which uploads came from one person. Both come from the one [keys] map, so the served
      * identities and the served ids can never disagree. A WRITE_ONLY link is served nothing (ADR 0031).
+     *
+     * One page of at most [limit] media past [after], in id order (ADR 0033 decision 6), of the whole subtree or — with
+     * [nodeId] — of the one node of it the guest has open; a node outside the live subtree is the same 404 as an
+     * unknown share, so the read tells nothing about a node the link does not serve.
      */
-    fun list(shareId: String, pwToken: String?): ShareMediaListOutcome {
+    fun list(shareId: String, pwToken: String?, nodeId: String?, after: String?, limit: Int): ShareMediaListOutcome {
         val viewable = when (val g = gate.viewGate(shareId, pwToken)) {
             is ShareViewGate.Viewable -> g
             ShareViewGate.WriteOnly -> return ShareMediaListOutcome.Listed(emptyList(), emptyMap())
@@ -104,11 +114,17 @@ class ShareMediaHandler(
             ShareViewGate.PasswordIncorrect -> return ShareMediaListOutcome.PasswordIncorrect
             ShareViewGate.RateLimited -> return ShareMediaListOutcome.RateLimited
         }
-        val rows = store.listShareMedia(viewable.scopeId, viewable.liveNodeIds)
+        val nodeIds = when {
+            nodeId == null -> viewable.liveNodeIds
+            nodeId in viewable.liveNodeIds -> listOf(nodeId)
+            else -> return ShareMediaListOutcome.NotFound
+        }
+        val page = store.listShareMedia(viewable.scopeId, nodeIds, after, limit)
+        val rows = page.items
         val keys = store.uploaderKeysOf(rows.mapNotNull { it.identityId }.toSet())
         val view = blocks.contentView(viewable.scopeId)
         val blocked = rows.filter { view.itemBlocked(it.row.mediaId, it.nodeId) }.mapTo(HashSet()) { it.row.mediaId }
-        return ShareMediaListOutcome.Listed(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys, blocked)
+        return ShareMediaListOutcome.Listed(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys, blocked, page.more)
     }
 
     /**

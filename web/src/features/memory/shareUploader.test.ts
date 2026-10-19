@@ -185,7 +185,7 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     fakeApi(mediaApi, {
       listNodeMedia: async (): Promise<MediaListPage> => ({
         media: [{ blockedByOperator: false, ...row, updatedAt: new Date(), ownerKey: `share:${identityId}` }],
-        mediaRevision: 1, deleteRevision: 0,
+        mediaRevision: 1, deleteRevision: 0, more: false,
         sealedDropPrivateKey, uploaderKeys: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
       }),
       updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>().mockResolvedValue({}),
@@ -233,6 +233,7 @@ describe('a WRITE_ONLY guest never holds K_node (ADR 0031 point 7)', () => {
     const viewerMedia = {
       media: [{ blockedByOperator: false, ...row, nodeId: NODE_ID, identityId }],
       identities: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
+      more: false,
     } satisfies ShareMediaListing
     stubApi(publicSharesApi, { resolveShare: viewerResolve, resolveShareBlob: { presignedGets } })
     stubApi(publicShareMediaApi, { listShareMedia: viewerMedia })

@@ -1,7 +1,7 @@
 {
   "revision": 3,
   "draft": true,
-  "note": "The instance privacy notice (ADR 0035 decision 8, GDPR Art. 13; uc.admin.privacy-notice): fixed text veyq ships, DE and EN, filled with the values the Server Owner sets and with what the running instance does, served without an account at GET /api/operator/privacy-notice and shown at /privacy on every tenant host. Read by the backend alone (core/terms/PrivacyNoticeRenderer.kt renders it, sharing the placeholder rules of the operator section, contracts/terms/operator-section.json); clients render what the endpoint serves. Nobody edits it at runtime. 'revision' moves with the text and only with it; nothing accepts it, so a bump reopens nothing. 'draft' is true until a qualified legal review; while it is, the endpoint serves 'draftBanner'. Every passage has an 'id' — its anchor on the page (/privacy#<id>): the invite acceptance links 'account', the report dialog 'reporter-contact', a guest's first-write notice 'guest-write-record'. A passage renders when all of its conditions hold: 'part' 'both' (either operating mode) or 'full' (the club, organisation or company mode only); 'switch' a capability id, rendered exactly while it is active for the host's space (ADR 0088); 'ifValue' / 'ifNoValue' a value, rendered exactly while it is set / not set; 'about' a value, absent while it is empty in the private mode's reduced variant and rendered with its gap in the full one. A passage with 'separate': true is a right to object, served apart from the rest (GDPR Art. 21(4)). Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line naming an empty value is left out where the line is 'optional' and in the reduced variant (an unset value is simply absent, owner Q26); otherwise the value renders as 'gap'. A line that is a list placeholder alone ({recipients}, {browserServices}) becomes one bullet per item. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {privacyContact} (the address the disclosures name, else the contact), {dataProtectionOfficer}, {supervisoryAuthority}, {recipients} (the Server Owner's list: name, what they do, country), {retention} (the guest-write record's N), {backupRetention} (B, ADR 0056 decision 8), {erasureWindow} (the account erasure's window, ADR 0101 decision 3), {breachedPasswordService} (the address the check calls; HIBP by its name), {browserServices} (every other outside service a browser calls on this host, with its address), {storeHost} (an external object store's host; empty for the bundled store). A typed value never carries prose of veyq's: a newline in it renders as ', '. The 'logs' passage states what ADR 0092 lets a log and a rate limiter keep (§§ 3, 5: ids only, an unexpected error by its error id and kind, buckets in memory until they refill): a change to what either keeps rewrites that passage in the same commit and moves 'revision' with it, or the notice no longer says what the instance does — no test holds the passage to the logs.",
+  "note": "The instance privacy notice (ADR 0035 decision 8, GDPR Art. 13; uc.admin.privacy-notice): fixed text veyq ships, DE and EN, filled with the values the Server Owner sets and with what the running instance does, served without an account at GET /api/operator/privacy-notice and shown at /privacy on every tenant host. Read by the backend alone (core/terms/PrivacyNoticeRenderer.kt renders it, sharing the placeholder rules of the operator section, contracts/terms/operator-section.json); clients render what the endpoint serves. Nobody edits it at runtime. 'revision' moves with the text and only with it; nothing accepts it, so a bump reopens nothing. 'draft' is true until a qualified legal review; while it is, the endpoint serves 'draftBanner'. Every passage has an 'id' — its anchor on the page (/privacy#<id>): the invite acceptance links 'account', the report dialog 'reporter-contact', a guest's first-write notice 'guest-write-record'. A passage renders when all of its conditions hold: 'part' 'both' (either operating mode) or 'full' (the club, organisation or company mode only); 'switch' a capability id, rendered exactly while it is active for the host's space (ADR 0088); 'ifValue' / 'ifNoValue' a value, rendered exactly while it is set / not set; 'about' a value, absent while it is empty in the private mode's reduced variant and rendered with its gap in the full one. A passage with 'separate': true is a right to object, served apart from the rest (GDPR Art. 21(4)). Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line naming an empty value is left out where the line is 'optional' and in the reduced variant (an unset value is simply absent, owner Q26); otherwise the value renders as 'gap'. A line that is a list placeholder alone ({recipients}, {browserServices}) becomes one bullet per item. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {privacyContact} (the address the disclosures name, else the contact), {dataProtectionOfficer}, {supervisoryAuthority}, {recipients} (the Server Owner's list: name, what they do, country — what they do is the recipient's kind in 'recipientKinds', one label per kind of the contract's OperatorRecipientKind, so neither language's page carries the other's words; OTHER's label holds {description}, the one text the operator types for it, shown as typed and quoted on both pages), {retention} (the guest-write record's N), {backupRetention} (B, ADR 0056 decision 8), {erasureWindow} (the account erasure's window, ADR 0101 decision 3), {breachedPasswordService} (the address the check calls; HIBP by its name), {browserServices} (every other outside service a browser calls on this host, with its address), {storeHost} (an external object store's host; empty for the bundled store). A typed value never carries prose of veyq's: a newline in it renders as ', '. The 'logs' passage states what ADR 0092 lets a log and a rate limiter keep (§§ 3, 5: ids only, an unexpected error by its error id and kind, buckets in memory until they refill): a change to what either keeps rewrites that passage in the same commit and moves 'revision' with it, or the notice no longer says what the instance does — no test holds the passage to the logs.",
   "draftBanner": {
     "en": "*Draft: this privacy notice has not yet been reviewed by a lawyer.*",
     "de": "*Entwurf: Diese Datenschutzerklärung ist noch nicht anwaltlich geprüft.*"
@@ -18,6 +18,28 @@
     "de": {
       "one": "1 Tag",
       "other": "{n} Tage"
+    }
+  },
+  "recipientKinds": {
+    "HOSTING": {
+      "en": "hosts the server",
+      "de": "hostet den Server"
+    },
+    "OBJECT_STORAGE": {
+      "en": "stores the encrypted files",
+      "de": "speichert die verschlüsselten Dateien"
+    },
+    "MAIL_RELAY": {
+      "en": "relays the mail",
+      "de": "versendet die E-Mails"
+    },
+    "BACKUP": {
+      "en": "keeps the backups",
+      "de": "bewahrt die Sicherungen auf"
+    },
+    "OTHER": {
+      "en": "other — “{description}”",
+      "de": "Sonstiges — „{description}“"
     }
   },
   "passages": [

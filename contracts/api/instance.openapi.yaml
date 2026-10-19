@@ -1720,7 +1720,8 @@ paths:
                 providerRepresentative: Erika Mustermann (Vorstand)
                 supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
                 recipients:
-                  - { name: Example Hosting GmbH, purpose: hosts the server, country: Germany }
+                  - { name: Example Hosting GmbH, kind: HOSTING, country: Germany }
+                  - { name: Example SMS AG, kind: OTHER, description: sends sign-in texts, country: Germany }
                 dataProtectionOfficer: "Datenschutz Beispiel GmbH, dsb@example.org"
                 recipientSuggestions:
                   - { kind: MAIL_RELAY, host: smtp.example.org }
@@ -1770,7 +1771,7 @@ paths:
               providerRepresentative: Erika Mustermann (Vorstand)
               supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
               recipients:
-                - { name: Example Hosting GmbH, purpose: hosts the server, country: Germany }
+                - { name: Example Hosting GmbH, kind: HOSTING, country: Germany }
               dataProtectionOfficer: "Datenschutz Beispiel GmbH, dsb@example.org"
       responses:
         "200":
@@ -3852,9 +3853,12 @@ components:
     OperatorRecipient:
       type: object
       description: >
-        One recipient the privacy notice names: who, what they do for the instance, and where. Shown as typed, in both
-        languages of the notice.
-      required: [name, purpose]
+        One recipient the privacy notice names: who, what they do for the instance, and where. What they do is a fixed
+        `kind` the notice renders in its own words on each language's page, so the German and the English notice never
+        mix languages; only an `OTHER` recipient carries a `description`, typed by the operator and shown as typed on
+        both pages after the kind's label. A `description` on any other kind, or an `OTHER` one without it, is refused
+        (`400 invalid_request`).
+      required: [name, kind]
       properties:
         name:
           x-veyq-visibility: pii
@@ -3867,14 +3871,17 @@ components:
           maxLength: 200
           example: Example Hosting GmbH
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 200)'
-        purpose:
+        kind:
+          $ref: "#/components/schemas/OperatorRecipientKind"
+        description:
           x-veyq-visibility: public
-          type: string
-          description: What they do for the instance — hosts the server, stores the encrypted files, relays the mail.
-          minLength: 1
-          maxLength: 300
-          example: hosts the server
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 300)'
+          type: [string, "null"]
+          description: >
+            What an `OTHER` recipient does, in the operator's words — shown as typed on both language pages; null for
+            every other kind.
+          maxLength: 120
+          example: sends sign-in texts
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 120)'
         country:
           x-veyq-visibility: public
           type: [string, "null"]
@@ -3884,6 +3891,17 @@ components:
           example: Germany
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 100)'
 
+    OperatorRecipientKind:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        What a recipient does for the instance, as the privacy notice names it in each language
+        (`contracts/terms/privacy-notice.json`, `recipientKinds`): `HOSTING` = hosts the server; `OBJECT_STORAGE` =
+        stores the encrypted files; `MAIL_RELAY` = relays the mail; `BACKUP` = keeps the backups; `OTHER` = something
+        else, said by the recipient's `description`.
+      enum: [HOSTING, OBJECT_STORAGE, MAIL_RELAY, BACKUP, OTHER]
+      example: HOSTING
+
     OperatorRecipientSuggestion:
       type: object
       description: A recipient the instance knows of by its own configuration, for the Server Owner to confirm.
@@ -3892,9 +3910,11 @@ components:
         kind:
           x-veyq-visibility: enum
           type: string
-          enum: [OBJECT_STORE, MAIL_RELAY]
-          description: "`OBJECT_STORE` = the external object store the instance stores in; `MAIL_RELAY` = the instance mail's SMTP relay."
-          example: OBJECT_STORE
+          enum: [OBJECT_STORAGE, MAIL_RELAY]
+          description: >
+            The recipient kind the offered row gets (`OperatorRecipientKind`): `OBJECT_STORAGE` = the external object
+            store the instance stores in; `MAIL_RELAY` = the instance mail's SMTP relay.
+          example: OBJECT_STORAGE
         host:
           x-veyq-visibility: public
           type: string

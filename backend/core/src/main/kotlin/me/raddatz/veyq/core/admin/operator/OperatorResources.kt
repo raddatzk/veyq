@@ -20,6 +20,7 @@ import me.raddatz.veyq.core.ratelimit.RateLimitKey
 import me.raddatz.veyq.core.tenant.RequestTenant
 import me.raddatz.veyq.core.terms.OperatorSections
 import me.raddatz.veyq.core.terms.PrivacyNotices
+import me.raddatz.veyq.core.terms.RecipientKind
 import me.raddatz.veyq.core.terms.toWire
 import jakarta.annotation.security.PermitAll
 import jakarta.annotation.security.RolesAllowed
@@ -27,6 +28,7 @@ import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import me.raddatz.veyq.core.generated.model.OperatingMode as WireOperatingMode
 import me.raddatz.veyq.core.generated.model.OperatorRecipient as WireRecipient
+import me.raddatz.veyq.core.generated.model.OperatorRecipientKind as WireRecipientKind
 
 /**
  * HTTP adapter for the Server Owner's operating mode and operator details (uc.admin.operator-details). Implements the
@@ -50,7 +52,10 @@ class InstanceOperatorResource(
     override fun getInstanceOperator(): Response = Response.ok(details.read().toWire()).build()
 
     override fun setInstanceOperator(instanceOperatorUpdate: InstanceOperatorUpdate): Response =
-        Response.ok(details.set(instanceOperatorUpdate.toValues()).toWire()).build()
+        when (val outcome = details.set(instanceOperatorUpdate.toValues())) {
+            is OperatorSetOutcome.Ok -> Response.ok(outcome.view.toWire()).build()
+            is HttpFailure -> httpError(outcome)
+        }
 
     override fun clearInstanceOperator(): Response = Response.ok(details.clear().toWire()).build()
 
@@ -77,7 +82,7 @@ class InstanceOperatorResource(
         providerRepresentative = providerRepresentative,
         supervisoryAuthority = supervisoryAuthority,
         dataProtectionOfficer = dataProtectionOfficer,
-        recipients = recipients.orEmpty().map { PublishedRecipient(it.name, it.purpose, it.country) },
+        recipients = recipients.orEmpty().map { PublishedRecipient(it.name, RecipientKind.valueOf(it.kind.name), it.description, it.country) },
     )
 
     private fun OperatorDetailsView.toWire() = InstanceOperator(
@@ -94,7 +99,7 @@ class InstanceOperatorResource(
         providerEmail = values.providerEmail,
         providerRepresentative = values.providerRepresentative,
         supervisoryAuthority = values.supervisoryAuthority,
-        recipients = values.recipients.map { WireRecipient(name = it.name, purpose = it.purpose, country = it.country) },
+        recipients = values.recipients.map { WireRecipient(name = it.name, kind = WireRecipientKind.valueOf(it.kind.name), description = it.description, country = it.country) },
         dataProtectionOfficer = values.dataProtectionOfficer,
         recipientSuggestions = suggestions.map {
             OperatorRecipientSuggestion(kind = OperatorRecipientSuggestion.Kind.valueOf(it.kind.name), host = it.host)

@@ -7,7 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
 import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
-import { hasDerivatives, unsealMeta, effectiveCapturedAt, newestCursor, type MediaItem } from './media'
+import { hasDerivatives, unsealMeta, effectiveCapturedAt, type MediaItem } from './media'
 import type { MemorySource } from './source'
 import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
@@ -68,6 +68,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // echoed as If-None-Match; null until the first load) + deleteRevision (echoed as sinceDelete to gate the id-set).
   const mediaRevision = ref<number | null>(null)
   const deleteRevision = ref(0)
+  // …and the keyset cursor the next poll continues from: the one the server answered with the last page it read (ADR
+  // 0033 decision 6) — never assembled from the items, whose order is the server's to say.
+  let pollSince: string | undefined
   const lightboxIndex = ref<number | null>(null)
   const lightboxItems = ref<MediaItem[]>([]) // a snapshot of the sorted order at open time (so an in-lightbox edit can't reorder underfoot)
   // trash undo (cr-0110): a lightbox-only delete soft-deletes into a per-Memory trash; an undo-toast offers restore
@@ -239,6 +242,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       items.value = []
       mediaRevision.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
       deleteRevision.value = 0
+      pollSince = undefined
       status.value = 'error'
       return
     }
@@ -247,14 +251,19 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       items.value = []
       mediaRevision.value = null
       deleteRevision.value = 0
+      pollSince = undefined
     }
     status.value = items.value.length ? 'ready' : 'loading'
     try {
-      const page = await ctx.source.listMedia(nodeId) // the full list
+      const page = await ctx.source.listMedia(nodeId) // every page of it
       if (ctx.node().id !== nodeId) return // navigated away while listing
       mergeItems(page.items)
-      mediaRevision.value = page.revision?.media ?? null // cache the ETag + delete gate for the live poll (none: no poll)
+      // The live poll continues from the FIRST page's revisions — read before its rows, so a change committed while the
+      // pages came in moves the server past them and the next poll pulls it — and from the LAST page's cursor (ADR 0033
+      // decision 6). None: this source has no live poll.
+      mediaRevision.value = page.revision?.media ?? null
       deleteRevision.value = page.revision?.delete ?? 0
+      pollSince = page.cursor ?? undefined
       status.value = 'ready'
       await pipeline.decrypt(inGridOrder(page.items), () => ctx.node().id === nodeId)
       if (ctx.node().id === nodeId) await ctx.onSettle() // settle: auto-date, then auto-location (RMW-safe)
@@ -276,7 +285,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
         key: ctx.node().id,
         revision: mediaRevision.value,
         deleteRevision: deleteRevision.value,
-        since: newestCursor(items.value),
+        since: pollSince,
       }
     },
     fetch: async (cursor) => {
@@ -287,13 +296,14 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       })
       return page.notModified
         ? { notModified: true }
-        : { notModified: false, items: page.items, revision: page.mediaRevision, deleteRevision: page.deleteRevision, ids: page.mediaIds }
+        : { notModified: false, items: page.items, revision: page.mediaRevision, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }
     },
     isCurrent: (nodeId) => ctx.node().id === nodeId,
     apply: async (change, cursor, signal) => {
       upsertItems(change.items, change.ids)
       mediaRevision.value = change.revision
       deleteRevision.value = change.deleteRevision
+      pollSince = change.cursor ?? pollSince // a delta that carried no row (a removal only) leaves the cursor where it was
       await pipeline.decrypt(change.items, () => ctx.node().id === cursor.key) // decrypt only the delta's new/changed tiles
       if (!signal.aborted && ctx.node().id === cursor.key) await ctx.onSettle()
     },

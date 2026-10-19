@@ -4,7 +4,7 @@ title: Live media updates — others' adds/removes surface into the open gallery
 # Built (web) — cr-0107, ADR 0033; the mechanism is core's since inbox #410 (veyq_node_items_revision, NodeItemsRevisions,
 # web/src/core/items), Memories' media its first user. A per-node revision counter (bumped on attach/meta-edit/delete, NOT a
 # cover change) → an ETag conditional GET on listNodeMedia (304 when unchanged); on a change a keyset delta (media
-# past the client's (updatedAt,id) cursor, so an active upload streams new items, never a full re-list) + the
+# past the client's (position,id) cursor, in pages, so an active upload streams new items, never a full re-list) + the
 # current mediaId set for delete-reconcile, gated by a second delete_revision counter (present only when a delete
 # advanced it). Short-poll, tab-visibility-gated, only while a Memory is open. Operator-blind (opaque counters +
 # opaque ids + exact timestamps). Backend + web verticals built + tested. (The
@@ -25,7 +25,7 @@ acceptanceCriteria:
           - src/features/memory/mediaRevisionPolling.test.ts
           - src/core/items/itemsLive.test.ts
   - id: keyset-delta-on-change
-    text: On a revision change the server returns only media with updated_at past the client's (updatedAt, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and advances the cursor. Requires a new veyq_media.updated_at (the attach time at attach, bumped on meta edit; the medium's only creation time since #398).
+    text: On a revision change the server returns only media past the client's (position, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and continues from the cursor the server answered. A medium's position is the node revision its last change bumped to (veyq_media.item_position), stamped under the revision row's lock, so positions become visible in commit order (ADR 0033 decision 3).
     coverage:
       backend:
         integration:
@@ -60,7 +60,7 @@ acceptanceCriteria:
           - src/shared/state/livePoller.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: operator-blind-live
-    text: The server sees only an opaque revision counter, opaque mediaIds, exact timestamps (a medium's updatedAt, to the millisecond), and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_node/K_share never touch the server.
+    text: The server sees only an opaque revision counter, opaque mediaIds, a medium's position (a revision it handed out itself), exact timestamps (a medium's updatedAt, to the millisecond), a page size, and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_node/K_share never touch the server.
     coverage:
       backend:
         integration:
@@ -69,3 +69,30 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/media.test.ts
+  - id: first-load-in-pages
+    text: The first load, and a poll whose delta is longer than a page, reads the list in pages of at most `limit` items (the server's cap is 1000, the response's `maxItems`; the client asks for MEDIA_PAGE_LIMIT), each page answering `more` while items remain and its `cursor`, the next asked from that cursor without If-None-Match, until every item is held. Each page is read with the same number of queries whatever its size. The client keeps the first page's revisions and the last page's cursor.
+    coverage:
+      backend:
+        integration:
+          - MediaListPagingSliceTest.aReadWithoutALimitIsOnePageOfTheCap
+          - MediaListPagingSliceTest.aLimitOutsideOneToTheCapIs400
+          - MediaListPagingSliceTest.theTrashPagesOnTheSameCursor
+          - MediaListQueryCountSliceTest.theMembersPageOfOnePhotoAndOfSixtyIssueTheSameStatements
+          - MediaListQueryCountSliceTest.theTrashPageOfOnePhotoAndOfSixtyIssueTheSameStatements
+          - NodeItemsRevisionsCoreSliceTest.aBumpAnswersTheRevisionItWroteTheItemsPosition
+      web:
+        unit:
+          - src/core/items/itemsLive.test.ts
+          - src/features/memory/media.test.ts
+          - src/features/memory/useMediaGalleryLive.test.ts
+  - id: paging-loses-no-concurrent-change
+    text: A change committed while a client pages — an add, an edit of a row already paged, a removal — reaches it by the next poll from the first page's revisions; and no commit order of two concurrent writers can put a row behind a cursor the client already passed (the keyset is a position handed out under the revision row's lock, not a timestamp).
+    coverage:
+      backend:
+        integration:
+          - MediaListPagingSliceTest.pagesArriveCompleteAndAChangeWhilePagingReachesTheNextPollFromTheFirstPagesRevisions
+          - MediaKeysetRaceSliceTest.anEditStampedBeforeAnotherButCommittedAfterItStillReachesTheNextPoll
+      web:
+        unit:
+          - src/core/items/itemsLive.test.ts
+          - src/features/memory/useMediaGalleryLive.test.ts

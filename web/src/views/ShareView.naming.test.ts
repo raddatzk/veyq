@@ -79,7 +79,7 @@ beforeEach(async () => {
   localStorage.clear()
   authenticatedCalls.length = 0
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
+  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [], more: false } })
   stubApi(publicShareFilesApi, { listShareFiles: { items: [] } })
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })
   await router.push(`/s/${SHARE_ID}${HASH}`)

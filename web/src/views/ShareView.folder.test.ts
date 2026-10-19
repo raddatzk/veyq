@@ -68,7 +68,7 @@ beforeEach(() => {
   route.query = {}
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(folderHead())
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
+  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [], more: false } })
 })
 
 describe('ShareView: a link rooted at a FOLDER', () => {

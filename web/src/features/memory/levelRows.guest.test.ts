@@ -123,6 +123,7 @@ beforeEach(() => {
         derivatives: [{ kind: 'THUMBNAIL', blobId: 't-rom', chunkCount: 1, byteSize: 5, wrappedBlobKey: 'eA==' }],
       }],
       identities: [],
+      more: false,
     },
   })
 })

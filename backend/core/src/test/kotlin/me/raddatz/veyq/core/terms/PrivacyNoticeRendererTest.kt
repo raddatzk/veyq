@@ -30,7 +30,7 @@ class PrivacyNoticeRendererTest {
         privacyContact = "privacy@example.org",
         dataProtectionOfficer = "DSB Beispiel GmbH, dsb@example.org",
         supervisoryAuthority = "LfD Musterland",
-        recipients = listOf(NoticeRecipient("Example Hosting GmbH", "hosts the server", "Germany")),
+        recipients = listOf(NoticeRecipient("Example Hosting GmbH", RecipientKind.HOSTING, null, "Germany")),
         retentionDays = 7,
         backupRetentionDays = 30,
         erasureWindowDays = 30,
@@ -127,10 +127,61 @@ class PrivacyNoticeRendererTest {
 
     @Test
     fun aRecipientsMissingCountryIsAGapInTheFullVariantAndLeftOutInTheReducedOne() {
-        val noCountry = all.copy(recipients = listOf(NoticeRecipient("Mail AG", "relays the mail", null)))
+        val noCountry = all.copy(recipients = listOf(NoticeRecipient("Mail AG", RecipientKind.MAIL_RELAY, null, null)))
         assertTrue(render(SectionVariant.FULL, noCountry).passage("recipients")!!.text.en.contains("- Mail AG: relays the mail (not stated by this operator)"))
         val reduced = render(SectionVariant.REDUCED, noCountry).passage("recipients")!!.text.en
         assertTrue(reduced.contains("- Mail AG: relays the mail") && !reduced.contains("not stated"), reduced)
+    }
+
+    @Test
+    fun eachRecipientKindIsNamedInThePagesOwnLanguage() {
+        val kinds = RecipientKind.entries.filter { it != RecipientKind.OTHER }
+        val r = render(values = all.copy(recipients = kinds.map { NoticeRecipient(it.name, it, null, null) })).passage("recipients")!!
+        for (kind in kinds) {
+            val label = text.recipientKinds.getValue(kind)
+            assertTrue(label.en != label.de, "$kind: a label of its own per language")
+            assertTrue(r.text.en.contains("- ${kind.name}: ${label.en} (not stated by this operator)"), r.text.en)
+            assertTrue(r.text.de.contains("- ${kind.name}: ${label.de} (von der Betreiberseite nicht angegeben)"), r.text.de)
+            assertFalse(r.text.de.contains(label.en), "$kind: the German page carries no English label")
+        }
+        assertTrue(r.text.de.contains("- HOSTING: hostet den Server"), "the shipped German label: ${r.text.de}")
+    }
+
+    @Test
+    fun anOtherRecipientsDescriptionIsShownAsTypedAndQuotedOnBothPages() {
+        val r = render(values = all.copy(recipients = listOf(NoticeRecipient("SMS AG", RecipientKind.OTHER, "sends sign-in texts", "Germany"))))
+            .passage("recipients")!!
+        assertTrue(r.text.en.contains("- SMS AG: other — “sends sign-in texts” (Germany)"), r.text.en)
+        assertTrue(r.text.de.contains("- SMS AG: Sonstiges — „sends sign-in texts“ (Germany)"), r.text.de)
+    }
+
+    @Test
+    fun onlyAnOtherRecipientTakesADescriptionAndItNeedsOne() {
+        assertTrue(RecipientKind.OTHER.accepts("sends sign-in texts"))
+        assertFalse(RecipientKind.OTHER.accepts(null))
+        assertFalse(RecipientKind.OTHER.accepts("  "))
+        for (kind in RecipientKind.entries.filter { it != RecipientKind.OTHER }) {
+            assertTrue(kind.accepts(null) && kind.accepts(""), "$kind without one")
+            assertFalse(kind.accepts("hosts the server"), "$kind with one")
+        }
+    }
+
+    @Test
+    fun theFileIsRefusedWithoutALabelPerKindOrWithTheDescriptionOutsideOther() {
+        fun root() = ObjectMapper().readTree(file).deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()
+        fun kinds(r: com.fasterxml.jackson.databind.node.ObjectNode) = r.get("recipientKinds") as com.fasterxml.jackson.databind.node.ObjectNode
+        PrivacyNoticeText.parse(root()) // control: the shipped file parses
+
+        assertThrows<IllegalArgumentException> { PrivacyNoticeText.parse(root().also { kinds(it).remove("BACKUP") }) }
+        assertThrows<IllegalArgumentException> {
+            PrivacyNoticeText.parse(root().also { kinds(it).set<com.fasterxml.jackson.databind.JsonNode>("FAX", kinds(it).get("HOSTING")) })
+        }
+        assertThrows<IllegalArgumentException> {
+            PrivacyNoticeText.parse(root().also { (kinds(it).get("HOSTING") as com.fasterxml.jackson.databind.node.ObjectNode).put("de", "{description}") })
+        }
+        assertThrows<IllegalArgumentException> {
+            PrivacyNoticeText.parse(root().also { (kinds(it).get("OTHER") as com.fasterxml.jackson.databind.node.ObjectNode).put("en", "other") })
+        }
     }
 
     @Test
@@ -173,9 +224,10 @@ class PrivacyNoticeRendererTest {
 
     @Test
     fun aValuesNewlinesRenderInlineSoATypedValueCannotStartAMarkdownBlock() {
-        val r = render(values = all.copy(providerAddress = "Musterstraße 1\n# 12345\n- x", recipients = listOf(NoticeRecipient("A\n## B", "c", "D"))))
+        val r = render(values = all.copy(providerAddress = "Musterstraße 1\n# 12345\n- x", recipients = listOf(NoticeRecipient("A\n## B", RecipientKind.OTHER, "c\n# {storeHost}", "D"))))
         assertTrue(r.passage("controller")!!.text.en.contains("- Address: Musterstraße 1, # 12345, - x"))
-        assertTrue(r.passage("recipients")!!.text.en.contains("- A, ## B: c (D)"))
+        // the description inline too, and put in as typed: a placeholder in it is text, never a value
+        assertTrue(r.passage("recipients")!!.text.en.contains("- A, ## B: other — “c, # {storeHost}” (D)"), r.passage("recipients")!!.text.en)
     }
 
     @Test

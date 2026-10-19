@@ -57,7 +57,7 @@ class PrivacyNotices(
             privacyContact = v.statementEmail ?: v.contactEmail,
             dataProtectionOfficer = v.dataProtectionOfficer,
             supervisoryAuthority = v.supervisoryAuthority,
-            recipients = v.recipients.map { NoticeRecipient(it.name, it.purpose, it.country) },
+            recipients = v.recipients.map { NoticeRecipient(it.name, it.kind, it.description, it.country) },
             retentionDays = records.retentionDays(),
             backupRetentionDays = backups.retention().days,
             erasureWindowDays = erasureWindowDays,
