@@ -521,7 +521,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the order reached the contact point, as entered — the hour's clock is the operator's, and this record is its proof.
+          description: When the order reached the contact point, as entered — the hour's clock is the operator's, and this record is its proof. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
           example: 2026-10-18T07:12:00Z
         reference:
           $ref: "#/components/schemas/SealedOrderReference"
@@ -543,6 +543,7 @@ components:
             For `REMOVAL` only: the authority forbids telling the affected until then (TCO Art. 11(3)) — at most six
             weeks (42 days) from now (`400 deferral_out_of_bounds`); the order's reference is the deferral's. Null = the
             statement goes out with the block.
+            Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
           example: null
 
     AuthorityOrder:

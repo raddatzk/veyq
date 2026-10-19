@@ -133,7 +133,7 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "deleted_at")
     var deletedAt: Instant? = null
 
-    /** When the server stored the node — server-observed, to the millisecond (`TIMESTAMP(3)`), set once at creation
+    /** When the server stored the node — server-observed, to the millisecond (`DATETIME(3)`), set once at creation
      *  ([birthInstant]) and never written again: a rename, a move, a trash and a restore all keep it, and no request
      *  carries it. Members' tree listing serves it (`NodeSummary.createdAt`), and clients order equal-named siblings by
      *  (createdAt, id) (ADR 0015). Never on a guest's share listing nor the trash listing. */

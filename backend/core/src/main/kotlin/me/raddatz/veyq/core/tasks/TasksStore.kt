@@ -520,7 +520,7 @@ class TasksStore {
         val jobs = JobEntity.find("id in ?1", hits.map { it.second }.toSet()).list().associateBy { it.id }
         val covering = hits.mapNotNull { (rotator, jobId) -> jobs[jobId]?.let { rotator to it } }
             .groupBy({ (rotator, job) -> job.scopeId to rotator }, { it.second })
-            // `veyq_job.created_at` is TIMESTAMP(3), so a dead-letter and the re-queue after it order by their
+            // `veyq_job.created_at` is DATETIME(3), so a dead-letter and the re-queue after it order by their
             // millisecond (second-precision made them tie on MariaDB, and the id decided: a coin flip). Only two
             // jobs created inside ONE millisecond still tie, and [NEWEST_COVERING] decides that without the id first.
             .mapValues { (_, candidates) ->
@@ -701,7 +701,7 @@ class TasksStore {
 
         /**
          * Which of several jobs covering one (scope, rotator) is the **newest**: the later `createdAt` (millisecond,
-         * `veyq_job.created_at` is `TIMESTAMP(3)`); on a tie — two jobs inside one millisecond — the live one
+         * `veyq_job.created_at` is `DATETIME(3)`); on a tie — two jobs inside one millisecond — the live one
          * (`PENDING`/`LEASED`: every later event joined it), then a `FAILED` over a `DONE` (the safe reading: a
          * rotation is never shown `secured` on a tie it cannot decide), then the id, so no engine's row order
          * decides. Used with `maxWith`.

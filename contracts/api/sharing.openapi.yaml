@@ -1428,7 +1428,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: Optional expiry; a share past this instant resolves `404` (same shape as an unknown id). Null = no expiry.
+          description: Optional expiry; a share past this instant resolves `404` (same shape as an unknown id). Null = no expiry. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
           example: null
         sealedNote:
           type: [string, "null"]
@@ -1552,7 +1552,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: New expiry instant (full replace, cr-share-link-expiry-edit); `null`/absent clears it. Send the current value to preserve it.
+          description: New expiry instant (full replace, cr-share-link-expiry-edit); `null`/absent clears it. Send the current value to preserve it. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
           example: null
         passwordRequired:
           x-veyq-visibility: flag
@@ -1631,7 +1631,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: The new share's expiry — the old one's carried, or changed in the re-issue dialog. Null = no expiry.
+          description: The new share's expiry — the old one's carried, or changed in the re-issue dialog. Null = no expiry. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `400 invalid_request`.
           example: null
         sealedNote:
           type: [string, "null"]

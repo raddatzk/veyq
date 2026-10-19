@@ -128,10 +128,11 @@ class StrictJsonTypes : ObjectMapperCustomizer {
     }
 
     /**
-     * A date-time from a string only, and only one the `TIMESTAMP` columns can hold: MariaDB's range is
-     * 1970-01-01T00:00:01Z to 2038-01-19T03:14:07Z, and past it an `INSERT`/`UPDATE` fails with error 1292 — a share's
-     * `expiresAt` in 2577 answered 500 (the API fuzzing's positive writes, ADR 0091 decision 9). Every date-time a request
-     * carries is one the server stores or compares with a stored one, so the range is the request's too.
+     * A date-time from a string only, and only one a time column can hold ([STORABLE]): past it an `INSERT`/`UPDATE`
+     * fails with error 1292 — a share's `expiresAt` in 2577 answered 500 while the columns were MariaDB's `TIMESTAMP`
+     * (the API fuzzing's positive writes, ADR 0091 decision 9; inbox #509 made them `DATETIME`). Every date-time a request
+     * carries is one the server stores or compares with a stored one, so the range is the request's too, and the
+     * contract says so on each request date-time.
      */
     private class StringOnly(delegate: JsonDeserializer<*>) : DelegatingDeserializer(delegate) {
         override fun newDelegatingInstance(newDelegatee: JsonDeserializer<*>): JsonDeserializer<*> = StringOnly(newDelegatee)
@@ -146,12 +147,17 @@ class StrictJsonTypes : ObjectMapperCustomizer {
                 else -> return value
             }
             return if (instant in STORABLE) value
-            else ctxt.handleWeirdStringValue(handledType(), text, "outside the range a TIMESTAMP column holds")
+            else ctxt.handleWeirdStringValue(handledType(), text, "outside the range a stored time holds")
         }
     }
 
     private companion object {
-        /** MariaDB's `TIMESTAMP` range (the pinned 11.4; 11.5 extends it on 64-bit platforms). */
-        val STORABLE = Instant.parse("1970-01-01T00:00:01Z")..Instant.parse("2038-01-19T03:14:07Z")
+        /**
+         * What a `DATETIME` column holds as Hibernate writes it. The upper end is `DATETIME`'s own (9999-12-31, to the
+         * millisecond the precision keeps). The lower end is not `DATETIME`'s 1000-01-01 but the Gregorian cutover:
+         * Hibernate binds an `Instant` on MariaDB through `java.sql.Timestamp`, whose calendar is Julian before
+         * 1582-10-15, so `1000-01-01T00:00:00Z` reaches the column as `0999-12-27` — refused, a 500 (measured).
+         */
+        val STORABLE = Instant.parse("1582-10-15T00:00:00Z")..Instant.parse("9999-12-31T23:59:59.999Z")
     }
 }

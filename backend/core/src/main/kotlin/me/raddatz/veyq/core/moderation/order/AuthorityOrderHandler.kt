@@ -115,7 +115,7 @@ class AuthorityOrderHandler(
     data class Written(val order: AuthorityOrderEntity, val contentScope: String?, val statements: List<String>)
 
     fun enter(enteredBy: String, entered: OrderIn, at: Instant = Instant.now()): OrderOutcome {
-        // Stored to the millisecond (TIMESTAMP(3)): the answer names the times exactly as a later read will.
+        // Stored to the millisecond (DATETIME(3)): the answer names the times exactly as a later read will.
         val now = at.truncatedTo(ChronoUnit.MILLIS)
         val order = entered.copy(
             receivedAt = entered.receivedAt.truncatedTo(ChronoUnit.MILLIS),

@@ -6,7 +6,7 @@ import java.time.Instant
 
 /**
  * The rule [TasksStore.compromiseRotations] picks a (scope, rotator)'s newest covering job by, pinned without a
- * database: `veyq_job.created_at` is `TIMESTAMP(3)`, so a tie is two jobs inside one millisecond, and it must never
+ * database: `veyq_job.created_at` is `DATETIME(3)`, so a tie is two jobs inside one millisecond, and it must never
  * fall to the random id first (it did while the column was second-precision: a coin flip on MariaDB).
  */
 class TasksStoreNewestCoveringTest {
