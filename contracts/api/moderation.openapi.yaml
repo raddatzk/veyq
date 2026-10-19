@@ -46,8 +46,8 @@ paths:
       summary: Report nodes and media of a space the caller belongs to → a reference and the time.
       description: >
         A member's report (ADR 0093 §§ 1-2). Every item must be a live node of the space (`NODE`) or an application's
-        item on one (`ITEM`, a Memories medium); a member reports no `LINK`. One item outside the space refuses the
-        whole report (`404 report_item_not_found`), as a space the caller is not a member of does (`404
+        item on one (`ITEM`, a Memories medium); a member reports no `LINK`. One item outside the space — or a `LINK`
+        — refuses the whole report (`404 report_item_not_found`), as a space the caller is not a member of does (`404
         scope_not_found`). Then, in one transaction, the report is stored, each item's open case is found or opened,
         and a hold is taken where the case holds none alive
         ([en.moderation.hold](../../docs/features/moderation/enablers/en.moderation.hold.md)); after it the
@@ -75,7 +75,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReportReceipt" }
         "400":
-          description: Malformed request — an item named twice, a NODE or ITEM without its id, a LINK (`invalid_request`).
+          description: Malformed request — a NODE or ITEM without its id, a LINK with one (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -91,7 +91,8 @@ paths:
         "404":
           description: >
             No such space, or the caller is not an accepted member of it (`scope_not_found`, indistinguishable); or an
-            item that is no live node or item of it (`report_item_not_found`).
+            item that is no live node or item of it, or a `LINK` — a member's request comes through no link
+            (`report_item_not_found`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_not_found } }
         "409":
@@ -99,6 +100,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            An item named twice — the same kind and id (`report_item_repeated`, nothing stored): a rule across the items
+            no schema states.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_repeated } }
         "429":
           description: Too many reports from this account (`rate_limited`), or too many of its reports still open (`too_many_open_reports`).
           content:

@@ -147,8 +147,9 @@ class ReportCoreSliceTest {
         asGuest(shareId, body(listOf(item("NODE", shared))), writeProof = false)
             .then().statusCode(404).body("code", equalTo("share_not_found"))
         asGuest("A".repeat(43), body(listOf(item("NODE", shared)))).then().statusCode(404).body("code", equalTo("share_not_found"))
-        // A READ guest reports what the link shows; the link itself is an upload link's guest's item (ADR 0093 § 1).
-        asGuest(shareId, body(listOf(item("LINK", null)))).then().statusCode(400).body("code", equalTo("invalid_request"))
+        // A READ guest reports what the link shows; the link itself is an upload link's guest's item (ADR 0093 § 1) — a
+        // well-formed item outside this guest's reach, so the reach's 404, never the shape's 400 (inbox #507).
+        asGuest(shareId, body(listOf(item("LINK", null)))).then().statusCode(404).body("code", equalTo("report_item_not_found"))
         assertNull(openCase("NODE", shared))
     }
 
@@ -165,16 +166,21 @@ class ReportCoreSliceTest {
     fun aMalformedReportIsRefusedBeforeAnythingIsStored() {
         val m = seedMemberScope(ScopeEntity.GROUP)
         val folder = seedNode(m.scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
-        // The same item twice; a node without its id; a member's LINK; no item; 101 items.
+        // The shape the contract states (inbox #507): a node without its id; a LINK with one; no item; 101 items.
         for (items in listOf(
-            listOf(item("NODE", folder), item("NODE", folder)),
             listOf(item("NODE", null)),
-            listOf(item("LINK", null)),
+            listOf(item("LINK", folder)),
             emptyList(),
             List(101) { item("NODE", UUID.randomUUID().toString()) },
         )) {
             asMember(m.userId, m.scopeId, body(items)).then().statusCode(400).body("code", equalTo("invalid_request"))
         }
+        // What no schema states: the same item twice — the same kind and id, whatever its sealed share says.
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", folder), item("NODE", folder))))
+            .then().statusCode(422).body("code", equalTo("report_item_repeated"))
+        // A member's LINK is well-formed and names nothing in reach: a member's request comes through no link.
+        asMember(m.userId, m.scopeId, body(listOf(item("LINK", null))))
+            .then().statusCode(404).body("code", equalTo("report_item_not_found"))
         assertEquals(0L, reportsOf(m.userId))
     }
 

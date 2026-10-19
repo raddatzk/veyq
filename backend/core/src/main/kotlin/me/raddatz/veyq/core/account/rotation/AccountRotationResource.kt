@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.generated.model.RotateAccountKeysRequest
 import me.raddatz.veyq.core.generated.model.RotateAccountKeysResult
 import me.raddatz.veyq.core.generated.model.RotatedWrap
 import me.raddatz.veyq.core.generated.model.RotationScopeState
+import me.raddatz.veyq.core.account.identitypins.PinWrite
 import me.raddatz.veyq.core.account.identitypins.toPinWrite
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -46,7 +47,8 @@ class AccountRotationResource(
         // The pins ride as the whole re-keyed set (ADR 0104): a write that keeps any entry would leave it under the
         // retired Master Key's id and seal, which every device then refuses.
         val pins = rotateAccountKeysRequest.identityPins.toPinWrite()
-        if (!pins.replaceAll || pins.contradictory()) return httpError(Failures.invalidRequest)
+        if (!pins.replaceAll || pins.deletesBesideReplaceAll()) return httpError(Failures.invalidRequest)
+        if (pins.contradictory()) return httpError(PinWrite.contradiction)
         return when (
             val outcome = handler.rotate(
                 userId = identity.principal.name,
