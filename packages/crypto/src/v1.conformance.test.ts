@@ -867,14 +867,71 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       expect(v1.itemMarkSelfTagVerifies(kSelf, c.context, flipped)).toBe(false)
     })
 
-    // The two vectors are one object: the item-favorites seal vector's plaintext is case one's `{tag, ids}`, so the
-    // stored format and the tag cannot drift apart unseen.
-    it('the item-favorites seal vector carries case one as its {tag, ids} plaintext', () => {
-      const pt = JSON.parse(new TextDecoder().decode(unhex(vectors.seal.sym['item-favorites'].plaintext)))
-      expect(Object.keys(pt)).toEqual(['tag', 'ids'])
-      expect(hex(Uint8Array.from(Buffer.from(pt.tag, 'base64')))).toBe(s.one.tag)
-      expect(pt.ids).toEqual(s.one.context.ids)
+    // The two vectors are one object: the item-favorites seal vector's plaintext is case one's encoding, so the stored
+    // format and the tag cannot drift apart unseen.
+    it('the item-favorites seal vector carries case one\'s plaintext', () => {
+      expect(vectors.seal.sym['item-favorites'].plaintext).toBe(s.one.plaintext)
       expect(vectors.seal.sym['item-favorites'].context).toEqual({ scopeId: s.one.context.scopeId, nodeId: s.one.context.nodeId })
+    })
+
+    // inbox #500: tag ‖ each distinct id's 16 bytes, ascending — the encoder writes the vector from any order and
+    // repetition, and the decoder reads it back as the tag and the distinct ids in that order.
+    it.each(cases)('%s: the plaintext is tag ‖ 16-byte ids, distinct and ascending', (_name, c) => {
+      const pt = unhex((c as Case & { plaintext: string }).plaintext)
+      expect(hex(v1.encodeItemMarks(unhex(c.tag), c.context.ids))).toBe(hex(pt))
+      expect(hex(v1.encodeItemMarks(unhex(c.tag), [...c.context.ids].reverse()))).toBe(hex(pt))
+      const back = v1.decodeItemMarks(pt)
+      expect(hex(back.tag)).toBe(c.tag)
+      expect(back.ids).toEqual([...new Set(c.context.ids)].sort())
+    })
+
+    it('an empty set is the tag alone, and reads back as no ids', () => {
+      const tag = unhex(s.one.tag)
+      expect(hex(v1.encodeItemMarks(tag, []))).toBe(s.one.tag)
+      expect(v1.decodeItemMarks(tag)).toEqual({ tag, ids: [] })
+    })
+
+    // Two ids that differ only in their first and their last byte: the order is the bytes' order across all 16 of
+    // them, and an id is read from exactly its own 16 bytes (the hex groups 8-4-4-4-12).
+    it('orders by every byte and reads each id from its own 16 bytes', () => {
+      const tag = unhex(s.one.tag)
+      const ids = ['ff000000-0000-4000-8000-000000000000', '00000000-0000-4000-8000-0000000000fe', '00000000-0000-4000-8000-0000000000ff']
+      const pt = v1.encodeItemMarks(tag, ids)
+      expect(pt.length).toBe(32 + 3 * 16)
+      expect(hex(pt.slice(32))).toBe([ids[1], ids[2], ids[0]].map((i) => i.replaceAll('-', '')).join(''))
+      expect(v1.decodeItemMarks(pt).ids).toEqual([ids[1], ids[2], ids[0]])
+      const odd = unhex('0123456789abcdef0123456789abcdef')
+      expect(v1.decodeItemMarks(v1.concat(tag, odd)).ids).toEqual(['01234567-89ab-cdef-0123-456789abcdef'])
+    })
+
+    it('the encoder refuses a tag of another length and an id that is not a canonical lowercase UUID', () => {
+      const tag = unhex(s.one.tag)
+      const refusal = /^item-mark tag is not 32 bytes$/
+      expect(() => v1.encodeItemMarks(tag.slice(0, 31), [])).toThrow(refusal)
+      expect(() => v1.encodeItemMarks(v1.concat(tag, Uint8Array.of(0)), [])).toThrow(refusal)
+      for (const bad of ['C0FFEE00-0000-4000-8000-00000000000C', 'c0ffee00-0000-4000-8000-00000000000', 'xc0ffee00-0000-4000-8000-00000000000c', 'c0ffee00-0000-4000-8000-00000000000cx', 7]) {
+        expect(() => v1.encodeItemMarks(tag, [bad as string]), String(bad)).toThrow(/^item-mark id is not a canonical lowercase UUID$/)
+      }
+      expect(() => v1.encodeItemMarks(tag, ['c0ffee00-0000-4000-8000-00000000000c'])).not.toThrow()
+      // not a string, though its text is a canonical id: refused as such, not by whatever a string method does to it
+      const lookalike = { toString: () => 'c0ffee00-0000-4000-8000-00000000000c' } as unknown as string
+      expect(() => v1.encodeItemMarks(tag, [lookalike])).toThrow(/^item-mark id is not a canonical lowercase UUID$/)
+    })
+
+    // Each refusal is a plaintext no encoder writes; each is crafted to fail exactly its one check.
+    it('the decoder refuses a short plaintext, a cut id, and ids out of order or repeated', () => {
+      const pt = unhex((s.several_unsorted_with_duplicate as Case & { plaintext: string }).plaintext)
+      const shape = /^item-mark plaintext is not a tag and whole ids$/
+      expect(() => v1.decodeItemMarks(pt.slice(0, 31))).toThrow(shape)
+      expect(() => v1.decodeItemMarks(new Uint8Array(0))).toThrow(shape)
+      expect(() => v1.decodeItemMarks(pt.slice(0, pt.length - 1))).toThrow(shape)
+      expect(() => v1.decodeItemMarks(v1.concat(pt, Uint8Array.of(0)))).toThrow(shape)
+      const order = /^item-mark ids are not distinct and ascending$/
+      const [tag, a, b] = [pt.slice(0, 32), pt.slice(32, 48), pt.slice(48, 64)]
+      expect(() => v1.decodeItemMarks(v1.concat(tag, b, a))).toThrow(order)
+      expect(() => v1.decodeItemMarks(v1.concat(tag, a, a))).toThrow(order)
+      expect(v1.decodeItemMarks(v1.concat(tag, a, b)).ids).toHaveLength(2)
+      expect(new v1.ItemMarksInvalid('x')).toBeInstanceOf(Error)
     })
 
     it('the statement\'s label domain-separates it from every seal purpose', () => {
