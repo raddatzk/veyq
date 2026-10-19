@@ -81,6 +81,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "#/components/responses/BannerConflict" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: The node is no MEMORY or CHAPTER (`illegal_target`), or an upload was not started as this node's banner or poster (`upload_mismatch`).
           content:
@@ -135,6 +136,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "#/components/responses/BannerConflict" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: The node is no MEMORY or CHAPTER (`illegal_target`).
           content:
