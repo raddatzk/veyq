@@ -21,18 +21,20 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
   more): the refused value is often ciphertext or an opaque id, and the operator-blind boundary applies to errors too
   (developer styleguide §7; `MalformedRequestSliceTest.assertRefused` holds the same rule for its cases).
 - **`peer_is_refused`** — the second identity (ADR 0091 decision 9, inbox #495): every positive request the OWNER made
-  in its personal scope and the server accepted (2xx) is sent again as the PEER — a member of the same tenant, of none
-  of the owner's scopes (`web/scripts/fuzz-seed.mts`) — and must be refused exactly as a scope that does not exist is
-  refused: the same `404` and the same `code` (the membership boundary is the first guard, so a non-member and a bogus
-  id are indistinguishable — `cc.security.authorization` § 2, ADR 0042); where the operation answers a bogus scope
-  with a success (declining an invitation nobody sent is a no-op), the same success with the same body. Where the path also names one of the owner's
-  objects (its Memory, medium, bucket), the request is sent a second time as the peer IN ITS OWN SCOPE, still naming
-  the owner's object, and must be answered as the same request naming an object nobody has — the object-level half
-  (an id from another scope is not found, not forbidden). Writes are replayed as well as reads: a write the peer is
-  wrongly let through is the finding, and it changes only the throwaway instance. Shares and tenant-level paths are
-  out of its reach on purpose: a share id is a capability its holder may use, and the peer is a member of the tenant.
-  The two tokens and the ids reach it by the environment (`VEYQ_FUZZ_PEER_TOKEN` by name; `VEYQ_FUZZ_IDS`, a path to
-  the run's non-secret ids); without them it checks nothing.
+  in its own scope (a group only it is a member of) and the server accepted (2xx) is sent again as the PEER — a member
+  of the same tenant, of none of the owner's scopes (`web/scripts/fuzz-seed.mts`) — and must be answered exactly as
+  the same request against a scope nobody has: the same `404` and the same `code` (the membership boundary is the
+  first guard, so a non-member and a bogus id are indistinguishable — `cc.security.authorization` § 2, ADR 0042), or,
+  where the operation answers a bogus scope with a success (declining an invitation nobody sent is a no-op), the same
+  success with the same body. Where the path also names one of the owner's objects (its Memory, medium, bucket, blob),
+  the request is sent a second time as the peer IN ITS OWN SCOPE, still naming the owner's object, and must be answered
+  as the same request naming an object nobody has — the object-level half (an id from another scope is not found, not
+  forbidden). Writes are replayed as well as reads: a write the peer is wrongly let through is the finding, and it
+  changes only the throwaway instance. Shares and tenant-level paths are out of its reach on purpose: a share id is a
+  capability its holder may use, and the peer is a member of the tenant. The peer's token and the ids reach it by the
+  environment (`VEYQ_FUZZ_PEER_TOKEN` by name; `VEYQ_FUZZ_IDS`, a path to the run's non-secret ids); without them it
+  checks nothing. Bitten 2026-10-19 by hand: the owner's token in the peer's place reds the scope half, and with the
+  scope half switched off and the owner's scope as the peer's own, the object half reds too.
 
 This file runs inside the pinned Schemathesis image (its Python), and is still written in the syntax of the host's
 Python 3.9 (`from __future__ import annotations`), because the repository's tooling reads every tracked `*.py` with it.

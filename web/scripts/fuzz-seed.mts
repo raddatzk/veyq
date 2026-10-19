@@ -6,8 +6,8 @@
 // tenant on the fuzzed domain accepted as that owner and sending through Mailpit, its personal scope. Then, through the
 // client's own modules (signed in and unlocked as a person is), the objects the run's positive requests are fixed to:
 //
-//   - in the owner's personal scope a Memory, one medium in it (a few sealed bytes, original only), a bucket, and a
-//     READ link on the Memory;
+//   - in a group scope of the owner's own (only the owner a member) a Memory, one medium in it (a few sealed bytes,
+//     original only), a bucket, and a READ link on the Memory;
 //   - a second identity, the PEER: a tenant member onboarded the product's way (an owner-minted invite read out of
 //     Mailpit, a cold-birth accept), with a personal scope of its own. It owns nothing of the owner's and is a member
 //     of none of the owner's scopes, so every request below the owner's scope must be refused to it as to a stranger
@@ -43,7 +43,7 @@ import { session } from '../src/app/session'
 import { clearVault } from '../src/app/vault'
 import { login } from '../src/features/account/login/login'
 import { unlockMasterKey } from '../src/features/account/unlock/unlock'
-import { ensurePersonalScope, openScope, type OpenedScope } from '../src/features/spaces/scopes'
+import { createGroup, ensurePersonalScope, openScope, openScopeById, type OpenedScope } from '../src/features/spaces/scopes'
 import { inviteMember } from '../src/features/spaces/members'
 import { registerAndAccept } from '../src/features/tenant/tenantInvite'
 import { createMemory } from '../src/features/memory/memoryNodes'
@@ -121,7 +121,7 @@ async function birth(): Promise<void> {
   const token = await signIn(owner.email, owner.password)
   await ensureBundledStore(token)
   const tenant = await birthTenant(token, built, { tenantName: 'Fuzz', domain, email: owner.email, username: 'fuzzowner' })
-  const scopeId = await birthPersonalScope(token, domain, tenant.ownerId, built)
+  await birthPersonalScope(token, domain, tenant.ownerId, built)
   // The tenant sends through the run's Mailpit, as every e2e suite's does (`e2eBootstrap.birthInstance`): an
   // instance that cannot mail answers `503 mail_unavailable` to every operation that mails, which is a statement about
   // the instance, not about the API — and the peer's invite travels by mail only. `username: null` keeps it off the
@@ -135,7 +135,6 @@ async function birth(): Promise<void> {
   session.apiBase = tenantBase(domain)
   await become(owner)
   const made = await ownerObjects()
-  if (made.scopeId !== scopeId) throw new Error('the owner opened another personal scope than the one it was born with')
 
   // --- the peer: a member of the tenant, of nothing of the owner's --------------------------------------------------
   const peerUserId = await onboardPeer(tenant.tenantId, peer, fromB64std(setup.instanceSalt))
@@ -154,12 +153,17 @@ async function birth(): Promise<void> {
   console.log(`fuzz-seed: instance born (owner, tenant ${domain}, a Memory with a medium, a bucket and a link; a peer member) — seed and tokens written to ${out}`)
 }
 
-/** In the signed-in owner's personal scope: a Memory, one medium in it (a few sealed bytes as the original, no tier — the
- *  server never sees more than ciphertext of any of them), a bucket, and a READ link on the Memory. */
+/** For the signed-in owner, in a GROUP scope of its own that only the owner is a member of: a Memory, one medium in it (a
+ *  few sealed bytes as the original, no tier — the server never sees more than ciphertext of any of them), a bucket, and
+ *  a READ link on the Memory. A group per call, not the personal scope: a positive write may rotate the scope it is fixed
+ *  to with keys nobody holds (the server cannot tell them from real ones), after which nobody opens that scope again —
+ *  measured, the second `--objects` of a run could no longer open the personal scope the first run's writes rotated. */
 async function ownerObjects(): Promise<Pick<Seed['ids'], 'scopeId' | 'nodeId' | 'mediaId' | 'blobId' | 'bucketId' | 'shareId'>> {
-  const own = await personalScope()
   // A name of its own per call: names are unique among a parent's children (`409 slug_taken`).
-  const name = `Fuzz memory ${crypto.randomUUID().slice(0, 8)}`
+  const name = `Fuzz ${crypto.randomUUID().slice(0, 8)}`
+  const groupId = await createGroup(name)
+  const own = await openScopeById(groupId)
+  if (!own) throw new Error('the owner cannot open the group it just created')
   const memory = await createMemory(own.scopeId, own.epochs, name)
   const bytes = new Uint8Array(4096).map((_, i) => (i * 31 + 7) % 251)
   const medium = await addCopiedMedia(own.scopeId, memory.nodeId, memory.memoryKey, {

@@ -5,16 +5,19 @@
 with `run_web_e2e.py`'s own primitives (the shared compose stack's MariaDB and store, a database and a bucket named
 by the run's stamp and dropped when it ends [run_names] — two worktrees' runs never share one, inbox #501 — its own
 ports), births an instance on it with the real client crypto (`web/scripts/fuzz-seed.mts`: an owner with a Memory, a
-medium, a bucket and a link in its personal scope, and a PEER, a second member of the tenant), and runs the pinned
+medium, a bucket and a link in a group of its own, and a PEER, a second member of the tenant), and runs the pinned
 Schemathesis image over every spec file `contract_specs.specs()` finds — never a list here — in [INVOCATIONS], in order:
 
+    public-positive   every GET, positive, the seeded ids fixed
     public-negative   every operation, negative (coverage, fuzzing)
-    public-positive   every GET, positive, the seeded ids fixed — before the writes may trash what they read
     public-writes     every other method, positive, the seeded ids fixed, minus [NEGATIVE_ONLY]
     public-stateful   Schemathesis' stateful phase over the links it infers from the schemas, minus [NEGATIVE_ONLY];
                       only the containers (tenant, owner, scope) fixed, so a sequence reaches what it creates
-    admin-negative    every admin operation, negative
     admin-positive    every admin GET, positive — an admin write is the instance's configuration: negative only
+    admin-negative    every admin operation, negative
+
+Each public positive invocation after the first is fixed to objects of its own (`fuzz-seed.mts --objects`): a negative
+run learns ids from the responses it reads, and the writes trash, revoke and purge what they are fixed to.
 
 An operation marked `x-veyq-channel: admin` goes to the admin listener, every other one to the public listener; a spec
 file with no operation for an invocation is not run for it. Before each spec file the runner makes sure the access
@@ -73,12 +76,14 @@ store — its own database and bucket only, and `up --no-recreate`, so a running
 git worktree, pin the stack to the main checkout's `infra/` (`VEYQ_INFRA_DIR=<main>/infra`) and the jar to the
 worktree's (`VEYQ_JAR`), as that script's `compose_up` explains; `run_pipeline.py` does the first for every job.
 
-**Measured** (2026-10-19, local: macOS arm64, Docker Desktop, a load average of 7-9 from parallel sessions;
-`MAX_EXAMPLES` 10; the green run): the image already built, the boot and the seed about 30 s; public-negative 62 s (180
-operations in 17 runs — `logout`'s own run included), public-positive 17 s (52 GETs), admin-negative 13 s (59
-operations), admin-positive 2 s (16 GETs) — 159 s in all. With the jar build, `npm ci` and the image build before it
-the job fits its 15 minutes on that machine; a CI runner has fewer cores, and its first run replaces these numbers
-(ADR 0091 decision 1). `MAX_EXAMPLES` is the knob if it does not.
+**Measured** (2026-10-19, local: macOS arm64, Docker Desktop, a load average of 11-21 from parallel sessions;
+`MAX_EXAMPLES` 10; the last two runs, the green one second): the image already built, the boot and the seed about 40 s,
+each later fresh set of objects about 10 s; public-positive 23-31 s (54 GETs), public-negative 67-87 s (182 operations),
+public-writes 75-129 s (112), public-stateful 49-53 s (40 of 165 operations reached through an inferred link), admin
+positive 2-3 s (17), admin-negative 13-19 s (61) — 343-438 s in all, against 159 s for the first slice alone. With the
+jar build, `npm ci` and the image build before it the job still fits its 15 minutes on that machine, with less room; a
+CI runner has fewer cores, and its first run replaces these numbers (ADR 0091 decision 1). `MAX_EXAMPLES` is the knob if
+it does not.
 
 Usage:
     python3 scripts/run_api_fuzz.py                      # the whole run, as CI calls it
@@ -338,8 +343,9 @@ def enforced(node: object) -> object:
     `minLength: 1`); and a required primitive is typed `[T, "null"]` with `@NotNull`, so that a missing field is refused
     rather than bound as 0/false (rule 5) — the `null` is the generator's workaround, never a value the server takes.
     Two more are what a format means: base64 is whole quanta, and an integer binds to the generated type's range.
-    Read as they are, every positive request carries one of them broken and is refused `400`, whatever else it says
-    (measured: 70 of the 111 positive writes of this slice's first run, every one for one of these three)."""
+    Read as they are, a positive request mostly carries one of them broken and is refused `400`, whatever else it says
+    (measured: 58 of the 111 positive writes of this slice's first run answered 400; each of the 25 read broke one of
+    these). The negative invocations read the contracts as they are."""
     if isinstance(node, list):
         return [enforced(x) for x in node]
     if not isinstance(node, dict):
