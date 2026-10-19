@@ -59,7 +59,7 @@ describe('operator facade (uc.admin.operator-details)', () => {
 })
 
 describe('operator facade — the privacy notice’s values (ADR 0035 decision 8)', () => {
-  const hosting = { name: 'Example Hosting GmbH', kind: 'HOSTING' as const, description: null, country: 'Germany' }
+  const hosting = { name: 'Example Hosting GmbH', kind: 'HOSTING' as const, description: null, country: 'DE' }
 
   it('warns, in the organisation mode only, while no recipient or no supervisory authority is named', () => {
     expect(operatorWarnings(op({ recipients: [hosting] }), true).privacy).toBe(true) // no authority yet
@@ -87,14 +87,17 @@ describe('operator facade — the privacy notice’s values (ADR 0035 decision 8
     expect(recipientFits({ kind: 'HOSTING', description: 'hosts the server' })).toBe(false)
   })
 
-  it('reads a CLI row as <name>|<kind>|<country>, other with its words, the country optional, and refuses anything else', () => {
-    expect(parseRecipient(' Example AG | hosting | Germany ')).toEqual({ name: 'Example AG', kind: 'HOSTING', description: null, country: 'Germany' })
+  it('reads a CLI row as <name>|<kind>|<country code>, other with its words, the country optional, and refuses anything else', () => {
+    expect(parseRecipient(' Example AG | hosting | DE ')).toEqual({ name: 'Example AG', kind: 'HOSTING', description: null, country: 'DE' })
+    expect(parseRecipient('Example AG|hosting|fi')).toMatchObject({ country: 'FI' }) // either case, sent upper
+    expect(parseRecipient('Example AG|hosting|Germany')).toBeNull() // a name is no code
+    expect(parseRecipient('Example AG|hosting|XX')).toBeNull() // a code the backend does not know
     expect(parseRecipient('Mail AG|Mail-Relay')).toEqual({ name: 'Mail AG', kind: 'MAIL_RELAY', description: null, country: null })
     expect(parseRecipient('S3 AG|object-storage')).toMatchObject({ kind: 'OBJECT_STORAGE' })
-    expect(parseRecipient('SMS AG|other: sends sign-in texts: by SMS|Germany'))
-      .toEqual({ name: 'SMS AG', kind: 'OTHER', description: 'sends sign-in texts: by SMS', country: 'Germany' })
+    expect(parseRecipient('SMS AG|other: sends sign-in texts: by SMS|DE'))
+      .toEqual({ name: 'SMS AG', kind: 'OTHER', description: 'sends sign-in texts: by SMS', country: 'DE' })
     expect(parseRecipient('SMS AG|other')).toBeNull() // OTHER needs its words
-    expect(parseRecipient('SMS AG|other: |Germany')).toBeNull()
+    expect(parseRecipient('SMS AG|other: |DE')).toBeNull()
     expect(parseRecipient('Example AG|hosting:hosts the server')).toBeNull() // words only for OTHER
     expect(parseRecipient('Example AG|hosts the server')).toBeNull() // free text is no kind any more
     expect(parseRecipient('Mail AG')).toBeNull()

@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.generated.model.DeliveryResult
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.terms.RecipientCountries
 import me.raddatz.veyq.core.terms.RecipientKind
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -33,7 +34,8 @@ sealed interface OperatorSetOutcome {
 
     /**
      * A recipient whose description does not fit its kind ([RecipientKind.accepts]): an OTHER one without one, or any
-     * other kind with one. The contract cannot say it field by field, so the handler does; nothing is stored.
+     * other kind with one; or whose country is a code of the right shape the JDK does not know ([RecipientCountries]).
+     * The contract cannot say either field by field, so the handler does; nothing is stored.
      */
     data object RecipientMalformed : OperatorSetOutcome, HttpFailure by httpFailure("invalid_request", FailureStatus.BAD_REQUEST)
 }
@@ -79,11 +81,14 @@ class OperatorDetailsHandler(
 
     /**
      * A full replace of the values (a value omitted is cleared); then a code for an unconfirmed notification address.
-     * Refused whole, storing nothing, where a recipient's description does not fit its kind.
+     * Refused whole, storing nothing, where a recipient's description does not fit its kind or its country is no code
+     * the JDK knows.
      */
     fun set(values: OperatorValues, now: Instant = Instant.now()): OperatorSetOutcome {
         val clean = values.cleaned()
-        if (clean.recipients.any { !it.kind.accepts(it.description) }) return OperatorSetOutcome.RecipientMalformed
+        if (clean.recipients.any { !it.kind.accepts(it.description) || !RecipientCountries.known(it.country) }) {
+            return OperatorSetOutcome.RecipientMalformed
+        }
         val ready = mailer.ready(now)
         val minted = QuarkusTransaction.requiringNew().call {
             val e = store.lockedRow()
@@ -207,7 +212,8 @@ class OperatorDetailsHandler(
         providerRepresentative = providerRepresentative.blankToNull(),
         supervisoryAuthority = supervisoryAuthority.blankToNull(),
         dataProtectionOfficer = dataProtectionOfficer.blankToNull(),
-        // The contract refuses a blank name (`OperatorRecipient`'s @NotBlank); a blank description or country is none.
+        // The contract refuses a blank name (`OperatorRecipient`'s @NotBlank) and a country that is no two capitals (its
+        // @Pattern); a blank description is none.
         recipients = recipients.map {
             PublishedRecipient(it.name.trim(), it.kind, it.description.blankToNull(), it.country.blankToNull())
         },
