@@ -156,9 +156,12 @@ member's wraps the scope's calls; the guest's reads the link's media listing (ea
 opens every tier through the share presign, and — for `READ_WRITE` only — uploads into the node on screen, naming it
 (the root names none) and sealing under that node's key from the chain, and purges what this device sent
 (`ownShareMedia.ts`). It has no door for the media trash, the node's date, place and cover, a medium's meta, the item
-marks, the organizer, the live poll or the heavy EXIF — so a guest's view re-reads its own listing after its own
-upload or delete, and sees another guest's upload on its next open; a `WRITE_ONLY` link uploads and deletes through its
-drop page, never this source.
+marks, the organizer or the heavy EXIF; a `WRITE_ONLY` link uploads and deletes through its drop page, never this source.
+It polls as the member's does (inbox #497, the same `useMediaGalleryLive` loop): its tag is the `ETag` of
+`listShareMedia`'s first page, a digest of everything the read serves ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)
+decision 4, never the node's item revision), and a change answers the whole listing with every id in it — a guest is
+told no order of the Memory's changes to continue a keyset from — so another uploader's photo appears, and one gone
+from the link drops, without a reload.
 
 **A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memory/levelRows.ts`), handed a guest's access and tree,
 gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed with the node's key the link's

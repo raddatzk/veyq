@@ -1,6 +1,6 @@
 # ADR 0081 — A scope's tree revision is the level view's change signal: the live refresh is a conditional GET
 
-- Status: Accepted
+- Status: Accepted (decision 4 reaches a guest's media listing too: 2026-10-19, inbox #497)
 - Date: 2026-10-12
 
 ## Context
@@ -62,7 +62,9 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
    client's parse and decryption, and the compare. A `404` — revoked, expired, deleted, its space going, one non-enumerable
    answer — is the same as ever, and the polling guest now notices it: the page flips to its unavailable state (a changed
    password to the gate). A failure that says nothing about the link (the network, a 429, a 5xx) backs the poller off and
-   leaves the page standing.
+   leaves the page standing. **The rule is every guest list's, not the resolve's alone:** Memories' `listShareMedia`, the
+   guest's gallery, is tagged the same way (a digest of every page it serves, never the node's item revision —
+   [ADR 0033](0033-live-media-updates-revision-polling.md) decision 7).
 
 5. **Clients.** The poller echoes the tag of what it shows. `304` is no work: nothing parsed, opened or compared, and the
    sections are told nothing. A `200` replaces the tree only if the fingerprint of its rows differs (the fingerprint stays
@@ -95,8 +97,10 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
   signal, bought by bumping up the whole ancestor chain on every write under a lock-heavy path — not worth it while a
   digest costs only the reads the resolve already does. Revisit if guest polls on very large scopes show.
 - **A server-side cache of the guest digest keyed by the scope revision** (so an idle guest poll skips the subtree
-  read): sound (read the revision first, then compute; a stale hit only re-computes), and not built. It is an
-  optimisation of reads the resolve always did; the first measurement that wants it can add it without changing the contract.
+  read): sound (read the revision first, then compute; a stale hit only re-computes), and not built for the resolve. It
+  is an optimisation of reads the resolve always did; the first measurement that wants it can add it without changing the
+  contract. The guest's media listing did want it — its digest reads every page of a gallery, about 0.5 s at 1,000 photos
+  — and has it, keyed by the asked nodes' item revisions and the blocks that reach them (ADR 0033 decision 7).
 - **A persistence listener that checks every node write bumped:** Hibernate's listeners do not see the bulk
   `UPDATE` that `applyUpdate` is, so the guard would be blind where it matters most.
 - **Push (SSE/WebSocket):** as in ADR 0033 — a held per-viewer connection is a stronger presence signal than a coarse poll.

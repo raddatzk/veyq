@@ -1,6 +1,6 @@
 # ADR 0033 — Live item lists: a per-node revision counter + conditional GET + keyset delta, short-polled
 
-- Status: Accepted (decision 6, the list in pages, and decision 3's keyset on a position: 2026-10-19, `cr-gallery-list-paging`)
+- Status: Accepted (decision 6, the list in pages, and decision 3's keyset on a position: 2026-10-19, `cr-gallery-list-paging`; decision 7, a guest's poll: 2026-10-19, inbox #497)
 - Date: 2026-07-09
 
 ## Context
@@ -107,9 +107,27 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    every page. **A guest's listing (`listShareMedia`) pages by the same rule on another key: the media id**, continued
    `after` the last id it was given, and it lists the one node a guest has open (`nodeId`) rather than the whole shared
    subtree. A position is the order of the Memory's changes, and a guest is told no time of the Memory's activity (ADR
-   0081 decision 4; it is served no `updatedAt` either), so its key is the one it already holds. Without a live poll for
-   guests (inbox #497) nothing depends on a guest's page order matching commit order: a medium added while a guest pages is
-   in its next load.
+   0081 decision 4; it is served no `updatedAt` either), so its key is the one it already holds.
+
+7. **A guest polls too, on a tag of its own (inbox #497).** A share view equals the member view, so a guest's open
+   gallery picks up a second uploader's photo as a member's does, through the same client loop (`useMediaGalleryLive`,
+   core's `itemsPollTick`). Its tag is not the node's item revision: that moves on changes a guest is not shown (a medium
+   moved between buckets, an edit undone) and would tell an anonymous visitor when the Memory is worked on. It is ADR
+   0081 decision 4's rule — `listShareMedia`'s first page (no `after`) carries an `ETag` that is a truncated SHA-256 over
+   everything the read serves, every page of it, each medium as the generated model names it, and the identities beside
+   them (`ShareMediaTag`); `If-None-Match` with it answers `304`. A guest has no keyset into the Memory's changes (its
+   pages run by id), so a change answers the **whole listing**, and the client merges it with every id it holds as the id
+   set — adds insert, a medium gone from the link drops, by the one `reconcileItems` merge. The first page's tag is read
+   before its rows, so a medium added while the guest pages moves the tag past the kept one and the next poll re-reads.
+   **The idle poll is cheap because the digest is remembered** by what it is a function of (`ShareMediaTags`, per
+   instance, bounded): the asked nodes and their item revisions — every medium writer bumps one, and a medium's blobs are
+   written with it — and the content blocks that reach those nodes, which bump nothing. An idle guest poll reads the gate,
+   the blocks and the revisions and compares; only a changed key reads the whole listing, and serves the first page from
+   that read. Measured (H2 in the slice suite, a developer Mac at load 22, indicative): an idle guest poll is 11
+   statements and about 10 ms at 1,000 and at 10,000 photos (a member's `304`: 13 statements, 10–30 ms); a recompute
+   after a change 14 statements and about 0.5 s at 1,000, 41 and about 5 s at 10,000 — one per change per instance,
+   shared by every link onto the node (`ShareMediaLivePollSliceTest` pins the idle poll's statements at 1 and 1,001
+   media). Two guests that miss at once each recompute; nothing single-flights them.
 
 How the server computes one `listNodeMedia` poll response (core's `NodeItemsRevisions.read` decides it) — the **O(1) revision compare short-circuits the idle
 case** (no media query at all), and only a genuine change runs the two queries (keyset delta + current id-set):
