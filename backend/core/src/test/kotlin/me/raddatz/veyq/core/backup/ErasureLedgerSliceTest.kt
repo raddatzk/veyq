@@ -15,6 +15,15 @@ import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.dismiss
+import me.raddatz.veyq.core.moderation.hold.HoldEntity
+import me.raddatz.veyq.core.moderation.hold.HoldPinEntity
+import me.raddatz.veyq.core.moderation.hold.HoldRowEntity
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.body
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.item
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.openCase
 import me.raddatz.veyq.core.moderation.cases.CaseViews
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import me.raddatz.veyq.core.moderation.report.CaseOrigin
@@ -319,6 +328,7 @@ class ErasureLedgerSliceTest {
         start.run()
         assertNull(read { VeyqUser.findById(member) })
         assertEquals(0L, read { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", member) })
+        assertTrue(read { ModerationBlockEntity.findById(block)!!.endedWithTarget }, "still a measure that ended with its target")
     }
 
     @Test
@@ -335,6 +345,8 @@ class ErasureLedgerSliceTest {
         }
         assertEquals(1, start.run().relifted)
         assertEquals(0L, read { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", member) })
+        // Lifted by the Server Owner, as the line says — never read as a measure that ended with its erased target.
+        assertEquals(owner, read { ModerationBlockEntity.findById(row)!!.liftedBy })
     }
 
     @Test
@@ -373,6 +385,61 @@ class ErasureLedgerSliceTest {
         val queued = cases.queue(null).single { it.id.toString() == open }
         assertEquals("RESTORED", queued.origin.name, "the queue shows that a case existed")
         assertEquals(0, start.run().caseStubs, "a stub is made once")
+    }
+
+    /**
+     * A dismissal ends the hold at once (ADR 0093 § 4) and writes a `HOLD_ENDED` line: a restore of a capture from before
+     * the dismissal brings the case back open and its hold back with its snapshot, its pins and an end up to 90 days
+     * ahead — for child sexual abuse longer than § 184b(5) StGB allows. The start ends the hold again and closes the case,
+     * as it was; a case reported beside it and never decided keeps its hold.
+     */
+    @Test
+    fun aHoldADismissalEndedAfterTheCaptureEndsAgainAndItsCaseClosesAgain() {
+        val mod = CaseTestKit.moderator()
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val dismissed = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        seedAttachment(m.scopeId, dismissed, "cover")
+        val undecided = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", dismissed), item("NODE", undecided)))).then().statusCode(201)
+        val caseId = openCase("NODE", dismissed)!!.id
+        val control = openCase("NODE", undecided)!!.id
+        val hold = CaseTestKit.holdOf(caseId)!!.id
+        // The capture: the case open, its hold with its snapshot and its pins, and the log as it stood.
+        val captured = read { listOf(HoldEntity.findById(hold)!!) + HoldRowEntity.list("holdId", hold) + HoldPinEntity.list("holdId", hold) }
+        val openKey = CaseTestKit.caseRow(caseId).openKey!!
+        val events = read { ModerationEventEntity.list("caseId", caseId).map { it.id } }
+        assertTrue(read { HoldRowEntity.count("holdId", hold) } > 0 && CaseTestKit.pinsOf(hold) > 0, "the hold holds something")
+
+        mod.dismiss(caseId).then().statusCode(200)
+        assertNull(read { HoldEntity.findById(hold) }, "a dismissal ends the hold at once")
+        assertEquals(1L, read { ErasureOutboxEntity.count("kind = ?1 and subjectId = ?2", "HOLD_ENDED", hold) }, "…with its line")
+
+        // The restore: the case open again, its hold back with its end ahead, its log without the dismissal. (The case row
+        // still exists, so it is written back by an update — a merge onto a live row is lost to field-access dirty tracking.)
+        restore(*captured.toTypedArray())
+        QuarkusTransaction.requiringNew().run {
+            ModerationCaseEntity.update("state = ?1, openKey = ?2, closedAt = null where id = ?3", CaseState.OPEN.name, openKey, caseId)
+            ModerationEventEntity.delete("caseId = ?1 and id not in ?2", caseId, events)
+        }
+        assertEquals(CaseState.OPEN.name, CaseTestKit.caseRow(caseId).state)
+        assertNotNull(read { HoldEntity.findById(hold) }, "the restore brought the hold back")
+
+        val done = start.run()
+        assertEquals(1, done.erased["HOLD_ENDED"])
+        assertEquals(1, done.casesMoved)
+        assertNull(read { HoldEntity.findById(hold) }, "ended again before the instance serves")
+        assertEquals(0L, read { HoldRowEntity.count("holdId", hold) }, "its snapshot gone")
+        assertEquals(0L, CaseTestKit.pinsOf(hold), "its pins released")
+        val case = CaseTestKit.caseRow(caseId)
+        assertEquals(CaseState.CLOSED.name, case.state, "closed, as it was closed")
+        assertNull(case.openKey, "no longer the item's open case")
+        assertTrue(read { ModerationEventEntity.list("caseId", caseId).all { it.expiresAt != null } }, "its log dated by the close")
+        assertNotNull(CaseTestKit.holdOf(control), "control: the hold of a case nobody decided stays")
+        assertEquals(CaseState.OPEN.name, CaseTestKit.caseRow(control).state)
+
+        val again = start.run()
+        assertEquals(null, again.erased["HOLD_ENDED"], "a line applied twice ends nothing")
+        assertEquals(0, again.casesMoved)
     }
 
     // --- B, the setting (ADR 0089) ------------------------------------------------------------------------------------------

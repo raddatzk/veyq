@@ -144,6 +144,7 @@ class Statements(
             sealedFacts = r.sealedFacts,
             inForce = inForce,
             liftedAt = m.liftedAt?.utc(),
+            endedWithTarget = m.endedWithTarget,
             contactAddress = contact,
             objection = objection?.let { o ->
                 StatementObjection(

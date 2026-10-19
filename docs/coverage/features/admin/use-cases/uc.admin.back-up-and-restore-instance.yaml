@@ -264,16 +264,19 @@ acceptanceCriteria:
   - id: moderation-survives-a-restore
     # A13, ADR 0056 decision 8 (owner 2026-10-18; TCO Art. 3, DSA Art. 17): the same ledger, the same start.
     text: >-
-      A block, a lift and a case enter the erasure ledger too. At start, per item the last block or lift line wins: an
-      item whose last line is a block and that the restored database does not block is blocked again on its basis, and
-      a lifted one is never blocked again. A case the database lacks is recreated as a stub — no report, no sealed
-      content, marked as restored — that keeps its retention date, so the queue shows that it existed.
+      A block, a lift, a case and a hold's end enter the erasure ledger too. At start, per item the last block or lift
+      line wins: an item whose last line is a block and that the restored database does not block is blocked again on
+      its basis, and a lifted one is never blocked again. A hold that ended after the capture ends again, its snapshot
+      and pins gone, and a case the database holds moves on to the state its last line names, forward only. A case the
+      database lacks is recreated as a stub — no report, no sealed content, marked as restored — that keeps its
+      retention date, so the queue shows that it existed.
     coverage:
       backend:
         integration:
           - ErasureLedgerSliceTest.aBlockedAccountIsBlockedAgainAndALiftedOneIsNot
           - ErasureLedgerSliceTest.aBlockLiftedAfterTheCaptureStaysLifted
           - ErasureLedgerSliceTest.aCaseTheRestoreLacksComesBackAsAStubKeepingItsRetention
+          - ErasureLedgerSliceTest.aHoldADismissalEndedAfterTheCaptureEndsAgainAndItsCaseClosesAgain
       web:
         unit:
           - src/features/moderation/ModerationQueue.test.ts

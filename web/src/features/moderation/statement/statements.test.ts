@@ -45,6 +45,7 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   sealedFacts: undefined,
   inForce: true,
   liftedAt: undefined,
+  endedWithTarget: false,
   contactAddress: undefined,
   objection: undefined,
   canObject: true,
