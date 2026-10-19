@@ -223,6 +223,26 @@
       "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
     },
     {
+      "id": "662461",
+      "operation": "GET /api/account/identity-pins/entries",
+      "check": "allow_header_conformance",
+      "failure": "AllowHeaderMismatch",
+      "signature": "|PUT",
+      "first_seen": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
+    },
+    {
+      "id": "528a65",
+      "operation": "GET /api/account/identity-pins/entries",
+      "check": "unsupported_method",
+      "failure": "UnsupportedMethodResponse",
+      "signature": "missing_allow_header",
+      "first_seen": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
+    },
+    {
       "id": "0e6f76",
       "operation": "GET /api/account/key-material",
       "check": "unsupported_method",
