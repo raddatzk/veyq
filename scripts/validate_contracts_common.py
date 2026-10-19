@@ -48,6 +48,12 @@ What it asserts:
      another name), never a requirement's scopes, and never the converse defect: an operation the server guards
      that names no requirement at all is green here and sends no bearer just the same. Whether an operation needs
      a credential is the server's, read by the API fuzzing and the slice tests, not by this file.
+  6. **Every operation that takes a request body declares `413` as `_common`'s `RequestTooLarge`** — derived from
+     `requestBody`, never listed. The server answers it to any body declared past its request limit, before reading
+     it (`RequestTooLargeRoutes`, held by `RequestTooLargeSliceTest`), so every such operation can answer it; the API
+     fuzzing reported it undeclared on `takeModerationMeasure` (cr-statement-facts-sealed-once). **Its limit:** the
+     declaration only — never that the server answers it there; and an operation without a `requestBody` is not asked,
+     though a client may still send one a `Content-Length` past the limit.
 
 Deliberately NOT asserted: collection-wrapping style (bare array vs `{results}`/`{items}` vs a domain key) — that
 mixes intentional batch-vs-list conventions, so it is a design call, not a drift bug (see the inbox #76 note).
@@ -241,6 +247,33 @@ def check_security_declared(specs: dict[str, dict]) -> int:
     return checked
 
 
+REQUEST_TOO_LARGE = "_common.openapi.yaml#/components/responses/RequestTooLarge"
+
+
+def check_request_too_large(specs: dict[str, dict]) -> int:
+    """Assertion 6: `_common` declares `RequestTooLarge`, and every operation that takes a request body declares
+    `413` as a `$ref` to it. Returns the number of operations with a body, so the summary can say the walk reached
+    something."""
+    common = yaml.safe_load(contract_specs.COMMON.read_text()) or {}
+    if "RequestTooLarge" not in ((common.get("components") or {}).get("responses") or {}):
+        errors.append("request-too-large: _common.openapi.yaml declares no components.responses.RequestTooLarge")
+    with_body = 0
+    for fname, spec in specs.items():
+        for path, item in (spec.get("paths") or {}).items():
+            for method, op in (item or {}).items():
+                if method not in HTTP_METHODS or not isinstance(op, dict) or "requestBody" not in op:
+                    continue
+                with_body += 1
+                answer = {str(k): v for k, v in (op.get("responses") or {}).items()}.get("413")
+                ref = (answer or {}).get("$ref", "") if isinstance(answer, dict) else ""
+                target, _, fragment = ref.partition("#")
+                if fragment != "/components/responses/RequestTooLarge" or contract_specs.ref_key(fname, target) != contract_specs.key(contract_specs.COMMON):
+                    errors.append(
+                        f"request-too-large: {fname} {op.get('operationId', method + ' ' + path)} takes a body but does "
+                        f"not declare 413 as {REQUEST_TOO_LARGE} — the server answers it to any body past its limit")
+    return with_body
+
+
 def main() -> int:
     specs = load_specs()
     if not specs:
@@ -257,6 +290,9 @@ def main() -> int:
     requirements = check_security_declared(specs)
     if not requirements:
         errors.append("security: no named security requirement was reached — the walk is broken")
+    with_body = check_request_too_large(specs)
+    if not with_body:
+        errors.append("request-too-large: no operation with a request body was reached — the walk is broken")
 
     if errors:
         print("CONTRACTS COMMON-COMPONENT VALIDATION FAILED:")
@@ -268,7 +304,8 @@ def main() -> int:
         f"several specs define ({', '.join(params)}) consistent, "
         f"{len(CANONICAL_ENUMS)} shared enum families aligned (ErrorResponse is single-sourced in _common), "
         f"{examples} object examples carry their required properties, "
-        f"{requirements} named security requirements declared in their spec")
+        f"{requirements} named security requirements declared in their spec, "
+        f"{with_body} operations with a body declare 413 RequestTooLarge")
     return 0
 
 

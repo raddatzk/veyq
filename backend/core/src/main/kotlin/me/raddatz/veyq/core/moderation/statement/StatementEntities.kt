@@ -67,6 +67,14 @@ class ModerationStatementEntity : PanacheEntityBase {
     @Column(name = "sealed_facts", columnDefinition = "TEXT")
     var sealedFacts: String? = null
 
+    /**
+     * A moderator's facts sealed once for the affected, under the statement's `K_facts` (`moderation-statement-facts`
+     * [caseId, id]) — each member's [StatementRecipientEntity.wrappedFactsKey] opens it; null without facts, and for a
+     * Server Owner's step, whose facts go by mail.
+     */
+    @Column(name = "sealed_member_facts", columnDefinition = "TEXT")
+    var sealedMemberFacts: String? = null
+
     /** When it went out; null where nobody could be told — the hold then counts from the decision — or while deferred. */
     @Column(name = "sent_at")
     var sentAt: Instant? = null
@@ -137,9 +145,12 @@ class StatementRecipientEntity : PanacheEntityBase {
     @Column(name = "roles", nullable = false, length = 64)
     lateinit var roles: String
 
-    /** The facts sealed to this member's identity (`moderation-facts` [caseId, accountId]); null without facts or for a guest. */
-    @Column(name = "sealed_facts", columnDefinition = "TEXT")
-    var sealedFacts: String? = null
+    /**
+     * The statement's `K_facts` wrapped to this member's identity (`moderation-facts-key` [caseId, statementId,
+     * accountId]); null without facts or for a guest.
+     */
+    @Column(name = "wrapped_facts_key", columnDefinition = "TEXT")
+    var wrappedFactsKey: String? = null
 
     /** When the instance mail telling this member went out; null until it did. */
     @Column(name = "mailed_at")

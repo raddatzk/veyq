@@ -78,8 +78,11 @@ object CaseTestKit {
             else """{"reporterNotices":[""" + reporters.joinToString(",") { (r, a) -> """{"reportId":"$r","address":"$a"}""" } + "]}",
         )
 
-    /** An opaque stand-in for the facts sealed to one member's identity (the server never opens one). */
+    /** An opaque stand-in for the facts sealed once under a statement's `K_facts` (the server never opens one). */
     const val SEALED_FACTS = "c2VhbGVkLWZhY3Rz"
+
+    /** An opaque stand-in for `K_facts` wrapped to one member's identity (the server never opens one). */
+    const val WRAPPED_FACTS_KEY = "d3JhcHBlZC1mYWN0cy1rZXk="
 
     /** The clause a test statement relies on (DSA Art. 17(3)(e)) — the organisation mode requires one. */
     const val PROVISION = "Space terms, clause 4"
@@ -93,15 +96,17 @@ object CaseTestKit {
         )
 
     /**
-     * Take a step with its statement of reasons: by default with facts — sealed (opaquely) for every member the server
-     * lists as a recipient, as the decision panel does in the organisation mode — or, [facts] false, without any.
-     * [factsFor] overrides the members the facts are sealed for (a stale list); [reporters] are `reportId to address`.
-     * [provision] is the clause relied on — by default with the facts, as the organisation mode asks; null for none.
+     * Take a step with its statement of reasons: by default with facts — sealed (opaquely) once, their key wrapped for
+     * every member the server lists as a recipient, as the decision panel does in the organisation mode — or, [facts]
+     * false, without any. [factsFor] overrides the members the key is wrapped for (a stale list); [reporters] are
+     * `reportId to address`. [provision] is the clause relied on — by default with the facts, as the organisation mode
+     * asks; null for none. [statementId] is the client-minted id, fresh by default.
      */
     fun Moderator.take(
         caseId: String, kind: String, targetId: String? = null, shareId: String? = null, facts: Boolean = true,
         ground: String = "TERMS_BREACH", factsFor: List<String>? = null, reporters: List<Pair<String, String>> = emptyList(),
         deferUntil: String? = null, provision: String? = if (facts) PROVISION else null,
+        statementId: String = UUID.randomUUID().toString(),
     ): Response {
         val members = when {
             !facts -> emptyList()
@@ -111,9 +116,11 @@ object CaseTestKit {
         }
         val deferral = deferUntil?.let { ""","deferral":{"until":"$it","reason":{"epoch":1,"sealedNote":"$SEALED_NOTE"}}""" } ?: ""
         val named = provision?.let { ""","provision":"$it"""" } ?: ""
-        val statement = if (!facts) """{"ground":"$ground"$named$deferral}""" else
-            """{"ground":"$ground"$named,"facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"factsFor":[""" +
-                members.joinToString(",") { """{"accountId":"$it","sealedFacts":"$SEALED_FACTS"}""" } + "]$deferral}"
+        val id = """"statementId":"$statementId","""
+        val statement = if (!facts) """{$id"ground":"$ground"$named$deferral}""" else
+            """{$id"ground":"$ground"$named,"facts":{"epoch":1,"sealedNote":"$SEALED_NOTE"},"sealedFacts":"$SEALED_FACTS",""" +
+                """"factsKeyFor":[""" + members.joinToString(",") { """{"accountId":"$it","wrappedFactsKey":"$WRAPPED_FACTS_KEY"}""" } +
+                "]$deferral}"
         val notices = reporters.joinToString(",") { (r, a) -> """{"reportId":"$r","address":"$a"}""" }
         return call(
             "takeModerationMeasure", caseId, "POST", "/api/moderation/cases/$caseId/measures",

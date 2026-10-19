@@ -412,6 +412,7 @@ paths:
                   value: { code: no_bundled_store }
                 storeInUse:
                   value: { code: store_in_use }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "503":
           description: >
             A secret was supplied, but no config-secret key is available to seal it (ADR 0050). Nothing is
@@ -669,6 +670,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: capability_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/capabilities/{capabilityId}/requirements/{requirement}:
     put:
@@ -736,6 +738,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: requirement_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [instance]
       operationId: clearInstanceCapabilityRequirement
@@ -890,6 +893,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: service_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [instance]
       operationId: clearInstanceExternalService
@@ -1048,6 +1052,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/mail-settings:
     get:
@@ -1160,6 +1165,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "503":
           description: >
             A password was supplied, but no config-secret key is available to seal it (ADR 0050). Nothing is stored.
@@ -1220,6 +1226,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: mail_code_invalid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many requests from this caller; retry after the window.
           content:
@@ -1339,6 +1346,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: moderation_off }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/moderation/moderators/{accountId}:
     delete:
@@ -1449,6 +1457,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: moderation_grants_incomplete }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/moderation/steps:
     get:
@@ -1592,6 +1601,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: sign_in_block_exists }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/moderation/sign-in-blocks/{blockId}:
     delete:
@@ -1681,6 +1691,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: order_exists }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/operator:
     get:
@@ -1797,6 +1808,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [instance-operator]
       operationId: clearInstanceOperator
@@ -1879,6 +1891,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: operator_code_invalid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many requests from this caller; retry after the window.
           content:
@@ -1968,6 +1981,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/guest-write-record:
     get:
@@ -2046,6 +2060,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/guest-write-record/identities/{identityId}:
     delete:
@@ -2169,6 +2184,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/store/reconcile:
     get:
@@ -2486,6 +2502,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: server_owner_account }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/accounts/erasures/stop:
     post:
@@ -2533,6 +2550,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: account_erasure_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
 components:
   parameters:

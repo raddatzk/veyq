@@ -26,6 +26,7 @@ enum class FailureStatus(val httpStatus: Int) {
     METHOD_NOT_ALLOWED(405),
     CONFLICT(409),
     GONE(410),
+    CONTENT_TOO_LARGE(413),
     UNPROCESSABLE(422),
     RATE_LIMITED(429),
     UNAVAILABLE_FOR_LEGAL_REASONS(451),

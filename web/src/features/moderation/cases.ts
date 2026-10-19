@@ -3,8 +3,10 @@
 // statement from what it matched. The texts the server must never read stay sealed in the browser: a report opens with
 // its epoch's key (`moderation-report` [epoch]), a note seals to the current epoch bound to its case
 // (`moderation-note` [epoch, caseId]) and opens with the epoch it was sealed to. A measure's statement of reasons
-// (uc.moderation.object-to-a-measure) seals its facts twice: to the moderation key, and to each affected member's identity
-// the server lists for that step (`moderation-facts` [caseId, accountId]); an objection opens with its epoch's key.
+// (uc.moderation.object-to-a-measure) seals its facts to the moderation key for the log, and once more under a fresh
+// `K_facts` bound to the statement whose id the browser mints (`moderation-statement-facts` [caseId, statementId]) — and
+// wraps only that key to each affected member's identity the server lists for that step (`moderation-facts-key` [caseId,
+// statementId, accountId]), so a member costs a wrap, not a copy of the facts; an objection opens with its epoch's key.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { moderationApi } from '../../api/client'
@@ -19,7 +21,7 @@ import type {
   ModerationStatementDeferral,
   ModerationProposalStep,
   ReporterNotice,
-  SealedFactsFor,
+  WrappedFactsKey,
   SealedModerationNote,
 } from '../../api/generated/moderation'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -136,19 +138,33 @@ export type StatementDraft = {
 }
 
 /**
- * The facts sealed for every member [kind] on [target] would tell — the server's list, read with a proof over the case.
- * Sealed to the identity it serves, unpinned: the moderation surface holds no Master Key to read a pin store (ADR 0099
- * § 6), and a substituted key would win the operator nothing the moderation key's copy of the same facts does not.
+ * The facts for every member [kind] on [target] would tell — the server's list, read with a proof over the case: sealed
+ * once under a fresh `K_facts`, which alone is wrapped to each member. Wrapped to the identity the server serves,
+ * unpinned: the moderation surface holds no Master Key to read a pin store (ADR 0099 § 6), and a substituted key would
+ * win the operator nothing the moderation key's copy of the same facts does not.
  */
-async function factsFor(caseId: string, kind: MeasureKind, target: { shareId?: string; targetId?: string }, facts: string): Promise<SealedFactsFor[]> {
+async function factsForMembers(
+  caseId: string,
+  statementId: string,
+  kind: MeasureKind,
+  target: { shareId?: string; targetId?: string },
+  facts: string,
+): Promise<{ sealedFacts: string; factsKeyFor: WrappedFactsKey[] }> {
   const proof = await proofFor('getModerationStatementRecipients', caseId)
   const recipients = await withRefresh(() =>
     moderationApi().getModerationStatementRecipients({ caseId, kind, shareId: target.shareId, targetId: target.targetId, ...proof }),
   )
-  return recipients.accounts.map((a) => {
-    const identity = v1.deserializeIdentityPublic(fromB64std(a.identityPublicKey))
-    return { accountId: a.accountId, sealedFacts: b64std(v1.sealModerationFacts(caseId, a.accountId, identity.kem, facts)) }
-  })
+  const factsKey = v1.newFactsKey()
+  try {
+    const sealedFacts = b64std(v1.sealStatementFacts(caseId, statementId, factsKey, facts))
+    const factsKeyFor = recipients.accounts.map((a) => {
+      const identity = v1.deserializeIdentityPublic(fromB64std(a.identityPublicKey))
+      return { accountId: a.accountId, wrappedFactsKey: b64std(v1.wrapFactsKey(caseId, statementId, a.accountId, identity.kem, factsKey)) }
+    })
+    return { sealedFacts, factsKeyFor }
+  } finally {
+    factsKey.fill(0)
+  }
 }
 
 /**
@@ -163,15 +179,26 @@ export async function takeMeasure(
   statement: StatementDraft,
   reporterNotices: ReporterNotice[] = [],
 ): Promise<ModerationCase> {
+  // The statement's id is this browser's (ADR 0072 Decision 3): the facts are sealed bound to it before the server sees it.
+  const statementId = crypto.randomUUID()
   const facts = sealNote(caseId, statement.facts)
-  const sealedFor = facts ? await factsFor(caseId, kind, target, statement.facts) : []
+  const forMembers = facts
+    ? await factsForMembers(caseId, statementId, kind, target, statement.facts)
+    : { sealedFacts: null, factsKeyFor: [] }
   const deferral = statement.deferral ? deferralOf(caseId, statement.deferral.until, statement.deferral.reason) : null
   const body = {
     kind,
     shareId: target.shareId ?? null,
     targetId: target.targetId ?? null,
     note: sealNote(caseId, note),
-    statement: { ground: statement.ground, provision: statement.provision?.trim() || null, facts, factsFor: sealedFor, deferral },
+    statement: {
+      statementId,
+      ground: statement.ground,
+      provision: statement.provision?.trim() || null,
+      facts,
+      ...forMembers,
+      deferral,
+    },
     reporterNotices,
   }
   const proof = await proofFor('takeModerationMeasure', caseId)
