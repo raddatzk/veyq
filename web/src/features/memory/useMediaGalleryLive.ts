@@ -362,8 +362,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     if (holding && (holding.key !== key || holding.scopeId !== ctx.scopeId())) closeListing(holding.scopeId, holding.key)
     holding = key ? { scopeId: ctx.scopeId(), key } : null
   }
+  // Two sources, compared one by one — never one getter returning `[id, key]`: that array is new on every run, and the
+  // getter re-runs whenever the node OBJECT is replaced (the host's tree poll re-reads the tree under an open Memory,
+  // inbox #503), so it would reset and reload the gallery for a change that is not this node's or its key's.
   watch(
-    () => [ctx.node().id, ctx.memoryKey()] as const,
+    [() => ctx.node().id, () => ctx.memoryKey()] as const,
     () => {
       hold(ctx.memoryKey())
       lightboxIndex.value = null

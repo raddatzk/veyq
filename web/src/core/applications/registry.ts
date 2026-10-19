@@ -123,13 +123,12 @@ export type ContentProblem = { code: 'invalid_manifest' | 'too_large'; message: 
 
 export interface KindDescriptor {
   kind: NodeKind
+  /** The page of an opened node of the kind. While it is on screen the host keeps the scope's tree live, as on a level
+   *  (`core/node/useLevelLive.ts`, ADR 0081: an idle scope is a `304`), whatever the kind: a block of the node or of a
+   *  folder above it turns the page to the host's *Blocked by the operator* at once (inbox #503), a drop box's new guest
+   *  folders and a Memory's new chapters arrive as rows, and a key re-derived from a re-read tree is the same object, so
+   *  nothing keyed on it reloads. What lives beside the tree (a Memory's gallery, ADR 0033) the page polls itself. */
   detail?: Component
-  /** The `detail` is drawn from the scope's tree (the nodes under the opened one), as a level is: the host keeps the tree
-   *  live while it is on screen, with the level view's own refresh and its condition (`core/node/useLevelLive.ts`, ADR
-   *  0081: an idle scope is a `304`) — Depot's drop box, whose guests' folders and their file counts are tree rows
-   *  (owner decision 2026-10-17). Omitted: an opened node's page polls nothing of the tree (a Memory's gallery has its
-   *  own revision, ADR 0033; a file's page is the one node). */
-  liveDetail?: boolean
   /** The PrimeIcons class core draws next to a node of this kind (e.g. the trash list). */
   icon: string
   /** The i18n key of the title core's delete dialog (`core/node/components/DeleteNodeDialog.vue`) shows for a node of

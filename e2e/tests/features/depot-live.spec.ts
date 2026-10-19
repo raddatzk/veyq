@@ -9,8 +9,9 @@
 //  2. A drop box: two guests in two contexts send a file each under the same display name. The owner's open folder
 //     counts them live on the drop box's row (1 person, then 2 people), the drop box lists one folder per guest, the
 //     second numbered `(2)`, and each folder holds that guest's file only — read-only for the owner.
-//  3. The drop box's own page is live too (owner decision 2026-10-17, `KindDescriptor.liveDetail`): with it open, a
-//     third guest's first file brings its folder onto the page and its second file counts there, without a reload.
+//  3. The drop box's own page is live too (owner decision 2026-10-17; every opened node's page polls the tree, inbox
+//     #503): with it open, a third guest's first file brings its folder onto the page and its second file counts there,
+//     without a reload.
 //
 // What it cannot show: a real phone or Safari/Firefox backgrounding a tab (Playwright keeps every page visible).
 //

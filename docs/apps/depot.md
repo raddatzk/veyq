@@ -78,9 +78,10 @@
   replace — is `AttachmentStore.attach`, which bumps the scope's tree revision in the transaction that fills the slot.
   An upload completing changes no node row, so the level's row factory answers a *moved* poll (`liveTick`) by re-reading
   `listFiles`, and answers nothing to a `304`. A guest's `resolveShare` tag covers the attachments of the served nodes
-  for the same reason. An open drop box's page is live the same way (`liveDetail` on its kind, owner decision
-  2026-10-17): its guests' folders and their file counts are tree rows, so the host's level poll alone keeps it current;
-  a file's page is not polled.
+  for the same reason. An open drop box's page is live the same way (owner decision 2026-10-17): its guests' folders and
+  their file counts are tree rows, so the host's tree poll alone keeps it current. A file's page polls the tree too
+  (inbox #503: every opened node's page does), so a block of the file, or of a folder above it, turns the page to
+  *Blocked by the operator* at once and a lift brings it back.
 
 Backend: `me.raddatz.veyq.depot.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
 dispatcher to `DepotUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto

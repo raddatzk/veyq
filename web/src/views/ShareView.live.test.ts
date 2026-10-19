@@ -273,3 +273,38 @@ describe("a share guest's drop-box page, live", () => {
     w.unmount()
   })
 })
+
+// A guest's opened node polls as the member's does (inbox #503, share view = member view): a moderator's block of the
+// node, or of a folder above it, changes no ciphertext — the re-resolve serves the row marked under a new digest, and the
+// page turns to *Blocked by the operator*; a lift brings the page back. The file's row is sealed once, so the block is the
+// only difference the poll carries (`shareTreeFingerprint` must see it).
+describe("a share guest's opened node, live", () => {
+  const FILE = '6e5a0000-0000-4000-8000-000000000904'
+  const title = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('.veyq-node-header-title')
+
+  it('turns a file page to the placeholder when a block reaches it, and a lift brings it back', async () => {
+    const shown = head([fileOf(FILE, 'bericht.pdf')])
+    // The same head with the file marked: one wrap, one ciphertext — the block is all that differs.
+    const blocked = { ...shown, share: { ...shown.share, nodes: shown.share.nodes!.map((n) => (n.id === FILE ? { ...n, blockedByOperator: true } : n)) } }
+    serve(shown)
+    const w = await mountPage(`?node=${FILE}`)
+    expect(title(w).text(), "the file's page is on screen").toBe('bericht.pdf')
+    vi.mocked(pollPublicShare).mockClear()
+    await settle(OVER_ONE_INTERVAL)
+    expect(pollPublicShare, 'an idle file page polls').toHaveBeenCalledTimes(1)
+    expect(w.find('.node-blocked').exists()).toBe(false)
+
+    serve(blocked)
+    await settle(OVER_ONE_INTERVAL)
+    await flushPromises()
+    expect(w.find('.node-blocked').exists()).toBe(true)
+    expect(title(w).exists(), "the file's page is gone").toBe(false)
+
+    serve(shown)
+    await settle(OVER_ONE_INTERVAL)
+    await flushPromises()
+    expect(w.find('.node-blocked').exists(), 'the lift reaches the page: it kept polling under the placeholder').toBe(false)
+    expect(title(w).text()).toBe('bericht.pdf')
+    w.unmount()
+  })
+})
