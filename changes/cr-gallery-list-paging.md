@@ -46,7 +46,7 @@ decision 4, proposed with `cr-gallery-virtualization`).
   two manifests, padded meta) is the item's shape, not its delivery.
 - **A growing number meets a contract cap** (changes/README § A CR that grows a count): the response gains its first
   `maxItems` (the page cap). Caps found elsewhere in the contracts on stores that grow with members or items are listed
-  in `cr-identity-pins-per-entry` § Other contract caps — none is on this CR's path.
+  in inbox #498-#500 — none is on this CR's path.
 
 ### Measured substrate (worktree at `6fb7c8dd`, clean)
 

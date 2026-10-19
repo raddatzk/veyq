@@ -87,7 +87,7 @@ sequenceDiagram
 ## Quality notes
 
 - **Operator-blind.** Verification is **client-only** — the compare runs on the device against the sealed pin; the
-  write is the pin store's one opaque ciphertext, so the trust graph stays off the server
+  write is one sealed entry of the pin store and its sealed head, so the trust graph stays off the server
   ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)).
 - **It closes the first-use gap for those who compare.** TOFU cannot see a key substituted at first contact; a
   compare out-of-band can — which is why the ceremony ships without strict mode (ADR 0028 Decision 3).
