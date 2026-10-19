@@ -115,7 +115,7 @@ says what veyq builds and the question stays a named blocker.
 - [x] **0 docs** — `uc.admin.privacy-notice` and `uc.admin.operator-details` (the two new values) corrected to the
   owner's answers; ADR 0035 decision 6 or 8 moved where Q27 goes. · Done when: feature-format, coverage, doc-link,
   doc-citation, change guards green.
-- [ ] **1 contracts** — the text file (DE and EN, drafts from the inventory above and the 2026-10-16 research), the
+- [x] **1 contracts** — the text file (DE and EN, drafts from the inventory above and the 2026-10-16 research), the
   public read, the recipients and officer values on the operator operations. · Done when: `npm run generate:api`; the
   contracts guards; `npm run check` in `web/` and `admin-web/` once, naming the typed lines the operator request's new
   fields redden (`grep -rln 'supervisoryAuthority' web/src admin-web/src backend/core/src/test e2e`).

@@ -1694,7 +1694,9 @@ paths:
         name, the provider identification and the competent supervisory authority — all public through
         `GET /api/operator` — and the notification address, which is not public and leaves the server only here, with
         where its confirmation stands (ADR 0097 decision 5). Also the operating mode in effect, which decides whether
-        admin-web warns about an empty value (ADR 0093 § 14). Every value may be empty. Server-Owner only.
+        admin-web warns about an empty value (ADR 0093 § 14), and the recipients and data-protection officer the
+        privacy notice names (ADR 0035 decision 8), with the recipients the instance suggests from its own
+        configuration. Every value may be empty. Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -1717,6 +1719,11 @@ paths:
                 providerEmail: info@example.org
                 providerRepresentative: Erika Mustermann (Vorstand)
                 supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
+                recipients:
+                  - { name: Example Hosting GmbH, purpose: hosts the server, country: Germany }
+                dataProtectionOfficer: "Datenschutz Beispiel GmbH, dsb@example.org"
+                recipientSuggestions:
+                  - { kind: MAIL_RELAY, host: smtp.example.org }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
           content:
@@ -1762,6 +1769,9 @@ paths:
               providerEmail: info@example.org
               providerRepresentative: Erika Mustermann (Vorstand)
               supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
+              recipients:
+                - { name: Example Hosting GmbH, purpose: hosts the server, country: Germany }
+              dataProtectionOfficer: "Datenschutz Beispiel GmbH, dsb@example.org"
       responses:
         "200":
           description: Stored; the values as they now stand, with the confirmation's state after any code sent.
@@ -1792,8 +1802,9 @@ paths:
       x-veyq-channel: admin
       summary: Clear every value, the notification address and its confirmation included.
       description: >
-        Clears the contact, the identification, the supervisory authority and the notification address with any code
-        and confirmation. The operating mode is not a value here and stays. Server-Owner only.
+        Clears the contact, the identification, the supervisory authority, the recipients, the data-protection officer
+        and the notification address with any code and confirmation. The operating mode is not a value here and stays.
+        Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -3694,12 +3705,15 @@ components:
       description: >
         The instance contact, the provider identification and the supervisory authority (all public through
         `GET /api/operator`), the notification address (admin channel only) with its confirmation, and the operating
-        mode in effect. Every value may be null.
+        mode in effect; the recipients and the data-protection officer the privacy notice names (ADR 0035 decision 8),
+        with what the instance itself suggests as a recipient. Every value may be null or empty.
       required:
         - operatingMode
         - contactLanguages
         - notificationConfirmation
         - instanceMailReady
+        - recipients
+        - recipientSuggestions
       properties:
         operatingMode:
           $ref: "#/components/schemas/OperatingMode"
@@ -3809,6 +3823,84 @@ components:
           description: The competent data-protection supervisory authority, as the operator names it (ADR 0035 decision 6).
           maxLength: 500
           example: "Landesbeauftragte für Datenschutz, Musterstadt"
+        recipients:
+          type: array
+          description: >
+            The recipients the privacy notice names (ADR 0035 decision 8), in the order the Server Owner gave them; empty
+            when none is named. Public only through the notice (`GET /api/operator/privacy-notice`).
+          maxItems: 20
+          items: { $ref: "#/components/schemas/OperatorRecipient" }
+        dataProtectionOfficer:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            A data-protection officer's contact (GDPR Art. 13(1)(b)), published in the privacy notice; the operator
+            typed it for that purpose.
+          type: string
+          description: The data-protection officer's name and contact, where one is appointed.
+          maxLength: 500
+          example: "Datenschutz Beispiel GmbH, dsb@example.org"
+        recipientSuggestions:
+          type: array
+          description: >
+            What the instance itself knows a recipient of: an external object store's host and the instance mail relay's
+            host — offered by admin-web as a row for the Server Owner to complete and save, never published by itself and
+            never stored. Empty for the bundled store and while instance mail is not set up; a host already named by a
+            recipient is still offered (the console tells them apart).
+          maxItems: 2
+          items: { $ref: "#/components/schemas/OperatorRecipientSuggestion" }
+
+    OperatorRecipient:
+      type: object
+      description: >
+        One recipient the privacy notice names: who, what they do for the instance, and where. Shown as typed, in both
+        languages of the notice.
+      required: [name, purpose]
+      properties:
+        name:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            A recipient's name (GDPR Art. 13(1)(e)), typed by the operator to be published in the privacy notice —
+            usually a company; it may name a person who hosts for them.
+          type: string
+          description: Who receives data — a hosting company, a mail provider.
+          minLength: 1
+          maxLength: 200
+          example: Example Hosting GmbH
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 200)'
+        purpose:
+          x-veyq-visibility: public
+          type: string
+          description: What they do for the instance — hosts the server, stores the encrypted files, relays the mail.
+          minLength: 1
+          maxLength: 300
+          example: hosts the server
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 300)'
+        country:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Where they process it; null = not named, which the full notice shows as "not stated by this operator".
+          maxLength: 100
+          example: Germany
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 100)'
+
+    OperatorRecipientSuggestion:
+      type: object
+      description: A recipient the instance knows of by its own configuration, for the Server Owner to confirm.
+      required: [kind, host]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [OBJECT_STORE, MAIL_RELAY]
+          description: "`OBJECT_STORE` = the external object store the instance stores in; `MAIL_RELAY` = the instance mail's SMTP relay."
+          example: OBJECT_STORE
+        host:
+          x-veyq-visibility: public
+          type: string
+          description: The host the instance is configured to reach, as configured.
+          maxLength: 253
+          example: s3.eu-central-1.example.com
 
     InstanceOperatorUpdate:
       type: object
@@ -3906,6 +3998,21 @@ components:
           description: The competent data-protection supervisory authority; null = none.
           maxLength: 500
           example: "Landesbeauftragte für Datenschutz, Musterstadt"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 500)'
+        recipients:
+          type: [array, "null"]
+          description: The recipients the privacy notice names, in this order — the whole list; null or empty = none.
+          maxItems: 20
+          items: { $ref: "#/components/schemas/OperatorRecipient" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 20)'
+        dataProtectionOfficer:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            A data-protection officer's contact (GDPR Art. 13(1)(b)), typed by the operator to be published.
+          type: [string, "null"]
+          description: The data-protection officer's name and contact; null = none appointed.
+          maxLength: 500
+          example: "Datenschutz Beispiel GmbH, dsb@example.org"
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 500)'
 
     InstanceOperatorConfirmation:
