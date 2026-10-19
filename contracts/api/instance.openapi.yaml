@@ -1720,8 +1720,8 @@ paths:
                 providerRepresentative: Erika Mustermann (Vorstand)
                 supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
                 recipients:
-                  - { name: Example Hosting GmbH, kind: HOSTING, country: Germany }
-                  - { name: Example SMS AG, kind: OTHER, description: sends sign-in texts, country: Germany }
+                  - { name: Example Hosting GmbH, kind: HOSTING, country: DE }
+                  - { name: Example SMS AG, kind: OTHER, description: sends sign-in texts, country: DE }
                 dataProtectionOfficer: "Datenschutz Beispiel GmbH, dsb@example.org"
                 recipientSuggestions:
                   - { kind: MAIL_RELAY, host: smtp.example.org }
@@ -1771,7 +1771,7 @@ paths:
               providerRepresentative: Erika Mustermann (Vorstand)
               supervisoryAuthority: "Landesbeauftragte für Datenschutz, Musterstadt"
               recipients:
-                - { name: Example Hosting GmbH, kind: HOSTING, country: Germany }
+                - { name: Example Hosting GmbH, kind: HOSTING, country: DE }
               dataProtectionOfficer: "Datenschutz Beispiel GmbH, dsb@example.org"
       responses:
         "200":
@@ -3856,7 +3856,8 @@ components:
         One recipient the privacy notice names: who, what they do for the instance, and where. What they do is a fixed
         `kind` the notice renders in its own words on each language's page, so the German and the English notice never
         mix languages; only an `OTHER` recipient carries a `description`, typed by the operator and shown as typed on
-        both pages after the kind's label. A `description` on any other kind, or an `OTHER` one without it, is refused
+        both pages after the kind's label. Where they are is a country code the notice names in each page's language.
+        A `description` on any other kind, an `OTHER` one without it, or a `country` the backend does not know is refused
         (`400 invalid_request`).
       required: [name, kind]
       properties:
@@ -3886,10 +3887,14 @@ components:
           x-veyq-visibility: public
           type: [string, "null"]
           description: >
-            Where they process it; null = not named, which the full notice shows as "not stated by this operator".
-          maxLength: 100
-          example: Germany
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 100)'
+            Where they process it, as an ISO 3166-1 alpha-2 code (`DE`), one of `contracts/terms/recipient-countries.json`
+            — the list the backend's JDK knows; a code of the right shape it does not know is refused (`400
+            invalid_request`). The notice names the country in each page's own language ("Deutschland" on the German
+            page, "Germany" on the English one), so neither page carries the other's word. Null = not named, which the
+            full notice shows as "not stated by this operator".
+          pattern: '^[A-Z]{2}$'
+          example: DE
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Pattern(regexp = "^[A-Z]{2}$")'
 
     OperatorRecipientKind:
       x-veyq-visibility: enum
