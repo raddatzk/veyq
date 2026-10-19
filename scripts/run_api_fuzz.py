@@ -2,21 +2,42 @@
 """Fuzz the API from its contracts against a live backend: Schemathesis, pinned by digest (ADR 0091 decision 9).
 
 **What it does.** Boots one fresh fast-jar under `%e2e` — the profile whose rate limits do not refuse a run's volume —
-with `run_web_e2e.py`'s own primitives (the shared compose stack's MariaDB and store, its own database
-[DATABASE] and bucket [BUCKET], its own ports), births an instance on it with the real client crypto
-(`web/scripts/fuzz-seed.mts`), and runs the pinned Schemathesis image four times over every spec file
-`contract_specs.specs()` finds — never a list here:
+with `run_web_e2e.py`'s own primitives (the shared compose stack's MariaDB and store, a database and a bucket named
+by the run's stamp and dropped when it ends [run_names] — two worktrees' runs never share one, inbox #501 — its own
+ports), births an instance on it with the real client crypto (`web/scripts/fuzz-seed.mts`: an owner with a Memory, a
+medium, a bucket and a link in its personal scope, and a PEER, a second member of the tenant), and runs the pinned
+Schemathesis image over every spec file `contract_specs.specs()` finds — never a list here — in [INVOCATIONS], in order:
 
-    {public listener, admin listener} x {negative on every operation, positive on every GET with the seeded ids}
+    public-negative   every operation, negative (coverage, fuzzing)
+    public-positive   every GET, positive, the seeded ids fixed — before the writes may trash what they read
+    public-writes     every other method, positive, the seeded ids fixed, minus [NEGATIVE_ONLY]
+    public-stateful   Schemathesis' stateful phase over the links it infers from the schemas, minus [NEGATIVE_ONLY];
+                      only the containers (tenant, owner, scope) fixed, so a sequence reaches what it creates
+    admin-negative    every admin operation, negative
+    admin-positive    every admin GET, positive — an admin write is the instance's configuration: negative only
 
 An operation marked `x-veyq-channel: admin` goes to the admin listener, every other one to the public listener; a spec
 file with no operation for an invocation is not run for it. Before each spec file the runner makes sure the access
-token still works and signs in again (`fuzz-seed.mts --login`) when it does not: a token lives 15 minutes, a run
-longer, and a negative request a server wrongly accepted may end a session.
+token still works and signs both identities in again (`fuzz-seed.mts --login`) when it does not: a token lives 15
+minutes, a run longer, and a request a server accepted may end a session.
+
+**What a positive run may change** (ADR 0091 decision 9): what the run's own identities own below the tenant — their
+account's sealed data, their scopes and what is in them, their links. Not how they sign in, not the tenant's own
+configuration and membership ([NEGATIVE_ONLY], a reason per entry; the runner refuses to start when one names no
+operation), not the instance (every admin write). A write's ciphertext is opaque to the server, so schema-valid random
+bytes are valid data as far as it can know; a write carrying a credential the run cannot forge is still sent, and its
+declared 401/403 is a correct answer.
+
+**The contracts as the server reads them.** Schemathesis reads a copy of every spec file ([write_enforced_specs], in
+the run directory) in which three of the contracts' own idioms are spelled the way a JSON Schema generator reads them —
+`contentEncoding: base64` as the base64 `pattern`, `@NotBlank`/`@NotEmpty` as a non-empty string, `[T, "null"]` with
+`@NotNull` as `T` ([enforced] says why each is what the contract already means). The contracts are not changed by it.
 
 **What the image checks** is `infra/fuzz/schemathesis.toml` (the checks, the auth) and `infra/fuzz/hooks.py` (veyq's
-two own checks: a refusal by location, and a refusal that echoes nothing). The seed is [SEED], the generation
-deterministic: a red re-runs to the same request. Changing the seed is a commit (ADR 0091 decision 9).
+three own checks: a refusal by location, a refusal that echoes nothing, and `peer_is_refused` — every positive request
+the owner made in its scope and the server accepted is sent again as the peer and must be refused as a scope that does
+not exist is). The seed is [SEED], the generation deterministic: a red re-runs to the same request. Changing the seed is
+a commit (ADR 0091 decision 9).
 
 **Red when** a failure is not in `infra/fuzz/baseline.json` (Schemathesis' own verdict, its exit code), an invocation
 of a spec file exits non-zero for any other reason, an invocation ERRORED on an operation (a network error is no
@@ -25,11 +46,14 @@ guard held" and "nothing ran" exit alike (changes/README.md § a bite test must 
 rules — a reason per entry, never a 5xx, no expiry — are `scripts/validate_api_fuzz_baseline.py`'s.
 
 **What it prints and keeps.** The run directory (`.fuzz-out/<stamp>/`, gitignored; `VEYQ_FUZZ_OUT` moves the root)
-holds the boot log, the seed (`seed.json`, `token`: mode 0600, a throwaway instance's), and per invocation and spec
+holds the boot log, the seed (`seed.json`, `token`, `token-peer`: mode 0600, a throwaway instance's; `reports/ids.json`,
+the ids only), the specs as read (`reports/contracts/`), and per invocation and spec
 file Schemathesis' JUnit (with a `curl` line per failure), NDJSON, VCR cassette and JSON report. `summary.txt` — also
 printed — names per invocation the operations tested, every failure by check and operation with its `curl` line, and
-**the GET operations that never answered 2xx** in the positive invocations: information, not a verdict — there the
-response schema went unchecked, because no seeded id reaches them (a node, a medium, a share, a moderation case).
+**the operations that never answered 2xx** in the positive invocations: information, not a verdict — there the
+response schema went unchecked and the peer was never sent them, because no seeded object reaches them (a moderation
+case, a statement, a task) or no generated request is one the instance accepts; and per spec file whether the stateful
+phase inferred any link at all.
 
 **The image is our own** (`infra/fuzz/Dockerfile`, owner decision Q8 of cr-api-fuzzing): a Python base pinned by
 digest, Schemathesis from PyPI with every package hash-pinned (`infra/fuzz/requirements.txt`, written by
@@ -86,9 +110,12 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
+
+import yaml
 
 # The backend's ports and the e2e primitives' module-level constants are read at import: this run's own ports are set
 # first, so it never answers on (or kills) a developer's 8080/8090 or a web-e2e run's.
@@ -111,12 +138,18 @@ IMAGE_REPO = "veyq-fuzz-schemathesis"
 SEED = 20261018
 # Test cases per operation and phase — the sampling knob that fits the job's 15 minutes (ADR 0091 decision 1).
 MAX_EXAMPLES = int(os.environ.get("VEYQ_FUZZ_MAX_EXAMPLES", "10"))
-PHASES = "examples,coverage,fuzzing"  # the stateful phase is the follow-up slice's (cr-api-fuzzing Q3)
+PHASES = "examples,coverage,fuzzing"
+# A negative invocation has no examples phase: the contract's examples are POSITIVE requests, and sent from there they
+# reached every write — the admin listener's and the NEGATIVE_ONLY ones included (measured: the first run of this slice
+# created tenants on the admin listener from `createTenant`'s example). The positive invocations send them.
+NEGATIVE_PHASES = "coverage,fuzzing"
+STATEFUL = "stateful"
 
-# This run's OWN database and bucket: never `veyq` (the developer's), never a `veyq_e2e_*` (a web-e2e run's).
-DATABASE = "veyq_fuzz"
-STORE_INIT_DATABASE = "veyq_fuzz_store_init"
-BUCKET = "veyq-fuzz"
+# This run's OWN database and bucket, named by its stamp ([run_names]) and dropped when it ends: never `veyq` (the
+# developer's), never a `veyq_e2e_*` (a web-e2e run's), never another fuzz run's (inbox #501 — a second worktree's run
+# recreated a shared `veyq_fuzz` under the first one's backend).
+DATABASE_PREFIX = "veyq_fuzz_"
+BUCKET_PREFIX = "veyq-fuzz-"
 
 HOST = "veyq.localhost"
 ADMIN_HOST = "veyq-admin.internal"
@@ -132,6 +165,34 @@ METHODS = ("get", "put", "post", "delete", "patch", "head", "options")
 SESSION_ENDING = ("logout",)
 CREDENTIAL = "token"  # the contract's `x-veyq-visibility` class of a credential (validate_field_visibility.py)
 
+# What a positive run may NOT change (ADR 0091 decision 9): the writes that stay negative-only on the public listener,
+# each with the reason it may not be sent with valid data. The rule they apply: a positive write may change what the
+# run's own identities own below the tenant (their account's sealed data, their scopes and what is in them, their
+# links), never how those identities sign in, nor the tenant's own configuration and membership, which every later
+# request is answered by. Every admin-listener write is negative-only by its channel, not by this list (the instance's
+# configuration). The runner refuses to start when a name here is no operationId of contracts/api.
+NEGATIVE_ONLY = {
+    # how the run's identities sign in
+    "changePassword": "replaces the password the run signs in again with",
+    "rotateAccountKeys": "replaces the account's key material with keys nobody holds",
+    "addAccountWrap": "adds a Master Key wrap the run cannot open, beside the one it signs in with",
+    "deleteAccountWrap": "may delete the PASSWORD wrap the run signs in with",
+    "eraseOwnAccount": "erases the owner, and the instance with it",
+    "confirmEmailChange": "changes the address the run signs in with",
+    "completePasswordRecovery": "replaces the password the run signs in with",
+    "revokeSessionFamily": "may revoke the session the run is sending with",
+    # the tenant's configuration and membership
+    "updateTenantTerms": "new terms make every member accept them again before any other request",
+    "setTenantCapabilitySwitch": "switches capabilities off that later requests rely on",
+    "setTenantCapabilityRequirement": "adds a requirement later requests do not meet",
+    "clearTenantCapabilityRequirement": "the pair of setTenantCapabilityRequirement",
+    "updateTenantMailSettings": "points the tenant's mail away from the run's Mailpit",
+    "updateTenantStorage": "changes the tenant's storage settings later uploads are admitted by",
+    "setTenantMemberRole": "may demote the owner the run sends as",
+    "removeTenantMember": "may remove the peer, or the owner",
+}
+
+
 
 def log(msg: str) -> None:
     print(f"[fuzz] {msg}", flush=True)
@@ -141,14 +202,36 @@ class Invocation(NamedTuple):
     name: str
     channel: str  # "public" | "admin"
     mode: str  # "negative" | "positive"
+    methods: str  # "all" | "get" | "write" (every method but GET)
+    phases: str
 
 
+# In this order: the positive reads first, on the objects the birth made; every later public positive invocation gets
+# objects of its own (`fuzz-seed.mts --objects`); the admin reads before the admin negatives, whose few valid requests
+# reach the instance's configuration.
 INVOCATIONS = (
-    Invocation("public-negative", "public", "negative"),
-    Invocation("public-positive", "public", "positive"),
-    Invocation("admin-negative", "admin", "negative"),
-    Invocation("admin-positive", "admin", "positive"),
+    Invocation("public-positive", "public", "positive", "get", PHASES),
+    Invocation("public-negative", "public", "negative", "all", NEGATIVE_PHASES),
+    Invocation("public-writes", "public", "positive", "write", PHASES),
+    Invocation("public-stateful", "public", "positive", "all", STATEFUL),
+    Invocation("admin-positive", "admin", "positive", "get", PHASES),
+    Invocation("admin-negative", "admin", "negative", "all", NEGATIVE_PHASES),
 )
+
+
+def run_names(stamp: str) -> tuple[str, str, str]:
+    """(database, store-init database, bucket) of the run stamped `stamp`."""
+    tag = stamp.replace("-", "_")
+    return f"{DATABASE_PREFIX}{tag}", f"{DATABASE_PREFIX}{tag}_store_init", f"{BUCKET_PREFIX}{stamp}"
+
+
+def unknown_negative_only() -> list[str]:
+    """The [NEGATIVE_ONLY] names no spec of contracts/api declares as an operationId — a stale entry excludes nothing."""
+    declared = set()
+    for spec in contract_specs.specs():
+        for item in (contract_specs.load(contract_specs.key(spec)).get("paths") or {}).values():
+            declared.update(op.get("operationId") for method, op in item.items() if method in METHODS)
+    return sorted(set(NEGATIVE_ONLY) - declared)
 
 
 def image_tag() -> str:
@@ -179,7 +262,9 @@ def operations(spec: Path, inv: Invocation, ending: bool = False) -> list[str]:
             admin = op.get("x-veyq-channel") == "admin"
             if (inv.channel == "admin") != admin:
                 continue
-            if inv.mode == "positive" and method != "get":
+            if (inv.methods == "get") != (method == "get") and inv.methods != "all":
+                continue
+            if inv.mode == "positive" and method != "get" and (admin or op.get("operationId") in NEGATIVE_ONLY):
                 continue
             if (op.get("operationId") in SESSION_ENDING) != ending:
                 continue
@@ -230,6 +315,68 @@ def credential_operations() -> list[str]:
 
 
 # --------------------------------------------------------------------------------------------------------------
+# The contracts as the server reads them
+# --------------------------------------------------------------------------------------------------------------
+
+# RFC 4648 base64, padded: what `contentEncoding: base64` means (the annotation's own `[A-Za-z0-9+/]*={0,2}` is the
+# loose shape it checks; a value the server decodes must also have whole quanta — measured: `D4=` answered 400).
+BASE64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+# The range of the type the generated server binds an integer to: `int64` a Long, anything else an Int (the Kotlin
+# generator's default for `type: integer`) — past it the value does not bind and the request is a 400.
+INT64 = (-(2 ** 63), 2 ** 63 - 1)
+INT32 = (-(2 ** 31), 2 ** 31 - 1)
+ANNOTATED_PATTERN = re.compile(r'constraints\.Pattern\(regexp = "((?:[^"\\]|\\.)*)"\)')
+
+
+def enforced(node: object) -> object:
+    """One schema node with what its own `x-field-extra-annotation` and `contentEncoding` already say made generable.
+
+    A request property's bounds hold on the server only through the annotation beside it (`validate_request_bounds.py`
+    holds the two together), and three of veyq's contract idioms say in an annotation what a JSON Schema generator does
+    not read: `contentEncoding: base64` declares the base64 `@Pattern` (that guard's rule 1 — JSON Schema makes
+    `contentEncoding` an annotation only); `@NotBlank`/`@NotEmpty` declare a non-empty string (rule 1 accepts them for
+    `minLength: 1`); and a required primitive is typed `[T, "null"]` with `@NotNull`, so that a missing field is refused
+    rather than bound as 0/false (rule 5) — the `null` is the generator's workaround, never a value the server takes.
+    Two more are what a format means: base64 is whole quanta, and an integer binds to the generated type's range.
+    Read as they are, every positive request carries one of them broken and is refused `400`, whatever else it says
+    (measured: 70 of the 111 positive writes of this slice's first run, every one for one of these three)."""
+    if isinstance(node, list):
+        return [enforced(x) for x in node]
+    if not isinstance(node, dict):
+        return node
+    out = {k: enforced(v) for k, v in node.items()}
+    note = out.get("x-field-extra-annotation")
+    note = note if isinstance(note, str) else ""
+    if out.get("contentEncoding") == "base64" and "pattern" not in out:
+        out["pattern"] = BASE64
+    if "pattern" not in out and ANNOTATED_PATTERN.search(note):
+        out["pattern"] = f"^(?:{ANNOTATED_PATTERN.search(note).group(1)})$"
+    if re.search(r"constraints\.Not(Blank|Empty)\b", note) and out.get("type") in ("string", ["string", "null"]):
+        out["minLength"] = max(int(out.get("minLength") or 0), 1)
+        if "NotBlank" in note and "pattern" not in out:
+            out["pattern"] = r"\S"  # not whitespace only: a search, as JSON Schema's `pattern` is
+    if "constraints.NotNull" in note and isinstance(out.get("type"), list) and "null" in out["type"]:
+        rest = [t for t in out["type"] if t != "null"]
+        out["type"] = rest[0] if len(rest) == 1 else rest
+    kinds = out.get("type") if isinstance(out.get("type"), list) else [out.get("type")]
+    if "integer" in kinds:
+        low, high = INT64 if out.get("format") == "int64" else INT32
+        out["minimum"] = max(out.get("minimum", low), low)
+        out["maximum"] = min(out.get("maximum", high), high)
+    return out
+
+
+def write_enforced_specs(dest: Path) -> None:
+    """Every spec file of contracts/api, read through [enforced], at its own relative path below `dest` — so the
+    cross-file `$ref`s resolve as they do in the contracts. The contracts themselves are not touched."""
+    for spec in contract_specs.specs():
+        key = contract_specs.key(spec)
+        target = dest / key
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(yaml.safe_dump(enforced(yaml.safe_load(spec.read_text())), sort_keys=False, allow_unicode=True))
+
+
+# --------------------------------------------------------------------------------------------------------------
 # The instance
 # --------------------------------------------------------------------------------------------------------------
 
@@ -241,7 +388,7 @@ def stack_up() -> None:
     e2e.run(e2e.COMPOSE + ["up", "-d", "--no-recreate", "--wait", "mariadb", "garage", "mailpit"])
 
 
-def provision_store(workdir: Path) -> None:
+def provision_store(workdir: Path, database: str) -> None:
     """The store must carry the backend's key alias before [BUCKET] can be granted to it. A store some backend already
     provisioned is used as it is; a cold one (CI) gets one throwaway boot on its own database, as in
     `run_web_e2e.provision_store`, which proves the provisioner — this run proves the API."""
@@ -251,8 +398,8 @@ def provision_store(workdir: Path) -> None:
     log("booting a throwaway backend to provision the store")
     secret = workdir / "config-secret-store-init.key"
     boot_log = workdir / "backend-store-init.log"
-    e2e.fresh_database(STORE_INIT_DATABASE)
-    proc = e2e.boot(STORE_INIT_DATABASE, secret, boot_log)
+    e2e.fresh_database(database)
+    proc = e2e.boot(database, secret, boot_log)
     try:
         not_ready = e2e.wait_ready(time.time() + e2e.BOOT_SECS, proc)
         if not_ready:
@@ -268,6 +415,17 @@ def provision_store(workdir: Path) -> None:
     finally:
         e2e.kill(proc)
         secret.unlink(missing_ok=True)
+        e2e.mysql(f"DROP DATABASE IF EXISTS {database};")
+
+
+def drop_run_state(database: str, bucket: str) -> None:
+    """This run's database and bucket, gone with the run: a per-run name must not leave one behind per run."""
+    e2e.mysql(f"DROP DATABASE IF EXISTS {database};")
+    try:
+        e2e._store_for(bucket).purge()
+    except e2e.instance_backup.BackupError:
+        pass  # never created — a run that failed before it
+    e2e.garage("bucket", "delete", "--yes", bucket)
 
 
 def seed_cmd(workdir: Path, *extra: str) -> list[str]:
@@ -291,8 +449,8 @@ def seed(workdir: Path, *extra: str) -> None:
         raise SystemExit(f"[fuzz] SEED FAILED ({' '.join(extra) or 'birth'}), exit {result.returncode}")
 
 
-def token(workdir: Path) -> str:
-    return (workdir / "token").read_text().strip()
+def token(workdir: Path, name: str = "token") -> str:
+    return (workdir / name).read_text().strip()
 
 
 def token_works(workdir: Path) -> bool:
@@ -318,12 +476,29 @@ def fresh_token(workdir: Path) -> None:
 # The invocations
 # --------------------------------------------------------------------------------------------------------------
 
-def positive_config(workdir: Path, ids: dict[str, str]) -> Path:
+def write_positive_configs(workdir: Path) -> dict[str, Path]:
+    """The positive invocations' configs and `ids.json` from the seed's current objects."""
+    seeded = json.loads((workdir / "seed.json").read_text())
+    ids = seeded["ids"]
+    # The ids `hooks.py` `peer_is_refused` compares with — no secret: the tokens travel by the environment only.
+    (workdir / "reports" / "ids.json").write_text(json.dumps({"owner": ids, "peer": seeded["peerIds"]}, indent=1))
+    return {
+        "positive": positive_config(workdir, ids),
+        "stateful": positive_config(workdir, {k: v for k, v in ids.items() if k in CONTAINERS}, "stateful"),
+    }
+
+
+# The containers a stateful sequence works inside: fixed, so what it creates is the owner's; the objects below them
+# come from the sequence's own links, which a fixed parameter would override.
+CONTAINERS = ("tenantId", "userId", "scopeId")
+
+
+def positive_config(workdir: Path, ids: dict[str, str], name: str = "positive") -> Path:
     """`schemathesis.toml` plus the seeded ids as fixed parameters — the positive invocations' copy only."""
     lines = [CONFIG.read_text(), "", "# Appended by scripts/run_api_fuzz.py: the seeded ids (fuzz-seed.mts).",
              "[parameters]"]
-    lines += [f'"path.{name}" = "{value}"' for name, value in sorted(ids.items())]
-    path = workdir / "reports" / "positive.toml"
+    lines += [f'"path.{key}" = "{value}"' for key, value in sorted(ids.items())]
+    path = workdir / "reports" / f"{name}.toml"
     path.write_text("\n".join(lines) + "\n")
     return path
 
@@ -357,10 +532,11 @@ def run_one(image: str, inv: Invocation, spec: Path, workdir: Path, config: Path
         "-v", f"{REPO}:/repo:ro", "-v", f"{reports}:/out", "-w", "/repo",
         # The token by NAME only: its value travels in this process' environment, never on a command line.
         "-e", "VEYQ_FUZZ_TOKEN", "-e", "VEYQ_FUZZ_CREDENTIALS=/out/credential-operations.json",
+        *(["-e", "VEYQ_FUZZ_PEER_TOKEN", "-e", "VEYQ_FUZZ_IDS=/out/ids.json"] if inv.mode == "positive" else []),
         image,
         "--config-file", container_config, "--no-color",
-        "run", f"contracts/api/{key}", "--url", url,
-        "--mode", inv.mode, "--phases", PHASES,
+        "run", f"/out/contracts/api/{key}" if inv.mode == "positive" else f"contracts/api/{key}", "--url", url,
+        "--mode", inv.mode, "--phases", inv.phases,
         "--max-examples", str(MAX_EXAMPLES), "--seed", str(SEED), "--generation-deterministic",
         "--continue-on-failure",
         "--baseline", container_baseline,
@@ -368,18 +544,28 @@ def run_one(image: str, inv: Invocation, spec: Path, workdir: Path, config: Path
         "--report-json-path", f"/out/{rel}/report.json",
     ]
     cmd += ["--include-by", ADMIN] if inv.channel == "admin" else ["--exclude-by", ADMIN]
-    if inv.mode == "positive":
-        # An exclusion, not `--include-method GET`: Schemathesis ORs its inclusions, so beside the admin channel's
-        # `--include-by` an inclusion would select every admin operation (measured: the first run's admin-positive
-        # invocation tested 59 operations where 15 are GETs). Exclusions are ANDed.
+    # Exclusions, not inclusions: Schemathesis ORs its inclusions, so beside the admin channel's `--include-by` an
+    # inclusion would select every admin operation (measured: the first run's admin-positive invocation tested 59
+    # operations where 15 are GETs). Exclusions are ANDed.
+    if inv.methods == "get":
         cmd += ["--exclude-method-regex", NOT_GET]
+    elif inv.methods == "write":
+        cmd += ["--exclude-method-regex", "^GET$"]
+    if inv.mode == "negative":
+        # A negative invocation's coverage phase also sends a few schema-valid requests, built from the contracts as
+        # they are, idioms and all ([enforced]); whether a valid request is accepted is the positive invocations' to say,
+        # on the contracts as the server reads them.
+        cmd += ["--exclude-checks", "positive_data_acceptance"]
+    if inv.mode == "positive":
+        for operation_id in sorted(NEGATIVE_ONLY):
+            cmd += ["--exclude-operation-id", operation_id]
     for operation_id in SESSION_ENDING:
         cmd += ["--include-operation-id" if ending else "--exclude-operation-id", operation_id]
     if os.environ.get("VEYQ_FUZZ_INCLUDE_BY"):
         cmd += ["--include-by", os.environ["VEYQ_FUZZ_INCLUDE_BY"]]
     if update:
         cmd += ["--baseline-update"]
-    env = {**os.environ, "VEYQ_FUZZ_TOKEN": token(workdir)}
+    env = {**os.environ, "VEYQ_FUZZ_TOKEN": token(workdir), "VEYQ_FUZZ_PEER_TOKEN": token(workdir, "token-peer")}
     started = time.time()
     with (out / "schemathesis.log").open("w") as handle:
         code = subprocess.run(cmd, env=env, stdout=handle, stderr=subprocess.STDOUT).returncode
@@ -442,7 +628,7 @@ def verdict(results: list[Result]) -> tuple[list[str], list[str]]:
     by_inv: dict[str, list[Result]] = {}
     for r in results:
         by_inv.setdefault(r.inv.name, []).append(r)
-    never_2xx: list[str] = []
+    never_2xx: dict[str, list[str]] = {}
     for name, rs in by_inv.items():
         tested = sum((r.report or {}).get("operations", {}).get("tested", 0) or 0 for r in rs)
         expected = sum(len(r.expected) for r in rs)
@@ -453,6 +639,11 @@ def verdict(results: list[Result]) -> tuple[list[str], list[str]]:
             where = f"{name} {r.spec}"
             if r.report is None:
                 problems.append(f"{where}: no JSON report (exit {r.exit_code}) — {r.report_dir / 'schemathesis.log'}")
+                continue
+            stateful = ((r.report.get("phases") or {}).get("stateful") or {})
+            if r.inv.phases == STATEFUL and stateful.get("skip_reason") == "not_applicable":
+                # No link inferred between this file's operations: nothing to sequence, which is a fact, not a red.
+                lines.append(f"   {r.spec}: no link inferred — no stateful sequence (information, no verdict)")
                 continue
             if not ops.get("tested"):
                 problems.append(f"{where}: tested no operation (selected {ops.get('selected')}, expected "
@@ -472,15 +663,15 @@ def verdict(results: list[Result]) -> tuple[list[str], list[str]]:
                 curl = next((ln.strip() for ln in message.splitlines() if ln.strip().startswith("curl ")), None)
                 lines.append(f"      {op}: {message.strip().splitlines()[0][:160] if message.strip() else ''}"
                              + (f"\n         {curl}" if curl else ""))
-            if r.inv.mode == "positive":
+            if r.inv.mode == "positive" and r.inv.phases != STATEFUL:
                 statuses = statuses_by_operation(r.report_dir)
                 for op in r.expected:
                     if not any(200 <= s < 300 for s in statuses.get(op, set())):
-                        never_2xx.append(f"{op} ({sorted(statuses.get(op, set()))})")
-    if never_2xx:
-        lines.append(f"== GET operations that never answered 2xx — their response schemas went unchecked "
-                     f"(information, no verdict): {len(never_2xx)}")
-        lines += [f"   {x}" for x in sorted(never_2xx)]
+                        never_2xx.setdefault(r.inv.name, []).append(f"{op} ({sorted(statuses.get(op, set()))})")
+    for name, ops in never_2xx.items():
+        lines.append(f"== {name}: operations that never answered 2xx — their response schemas went unchecked, and the "
+                     f"peer was never sent them (information, no verdict): {len(ops)}")
+        lines += [f"   {x}" for x in sorted(ops)]
     return problems, lines
 
 
@@ -495,6 +686,9 @@ def main(argv: list[str]) -> int:
         raise SystemExit(f"[fuzz] no fast-jar at {e2e.JAR} — `cd backend && ./gradlew quarkusBuild` first")
     if e2e.port_is_taken():
         raise SystemExit(f"[fuzz] something already answers on {e2e.READY_URL} — not ours to fuzz")
+    stale = unknown_negative_only()
+    if stale:
+        raise SystemExit(f"[fuzz] NEGATIVE_ONLY names no operation of contracts/api: {stale}")
     specs = [p for p in contract_specs.specs() if not args.only or contract_specs.key(p) in args.only]
     if not specs:
         raise SystemExit("[fuzz] no spec file selected")
@@ -507,37 +701,49 @@ def main(argv: list[str]) -> int:
 
     image = build_image()
 
+    database, store_init_database, bucket = run_names(stamp)
     stack_up()
-    provision_store(workdir)
-    e2e.fresh_bucket(BUCKET)
-    e2e.fresh_database(DATABASE)
-    secret = workdir / "config-secret.key"
-    boot_log = workdir / "backend.log"
-    proc = e2e.boot(DATABASE, secret, boot_log, bucket=BUCKET)
     results: list[Result] = []
+    proc = None
     try:
+        provision_store(workdir, store_init_database)
+        e2e.fresh_bucket(bucket)
+        e2e.fresh_database(database)
+        secret = workdir / "config-secret.key"
+        boot_log = workdir / "backend.log"
+        proc = e2e.boot(database, secret, boot_log, bucket=bucket)
         not_ready = e2e.wait_ready(time.time() + e2e.BOOT_SECS, proc)
         if not_ready:
             e2e.tail(boot_log)
             raise SystemExit(f"[fuzz] BOOT FAILED: {not_ready}")
         log(f"backend ready on {PORT} (admin {ADMIN_PORT}) after {time.time() - started:.0f} s")
         seed(workdir)
-        ids = json.loads((workdir / "seed.json").read_text())["ids"]
-        configs = {"negative": CONFIG, "positive": positive_config(workdir, ids)}
         (workdir / "reports" / "credential-operations.json").write_text(json.dumps(credential_operations(), indent=1))
+        write_enforced_specs(workdir / "reports" / "contracts" / "api")
         baseline = BASELINE
         if args.baseline_update:
             baseline = workdir / "reports" / "baseline.json"
             shutil.copyfile(BASELINE, baseline)
+        fresh = True  # the birth's objects: nobody has sent a request yet
         for inv in INVOCATIONS:
+            if inv.mode == "positive" and inv.channel == "public":
+                # Objects no earlier invocation could have changed: a negative run learns ids from the responses it
+                # reads and sends some valid requests too (measured: the seeded link was gone before the first positive
+                # run, when the negative one ran first), and the writes trash, revoke and purge what they are fixed to.
+                if not fresh:
+                    fresh_token(workdir)
+                    seed(workdir, "--objects")
+                configs = write_positive_configs(workdir)
+            fresh = False
             for spec in specs:
-                for ending in (False, True):
+                # A stateful sequence never ends its own session: the session-ending operations are not part of it.
+                for ending in (False,) if inv.phases == STATEFUL else (False, True):
                     expected = operations(spec, inv, ending)
                     if not expected:
                         continue
                     fresh_token(workdir)
-                    r = run_one(image, inv, spec, workdir, configs[inv.mode], baseline, args.baseline_update,
-                                expected, ending)
+                    config = CONFIG if inv.mode == "negative" else configs["stateful" if inv.phases == STATEFUL else "positive"]
+                    r = run_one(image, inv, spec, workdir, config, baseline, args.baseline_update, expected, ending)
                     ops = (r.report or {}).get("operations") or {}
                     log(f"{inv.name} {r.spec}{' (session-ending)' if ending else ''}: exit {r.exit_code}, "
                         f"tested {ops.get('tested')}/{len(expected)}, {r.seconds:.0f} s")
@@ -546,8 +752,10 @@ def main(argv: list[str]) -> int:
             shutil.copyfile(baseline, BASELINE)
             log(f"baseline merged into {BASELINE.relative_to(REPO)} — give every new entry its `reason`")
     finally:
-        e2e.kill(proc)
-        secret.unlink(missing_ok=True)
+        if proc is not None:
+            e2e.kill(proc)
+        (workdir / "config-secret.key").unlink(missing_ok=True)
+        drop_run_state(database, bucket)
 
     problems, lines = verdict(results)
     lines.append(f"== total {time.time() - started:.0f} s, max-examples {MAX_EXAMPLES}, seed {SEED}")
