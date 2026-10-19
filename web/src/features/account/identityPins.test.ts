@@ -186,6 +186,35 @@ describe('checkAndPin (TOFU)', () => {
   })
 })
 
+// Inbox #491: the single 1 MiB blob refused the 445th pin, and the grant-delivery worker could wrap to nobody after it.
+// The worker's pin step is checkAndPin; driven here for 1,000 contacts against the per-entry store, every write is one
+// entry plus the head — the 445th and the 1,000th exactly like the first — and the whole set reads back.
+describe('a key-holder pins past the old ceiling (ADR 0104, inbox #491)', () => {
+  it('the 445th and the 1,000th contact pin as the first did: one entry a write, the set reads back whole', async () => {
+    const srv = fakeServer()
+    const contacts = Array.from({ length: 1000 }, (_, i) => ({
+      userId: `c0ffee00-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      key: keyOf(),
+    }))
+    for (const c of contacts) expect(await checkAndPin(c.userId, c.key)).toBe('firstUse')
+    expect(srv.state.revision).toBe(1000)
+    expect(srv.state.entries.size).toBe(1000)
+    const sizes = srv.writeIdentityPins.mock.calls.map(([req]) => JSON.stringify(req.identityPinsWrite).length)
+    for (const n of [1, 445, 1000]) {
+      const w = srv.writeIdentityPins.mock.calls[n - 1][0].identityPinsWrite
+      expect(w.put, `write ${n}`).toHaveLength(1)
+      expect(w.replaceAll).toBe(false)
+    }
+    // A write's size does not grow with the store (the head's digest is fixed-size; the count adds a digit at most).
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(8)
+    forgetVerifiedPins() // a fresh session lists the whole set and checks it against the head
+    const states = await trustStates(contacts.map((c) => ({ userId: c.userId, directoryKey: c.key })))
+    expect(Object.values(states).every((t) => t.state === 'pinned')).toBe(true)
+    expect(states[contacts[444].userId]).toEqual({ state: 'pinned', pinVerified: false })
+    expect(states[contacts[999].userId]).toEqual({ state: 'pinned', pinVerified: false })
+  }, 120_000)
+})
+
 describe('acceptKeyChange (human accept → re-pin)', () => {
   it('re-pins a contact to the new key, preserving firstSeenAt, so a later check matches', async () => {
     const srv = fakeServer(storeOf({ [U1]: pinOf(KEY_A, 'pinned', 42) }, 1))

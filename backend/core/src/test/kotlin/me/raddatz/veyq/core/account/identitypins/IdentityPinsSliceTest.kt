@@ -232,6 +232,10 @@ class IdentityPinsSliceTest {
         assertTrue(body.length + ROTATION_OVERHEAD < limit.asLongValue(), "the rotation's whole body fits the limit")
         send(token, body).then().statusCode(200).body("revision", equalTo(1))
         assertEquals(25_000L, count(user))
+        // And it reads back whole, page by page, in pinId order — what a device lists before it checks the head.
+        val listed = entries(token)
+        assertEquals(25_000, listed.size)
+        assertEquals(listOf(pin(1), pin(445), pin(1000), pin(25_000)), listOf(listed[0], listed[444], listed[999], listed[24_999]))
 
         // The store holds no more: one more entry is refused, and nothing of that write lands — not even its head.
         write(token, 1, HEAD_2, put = listOf(pin(25_001)))
