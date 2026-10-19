@@ -1,7 +1,7 @@
 ---
 id: cr-instance-privacy-notice
 title: A fixed instance privacy notice, public on every tenant host, filled with the instance's values
-status: planned
+status: in-progress
 satisfies: ["uc.admin.privacy-notice", "uc.admin.operator-details"]
 adrs: ["0035", "0093", "0056", "0101", "0088", "0089", "0087"]
 invariants:
@@ -112,7 +112,7 @@ says what veyq builds and the question stays a named blocker.
 
 ## Phases
 
-- [ ] **0 docs** — `uc.admin.privacy-notice` and `uc.admin.operator-details` (the two new values) corrected to the
+- [x] **0 docs** — `uc.admin.privacy-notice` and `uc.admin.operator-details` (the two new values) corrected to the
   owner's answers; ADR 0035 decision 6 or 8 moved where Q27 goes. · Done when: feature-format, coverage, doc-link,
   doc-citation, change guards green.
 - [ ] **1 contracts** — the text file (DE and EN, drafts from the inventory above and the 2026-10-16 research), the

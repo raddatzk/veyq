@@ -137,14 +137,14 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    - **authorities**: Art. 18 reports, orders complied with, terrorist content prohibited and blocked once known,
      and the instance contact as the point of contact for users and authorities and the TCO contact point, with
      its languages;
-   - **the guest-write record's GDPR Art. 13 information**, with the **right to object (Art. 21) as a notice of its
-     own**, separate from the rest; the first-layer sentence on every guest write page links here (ADR 0093 § 10).
+   - **a pointer to the guest-write record's GDPR Art. 13 information**, which is the privacy notice's (decision 8,
+     with its right to object apart): one home for every Art. 13 passage (owner, Q27 of `cr-instance-privacy-notice`).
 
    It is shown wherever a space's terms are — the member gate, the share gate, the space's terms panel, and the login
    page once that surface exists — and served with them by the same endpoints, after the space's own text. DSA
    Art. 14(1) asks the terms to be publicly available and easily accessible, so it is also served without an account
    (`GET /api/operator/terms`) and shown at a page of its own (`/operator-terms`), linked from the login page, the share
-   page and the signed-in shell; the guest-write record's first-layer sentence links its record passage there. Its revision moves only with
+   page and the signed-in shell. Its revision moves only with
    its text, that is with a veyq release; a bump reopens the gate like a space's revision, and a value changed in
    admin-web renders at once without reopening it. A space with no terms (revision 0) shows the operator section
    without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the drafts of the
@@ -161,10 +161,10 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
      contact point for users and authorities with its languages (DSA Art. 11–12, TCO Art. 15); the statement's
      deferral on an authority's request (TCO Art. 11(3)); and the statement's further content, reduced as ADR 0093
      § 7 says;
-   - **follows its value, not the mode:** the guest-write record's information is in the section exactly while
-     `core.public-shares.guest-write-record` is on, in either variant, since its first-layer sentence and Art. 13
-     come with the recording; a contact or a provider identification the operator set is shown, and one left empty is
-     simply absent — the full section shows that gap as "not stated by this operator".
+   - **follows its value, not the mode:** the pointer to the guest-write record's information is in the section
+     exactly while `core.public-shares.guest-write-record` is on, in either variant; a contact or a provider
+     identification the operator set is shown, and one left empty is simply absent — the full section shows that gap
+     as "not stated by this operator".
 
    Both variants carry one revision, moved with the text of either, and the gate compares the variant with it:
    switching the mode **reopens the gate**, since what members accepted changed. Switching the record does not: its
@@ -173,20 +173,11 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    has one; a guest's device keeps the last four triples it accepted, and its gate asks the same question. Four, since
    both revisions only grow: both variants at the current revisions and at the previous ones (a rolled-back release) are
    all that can come back. So switching the mode back to a variant accepted before asks nobody again, member or guest
-   (the owner's decision of 2026-10-18). An unset value follows the variant in the record passage too — a visible gap
-   in the full one, absent in the reduced one — as the owner decided for the private mode's privacy texts (decision 8,
-   Q26 of `cr-instance-privacy-notice`); the sentences around a value stay.
+   (the owner's decision of 2026-10-18).
 
    **Gaps against the law, named rather than papered over** (the owner's rule of 2026-10-18: a legal duty wins over
    what an ADR or the code says). Each is a correction owed before the first release, or a question for the qualified
    review the whole text waits on:
-   - **The backup period B** (GDPR Art. 13(2)(a), ADR 0093 § 10) is no value veyq holds yet: the record passage says a
-     backup made another way can hold the record "until that backup is deleted", a criterion where the law prefers a
-     period. `cr-backup-erasure-and-retention` makes B a value; the passage then renders it.
-   - **A member's own GDPR Art. 13 information** (the account, the acceptance history, the moderation log as far as it
-     names them) is in no text; the section covers only the guest-write record and a reporter's contact.
-     `cr-instance-privacy-notice` writes the privacy notice (decision 8) and moves the record's passage there (its Q27),
-     leaving a pointer here.
    - **A space's own terms are not public before sign-in** (decision 5); whether DSA Art. 14(1) reaches them, as terms
      the provider's service runs under, is a question for the review.
 
@@ -226,6 +217,17 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    run by default are open (ADR 0093 Still open 6 and 7); until answered the notice names the Server Owner as the
    controller and states the check as it runs.
 
+   The owner's answers (2026-10-18, Q26–Q28 of `cr-instance-privacy-notice`): the notice is shown in **both modes**,
+   every passage being a fact of the software true on every instance (in *private* the household exemption only makes
+   it not owed); it is the **one home of every Art. 13 passage**, the guest-write record's included, its right to
+   object set apart as in decision 6 before, and the operator section keeps a pointer; the recipients are a **list** the
+   Server Owner keeps — name, what they do, country — with suggested rows for what the instance knows (an external
+   store's host, the instance mail relay's host) that publish nothing until saved, since fixed slots miss a backup host
+   or a second relay. A space's own mail relay is named generically, as the space owner's choice: who controls it is
+   the joint-control question. A guest objecting to the record names the identity whose rows are erased by a **guest
+   id** its own view shows to copy (Art. 21(1) with 12(2)), the share identity's random id; an objection erases the
+   rows so far and does not stop later writes from being recorded, and the notice says so (owner: keep it so).
+
 ## Consequences
 
 - **New operator-visible surface, all public/operational:** the tenant `terms_markdown_by_locale` + `terms_revision`
@@ -254,8 +256,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 - **The privacy notice is a second fixed text** (8), with its own public route and endpoint, the recipients list and
   an optional data-protection officer as new instance values, and links from every place that collects. The space
   template's privacy clause stays the space owner's description of their space, never the operator's notice. The
-  guest-write record's Art. 13 passage is in the operator section (6) as that is built; whether it moves into the
-  notice, leaving a pointer, is an owner question of `cr-instance-privacy-notice` (recommended: one home).
+  guest-write record's Art. 13 passage is the notice's; the operator section (6) points to it.
 
 ## Alternatives considered
 
