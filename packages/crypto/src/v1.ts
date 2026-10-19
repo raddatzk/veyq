@@ -42,6 +42,7 @@ export {
   decodeBlobMeta,
   BlobMetaInvalid,
   BLOB_META,
+  SHA256_B64URL,
   type BlobMeta,
   type OpenedBlobMeta,
 } from './blobMeta'

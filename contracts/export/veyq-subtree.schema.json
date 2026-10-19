@@ -449,13 +449,12 @@
       }
     },
     "memoriesCover": {
-      "description": "The cover: one of the exported media (by its index in `media`) or an uploaded image (a payload), framed by a normalized 0..1 crop.",
+      "description": "The cover: the node's own uploaded image (a payload), framed by a normalized 0..1 crop.",
       "type": "object",
+      "required": [
+        "file"
+      ],
       "properties": {
-        "mediaIndex": {
-          "type": "integer",
-          "minimum": 0
-        },
         "file": {
           "$ref": "#/$defs/payload"
         },
@@ -465,7 +464,7 @@
       }
     },
     "memoriesBanner": {
-      "description": "The banner (uc.memory.banner): its own image or video as a payload (and a video's poster), framed by a fill or fit frame around a normalized 0..1 focal point, with an optional description. `mediaIndex` names the exported medium it was copied from, when that medium is in the archive; an import never needs it.",
+      "description": "The banner (uc.memory.banner): its own image or video as a payload (and a video's poster), framed by a fill or fit frame around a normalized 0..1 focal point.",
       "type": "object",
       "required": [
         "file",
@@ -504,14 +503,6 @@
               "maximum": 1
             }
           }
-        },
-        "alt": {
-          "type": "string",
-          "maxLength": 200
-        },
-        "mediaIndex": {
-          "type": "integer",
-          "minimum": 0
         }
       }
     },

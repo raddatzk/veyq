@@ -72,7 +72,7 @@ Owner decision 2026-10-19 (three parts, plus an addition the same day):
    `storage_key`, and a line is written only when the sweep really deleted the object. `MeasureTargets` names no blob table.
 4. **Where the content hash lives: the original's `blob-meta`** — `{v, type, name?, modifiedAt?, sha256?}`, `sha256` the
    43-character base64url SHA-256 of the plaintext, sealed under the blob's own `K_blob`. The listed media meta has no room
-   (512 base64, already clamping the place name); `blob-meta` has (worst case 821 → 875 of 1024 bytes), is the blob's own
+   (512 base64, already clamping the place name); `blob-meta` has (worst case 821 → 876 of 1024 bytes), is the blob's own
    fact, and is served with every listed original. Written for a gallery original and for a video banner's `BANNER` blob
    (the two kinds of slot that hold the source bytes); copied into a shared row's `blob-meta`. **New uploads only:** a medium
    uploaded before this CR has no hash and is never matched. Cost: the client reads each picked original once more to hash

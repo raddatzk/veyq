@@ -4,6 +4,7 @@
 // K_blob never open as each other.
 import { describe, expect, it } from 'vitest'
 import * as v1 from './v1'
+import { b64url } from './base64'
 
 const kBlob = new Uint8Array(32).fill(7)
 const text = (b: Uint8Array) => new TextDecoder().decode(b)
@@ -11,6 +12,8 @@ const text = (b: Uint8Array) => new TextDecoder().decode(b)
 const docOf = (b: Uint8Array) => text(b).trimEnd()
 /** Seal an arbitrary plaintext the way another writer could, to exercise the reader. */
 const sealRaw = (plaintext: string) => v1.seal({ purpose: 'blob-meta' }, kBlob, new TextEncoder().encode(plaintext))
+/** The SHA-256 of 'abc' in base64url, no padding: a digest as `sha256` carries it. */
+const DIGEST = 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0'
 
 describe('blob meta', () => {
   it('round-trips through its seal, one 256-byte bucket for a short document', () => {
@@ -47,8 +50,9 @@ describe('blob meta', () => {
         type: '"'.repeat(v1.BLOB_META.typeBytes),
         name: '\\'.repeat(400),
         modifiedAt: Number.MAX_SAFE_INTEGER,
+        sha256: DIGEST,
       })
-      expect(docOf(b).length).toBe(821)
+      expect(docOf(b).length).toBe(876)
       expect(b.length).toBe(v1.BLOB_META.maxBytes)
     })
   })
@@ -106,6 +110,38 @@ describe('blob meta', () => {
     })
     it.each([-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY])('%d is left out', (n) => {
       expect(doc(n)).toBe('{"v":1,"type":""}')
+    })
+  })
+
+  describe('the content digest (cr-cover-banner-upload-only-and-dedup)', () => {
+    it('is written last, in the fixed key order, and read back', () => {
+      const b = v1.encodeBlobMeta({ sha256: DIGEST, modifiedAt: 1, name: 'a', type: 't' })
+      expect(docOf(b)).toBe(`{"v":1,"type":"t","name":"a","modifiedAt":1,"sha256":"${DIGEST}"}`)
+      expect(v1.decodeBlobMeta(b).sha256).toBe(DIGEST)
+    })
+    it('is the digest of the plaintext, in base64url', () => {
+      expect(b64url(v1.sha256Digest(new TextEncoder().encode('abc')))).toBe(DIGEST)
+    })
+    // Read off the written document: the reader drops the same values and would hide a writer that let them through.
+    it.each([
+      ['42 characters', DIGEST.slice(0, 42)],
+      ['44 characters', `${DIGEST}A`],
+      ['padding', `${DIGEST}=`],
+      ['standard base64', DIGEST.replace('-', '+')],
+      ['non-zero trailing bits', `${DIGEST.slice(0, 42)}b`],
+      ['hex', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'],
+    ])('a value with %s is left out', (_, sha256) => {
+      expect(docOf(v1.encodeBlobMeta({ type: '', sha256 }))).toBe('{"v":1,"type":""}')
+    })
+    it('a digest that is no string is left out, even one that reads as a digest once stringified', () => {
+      const meta = { type: '', sha256: [DIGEST] } as unknown as v1.BlobMeta
+      expect(docOf(v1.encodeBlobMeta(meta))).toBe('{"v":1,"type":""}')
+      expect(v1.openBlobMeta(kBlob, sealRaw(`{"v":1,"type":"","sha256":["${DIGEST}"]}`))).toEqual({ v: 1, type: '' })
+    })
+    it('the reader drops a malformed digest and keeps a well-formed one', () => {
+      expect(v1.openBlobMeta(kBlob, sealRaw(`{"v":1,"type":"","sha256":"${DIGEST}"}`)).sha256).toBe(DIGEST)
+      expect(v1.openBlobMeta(kBlob, sealRaw('{"v":1,"type":"","sha256":"abc"}'))).toEqual({ v: 1, type: '' })
+      expect(v1.openBlobMeta(kBlob, sealRaw('{"v":1,"type":"","sha256":7}'))).toEqual({ v: 1, type: '' })
     })
   })
 
