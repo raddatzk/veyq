@@ -215,8 +215,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    collection — the invite acceptance that births an account, the report dialog that takes a contact, a guest's
    first write — and each of those links to it, as do the login page, the share page and the signed-in app
    (the provider identification's footer, which the app shell gains). It is information, not consent: no gate, no
-   acceptance, and its revision moves only with its text. It is shown in both operating modes (owner question in
-   `cr-instance-privacy-notice`); in the *private* mode an empty value is simply absent and nothing warns, in the
+   acceptance, and its revision moves only with its text. It is shown in both operating modes (owner, Q26 below); in the *private* mode an empty value is simply absent and nothing warns, in the
    other the full notice shows the gap as "not stated by this operator" and admin-web warns, as for the
    identification. Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
    run by default are open (ADR 0093 Still open 6 and 7); until answered the notice names the Server Owner as the
