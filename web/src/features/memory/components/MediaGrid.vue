@@ -173,6 +173,17 @@ watch(
 
 // --- measuring --------------------------------------------------------------------------------------------------
 
+/**
+ * How much of the window's top a page's sticky chrome covers (the shell's top bar and a Memory's sticky tab row,
+ * uc.memory.banner): the page says so in `--media-grid-occluded-top` (px) on an ancestor; none said is 0. A tile moved to
+ * by the keyboard is then scrolled below it, never under it. Capped at half the window, so a wrong value cannot hide
+ * the grid.
+ */
+function occludedTop(el: HTMLElement, winHeight: number): number {
+  const v = parseFloat(getComputedStyle(el).getPropertyValue('--media-grid-occluded-top'))
+  return Number.isFinite(v) && v > 0 ? Math.min(v, winHeight / 2) : 0
+}
+
 /** The nearest ancestor that scrolls vertically, else the window. */
 function findScroller(el: HTMLElement): HTMLElement | Window {
   for (let n = el.parentElement; n; n = n.parentElement) {
@@ -198,6 +209,8 @@ function measure() {
       top = Math.max(box.top, 0)
       bottom = Math.min(box.bottom, winHeight)
     }
+  } else {
+    top = occludedTop(el, winHeight)
   }
   const height = bottom - top > 0 ? bottom - top : FALLBACK_VIEW
   const next = { top: Math.round(top - rect.top), height: Math.round(height) }

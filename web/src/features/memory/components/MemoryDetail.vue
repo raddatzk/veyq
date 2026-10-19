@@ -21,7 +21,7 @@
 // source's loaders and each write per right (`canSetCover`, `canDelete`, the source's `mediaMeta` door). A guest
 // mounts this through core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and chapter of its link: it
 // sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Tabs from 'primevue/tabs'
@@ -63,6 +63,10 @@ import type { MemoryRights } from '../rights'
 import { provideMemoryView, sourceRights, type MemorySource } from '../source'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
+import MemoryBanner from '../banner/MemoryBanner.vue'
+import BannerDialog from '../banner/BannerDialog.vue'
+import { useMemoryBanner } from '../banner/useMemoryBanner'
+import { useBannerEditor } from '../banner/useBannerEditor'
 
 const props = defineProps<{
   node: TreeNode
@@ -105,11 +109,55 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { viewMode } = useViewMode()
-const { ask } = useConfirm()
+const { ask, askWithOption } = useConfirm()
 const toast = useToast()
 
 /** What this view offers: the matrix's grant AND the source's door (see the header). */
 const can = computed(() => sourceRights(props.rights, props.source))
+
+// --- the banner (uc.memory.banner, ADR 0102): drawn above the header row from the node's own attachments, before and
+// without the media list, the same for a member and a guest; set, re-framed or removed in its dialog where `setBanner`
+// grants it. The dialog's save runs through the source's banner door (`useBannerEditor`).
+const memoryBanner = useMemoryBanner({
+  scopeId: () => props.scopeId,
+  node: () => props.node,
+  memoryKey: () => props.memoryKey,
+  loaders: props.source.loaders,
+})
+/** The open banner dialog, and the gallery medium it was opened on (the lightbox's "Use as banner"). */
+const bannerDialog = ref<{ seed: { mediaId: string; src: string | null; video: boolean } | null } | null>(null)
+function openBannerDialog(seed: { mediaId: string; src: string | null; video: boolean } | null = null) {
+  if (!can.value.setBanner || !props.memoryKey) return
+  bannerDialog.value = { seed }
+}
+/** The medium the banner was made from: the lightbox marks it, and deleting it asks about the banner (decision 7). */
+const bannerMediaId = computed(() => memoryBanner.banner.value?.origin?.mediaId ?? null)
+
+// How far down the sticky stack reaches (the shell's chrome + the stuck tab row): the gallery's windowing keeps a tile the
+// keyboard moves to below it (`MediaGrid`'s `--media-grid-occluded-top`). Measured, because the row's height is the
+// theme's and its offset the shell's breakpoint's.
+const detailEl = ref<HTMLElement | null>(null)
+const occludedTop = ref(0)
+let stickyObserver: ResizeObserver | null = null
+function measureSticky() {
+  const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .p-tablist')
+  if (!row) return
+  const top = parseFloat(getComputedStyle(row).top)
+  occludedTop.value = Math.round((Number.isFinite(top) ? top : 0) + row.offsetHeight)
+}
+onMounted(() => {
+  measureSticky()
+  window.addEventListener('resize', measureSticky)
+  const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .p-tablist')
+  if (row && typeof ResizeObserver !== 'undefined') {
+    stickyObserver = new ResizeObserver(measureSticky)
+    stickyObserver.observe(row)
+  }
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measureSticky)
+  stickyObserver?.disconnect()
+})
 provideMemoryView({ source: props.source, rights: can })
 /** The participants row under the title (who was there): it owns the picker the header's action opens. */
 const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
@@ -124,6 +172,8 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // `participants` (a member's alone, fail-closed) where the list may be written - never in a personal scope, never during a
   // pending deletion (E2) - which is the row's own `canEdit`.
   { id: 'participants', label: t('memory.participants.title'), icon: 'pi pi-users', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
+  // The banner above the Memory (uc.memory.banner): who may choose the cover may set it (`setBanner`, a member's only).
+  { id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'pi pi-objects-column', shown: can.value.setBanner, disabled: !props.memoryKey, onClick: () => openBannerDialog() },
   { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: can.value.rename, onClick: () => emit('rename') },
   // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
   { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: can.value.move, onClick: () => emit('move') },
@@ -316,6 +366,19 @@ const { storedCover, coverSrc, coverMediaId, coverSourceOf } = useMemoryCover({
   thumbs,
 })
 
+const bannerEditor = useBannerEditor({
+  scopeId: () => props.scopeId,
+  node: () => props.node,
+  memoryKey: () => props.memoryKey,
+  source: props.source,
+  items: () => items.value,
+  raw: () => memoryBanner.raw.value,
+  onMetaUpdated: (update) => emit('metaUpdated', update),
+})
+function onSetBannerFromMedium(payload: { mediaId: string; src: string | null; video: boolean }) {
+  openBannerDialog(payload)
+}
+
 // The cover photo's thumbnail is the header's image: wanted whether or not its tile is near the gallery's viewport.
 watch(coverMediaId, (id) => wantThumbs('cover', id ? [id] : []), { immediate: true })
 
@@ -433,7 +496,31 @@ function canDeleteInLightbox(it: MediaItem): boolean {
 /** The lightbox asked to delete: the door decides how — a trash with undo, or a guest's purge asked first. */
 function onLightboxDelete(payload: { mediaId: string }) {
   if (can.value.deleteMedia === 'own') void onDeleteOwn(payload.mediaId)
+  else if (can.value.setBanner && payload.mediaId === bannerMediaId.value) void onDeleteBannerSource(payload)
   else void onDeleteFromLightbox(payload)
+}
+
+/**
+ * Deleting the medium the banner was made from (ADR 0102 decision 7): the confirmation says the banner keeps its own copy
+ * and offers to remove it in the same step. Nothing else ties the two: declined, nothing is deleted; accepted, the medium
+ * goes to the trash as any other (with its undo), and the banner goes too only where that was ticked.
+ */
+async function onDeleteBannerSource(payload: { mediaId: string }) {
+  const answer = await askWithOption({
+    header: t('memory.banner.originTitle'),
+    message: t('memory.banner.originNotice'),
+    acceptLabel: t('media.delete'),
+    acceptIcon: 'pi pi-trash',
+    option: { label: t('memory.banner.originRemove') },
+  })
+  if (!answer) return
+  void onDeleteFromLightbox(payload)
+  if (!answer.option) return
+  try {
+    await bannerEditor.save({ kind: 'remove' })
+  } catch {
+    toast.error(t('memory.banner.failed'))
+  }
 }
 
 // The lightbox's bytes and seals through the source, under this node's key (the lightbox mounts only with one).
@@ -475,7 +562,15 @@ watch(
 </script>
 
 <template>
-  <div class="memory-route-surface memory-detail">
+  <div ref="detailEl" class="memory-route-surface memory-detail" :style="{ '--media-grid-occluded-top': `${occludedTop}px` }">
+    <!-- The banner (uc.memory.banner): above the header row, scrolling away with it while the tab row below sticks. -->
+    <MemoryBanner
+      :banner="memoryBanner.banner.value"
+      :picture-url="memoryBanner.pictureUrl.value"
+      :status="memoryBanner.status.value"
+      :video-chunks="memoryBanner.videoChunks"
+      :video-bytes="memoryBanner.videoBytes"
+    />
     <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
          the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
@@ -785,8 +880,10 @@ watch(
       :start-index="lightboxIndex"
       :memory-name="node.name"
       :cover-media-id="coverMediaId"
-      :suspend-keys="coverEditing"
+      :suspend-keys="coverEditing || !!bannerDialog"
       :can-set-cover="can.setCover"
+      :banner-media-id="bannerMediaId"
+      :can-set-banner="can.setBanner"
       :can-delete="canDeleteInLightbox"
       :media-meta="source.mediaMeta"
       :uploader-of="uploaderNames.uploaderOf"
@@ -800,8 +897,18 @@ watch(
       @close="onLightboxClose"
       @updated="onCapturedAtUpdated"
       @set-cover="onSetCoverFromPhoto"
+      @set-banner="onSetBannerFromMedium"
       @delete="onLightboxDelete"
       @report="emit('reportMedium', $event)"
+    />
+
+    <BannerDialog
+      v-if="bannerDialog && memoryKey && can.setBanner"
+      :current="memoryBanner.banner.value"
+      :current-src="memoryBanner.pictureUrl.value"
+      :seed="bannerDialog.seed"
+      :save="bannerEditor.save"
+      @close="bannerDialog = null"
     />
 
     <MemoryDateEditor
@@ -907,9 +1014,20 @@ watch(
   font-size: 0.9rem;
 }
 /* Query container on the detail surface so the header responds to its OWN width (not the viewport — the sidebar
-   eats ~230px, so a viewport media query stacks too late). */
+   eats ~230px, so a viewport media query stacks too late). The banner's frame reads it too (3:1 wide, 16:9 narrow). */
 .memory-detail {
   container: memory-detail-surface / inline-size;
+}
+/* The tab row sticks below the shell's sticky chrome (`--app-sticky-top`: the top bar, the compact header on a phone,
+   0 on a share page) while the banner and the header row scroll away (uc.memory.banner, owner's Q3). The page scrolls
+   the WINDOW, and so does the gallery's windowing (`MediaGrid` takes the nearest scrolling ancestor, which is the window
+   here): one scroller, so the row sticks over exactly what the grid measures, and `MediaGrid` reads how far down the
+   sticky stack reaches from `--media-grid-occluded-top` (set below from the row's measured bottom). */
+.memory-tabs :deep(.p-tablist) {
+  position: sticky;
+  top: var(--app-sticky-top, 0px);
+  z-index: 6;
+  background: var(--app-bg);
 }
 /* The Memory cover (cr-0072): a 16:9 tile showing the chosen, cropped cover (or the placeholder). It IS the
    "set/edit cover" button — clicking it opens the crop dialog. A hint label sits over it (always when empty,

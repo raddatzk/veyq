@@ -93,6 +93,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/media:
     get:
@@ -247,6 +248,7 @@ paths:
           description: The `bucketId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/buckets/{bucketId}:
     patch:
@@ -298,6 +300,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: bucket_not_found } }
         "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [buckets]
       operationId: deleteBucket
@@ -379,6 +382,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/media/{mediaId}/exif:
     get:
@@ -471,6 +475,7 @@ paths:
             (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaRevision: 2 } }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/media/{mediaId}:
     delete:

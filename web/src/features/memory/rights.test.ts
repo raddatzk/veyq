@@ -21,7 +21,7 @@ const WO = guestAccessOf('WRITE_ONLY')
 
 /** A member on an opened Memory or chapter, as the detail has always offered it (cr-0049 … cr-0113). */
 const MEMBER_ON_NODE: Grant = {
-  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, mark: true,
+  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, setBanner: true, mark: true,
   share: true, shareContribute: true, shareUpload: true, rename: true, deleteNode: true, move: true, mediaTrash: true, buckets: true,
 }
 
@@ -84,7 +84,7 @@ describe('memoryRights: the matrix', () => {
 // new Memory (owner decision 2026-10-14: the server lets no guest create one, core's `GuestCreatableKinds`).
 describe('memoryRights: member-only functions', () => {
   const MEMBER_ONLY: (keyof MemoryRights)[] = [
-    'mark', 'editMeta', 'setCover', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
+    'mark', 'editMeta', 'setCover', 'setBanner', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
   ]
   it('no guest role grants any of them', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {

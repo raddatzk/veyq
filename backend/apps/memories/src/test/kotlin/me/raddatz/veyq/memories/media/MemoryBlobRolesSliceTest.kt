@@ -26,7 +26,7 @@ import me.raddatz.veyq.memories.testing.mediaId
 
 /**
  * The blob role is an open token on the wire since cr-files-application P3-S2. Core's member start takes only a role
- * some application declares ([MemoriesMemberBlobRoles], inbox #366) — here, with Memories alone, Memories' four — and
+ * some application declares ([MemoriesMemberBlobRoles], inbox #366) — here, with Memories alone, Memories' five and core's `COVER` — and
  * Memories' completion attaches a medium's blobs only in the roles it names for a medium ([MemoryBlobRoles]):
  * `upload_mismatch`, the item refused whole and nothing attached. A session in another application's role (Depot's
  * `FILE_CONTENT`, which the composed application starts) is opened through the store here, since this application's
@@ -124,12 +124,30 @@ class MemoryBlobRolesSliceTest {
             .then().statusCode(200).body("results[0].error", nullValue()).body("results[0].mediaId", equalTo(mediaId))
     }
 
+    /**
+     * A banner's roles are a member's (ADR 0102) and so pass the member start, but they are the node's attachments, never
+     * a medium's: a session started as `BANNER` or `BANNER_POSTER` and completed as a medium's original is refused whole.
+     */
+    @Test
+    fun aBannerUploadIsNeverAMediumsOriginal() {
+        for (role in MemoryBlobRoles.BANNER_ROLES) {
+            val mediaId = TestIds.uuid()
+            val banner = start(mediaId, role) // control: the member start takes the role
+            completeOverHttp(mediaId, banner).then().statusCode(200).body("results[0].error", equalTo("upload_mismatch"))
+            assertNull(attached(mediaId), "nothing was attached for $role")
+        }
+        // control: the same request with an ORIGINAL session attaches
+        val mediaId = TestIds.uuid()
+        completeOverHttp(mediaId, start(mediaId, MemoryBlobRoles.ORIGINAL))
+            .then().statusCode(200).body("results[0].error", nullValue()).body("results[0].mediaId", equalTo(mediaId))
+    }
+
     @Test
     fun theCompletionAttachesADerivativeOnlyInARoleMemoriesNamesOne() {
         val mediaId = TestIds.uuid()
         val original = start(mediaId, MemoryBlobRoles.ORIGINAL)
         // each session is bound to this media in exactly the role it is declared in, so only the role list refuses it
-        for (role in listOf("FILE_CONTENT", MemoryBlobRoles.ORIGINAL, "COVER")) {
+        for (role in listOf("FILE_CONTENT", MemoryBlobRoles.ORIGINAL, "COVER", MemoryBlobRoles.BANNER, MemoryBlobRoles.BANNER_POSTER)) {
             val derivative = if (role in MemoryBlobRoles.MEMBER) start(mediaId, role) else openPastTheStart(mediaId, role)
             assertEquals(
                 "upload_mismatch", completeThroughTheSeam(mediaId, original, listOf(DerivativeDeclare(role, derivative))),

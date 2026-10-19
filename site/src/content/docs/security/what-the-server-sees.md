@@ -16,6 +16,7 @@ sources:
   - docs/decisions/0014-group-scopes-and-governance.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
+  - docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md
 ---
 
 The server never sees content, only structure. Operator-blind does not mean metadata-blind: a defined set of
@@ -98,6 +99,11 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   space's name and icon, a bucket's name, a medium's metadata: the member or guest identity behind the last write,
   served to no one and never what was written. It decides that a guest can take back only an empty upload of its own.
 - A medium's **trash state**: a flag, who trashed it and when, until the scheduled purge.
+- A Memory's **banner**: that it has one and whether it is a video (one or two attachment rows and their sizes), never
+  its framing, its description or its picture. A banner copied from one of the Memory's media can be matched to that
+  medium by its size — a video banner is that video's original, re-sealed as it is — and choosing one downloads the
+  medium's original once
+  ([ADR 0102](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)).
 - Job-queue and op-log offsets, presence facts, and a grant-delivery decline status.
 - An account's **identity-pin entries**: an opaque id per pin (keyed by a Master-Key-derived key, so it names no
   contact and differs between accounts), which entry a write touched, and how many there are — the count was

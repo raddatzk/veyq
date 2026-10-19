@@ -178,12 +178,14 @@ class ModerationResource(
     override fun takeModerationMeasure(
         caseId: UUID, moderationMeasureRequest: ModerationMeasureRequest, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?,
     ): Response = with(moderationMeasureRequest) {
-        val factsFor = statement.factsFor.orEmpty()
-        if (factsFor.map { it.accountId }.toSet().size != factsFor.size) return httpError(CaseFailures.invalid)
+        val factsKeyFor = statement.factsKeyFor.orEmpty()
+        if (factsKeyFor.map { it.accountId }.toSet().size != factsKeyFor.size) return httpError(CaseFailures.invalid)
         val input = StatementInput(
+            statementId = statement.statementId.toString(),
             ground = StatementGround.valueOf(statement.ground.name),
             facts = statement.facts.sealed(),
-            factsFor = factsFor.associate { it.accountId.toString() to it.sealedFacts },
+            sealedFacts = statement.sealedFacts,
+            factsKeyFor = factsKeyFor.associate { it.accountId.toString() to it.wrappedFactsKey },
             deferral = statement.deferral?.let { DeferralInput(it.until.toInstant(), SealedNote(it.reason.epoch, it.reason.sealedNote)) },
             provision = statement.provision,
         )

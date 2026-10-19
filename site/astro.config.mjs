@@ -94,6 +94,7 @@ export default defineConfig({
                     'memories/set-the-location',
                     'memories/people-in-your-memories',
                     'memories/set-a-cover',
+                    'memories/add-a-banner',
                     'memories/marked-photos',
                     'memories/contributions',
                     'memories/photo-trash',

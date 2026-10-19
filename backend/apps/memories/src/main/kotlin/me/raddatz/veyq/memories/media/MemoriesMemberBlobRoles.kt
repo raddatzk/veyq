@@ -5,7 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * The roles a member uploads a Memories blob in, for core's member start (inbox #366): a medium's original and its
- * derivatives ([MediaUploadCompletion]) - [MemoryBlobRoles.MEMBER]. A node's cover role is core's (`CoreMemberBlobRoles`).
+ * derivatives ([MediaUploadCompletion]) and a Memory's banner and its poster (`MemoryBannerHandler`) -
+ * [MemoryBlobRoles.MEMBER]. A node's cover role is core's (`CoreMemberBlobRoles`).
  */
 @ApplicationScoped
 class MemoriesMemberBlobRoles : MemberBlobRoles {

@@ -1,0 +1,308 @@
+openapi: 3.1.0
+info:
+  title: veyq Memory Banner API
+  version: 0.1.0
+  description: >
+    The Memories application's **banner** ([uc.memory.banner](../../../docs/features/memory/use-cases/uc.memory.banner.md),
+    [ADR 0102](../../../docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): one image
+    or one video shown above a Memory's (or a Chapter's) menu bar, independent of its cover. Its bytes are the node's
+    own core attachments in two slots, `BANNER` (the image, or the video) and `BANNER_POSTER` (a video's first frame);
+    which medium it is, where it came from, its frame, focal point and description are sealed in the node's
+    `wrappedMeta` and never reach the server. **Operator-blind:** the server learns that a banner exists and, by the
+    poster slot and the sizes, that it is a video - nothing else. Authorization is enforced by code, not this spec
+    (ADR 0008); field validation via `x-field-extra-annotation`.
+tags:
+  - name: memory-banner
+    description: >
+      Set and remove a Memory's banner: the attachment slots and the sealed meta that names them, in one write. A
+      re-frame (focal point, fill or fit, the description) changes only the sealed meta and is core's plain node
+      update (`updateNode`). One tag is one resource interface with one root path (the node's `banner`).
+
+paths:
+  /api/scopes/{scopeId}/nodes/{nodeId}/banner:
+    put:
+      tags: [memory-banner]
+      operationId: setMemoryBanner
+      x-veyq-concurrency:
+        mode: revision
+        fields:
+          - field: metaRevision
+            required: true
+      summary: Make uploaded bytes the Memory's banner - the slots and the sealed meta naming them, in one write.
+      description: >
+        The client sealed the banner's bytes as uploads owned by this node (`startBlobUploads` with `ownerId` = this
+        node and `role` BANNER, and for a video a second one in BANNER_POSTER; each `K_blob` wrap is sealed under the
+        node's content key, bound to blob, node and role, ADR 0072) and re-sealed the node's `wrappedMeta` with the
+        banner that names them. The server verifies each upload (declare-then-verify), then, **in one transaction**:
+        attaches `uploadId` to the `BANNER` slot in place of `expectedBlobId`; attaches `posterUploadId` to the
+        `BANNER_POSTER` slot in place of `expectedPosterBlobId` - or, with no `posterUploadId`, empties that slot of
+        `expectedPosterBlobId` (an image replacing a video); and compare-and-sets the node's `wrappedMeta` at
+        `metaRevision` (ADR 0077). The server cannot tell an image from a video, so the poster slot follows the
+        request: present means filled, absent means emptied.
+
+        All or nothing: a slot that holds anything else than the request states (another member changed the banner)
+        is `409 banner_stale` with what the two slots hold now, and a meta that moved is `409 stale_revision` with the
+        current meta - either way **nothing is written and the uploads stay open**, for a retry on the fresh state or
+        for the stale-session purge. Every replaced blob's row goes in the same transaction and its store objects onto
+        the reclaim list ([ADR 0062](../../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The
+        caller needs write access to the scope (`scope_deleting` while it is being deleted); a node of another kind
+        than MEMORY or CHAPTER is `422 illegal_target`. No link role has this operation.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetMemoryBannerRequest" }
+            example:
+              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+              posterUploadId: 2a3b4c5d-6e7f-4a1b-8c2d-3e4f5a6b7c8d
+              expectedBlobId: null
+              expectedPosterBlobId: null
+              wrappedMeta: d3JhcHBlZC1tZXRh
+              metaRevision: 3
+      responses:
+        "204":
+          description: The uploads fill the banner's slots, the node's `wrappedMeta` is the one sent (at `metaRevision + 1`), and every replaced blob is freed.
+        "400":
+          description: Malformed request, or an upload failed declare-then-verify (`budget_exceeded`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope, live node or open upload (unknown, spent, another scope's, another member's), or the caller holds no grant for the scope or may not write it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "#/components/responses/BannerConflict" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: The node is no MEMORY or CHAPTER (`illegal_target`), or an upload was not started as this node's banner or poster (`upload_mismatch`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/banner/removal:
+    post:
+      tags: [memory-banner]
+      operationId: removeMemoryBanner
+      x-veyq-concurrency:
+        mode: revision
+        fields:
+          - field: metaRevision
+            required: true
+      summary: Remove the Memory's banner - both slots and the sealed meta that named them, in one write.
+      description: >
+        Empties the `BANNER` slot of `blobId` and the `BANNER_POSTER` slot of `posterBlobId` (null: the banner had no
+        poster) and writes the node's `wrappedMeta` re-sealed without the banner, compare-and-set at `metaRevision` -
+        all in one transaction, freeing both blobs (row and reclaim record). A slot that holds another blob than stated
+        is `409 banner_stale` and nothing is written; a slot already empty (a replay) still writes the meta, so the
+        removal is idempotent and heals a meta that named a blob that is gone. The caller needs write access to the
+        scope.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RemoveMemoryBannerRequest" }
+            example:
+              blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+              posterBlobId: null
+              wrappedMeta: d3JhcHBlZC1tZXRh
+              metaRevision: 4
+      responses:
+        "204":
+          description: Both slots are empty, their blobs freed, and the node's `wrappedMeta` is the one sent (at `metaRevision + 1`).
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope or live node, or the caller holds no grant for the scope or may not write it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "#/components/responses/BannerConflict" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: The node is no MEMORY or CHAPTER (`illegal_target`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. A member who may write the scope (enforced by code).
+
+  parameters:
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      description: Opaque id of the scope whose tree is addressed.
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of the Memory or Chapter node.
+      schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+
+  responses:
+    BannerConflict:
+      description: >
+        The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current meta and
+        revision); a banner slot holds another blob than stated (`banner_stale`, with what both slots hold now); or
+        the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). Nothing was written
+        in any case, and the uploads of a refused set are still open.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MemoryBannerConflict" }
+          example: { code: banner_stale, currentBlobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, currentPosterBlobId: null }
+
+  schemas:
+    ErrorResponse:
+      $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
+
+    SetMemoryBannerRequest:
+      type: object
+      description: >
+        Make one or two upload sessions the node's banner, and re-seal the node's `wrappedMeta` with the banner that
+        names them (see `setMemoryBanner`).
+      required: [uploadId, wrappedMeta, metaRevision]
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session of the banner's image or video, opened by `startBlobUploads` with `role` BANNER and `ownerId` = this node.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        posterUploadId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The upload session of a video's poster, opened with `role` BANNER_POSTER and `ownerId` = this node. Present:
+            the poster slot is filled with it. Absent or null: the poster slot is emptied of `expectedPosterBlobId`.
+          example: 2a3b4c5d-6e7f-4a1b-8c2d-3e4f5a6b7c8d
+        expectedBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The blob the caller read in the `BANNER` slot and replaces; null for a node with no banner.
+          example: null
+        expectedPosterBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The blob the caller read in the `BANNER_POSTER` slot and replaces or frees; null when it is empty.
+          example: null
+        wrappedMeta:
+          type: string
+          description: The node's sealed payload, re-sealed under a field key derived from its content key with the banner (see core's `NodeSummary.wrappedMeta`). Opaque base64.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        metaRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The `NodeSummary.metaRevision` the sent `wrappedMeta` was built from (ADR 0077).
+          minimum: 0
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+
+    RemoveMemoryBannerRequest:
+      type: object
+      description: Empty the node's banner slots and re-seal the node's `wrappedMeta` without the banner (see `removeMemoryBanner`).
+      required: [blobId, wrappedMeta, metaRevision]
+      properties:
+        blobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The blob the caller read in the `BANNER` slot; the slot is emptied only while it still holds it.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        posterBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The blob the caller read in the `BANNER_POSTER` slot; null when the banner had no poster.
+          example: null
+        wrappedMeta:
+          type: string
+          description: The node's sealed payload, re-sealed without the banner. Opaque base64.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        metaRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The `NodeSummary.metaRevision` the sent `wrappedMeta` was built from (ADR 0077).
+          minimum: 0
+          example: 4
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+
+    MemoryBannerConflict:
+      type: object
+      description: >
+        A refused banner write; nothing was written. `stale_revision`: the node's `wrappedMeta` moved since
+        `metaRevision`, and the body carries the current meta and revision to re-apply the change on (ADR 0077).
+        `banner_stale`: a banner slot holds another blob than stated, and the body carries what both slots hold now
+        (null: empty). `scope_deleting` carries `code` alone.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: public
+          type: string
+          maxLength: 64
+          example: banner_stale
+        message:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          maxLength: 512
+          example: null
+        wrappedMeta:
+          type: [string, "null"]
+          description: With `stale_revision`, the node's current sealed value (opaque base64); null when it has none.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+        metaRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: With `stale_revision`, the revision the current `wrappedMeta` is at.
+          example: 4
+        currentBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: With `banner_stale`, the blob the `BANNER` slot holds now; null when empty.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        currentPosterBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: With `banner_stale`, the blob the `BANNER_POSTER` slot holds now; null when empty.
+          example: null

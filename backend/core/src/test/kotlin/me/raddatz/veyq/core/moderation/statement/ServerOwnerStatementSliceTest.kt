@@ -183,8 +183,8 @@ class ServerOwnerStatementSliceTest {
             assertNull(row.caseId)
             assertEquals("OWN_FINDING", row.basis)
             val stored = ModerationEventEntity.listAll().map { listOf(it.reason, it.targetId, it.sealedText).joinToString() } +
-                listOf(row.sealedFacts, row.provision, row.ground).joinToString() +
-                StatementRecipientEntity.list("statementId", statementId).map { listOf(it.roles, it.sealedFacts).joinToString() }
+                listOf(row.sealedFacts, row.sealedMemberFacts, row.provision, row.ground).joinToString() +
+                StatementRecipientEntity.list("statementId", statementId).map { listOf(it.roles, it.wrappedFactsKey).joinToString() }
             assertTrue(stored.none { it.contains(FACTS) }, "the facts are stored in the clear")
             assertTrue(ModerationEventEntity.list("caseId is null and event = ?1 and targetId = ?2", "STATEMENT_SENT", statementId).isNotEmpty())
             assertNotNull(StatementRecipientEntity.find("statementId", statementId).firstResult()!!.mailedAt)

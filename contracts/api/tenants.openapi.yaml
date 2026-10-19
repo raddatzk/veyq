@@ -107,6 +107,7 @@ paths:
                   value: { code: domain_taken }
                 storeNotReady:
                   value: { code: store_not_ready }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     get:
       tags: [tenants]
       operationId: listTenants
@@ -269,6 +270,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_pending }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/change-domain:
     post:
@@ -335,6 +337,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: domain_taken }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/member-invites:
     post:
@@ -416,6 +419,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: already_member }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "503":
           description: >
             This tenant cannot send mail, so the invite cannot reach anyone and none was minted
@@ -608,6 +612,7 @@ paths:
         "403": { description: "The caller is a member of this tenant but not its owner (`not_tenant_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_tenant_owner } } } }
         "404": { description: "No such member of this tenant (`member_not_found`); or no such tenant, or the caller is not a member of it (`tenant_not_found`, indistinguishable per ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
         "409": { description: "The last remaining OWNER cannot be demoted (`last_owner`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [tenants]
       operationId: removeTenantMember
@@ -859,6 +864,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_deletable }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [tenants]
       operationId: stopTenantDeletion
@@ -961,6 +967,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_tenant_member }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/suspend:
     post:
@@ -1033,6 +1040,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_active }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/reactivate:
     post:
@@ -1198,6 +1206,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/terms/accept:
     post:
@@ -1272,6 +1281,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: terms_revision_changed }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/mail-settings:
     get:
@@ -1408,6 +1418,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/capabilities:
     get:
@@ -1589,6 +1600,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: capability_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/capability-switches/{capabilityId}/requirements/{requirement}:
     put:
@@ -1658,6 +1670,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: requirement_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [tenants]
       operationId: clearTenantCapabilityRequirement
@@ -1815,6 +1828,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/{tenantId}/storage-fit:
     post:
@@ -1875,6 +1889,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many questions in a short time (per member and per tenant); retry after the `Retry-After` seconds.
           content:
@@ -1940,6 +1955,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [tenants]
       operationId: clearTenantStorageQuota
@@ -2025,6 +2041,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_no_longer_valid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/accept:
     post:
@@ -2095,6 +2112,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_no_longer_valid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/accept/ownership:
     post:
@@ -2155,6 +2173,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_no_longer_valid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/accept/register:
     post:
@@ -2228,6 +2247,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_no_longer_valid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
 components:
   securitySchemes:

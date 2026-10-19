@@ -44,8 +44,8 @@
    mail to the member or to the tenant's owners ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md)
    A7); a step without a case carries one when the Server Owner marks it as over content.
 6. Each step takes an optional note sealed to the moderation key. A moderator's step (2–4) also takes its **statement
-   of reasons** — the ground, the provision or clause it relies on, and the facts sealed to the moderation key and to
-   each affected member's identity key —
+   of reasons** — the ground, the provision or clause it relies on, and the facts sealed to the moderation key and, once,
+   for the affected members, under a key wrapped to each one's identity key —
    sent with it ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md) steps 1–6); a reporter who
    left a contact is told the decision. The case is *decided*, and its hold now ends six months after the statement is
    sent (from the decision where nobody can be told).

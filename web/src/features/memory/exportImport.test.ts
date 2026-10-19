@@ -9,7 +9,9 @@ vi.mock('./media', async (orig) => ({
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), readShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
 vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), listTree: vi.fn() }))
-vi.mock('../../core/node/cover/coverWrite', () => ({ uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
+vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
+vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
+vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import {
@@ -30,6 +32,8 @@ import type { EpochKeys } from '../spaces/epochs'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_LIMITS, MEMORY_CONTENT, CHAPTER_CONTENT } from './exportImport'
 import { readFileSync } from 'node:fs'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
+import { uploadBanner, writeMemoryBanner } from './banner/bannerWrite'
+import { makeChunkProvider } from '../../core/blob/transport'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const NODE = '22222222-2222-4222-8222-222222222222'
@@ -345,6 +349,10 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
     ['a place over its length', { ...sound, location: { name: 'x'.repeat(MEMORIES_LIMITS.place + 1) } }, 'too_large'],
     ['a participant over its length', { ...sound, participants: ['x'.repeat(MEMORIES_LIMITS.participant + 1)] }, 'too_large'],
     ['more participants than the cap', { ...sound, participants: Array.from({ length: MEMORIES_LIMITS.participants + 1 }, () => 'A') }, 'too_large'],
+    ['a banner with no file', { ...sound, banner: { medium: 'image' } }, 'invalid_manifest'],
+    ['a banner of another medium', { ...sound, banner: { medium: 'audio', file: { path: 'b', size: 1 } } }, 'invalid_manifest'],
+    ['a banner focal point off the medium', { ...sound, banner: { medium: 'image', file: { path: 'b', size: 1 }, focal: { x: 2, y: 0 } } }, 'invalid_manifest'],
+    ['a banner description over its length', { ...sound, banner: { medium: 'image', file: { path: 'b', size: 1 }, alt: 'x'.repeat(MEMORIES_LIMITS.bannerAlt + 1) } }, 'too_large'],
   ])('refuses %s', (_what, content, code) => {
     expect(validateMemoryContent(content as unknown as ManifestNode['content'] & object)).toMatchObject({ code })
   })
@@ -358,9 +366,66 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
       place: d.memoriesPlace.properties.name.maxLength,
       participant: d.memoriesMemory.properties.participants.items.maxLength,
       participants: d.memoriesMemory.properties.participants.maxItems,
+      bannerAlt: d.memoriesBanner.properties.alt.maxLength,
     }).toEqual(MEMORIES_LIMITS)
+    expect(d.memoriesChapter.properties.banner.$ref).toBe('#/$defs/memoriesBanner')
     expect(d.memoriesMedium.properties.location.properties.place.maxLength).toBe(MEMORIES_LIMITS.place)
     expect(d.memoriesChapter.properties.participants.maxItems).toBe(MEMORIES_LIMITS.participants)
     expect(d.memoriesChapter.properties.participants.items.maxLength).toBe(MEMORIES_LIMITS.participant)
+  })
+})
+
+// uc.memory.banner: the banner travels with its Memory as its own files and its framing (ADR 0082). Bite 11: drop
+// `content.banner` from the export and this round trip loses the banner, its frame and its focal point.
+describe('the banner travels with its Memory', () => {
+  const ref = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 100, wrappedBlobKey: 'k' })
+  const stored = {
+    medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/quicktime', origin: { mediaId: 'b' },
+    frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay',
+  }
+  const importCtx = (content: Record<string, unknown>) =>
+    ({
+      scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Lisbon', cache: new Map(),
+      node: { id: 'n', kind: MEMORY_KIND, name: 'Lisbon', content },
+      payload: vi.fn(async (_ref: unknown, name: string) => new File(['x'], name)),
+    }) as unknown as ImportNodeContext
+
+  beforeEach(() => {
+    vi.mocked(makeChunkProvider).mockReturnValue({ chunkCount: 1, byteSize: 100, getPlaintextChunk: async () => new Uint8Array([1]) } as unknown as ReturnType<typeof makeChunkProvider>)
+    vi.mocked(openBlob).mockResolvedValue(new Uint8Array([0xff, 0xd8]))
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: v1.randomBytes(32) })
+    let n = 0
+    vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
+    vi.mocked(listMedia).mockResolvedValue([])
+    vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
+    vi.mocked(uploadBanner).mockResolvedValue({ medium: 'video', uploadId: 'bu', posterUploadId: 'pu', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime' })
+  })
+
+  it('a video banner exports as its files and framing, and comes back into the new node\'s slots with them', async () => {
+    const { ctx, payloads } = exportCtx({ banner: stored })
+    const content = (await exportMemoryContent(ctx))!
+    expect(payloads.slice(-2).map((p) => [p.name, p.mediaType])).toEqual([['banner.mov', 'video/quicktime'], ['banner-poster.jpg', 'image/jpeg']])
+    expect(content.banner).toMatchObject({ medium: 'video', frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay', mediaIndex: 1 })
+    expect(validateMemoryContent(content)).toBeNull()
+    // read through the member's chunk source over the BANNER ref: the banner's own attachment, nothing of the gallery
+    expect(vi.mocked(makeChunkProvider).mock.calls[0][2]).toMatchObject({ blobId: 'v', role: 'BANNER', ownerId: NODE })
+
+    const wire = JSON.parse(JSON.stringify(content)) as Record<string, unknown> // as an archive carries it
+    await importMemoryContent(MEMORY_KIND)(importCtx(wire))
+    expect(vi.mocked(uploadBanner).mock.calls[0][3]).toMatchObject({ medium: 'video', type: 'video/quicktime' })
+    expect(vi.mocked(writeMemoryBanner)).toHaveBeenCalledWith(expect.objectContaining({
+      nodeId: NEW, upload: { uploadId: 'bu', posterUploadId: 'pu' }, surfaceConflict: false,
+      banner: {
+        medium: 'video', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime', origin: { mediaId: 'm2' },
+        frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay',
+      },
+    }))
+  })
+
+  it('a banner that does not come back is a loss, never a failed import', async () => {
+    vi.mocked(uploadBanner).mockRejectedValue(new Error('quota_exceeded'))
+    const content = { type: MEMORY_CONTENT, schema: 1, media: [], banner: { medium: 'image', file: { path: 'n/banner.jpg', size: 2, mediaType: 'image/jpeg' } } }
+    await expect(importMemoryContent(MEMORY_KIND)(importCtx(content))).resolves.toMatchObject({ nodeId: NEW })
+    expect(writeMemoryBanner).not.toHaveBeenCalled()
   })
 })
