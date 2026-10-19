@@ -58,6 +58,15 @@
   keyset from): a second uploader's photo appears, one gone from the link drops. An idle guest poll is as cheap as a
   member's, because the server remembers the digest by the node's revisions
   ([ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) decision 7).
+- **E8 — a moderator blocks a shown medium, or lifts its block** ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)):
+  the poll that carries it patches the held item's block state in place, as it patches a meta edit. A blocked tile turns
+  to *Blocked by the operator* at once and keeps its place in the grid (its aspect is the sealed tier's, which a block
+  does not touch, so the windowed grid keeps its scroll anchor); its decrypted thumbnail is revoked and dropped from the
+  URL cache and is not read again (every byte of it answers `451`). An open lightbox on it holds the same item: its stage
+  shows the placeholder and its decrypted preview, original and video are revoked, and a read still in flight is dropped
+  when it lands. A lift shows the medium again through the normal thumbnail and preview reads. A member's poll carries an
+  **item** block (it bumps the node's item revision); a guest's carries every block that reaches the node, its tag being
+  a digest of the rows (E7).
 
 ## Quality notes
 
