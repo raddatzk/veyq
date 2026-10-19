@@ -811,6 +811,59 @@ def with_tokens(carriers: dict[str, list[str]], tokens: RunTokens) -> dict[str, 
     return merged
 
 
+def load_pii(pii_files: Iterable[Path]) -> tuple[dict[str, list[str]], list[str]]:
+    """The third needle set, `pii` (ADR 0092 § 4): every email address the run's suites signed up with, as needle →
+    `pii from <file>` labels, and why any file could not be read. The suites write them (`recordPii`, one
+    `pii-<suite>.json` per suite, the canary files' format) where they mint the address they sign up with.
+
+    **Searched only in the logs** — every boot log ([sweep_logs]) and every container log ([sweep_containers]) — and
+    nowhere else: the database dump, the statement log, the HTTP recording and the mailbox hold an account's address
+    by design (it is declared plaintext, `pii`, the login identifier). That is why it is a set of its own rather than
+    a canary, which every surface would search. Its control is [pii_control]."""
+    carriers, problems = load_canaries(pii_files)
+    return {address: [f"pii from {name}" for name in files] for address, files in carriers.items()}, problems
+
+
+def with_pii(needles: dict[str, list[str]], pii: dict[str, list[str]] | None) -> dict[str, list[str]]:
+    """[with_tokens]' merge, for the `pii` set: one needle → labels map, each label naming its set."""
+    merged = {needle: list(labels) for needle, labels in needles.items()}
+    for needle, labels in (pii or {}).items():
+        merged.setdefault(needle, []).extend(labels)
+    return merged
+
+
+def pii_control(pii_files: Iterable[Path], held_by: Iterable[Path], where: str) -> str | None:
+    """The `pii` needle set's positive control: every address is found where it belongs. Returns None, else why not.
+
+    **What it asserts.** The run recorded at least one address — zero is a failure, as zero logs is, because a log
+    sweep for no address proves nothing — every `pii-*.json` reads, and each address appears, as a plain substring,
+    in some file of `held_by`: the mails the run read (`run_web_e2e.py`, where every signed-up address is invited or
+    mailed) or the statement log (lane L1, where the instance wrote every account it created). So a needle is an
+    address the instance really handled, in the spelling it handled it, and its absence from the logs means something.
+
+    **The defect that bought it.** The log sweep searched sealed values and tokens, and an address was in no needle
+    set: runs of 2026-10-16 passed with the invite mailer's line naming the owner's address in a boot log
+    (`tenant invite for a-<stamp>@e2e.test … was NOT delivered`), until the legal audit of 2026-10-18 removed the line
+    by hand (inbox #481). Nothing would have turned the next one red.
+
+    **Its limit.** A substring of a file, not a parsed header or literal: an address that only occurs inside another
+    one would pass. And it proves the needle is real, not that every address a suite handled was recorded — an
+    address minted outside the recording helpers is in no needle set."""
+    carriers, problems = load_pii(pii_files)
+    if problems:
+        return "the pii needle set is unusable: " + "; ".join(problems)
+    if not carriers:
+        return ("the run recorded no pii — no address a suite signed up with, so a log sweep for addresses would have "
+                "proved the absence of nothing")
+    texts = [path.read_bytes().decode("utf-8", errors="replace") for path in sorted(held_by) if path.is_file()]
+    missing = sorted(address for address in carriers if not any(address in text for text in texts))
+    if missing:
+        return (f"{len(missing)} of {len(carriers)} pii address(es) are in none of the {len(texts)} file(s) of {where} "
+                f"— not an address the instance handled, so its absence from the logs proves nothing: {missing}")
+    log(f"pii control: all {len(carriers)} address(es) the suites signed up with are in {where} ({len(texts)} file(s))")
+    return None
+
+
 def db_token_findings(dump: str, tokens: dict[str, Token]) -> tuple[list[tuple[str, str]], list[Token]]:
     """Over a dump's data rows: every (token, table) a raw token lands on, and the tokens whose HASH the dump holds.
 
@@ -962,8 +1015,8 @@ def report_hits(hits: list[Hit], carriers: dict[str, list[str]]) -> None:
     for hit in hits:
         shown_line = ANSI.sub("", hit.line).strip()
         labels = carriers.get(hit.canary) or ["?"]
-        # A token leads with its kind, so a reader never takes a leaked capability for a leaked canary.
-        what = f"{labels[0].split(' from ')[0]} " if labels[0].startswith("token:") else ""
+        # A token leads with its kind, an address with `pii`, so a reader never takes either for a leaked canary.
+        what = f"{labels[0].split(' from ')[0]} " if labels[0].startswith(("token:", "pii ")) else ""
         log(f"    {hit.source}:{hit.line_no}  [{hit.variant}]  {what}{hit.canary!r}  "
             f"(carried by {', '.join(labels)})")
         log(f"        | {shown_line[:240]}")
@@ -1018,7 +1071,7 @@ def read_log(path: Path) -> tuple[str, str | None]:
 
 
 def sweep_logs(workdir: Path, canary_files: Iterable[Path], booted_database: Callable[[Path], str | None],
-               tokens: RunTokens = NO_TOKENS) -> str | None:
+               tokens: RunTokens = NO_TOKENS, pii: dict[str, list[str]] | None = None) -> str | None:
     """Prove no canary of the run is readable in any boot log the run retains. Returns None, else why not.
 
     **What it asserts** (cc.security.wire-assertion, ADR 0053). Run-level, after every group: every
@@ -1039,10 +1092,12 @@ def sweep_logs(workdir: Path, canary_files: Iterable[Path], booted_database: Cal
     attribution of a hit is per canary file, not per log: a restored instance's log owes the previous member's
     values too. And the encoding pin is the e2e boot's — an operator's own locale is theirs.
 
-    The run's capability tokens ([run_tokens]) are searched alongside the canaries, each hit led by `token:<kind>`.
+    The run's capability tokens ([run_tokens]) are searched alongside the canaries, each hit led by `token:<kind>`,
+    and so are the addresses the suites signed up with ([load_pii], `pii`), each hit led by `pii` — a log is the one
+    surface that must not hold them.
     """
     carriers, problems = load_canaries(canary_files)
-    needles = with_tokens(carriers, tokens)
+    needles = with_pii(with_tokens(carriers, tokens), pii)
     logs = sorted(workdir.rglob("backend-*.log"))
     if not logs:
         return (f"no boot log under {shown(workdir)} — the log sweep would have proved the absence of nothing "
@@ -1078,17 +1133,19 @@ def sweep_logs(workdir: Path, canary_files: Iterable[Path], booted_database: Cal
         found = needle_hits(shown(path).as_posix(), text, needles)
         hits.extend(found)
         log(f"log sweep: {shown(path)} — {text.count(chr(10))} line(s), {len(carriers)} canary/canaries, "
-            f"{len(tokens.by_needle)} token(s), {len(found)} hit(s); armed: {', '.join(controls) or 'NOTHING'}")
+            f"{len(tokens.by_needle)} token(s), {len(pii or {})} pii, {len(found)} hit(s); armed: "
+            f"{', '.join(controls) or 'NOTHING'}")
 
     if hits or unmet:
         log(f"WIRE ASSERTION FAILED on the server log — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
         report_hits(hits, needles)
         for reason in unmet:
             log(f"    control: {reason}")
-        return (f"the wire assertion failed on the server log: {len(hits)} canary or token hit(s), {len(unmet)} unmet "
-                f"control(s) across {len(logs)} boot log(s) (listed above)")
-    log(f"wire assertion: {len(carriers)} canary/canaries and {len(tokens.by_needle)} capability token(s) "
-        f"({kinds_of(tokens.by_needle.values())}) of the run appear in none of {len(logs)} boot log(s), each armed")
+        return (f"the wire assertion failed on the server log: {len(hits)} canary, token or pii hit(s), {len(unmet)} "
+                f"unmet control(s) across {len(logs)} boot log(s) (listed above)")
+    log(f"wire assertion: {len(carriers)} canary/canaries, {len(tokens.by_needle)} capability token(s) "
+        f"({kinds_of(tokens.by_needle.values())}) and {len(pii or {})} pii address(es) of the run appear in none of "
+        f"{len(logs)} boot log(s), each armed")
     return None
 
 
@@ -1133,7 +1190,8 @@ def container_log(stack: Stack, service: str, since: str) -> str:
 
 def sweep_containers(stack: Stack, workdir: Path, canary_files: Iterable[Path], since: str, sentinel: str,
                      tokens: RunTokens = NO_TOKENS,
-                     controls: dict[str, Callable[[str], str | None]] | None = None) -> str | None:
+                     controls: dict[str, Callable[[str], str | None]] | None = None,
+                     pii: dict[str, list[str]] | None = None) -> str | None:
     """Prove no canary of the run is readable in any container log of the stack, over the run's window.
 
     **What it asserts.** Every service `docker compose ps` reports (MariaDB, Garage, Traefik, Mailpit today) has its
@@ -1160,11 +1218,14 @@ def sweep_containers(stack: Stack, workdir: Path, canary_files: Iterable[Path], 
     called with the service's log and returns why it is not met, or None (lane L1 requires the app's own log to name
     its database, [names_database] — the backend's log is a container log there, not a boot log). A service a
     control names that the project does not run is unmet. Its line then reads `armed: <what it found>`.
+
+    **`pii`** — the addresses the suites signed up with ([load_pii]), searched in every container log with no
+    exemption: none of these processes has a reason to write a person's address (ADR 0092 § 3).
     """
     carriers, problems = load_canaries(canary_files)
     if not carriers:
         return "the run's canary files hold no canary — a green container-log sweep would mean nothing"
-    needles = with_tokens(carriers, tokens)
+    needles = with_pii(with_tokens(carriers, tokens), pii)
     exempted: list[Hit] = []
     try:
         services = compose_services(stack)
@@ -1211,21 +1272,22 @@ def sweep_containers(stack: Stack, workdir: Path, canary_files: Iterable[Path], 
             else:
                 unmet.append(f"`{service}`: {why}")
                 armed = "its control NOT met"
-        log(f"container log sweep: {service} — {text.count(chr(10))} line(s) since {since}, {len(found)} hit(s); "
-            f"{armed}")
+        log(f"container log sweep: {service} — {text.count(chr(10))} line(s) since {since}, {len(pii or {})} pii, "
+            f"{len(found)} hit(s); {armed}")
 
     if hits or unmet:
         log(f"WIRE ASSERTION FAILED on the container logs — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
         report_hits(hits, needles)
         for reason in unmet:
             log(f"    control: {reason}")
-        return (f"the wire assertion failed on the container logs: {len(hits)} canary or token hit(s), {len(unmet)} unmet "
-                f"control(s) across {len(services)} service(s) (listed above)")
+        return (f"the wire assertion failed on the container logs: {len(hits)} canary, token or pii hit(s), "
+                f"{len(unmet)} unmet control(s) across {len(services)} service(s) (listed above)")
     exempt_urls = {h.canary for h in exempted}
     log(f"container log sweep: {len(exempt_urls)} presigned-URL token(s) found in the `{store_service}` log, its own "
         f"verifier, and exempted there ({len(exempted)} line(s)) — swept on every other surface")
-    log(f"wire assertion: {len(carriers)} canary/canaries and {len(tokens.by_needle)} capability token(s) of the run "
-        f"appear in none of {len(services)} container log(s); the store's armed by its planted sentinel")
+    log(f"wire assertion: {len(carriers)} canary/canaries, {len(tokens.by_needle)} capability token(s) and "
+        f"{len(pii or {})} pii address(es) of the run appear in none of {len(services)} container log(s); the store's "
+        f"armed by its planted sentinel")
     return None
 
 

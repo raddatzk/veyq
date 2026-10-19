@@ -3,6 +3,7 @@ title: Verify it yourself
 description: How to re-run the checks behind veyq's security claims, what each one proves, and what none of them has proven yet.
 sources:
   - docs/crosscutting/cc.security.wire-assertion.md
+  - docs/decisions/0092-logs-are-operational-and-name-no-person.md
   - docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md
@@ -160,6 +161,12 @@ The second needle set is **every capability token the run handled**: each value 
 (bearer and refresh tokens, contributor, invite, recovery and pairing secrets, share-write proofs) and every
 presigned URL. These are derived from the HTTP recording by that marker, never listed. The token sweep is armed by
 its hashes: at least one token's SHA-256 must be found in the suite's database dump, or the suite fails.
+
+The **server and container logs** are searched for a third set: **every email address a suite signed an account up
+with** (`pii`). An address is declared plaintext, so the database, the recording and the mailbox hold it by design and
+are not searched for it; no log may hold one ([ADR 0092](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0092-logs-are-operational-and-name-no-person.md)).
+Its control: the run recorded at least one, and each is found in a mail or a database dump of the run — or, on the
+lane that installs the release candidate, in the statement log — so it is an address the instance handled.
 
 The other sensors are armed by positive controls, never by a count of zero. Each boot log must name its database
 and carry the shutdown line; the store's log must contain a key the run plants; the statement log must contain a

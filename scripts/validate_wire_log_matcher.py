@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Guard the no-Docker half of the log, statement-log, mailbox and token wire assertions: needles, readers, controls.
+"""Guard the no-Docker half of the log, statement-log, mailbox, token and pii wire assertions: needles, readers, controls.
 
-**What it asserts.** Five things about `scripts/run_web_e2e.py`, imported by path and run over synthetic files in a
+**What it asserts.** Six things about `scripts/run_web_e2e.py`, imported by path and run over synthetic files in a
 temporary directory — no Docker, no jar, nothing written into the repo:
   1. **Every spelling is found, under its own variant name.** For synthetic canaries carrying a space, a quote, a
      backslash, a newline, a non-ASCII character and the characters the two JavaScript URL encoders disagree on,
@@ -37,6 +37,10 @@ temporary directory — no Docker, no jar, nothing written into the repo:
      raw form is the only needle); a presigned URL's needle is its request target; a raw token planted in a boot log
      is reported as `token:accessToken`; and over a synthetic dump the hash control finds a token by its SHA-256
      while a raw copy is a hit.
+  6. **The `pii` set is searched and controlled** (ADR 0092 § 4). A clean synthetic run with one address in a
+     `pii-*.json` is green and counts it; the same address planted in a boot log is reported led by `pii` and named
+     by its file; and `pii_control` accepts an address a retained mail holds, and refuses, by name, a run with no
+     address and an address no mail holds.
 
 **The defect that bought it.** No incident — built with cr-wire-assertion-server-logs because the real canaries
 cannot exercise most of the matcher: measured across every retained e2e run, 0 of 80 distinct canaries carry a
@@ -529,8 +533,50 @@ def check_tokens() -> int:
     return len(EXPECTED_TOKENS)
 
 
+def check_pii() -> int:
+    """6 — the `pii` set: a planted address is a hit led by `pii` and named by its file; its control bites three ways."""
+    address = "a-1790576564@e2e.test"
+    checks = 0
+    with tempfile.TemporaryDirectory(prefix="veyq-wire-log-guard-") as tmp:
+        run = synthetic_run(pathlib.Path(tmp))
+        (run / "pii-1.json").write_text(json.dumps([address]), encoding="utf-8")
+        pii, problems = orchestrator.sweeps.load_pii(sorted(run.glob("pii-*.json")))
+        canaries = sorted(run.glob("canaries-*.json"))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            clean = orchestrator.sweep_logs(run, canaries, orchestrator.NO_TOKENS, pii)
+        if problems or clean is not None or "1 pii" not in out.getvalue():
+            errors.append(f"pii: a clean run with one address was not green, or did not count it ({problems!r}, {clean!r})")
+        with (run / "backend-1.log").open("a", encoding="utf-8") as f:
+            f.write(f"2026-10-01 08:23:00,000 WARN  [me.raddatz.veyq] (worker) invite for {address} was NOT delivered\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            verdict = orchestrator.sweep_logs(run, canaries, orchestrator.NO_TOKENS, pii)
+        if verdict is None or f"pii {address!r}" not in out.getvalue() or "pii-1.json" not in out.getvalue():
+            errors.append(f"pii: an address in a boot log was not reported led by `pii` and named by its file ({verdict!r})")
+        checks += 2
+
+        mail = run / "mailbox" / "m1.eml"
+        mail.parent.mkdir()
+        mail.write_text(f"To: {address}\nSubject: x\n\nbody\n", encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            found = orchestrator.sweeps.pii_control(sorted(run.glob("pii-*.json")), [mail], "the mails")
+            empty = orchestrator.sweeps.pii_control([], [mail], "the mails")
+            mail.write_text("To: someone-else@e2e.test\n\nbody\n", encoding="utf-8")
+            missing = orchestrator.sweeps.pii_control(sorted(run.glob("pii-*.json")), [mail], "the mails")
+        if found is not None:
+            errors.append(f"pii control: an address the mails hold was not accepted ({found!r})")
+        if empty is None or "no pii" not in empty:
+            errors.append(f"pii control: a run with no address was not refused ({empty!r})")
+        if missing is None or address not in missing:
+            errors.append(f"pii control: an address no mail holds was not refused by name ({missing!r})")
+        checks += 3
+    return checks
+
+
 spellings = check_spellings()
 cases = check_sweep()
+pii_checks = check_pii()
 literals = check_literals() + check_literal_scope()
 statement_cases = check_statement_sweep()
 mails = check_mail()
@@ -546,4 +592,4 @@ print(f"wire log matcher OK: {spellings} spelling(s) found under their variant; 
       f"synthetic run and red, by name, on {cases - 1} unarmed or leaking case(s); statement log: {literals} "
       f"literal check(s), sweep_statements green when clean and red, by name, on {statement_cases} case(s); mailbox: {mails} "
       f"canaries found by the decoded read; tokens: {token_rules} derivation rule(s) by marker, raw-only needles, "
-      f"the hash control and a token: hit")
+      f"the hash control and a token: hit; pii: {pii_checks} check(s) of the address set and its control")

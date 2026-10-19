@@ -32,7 +32,11 @@ over every service the file declares — the set is the file's, never a list her
      `json-file` or `local` driver and both `max-size` and `max-file`, so no container's log grows without bound. The
      store — the service the app's `VEYQ_BUNDLED_STORE_ENDPOINT` names — sets `RUST_LOG`, and no directive in it is
      `info`, `debug` or `trace`: unset, the image's own `garage=info` logs every request with the peer's address and
-     the URI. The positive control on the same predicate: the store is found, or the level would go unchecked.
+     the URI. The positive control on the same predicate: the store is found, or the level would go unchecked. And
+     the proxy — every service of assertion 4's proxy set — keeps no access log (owner Q30): no `--accesslog` flag
+     in its command or entrypoint and no `TRAEFIK_ACCESSLOG*` variable, because an access log records every reader
+     with every share id read; and it sets its own level, `--log.level` of `ERROR`, `FATAL` or `PANIC`, rather than
+     inheriting the image's. The level is the clause's positive control: the proxy's flags were read.
 
 **Scoped to the production file on purpose.** The dev stack (`infra/docker-compose.yml`) is not internet-facing:
 it runs no app container, publishes its ports for a developer's host, and ships `change-me` passwords. A rule
@@ -56,7 +60,10 @@ came with a legal audit (2026-10-18), live when written: no service had a `loggi
 every log was `json-file` without rotation, and Garage ran at its image's `garage=info`, logging every reader's address
 with the object key. Its first run on that tree was red on all six services and on the store. Bitten by
 snapshot-and-restore: one service's block removed, `max-file` dropped, the store's `RUST_LOG` removed, set to
-`garage=info`, and kept at `garage=warn` with one crate raised to `debug`.
+`garage=info`, and kept at `garage=warn` with one crate raised to `debug`. Its proxy clause came with cr-logging: no
+incident — Traefik wrote no access log, by its default rather than by the recipe — and its first run on that tree was
+red on the missing level alone. Bitten by snapshot-and-restore: `--accesslog=true` added, `--accessLog.filePath=…`
+added, `TRAEFIK_ACCESSLOG=true` set, and the level removed or set to `INFO`.
 
 **Its limits — what a green run does NOT prove.** It reads the file; it runs nothing. So a read-only root that
 misses a scratch path, a `tmpfs:` a process cannot write, or a uid the image cannot run as are all green here
@@ -72,7 +79,10 @@ middleware name the app's routing file renders is the one declared here are the 
 the lane's own routing (`scripts/run_stack_e2e.py`); it also cannot see an edge in front of Traefik. Assertion 6 reads
 the declaration, not the daemon or Garage: that the pinned Garage reads `RUST_LOG` as a target-prefix filter, and that
 `warn` drops its request line, was measured on the image, and an operator's override file (the e2e overlay raises the
-store to `info` on purpose) is outside its reach. It bounds a log's size, never its age.
+store to `info` on purpose) is outside its reach. It bounds a log's size, never its age. The proxy clause reads the
+flags and variables Traefik takes its static configuration from on this recipe; a static configuration file
+(`--configFile`, or one mounted where Traefik looks by default) is not read, and nothing the proxy logs at `ERROR` is
+checked — what a Traefik error line holds is Traefik's.
 
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """
@@ -113,6 +123,12 @@ BOUNDED_LOG_DRIVERS = {"json-file", "local"}
 STORE_ENV = "VEYQ_BUNDLED_STORE_ENDPOINT"
 STORE_HOST = re.compile(r"^https?://([^:/]+)")
 VERBOSE_LEVELS = {"info", "debug", "trace"}
+# 6, the proxy: an access log in each spelling Traefik's static configuration takes (flags are case-insensitive),
+# and the levels at or above its own default that the recipe may set.
+ACCESS_LOG_FLAG = re.compile(r"^--accesslog(\.|=|$)", re.IGNORECASE)
+ACCESS_LOG_ENV = re.compile(r"^TRAEFIK_ACCESSLOG", re.IGNORECASE)
+PROXY_LOG_LEVEL = re.compile(r"^--log\.level=(\S+)$", re.IGNORECASE)
+QUIET_PROXY_LEVELS = {"error", "fatal", "panic"}
 
 errors: list[str] = []
 
@@ -364,6 +380,18 @@ else:
         fail(f"the store `{store}` sets RUST_LOG={rust_log} — a level of {sorted(VERBOSE_LEVELS & set(levels))} "
              f"logs every request with the peer's address (ADR 0092 § 5); keep it at warn")
 
+for proxy in proxies:
+    flags = commands(services[proxy])
+    for flag in filter(ACCESS_LOG_FLAG.match, flags):
+        fail(f"the proxy `{proxy}` turns on an access log ({flag.split('=', 1)[0]}) — it records every reader with every "
+             f"share id read; an operator who wants one turns it on as their own processing (ADR 0092 § 5, owner Q30)")
+    for variable in filter(ACCESS_LOG_ENV.match, env_of(services[proxy])):
+        fail(f"the proxy `{proxy}` sets {variable} — an access log by environment records every reader (ADR 0092 § 5)")
+    levels = [m.group(1).lower() for m in filter(None, map(PROXY_LOG_LEVEL.match, flags))]
+    if not levels or not set(levels) <= QUIET_PROXY_LEVELS:
+        fail(f"the proxy `{proxy}` sets --log.level={'/'.join(levels) or '(nothing)'} — set it to ERROR, never inherit "
+             f"the image's level (ADR 0092 § 5)")
+
 if errors:
     print("COMPOSE POSTURE CHECK FAILED:")
     for e in errors:
@@ -375,5 +403,6 @@ print(
     f"({', '.join(steps) or 'none'}), which chowns to the uid that writes; the proxy ({', '.join(proxies)}) shares no "
     f"network with the database ({database}), and the app reaches both; the app's port source is "
     f"{source or 'unset'} with {', '.join(plugins) or 'no'} local plugin, no remote plugin and no PROXY protocol; every "
-    f"service's log rotates by size, and the store ({store}) logs below info"
+    f"service's log rotates by size, the store ({store}) logs below info, and the proxy keeps no access log at its "
+    f"own ERROR level"
 )

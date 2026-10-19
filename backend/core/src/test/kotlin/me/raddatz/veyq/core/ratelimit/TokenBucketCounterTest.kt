@@ -74,4 +74,55 @@ class TokenBucketCounterTest {
         counter.consume("d", now + 60 * second, max, window)
         assertNull(counter.consume("throttled", now + 60 * second, max, window), "a replenished key is allowed")
     }
+
+    /**
+     * The pass by time (ADR 0092 § 5): a counter's full bucket is gone after one pass of the sweeper it registered with,
+     * whatever the key count, and a partly spent one stays. Bites by removing the registration from
+     * [TokenBucketCounter]'s `init` — the pass then reaches no counter and the full bucket stays. The sweeper is the
+     * test's own, so its fake clock reaches no counter of the app's.
+     */
+    @Test
+    fun aPassDropsEveryFullBucketAndKeepsAPartlySpentOne() {
+        val sweeper = TokenBucketSweeper()
+        val counter = TokenBucketCounter(sweeper = sweeper)
+        val now = 1_000L * second
+        counter.consume("quiet", now, max, window)
+        repeat(3) { counter.consume("busy", now, max, window) }
+        assertEquals(2, counter.trackedKeys(), "the control: both keys are tracked before the pass")
+
+        sweeper.sweep(now + 20 * second) // "quiet" spent one token 20s ago: full again. "busy" is one of three back.
+        assertEquals(1, counter.trackedKeys(), "one pass drops the full bucket and keeps the partly spent one")
+    }
+
+    /** A pass changes no limit: the same requests answer the same with and without one between them. */
+    @Test
+    fun aSpendAfterAPassAnswersWhatItAnsweredBeforeIt() {
+        val sweeper = TokenBucketSweeper()
+        val swept = TokenBucketCounter(sweeper = sweeper)
+        val kept = TokenBucketCounter(sweeper = TokenBucketSweeper())
+        val now = 1_000L * second
+        val requests = listOf("quiet" to now, "busy" to now, "busy" to now, "busy" to now)
+        requests.forEach { (key, at) -> assertEquals(kept.consume(key, at, max, window), swept.consume(key, at, max, window)) }
+
+        sweeper.sweep(now + 20 * second)
+        val after = listOf("quiet", "quiet", "quiet", "quiet", "busy", "busy")
+        after.forEach { key ->
+            assertEquals(kept.consume(key, now + 20 * second, max, window), swept.consume(key, now + 20 * second, max, window), key)
+        }
+    }
+
+    /** The sweeper holds its counters weakly: one nobody references is not kept alive by being registered. */
+    @Test
+    fun aCounterNobodyHoldsIsNotKeptBySweeper() {
+        val sweeper = TokenBucketSweeper()
+        var counter: TokenBucketCounter? = TokenBucketCounter(sweeper = sweeper)
+        val ref = java.lang.ref.WeakReference(counter)
+        counter = null
+        repeat(50) {
+            if (ref.get() == null) return
+            System.gc()
+            Thread.sleep(10)
+        }
+        assertNull(ref.get(), "the sweeper kept a counter nobody else holds")
+    }
 }
