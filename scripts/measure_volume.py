@@ -847,10 +847,50 @@ def oom_bite(inst: Instance) -> bool:
 # ---------------------------------------------------------------- judging (Q1)
 
 
+# The windowed gallery's targets (`cr-gallery-virtualization` Q2, owner 2026-10-19), on the local recipe, Chromium.
+# Desktop, per Chapter size: the grid shown (its order final) after the list, viewport complete after navigation, end
+# complete after the jump — in ms. Under the 4x throttle at 1,000 and 3,000: viewport complete, the longest task after
+# it, the long tasks of the scroll-through; 10,000 under the throttle is reported, not judged. Every stage: the live DOM
+# under DOM_NODES_MAX at both moments, independent of the Chapter's size.
+DOM_NODES_MAX = 3000
+DESKTOP_TARGETS = {1000: (2000, 3000, 2000), 3000: (2000, 3000, 2000), 10000: (4000, 5000, 2000)}
+THROTTLED_TARGETS = {1000: (8000, 500, 5000), 3000: (8000, 500, 5000)}
+
+
+def gallery_findings(items: int, run_: dict) -> list[str]:
+    """Q2's clauses over one gallery run that ended (a stopped run is already a finding of its own). A clause whose
+    reading is missing is a finding too: a metric the run never produced proves nothing, least of all a pass."""
+    out: list[str] = []
+
+    def over(label: str, value: Any, limit: float, strict: bool = False) -> None:
+        if value is None:
+            out.append(f"{label}: not measured")
+        elif value > limit or (strict and value >= limit):
+            out.append(f"{label} {value} (> {limit})" if not strict else f"{label} {value} (not under {limit})")
+
+    over("DOM nodes at viewport complete", run_.get("viewportDomNodes"), DOM_NODES_MAX, strict=True)
+    over("DOM nodes at end complete", run_.get("endDomNodes"), DOM_NODES_MAX, strict=True)
+    if run_.get("throttle") == 1 and items in DESKTOP_TARGETS:
+        shown, viewport, end = DESKTOP_TARGETS[items]
+        first, listed = run_.get("firstTileMs"), run_.get("listMs")
+        over("grid shown after the list, ms", None if first is None or listed is None else round(first - listed), shown)
+        over("viewport complete, ms", run_.get("viewportCompleteMs"), viewport)
+        over("end complete after the jump, ms", run_.get("endCompleteMs"), end)
+    elif run_.get("throttle") == 4 and items in THROTTLED_TARGETS:
+        viewport, longest, scroll = THROTTLED_TARGETS[items]
+        over("viewport complete, ms", run_.get("viewportCompleteMs"), viewport)
+        over("longest task after viewport complete, ms", (run_.get("longtasksAfterViewport") or {}).get("maxMs"), longest)
+        over("long tasks in the scroll-through, ms",
+             ((run_.get("scrollThrough") or {}).get("longtasks") or {}).get("totalMs"), scroll, strict=True)
+    return out
+
+
 def judge(directory: Path) -> dict:
     """Q1, as the owner decided it: a host carries a stage when no container is OOM-killed or restarted, the peak memory
     stays at or below 80 % of the host's RAM, no request fails, and on a desktop browser a 3,000-photo Chapter's list
-    arrives within 2 s and its last thumbnail within 15 s. Reads every sampler.json, server-*.json and browser-*.json."""
+    arrives within 2 s. Its "last thumbnail within 15 s" was a promise about an unwindowed grid; a windowed one is held
+    to `cr-gallery-virtualization`'s Q2 instead ([gallery_findings]). Reads every sampler.json, server-*.json and
+    browser-*.json."""
     findings, notes = [], []
     for sampler in directory.glob("**/sampler.json"):
         s = json.loads(sampler.read_text(encoding="utf-8"))
@@ -877,12 +917,16 @@ def judge(directory: Path) -> dict:
             if run_.get("failedRequests"):
                 findings.append(f"{browser.name}: {len(run_['failedRequests'])} failed request(s) in a run")
             if run_.get("stopped"):
-                findings.append(f"{browser.name}: a run stopped: {run_['stopped']}")
+                stop = f"{browser.name}: a run stopped: {run_['stopped']}"
+                # 10,000 photos under the 4x throttle is reported, not judged (Q2): its stall is a note, not a finding.
+                reported_only = r.get("axis") == "photos" and r.get("items") == 10000 and run_.get("throttle") == 4
+                (notes if reported_only else findings).append(stop)
             if r.get("axis") == "photos" and r.get("items") == 3000 and run_.get("throttle") == 1:
                 if (run_.get("listMs") or 1e9) > 2000:
                     findings.append(f"{browser.name}: the 3,000 list arrived after {run_.get('listMs')} ms (> 2 s)")
-                if (run_.get("lastThumbnailMs") or 1e9) > 15000:
-                    findings.append(f"{browser.name}: the last thumbnail after {run_.get('lastThumbnailMs')} ms (> 15 s)")
+            if r.get("axis") == "photos" and not run_.get("stopped"):
+                findings.extend(f"{browser.name} x{run_.get('throttle')} run {run_.get('run')}: {f}"
+                                for f in gallery_findings(int(r.get("items") or 0), run_))
     verdict = {"directory": str(directory), "carries": not findings, "findings": findings, "notes": notes}
     (directory / "verdict.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
     return verdict
@@ -990,6 +1034,8 @@ def main() -> int:
                     for r in reading["runs"]:
                         say(f"  {spec['label']} x{r['throttle']} run {r['run']}: list {r['listMs']} ms "
                             f"(request {r['listRequestMs']} ms), first {r['firstTileMs']} ms, done {r['doneMs']} ms"
+                            + (f", end {r.get('endCompleteMs')} ms, DOM {r.get('viewportDomNodes')}/{r.get('endDomNodes')}"
+                               if r.get("viewportCompleteMs") is not None else "")
                             + (f" — STOPPED: {r['stopped']}" if r["stopped"] else ""))
                 say(f"readings in {out}")
             elif args.cmd == "scenario":

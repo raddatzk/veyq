@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock the media data layer so the composable is tested in isolation from crypto/API/object-store.
 vi.mock('./media', async (orig) => ({
@@ -19,13 +19,15 @@ vi.mock('../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
 }))
 
-import { defineComponent, h, type UnwrapRef } from 'vue'
+import { defineComponent, h, type Component, type UnwrapRef } from 'vue'
+import MediaGrid from './components/MediaGrid.vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaTrash } from './useMediaTrash'
 import { memberMemorySource } from './source'
 import { listTrash, restoreMedia, purgeMedia, openGrid, hasDerivatives, unsealMeta, originalBlobMeta, type MediaItem } from './media'
 import { realI18n, t } from '../../test/i18n'
 import { mediaItem, treeNode } from '../../test/models'
+import { closeListing } from './openedListing'
 
 const KEY = new Uint8Array(32)
 const item = (id: string): MediaItem => mediaItem({ mediaId: id })
@@ -65,6 +67,7 @@ function setup() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  closeListing('scope-1', KEY) // the opened listing keeps a value per seal; each case's mocks answer anew
   vi.mocked(restoreMedia).mockResolvedValue(undefined)
   vi.mocked(purgeMedia).mockResolvedValue(undefined)
   vi.mocked(openGrid).mockImplementation(async () => new Uint8Array([1, 2, 3]))
@@ -74,15 +77,19 @@ beforeEach(() => {
 })
 
 describe('useMediaTrash', () => {
-  it('loadTrash lists the trashed media, decrypts a thumbnail per item, and lands ready', async () => {
-    vi.mocked(listTrash).mockResolvedValue([item('a'), item('b')])
+  it('loadTrash lists the trashed media and lands ready; a thumbnail is read for each tile its grid wants', async () => {
+    vi.mocked(listTrash).mockResolvedValue([item('a'), item('b'), item('c')])
     const { vm } = setup()
     await vm.loadTrash()
     await flushPromises()
     expect(listTrash).toHaveBeenCalledWith('scope-1', 'node-1')
-    expect(vm.trashedItems.map((i) => i.mediaId)).toEqual(['a', 'b'])
+    expect(vm.trashedItems.map((i) => i.mediaId)).toEqual(['a', 'b', 'c'])
     expect(vm.trashStatus).toBe('ready')
-    expect(vm.trashThumbs.size).toBe(2)
+    expect(openGrid).not.toHaveBeenCalled() // the list alone reads no thumbnail (ADR 0105 decision 2)
+    vm.wantTrashThumbs(['c', 'a']) // the grid's window, nearest first
+    await flushPromises()
+    expect(vi.mocked(openGrid).mock.calls.map(([, , m]) => m.mediaId)).toEqual(['c', 'a'])
+    expect([...vm.trashThumbs.keys()].sort()).toEqual(['a', 'c'])
   })
 
   it('loadTrash lands error when the list fails', async () => {
@@ -257,5 +264,50 @@ describe('useMediaTrash — a restore the server refuses (inbox #432)', () => {
     } finally {
       process.off('unhandledRejection', unhandled)
     }
+  })
+})
+
+// ADR 0105 (uc.memory.delete-media): the trash is the same windowed grid over the same thumbnail queue — the REAL
+// MediaGrid over the composable's tiles, its `window` wired as MemoryDetail wires it. A trash of 2,000 mounts about a
+// window, reads the thumbnails of that window only, and its select-all still selects all 2,000 by id. happy-dom lays
+// nothing out: every box is 960 px wide, the window is happy-dom's own viewport.
+describe('useMediaTrash — a trash of 2,000 on the windowed grid (ADR 0105)', () => {
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('mounts about a window, reads only its thumbnails, and select-all selects all 2,000', async () => {
+    vi.mocked(listTrash).mockResolvedValue(Array.from({ length: 2000 }, (_, i) => item(`m${i}`)))
+    let api!: ReturnType<typeof useMediaTrash>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          api = useMediaTrash({
+            source: memberMemorySource({ scopeId: () => 'scope-1' }),
+            scopeId: () => 'scope-1',
+            node: () => treeNode(),
+            memoryKey: () => KEY,
+            reloadGallery: vi.fn(),
+            liftTombstone: vi.fn(),
+          })
+          return () =>
+            h(MediaGrid as unknown as Component, { items: api.trashLayoutItems.value, onWindow: api.wantTrashThumbs }, {
+              tile: ({ tile }: { tile: { id: string } }) => h('div', { class: 'media-tile', 'data-media-id': tile.id }),
+            })
+        },
+      }),
+      { global: { plugins: [realI18n()] }, attachTo: document.body },
+    )
+    await api.loadTrash()
+    await flushPromises()
+    const windowed = wrapper.findAll('.media-tile').length
+    expect(windowed).toBeGreaterThan(0)
+    expect(windowed).toBeLessThan(200)
+    expect(vi.mocked(openGrid).mock.calls.length).toBe(windowed) // the window's thumbnails, nothing beyond it
+    api.toggleSelectAllTrash()
+    expect(api.selectedTrash.value.size).toBe(2000)
+    expect(api.allTrashSelected.value).toBe(true)
   })
 })

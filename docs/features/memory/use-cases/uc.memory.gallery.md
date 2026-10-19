@@ -22,13 +22,24 @@
 2. The client **lists the Memory's media** ([en.memory.media](../enablers/en.memory.media.md)) — in pages of a bounded
    size, every page before the grid is drawn, because the order below is only final once every item's sealed capture
    time is in hand ([ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) decision 6); a share
-   guest lists the node it has open, by the same paging rule, never the whole shared subtree — and fetches each
-   item's **thumbnail** ([en.memory.derivatives](../enablers/en.memory.derivatives.md)) via presigned GET,
-   decrypts on device, and renders a **grid** under a header (title, item count, pin toggle, and — in a group
-   scope — the favorites filter). The grid is
+   guest lists the node it has open, by the same paging rule, never the whole shared subtree — opens every item's
+   listed seals once, off the page's main thread
+   ([ADR 0105](../../../decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)
+   decision 3), and renders a **grid** under a header (title, item count, pin toggle, and — in a group scope — the
+   favorites filter), fetching the **thumbnail** ([en.memory.derivatives](../enablers/en.memory.derivatives.md)) of
+   each tile near the viewport via presigned GET, nearest first, and decrypting it on device. The grid is
    ordered by **effective capture time** — newest first by default, a header toggle for oldest first, undated
    media last — read from each media's sealed capture tier, so the blind server never sees a timestamp yet the
    order is exact on device (cr-0066).
+2a. **The keyboard** (ADR 0105 decision 5, owner 2026-10-19). The grid is one tab stop, on one tile: **Tab** enters on
+   that tile's open button, goes through its own controls (the mark, the checkbox, the menu) and leaves the grid. The
+   arrow keys move left and right through the grid order and up and down to the nearest tile of the adjacent row,
+   **Home** and **End** to the first and the last item, **PageUp** and **PageDown** by one viewport; each move scrolls
+   its tile into view and focuses it. **Enter** opens the item; in the trash and the contributors' view **Space**
+   selects it, as a click does. The lightbox takes the focus while it is open, and closing it scrolls the item it
+   showed last into view and focuses its tile. A screen reader is told the grid's row count and each mounted row's
+   position (`role="grid"`, `aria-rowcount`, `aria-rowindex`), and each tile keeps its name, *Open item n*, n counting
+   the whole list.
 3a. **Zoom and slideshow in the lightbox** (decided 2026-10-14 by the coordinator on the owner's behalf, inbox #90 and
    #91; built the same day). **Zoom** (a photo; a video does not zoom): double-click / double-tap toggles 1x / 2x at the
    pointer, a pinch with two pointers and ctrl+wheel zoom continuously (1x - 8x), a drag or the arrow keys pan within the
@@ -112,8 +123,9 @@
   lightbox show *Blocked by the operator* with no reason and load no bytes (each answers `451 blocked_by_operator`), for
   members and guests alike; its uploader may still delete it, and it cannot be restored from the trash while blocked.
   A Memory blocked as a whole shows as that placeholder in its level and does not open.
-- **E7 — a Memory or Chapter of thousands of photos** (inbox #488): the client asks for the thumbnails in grid order
-  and never all at once — their presigns travel in batches of up to the contract's 256 blobs per request, at most two
+- **E7 — a Memory or Chapter of thousands of photos** (inbox #488, #489): the client asks only for the thumbnails of
+  the tiles near the viewport, nearest first, drops the ones that scrolled away while they still wait, and never asks
+  for all at once — their presigns travel in batches of up to the contract's 256 blobs per request, at most two
   requests in flight, and at most sixteen store reads in flight across the page (`web/src/core/blob/readScheduler.ts`
   holds the limits and why). What the user opens — a preview, a video, a download, a cover — goes before the grid's
   thumbnails, and leaving the Memory drops the reads still waiting. Thumbnails that arrive within 100 ms of each other
@@ -129,6 +141,14 @@
   pixel, a filename, a media type or a content key. The lightbox shows the **preview**, not the original — the original
   leaves the store on explicit download, a video's playback, and a zoom past the preview (3a) - each fetched as
   ciphertext and opened on the device.
+- **Bounded rendering** ([ADR 0105](../../../decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)
+  decision 1). Every view over a list of media — this gallery, the trash, the contributors' view, a guest's share —
+  keeps the justified layout of the whole list but mounts only the rows near its viewport, so its DOM does not grow
+  with the Memory, and keeps a bounded number of decrypted thumbnails, revoking the rest. A new view that renders every
+  item, or opens a listed seal on the page at every render, is a defect against that record. The targets it is held to
+  are ADR 0105's (§ Targets), measured with the volume harness at the V1 heavy stage; until then they are
+  targets, not readings. Not yet seen in a browser: the windowed grid, its keyboard model and a screen reader's reading
+  of it (the browser pass waits for the same stage).
 - **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
   and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it
   is sealed or uploaded — because that key is derivable on device from the same **EXIF date, else the file's

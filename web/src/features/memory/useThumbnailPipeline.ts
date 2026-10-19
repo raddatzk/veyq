@@ -1,22 +1,28 @@
-// Shared gallery thumbnail pipeline (web) — the one decrypt-per-tile → object-URL-map pipeline behind both the
-// internal Memory gallery (MemoryDetail) and the public share page (ShareView), extracted into a composable
-// (cr-0150, audit #74/P3d). Owns the thumbnail object-URL lifecycle via `useObjectUrls` — so a thumbnail URL has
-// exactly ONE revoke owner, including a donated optimistic-upload preview (adopted, then superseded exactly once).
-// The only per-caller seam is `decryptTile` (`openGrid` vs `openShareGrid`) + the item-shape adapters.
+// Shared gallery thumbnail pipeline (web) — the one decrypt-per-tile → object-URL-map pipeline behind every grid of a
+// Memory (the gallery and its contributors' view, the trash, a guest's share), extracted into a composable (cr-0150,
+// audit #74/P3d). Owns the thumbnail object-URL lifecycle via `useObjectUrls` — so a thumbnail URL has exactly ONE
+// revoke owner, including a donated optimistic-upload preview (adopted, then superseded exactly once).
 //
-// The reads themselves are scheduled by core (`core/blob/readScheduler.ts`, inbox #488): the pipeline asks for every
-// tile at once, in the order it is handed, and the scheduler batches the presigns and bounds what is in flight. What
-// the pipeline adds is the end of a read nobody wants any more — a reset aborts the reads still waiting — and the tile
-// a read that failed for good leaves behind: marked `failed`, so the grid shows it, never a shimmer that never ends.
-// And it installs the thumbnails that arrive together: every install re-renders the whole grid (one map, not virtualized
-// — inbox #489), so one install per arriving tile made 3,000 renders of 3,000 tiles and held each GET slot behind a
-// render (measured 2026-10-19: the last of 3,000 thumbnails after 161 s, the store answering 19 a second).
+// **A thumbnail is read only for a tile near the viewport** (ADR 0105 decision 2, inbox #489). A grid announces the tiles
+// it mounts, nearest to the viewport's centre first (`MediaGrid`'s `window`), and the caller hands them in with [want],
+// one list per OWNER (a grid, the cover): the pipeline reads the thumbnails of every wanted tile it does not hold, in
+// that order, and drops the reads of a tile no owner wants any more while they still wait in the read scheduler
+// (`core/blob/readScheduler.ts`, which bounds and batches them, inbox #488 — once started, a read runs to its end). The
+// object URLs it keeps are bounded: twice the largest window seen, at least [MIN_KEPT]; past that, the tiles wanted
+// longest ago are revoked, and a tile that comes back is read again. A read that failed for good leaves its tile
+// `failed`, so the grid shows an error tile, never a shimmer that never ends.
+//
+// Thumbnails decrypted close together are installed together ([INSTALL_EVERY_MS]): the store's map changes in place
+// (`useObjectUrls`), and the grid re-renders once per install, not once per arriving tile.
 import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
 
 /** How long decrypted thumbnails gather before they are installed together: at most ten grid renders a second while a
  *  gallery fills, and the first tile at most this late. */
 export const INSTALL_EVERY_MS = 100
+
+/** The fewest object URLs the pipeline keeps before it revokes the ones wanted longest ago. */
+export const MIN_KEPT = 300
 
 /** The per-caller seams. `T` is the caller's item type (`MediaItem` internally, `ShareItem` on the share page). */
 export interface ThumbnailPipelineCtx<T> {
@@ -35,7 +41,7 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
   // decrypt-scheduling hint only — revoke ownership is uniformly `store` (useObjectUrls), not split across owners.
   const placeholders = new Set<string>()
   // mediaIds whose thumbnail read failed for good (after the scheduler's retries): the tile's error state. Reassigned on
-  // every change, like `store.urls`, so a template reading `failed.value.has(id)` re-renders.
+  // every change, so a template reading `failed.value.has(id)` re-renders.
   const failed = ref<ReadonlySet<string>>(new Set())
   const setFailed = (id: string, on: boolean) => {
     if (failed.value.has(id) === on) return
@@ -44,11 +50,16 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
     else next.delete(id)
     failed.value = next
   }
-  // The reads of the current generation; a reset (revokeAll) and the owner's end abort them, so a Chapter left while
-  // its 3,000 tiles still wait does not keep the next one's tiles behind them.
-  let reads = new AbortController()
-  // Decrypted thumbnails not yet installed, and the timer that installs them ([INSTALL_EVERY_MS]); a decrypt() also
-  // installs what it gathered when its last read settles, so nothing waits on the timer once the reads are done.
+  // The listed items by id (from [reconcile]): what a wanted id is read as.
+  let listed = new Map<string, T>()
+  // Each owner's wanted ids, nearest first; and when each id was last wanted (the eviction's order).
+  const owners = new Map<string, readonly string[]>()
+  const wantedAt = new Map<string, number>()
+  let round = 0
+  let largestWindow = 0
+  // The reads on their way, each droppable on its own; a reset (revokeAll) and the owner's end drop them all.
+  const reading = new Map<string, AbortController>()
+  // Decrypted thumbnails not yet installed, and the timer that installs them ([INSTALL_EVERY_MS]).
   let gathered = new Map<string, Blob>()
   let installTimer: ReturnType<typeof setTimeout> | null = null
   function install() {
@@ -62,6 +73,7 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
       placeholders.delete(id)
       setFailed(id, false)
     }
+    evict()
   }
   function gather(id: string, blob: Blob) {
     gathered.set(id, blob)
@@ -72,30 +84,108 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
     installTimer = null
     gathered = new Map()
   }
+  function dropReads() {
+    for (const c of reading.values()) c.abort()
+    reading.clear()
+  }
   if (getCurrentScope()) {
     onScopeDispose(() => {
-      reads.abort()
+      dropReads()
       discardGathered()
     })
   }
 
-  /** Prune thumbs of no-longer-listed media, and donate a done upload's preview for each newly-listed media so its
-   *  optimistic tile hands off with no gray gap (the real thumbnail replaces it once decrypted). No decrypt here. */
-  function reconcile(listed: readonly T[]) {
-    const ids = new Set(listed.map(ctx.idOf))
+  /** Every id some owner wants, in the owners' order, each once. */
+  function wanted(): string[] {
+    const seen = new Set<string>()
+    for (const ids of owners.values()) for (const id of ids) seen.add(id)
+    return [...seen]
+  }
+
+  /** Read one item's thumbnail unless it is in place, on its way, or failed for good. */
+  function read(item: T) {
+    if (!ctx.isDerivable(item)) return // non-image/video → icon tile, no fetch
+    const id = ctx.idOf(item)
+    if ((store.get(id) && !placeholders.has(id)) || gathered.has(id) || reading.has(id) || failed.value.has(id)) return
+    const c = new AbortController()
+    reading.set(id, c)
+    ctx.decryptTile(item, c.signal).then(
+      (bytes) => {
+        if (reading.get(id) === c) reading.delete(id)
+        if (bytes && !c.signal.aborted) gather(id, new Blob([bytes as BlobPart]))
+        if (reading.size === 0) install() // the last read of the window: nothing to wait for
+      },
+      () => {
+        if (reading.get(id) === c) reading.delete(id)
+        // a read dropped on purpose is nobody's failure; any other is this tile's error state (a donated preview stays
+        // visible under it), and the rest of the grid is unaffected
+        if (!c.signal.aborted) setFailed(id, true)
+        if (reading.size === 0) install()
+      },
+    )
+  }
+
+  /** Bring the reads in line with what is wanted: drop the unwanted ones still waiting, ask for the missing ones in
+   *  order, and revoke past the bound. */
+  function pump() {
+    round += 1
+    const order = wanted()
+    largestWindow = Math.max(largestWindow, order.length)
+    const keep = new Set(order)
+    for (const id of order) wantedAt.set(id, round)
+    for (const [id, c] of reading) {
+      if (!keep.has(id)) {
+        c.abort() // out of the scheduler's queue if it still waits there; a read already running runs to its end
+        reading.delete(id)
+      }
+    }
+    for (const id of order) {
+      const item = listed.get(id)
+      if (item) read(item)
+    }
+    evict()
+  }
+
+  /** Revoke the object URLs wanted longest ago, past twice the largest window seen (at least [MIN_KEPT]). A tile any
+   *  owner wants now is never revoked. */
+  function evict() {
+    const cap = Math.max(MIN_KEPT, 2 * largestWindow)
+    const held = store.urls.value
+    if (held.size <= cap) return
+    const keep = new Set(wanted())
+    const stale = [...held.keys()].filter((id) => !keep.has(id)).sort((a, b) => (wantedAt.get(a) ?? 0) - (wantedAt.get(b) ?? 0))
+    for (const id of stale.slice(0, held.size - cap)) {
+      store.drop(id)
+      placeholders.delete(id)
+    }
+  }
+
+  /** The tiles `owner` wants a thumbnail for, nearest first — replacing what it wanted before. An empty list releases
+   *  its tiles (a grid that is hidden or gone). */
+  function want(owner: string, ids: readonly string[]) {
+    owners.set(owner, ids)
+    pump()
+  }
+
+  /** Prune thumbs of no-longer-listed media, donate a done upload's preview for each newly-listed media so its
+   *  optimistic tile hands off with no gray gap, and read what the owners want of the new list. */
+  function reconcile(list: readonly T[]) {
+    listed = new Map(list.map((item) => [ctx.idOf(item), item]))
     for (const id of [...store.urls.value.keys()]) {
-      if (!ids.has(id)) {
+      if (!listed.has(id)) {
         store.drop(id)
         placeholders.delete(id)
       }
     }
-    for (const id of [...gathered.keys()]) {
-      if (!ids.has(id)) gathered.delete(id)
+    for (const id of [...gathered.keys()]) if (!listed.has(id)) gathered.delete(id)
+    for (const [id, c] of reading) {
+      if (!listed.has(id)) {
+        c.abort()
+        reading.delete(id)
+      }
     }
-    for (const id of failed.value) {
-      if (!ids.has(id)) setFailed(id, false)
-    }
-    for (const item of listed) {
+    for (const id of failed.value) if (!listed.has(id)) setFailed(id, false)
+    for (const item of list) {
       const id = ctx.idOf(item)
       if (store.get(id) || !ctx.isDerivable(item)) continue
       const donor = ctx.donorPreviewFor(id)
@@ -103,55 +193,30 @@ export function useThumbnailPipeline<T>(ctx: ThumbnailPipelineCtx<T>) {
       store.adopt(id, donor) // single-owner: the donated url's revoke now belongs to `store`
       placeholders.add(id)
     }
-  }
-
-  /** Decrypt + install the real thumbnail for each derivable item still lacking one (parallel, operator-blind).
-   *  `isCurrent` is the caller's race guard (e.g. still on the same node) — a stale result is dropped. */
-  async function decrypt(list: readonly T[], isCurrent: () => boolean = () => true) {
-    const { signal } = reads
-    await Promise.all(
-      list.map(async (item) => {
-        if (!ctx.isDerivable(item)) return // non-image/video → icon tile, no fetch
-        const id = ctx.idOf(item)
-        if ((store.get(id) && !placeholders.has(id)) || gathered.has(id)) return // a real thumbnail is in place or on its way
-        try {
-          const bytes = await ctx.decryptTile(item, signal)
-          if (!bytes || !isCurrent() || signal.aborted) return
-          gather(id, new Blob([bytes as BlobPart]))
-        } catch {
-          // a read dropped by a reset is nobody's failure; any other is this tile's error state (a donated preview
-          // stays visible under it), and the rest of the grid is unaffected
-          if (!signal.aborted && isCurrent()) setFailed(id, true)
-        }
-      }),
-    )
-    if (!signal.aborted) install()
-  }
-
-  /** Full refresh for a fresh list: prune + donate, then decrypt the missing tiles. */
-  async function sync(listed: readonly T[], isCurrent: () => boolean = () => true) {
-    reconcile(listed)
-    await decrypt(listed, isCurrent)
+    pump()
   }
 
   /** Drop one media's thumbnail (optimistic delete / removal), revoking its url. */
   function dropThumb(id: string) {
     gathered.delete(id)
+    reading.get(id)?.abort()
+    reading.delete(id)
     store.drop(id)
     placeholders.delete(id)
     setFailed(id, false)
   }
 
   /** Revoke every thumbnail and drop every read still waiting (a Memory/share reset). Unmount also auto-revokes via
-   *  `useObjectUrls` and aborts the reads. */
+   *  `useObjectUrls` and drops the reads. What the owners want stays: their grids re-announce over the next list. */
   function revokeAll() {
-    reads.abort()
-    reads = new AbortController()
+    dropReads()
     discardGathered()
     store.clear()
     placeholders.clear()
+    listed = new Map()
+    wantedAt.clear()
     failed.value = new Set()
   }
 
-  return { thumbs: store.urls, failed, reconcile, decrypt, sync, dropThumb, revokeAll }
+  return { thumbs: store.urls, failed, reconcile, want, dropThumb, revokeAll }
 }

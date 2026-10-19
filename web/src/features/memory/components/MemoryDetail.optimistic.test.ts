@@ -78,8 +78,9 @@ function uploadFile(id: string, status: string, opts: { progress?: number; media
 
 /** The grid's tiles in DOM order, each named: a real media by its id, an optimistic tile by its file name. */
 function gridOrder(wrapper: ReturnType<typeof mountDetail>): string[] {
+  // each tile is its grid cell's one child (the windowed grid's rows and cells, ADR 0105), in DOM order
   const grid = wrapper.find('.media-grid').element
-  return Array.from(grid.children).map(
+  return Array.from(grid.querySelectorAll('[role="gridcell"] > *')).map(
     (el) => el.getAttribute('data-media-id') ?? el.querySelector('img')?.getAttribute('alt') ?? '?',
   )
 }
