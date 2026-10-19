@@ -367,7 +367,7 @@ components:
           description: Where the receipt goes, if the reporter left an address. Not stored.
           maxLength: 254
           example: reporter@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     ReportReceipt:
       type: object
