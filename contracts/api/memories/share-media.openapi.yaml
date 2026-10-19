@@ -58,6 +58,12 @@ paths:
         the id's, not the member list's `(updatedAt, id)`: a guest is told no time of the Memory's activity (ADR 0081
         decision 4), and an id is all it holds. `nodeId` narrows the read to one node of the shared subtree — the
         gallery of the node a guest has open; a node outside the live subtree is this read's ordinary `404`.
+        **Live refresh (ADR 0081 decision 4, ADR 0033):** a read without `after` carries an `ETag` that is a digest of
+        everything this read serves across all its pages (the media of the asked node, or of the subtree, and the
+        identities beside them) — never the node's item revision nor the scope's tree revision, which move on changes
+        the guest is not shown, so the tag tells the guest nothing the listing does not. Echoed as `If-None-Match`, an
+        unchanged listing answers `304` with no body. A later page (`after` given) is never conditional and carries no
+        tag; a client keeps the first page's.
       parameters:
         - $ref: "#/components/parameters/ShareId"
         - $ref: "#/components/parameters/SharePassword"
@@ -78,14 +84,32 @@ paths:
             Omitted => from the beginning.
           schema: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
+        - name: If-None-Match
+          x-veyq-visibility: structure
+          in: header
+          required: false
+          description: >
+            The `ETag` of the guest's last first page of this read. When it equals the digest of what the read would
+            serve now, `304`. Ignored on a later page (`after` given).
+          schema: { type: string, maxLength: 80, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
       responses:
         "200":
           description: >
             One page of the sealed media under the shared subtree (or the one node) and the uploader keys that open
             them (both empty for a `WRITE_ONLY` link).
+          headers:
+            ETag:
+              x-veyq-visibility: structure
+              description: >
+                On a read without `after`: a digest of everything the read serves, every page of it — echo it as
+                `If-None-Match` on the next poll. Absent on a later page.
+              schema: { type: string, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareMediaListing" }
+        "304":
+          description: >
+            Not Modified — the guest's `If-None-Match` equals the digest of what this read would serve; no body.
         "400":
           description: Malformed request — a parameter or the body outside its contract.
           content:
@@ -152,6 +176,7 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable (`share_not_found`); or the `nodeId` names no live node inside the share's subtree (`node_not_found`, the same for a node outside it as for none).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/shares/{shareId}/media/{mediaId}:
     delete:

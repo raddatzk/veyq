@@ -88,7 +88,7 @@ Owner appoints review the held snapshot in the share viewer's moderation mode, h
 web's moderation surface: dismiss, extend a hold, bar a reporter, or block a link, content or a guest uploader. Blocking
 a member's sign-in and taking a tenant offline stay the Server Owner's, on the admin channel. Every step is a row by id
 that deletes nothing and is lifted by closing it. A block carries its statement of reasons to the people it affects,
-the facts sealed to each of them; they object once, and another moderator decides where there is one
+the facts sealed once under a key wrapped to each of them; they object once, and another moderator decides where there is one
 ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md),
 [uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md),
 [uc.moderation.take-a-measure](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.take-a-measure.md),

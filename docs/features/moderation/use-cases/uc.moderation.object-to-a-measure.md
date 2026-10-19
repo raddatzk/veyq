@@ -20,16 +20,16 @@
 
 1. **The statement is sent with the measure.** The decision panel asks for the ground — one of the report categories,
    the law or the terms —, the provision of the law or the clause of the terms it relies on (a short reference in the
-   clear, "§ 86a StGB", "Space terms, clause 4"), and the facts, which explain why the content falls under it. The moderator's browser seals the facts twice: to the moderation key, for the
-   log, and to each affected member's identity key, which the server lists for that measure before it is taken. The
-   server records the statement with the measure, in one transaction, and refuses the measure when the sealed copies do
-   not name exactly the members it would tell (`statement_recipients_changed`). The list is whole or refused, never
-   cut: all the sealed copies travel in the measure's one request, so with facts a step reaches at most 4,000 members
-   (what one request body holds at the smallest sealed facts, `StatementRecipients.MAX_SEALED`), and past that it is
-   refused by name (`statement_recipients_too_many`). In the full form, which requires the facts, such a step cannot be
-   taken at all — the open wall. Longer facts reach the request limit sooner (about 870 members at the longest); sealing
-   the facts once and wrapping only a key per member would make each member's share a fixed 1.6 KB or so whatever the
-   facts' length, and only paging the upload removes the wall.
+   clear, "§ 86a StGB", "Space terms, clause 4"), and the facts, which explain why the content falls under it. The moderator's browser seals the facts for the log to
+   the moderation key, and once more for the affected, under a fresh key of their own bound to the statement, whose id
+   the browser mints; that key alone it wraps to each affected member's identity key, which the server lists for that
+   measure before it is taken (ADR 0093 § 7). The server records the statement with the measure, in one transaction,
+   and refuses the measure when the wrapped keys do not name exactly the members it would tell
+   (`statement_recipients_changed`). The list is whole or refused, never cut: every wrap travels in the measure's one
+   request, a fixed 1.6 KB a member whatever the facts' length, so with facts a step reaches at most 6,000 members
+   (`StatementRecipients.MAX_SEALED`), and past that it is refused by name (`statement_recipients_too_many`). In the
+   full form, which requires the facts, such a step cannot be taken at all — the wall that remains; only paging the
+   upload removes it.
 2. **Who is told.** The creator of a blocked link, or of the link a blocked guest came through; the uploaders the held
    rows name (a blocked guest: that guest); and, on a content block, every owner of the space. A guest is told nothing
    in veyq and has no address: a guest uploader counts as *nobody can be told*.
@@ -88,8 +88,9 @@
 
 ## Quality notes
 
-- **Operator-blind**: the facts of a moderator's measure reach the affected sealed to their identity keys, the
-  objection reaches the moderators sealed to the moderation key; the server holds both as ciphertext and mails neither
+- **Operator-blind**: the facts of a moderator's measure reach the affected sealed under a key wrapped to their
+  identity keys, the objection reaches the moderators sealed to the moderation key; the server holds both as
+  ciphertext and mails neither
   (ADR 0049). The one exception is the Server Owner's own step (A7): its facts are the Server Owner's own words, which
   the server reads as it mails them — a consented disclosure by their author (ADR 0049 decision 2) — and stores only
   sealed.

@@ -61,6 +61,8 @@ import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated
 import type { ShareMedia } from '../../api/generated/share-media'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { stubApi } from '../../test/apiMock'
+import { apiResponse } from '../../test/apiResponse'
+import { httpError } from '../../test/httpError'
 import { guestAccessFor, mediaItem } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
 import type { GuestAccess } from '../../core/access'
@@ -91,6 +93,8 @@ function head(role: ShareRole): PublicShareHead {
 }
 /** What the share's chunk provider hands back, as a marker (its own suite opens the bytes). */
 const CHUNKS = { meta: vi.fn(), chunk: vi.fn() } as unknown as ReturnType<typeof share.shareChunkProvider>
+/** The tag the link's listing names (a digest of what it serves, ADR 0081 decision 4 — opaque to the client). */
+const TAG = '"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f"'
 const row = (mediaId: string, nodeId: string): ShareMedia => ({ blockedByOperator: false, mediaId, nodeId, blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' })
 
 let requestGuest: ReturnType<typeof vi.fn<() => Promise<GuestIdentity | null>>>
@@ -105,7 +109,8 @@ beforeEach(() => {
   localStorage.clear()
   forgetGuestSession(SHARE)
   authenticatedCalls.length = 0
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-root', MEMORY), row('m-ch', CHAPTER)], identities: [], more: false } })
+  const listing = { media: [row('m-root', MEMORY), row('m-ch', CHAPTER)], identities: [], more: false }
+  stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: TAG }) })
   vi.mocked(share.openShareGrid).mockResolvedValue(new Uint8Array([1]))
   vi.mocked(share.openShareLightbox).mockResolvedValue(new Uint8Array([2]))
   vi.mocked(share.openShareOriginal).mockResolvedValue(new Uint8Array([3]))
@@ -115,21 +120,42 @@ beforeEach(() => {
 })
 
 /** Every door a member's source carries and a guest's must not, by name. */
-const MEMBER_ONLY = ['poll', 'trash', 'nodeMeta', 'mediaMeta', 'marks', 'buckets'] as const
+const MEMBER_ONLY = ['trash', 'nodeMeta', 'mediaMeta', 'marks', 'buckets'] as const
 
 describe("the guest's source reads the link, and only the link", () => {
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-    it(`${role}: lists the node's own media from the link's listing — the root's, a chapter's — with no live poll`, async () => {
+    it(`${role}: lists the node's own media from the link's listing — the root's, a chapter's — and keeps its tag for the poll`, async () => {
       const { source } = guest(role)
       const atRoot = await source.listMedia(MEMORY)
       const atChapter = await source.listMedia(CHAPTER)
       expect(atRoot.items.map((i) => i.mediaId)).toEqual(['m-root'])
       expect(atChapter.items.map((i) => i.mediaId)).toEqual(['m-ch'])
-      expect(atRoot.revision, 'no revisions: a guest has no live poll').toBeNull()
-      expect(vi.mocked(publicShareMediaApi().listShareMedia).mock.calls.map(([r]) => r), 'its open node, a page each').toEqual([
-        { shareId: SHARE, xSharePassword: PW, nodeId: MEMORY, after: undefined, limit: media.MEDIA_PAGE_LIMIT },
-        { shareId: SHARE, xSharePassword: PW, nodeId: CHAPTER, after: undefined, limit: media.MEDIA_PAGE_LIMIT },
+      expect(atRoot.revision, "the listing's tag, verbatim; no delete revision, no cursor").toEqual({ tag: TAG, delete: 0 })
+      expect(atRoot.cursor).toBeNull()
+      expect(vi.mocked(publicShareMediaApi().listShareMediaRaw).mock.calls.map(([r]) => r), 'its open node, a page each').toEqual([
+        { shareId: SHARE, xSharePassword: PW, nodeId: MEMORY, limit: media.MEDIA_PAGE_LIMIT, ifNoneMatch: undefined },
+        { shareId: SHARE, xSharePassword: PW, nodeId: CHAPTER, limit: media.MEDIA_PAGE_LIMIT, ifNoneMatch: undefined },
       ])
+      expect(authenticatedCalls).toEqual([])
+    })
+
+    it(`${role}: polls its open node conditionally on the tag it holds — a 304 is nothing, a change is the whole listing`, async () => {
+      const { source } = guest(role)
+      const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+      raw.mockRejectedValueOnce(httpError(304))
+      expect(await source.poll!(CHAPTER, { tag: TAG, deleteRevision: 0 })).toEqual({ notModified: true })
+      expect(raw.mock.calls.at(-1)![0], 'the tag echoed verbatim, for the node on screen').toEqual({
+        shareId: SHARE, xSharePassword: PW, nodeId: CHAPTER, limit: media.MEDIA_PAGE_LIMIT, ifNoneMatch: TAG,
+      })
+
+      const changed = { media: [row('m-ch', CHAPTER), row('m-new', CHAPTER), row('m-root', MEMORY)], identities: [], more: false }
+      raw.mockResolvedValueOnce(apiResponse(changed, { ETag: '"next"' }))
+      const page = await source.poll!(CHAPTER, { tag: TAG, deleteRevision: 0 })
+      expect(page.notModified).toBe(false)
+      if (page.notModified) return
+      expect(page.items.map((i) => i.mediaId), "the node's own media only").toEqual(['m-ch', 'm-new'])
+      expect(page.mediaIds, 'every id it holds — so a medium gone from the link drops').toEqual(['m-ch', 'm-new'])
+      expect([page.tag, page.deleteRevision, page.cursor]).toEqual(['"next"', 0, null])
       expect(authenticatedCalls).toEqual([])
     })
 
@@ -262,7 +288,7 @@ describe("the member's source is today's calls, with its scope", () => {
     ['loaders.chunk', () => src.loaders.chunk(item, key), media.chunkProvider, [S, key, item]],
     ['loaders.coverBlob', () => src.loaders.coverBlob(item.original, key), media.openBlob, [S, key, item.original]],
     ['loaders.exif', () => src.loaders.exif!(item, key), media.loadMediaExif, [S, item, key]],
-    ['poll', () => src.poll!('n', { mediaRevision: 7, since: 'c', deleteRevision: 2 }), media.listMediaPages, [S, 'n', { ifNoneMatch: '7', since: 'c', sinceDelete: 2 }]],
+    ['poll', () => src.poll!('n', { tag: '7', since: 'c', deleteRevision: 2 }), media.listMediaPages, [S, 'n', { ifNoneMatch: '7', since: 'c', sinceDelete: 2 }]],
     ['deleteMedia.trash', () => (src.deleteMedia!.reach === 'any' ? src.deleteMedia!.trash('m-1') : null), media.deleteMedia, [S, 'm-1']],
     ['deleteMedia.restore', () => (src.deleteMedia!.reach === 'any' ? src.deleteMedia!.restore('m-1') : null), media.restoreMedia, [S, 'm-1']],
     ['trash.list', () => src.trash!.list('n'), media.listTrash, [S, 'n']],

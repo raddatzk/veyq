@@ -82,6 +82,7 @@ paths:
           description: A sibling already has that slug (`slug_taken`), the `nodeId` is already taken (`id_taken`), the `epoch` is not the scope's current one (`stale_epoch` — the caller's grant lags a rotation; nothing stored), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             Unprocessable. Two codes: `illegal_structure` — the kind's placement rule refuses the parent, the kind is
@@ -234,6 +235,7 @@ paths:
             nothing was written, ADR 0077). Every code but `stale_revision` carries `code` alone.
           content:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: d3JhcHBlZC1tZXRh, metaRevision: 4 } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: Illegal structure (the node's kind may not live under the destination, the destination is missing, trashed or in another scope, or the move would create a cycle — the destination is the node itself or inside its subtree).
           content:
@@ -341,6 +343,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "#/components/responses/CoverConflict" }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: The node's kind takes no cover (`illegal_target`), or the upload was not started as this node's cover (`upload_mismatch`).
           content:
@@ -396,6 +399,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "#/components/responses/CoverConflict" }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/restore:
     post:
@@ -441,6 +445,7 @@ paths:
           description: A live sibling already holds that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "451":
           description: >
             A moderator blocked this node's content, or a node above it (`blocked_by_operator`,

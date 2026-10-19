@@ -106,6 +106,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/item-favorites:
     get:

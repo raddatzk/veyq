@@ -50,6 +50,7 @@ vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
 }))
 
+import { reactive } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
 import { addMedia, listMedia, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
@@ -175,6 +176,30 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.find(`button[aria-label="${t('media.download')}"]`).exists()).toBe(false)
     const presigned = store.blob.presignBlobDownloads.mock.calls.flatMap((c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId))
     expect(presigned, 'not one byte of the blocked medium is asked for').not.toContain(store.blobIdOfUpload('up-2'))
+  })
+
+  // The gallery's live poll adopts a block on the item the lightbox holds, in place (useMediaGalleryLive): the stage turns
+  // to the placeholder and the decrypted preview is revoked at once; a lift reads the preview again.
+  it('a block that arrives while the medium is open revokes its preview and shows the placeholder; a lift shows it again', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const held = reactive(items.map((it) => ({ ...it }))) // the gallery's items: reactive, patched in place by its poll
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+    const wrapper = mountLightbox(memoryKey, held)
+    await flushPromises()
+    const shown = wrapper.find('.media-lightbox-stage img').attributes('src')
+    expect(shown).toMatch(/^blob:/)
+
+    held[0].blocked = true
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-blocked').text()).toBe(t('node.blockedByOperator'))
+    expect(wrapper.find('.media-lightbox-stage img').exists()).toBe(false)
+    expect(revoke, 'the decrypted preview of a blocked medium is revoked').toHaveBeenCalledWith(shown)
+
+    delete held[0].blocked
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-blocked').exists()).toBe(false)
+    expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toMatch(/^blob:/)
   })
 
   it('“Set as cover” emits setCover for the current item (cr-0073 gallery source)', async () => {

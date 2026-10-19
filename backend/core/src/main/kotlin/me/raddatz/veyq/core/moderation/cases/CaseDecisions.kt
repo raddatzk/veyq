@@ -63,14 +63,17 @@ enum class MeasureStep { SHARE, CONTENT, GUEST_IDENTITY }
 data class ResolvedStep(val kind: BlockKind, val targetId: String, val shareId: String?)
 
 /**
- * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): the [ground], the [provision] of the law or
- * clause of the terms it relies on (in the clear, DSA Art. 17(3)(d), (e)), the [facts] sealed to the moderation key, and
- * [factsFor] — the facts sealed to each affected member's identity, by account id.
+ * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): its client-minted [statementId], the
+ * [ground], the [provision] of the law or clause of the terms it relies on (in the clear, DSA Art. 17(3)(d), (e)), the
+ * [facts] sealed to the moderation key for the log, the facts sealed once for the affected under the statement's
+ * `K_facts` ([sealedFacts]), and [factsKeyFor] — `K_facts` wrapped to each affected member's identity, by account id.
  */
 data class StatementInput(
+    val statementId: String,
     val ground: StatementGround,
     val facts: SealedNote?,
-    val factsFor: Map<String, String>,
+    val sealedFacts: String?,
+    val factsKeyFor: Map<String, String>,
     val deferral: DeferralInput? = null,
     val provision: String? = null,
 )
@@ -103,6 +106,7 @@ object CaseFailures {
     val provisionRequired = httpFailure("statement_provision_required", FailureStatus.BAD_REQUEST)
     val recipientsChanged = httpFailure("statement_recipients_changed", FailureStatus.CONFLICT)
     val recipientsTooMany = httpFailure("statement_recipients_too_many", FailureStatus.UNPROCESSABLE)
+    val idTaken = httpFailure("id_taken", FailureStatus.CONFLICT)
     val objectionNotFound = httpFailure("objection_not_found", FailureStatus.NOT_FOUND)
     val objectionDecided = httpFailure("objection_decided", FailureStatus.CONFLICT)
     val needsAnotherModerator = httpFailure("objection_needs_another_moderator", FailureStatus.CONFLICT)
@@ -300,15 +304,19 @@ class CaseDecisions(
         if (statement.facts == null && full) return Taken(refused(CaseFailures.factsRequired))
         if (statement.provision.isNullOrBlank() && full) return Taken(refused(CaseFailures.provisionRequired))
         noteRefusal(statement.facts)?.let { return Taken(refused(it)) }
+        // The log's copy, the members' copy and the wraps of its key come together or not at all.
+        if ((statement.facts == null) != (statement.sealedFacts == null)) return Taken(refused(CaseFailures.invalid))
+        if (statement.facts == null && statement.factsKeyFor.isNotEmpty()) return Taken(refused(CaseFailures.invalid))
+        // The client minted the statement's id and sealed the facts bound to it (ADR 0072 Decision 3): never substituted.
+        if (ModerationStatementEntity.findById(statement.statementId) != null) return Taken(refused(CaseFailures.idTaken))
         statement.deferral?.let { d ->
             if (!deferrals.inBounds(d.until, now)) return Taken(refused(CaseFailures.deferralOutOfBounds))
             noteRefusal(d.reason)?.let { return Taken(refused(it)) }
         }
         val told = recipients.of(case, resolved, known, held)
         val members = told.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }.toSet()
-        if (statement.facts == null && statement.factsFor.isNotEmpty()) return Taken(refused(CaseFailures.invalid))
         if (statement.facts != null && members.size > StatementRecipients.MAX_SEALED) return Taken(refused(CaseFailures.recipientsTooMany))
-        if (statement.facts != null && statement.factsFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
+        if (statement.facts != null && statement.factsKeyFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
         val row = block(resolved.kind, resolved.targetId, case, moderatorId, now).apply {
             if (resolved.kind == BlockKind.CONTENT_NODE || resolved.kind == BlockKind.CONTENT_ITEM) scopeId = case.scopeId
             if (resolved.kind == BlockKind.GUEST_IDENTITY) this.shareId = resolved.shareId
@@ -326,7 +334,7 @@ class CaseDecisions(
         // decision (ADR 0093 § 4). An authority's deferral holds it back until its end (ADR 0093 § 7).
         val sentAt = if (members.isNotEmpty() && statement.deferral == null) now else null
         val written = ModerationStatementEntity().apply {
-            id = UUID.randomUUID().toString()
+            id = statement.statementId
             measureId = row.id
             this.caseId = case.id
             ground = statement.ground.name
@@ -334,6 +342,7 @@ class CaseDecisions(
             basis = StatementBasis.REPORT.name
             epoch = statement.facts?.epoch
             sealedFacts = statement.facts?.sealed
+            sealedMemberFacts = statement.sealedFacts
             this.sentAt = sentAt
         }
         written.persist()
@@ -344,7 +353,7 @@ class CaseDecisions(
                 recipientKind = r.kind.name
                 recipientId = r.id
                 roles = r.roles.joinToString(",") { it.name }
-                sealedFacts = statement.factsFor[r.id]
+                wrappedFactsKey = statement.factsKeyFor[r.id]
             }.persist()
         }
         if (sentAt != null) {

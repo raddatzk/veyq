@@ -22,7 +22,7 @@ import { byCaptureTime } from './optimisticUpload'
  *  settle callback (auto-date + auto-location self-heal) run after every list refresh. */
 export interface MediaGalleryLiveCtx {
   /** The session's data source (`./source.ts`): the list, the tiles' bytes, the live poll and the delete — each only
-   *  where the source carries it (a guest's has no poll and no trash). */
+   *  where the source carries it (a guest's has no trash, and its delete reaches its own media only). */
   source: MemorySource
   scopeId: () => string
   node: () => TreeNode
@@ -55,7 +55,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_node (operator-blind).
   const pipeline = useThumbnailPipeline<MediaItem>({
     idOf: (m) => m.mediaId,
-    isDerivable: hasDerivatives,
+    // A medium a moderator blocked has no thumbnail to read: every byte of it answers 451 (uc.moderation.take-a-measure).
+    isDerivable: (m) => !m.blocked && hasDerivatives(m),
     decryptTile: (m, signal) => {
       const key = ctx.memoryKey()
       return key ? ctx.source.loaders.grid(m, key, signal) : Promise.resolve(null)
@@ -65,9 +66,10 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const thumbs = pipeline.thumbs // mediaId → thumbnail object URL (derivable items only)
   const thumbFailed = pipeline.failed // mediaIds whose thumbnail read failed for good: the tile's error state
   const status = ref<'loading' | 'ready' | 'error'>('loading')
-  // live media updates (uc.memory.live-updates, cr-0107): the cached per-node counters — mediaRevision (the ETag
-  // echoed as If-None-Match; null until the first load) + deleteRevision (echoed as sinceDelete to gate the id-set).
-  const mediaRevision = ref<number | null>(null)
+  // live media updates (uc.memory.live-updates, cr-0107): the list's tag — the ETag echoed as If-None-Match, opaque here
+  // (a member's: the node's item revision; a guest's: a digest of what its link serves, inbox #497); null until the first
+  // load, and while the source has no live poll — + deleteRevision (echoed as sinceDelete to gate the id-set).
+  const mediaTag = ref<string | null>(null)
   const deleteRevision = ref(0)
   // …and the keyset cursor the next poll continues from: the one the server answered with the last page it read (ADR
   // 0033 decision 6) — never assembled from the items, whose order is the server's to say.
@@ -233,7 +235,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     if (!key) {
       pipeline.revokeAll()
       items.value = []
-      mediaRevision.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
+      mediaTag.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
       deleteRevision.value = 0
       pollSince = undefined
       status.value = 'error'
@@ -242,7 +244,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     if (reset) {
       pipeline.revokeAll()
       items.value = []
-      mediaRevision.value = null
+      mediaTag.value = null
       deleteRevision.value = 0
       pollSince = undefined
     }
@@ -258,7 +260,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       // The live poll continues from the FIRST page's revisions — read before its rows, so a change committed while the
       // pages came in moves the server past them and the next poll pulls it — and from the LAST page's cursor (ADR 0033
       // decision 6). None: this source has no live poll.
-      mediaRevision.value = page.revision?.media ?? null
+      mediaTag.value = page.revision?.tag ?? null
       deleteRevision.value = page.revision?.delete ?? 0
       pollSince = page.cursor ?? undefined
       status.value = 'ready'
@@ -270,30 +272,30 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   }
 
   /** The live poll's tick (uc.memory.live-updates, cr-0107; the conditional read is core's `itemsPollTick`, inbox #410):
-   *  a conditional GET keyed on the cached `mediaRevision`. A 304 is a no-op; a change upserts the keyset delta (new
+   *  a conditional GET keyed on the cached `mediaTag`. A 304 is a no-op; a change upserts the keyset delta (new
    *  tiles auto-insert), reconciles removals via the id-set, and decrypts just the delta's tiles. Node-race-guarded
    *  (`isCurrent`) so a mid-poll navigation can't write into the wrong gallery, and fenced by the live poll's `signal`
    *  so a poll still in flight when the loop stops (close, lock) writes nothing. A failed fetch REJECTS: the loop backs
    *  off and the next successful poll re-syncs in one round-trip (E6) while the last grid stays. */
-  const pollTick = itemsPollTick<MediaItem, string>({
+  const pollTick = itemsPollTick<MediaItem, string, string>({
     cursor: () => {
-      if (!ctx.memoryKey() || !ctx.source.poll || mediaRevision.value === null) return null // no live poll here / not an open, loaded gallery
+      if (!ctx.memoryKey() || !ctx.source.poll || mediaTag.value === null) return null // no live poll here / not an open, loaded gallery
       return {
         key: ctx.node().id,
-        revision: mediaRevision.value,
+        revision: mediaTag.value,
         deleteRevision: deleteRevision.value,
         since: pollSince,
       }
     },
     fetch: async (cursor) => {
       const page = await ctx.source.poll!(cursor.key, {
-        mediaRevision: cursor.revision,
+        tag: cursor.revision,
         since: cursor.since,
         deleteRevision: cursor.deleteRevision,
       })
       return page.notModified
         ? { notModified: true }
-        : { notModified: false, items: page.items, revision: page.mediaRevision, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }
+        : { notModified: false, items: page.items, revision: page.tag, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }
     },
     isCurrent: (nodeId) => ctx.node().id === nodeId,
     apply: async (change, cursor, signal) => {
@@ -302,7 +304,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       if (key) await openListing(ctx.scopeId(), key, change.items)
       if (signal.aborted || ctx.node().id !== cursor.key) return
       upsertItems(change.items, change.ids)
-      mediaRevision.value = change.revision
+      mediaTag.value = change.revision
       deleteRevision.value = change.deleteRevision
       pollSince = change.cursor ?? pollSince // a delta that carried no row (a removal only) leaves the cursor where it was
       // a new tile's thumbnail is read when the grid announces it near the viewport ([wantThumbs])
@@ -324,6 +326,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
    *  snapshot stays consistent) - and, **only when the id-set is present** (a delete advanced the delete revision),
    *  drop any cached media absent from it, revoking its thumbnail. Reassigns `items` so the justified grid re-sorts. */
   function upsertItems(delta: MediaItem[], mediaIds: string[] | null) {
+    const blockedNow: string[] = []
     items.value = reconcileItems(items.value, delta, mediaIds, {
       idOf: (m) => m.mediaId,
       skip: (id) => pendingDelete.has(id), // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
@@ -331,12 +334,23 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
         existing.wrappedMeta = m.wrappedMeta // a meta edit re-sealed the tier; patch in place (shared with the lightbox snapshot)
         existing.metaRevision = m.metaRevision // …and the version it is at, or the next write from here would 409 once
         existing.updatedAt = m.updatedAt
+        // A block or its lift (uc.moderation.take-a-measure, ADR 0093 § 6) bumps the item's revision, so it arrives here:
+        // the tile and an open lightbox (the same object) show "Blocked by the operator" at once, its decrypted thumbnail
+        // goes below; a lift shows the medium again, its thumbnail read anew when the grid wants it.
+        if (m.blocked && !existing.blocked) {
+          existing.blocked = true
+          blockedNow.push(m.mediaId)
+        } else if (!m.blocked && existing.blocked) delete existing.blocked
       },
       onIds: (listed) => {
         for (const id of [...pendingDelete]) if (!listed.has(id)) pendingDelete.delete(id) // cr-0111: server confirmed it's gone → lift the tombstone
       },
       onDrop: (id) => pipeline.dropThumb(id),
     })
+    for (const id of blockedNow) pipeline.dropThumb(id) // revoke the decrypted thumbnail its block withdrew
+    // The pipeline reads what the grid wants from the list it holds: hand it the merged one, so a medium the poll added,
+    // or one whose block was lifted, gets its thumbnail when its tile is near the viewport.
+    pipeline.reconcile(items.value)
   }
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and

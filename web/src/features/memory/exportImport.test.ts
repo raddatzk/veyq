@@ -6,7 +6,7 @@ vi.mock('./media', async (orig) => ({
   chunkProvider: vi.fn(), plaintextSize: vi.fn(), addMedia: vi.fn(), setMediaMeta: vi.fn(), backfillPlaceName: vi.fn(), openBlob: vi.fn(),
   addCopiedMedia: vi.fn(), tierChunkProviders: vi.fn(), rawMediaMeta: vi.fn(), readByChunk: vi.fn(),
 }))
-vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), listShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
+vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), readShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
 vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), listTree: vi.fn() }))
 vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
@@ -18,7 +18,7 @@ import {
   addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPages, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
   rawMediaMeta, setMediaMeta, tierChunkProviders, unsealMeta, type MediaItem,
 } from './media'
-import { listShareMedia, openSharedMemory, shareChunkProvider } from './share'
+import { readShareMedia, openSharedMemory, shareChunkProvider } from './share'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
 import type { Access } from '../../core/access'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
@@ -113,7 +113,7 @@ describe('exportMemoryContent', () => {
 
   it('a READ guest downloads through the link: no member read, no names (never the member directory), no EXIF copy', async () => {
     const guest = guestAccessOf('READ', { head: { scopeId: SCOPE } as unknown as PublicShareHead })
-    vi.mocked(listShareMedia).mockResolvedValue({ media: [] } as unknown as Awaited<ReturnType<typeof listShareMedia>>)
+    vi.mocked(readShareMedia).mockResolvedValue({ listing: { media: [] }, etag: null } as unknown as Awaited<ReturnType<typeof readShareMedia>>)
     vi.mocked(openSharedMemory).mockReturnValue({ items: [{ item: item('a'), nodeId: NODE }, { item: item('x'), nodeId: 'other' }] } as unknown as ReturnType<typeof openSharedMemory>)
     vi.mocked(shareChunkProvider).mockReturnValue({ chunkCount: 0, getPlaintextChunk: async () => new Uint8Array(0) } as unknown as ReturnType<typeof shareChunkProvider>)
     const { ctx, payloads } = exportCtx(meta, MEMORY_KIND, guest)

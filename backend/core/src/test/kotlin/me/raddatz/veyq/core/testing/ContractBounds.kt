@@ -5,7 +5,8 @@ import java.io.File
 /**
  * A response array's `maxItems` as the contract states it, read from `contracts/api` — so a test that fills a list past a
  * number can assert the answer still fits its own schema. The generated Kotlin models carry no bound of a response
- * (only a request's `x-field-extra-annotation` reaches the code), so nothing else in a slice test sees one.
+ * (only a request's `x-field-extra-annotation` reaches the code), so nothing else in a slice test sees one. A field's
+ * `maxLength` the same way — so a test can hold a request's annotation to the number the contract states.
  *
  * Reads the house layout only: a schema at four spaces under `components.schemas`, its property at eight, the
  * property's keys at ten. A schema or property it cannot find is a failure, never a pass.
@@ -13,14 +14,19 @@ import java.io.File
 object ContractBounds {
 
     /** [schema].[property]'s `maxItems` in `contracts/api/[spec]`, or null when the contract sets none. */
-    fun maxItems(spec: String, schema: String, property: String): Int? {
+    fun maxItems(spec: String, schema: String, property: String): Int? = key(spec, schema, property, "maxItems")
+
+    /** [schema].[property]'s `maxLength` in `contracts/api/[spec]`, or null when the contract sets none. */
+    fun maxLength(spec: String, schema: String, property: String): Int? = key(spec, schema, property, "maxLength")
+
+    private fun key(spec: String, schema: String, property: String, key: String): Int? {
         val lines = File("../contracts/api/$spec").readLines()
         val start = lines.indexOf("    $schema:").also { check(it >= 0) { "no schema $schema in $spec" } }
         val end = (start + 1 until lines.size).firstOrNull { lines[it].matches(Regex("^ {4}\\S.*")) } ?: lines.size
         val prop = (start + 1 until end).firstOrNull { lines[it] == "        $property:" }
             ?: error("no property $schema.$property in $spec")
         val propEnd = (prop + 1 until end).firstOrNull { lines[it].matches(Regex("^ {8}\\S.*")) } ?: end
-        return (prop + 1 until propEnd).firstNotNullOfOrNull { Regex("^ {10}maxItems: (\\d+)$").find(lines[it])?.groupValues?.get(1)?.toInt() }
+        return (prop + 1 until propEnd).firstNotNullOfOrNull { Regex("^ {10}$key: (\\d+)$").find(lines[it])?.groupValues?.get(1)?.toInt() }
     }
 
     /** Fails unless [count] items fit [schema].[property] as the contract bounds it. */

@@ -16,7 +16,11 @@ import me.raddatz.veyq.core.sharing.ShareGuestGate
 import me.raddatz.veyq.core.sharing.ShareViewGate
 import me.raddatz.veyq.core.sharing.ShareWriteGate
 import me.raddatz.veyq.core.sharing.ShareWriteTarget
+import me.raddatz.veyq.core.moderation.block.ContentView
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
+import me.raddatz.veyq.core.items.ItemsPage
+import me.raddatz.veyq.core.items.NodeItemsRevisions
+import me.raddatz.veyq.core.sharing.ShareETag
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface ShareMediaListOutcome {
@@ -24,12 +28,16 @@ sealed interface ShareMediaListOutcome {
      *  [media] row's `identityId` is one of its keys or null. */
     /** [blocked] holds the media a moderator blocked (uc.moderation.take-a-measure): kept in [media], marked. */
     /** [more]: media remain past this page (ADR 0033 decision 6) — the guest asks again after the last one. */
+    /** [etag]: the digest of the whole listing ([ShareMediaTag]) on a read without `after`; null on a later page. */
     data class Listed(
         val media: List<ShareMediaRow>,
         val uploaderKeys: Map<String, String>,
         val blocked: Set<String> = emptySet(),
         val more: Boolean = false,
+        val etag: String? = null,
     ) : ShareMediaListOutcome
+    /** The guest's `If-None-Match` names what the read would serve now (inbox #497): a `304`, no page read. */
+    data class NotModified(val etag: String) : ShareMediaListOutcome
     /** Unknown, disabled, expired or deleted share, a space that serves no guests, or password-protected with no token
      *  — the non-enumerable 404 (the password challenge is the resolve's locked shell; this read serves none). */
     object NotFound : ShareMediaListOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
@@ -93,6 +101,8 @@ class ShareMediaHandler(
     private val store: MediaStore,
     private val blocks: ModerationBlocks,
     private val guestWriteRecords: GuestWriteRecords,
+    private val items: NodeItemsRevisions,
+    private val tags: ShareMediaTags,
 ) {
 
     /**
@@ -105,11 +115,22 @@ class ShareMediaHandler(
      * One page of at most [limit] media past [after], in id order (ADR 0033 decision 6), of the whole subtree or — with
      * [nodeId] — of the one node of it the guest has open; a node outside the live subtree is the same 404 as an
      * unknown share, so the read tells nothing about a node the link does not serve.
+     *
+     * **The live refresh (inbox #497, ADR 0081 decision 4).** A read without [after] is conditional: its tag is a digest
+     * of the whole listing as served ([ShareMediaTag]), never a revision, so a guest polling it learns of a change only
+     * when what it is shown changed. [ifNoneMatch] equal to it answers [ShareMediaListOutcome.NotModified] without a
+     * page. The digest is remembered by what it is a function of ([ShareMediaTags]): an idle poll reads the gate, the
+     * blocks and the asked nodes' item revisions; only a changed key reads the whole listing — and then serves the first
+     * page from that read rather than a second one.
      */
-    fun list(shareId: String, pwToken: String?, nodeId: String?, after: String?, limit: Int): ShareMediaListOutcome {
+    fun list(shareId: String, pwToken: String?, nodeId: String?, after: String?, limit: Int, ifNoneMatch: String? = null): ShareMediaListOutcome {
         val viewable = when (val g = gate.viewGate(shareId, pwToken)) {
             is ShareViewGate.Viewable -> g
-            ShareViewGate.WriteOnly -> return ShareMediaListOutcome.Listed(emptyList(), emptyMap())
+            ShareViewGate.WriteOnly -> return when {
+                after != null -> ShareMediaListOutcome.Listed(emptyList(), emptyMap())
+                ShareETag.matches(ifNoneMatch, NOTHING) -> ShareMediaListOutcome.NotModified(NOTHING)
+                else -> ShareMediaListOutcome.Listed(emptyList(), emptyMap(), etag = NOTHING)
+            }
             ShareViewGate.NotFound, ShareViewGate.Locked -> return ShareMediaListOutcome.NotFound
             ShareViewGate.PasswordIncorrect -> return ShareMediaListOutcome.PasswordIncorrect
             ShareViewGate.RateLimited -> return ShareMediaListOutcome.RateLimited
@@ -119,12 +140,64 @@ class ShareMediaHandler(
             nodeId in viewable.liveNodeIds -> listOf(nodeId)
             else -> return ShareMediaListOutcome.NotFound
         }
-        val page = store.listShareMedia(viewable.scopeId, nodeIds, after, limit)
-        val rows = page.items
-        val keys = store.uploaderKeysOf(rows.mapNotNull { it.identityId }.toSet())
         val view = blocks.contentView(viewable.scopeId)
+        if (after != null) {
+            val page = store.listShareMedia(viewable.scopeId, nodeIds, after, limit)
+            return served(page.items, view).page(limit, page.more, etag = null)
+        }
+        // The key before the rows (ADR 0081 decision 3's order): see ShareMediaTags.
+        val revisions = items.revisionsOf(nodeIds)
+        val key = ShareMediaTags.Key(
+            nodes = nodeIds.sorted().map { it to revisions.getValue(it) },
+            blockedNodes = nodeIds.filterTo(HashSet()) { view.nodeBlocked(it) },
+            blockedItems = view.itemIds,
+        )
+        val known = tags.get(key)
+        if (known != null) {
+            if (ShareETag.matches(ifNoneMatch, known)) return ShareMediaListOutcome.NotModified(known)
+            val page = store.listShareMedia(viewable.scopeId, nodeIds, null, limit)
+            return served(page.items, view).page(limit, page.more, known)
+        }
+        val whole = served(wholeListing(viewable.scopeId, nodeIds), view)
+        val etag = ShareMediaTag.of(whole.media.map { ShareMediaWire.media(it, it.row.mediaId in whole.blocked) }, ShareMediaWire.identities(whole.keys))
+        tags.put(key, etag)
+        if (ShareETag.matches(ifNoneMatch, etag)) return ShareMediaListOutcome.NotModified(etag)
+        return whole.page(limit, whole.media.size > limit, etag)
+    }
+
+    /** Every page of the listing of [nodeIds], at the cap — what the tag is a digest of. */
+    private fun wholeListing(scopeId: String, nodeIds: List<String>): List<ShareMediaRow> {
+        val all = ArrayList<ShareMediaRow>()
+        var after: String? = null
+        do {
+            val page = store.listShareMedia(scopeId, nodeIds, after, ItemsPage.CAP)
+            all += page.items
+            after = page.items.lastOrNull()?.row?.mediaId
+        } while (page.more && after != null)
+        return all
+    }
+
+    /** [rows] as a guest is served them: a medium names its identity only where its wrapped key is served beside it (see
+     *  [list]), and a blocked one is marked. */
+    private fun served(rows: List<ShareMediaRow>, view: ContentView): Served {
+        val keys = store.uploaderKeysOf(rows.mapNotNull { it.identityId }.toSet())
         val blocked = rows.filter { view.itemBlocked(it.row.mediaId, it.nodeId) }.mapTo(HashSet()) { it.row.mediaId }
-        return ShareMediaListOutcome.Listed(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys, blocked, page.more)
+        return Served(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys, blocked)
+    }
+
+    private class Served(val media: List<ShareMediaRow>, val keys: Map<String, String>, val blocked: Set<String>) {
+        /** The first [limit] of these as one page, with only the identities and marks of its own rows. */
+        fun page(limit: Int, more: Boolean, etag: String?): ShareMediaListOutcome.Listed {
+            val rows = media.take(limit)
+            val named = rows.mapNotNullTo(HashSet()) { it.identityId }
+            val ids = rows.mapTo(HashSet()) { it.row.mediaId }
+            return ShareMediaListOutcome.Listed(rows, keys.filterKeys { it in named }, blocked.filterTo(HashSet()) { it in ids }, more, etag)
+        }
+    }
+
+    private companion object {
+        /** A `WRITE_ONLY` link's tag: it is served nothing, so its tag never changes. */
+        val NOTHING = ShareMediaTag.of(emptyList(), emptyList())
     }
 
     /**

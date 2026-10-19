@@ -168,6 +168,78 @@ describe('useMediaGalleryLive', () => {
   })
 })
 
+// uc.moderation.take-a-measure (ADR 0093 § 6): a block, and its lift, bump the item's revision (ADR 0033), so the live
+// poll carries the medium again - the gallery adopts its moderation state in place, a member's and a guest's alike.
+describe('useMediaGalleryLive — a medium blocked or lifted while the gallery is open', () => {
+  /** Load a, b, c with every thumbnail shown, each object URL its own, and the lightbox open on b. */
+  async function openGallery() {
+    let n = 0
+    vi.mocked(URL.createObjectURL).mockImplementation(() => `blob:${++n}`)
+    vi.mocked(listMediaPages).mockResolvedValue(page([item('a'), item('b'), item('c')]))
+    const ctx = setup()
+    await flushPromises()
+    ctx.vm.wantThumbs('gallery', ['a', 'b', 'c'])
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 120)) // the thumbnails install together (INSTALL_EVERY_MS)
+    const index = ctx.vm.layoutItems.findIndex((t) => t.id === 'b')
+    ctx.vm.openLightboxAt(index)
+    return ctx
+  }
+  const geometry = (vm: ReturnType<typeof setup>['vm']) => vm.layoutItems.map((t) => [t.id, t.aspectRatio])
+
+  it('turns its tile to the placeholder at once, revokes its thumbnail URL, reads it no more, and keeps every tile in place', async () => {
+    const { vm } = await openGallery()
+    const shown = vm.thumbs.get('b')
+    expect(shown).toMatch(/^blob:/)
+    const before = geometry(vm)
+    vi.mocked(openGrid).mockClear()
+
+    vi.mocked(listMediaPages).mockResolvedValue(page([{ ...item('b'), blocked: true }]))
+    await vm.pollMedia()
+
+    const tile = vm.layoutItems.find((t) => t.id === 'b')
+    expect(tile?.kind === 'media' && tile.media.blocked, 'the tile shows "Blocked by the operator"').toBe(true)
+    expect(vm.thumbs.has('b'), 'its decrypted thumbnail is gone from the URL cache').toBe(false)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(shown)
+    expect(vm.thumbs.get('a')).toMatch(/^blob:/) // the rest of the grid keeps its thumbnails
+    expect(geometry(vm), 'no tile moves: the windowed grid keeps its scroll anchor').toEqual(before)
+    // the open lightbox holds the same item: it shows the placeholder too (MediaLightbox revokes its preview)
+    expect(vm.lightboxItems[vm.lightboxIndex!].mediaId).toBe('b')
+    expect(vm.lightboxItems[vm.lightboxIndex!].blocked).toBe(true)
+
+    vm.wantThumbs('gallery', ['a', 'b', 'c']) // the grid re-announces its window
+    await flushPromises()
+    expect(vi.mocked(openGrid).mock.calls.map(([, , m]) => m.mediaId), 'a blocked medium is not read (451)').not.toContain('b')
+  })
+
+  it('a lift restores the tile through the thumbnail pipeline', async () => {
+    const { vm } = await openGallery()
+    vi.mocked(listMediaPages).mockResolvedValue(page([{ ...item('b'), blocked: true }]))
+    await vm.pollMedia()
+    vi.mocked(openGrid).mockClear()
+
+    vi.mocked(listMediaPages).mockResolvedValue(page([item('b')])) // lifted: blockedByOperator false again
+    await vm.pollMedia()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 120))
+
+    expect(vm.items.find((m) => m.mediaId === 'b')?.blocked).toBeFalsy()
+    expect(vm.lightboxItems[vm.lightboxIndex!].blocked).toBeFalsy()
+    expect(vi.mocked(openGrid).mock.calls.map(([, , m]) => m.mediaId)).toEqual(['b'])
+    expect(vm.thumbs.get('b')).toMatch(/^blob:/)
+  })
+
+  it('a medium a poll adds gets its thumbnail once the grid wants it', async () => {
+    const { vm } = await openGallery()
+    vi.mocked(openGrid).mockClear()
+    vi.mocked(listMediaPages).mockResolvedValue(page([item('d')]))
+    await vm.pollMedia()
+    vm.wantThumbs('gallery', ['a', 'b', 'c', 'd'])
+    await flushPromises()
+    expect(vi.mocked(openGrid).mock.calls.map(([, , m]) => m.mediaId)).toEqual(['d'])
+  })
+})
+
 /** A generated-client refusal: the `ResponseError` shape `decodeHttpError` reads (`.response` with a JSON `code`). */
 const refusal = (status: number, code: string) =>
   Object.assign(new Error(code), { response: new Response(JSON.stringify({ code }), { status, headers: { 'content-type': 'application/json' } }) })

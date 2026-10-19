@@ -28,10 +28,12 @@ const config = {
   // NEXT line changes that verdict (emergencyKit.ts's `if (!m)` stayed "Survived" after `m[1]` moved out of the
   // try). Judge a local fix with `--force`, not with the incremental rerun.
   incremental: true,
-  // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-19, the
-  // identity-pin store's id, set digest and fingerprint digits joined v1.ts): 999 mutants, 995 killed, 4 timed out (the
-  // fingerprint's loop counters turned into endless loops; two static report.ts mutants at a load average above 30, read
-  // as unproven below), 0 survived, 0 without coverage — 100.00 % on every file. Its first run had 3 survivors, all in a
+  // break: the gate goes red below this, and here it is 100 — no margin. Measured with `--force` (2026-10-19, a
+  // statement's facts sealed once and their key wrapped per member, on top of the identity-pin store's id, set digest and
+  // fingerprint digits in v1.ts): 1,020 mutants, 1,012 killed, 2 timed out (the fingerprint's loop counters turned into
+  // endless loops), 0 survived, 0 without coverage, 6 ignored — 100.00 % on every file. The identity-pin run had 4
+  // timeouts, two of them static report.ts mutants at a load average above 30 (read as unproven below); at the same
+  // load this run killed both. The identity-pin store's first run had 3 survivors, all in a
   // byte compare that tolerated ids of two lengths: the ids are checked to be 32 bytes BEFORE the sort now, so the
   // compare runs over a fixed 32 and a test orders two ids that differ only in their last byte. report.ts's first run had
   // 9 survivors: the refusal's message and name (asserted through `toThrow(new ReportInvalid(…))`, which builds the same

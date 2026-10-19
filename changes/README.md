@@ -1784,7 +1784,7 @@ edit, the phase and the surface each of its effects lands in.
 amended the day it was answered — no in-browser transcoder, the banner plays the copied original — and the paragraph
 that recorded it rewrote the phases but not the invariant above them: *"the server learns … never which medium"*. A
 transcoded copy had bought that; the original re-sealed as it is has the original's exact byte size, so the claim was
-false the moment the amendment landed, and the implementer found it while writing the upload (inbox #502). The same
+false the moment the amendment landed, and the implementer found it while writing the upload (inbox #505). The same
 hides in a re-derive: an image derived with an existing tier's own spec in the browser that made that tier reproduces
 its bytes. So an amendment names, beside the steps it reverses, each property in the CR's `invariants:` and the ADR's
 *What the server sees* that the replaced mechanism carried, and says whether it still holds and by what.

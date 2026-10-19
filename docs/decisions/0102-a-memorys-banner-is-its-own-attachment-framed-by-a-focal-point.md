@@ -181,7 +181,7 @@ Published for readers outside the project in [What the server sees](../../site/s
   medium's preview, re-sealed: the preview's size); an image banner made in the browser that uploaded the medium is
   derived with the preview tier's own spec, so its size can equal that preview's. An operator who compares sizes can name
   the medium. Accepted until the small copy (decision 4) replaces the video's bytes; whether the copy should also be
-  padded, or the image derived with a spec of its own, is open (inbox #502).
+  padded, or the image derived with a spec of its own, is open (inbox #505).
 - That the node's meta changed and who wrote it last (`meta_editor_*`) — not that the banner was the part that changed.
 - When it plays: ADR 0047's per-chunk fetch pattern, as for any played video.
 - When a gallery medium is chosen: one download of its original (an image's, or a video's read by frame while it is

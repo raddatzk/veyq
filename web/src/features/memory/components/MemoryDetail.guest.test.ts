@@ -10,7 +10,9 @@
 // (rename, delete the Memory, the pin, share, the cover, date and place, buckets, marks, the media trash, the contributions
 // tab), and what each role may do is there: READ — the gallery, the chapters to navigate into, the lightbox's download;
 // READ_WRITE — besides, the upload (into the chapter on screen, under that chapter's key) and the delete of its own media
-// (asked first, then purged). A chapter opens through the tree's `linkTo`, the `#k=` fragment kept.
+// (asked first, then purged). A chapter opens through the tree's `linkTo`, the `#k=` fragment kept. And the gallery polls as
+// a member's does (inbox #497): a second uploader's photo appears without a reload, one gone from the link drops, and an
+// idle poll — a `304` on the listing's tag — changes nothing.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -40,6 +42,8 @@ vi.mock('../../../core/favorites/favoritesStore', async (orig) => ({ ...(await o
 vi.mock('../itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
 // The guest's upload is recorded at the share helper (its wire is `source.wire.test.ts`'s).
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), addSharePhoto: vi.fn() }))
+// The live poll's loop is held here so a test runs its tick by hand (the loop itself is `shared/state/livePoller.ts`'s).
+vi.mock('../mediaRevisionPolling', () => ({ startMediaRevisionPolling: vi.fn(), stopMediaRevisionPolling: vi.fn() }))
 
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
@@ -58,6 +62,9 @@ import { addSharePhoto } from '../share'
 import { isFavorite } from '../../../core/favorites/favoritesStore'
 import { loadItemFavoritesFor } from '../itemFavoritesStore'
 import { rememberOwnShareMedia } from '../ownShareMedia'
+import { startMediaRevisionPolling } from '../mediaRevisionPolling'
+import { apiResponse } from '../../../test/apiResponse'
+import { httpError } from '../../../test/httpError'
 import { clearUploads } from '../uploadQueue'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
@@ -111,8 +118,10 @@ beforeEach(async () => {
   memberReads.length = 0
   vi.clearAllMocks()
   setViewMode('grid')
+  const listing = { media: [row('m-1', MEMORY), row('m-own', MEMORY), row('c-1', CHAPTER)], identities: [], more: false }
   stubApi(publicShareMediaApi, {
-    listShareMedia: { media: [row('m-1', MEMORY), row('m-own', MEMORY), row('c-1', CHAPTER)], identities: [], more: false },
+    listShareMedia: listing,
+    listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }),
     deleteShareMedia: undefined,
   })
   // A tier read (the lightbox's preview) is refused: the stage shows its error, the download stays.
@@ -182,6 +191,54 @@ function click(el: Element) {
 }
 
 describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () => {
+  it("READ: the gallery polls the link's listing on its tag — an idle poll changes nothing, a change shows without a reload", async () => {
+    const w = await mountPage(ShareRole.Read)
+    const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
+    const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+    const asked = () => raw.mock.calls.at(-1)![0]
+
+    raw.mockRejectedValueOnce(httpError(304))
+    await tick(new AbortController().signal)
+    await flushPromises()
+    expect(asked(), "the tag of what is shown, for the node on screen").toMatchObject({ nodeId: MEMORY, ifNoneMatch: '"t1"' })
+    expect(tiles(w), 'a 304 changes nothing').toEqual(['m-1', 'm-own'])
+
+    // A second uploader's photo arrives and one leaves the link: the whole listing, under a new tag.
+    raw.mockResolvedValueOnce(apiResponse({ media: [row('m-1', MEMORY), row('m-new', MEMORY), row('c-1', CHAPTER)], identities: [], more: false }, { ETag: '"t2"' }))
+    await tick(new AbortController().signal)
+    await flushPromises()
+    expect(tiles(w)).toEqual(['m-1', 'm-new'])
+
+    raw.mockRejectedValueOnce(httpError(304))
+    await tick(new AbortController().signal)
+    expect(asked().ifNoneMatch, 'the next poll echoes the tag the change named').toBe('"t2"')
+    expectGuestOnly(w)
+    w.unmount()
+  })
+
+  // uc.moderation.take-a-measure: a guest sees a block as a member does - the tile turns to the placeholder on the poll that
+  // carries it, and back on the one that carries its lift (the thumbnail's revoke is useMediaGalleryLive.test.ts's).
+  it('READ: a medium blocked while the gallery is open turns to the placeholder without a reload, and back on its lift', async () => {
+    const w = await mountPage(ShareRole.Read)
+    const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
+    const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+    const blocked = () => w.find('[data-media-id="m-1"] .media-tile-blocked')
+
+    raw.mockResolvedValueOnce(apiResponse({ media: [{ ...row('m-1', MEMORY), blockedByOperator: true }, row('m-own', MEMORY)], identities: [], more: false }, { ETag: '"t2"' }))
+    await tick(new AbortController().signal)
+    await flushPromises()
+    expect(blocked().exists(), 'the blocked tile').toBe(true)
+    expect(blocked().text()).toBe(t('node.blockedByOperator'))
+    expect(w.find('[data-media-id="m-own"] .media-tile-blocked').exists()).toBe(false)
+    expect(tiles(w), 'the tile keeps its place').toEqual(['m-1', 'm-own'])
+
+    raw.mockResolvedValueOnce(apiResponse({ media: [row('m-1', MEMORY), row('m-own', MEMORY)], identities: [], more: false }, { ETag: '"t3"' }))
+    await tick(new AbortController().signal)
+    await flushPromises()
+    expect(blocked().exists(), 'lifted').toBe(false)
+    w.unmount()
+  })
+
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
     it(`${role}: the gallery of the node on screen, its chapters, and nothing of a member's`, async () => {
       const w = await mountPage(role)
