@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.RequestClient
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
@@ -39,12 +40,13 @@ class ShareMediaResource(
             "unbounded BY DECISION, not by omission: neither available axis fits, and the residual gap is recorded in " +
             "cc.security.rate-limit (§ Unbounded by decision) rather than left silent.",
     )
-    override fun listShareMedia(shareId: String, xSharePassword: String?): Response =
-        when (val o = handler.list(shareId, xSharePassword)) {
+    override fun listShareMedia(shareId: String, xSharePassword: String?, nodeId: UUID?, after: UUID?, limit: Int?): Response =
+        when (val o = handler.list(shareId, xSharePassword, nodeId?.toString(), after?.toString(), ItemsPage.limitOf(limit))) {
             is ShareMediaListOutcome.Listed -> Response.ok(
                 ShareMediaListing(
                     media = o.media.map { toShareMedia(it, it.row.mediaId in o.blocked) },
                     identities = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
+                    more = o.more,
                 ),
             ).build()
             is HttpFailure -> httpError(o)

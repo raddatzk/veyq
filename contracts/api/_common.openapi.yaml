@@ -45,10 +45,11 @@ components:
       in: query
       required: false
       description: >
-        The client's keyset cursor `updatedAt,id` (an RFC3339 timestamp, a `,`, then the item uuid). On a `200` the
-        server returns only items strictly past it (`updatedAt > ts`, id as the tie-break). Omitted on first load
-        => the list from its beginning; a later page of the same load sends the last item of the page before.
-      schema: { type: string, maxLength: 80, example: "2026-07-09T12:34:56.789Z,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
+        The client's keyset cursor: the `cursor` the last page it holds answered, echoed verbatim (opaque to the
+        client; the server's position of that page's last item, then its id). On a `200` the server returns only items
+        strictly past it, in the order the items' changes committed. Omitted on first load => the list from its
+        beginning; a later page of the same load, and every poll, send the last page's `cursor`.
+      schema: { type: string, maxLength: 80, example: "17,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
     ItemsSinceDelete:
       name: sinceDelete
       in: query

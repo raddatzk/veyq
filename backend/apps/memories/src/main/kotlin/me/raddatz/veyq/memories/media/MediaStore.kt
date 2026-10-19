@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.items.ItemsCursor
+import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
@@ -154,7 +155,7 @@ class MediaStore(
         val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val originalBlobId = blobs.persistBlob(original, originalManifest)
         val now = Instant.now()
-        MediaEntity().apply {
+        val medium = MediaEntity().apply {
             id = mediaId
             this.scopeId = scopeId
             this.nodeId = nodeId
@@ -168,8 +169,8 @@ class MediaStore(
             this.shareIdentityId = shareIdentityId
             this.createdBy = ownerKey // cr-0113: the buckets attribution (denormalized owner_key)
             this.bucketId = bucket.id // cr-0113: the uploader's primary; a move files it elsewhere
-            updatedAt = now // cr-0107: the keyset cursor starts at the attach time
-        }.persist()
+            updatedAt = now // cr-0107: the attach time (the served `updatedAt`); the list order is `position`, below
+        }.also { it.persist() }
         for (d in derivatives) {
             val derivBlobId = blobs.persistBlob(d.session, d.manifest)
             MediaDerivativeEntity().apply {
@@ -179,26 +180,39 @@ class MediaStore(
                 blobId = derivBlobId
             }.persist()
         }
-        items.bump(scopeId, nodeId) // cr-0107: an add moves the node's item revision (the live-updates change signal), not its delete revision
+        // cr-0107: an add moves the node's item revision (the live-updates change signal), not its delete revision — and
+        // the revision it moved to is the new medium's place at the list's end (ADR 0033 decision 3, [MediaEntity.position]).
+        medium.position = items.bump(scopeId, nodeId)
         attached(mediaId)
         return originalBlobId to mediaId
     }
 
     /**
-     * The node's media as a **keyset delta** past [since] (cr-0107, ADR 0033): rows whose `updated_at` is strictly
-     * greater than the cursor (id as the tie-break), oldest-first so the client advances its cursor to the last
-     * row. [since] = null ⇒ the full list (first load). Ordered by `(updated_at, id)`, the cursor's sort key.
+     * One page of the node's live media as a **keyset delta** past [since] (cr-0107, ADR 0033 decisions 3 and 6): at most
+     * [limit] rows whose position ([MediaEntity.position]) is past the cursor's (id as the tie-break), in the order their
+     * changes committed, so the client's next page — or next poll — continues from the last row and nothing lands behind
+     * it. [since] = null ⇒ from the beginning (a first load).
      */
-    fun listNodeMediaSince(scopeId: String, nodeId: String, since: ItemsCursor?): List<MediaRow> {
-        val media = if (since == null) {
-            MediaEntity.find("scopeId = ?1 and nodeId = ?2 and deletedAt is null order by updatedAt, id", scopeId, nodeId).list()
+    fun listNodeMediaSince(scopeId: String, nodeId: String, since: ItemsCursor?, limit: Int): ItemsPage<MediaRow> =
+        keysetPage(scopeId, nodeId, live = true, since, limit)
+
+    /**
+     * One keyset page of the node's live ([live]) or trashed media: `limit + 1` rows read in cursor order (the extra one
+     * only says more remain), mapped with a constant number of queries ([toRows]).
+     */
+    private fun keysetPage(scopeId: String, nodeId: String, live: Boolean, since: ItemsCursor?, limit: Int): ItemsPage<MediaRow> {
+        val state = if (live) "deletedAt is null" else "deletedAt is not null"
+        val query = if (since == null) {
+            MediaEntity.find("scopeId = ?1 and nodeId = ?2 and $state order by position, id", scopeId, nodeId)
         } else {
             MediaEntity.find(
-                "scopeId = ?1 and nodeId = ?2 and deletedAt is null and (updatedAt > ?3 or (updatedAt = ?3 and id > ?4)) order by updatedAt, id",
-                scopeId, nodeId, since.updatedAt, since.id,
-            ).list()
+                "scopeId = ?1 and nodeId = ?2 and $state and (position > ?3 or (position = ?3 and id > ?4)) order by position, id",
+                scopeId, nodeId, since.position.toInt(), since.id,
+            )
         }
-        return media.mapNotNull(::toRow)
+        val page = ItemsPage.of(query.range(0, limit).list(), limit) // range is inclusive: limit + 1 rows
+        // The cursor is the last row READ, not the last mapped: a row dropped for a missing blob is still passed.
+        return ItemsPage(toRows(page.items), page.more, page.items.lastOrNull()?.let { ItemsCursor(it.position.toLong(), it.id) })
     }
 
     /**
@@ -244,14 +258,17 @@ class MediaStore(
             Instant.now(), mediaId, scopeId,
         ) == 1
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
-        if (restored) items.bump(scopeId, media.nodeId)
+        if (restored) placeAt(mediaId, items.bump(scopeId, media.nodeId)) // back at the list's end: the bump's revision
         return media.nodeId // restored now, or already live — idempotent
     }
 
-    /** The node's TRASHED media, newest-trashed first (cr-0110) — the Trash tab list (rows carry deletedAt/deletedBy). */
-    fun listNodeTrashed(scopeId: String, nodeId: String): List<MediaRow> =
-        MediaEntity.find("scopeId = ?1 and nodeId = ?2 and deletedAt is not null order by deletedAt desc, id", scopeId, nodeId)
-            .list().mapNotNull(::toRow)
+    /**
+     * One page of the node's TRASHED media (cr-0110) — the Trash tab list (rows carry deletedAt/deletedBy) — on the live
+     * list's keyset, so one cursor and one limit serve both states of `listNodeMedia`. The client orders the Trash tab
+     * by `deletedAt` once it holds every page; a trash during the paging is in the next open of the tab (not live).
+     */
+    fun listNodeTrashed(scopeId: String, nodeId: String, since: ItemsCursor?, limit: Int): ItemsPage<MediaRow> =
+        keysetPage(scopeId, nodeId, live = false, since, limit)
 
     /**
      * Hard-delete one media's rows in FK order (derivative → media → blob) and put their store objects on the
@@ -310,21 +327,33 @@ class MediaStore(
         return expired.size
     }
 
-    /** Map a media entity to its read-back row, resolving the original + derivative blobs; null when the original blob is missing. */
-    private fun toRow(m: MediaEntity): MediaRow? {
-        val blob = BlobEntity.findById(m.blobId) ?: return null
-        val derivatives = MediaDerivativeEntity.find("mediaId = ?1", m.id).list().mapNotNull { d ->
-            val derivBlob = BlobEntity.findById(d.blobId) ?: return@mapNotNull null
-            DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest), derivBlob.wrappedBlobMeta)
+    /**
+     * Map a page of media entities to their read-back rows, in their order: the derivatives of the whole page in one
+     * query, and every blob they and the originals name in one more — a constant number of queries per page, whatever
+     * its size (cr-gallery-list-paging; one query per photo and one per derivative cost 40,017 SELECTs for 10,000
+     * photos, `MediaListQueryCountSliceTest`). A medium whose original blob is missing is dropped, a derivative whose
+     * blob is missing left out, as the per-row mapping did.
+     */
+    private fun toRows(media: List<MediaEntity>): List<MediaRow> {
+        if (media.isEmpty()) return emptyList()
+        val derivatives = MediaDerivativeEntity.list("mediaId in ?1", media.map { it.id }).groupBy { it.mediaId }
+        val blobIds = media.map { it.blobId } + derivatives.values.flatten().map { it.blobId }
+        val blobRows = BlobEntity.list("id in ?1", blobIds.distinct()).associateBy { it.id }
+        return media.mapNotNull { m ->
+            val blob = blobRows[m.blobId] ?: return@mapNotNull null
+            val tiers = derivatives[m.id].orEmpty().mapNotNull { d ->
+                val derivBlob = blobRows[d.blobId] ?: return@mapNotNull null
+                DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest), derivBlob.wrappedBlobMeta)
+            }
+            MediaRow(
+                m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, blobs.decodeManifest(blob.manifest),
+                tiers, m.wrappedMeta, m.updatedAt,
+                m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
+                m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
+                m.metaRevision,
+                wrappedBlobMeta = blob.wrappedBlobMeta,
+            )
         }
-        return MediaRow(
-            m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, blobs.decodeManifest(blob.manifest),
-            derivatives, m.wrappedMeta, m.updatedAt,
-            m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
-            m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
-            m.metaRevision,
-            wrappedBlobMeta = blob.wrappedBlobMeta,
-        )
     }
 
     /** The media, if it exists in this scope — carries the lazy `wrappedExif` for the lightbox exif endpoint. */
@@ -363,8 +392,18 @@ class MediaStore(
         }
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return SetMetaResult.Missing
         if (rows == 0) return SetMetaResult.Stale(media.wrappedMeta, media.metaRevision)
-        items.bump(scopeId, media.nodeId) // a meta edit moves the item revision, not the delete revision
+        placeAt(mediaId, items.bump(scopeId, media.nodeId)) // a meta edit moves the item revision, not the delete revision
         return SetMetaResult.Written(media.wrappedMeta)
+    }
+
+    /**
+     * Put [mediaId] at its list's end: [position] is the revision the writer's `items.bump` just wrote, stamped in the same
+     * transaction while the bump's row lock is held — so a client that already passed that place cannot see the medium
+     * land behind it (ADR 0033 decision 3). For a writer whose row this transaction already changed (and locked) by a
+     * guarded UPDATE; an attach stamps its new entity itself.
+     */
+    private fun placeAt(mediaId: String, position: Int) {
+        MediaEntity.update("position = ?1 where id = ?2", position, mediaId)
     }
 
     // --- buckets (en.memory.buckets, ADR 0034, cr-0113) ----------------------
@@ -404,18 +443,26 @@ class MediaStore(
     }
 
     /**
-     * The live media under a share's live subtree ([liveNodeIds], core's view gate already filtered them by its
-     * own `deletedAt is null`) — what `listShareMedia` serves a guest.
+     * One page of the live media under [nodeIds] — a share's live subtree, or the one node of it a guest has open (core's
+     * view gate already filtered them by its own `deletedAt is null`) — what `listShareMedia` serves a guest: at most
+     * [limit] media past [after] in **id** order. Not the member list's `(updated_at, id)`: a guest is told no time of
+     * the Memory's activity (ADR 0081 decision 4), and the id is the one key it already holds.
      */
-    fun listShareMedia(scopeId: String, liveNodeIds: List<String>): List<ShareMediaRow> {
-        if (liveNodeIds.isEmpty()) return emptyList() // the shared root itself is trashed: nothing to list
+    fun listShareMedia(scopeId: String, nodeIds: List<String>, after: String?, limit: Int): ItemsPage<ShareMediaRow> {
+        if (nodeIds.isEmpty()) return ItemsPage(emptyList(), false) // the shared root itself is trashed: nothing to list
         // `deletedAt is null` — a trashed medium (uc.memory.delete-media, cr-0110) is a soft delete, so without this
         // predicate the guest listing keeps serving it for the whole retention window. Its sibling,
         // `MediaSharedSubtreeContributor.authorizedBlobIds`, authorizes the blob GET and carries the predicate
         // SEPARATELY on purpose: one covering for the other is how a later change reopens the hole silently
         // (`ShareTrashedMediaSliceTest` bites each on its own).
-        return MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, liveNodeIds).list()
-            .mapNotNull { m -> toRow(m)?.let { ShareMediaRow(m.nodeId, m.shareIdentityId, it) } }
+        val query = if (after == null) {
+            MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null order by id", scopeId, nodeIds)
+        } else {
+            MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null and id > ?3 order by id", scopeId, nodeIds, after)
+        }
+        val page = ItemsPage.of(query.range(0, limit).list(), limit) // range is inclusive: limit + 1 rows
+        val byId = page.items.associateBy { it.id }
+        return ItemsPage(toRows(page.items).map { r -> byId.getValue(r.mediaId).let { m -> ShareMediaRow(m.nodeId, m.shareIdentityId, r) } }, page.more)
     }
 
     /** A primary's sealed name: for a contributor (`share:{id}`) copy the identity's sealed name; else null (member → username). */

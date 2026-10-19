@@ -1,6 +1,6 @@
 # ADR 0033 — Live item lists: a per-node revision counter + conditional GET + keyset delta, short-polled
 
-- Status: Accepted; decision 6 (the first load in pages) Proposed 2026-10-19 with `cr-gallery-list-paging`
+- Status: Accepted (decision 6, the list in pages, and decision 3's keyset on a position: 2026-10-19, `cr-gallery-list-paging`)
 - Date: 2026-07-09
 
 ## Context
@@ -50,12 +50,20 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    case. Changed ⇒ `200` with the delta below. One endpoint covers both #48 sub-ideas (skip-when-unchanged +
    fetch-on-change).
 
-3. **On change, a keyset delta — never a full re-list.** The client sends its cursor `(updatedAt, id)`; the
-   server returns **only media with `updated_at > cursor`** (tie-broken by id). This requires a new
-   `veyq_media.updated_at` (set to the attach time at attach, bumped on meta edit; since inbox #398 the
-   medium's only creation time — no separate `created_at` is stored). So an **active upload streams the
-   handful of new items each poll**, not the whole gallery every interval — the failure mode a full-re-list-on-
-   change would have. The client upserts the delta by `mediaId` and advances the cursor.
+3. **On change, a keyset delta — never a full re-list.** The client sends its cursor `(position, id)`; the
+   server returns **only media past it** (tie-broken by id). A medium's **position** is the node's item revision its
+   last change bumped to: `bump` returns it, and the writer stamps it on the row (`veyq_media.item_position`) in the same
+   transaction, while the revision row's lock — which the bump holds to the commit — is still held. So positions become
+   visible in the order they were handed out, and a client that has passed one never sees a row land behind it. A
+   **timestamp cannot promise that**, and the keyset was one until 2026-10-19: `updated_at`, stamped before the revision
+   lock, let a writer that took its stamp first and committed last land behind a cursor a poll in between had already
+   passed — its change was never delivered (`MediaKeysetRaceSliceTest`, red on `updated_at` on H2, green on the position;
+   a millisecond tie broke the same way). Every writer that moves a medium to the end of the list stamps it — an attach,
+   a meta edit, a restore, a block or its lift; a move between buckets and a reparent bump the revision without moving
+   the row. `updated_at` stays the medium's change time (set at attach, bumped on the same writes; since inbox #398 its
+   only creation time) and is served as such. So an **active upload streams the handful of new items each poll**, not the
+   whole gallery every interval — the failure mode a full-re-list-on-change would have. The client upserts the delta by
+   `mediaId` and continues from the `cursor` the server answered: opaque to it, never assembled from a row's fields.
 
 4. **Delete-reconcile via the current id-set, gated by a second counter.** A keyset delta is add/edit-only — it
    cannot express a removal. So a `200` **may** also carry the node's **current `mediaId` set** (ids only); the
@@ -80,18 +88,28 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    Memory closes; a poll still in flight then writes nothing, and a tick never overlaps the previous one. With the delta, even an active upload is cheap per poll. A few seconds of latency is fine for a photo
    grid; **long-poll / a push channel** (sub-second, shared later with #6 live journal) is a deferred upgrade.
 
-6. **The first load is the same keyset, in pages** (proposed 2026-10-19 by `cr-gallery-list-paging`, not built; today
-   the first load is one unbounded answer). A list read without `since` is not special: it is a delta from the
-   beginning. Every read takes a `limit` (the server caps it, and the response's `media` carries that cap as its
-   `maxItems`) and answers `more` when rows remain past the page; the client asks again with the last row's cursor
-   until `more` is false. **The revisions a client keeps are the first page's.** The server reads them before the rows
-   (as ADR 0081 decision 3 orders it), so a change committed while the client pages moves the revision past the one it
-   kept, and its next poll pulls that change as a delta; an edit to a row already paged moves the row to the end, where
-   it is delivered again and upserted; a delete moves `delete_revision` past the kept one, so the next poll carries the id
-   set. Paging bounds one answer's size and the server's memory for it. It does not give the client its first screen:
-   the gallery's order is the sealed capture time, which only the device reads, so the page order (`updated_at`, `id`)
-   is not the display order and the client needs every page before the order is final. The share listing
-   (`listShareMedia`) is paged by the same rule.
+6. **The first load is the same keyset, in pages.** A list read without `since` is not special: it is a delta from the
+   beginning. Every read takes a `limit` (1–1000, absent = 1000; the response's `media` carries the cap as its
+   `maxItems`) and answers `more` when rows remain past the page, and the page's `cursor`; the client asks again with that
+   cursor, and without `If-None-Match`, until `more` is false. A poll whose delta is longer than a page pages the same
+   way. **The revisions a client keeps are the first page's, the cursor the last page's.** The server reads the
+   revisions before the rows (as ADR 0081 decision 3 orders it), so a change committed while the client pages moves the
+   revision past the one it kept, and its next poll pulls that change as a delta; an edit to a row already paged moves
+   the row to the end, where it is delivered again and upserted; a delete moves `delete_revision` past the kept one, so
+   the next poll carries the id set (`MediaListPagingSliceTest`, red when the client keeps the last page's revisions).
+   Each page is read with the same number of queries whatever it holds — its originals, their derivatives and every blob
+   they name, one query each (`MediaListQueryCountSliceTest`; one query per photo and per derivative cost 40,017 SELECTs
+   for 10,000 photos). Paging bounds one answer's size and the server's memory for it. It does not give the client its
+   first screen: the gallery's order is the sealed capture time, which only the device reads, so the page order is not
+   the display order and the client needs every page before the order is final
+   ([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md) decision 4). The
+   Trash tab's listing (`state=trashed`) pages on the same keyset, its order by `deletedAt` the client's once it holds
+   every page. **A guest's listing (`listShareMedia`) pages by the same rule on another key: the media id**, continued
+   `after` the last id it was given, and it lists the one node a guest has open (`nodeId`) rather than the whole shared
+   subtree. A position is the order of the Memory's changes, and a guest is told no time of the Memory's activity (ADR
+   0081 decision 4; it is served no `updatedAt` either), so its key is the one it already holds. Without a live poll for
+   guests (the guest live-poll inbox row) nothing depends on a guest's page order matching commit order: a medium added while a guest pages is
+   in its next load.
 
 How the server computes one `listNodeMedia` poll response (core's `NodeItemsRevisions.read` decides it) — the **O(1) revision compare short-circuits the idle
 case** (no media query at all), and only a genuine change runs the two queries (keyset delta + current id-set):
@@ -106,7 +124,7 @@ flowchart TB
   ETAG["etag := tag(revision)"]
   Q1{"client's If-None-Match == etag?"}
   R304["respond 304 Not Modified"]
-  DELTA["delta := media rows WHERE updated_at > client cursor<br>(keyset scan, id as tie-break)"]
+  DELTA["delta := one page of media rows past the client cursor (position, id)<br>(keyset range, at most limit rows, more if any remain)"]
   Q2{"client delete_revision < node delete_revision?"}
   IDSET["idSet := every mediaId of this node<br>(ids only)"]
   R200A["respond 200 → delta + idSet + both revisions"]
@@ -159,7 +177,8 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   Memories' `veyq_media_revision` from inbox #341 to #410; core's `veyq_node_items_revision` now, with a foreign key
   onto `veyq_node` that does not cascade — the node-subtree eraser at phase 300 and the scope's node eraser delete the
   row before the node goes), an `updated_at
-  TIMESTAMP` on `veyq_media` (backfilled `= created_at` then; `NOT NULL` and the only creation time since inbox #398); `listNodeMedia` gains a conditional GET (`If-None-Match`
+  TIMESTAMP` on `veyq_media` (backfilled `= created_at` then; `NOT NULL` and the only creation time since inbox #398), and
+  the keyset's `item_position INT` on `veyq_media` with the index `(node_id, item_position, id)` (decision 3, 6); `listNodeMedia` gains a conditional GET (`If-None-Match`
   → `304`), a `since` cursor (keyset delta), and the current-id-set on a `200` **only when the client's
   `delete_revision` lags** (a delete occurred). All opaque/operational — no key, no plaintext.
 - **Scope: own-node list only.** The gallery lists the open node's own media (chapters open to their own
