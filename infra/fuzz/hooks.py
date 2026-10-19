@@ -20,6 +20,21 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
 - **`refusal_echoes_nothing`** — no 4xx body carries a path, query or header value the request sent (six characters or
   more): the refused value is often ciphertext or an opaque id, and the operator-blind boundary applies to errors too
   (developer styleguide §7; `MalformedRequestSliceTest.assertRefused` holds the same rule for its cases).
+- **`peer_is_refused`** — the second identity (ADR 0091 decision 9, inbox #495): every positive request the OWNER made
+  in its own scope (a group only it is a member of) and the server accepted (2xx) is sent again as the PEER — a member
+  of the same tenant, of none of the owner's scopes (`web/scripts/fuzz-seed.mts`) — and must be answered exactly as
+  the same request against a scope nobody has: the same `404` and the same `code` (the membership boundary is the
+  first guard, so a non-member and a bogus id are indistinguishable — `cc.security.authorization` § 2, ADR 0042), or,
+  where the operation answers a bogus scope with a success (declining an invitation nobody sent is a no-op), the same
+  success with the same body. Where the path also names one of the owner's objects (its Memory, medium, bucket, blob),
+  the request is sent a second time as the peer IN ITS OWN SCOPE, still naming the owner's object, and must be answered
+  as the same request naming an object nobody has — the object-level half (an id from another scope is not found, not
+  forbidden). Writes are replayed as well as reads: a write the peer is wrongly let through is the finding, and it
+  changes only the throwaway instance. Shares and tenant-level paths are out of its reach on purpose: a share id is a
+  capability its holder may use, and the peer is a member of the tenant. The peer's token and the ids reach it by the
+  environment (`VEYQ_FUZZ_PEER_TOKEN` by name; `VEYQ_FUZZ_IDS`, a path to the run's non-secret ids); without them it
+  checks nothing. Bitten 2026-10-19 by hand: the owner's token in the peer's place reds the scope half, and with the
+  scope half switched off and the owner's scope as the peer's own, the object half reds too.
 
 This file runs inside the pinned Schemathesis image (its Python), and is still written in the syntax of the host's
 Python 3.9 (`from __future__ import annotations`), because the repository's tooling reads every tracked `*.py` with it.
@@ -33,6 +48,7 @@ import sys
 
 import schemathesis
 from schemathesis.core.parameters import ParameterLocation
+from schemathesis.specs.openapi._auth_retry import clone_case, send_probe
 from schemathesis.specs.openapi.checks import negative_data_rejection
 
 # TraceCov — the proprietary coverage plugin the official Schemathesis image loads on every run — is not in our image
@@ -160,3 +176,86 @@ def refusal_echoes_nothing(ctx, response, case):
                 "a refusal echoes nothing it was sent (developer styleguide §7)"
             )
     return None
+
+
+# --- the second identity -----------------------------------------------------------------------------------------
+
+# An id nobody has: the reference a refusal to the peer is compared with. Fixed, so a run re-sends the same requests.
+NOBODY = "00000000-0000-4000-8000-00000000f022"
+# The owner's objects a path may name below its scope (the seeder's `ids`): the object-level half's targets.
+OWNER_OBJECTS = ("nodeId", "mediaId", "bucketId", "blobId")
+
+
+def _ids() -> dict:
+    path = os.environ.get("VEYQ_FUZZ_IDS")
+    if not path or not os.environ.get("VEYQ_FUZZ_PEER_TOKEN"):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+IDS = _ids()
+
+
+def _code(response: object) -> object:
+    try:
+        body = json.loads(response.content or b"null")  # type: ignore[attr-defined]
+    except ValueError:
+        return None
+    return body.get("code") if isinstance(body, dict) else None
+
+
+def _as_peer(ctx: object, case: object, **path: str) -> object:
+    """`case` sent again with the peer's token, and with the given path parameters replaced."""
+    probe = clone_case(case)
+    probe.headers["Authorization"] = f"Bearer {os.environ['VEYQ_FUZZ_PEER_TOKEN']}"  # type: ignore[attr-defined]
+    probe.path_parameters.update(path)  # type: ignore[attr-defined]
+    return send_probe(ctx, case, probe)  # type: ignore[arg-type]
+
+
+def _answered_alike(got: object, reference: object) -> bool:
+    """The same status, and the same `code` for a refusal or the same body for an acceptance: nothing tells them apart."""
+    status = got.status_code  # type: ignore[attr-defined]
+    if status != reference.status_code:  # type: ignore[attr-defined]
+        return False
+    if 200 <= status < 300:
+        return (got.content or b"") == (reference.content or b"")  # type: ignore[attr-defined]
+    return _code(got) == _code(reference)
+
+
+@schemathesis.check
+def peer_is_refused(ctx, response, case):
+    """What the owner may do in its own scope, the peer is refused as if the scope (or the object) did not exist."""
+    meta = case.meta
+    if not IDS or meta is None or not meta.generation.mode.is_positive or not 200 <= response.status_code < 300:
+        return None
+    owner, peer = IDS["owner"], IDS["peer"]
+    path = case.path_parameters or {}
+    if path.get("scopeId") != owner["scopeId"]:
+        return None
+    got = _as_peer(ctx, case)
+    reference = _as_peer(ctx, case, scopeId=NOBODY)
+    if not _answered_alike(got, reference):
+        raise AssertionError(
+            f"The owner's request was accepted ({response.status_code}); sent again by a member of the tenant who is no "
+            f"member of the owner's scope it answered {got.status_code} `{_shown(got)}`, where a scope nobody has "
+            f"answers {reference.status_code} `{_shown(reference)}` — a non-member is refused like a bogus id, with a "
+            "404, or the same no-op where the operation is one (cc.security.authorization § 2)"
+        )
+    named = {name: NOBODY for name in OWNER_OBJECTS if path.get(name) == owner.get(name)}
+    if named:
+        got = _as_peer(ctx, case, scopeId=peer["scopeId"])
+        reference = _as_peer(ctx, case, scopeId=peer["scopeId"], **named)
+        if not _answered_alike(got, reference):
+            raise AssertionError(
+                f"Sent by the peer in its own scope but naming the owner's {', '.join(sorted(named))}, the request "
+                f"answered {got.status_code} `{_shown(got)}`, where the same request naming an object nobody has "
+                f"answers {reference.status_code} `{_shown(reference)}` — an object of another scope is not found here"
+            )
+    return None
+
+
+def _shown(response: object) -> str:
+    """The `code` as the failure message may name it — never a value the response varies by (the baseline signature)."""
+    code = _code(response)
+    return code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,40}", code) else "no ErrorResponse code"

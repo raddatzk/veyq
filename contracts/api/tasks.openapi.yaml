@@ -581,7 +581,7 @@ components:
           type: string
           format: uuid
           description: The pending member's user id.
-          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         targetMembershipId:
           x-veyq-visibility: id
           type: string
