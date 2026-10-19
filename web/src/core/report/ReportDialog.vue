@@ -13,6 +13,7 @@ import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { ReportCategory, type ReportReceipt } from '../../api/generated/moderation'
+import { PRIVACY_ANCHOR, privacyLink } from '../privacy/privacyNotice'
 import {
   MAX_REPORT_ITEMS, REPORT_CATEGORIES, ReportRefused, closeReport, reportRequest, submitReport, type ReportTarget,
 } from './report'
@@ -134,6 +135,9 @@ async function send(): Promise<void> {
         <label for="veyq-report-contact">{{ t('report.contact') }}</label>
         <InputText id="veyq-report-contact" v-model="contact" type="email" autocomplete="email" maxlength="254" :disabled="loading" />
         <span class="veyq-report-hint">{{ t('report.contactHint') }}</span>
+        <!-- GDPR Art. 13 applies here, where a contact is taken: the notice's passage on it, in a tab of its own (a share
+             page's key rides its fragment). -->
+        <a class="veyq-report-privacy" :href="privacyLink(PRIVACY_ANCHOR.reporterContact)" target="_blank" rel="noopener">{{ t('privacyNotice.atReport') }}</a>
       </template>
 
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
@@ -162,6 +166,10 @@ async function send(): Promise<void> {
 .veyq-report-hint {
   font-size: 0.85rem;
   color: var(--app-muted);
+}
+.veyq-report-privacy {
+  font-size: 0.85rem;
+  color: var(--app-accent);
 }
 .veyq-report-good-faith {
   display: flex;

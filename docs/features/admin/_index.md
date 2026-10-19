@@ -92,13 +92,14 @@ handling of reported shares.
   ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
   console notices, and instance mail for the Server Owner only)
 - ★ [Choose the operating mode and publish who runs the instance](use-cases/uc.admin.operator-details.md) —
-  **planned** ([ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+  **built** ([ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   §§ 11 and 14, [ADR 0035](../../decisions/0035-server-terms-of-service.md) decisions 6–7; the mode a preset over
   the register's switches, the contact and the provider identification published, admin-web warning only in the
-  *club, organisation or company* mode)
-- [Read the instance's privacy notice](use-cases/uc.admin.privacy-notice.md) — **planned**
-  (cr-instance-privacy-notice; [ADR 0035](../../decisions/0035-server-terms-of-service.md) decision 8, GDPR Art. 13):
-  fixed text with the instance's values, public on every tenant host.
+  *club, organisation or company* mode; the recipients and the data-protection officer the privacy notice names)
+- [Read the instance's privacy notice](use-cases/uc.admin.privacy-notice.md) — **built**
+  ([ADR 0035](../../decisions/0035-server-terms-of-service.md) decision 8, GDPR Art. 13): fixed text with the
+  instance's values and the switches on for the host's space, public at `/privacy` on every tenant host and linked
+  wherever data is collected; a draft until a qualified legal review.
 - Act on a reported public share — planned, under [Moderation](../moderation/_index.md): who moderates and the key a
   report is sealed to are [uc.moderation.appoint-moderators](../moderation/use-cases/uc.moderation.appoint-moderators.md)
   (the Server Owner's side, on admin-web)

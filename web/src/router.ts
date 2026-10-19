@@ -12,6 +12,7 @@ import SettingsHubView from './views/SettingsHubView.vue'
 import TenantJoinView from './views/TenantJoinView.vue'
 import TermsAcceptView from './views/TermsAcceptView.vue'
 import OperatorTermsView from './views/OperatorTermsView.vue'
+import PrivacyNoticeView from './views/PrivacyNoticeView.vue'
 import MemoryHomeView from './views/MemoryHomeView.vue'
 import GroupInvitationsView from './views/GroupInvitationsView.vue'
 import ShareView from './views/ShareView.vue'
@@ -21,6 +22,7 @@ import ConfirmEmailChangeView from './views/ConfirmEmailChangeView.vue'
 import ModerationView from './views/ModerationView.vue'
 import { MODERATION_PATH } from './app/moderationPath'
 import { OPERATOR_TERMS_PATH } from './core/terms/operatorSection'
+import { PRIVACY_PATH } from './core/privacy/privacyNotice'
 
 // A fresh instance lands on /not-set-up; an already-set-up one on /login. First-run setup is NOT a route here
 // any more — it moved to `admin-web` with the rest of the Server-Owner surface (ADR 0065), which is what lets
@@ -56,6 +58,9 @@ const router = createRouter({
     // The operator section of the terms, public (ADR 0035 decision 6, DSA Art. 14(1)): no session, no gate — what every
     // space's terms carry after their own text, read by anyone. Its record passage is the anchor `#guest-write-record`.
     { path: OPERATOR_TERMS_PATH, name: 'operator-terms', component: OperatorTermsView },
+    // The instance privacy notice, public on every tenant host (ADR 0035 decision 8, GDPR Art. 13 at collection): no
+    // session, no gate, nothing recorded. Each passage is an anchor the places that collect link (`privacyLink`).
+    { path: PRIVACY_PATH, name: 'privacy-notice', component: PrivacyNoticeView },
     // Public anonymous viewer share (uc.sharing.share-public-viewer, cr-0100). No session gate — an account-less
     // visitor opens ONE Memory read-only; the share key rides the #fragment (`/s/{shareId}#k=<K_share>`), resolved
     // + decrypted client-side. `layout: 'plain'` gives the gallery the full viewport (not the narrow public card).

@@ -44,7 +44,7 @@ class OperatorSectionRendererTest {
     fun everyPlaceholderTheFileNamesIsOneTheRendererKnows() {
         for (variant in SectionVariant.entries) {
             val r = render(variant)
-            for (t in listOfNotNull(r.text, r.record, r.objection)) {
+            for (t in listOfNotNull(r.text, r.record)) {
                 assertFalse(Regex("""\{\w+}""").containsMatchIn(t.en + t.de), "an unfilled placeholder in $variant: $t")
             }
         }
@@ -52,7 +52,7 @@ class OperatorSectionRendererTest {
 
     @Test
     fun anUnknownPlaceholderIsRefusedRatherThanPrinted() {
-        val broken = text.copy(passages = text.passages + SectionPassage("x", SectionPart.BOTH, false, listOf(SectionLine(SectionTexts("{nobody}", "{nobody}"), false))))
+        val broken = text.copy(passages = text.passages + SectionPassage("x", SectionPart.BOTH, listOf(SectionLine(SectionTexts("{nobody}", "{nobody}"), false))))
         assertThrows<IllegalStateException> { OperatorSectionRenderer.render(broken, SectionVariant.FULL, all, false) }
     }
 
@@ -105,48 +105,33 @@ class OperatorSectionRendererTest {
     }
 
     @Test
-    fun theRecordFollowsItsSwitchNotTheVariant() {
+    fun theRecordsPointerFollowsItsSwitchNotTheVariant() {
+        // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice): the section keeps
+        // a pointer, there exactly while the record is on, in either variant, and never inside the text.
         for (variant in SectionVariant.entries) {
             val on = render(variant, recordOn = true)
-            assertNotNull(on.record, "$variant, on: the record's information")
-            assertNotNull(on.objection, "$variant, on: the right to object")
-            assertTrue(on.record!!.en.contains("Art. 6(1)(f) GDPR") && on.record!!.en.contains("7 days"))
-            assertTrue(on.objection!!.en.startsWith("### Your right to object"))
-            assertFalse(on.text.en.contains("Your right to object"), "set apart: never inside the text")
-            val off = render(variant, recordOn = false)
-            assertNull(off.record, "$variant, off")
-            assertNull(off.objection, "$variant, off")
+            assertNotNull(on.record, "$variant, on: the pointer")
+            assertTrue(on.record!!.en.contains("privacy notice of this instance") && on.record!!.de.contains("Datenschutzerklärung dieser Instanz"))
+            assertFalse(on.record!!.en.contains("Art. 6(1)(f)"), "the information itself is the notice's, not repeated here")
+            assertFalse(on.text.en.contains("privacy notice of this instance"), "set apart: never inside the text")
+            assertNull(render(variant, recordOn = false).record, "$variant, off")
         }
     }
 
     @Test
-    fun theRecordShowsAMissingControllerAsAGapInTheFullVariantAndLeavesItOutInTheReducedOne() {
-        // The private mode's rule for its privacy texts (owner, Q26 of cr-instance-privacy-notice): an unset value is
-        // absent, record passage included; the full variant shows it as missing. Either way the rest of the passage, and
-        // the right to object, stay.
-        val unset = all.copy(providerName = null, providerAddress = null, privacyContact = null)
-        val full = render(SectionVariant.FULL, unset, recordOn = true)
-        assertTrue(full.record!!.en.contains("the operator: not stated by this operator, not stated by this operator."), full.record!!.en)
-        val reduced = render(SectionVariant.REDUCED, unset, recordOn = true)
-        assertFalse(reduced.record!!.en.contains("Responsible for this processing"), reduced.record!!.en)
-        assertFalse(reduced.record!!.en.contains("not stated"))
-        assertTrue(reduced.record!!.en.contains("This is the information of Art. 13 GDPR.") && reduced.record!!.en.contains("Art. 6(1)(f) GDPR"))
-        assertTrue(reduced.objection!!.en.contains("(Art. 21 GDPR)"), "the right to object stays without its address")
-        assertFalse(reduced.objection!!.en.contains("Write to"))
+    fun theSectionCarriesNoRightToObjectOfItsOwnAnyMore() {
+        // A `separate` passage was the record's right to object; it moved with the record (Q27). A file that brings one
+        // back is refused at load, so the section cannot carry a second, drifting copy of the notice's.
+        val withSeparate = ObjectMapper().readTree(file).deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()
+        (withSeparate.get("passages").get(0) as com.fasterxml.jackson.databind.node.ObjectNode).put("separate", true)
+        assertThrows<IllegalArgumentException> { OperatorSectionText.parse(withSeparate) }
+        assertEquals(2, text.revision, "the move bumped the section's revision once (Q27)")
     }
 
     @Test
     fun aValuesNewlinesRenderInlineSoATypedAddressCannotStartAMarkdownBlock() {
         val r = render(SectionVariant.FULL, all.copy(providerAddress = "Musterstraße 1\n# 12345 Musterstadt\n- x"))
         assertTrue(r.text.en.contains("Address: Musterstraße 1, # 12345 Musterstadt, - x"), r.text.en)
-    }
-
-    @Test
-    fun theRetentionCarriesItsUnitPerLanguage() {
-        val one = render(SectionVariant.FULL, all.copy(retentionDays = 1)).record!!
-        assertTrue(one.en.contains("deleted 1 day after") && one.de.contains("wird 1 Tag nach"), one.en)
-        val many = render(SectionVariant.FULL, all.copy(retentionDays = 30)).record!!
-        assertTrue(many.en.contains("deleted 30 days after") && many.de.contains("wird 30 Tage nach"), many.de)
     }
 
     @Test

@@ -23,6 +23,8 @@ data class OperatorDetailsView(
     val confirmedAt: Instant?,
     /** Whether a code can be mailed at all: instance mail configured and the Server Owner's own address confirmed. */
     val instanceMailReady: Boolean,
+    /** The recipients the instance knows of by its own configuration, for the console to offer ([RecipientSuggestions]). */
+    val suggestions: List<RecipientSuggestion> = emptyList(),
 )
 
 sealed interface OperatorConfirmOutcome {
@@ -54,6 +56,7 @@ sealed interface OperatorConfirmOutcome {
 class OperatorDetailsHandler(
     private val store: OperatorDetailsStore,
     private val mailer: InstanceNoticeMailer,
+    private val suggestions: RecipientSuggestions,
 ) {
 
     fun read(now: Instant = Instant.now()): OperatorDetailsView =
@@ -78,6 +81,8 @@ class OperatorDetailsHandler(
             e.providerEmail = clean.providerEmail
             e.providerRepresentative = clean.providerRepresentative
             e.supervisoryAuthority = clean.supervisoryAuthority
+            e.dataProtectionOfficer = clean.dataProtectionOfficer
+            store.replaceRecipients(clean.recipients)
             // A failed send describes the last save's mail; this save is a new attempt, or none.
             e.codeFailed = false
             val address = clean.notificationEmail
@@ -110,6 +115,8 @@ class OperatorDetailsHandler(
             e.providerEmail = null
             e.providerRepresentative = null
             e.supervisoryAuthority = null
+            e.dataProtectionOfficer = null
+            store.replaceRecipients(emptyList())
             e.codeHash = null
             e.codeAddress = null
             e.codeExpiresAt = null
@@ -168,6 +175,7 @@ class OperatorDetailsHandler(
             confirmation = state,
             confirmedAt = row?.confirmedAt.takeIf { state == NotificationConfirmationState.CONFIRMED },
             instanceMailReady = mailer.ready(now),
+            suggestions = suggestions.list(),
         )
     }
 
@@ -183,6 +191,9 @@ class OperatorDetailsHandler(
         providerEmail = providerEmail.blankToNull(),
         providerRepresentative = providerRepresentative.blankToNull(),
         supervisoryAuthority = supervisoryAuthority.blankToNull(),
+        dataProtectionOfficer = dataProtectionOfficer.blankToNull(),
+        // The contract refuses a blank name or purpose (`OperatorRecipient`'s @NotBlank); a blank country is none.
+        recipients = recipients.map { PublishedRecipient(it.name.trim(), it.purpose.trim(), it.country.blankToNull()) },
     )
 
     private fun String?.blankToNull(): String? = this?.trim()?.takeUnless { it.isEmpty() }

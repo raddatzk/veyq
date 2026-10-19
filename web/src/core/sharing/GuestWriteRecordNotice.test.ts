@@ -21,10 +21,11 @@ describe('GuestWriteRecordNotice', () => {
     expect(w.find('.guest-write-record-objection').text()).toBe(t('share.guest.recordObjection'))
   })
 
-  it('links the full Art. 13 text: the record passage of the public operator section, in a tab of its own', () => {
-    // The share page's key rides its #fragment, so the link leaves the page alone (ADR 0035 decision 6).
+  it('links the full Art. 13 text: the record passage of the privacy notice, in a tab of its own', () => {
+    // The share page's key rides its #fragment, so the link leaves the page alone (ADR 0035 decision 8, Q27: the
+    // notice is the one home of every Art. 13 passage).
     const more = mountNotice(7).find('[data-testid="guest-write-record-more"]')
-    expect(more.attributes('href')).toBe('/operator-terms#guest-write-record')
+    expect(more.attributes('href')).toBe('/privacy#guest-write-record')
     expect(more.attributes('target')).toBe('_blank')
     expect(more.text()).toBe(t('share.guest.recordMore'))
   })

@@ -105,6 +105,7 @@ import {
   OperatingMode,
   operatorUpdateOf,
   parseLanguages,
+  parseRecipient,
   presetChanges,
   setOperatingMode,
   setOperator,
@@ -311,6 +312,18 @@ const OPERATOR_FLAGS: Record<string, keyof InstanceOperatorUpdate> = {
   'provider-email': 'providerEmail',
   'provider-representative': 'providerRepresentative',
   'supervisory-authority': 'supervisoryAuthority',
+  'recipients': 'recipients',
+  'data-protection-officer': 'dataProtectionOfficer',
+}
+
+/** `--recipients` as typed: rows `<name>|<what they do>|<country>` separated by `;`, the country optional — the whole
+ *  list, replacing the one there. A malformed row is refused, naming it, rather than half-stored. */
+function parseRecipients(typed: string): NonNullable<InstanceOperatorUpdate['recipients']> {
+  return typed.split(';').map((x) => x.trim()).filter(Boolean).map((row) => {
+    const r = parseRecipient(row)
+    if (!r) throw new CliError(`--recipients: '${row}' is not <name>|<what they do>|<country> (the country may be left out)`)
+    return r
+  })
 }
 
 /**
@@ -697,8 +710,8 @@ export const COMMANDS: Record<string, Command> = {
     run: () => getOperator(),
   },
   'operator set': {
-    usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>]',
-    summary: 'Change the given values (none clears one) and keep the rest. A new notification address gets a code by instance mail, typed into the console’s Server → Operator.',
+    usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<what they do>|<country>; …\'] [--data-protection-officer <n>]',
+    summary: 'Change the given values (none clears one) and keep the rest; --recipients replaces the privacy notice’s whole list. A new notification address gets a code by instance mail, typed into the console’s Server → Operator.',
     flags: Object.fromEntries(
       Object.keys(OPERATOR_FLAGS).map((k) => [k, { describe: `${k.replace(/-/g, ' ')}, or none to clear it`, required: false }]),
     ),
@@ -709,6 +722,7 @@ export const COMMANDS: Record<string, Command> = {
       for (const k of given) {
         const value = f[k] === 'none' ? null : f[k]
         if (k === 'contact-languages') update.contactLanguages = value === null ? null : parseLanguages(value)
+        else if (k === 'recipients') update.recipients = value === null ? [] : parseRecipients(value)
         else (update as Record<string, string | null>)[OPERATOR_FLAGS[k]] = value
       }
       return setOperator(update)

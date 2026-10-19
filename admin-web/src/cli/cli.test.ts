@@ -843,7 +843,7 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
     operatingMode: 'ORGANISATION', contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: undefined,
     notificationEmail: 'alerts@example.org', notificationConfirmation: 'CONFIRMED', notificationConfirmedAt: EXPIRES,
     instanceMailReady: true, providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: undefined,
-    providerRepresentative: undefined, supervisoryAuthority: undefined, ...over,
+    providerRepresentative: undefined, supervisoryAuthority: undefined, recipients: [], recipientSuggestions: [], ...over,
   })
 
   it('mode show prints the mode, the notice in the locale, and what the other mode would switch', async () => {
@@ -898,8 +898,35 @@ describe('veyq-admin — the operating mode and the operator details (uc.admin.o
     expect(setOperator).toHaveBeenCalledWith({
       contactEmail: null, contactLanguages: ['de', 'en'], statementEmail: null, notificationEmail: 'alerts@example.org',
       providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: 'info@example.org',
-      providerRepresentative: null, supervisoryAuthority: null,
+      providerRepresentative: null, supervisoryAuthority: null, recipients: [], dataProtectionOfficer: null,
     })
+  })
+
+  it('operator set --recipients replaces the privacy notice’s list, none empties it, and a malformed row sends nothing', async () => {
+    vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', purpose: 'x', country: undefined }] }))
+    vi.mocked(setOperator).mockResolvedValueOnce(op())
+    const r = await invoke(['operator', 'set', '--recipients', 'Example Hosting GmbH|hosts the server|Germany; Mail AG|relays the mail',
+      '--data-protection-officer', 'DSB GmbH'])
+    expect(r.code).toBe(0)
+    expect(vi.mocked(setOperator).mock.lastCall![0]).toMatchObject({
+      recipients: [
+        { name: 'Example Hosting GmbH', purpose: 'hosts the server', country: 'Germany' },
+        { name: 'Mail AG', purpose: 'relays the mail', country: null },
+      ],
+      dataProtectionOfficer: 'DSB GmbH',
+    })
+
+    vi.mocked(getOperator).mockResolvedValueOnce(op({ recipients: [{ name: 'Old AG', purpose: 'x', country: undefined }] }))
+    vi.mocked(setOperator).mockResolvedValueOnce(op())
+    expect((await invoke(['operator', 'set', '--recipients', 'none'])).code).toBe(0)
+    expect(vi.mocked(setOperator).mock.lastCall![0].recipients).toEqual([])
+
+    vi.mocked(setOperator).mockClear()
+    vi.mocked(getOperator).mockResolvedValueOnce(op())
+    const bad = await invoke(['operator', 'set', '--recipients', 'Example AG'])
+    expect(bad.code).toBe(1)
+    expect(bad.err).toContain("'Example AG' is not <name>|<what they do>|<country>")
+    expect(setOperator).not.toHaveBeenCalled()
   })
 
   it('operator set with no value is refused and sends nothing; operator clear clears', async () => {

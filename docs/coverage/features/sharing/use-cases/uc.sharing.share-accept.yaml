@@ -90,8 +90,7 @@ acceptanceCriteria:
   - id: the-section-is-public-without-an-account
     text: >-
       The operator section is publicly available without an account (DSA Art. 14(1)) at a page of its own, linked from
-      the login page, the share page and the signed-in shell; the guest-write record's first-layer sentence links its
-      record passage there, in a tab of its own so the share page keeps its key.
+      the login page, the share page and the signed-in shell, in a tab of its own so the share page keeps its key.
     coverage:
       backend:
         integration: [TenantTermsOperatorSectionSliceTest.aSpaceWithNoTermsServesTheSectionWithoutAGate]

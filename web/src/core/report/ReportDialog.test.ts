@@ -62,6 +62,17 @@ describe('ReportDialog', () => {
     w.unmount()
   })
 
+  it('links the privacy notice’s passage on the contact, beside the field that takes it (GDPR Art. 13)', async () => {
+    const w = mountDialog()
+    openReport({ access: member, scopeId: 's', targets: [target(1)] })
+    await flushPromises()
+    const link = document.body.querySelector<HTMLAnchorElement>('.veyq-report-privacy')!
+    expect(link.getAttribute('href')).toBe('/privacy#reporter-contact')
+    expect(link.getAttribute('target')).toBe('_blank') // a share page's key rides its fragment
+    expect(link.textContent).toBe(t('privacyNotice.atReport'))
+    w.unmount()
+  })
+
   it('says a report of child sexual abuse material needs no name', async () => {
     const w = mountDialog()
     openReport({ access: member, scopeId: 's', targets: [target(1)] })
