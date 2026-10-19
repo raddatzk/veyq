@@ -57,9 +57,16 @@ private data class Failure(override val code: String, override val status: Failu
  * The single place `ErrorResponse` is constructed. Renders any [HttpFailure] to its JAX-RS response — the status
  * from the bucket, the body the uniform `ErrorResponse{code}` (never content/keys/secrets, styleguide §7).
  */
-fun httpError(failure: HttpFailure): Response =
+fun httpError(failure: HttpFailure): Response = httpError(failure, null)
+
+/**
+ * The same, with the contract's optional `message`: developer-facing detail that never carries content, a key, a
+ * secret or anything a client sent. Its one user is the unexpected-error answer, whose message is the error id
+ * (ADR 0092 § 4).
+ */
+fun httpError(failure: HttpFailure, message: String?): Response =
     Response.status(failure.status.httpStatus)
-        .entity(ErrorResponse(code = failure.code))
+        .entity(ErrorResponse(code = failure.code, message = message))
         .build()
 
 /**

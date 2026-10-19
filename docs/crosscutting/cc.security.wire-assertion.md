@@ -7,7 +7,8 @@
   verification are traceable from the threat model.
 - **Status:** **six surfaces are swept — the database, the object store, the HTTP bodies, the server log, the
   database's statement log and the mailbox**, each armed in the `web-e2e` job, for two needle sets: the sealed
-  plaintext (canaries) and every capability token the run handled (§ Capability tokens). [ADR 0053](../decisions/0053-wire-assertion-canary-sweep.md) settled the
+  plaintext (canaries) and every capability token the run handled (§ Capability tokens); and the logs alone for a
+  third, every address a suite signed an account up with (§ The `pii` needle set). [ADR 0053](../decisions/0053-wire-assertion-canary-sweep.md) settled the
   oracle; the surfaces landed one change-request at a time (§ Surfaces below). Only the S3 object key's own guard
   is still *planned*.
 
@@ -89,6 +90,7 @@ photo's file name and EXIF text, the share's label. Every spec file that execute
 | Object store (the bucket `blobs`) | `sweep_store()` | the database's own `veyq_blob` count: rows with an empty mirror fail |
 | Every container log of the project, since the run began | `sweep_containers()` | the sentinel key, sent through Traefik on the public origin to the bucket and found percent-encoded in Garage's log; the `app` container's log must name its database (Flyway's JDBC line) — the backend's log is a container log here |
 | Statement log, for the window around the browser stage | `StatementLog`, `sweep_statements()` | the two sentinel statements; and, since the app's pool connected at `up`, before the window, the owner's email in a literal the backend sent (`written`) in place of a `Connect` entry |
+| Every container log, for the `pii` set | `sweep_containers(pii=…)` | at least one address (`freshOwner` records each, `e2e/src/accounts.ts`), and each in the statement log: an account the instance created ([`pii_control()`](#the-pii-needle-set)) |
 
 The store's request log the container control reads exists only because the run asks for it: the production recipe
 and the chart run Garage at `RUST_LOG=garage=warn`, which logs no request
@@ -97,7 +99,29 @@ raises it back to `garage=info` for the lane; the development stack keeps the im
 
 Not swept on the lane, by construction: the HTTP recording and the capability tokens derived from it (the browser
 records no HTTP; the API-level suites sweep both), boot logs (there are none — the app's log is a container log),
-and the mailbox (the recipe ships no relay and a fresh tenant has no mail settings).
+and the mailbox (the recipe ships no relay; the overlay's relay is reached only from the run's own networks).
+
+## The `pii` needle set
+
+[ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) § 3 keeps every email address out of the
+logs. An address is declared plaintext (`x-veyq-visibility: pii`), so it is no canary: the dump, the statement log,
+the HTTP recording and the mailbox hold it by design. It is a third needle set instead, **searched in the logs and
+nowhere else** — every boot log (`sweep_logs()`) and every container log (`sweep_containers()`), with no exemption.
+
+- **Recorded where an account is signed up**, by `recordPii` — `birthInstance` and `onboardMember` in
+  `web/src/test/e2eBootstrap.ts` (`VEYQ_PII_FILE`, one `pii-<tag>.json` per suite), `freshOwner` in
+  `e2e/src/accounts.ts` (`pii-<spec>.json`) — in the canary files' format, in files of their own, so no other surface
+  ever reads them. A hit is reported led by `pii`.
+- **Its control, `pii_control()`:** zero addresses is a failure, as zero logs is, and each address must be one the
+  instance handled — in a mail or a database dump of the run (`run_web_e2e.py`; every signed-up address is invited
+  or mailed, or is an account row), or in the statement log (lane L1, which reads no mailbox). A needle no surface
+  ever held would make its absence from the logs prove nothing.
+- **The defect that bought it:** runs of 2026-10-16 passed with the invite mailer's line naming the owner's address
+  in a boot log; the legal audit of 2026-10-18 removed it by hand (inbox #481), and nothing would have turned the
+  next one red.
+- **Its limit:** only the addresses the recording helpers mint are needles; an address a suite builds inline (an
+  email change's new address, an invite that is refused) is in no set. A forged client network address is the
+  backend's slice tests' to catch (`GuestWriteRecordCoreSliceTest`), which capture every log line of the process.
 
 ## Capability tokens — the second needle set
 

@@ -603,9 +603,10 @@ def booted_databases(workdir: Path) -> set[str]:
     return {db for db in (booted_database(p) for p in workdir.rglob("backend-*.log")) if db}
 
 
-def sweep_logs(workdir: Path, canary_files: Iterable[Path], tokens: RunTokens = NO_TOKENS) -> str | None:
+def sweep_logs(workdir: Path, canary_files: Iterable[Path], tokens: RunTokens = NO_TOKENS,
+               pii: dict[str, list[str]] | None = None) -> str | None:
     """[e2e_sweeps.sweep_logs] over this run's boot logs, each armed by the database [booted_database] derives."""
-    return sweeps.sweep_logs(workdir, canary_files, booted_database, tokens)
+    return sweeps.sweep_logs(workdir, canary_files, booted_database, tokens, pii)
 
 
 def plant_store_sentinel(stamp: str) -> str:
@@ -625,9 +626,9 @@ def plant_store_sentinel(stamp: str) -> str:
 
 
 def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, sentinel: str,
-                     tokens: RunTokens = NO_TOKENS) -> str | None:
+                     tokens: RunTokens = NO_TOKENS, pii: dict[str, list[str]] | None = None) -> str | None:
     """[e2e_sweeps.sweep_containers] over every service of the dev compose project."""
-    return sweeps.sweep_containers(DEV, workdir, canary_files, since, sentinel, tokens)
+    return sweeps.sweep_containers(DEV, workdir, canary_files, since, sentinel, tokens, pii=pii)
 
 
 class StatementLog(sweeps.StatementLog):
@@ -1732,6 +1733,7 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
     secret_file = inst.secret_file
     boot_log = workdir / f"backend-{tag}.log"
     canary_file = workdir / f"canaries-{tag}.json"
+    pii_file = workdir / f"pii-{tag}.json"
     record_file = workdir / f"http-{tag}.jsonl"
     database = inst.database
     proc = boot(database, secret_file, boot_log, inst.bucket, build.jar)
@@ -1753,6 +1755,8 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             # The wire-assertion seam (ADR 0053): the suite writes here what it recovered by unsealing; this
             # side reads it back and sweeps. Absolute, because vitest runs with cwd=web/.
             "VEYQ_CANARY_FILE": str(canary_file),
+            # The third needle set (ADR 0092 § 4): every address the suite signed up with, searched in the logs only.
+            "VEYQ_PII_FILE": str(pii_file),
             # The HTTP half of the same seam: the suite records every request it made and every response it
             # got, this side reads the file back and sweeps it. Absolute, for the same reason.
             "VEYQ_HTTP_RECORD_FILE": str(record_file),
@@ -1907,12 +1911,22 @@ def main(argv: list[str]) -> int:
         tokens = run_tokens(workdir)
         log(f"capability tokens of the run: {len(tokens.by_needle)} ({kinds_of(tokens.by_needle.values())}), "
             f"{len(tokens.mailed)} first read out of a mail")
+        # The third, `pii`: every address a suite signed up with (`recordPii`), searched in the boot and container
+        # logs only — the dumps, the recordings, the statement log and the mailbox hold an account's address by design.
+        pii_files = sorted(workdir.rglob("pii-*.json"))
+        pii, pii_problems = sweeps.load_pii(pii_files)
+        log(f"pii addresses of the run: {len(pii)} from {len(pii_files)} file(s)")
         run_failures = [(name, reason) for name, reason in (
-            ("(run) server-log sweep", sweep_logs(workdir, canary_files, tokens)),
+            ("(run) server-log sweep", sweep_logs(workdir, canary_files, tokens, pii)),
             # Bounded below by the run's own start (the stamp is a unix time): a developer's earlier traffic on these
             # long-lived containers is not this run's to answer for.
-            ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel, tokens)),
+            ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel, tokens, pii)),
             ("(run) mailbox sweep", sweep_mailbox(workdir, canary_files, float(stamp), mail_sentinel, tokens)),
+            # Its control, after the mailbox sweep retained the mails: each address is one the instance handled — in a
+            # mail it sent, or in a suite's database. Zero addresses is a failure.
+            ("(run) pii control", "; ".join(pii_problems) or sweeps.pii_control(
+                pii_files, [*workdir.rglob("mailbox/*.eml"), *workdir.rglob("database-*.sql")],
+                "the run's mails and database dumps")),
         ) if reason]
         sentinels.append(statements.plant("end"))
     finally:

@@ -108,7 +108,7 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    `after` the last id it was given, and it lists the one node a guest has open (`nodeId`) rather than the whole shared
    subtree. A position is the order of the Memory's changes, and a guest is told no time of the Memory's activity (ADR
    0081 decision 4; it is served no `updatedAt` either), so its key is the one it already holds. Without a live poll for
-   guests (the guest live-poll inbox row) nothing depends on a guest's page order matching commit order: a medium added while a guest pages is
+   guests (inbox #497) nothing depends on a guest's page order matching commit order: a medium added while a guest pages is
    in its next load.
 
 How the server computes one `listNodeMedia` poll response (core's `NodeItemsRevisions.read` decides it) — the **O(1) revision compare short-circuits the idle

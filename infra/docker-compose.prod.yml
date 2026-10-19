@@ -269,6 +269,10 @@ services:
       # reload can never read half of it.
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
+      # Its own errors only, set rather than inherited, and no access log (ADR 0092 § 5, owner Q30): an access log
+      # records every reader with every share id read, and the app's error id answers what a 5xx log would. An
+      # operator who wants one turns it on as their own processing. validate_compose_posture.py assertion 6 holds both.
+      - "--log.level=ERROR"
       # veyq's client-address middleware (traefik-clientaddr.go, ADR 0094 decision 7), loaded from the two files
       # mounted below — a LOCAL plugin, interpreted by Traefik's own Yaegi, never fetched (a remote catalog plugin
       # would make every start depend on the network). Traefik files it under `experimental`, so an upgrade of the

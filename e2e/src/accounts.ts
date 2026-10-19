@@ -4,15 +4,18 @@ import type { Download } from '@playwright/test'
 import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { recordPii } from './canaries'
 
 export interface Owner {
   email: string
   password: string
 }
 
+/** A fresh account's identity. Its address is recorded as a `pii` needle (`recordPii`): no log of the run may hold it. */
 export function freshOwner(domain: string): Owner {
   const stamp = randomBytes(4).toString('hex')
-  return { email: `owner-${stamp}@${domain}`, password: `e2e ${randomBytes(18).toString('base64')} Gänsefüßchen` }
+  const email = recordPii(`owner-${stamp}@${domain}`)
+  return { email, password: `e2e ${randomBytes(18).toString('base64')} Gänsefüßchen` }
 }
 
 /**

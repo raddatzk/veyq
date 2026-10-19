@@ -29,6 +29,8 @@ import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/
 import { inviteMember } from '../features/spaces/members'
 import { myUserId } from '../features/account/profile/profile'
 import { mailCursor, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
+// Every address an account is signed up with is a `pii` needle: no log of the run may hold it (ADR 0092 § 4).
+import { recordPii } from './canaries'
 
 /** Tenant domain and API base — see the module header for why this exact host. */
 export const HOST = process.env.VEYQ_HOST ?? 'veyq.localhost'
@@ -168,7 +170,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
   const salt = fromB64std(setup.instanceSalt)
 
   const owner = mkActor('a')
-  owner.built = await buildAccount(owner.email, owner.password, salt)
+  owner.built = await buildAccount(recordPii(owner.email), owner.password, salt)
 
   await createServerOwner(owner.built.material, owner.email)
   await become(owner)
@@ -206,7 +208,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
  * a clean timeout instead of as an expired token three calls later.
  */
 export async function onboardMember(tenantId: string, actor: Actor, salt: Uint8Array): Promise<Actor> {
-  actor.built = await buildAccount(actor.email, actor.password, salt)
+  actor.built = await buildAccount(recordPii(actor.email), actor.password, salt)
   const cursor = await mailCursor(actor.email)
   await inviteMember(tenantId, actor.email)
   const body = await waitForMail(actor.email, { after: cursor })

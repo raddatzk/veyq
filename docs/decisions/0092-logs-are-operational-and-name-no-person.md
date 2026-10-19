@@ -1,23 +1,36 @@
 # ADR 0092 — Logs are operational and name no person; evidence never rides a log
 
-- Status: **Accepted 2026-10-18** by the owner, with Q29–Q33 of `changes/cr-logging.md` as recommended (proposed
-  2026-10-16; re-grounded 2026-10-18 after moderation landed, inbox #462).
+- Status: **Accepted 2026-10-18 and built 2026-10-19** (cr-logging), with the owner's answers Q29–Q33 as recommended
+  (proposed 2026-10-16; re-grounded 2026-10-18 after moderation landed, inbox #462).
   **Built:** § 1's separation, held by `ModerationLogSliceTest` (no moderation event in a log line) and
   `GuestWriteRecordCoreSliceTest` (neither the recorded nor a forged address in a log line); § 2 whole, by
-  cr-guest-write-record and ADR 0093 § 10; § 3 at the mail, invite and recovery sites (inbox #481, the first two pinned
-  by `SmtpDeliveryLogTest` and `TenantInviteMailerLogTest`; the recovery line has no test yet); § 5's size bound on every
-  Compose service and `garage=warn` on both targets, held by `validate_compose_posture.py` assertion 6 and
-  `chart_meta_check.py` (xxvii) (#482); the Run pages [Operations § Logs](../../site/src/content/docs/run/operations.md#logs)
-  and [Data protection](../../site/src/content/docs/run/data-protection.md). **Open, and built by
-  `changes/cr-logging.md`:** the catch-all for unexpected errors (§ 4) — today Quarkus logs the request URI with its
-  query and the exception's text, which carries a database's bound value (M6, M7); the remaining sites of § 3 (M3, M4);
-  the rate limiters' time-based eviction, whose keys include email addresses (§ 5); the admin console's access log
-  without the client's address (§ 5, owner Q29); Traefik's level set explicitly and its access log held off by the
-  posture guard (§§ 4, 5); the e2e sweep's email-address needles (§ 4); the Run and Security pages. **Acceptance
-  commits to:** §§ 1–8 as the rule for every log veyq writes or its recipes configure, on both deployment targets; the
-  CR's build; the answers to the CR's owner questions as recommended unless answered otherwise; § 6's Still open taken
+  cr-guest-write-record and ADR 0093 § 10; § 3 at every site that handles a person's value, each pinned by a
+  log-capture test with its control — the mail and invite lines (`SmtpDeliveryLogTest`, `TenantInviteMailerLogTest`),
+  the recovery worker (`RecoveryDeliveryLogTest`), the unknown wrap method by its length
+  (`AccountKeyMaterialSliceTest`), Garage's admin errors by status and code (`GarageStoreProvisionerTest`); § 4's
+  catch-all and Hibernate's silenced statement log (`UnexpectedErrorLogSliceTest`), the proxy's posture
+  (`validate_compose_posture.py` assertion 6) and the e2e sweep's `pii` needle set
+  ([cc.security.wire-assertion](../crosscutting/cc.security.wire-assertion.md)); § 5 whole — the size bound on every
+  Compose service and `garage=warn` on both targets (`validate_compose_posture.py` assertion 6,
+  `chart_meta_check.py` (xxvii)), Traefik at `ERROR` with no access log, the admin console's access log without the
+  reader (`admin-web/src/shared/security/accessLog.test.ts`), the rate limiters' pass by time
+  (`TokenBucketCounterTest`); and the Run and Security pages:
+  [Operations § Logs](../../site/src/content/docs/run/operations.md#logs),
+  [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md),
+  [Data protection](../../site/src/content/docs/run/data-protection.md),
+  [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) and
+  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md). **Open, found by the build:** a
+  constraint violation raised at **commit** (not at an explicit flush) is logged once more by Narayana —
+  `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with the converted exception whose text carries the driver's
+  message: measured in `./gradlew check`'s output, where two racing email changes (`EmailChangeSliceTest`) put the
+  colliding address in that line. Its category also carries the transaction reaper's timeout warnings, so silencing it
+  as § 4 silences Hibernate's is a trade the owner decides. **Acceptance commits to:** §§ 1–8
+  as the rule for every log veyq writes or its recipes configure, on both deployment targets; § 6's Still open taken
   as met until veyq is offered as a service. It does not commit to JSON logs, a request id, a static log guard or a
-  time-bounded retention.
+  time-bounded retention. The owner's answers: the admin console's access log keeps no reader (Q29); no Traefik access
+  log, held by the posture guard (Q30); the full exception at DEBUG under its own category, off by default (Q31); the
+  period stated as its criterion, Compose at 10m × 3 and the kubelet's default (Q32); no `CLAUDE.md` line — the tests
+  bite on the value (Q33).
 - Date: 2026-10-16
 
 Provenance: **(Mn)** is a command in § Measurement ledger, run on this worktree (branch
@@ -100,23 +113,32 @@ always for an unexpected error, it is logged by its class chain.
 ### 4. Enforcement
 
 - **A log-capture test per site that handles a person's value**, after `SmtpDeliveryLogTest`: it asserts the line
-  **is** emitted (the positive control) and does not carry the value. Built for the mail and invite sites; owed for the
-  recovery worker, the unknown-wrap warning and the catch-all.
-- **A catch-all for unexpected errors**, one formatter behind two entry points — a JAX-RS mapper for `Throwable` and a
-  Vert.x failure handler ahead of Quarkus's own, so no failure reaches the default handler's line (M6). It logs at ERROR
-  a random error id, the method, the route **template**, the class chain, a SQLState and vendor code where a
-  `SQLException` is in it, and the first frame in `me.raddatz.veyq`; never the URI, the query or any message. It
-  answers 500 with the existing `ErrorResponse` (`internal_error`, the error id as `message`). The full exception goes
-  to DEBUG under its own category, off by default (owner Q31).
+  **is** emitted (the positive control) and does not carry the value, on one capture of the root logger
+  (`LogCapture`, whose own control record proves it is attached). Built for every such site (the status line).
+- **A catch-all for unexpected errors**, one formatter (`UnexpectedError`) behind one Vert.x failure handler ordered
+  just ahead of Quarkus's own, so no failure reaches the default handler's line (M6). A JAX-RS resource and a Vert.x
+  route both reach it: Quarkus REST hands an exception no mapper matches to the routing context's failure, and a
+  request filter leaves the matched resource's template for it. **Not a JAX-RS mapper for `Throwable`**, as first
+  planned: a mapper for a supertype of `NotFoundException` makes Quarkus REST answer an unmatched route itself instead
+  of passing it on, which the app shell's SPA fallback and the admin channel's unknown-route refusal depend on, and it
+  would receive every bodiless `WebApplicationException` the boundary's filters answer. It logs at ERROR a random
+  error id, the method, the route **template** (`-` for a route that is no JAX-RS resource), the class chain, a
+  SQLState and vendor code where a `SQLException` is in it, and the first frame in `me.raddatz.veyq`; never the URI,
+  the query or any message. It answers 500 with the existing `ErrorResponse` (`internal_error`, the error id as
+  `message`). The full exception goes to DEBUG under its own category, `me.raddatz.veyq.core.http.unexpected.detail`,
+  off by default (owner Q31) — lower case, so an environment variable can raise it. Held by
+  `UnexpectedErrorLogSliceTest`.
 - **Hibernate's statement error log is silenced**: `org.hibernate.orm.jdbc.error` is set to ERROR, so the WARN line
   that carries the driver's message is not written (M7). The catch-all keeps the SQLState and vendor code.
 - **The e2e sweep, widened.** `scripts/e2e_sweeps.py` already fails a run on any sealed value or token in any log
-  (M17). It gains a needle kind for every email address the run's suites signed up with, searched in every log and
-  exempt only where it belongs (the mailbox, the database dump, the HTTP recording); its control is that each address
-  is found in the mailbox. A forged client address is the slice tests' (built, M16), which capture the root logger
-  and so every framework's lines too.
+  (M17). It gains a third needle set, `pii`: every email address the run's suites signed up with, searched in every
+  boot and container log and nowhere else, since the database dump, the statement log, the HTTP recording and the
+  mailbox hold it by design. Its control: at least one address, and each found where the instance handled it — a mail
+  or a database dump of the run on the API lane, the statement log on lane L1, which reads no mailbox. A forged client
+  address is the slice tests' (built, M16), which capture the root logger and so every framework's lines too.
 - **`validate_compose_posture.py` assertion 6** (built: every service bounded, the store below `info`) gains: the
-  proxy sets no access log. The chart has no proxy; its store is `chart_meta_check.py` (xxvii).
+  proxy sets no access log, by flag or variable, and its own level, `ERROR`. The chart has no proxy; its store is
+  `chart_meta_check.py` (xxvii).
 - No static scan of log statements. A grep for `email` in a log call is easy to evade and would turn red on a comment.
   The tests above bite on the value instead.
 

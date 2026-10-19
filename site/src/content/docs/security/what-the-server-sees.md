@@ -15,6 +15,7 @@ sources:
   - docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md
   - docs/decisions/0014-group-scopes-and-governance.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
+  - docs/decisions/0092-logs-are-operational-and-name-no-person.md
 ---
 
 The server never sees content, only structure. Operator-blind does not mean metadata-blind: a defined set of
@@ -205,6 +206,22 @@ that address.
 The tenant's **terms text and revision** are the space owner's public policy, served to everyone. A member's
 **accepted terms revisions and when they accepted each** are kept as a history, one row per revision, never
 overwritten: audit evidence for a dispute, served by no API.
+
+### Logs
+
+A log holds less than the database, never more. The application's lines name accounts, tenants, scopes, nodes,
+shares, blobs and jobs **by id**, with a domain, an exception's class, a database's SQLState and counts. They never
+carry a key, a token, a sealed value, plaintext metadata, an email address, a network address, a User-Agent, a
+request's URI or what it sent, or text someone else wrote (a database's message, a mail server's reply, a remote
+API's body) — with one path left: when two requests race for the same email address and the database refuses the
+second as it commits, the transaction manager's warning carries the database's message, which names that address.
+An error the server had no answer for is logged by a random error id, its route template and its exception's class
+chain; its full text is written only while an operator has raised one category on purpose. The
+admin console's access log keeps no reader's address; the bundled proxy keeps no access log, which a posture check
+holds; the object store logs warnings only. A rate limiter keeps a client's address, or an email address for the
+recovery and invitation mails, in memory as a bucket's key until the bucket has refilled. Logs are bounded by size and
+never evidence: a report's evidence is a database record. Every end-to-end run fails if a log holds a sealed value, a
+token or an address a suite signed up with ([Verify it yourself](/veyq/security/verify-it-yourself/)).
 
 ## The six concessions
 

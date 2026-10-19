@@ -84,7 +84,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    is stored **client-side** (localStorage, keyed **per tenant**, holding the triples accepted — the revision with the
    operator section's revision and variant, decision 6 — accepting on one share of a tenant clears the gate on every
    share of that tenant, since they are the *space's* terms, not the link's) — the server
-   records **nothing** about the accountless visitor, preserving anonymity. This reuses the same tenant terms (the
+   records **nothing** about the accountless visitor, preserving anonymity — and its logs name no visitor either: no
+   address, no User-Agent, no request URI ([ADR 0092](0092-logs-are-operational-and-name-no-person.md) § 3). This reuses the same tenant terms (the
    T&S decryptable-on-report corollary).
 
    **Delivery — the terms reach the accountless client from the *share*, not the member endpoint or the Host.** The
