@@ -87,9 +87,10 @@ describe('itemFavoritesStore', () => {
   it('reverts the optimistic mark when the write fails', async () => {
     vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
     await loadItemFavoritesFor('s', 'n', KEY)
-    vi.mocked(saveItemFavorites).mockRejectedValue(new Error('network'))
+    const network = new Error('network')
+    vi.mocked(saveItemFavorites).mockRejectedValue(network)
 
-    await toggleItemFavorite('c', 's', 'n', KEY)
+    await expect(toggleItemFavorite('c', 's', 'n', KEY)).rejects.toBe(network) // rethrown: MemoryDetail says why (inbox #500)
 
     expect(isMarkedByMe('c')).toBe(false)
     expect(markCount('c')).toBe(1) // back to the one co-member who had it

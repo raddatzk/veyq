@@ -5,6 +5,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 import { hkdf } from '@noble/hashes/hkdf.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import { argon2id } from '@noble/hashes/argon2.js'
 import { aeadOpen, aeadSeal, concat, kemPublic, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
 import { encodeStatement, SealContextInvalid, type ScopeKind, type StatementContext } from './seal'
@@ -445,6 +446,52 @@ export const itemMarkSelfTag = (key: Uint8Array, m: ItemMarks): Uint8Array =>
 export const itemMarkSelfTagVerifies = (key: Uint8Array, m: ItemMarks, tag: Uint8Array): boolean =>
   macEquals(itemMarkSelfTag(key, m), tag)
 
+// ── Item-mark plaintext (ADR 0068 §4, inbox #500) ───────────────────────────────────────────────────────
+// One member's marks in one Memory are ONE sealed blob (`item-favorites`), re-sealed whole on every toggle, so its size
+// is both its limit and its per-click upload. Each marked media id is written as its 16 raw bytes rather than as a
+// 36-character string inside JSON, after the 32-byte self-tag: `tag ‖ id₁ ‖ … ‖ idₙ`, the ids distinct and ascending.
+// One encoding per set, so the decoder refuses every other shape. No version byte: the resource is the versioning axis
+// (ADR 0068 §1). Conformance: v1.json#item_mark_self (each case's `plaintext`) and #seal.sym.item-favorites (case one's).
+
+/** An item-mark plaintext that is not `tag ‖ ids` in its one canonical form, or an input the encoder cannot write. */
+export class ItemMarksInvalid extends Error {}
+
+/** A canonical lowercase UUID, the one spelling an id is encoded from (an item mark's media id, a pin's contact). */
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const ITEM_MARK_TAG_BYTES = 32
+const MEDIA_ID_BYTES = 16
+
+/** `tag ‖ id…`: the self-tag, then each distinct id's 16 bytes in ascending order, whatever order they are handed in.
+ *  Canonical lowercase UUIDs only, so their text order is their byte order and one set has one encoding. */
+export function encodeItemMarks(tag: Uint8Array, ids: Iterable<string>): Uint8Array {
+  if (tag.length !== ITEM_MARK_TAG_BYTES) throw new ItemMarksInvalid('item-mark tag is not 32 bytes')
+  const sorted = [...new Set(ids)].sort()
+  const out = new Uint8Array(ITEM_MARK_TAG_BYTES + MEDIA_ID_BYTES * sorted.length)
+  out.set(tag)
+  sorted.forEach((id, i) => {
+    if (typeof id !== 'string' || !CANONICAL_UUID.test(id)) throw new ItemMarksInvalid('item-mark id is not a canonical lowercase UUID')
+    out.set(hexToBytes(id.replaceAll('-', '')), ITEM_MARK_TAG_BYTES + MEDIA_ID_BYTES * i)
+  })
+  return out
+}
+
+/** The tag and the ids of an item-mark plaintext. Refuses a plaintext shorter than a tag, ids cut short, and ids that are
+ *  not distinct and ascending — each a plaintext no encoder writes. */
+export function decodeItemMarks(plaintext: Uint8Array): { tag: Uint8Array; ids: string[] } {
+  const body = plaintext.length - ITEM_MARK_TAG_BYTES
+  if (body < 0 || body % MEDIA_ID_BYTES !== 0) throw new ItemMarksInvalid('item-mark plaintext is not a tag and whole ids')
+  const ids: string[] = []
+  let previous = '' // below every id: the text of an id is never empty
+  for (let at = ITEM_MARK_TAG_BYTES; at < plaintext.length; at += MEDIA_ID_BYTES) {
+    const h = bytesToHex(plaintext.subarray(at, at + MEDIA_ID_BYTES))
+    const id = `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+    if (previous >= id) throw new ItemMarksInvalid('item-mark ids are not distinct and ascending')
+    ids.push(id)
+    previous = id
+  }
+  return { tag: plaintext.slice(0, ITEM_MARK_TAG_BYTES), ids }
+}
+
 // ── Identity-pin store (ADR 0104) ───────────────────────────────────────────────────────────────────────
 // The pin store is one sealed entry per pin under a sealed head. An entry is stored, and sealed (`identity-pin`), at an
 // opaque id only the account can compute: `pinId = HMAC-SHA256(K_pinIndex, utf8(userId))`, the key derived from the
@@ -457,12 +504,10 @@ export const itemMarkSelfTagVerifies = (key: Uint8Array, m: ItemMarks, tag: Uint
 export const identityPinIndexKey = (masterKey: Uint8Array): Uint8Array =>
   hkdf(sha256, masterKey, new Uint8Array(0), utf8('veyq/v1/identity-pin-index'), 32)
 
-const CANONICAL_USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-
 /** The id `userId`'s pin is stored at: `HMAC-SHA256(key, utf8(userId))`, 32 bytes. Canonical lowercase UUIDs only —
  *  a second spelling of one contact would address a second slot. */
 export function identityPinId(key: Uint8Array, userId: string): Uint8Array {
-  if (typeof userId !== 'string' || !CANONICAL_USER_ID.test(userId)) {
+  if (typeof userId !== 'string' || !CANONICAL_UUID.test(userId)) {
     throw new SealContextInvalid('identity-pin userId is not a canonical lowercase UUID')
   }
   return hmac(sha256, key, utf8(userId))

@@ -180,9 +180,9 @@ components:
           example: true
         ciphertext:
           type: string
-          description: That member's marked-media-id set for this node with their self-tag, `{"tag","ids"}` AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64).
+          description: That member's marked media ids for this node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64).
           contentEncoding: base64
-          maxLength: 65536
+          maxLength: 262144
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
 
     PutItemFavoritesRequest:
@@ -191,11 +191,11 @@ components:
       properties:
         ciphertext:
           type: string
-          description: The caller's marked-media-id set for this node with their self-tag, `{"tag","ids"}` AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
+          description: The caller's marked media ids for this node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
           contentEncoding: base64
-          maxLength: 65536
+          maxLength: 262144
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 262144) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     OwnItemFavoritesEntry:
       type: object
@@ -215,9 +215,9 @@ components:
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         ciphertext:
           type: string
-          description: The caller's own marked-media-id set for that node with their self-tag, `{"tag","ids"}` AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64) — exactly what the node's read serves as the caller's entry.
+          description: The caller's own marked media ids for that node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64) — exactly what the node's read serves as the caller's entry.
           contentEncoding: base64
-          maxLength: 65536
+          maxLength: 262144
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
 
     ErrorResponse:

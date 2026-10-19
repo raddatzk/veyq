@@ -10,11 +10,12 @@
 // key. (Node content still seals under the *write* epoch; item marks are the deliberate exception.)
 //
 // Partitioned per **node**, not per scope: the client has just listed that node's media, so the server already
-// observed the node id and the partition leaks nothing new — while it keeps the 65 536-char `ciphertext` cap
-// out of reach and stops a single toggle from re-uploading the whole scope's marks (ADR 0068 §4).
+// observed the node id and the partition leaks nothing new — and a single toggle re-uploads that Memory's set, never
+// the scope's (ADR 0068 §4). Each id rides as its 16 raw bytes (`encodeItemMarks`, inbox #500), so the contract's
+// 262,144-character cap holds 12,284 marks: a 10,000-photo Memory, every photo marked.
 //
 // **Which entry is mine is proven here, not told by the server (ADR 0068 §9).** The plaintext is
-// `{"tag","ids"}`: the tag is an HMAC under a key derived from the marking member's Master Key, over the scope, the
+// `tag ‖ ids`: the tag is an HMAC under a key derived from the marking member's Master Key, over the scope, the
 // node and the marked set. An entry is mine only when the server flags it `self` AND its tag verifies under my key —
 // the flag alone would let the server show another member's set as mine, and my next toggle would then write that
 // set into my own row. Everything not provably mine counts as someone else's: a degradation, never a refusal.
@@ -32,8 +33,6 @@ import { keyAt, zeroEpochKeys } from '../spaces/epochs'
  * one. Whose an entry is, is the self-tag inside it.
  */
 const itemFavContext = (scopeId: string, nodeId: string) => ({ purpose: 'item-favorites', scopeId, nodeId }) as const
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
 
 /**
  * One member's marked-media set for a node, as the client holds it after opening the blob.
@@ -44,39 +43,39 @@ const decoder = new TextDecoder()
  */
 export type MemberMarks = { own: boolean; ids: Set<string> }
 
-/** A blob as opened: its ids, and its self-tag when it carries a well-formed one. */
+/** A blob as opened: its ids, and its self-tag when it carries one. */
 type OpenedMarks = { ids: Set<string>; tag: Uint8Array | null }
 
 /**
- * Open one entry. A blob that will not open is an empty set; a plaintext with no usable tag — a bare array, a tag
- * that is not base64 — still counts its ids, it just cannot be anybody's *own* (ADR 0068 §9).
+ * The contract's cap on one member's sealed marks for one Memory (`PutItemFavoritesRequest.ciphertext`'s `maxLength`,
+ * item-favorites.openapi.yaml; itemFavorites.test.ts reads it there): the self-tag and 12,284 ids.
+ */
+export const ITEM_MARKS_CIPHERTEXT_MAX = 262_144
+
+/** The caller's marks for one Memory would not fit {@link ITEM_MARKS_CIPHERTEXT_MAX}: refused before any write. */
+export class ItemMarksTooMany extends Error {}
+
+/**
+ * Open one entry. A blob that will not open, or whose plaintext is not `tag ‖ ids` in its one canonical form, is an
+ * empty set that is nobody's own — a degradation, never a refusal (ADR 0068 §9).
  */
 function openMarks(scopeId: string, nodeId: string, scopeKey: Uint8Array, ciphertext: string): OpenedMarks {
-  let pt: unknown
   try {
-    pt = JSON.parse(decoder.decode(v1.open(itemFavContext(scopeId, nodeId), scopeKey, fromB64std(ciphertext))))
+    const { tag, ids } = v1.decodeItemMarks(v1.open(itemFavContext(scopeId, nodeId), scopeKey, fromB64std(ciphertext)))
+    return { ids: new Set(ids), tag }
   } catch {
     return { ids: new Set(), tag: null }
   }
-  const body = (pt ?? {}) as { tag?: unknown; ids?: unknown }
-  const list = Array.isArray(pt) ? pt : Array.isArray(body.ids) ? body.ids : []
-  const ids = new Set<string>(list.filter((i): i is string => typeof i === 'string'))
-  let tag: Uint8Array | null = null
-  if (typeof body.tag === 'string') {
-    try {
-      tag = fromB64std(body.tag)
-    } catch {
-      tag = null
-    }
-  }
-  return { ids, tag }
 }
 
-/** Seal `ids` with their self-tag under `selfKey` and store them as the caller's blob for the node. */
+/**
+ * Seal `ids` with their self-tag under `selfKey` and store them as the caller's blob for the node. A set past the cap
+ * throws {@link ItemMarksTooMany} before the PUT, so the server never sees the attempt and the caller can say why.
+ */
 async function putMarks(scopeId: string, nodeId: string, scopeKey: Uint8Array, selfKey: Uint8Array, ids: Set<string>): Promise<void> {
-  const tag = b64std(v1.itemMarkSelfTag(selfKey, { scopeId, nodeId, ids }))
-  const json = encoder.encode(JSON.stringify({ tag, ids: [...ids] }))
-  const ciphertext = b64std(v1.seal(itemFavContext(scopeId, nodeId), scopeKey, json))
+  const tag = v1.itemMarkSelfTag(selfKey, { scopeId, nodeId, ids })
+  const ciphertext = b64std(v1.seal(itemFavContext(scopeId, nodeId), scopeKey, v1.encodeItemMarks(tag, ids)))
+  if (ciphertext.length > ITEM_MARKS_CIPHERTEXT_MAX) throw new ItemMarksTooMany(`${ids.size} marks do not fit one Memory's set`)
   await withRefresh(() => itemFavoritesApi().putItemFavorites({ scopeId, nodeId, putItemFavoritesRequest: { ciphertext } }))
 }
 
