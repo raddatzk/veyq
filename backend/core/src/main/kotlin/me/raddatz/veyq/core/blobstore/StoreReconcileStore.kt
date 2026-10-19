@@ -13,6 +13,7 @@ import jakarta.transaction.Transactional
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 /** Why a tick stopped — the wire's `StoreReconcileFailure.reason`. */
 enum class ReconcileFailure { STORE_UNREACHABLE, LIST_DENIED, NO_STORE, NO_STORE_CLOCK, DATABASE }
@@ -296,9 +297,12 @@ class StoreReconcileStore {
         }
         if (row.passStartedAt == null) {
             val last = row.completedStartedAt
-            if (last != null && last.plus(period) > now) return null
+            // Cut to the column's millisecond HERE (as `NodeEntity.birthInstant` does): H2 rounds the digits past it, so an
+            // uncut start was stored up to half a millisecond late, and a tick sooner than that read it as after itself.
+            val start = now.truncatedTo(ChronoUnit.MILLIS)
+            if (last != null && last.plus(period) > start) return null
             row.passNo += 1
-            row.passStartedAt = now
+            row.passStartedAt = start
             row.passPage = 0
             row.passCursor = null
             row.passObjects = 0
