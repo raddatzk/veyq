@@ -42,7 +42,9 @@ that could not be sent. **What it does not log:** content, names, email addresse
 the links that carry them. A mail that could not be sent is logged by its kind and the mail server's reply code, not
 by its recipient; a new tenant's invitation that falls back to the copy link is logged by the tenant's id. An
 operator who needs to know whose mail it was looks the account or the tenant up by that id. Nor does it log what
-someone else wrote: a database's message, a mail server's reply text, a remote API's body.
+someone else wrote: a database's message, a mail server's reply text, a remote API's body — with one path left: when
+two requests race for the same email address and the database refuses the second as it commits, the transaction
+manager's warning (`ARJUNA012125`) carries the database's message, which names that address.
 
 **An unexpected error** — one the server had no answer for — is answered `500` with an error id in the response
 (`"message": "error id 3f2c…"`), and logged once at `ERROR` under that id: the method, the route as a template

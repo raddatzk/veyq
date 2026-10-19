@@ -19,7 +19,12 @@
   [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md),
   [Data protection](../../site/src/content/docs/run/data-protection.md),
   [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) and
-  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md). **Acceptance commits to:** §§ 1–8
+  [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md). **Open, found by the build:** a
+  constraint violation raised at **commit** (not at an explicit flush) is logged once more by Narayana —
+  `ARJUNA012125` at WARN on `com.arjuna.ats.arjuna`, with the converted exception whose text carries the driver's
+  message: measured in `./gradlew check`'s output, where two racing email changes (`EmailChangeSliceTest`) put the
+  colliding address in that line. Its category also carries the transaction reaper's timeout warnings, so silencing it
+  as § 4 silences Hibernate's is a trade the owner decides. **Acceptance commits to:** §§ 1–8
   as the rule for every log veyq writes or its recipes configure, on both deployment targets; § 6's Still open taken
   as met until veyq is offered as a service. It does not commit to JSON logs, a request id, a static log guard or a
   time-bounded retention. The owner's answers: the admin console's access log keeps no reader (Q29); no Traefik access

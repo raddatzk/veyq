@@ -211,7 +211,8 @@ but reads every chunk in order, so it shows the operator no more than a whole-bl
 § 3). The app's lines name accounts, tenants, scopes, nodes, shares, blobs and jobs by id, a domain, an exception's
 class, a SQLState and counts — never a key, a token, a sealed value or plaintext metadata, an email address, a network
 address, a User-Agent, a request's URI or input, or a message someone else wrote (a database driver's, a mail
-server's, a remote API's body). An unexpected error is logged by its route template and class chain under a random
+server's, a remote API's body) — one path open: a constraint violation at commit is logged by Narayana with the
+driver's message (ADR 0092's status line). An unexpected error is logged by its route template and class chain under a random
 error id; its full text needs a DEBUG category raised on purpose. The admin console's access log keeps no reader's
 address, the bundled proxy keeps no access log, and the e2e sweep fails a run whose logs hold a sealed value, a token
 or an address a suite signed up with ([cc.security.wire-assertion](cc.security.wire-assertion.md)). A log is
