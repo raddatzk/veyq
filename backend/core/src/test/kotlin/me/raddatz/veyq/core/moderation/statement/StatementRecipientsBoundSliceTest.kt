@@ -38,9 +38,10 @@ import java.util.UUID
  * whatever the facts' length.
  *
  * The bound is measured, not recalled: [aBodyAtTheBoundWithEveryFieldAtItsLargestFitsTheRequestLimit] sends the largest
- * body the contract lets a step have at the bound and the server reads it; red (`413`) when the bound grows past what
- * Quarkus' 10,240 KiB request limit holds. Past the bound, a step with facts is refused by name, and the same step
- * without facts still tells every member.
+ * body the contract lets a step have at the bound and the server reads it; red when the bound grows past what Quarkus'
+ * 10,240 KiB request limit holds — measured at 6,400: the server resets the upload mid-body (`SocketException:
+ * Connection reset`), it does not answer `413`, so a client sees no status at all. Past the bound, a step with facts is
+ * refused by name, and the same step without facts still tells every member.
  */
 @QuarkusTest
 class StatementRecipientsBoundSliceTest {
