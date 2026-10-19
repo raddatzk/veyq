@@ -50,6 +50,8 @@ import { saveGuestSession, forgetGuestSession, type GuestIdentity } from '../../
 import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
 import type { ShareMedia } from '../../../api/generated/share-media'
 import { publicSharesApi } from '../../../api/client'
+import type { SharingApi } from '../../../api/generated/sharing'
+import { planBlob } from '../../../core/blob/transport'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { publicShareMediaApi } from '../api'
 import { addSharePhoto } from '../share'
@@ -82,7 +84,7 @@ function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Ar
   return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A folder link: the folder, a Memory in it, a chapter in the Memory. */
-function head(role: ShareRole): PublicShareHead {
+function head(role: ShareRole, extraMeta: Record<string, unknown> = {}): PublicShareHead {
   return {
     shareId: SHARE, kShare: K_SHARE, scopeId: SCOPE, name: 'Familie', noteByLocale: {}, role, rootKind: FOLDER_KIND,
     share: {
@@ -90,7 +92,7 @@ function head(role: ShareRole): PublicShareHead {
       nodes: [
         { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
         // a share serves the node's `wrappedMeta` UNCHANGED: the Memory's carries its participants, the guest holds its `K_node`
-        { ...child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND), wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: PARTICIPANTS } }) },
+        { ...child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND), wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: PARTICIPANTS }, ...extraMeta }) },
         child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND),
       ],
     } as PublicShare,
@@ -127,8 +129,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function mountPage(role: ShareRole) {
-  const h = head(role)
+async function mountPage(role: ShareRole, extraMeta: Record<string, unknown> = {}) {
+  const h = head(role, extraMeta)
   requestGuest = vi.fn(async () => null)
   const w = mount(ShareTreePage, {
     props: { shareId: SHARE, fragmentKey: b64url(K_SHARE), pwToken: PW, head: h, reload: async () => {}, access: guestAccessFor(h, { pwToken: PW, requestGuest }) },
@@ -149,7 +151,8 @@ const byLabel = (w: Page, label: string) => w.find(`[aria-label="${label}"]`)
 function expectGuestOnly(w: Page) {
   for (const label of [
     t('share.share'), t('share.uploadRequest'), t('node.favorite'), t('node.unfavorite'), t('node.rename'), t('node.delete'),
-    t('media.marks.mark'), t('media.marks.unmark'), t('memory.addChapter'),
+    t('media.marks.mark'), t('media.marks.unmark'), t('memory.addChapter'), t('memory.banner.add'), t('memory.banner.change'),
+    t('memory.banner.useAsBanner'),
   ]) {
     expect(byLabel(w, label).exists(), label).toBe(false)
     expect(w.findAll('button').some((b) => b.text() === label), label).toBe(false)
@@ -227,6 +230,19 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     const participants = unsealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, served.wrappedMeta ?? null).participants
     expect(participants).toEqual({ userIds: PARTICIPANTS })
     expect(Object.keys(participants as object)).toEqual(['userIds'])
+  })
+
+  // uc.memory.banner E6 - share view = member view: the guest's page draws the Memory's banner from the node's own BANNER
+  // attachment through the link's gated presign (the banner's ref sealed in the meta the share serves), and offers no action.
+  it('READ: the banner is read from the Memory\'s own attachment through the link, and offers no action', async () => {
+    const plan = planBlob(SCOPE, { ownerId: MEMORY, role: 'BANNER' }, keys.memory, new Blob([new Uint8Array(4)]))
+    const banner = { medium: 'image', blob: { blobId: plan.blobId, chunkCount: plan.chunkCount, byteSize: plan.byteSize, wrappedBlobKey: plan.wrappedBlobKey }, frame: 'fill', focal: { x: 0.5, y: 0.5 } }
+    const resolve = vi.fn<SharingApi['resolveShareBlob']>(async () => { throw new Error('no store here') })
+    fakeApi(publicSharesApi, { resolveShareBlob: resolve })
+    const w = await mountPage(ShareRole.Read, { banner })
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, blobId: plan.blobId })))
+    expectGuestOnly(w)
+    w.unmount()
   })
 
   it('READ: no delete on any tile, not even one this device once sent', async () => {

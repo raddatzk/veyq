@@ -65,6 +65,10 @@ const props = defineProps<{
   coverMediaId?: string | null // the photo currently used as the Memory's cover — marks the "Set as cover" button
   /** Offer "use this photo as the Memory's cover" (`setCover` event). */
   canSetCover: boolean
+  /** The medium the Memory's banner was made from (its sealed `origin`) — marks the "Use as banner" button. */
+  bannerMediaId?: string | null
+  /** Offer "use this photo or video as the Memory's banner" (`setBanner` event, uc.memory.banner A1). */
+  canSetBanner?: boolean
   /** Whether the shown item carries a delete (`delete` event; the parent trashes or purges it, Delete key included). */
   canDelete: (item: MediaItem) => boolean
   previewLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier
@@ -93,6 +97,7 @@ const emit = defineEmits<{
   close: [mediaId: string | null]
   updated: [{ mediaId: string } & SealedMetaState] // a meta write landed, or a conflict handed back the current tier
   setCover: [{ mediaId: string }] // "use this photo as the Memory's cover" (cr-0073 §gallery-source)
+  setBanner: [{ mediaId: string; src: string | null; video: boolean }] // "use this as the Memory's banner" (uc.memory.banner A1)
   delete: [{ mediaId: string }] // delete this photo: a member's trash with undo (cr-0110), a guest's purge of its own (asked first)
   report: [item: MediaItem] // report this medium (uc.moderation.report): the host opens core's report dialog with its keys
 }>()
@@ -139,6 +144,7 @@ const capturedAtError = ref<'failed' | 'conflict' | 'unreadable' | null>(null)
 
 const item = computed(() => props.items[current.value])
 const isCover = computed(() => !!item.value && item.value.mediaId === props.coverMediaId) // this photo is the Memory's cover
+const isBanner = computed(() => !!item.value && item.value.mediaId === props.bannerMediaId) // the banner was made from it
 const canPrev = computed(() => current.value > 0)
 const canNext = computed(() => current.value < props.items.length - 1)
 // A medium a moderator blocked (uc.moderation.take-a-measure) previews nothing: every byte of it answers 451.
@@ -737,6 +743,20 @@ onBeforeUnmount(() => {
           @click="!isCover && item && emit('setCover', { mediaId: item.mediaId })"
         >
           <span class="pi" :class="isCover ? 'pi-check' : 'pi-image'" />
+        </button>
+        <!-- uc.memory.banner A1: the banner dialog opens over the lightbox on this medium (its keys suspended, as for the
+             cover). The medium is copied from its original on save; the button marks the one the banner was made from. -->
+        <button
+          v-if="previewable && canSetBanner"
+          class="veyq-icon-button lightbox-icon-button"
+          :class="{ 'lightbox-cover-active': isBanner }"
+          type="button"
+          :aria-pressed="isBanner"
+          :aria-label="t(isBanner ? 'memory.banner.isBanner' : 'memory.banner.useAsBanner')"
+          :title="t(isBanner ? 'memory.banner.isBanner' : 'memory.banner.useAsBanner')"
+          @click="!isBanner && item && emit('setBanner', { mediaId: item.mediaId, src: previewUrl, video: !!videoType })"
+        >
+          <span class="pi" :class="isBanner ? 'pi-check' : 'pi-objects-column'" />
         </button>
         <button
           v-if="item && canReport"
