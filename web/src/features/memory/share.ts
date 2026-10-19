@@ -234,7 +234,8 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
           ...target,
           items: [{
             mediaId: media.mediaId,
-            originalUploadId: media.originalUploadId,
+            // A guest's upload is never a shared row (ADR 0013 § 5): no `storedOriginal` reaches this transport.
+            originalUploadId: media.originalUploadId!,
             derivatives: media.derivatives.map((d) => ({ kind: d.kind, uploadId: d.uploadId })),
             wrappedMeta: media.wrappedMeta,
             wrappedExif: media.wrappedExif,

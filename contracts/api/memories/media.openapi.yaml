@@ -625,8 +625,9 @@ components:
       type: object
       description: >
         One logical media: the original upload plus up to two role-tagged derivative uploads (THUMBNAIL,
-        PREVIEW). Each `*UploadId` references a session opened by `startBlobUploads` for this `mediaId`.
-      required: [mediaId, originalUploadId, nodeId]
+        PREVIEW). Each `*UploadId` references a session opened by `startBlobUploads` for this `mediaId`. The original
+        is exactly one of `originalUploadId` and `originalShared`, else the item fails `invalid_request`.
+      required: [mediaId, nodeId]
       properties:
         mediaId:
           x-veyq-visibility: id
@@ -637,10 +638,20 @@ components:
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         originalUploadId:
           x-veyq-visibility: id
-          type: string
+          type: [string, "null"]
           format: uuid
           description: The upload session for the **original** (pristine) blob, opened by `startBlobUploads`.
           example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        originalShared:
+          description: >
+            In place of `originalUploadId`: the original is a new row on the stored object of a blob the target node
+            already holds - a video banner (`BANNER`) the picked file was found equal to
+            (cr-cover-banner-upload-only-and-dedup). Its wrap is sealed with `role` ORIGINAL and `ownerId` = `mediaId`.
+            A member's completion only; the item fails `shared_source_invalid` where the source is not the node's.
+          oneOf:
+            - { $ref: "#/components/schemas/SharedBlob" }
+            - { type: "null" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         nodeId:
           x-veyq-visibility: id
           type: string
@@ -730,7 +741,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists); null on success.
+          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `shared_source_invalid` = `originalShared` names no blob the node holds, or its id is taken, `invalid_request` = neither or both of `originalUploadId` and `originalShared`); null on success.
           maxLength: 64
           example: null
 
@@ -1179,5 +1190,7 @@ components:
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
+    SharedBlob:
+      $ref: '../_common.openapi.yaml#/components/schemas/SharedBlob'
     StaleSealedMeta:
       $ref: '../_common.openapi.yaml#/components/schemas/StaleSealedMeta'

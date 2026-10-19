@@ -13,6 +13,7 @@ vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<ob
 vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
 
+import { contentDigest } from '../../core/blob/sharedBlob'
 import * as v1 from '@veyq/crypto/v1'
 import {
   addCopiedMedia, addMedia, backfillPlaceName, chunkProvider, listMedia, listMediaPages, loadMediaExif, openBlob, originalBlobMeta, originalMediaType, plaintextSize,
@@ -91,7 +92,8 @@ describe('exportMemoryContent', () => {
   it('exports the media with capture time, correction flag, place and EXIF, and the node\'s date, place, cover and names', async () => {
     const { ctx, payloads } = exportCtx(meta)
     const c = (await exportMemoryContent(ctx))!
-    expect(c).toMatchObject({ type: MEMORY_CONTENT, schema: 1, date: meta.date, participants: ['Anna Meyer', 'Ben'], cover: { mediaIndex: 1 } })
+    expect(c).toMatchObject({ type: MEMORY_CONTENT, schema: 1, date: meta.date, participants: ['Anna Meyer', 'Ben'] })
+    expect(c.cover, 'an older client\'s photo reference is no cover: nothing to export').toBeUndefined()
     expect(c.location).toMatchObject({ name: 'Lisbon', derived: { lat: 38.7, lng: -9.1 } })
     const [a, b] = c.media as { name: string; capturedAt: string; capturedAtCorrected?: true; location?: unknown; exif?: Record<string, unknown>; contributor?: string }[]
     expect(a).toMatchObject({ name: 'a.jpg', capturedAt: new Date(1_700_000_000_000).toISOString(), location: { lat: 38.7, lon: -9.1, place: 'Lisbon' }, contributor: 'Anna Meyer' })
@@ -225,7 +227,7 @@ describe('importMemoryContent', () => {
     vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
   })
 
-  it('creates the Memory with its date and place sealed at birth, adds the originals through the upload and sets the cover', async () => {
+  it('creates the Memory with its date and place sealed at birth, adds the originals; an older archive\'s cover by mediaIndex is not restored', async () => {
     const c = ctx(node())
     const made = await importMemoryContent(MEMORY_KIND)(c)
     expect(made.nodeId).toBe(NEW)
@@ -238,7 +240,7 @@ describe('importMemoryContent', () => {
     expect(vi.mocked(addMedia)).toHaveBeenCalledTimes(3)
     const src = vi.mocked(addMedia).mock.calls[0][3]
     expect(src).toMatchObject({ mediaType: 'image/jpeg', lastModified: 1_700_000_000_000, name: 'a.jpg' })
-    expect(vi.mocked(writeNodeCover)).toHaveBeenCalledWith(expect.objectContaining({ nodeId: NEW, cover: { source: { kind: 'media', mediaId: 'm2' }, crop: { x: 0, y: 0, width: 1, height: 1 } } }))
+    expect(vi.mocked(writeNodeCover), 'a cover is set only by an upload: a photo reference is left out').not.toHaveBeenCalled()
   })
 
   it('restores a correction as an override and a place name, only for the media that need it', async () => {
@@ -329,11 +331,13 @@ describe('importMemoryContent', () => {
 
 describe('validateMemoryContent: a download\'s Memory checked against its contract before anything is written', () => {
   const medium = { file: { path: 'Trip/a.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'a.jpg' }
-  const sound = { type: MEMORY_CONTENT, schema: 1, media: [medium], date: { mode: 'range', from: '2025-09-14', to: '2025-09-17' }, participants: ['Anna'], cover: { mediaIndex: 0, crop: {} } }
+  const sound = { type: MEMORY_CONTENT, schema: 1, media: [medium], date: { mode: 'range', from: '2025-09-14', to: '2025-09-17' }, participants: ['Anna'], cover: { file: { path: 'Trip/cover.jpg', size: 1, mediaType: 'image/jpeg' }, crop: {} } }
 
   it('control: sound content passes, unknown fields are ignored', () => {
     expect(validateMemoryContent({ ...sound, someday: 'a field a later build adds' })).toBeNull()
     expect(validateMemoryContent({ type: CHAPTER_CONTENT, media: [] })).toBeNull()
+    // an older archive's cover by `mediaIndex` has no file: left out on import, never a refusal
+    expect(validateMemoryContent({ ...sound, cover: { mediaIndex: 0, crop: {} } })).toBeNull()
   })
 
   it.each([
@@ -343,7 +347,7 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
     ['a capture time that is no time', { ...sound, media: [{ ...medium, capturedAt: 'yesterday' }] }, 'invalid_manifest'],
     ['a latitude out of range', { ...sound, media: [{ ...medium, location: { lat: 91 } }] }, 'invalid_manifest'],
     ['a date of another shape', { ...sound, date: { mode: 'someday' } }, 'invalid_manifest'],
-    ['a cover that is neither a medium nor a file', { ...sound, cover: { crop: {} } }, 'invalid_manifest'],
+    ['a cover whose file is no payload', { ...sound, cover: { file: 'cover.jpg', crop: {} } }, 'invalid_manifest'],
     ['a medium name over its length', { ...sound, media: [{ ...medium, name: 'x'.repeat(MEMORIES_LIMITS.name + 1) }] }, 'too_large'],
     ['a contributor over its length', { ...sound, media: [{ ...medium, contributor: 'x'.repeat(MEMORIES_LIMITS.contributor + 1) }] }, 'too_large'],
     ['a place over its length', { ...sound, location: { name: 'x'.repeat(MEMORIES_LIMITS.place + 1) } }, 'too_large'],
@@ -352,7 +356,6 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
     ['a banner with no file', { ...sound, banner: { medium: 'image' } }, 'invalid_manifest'],
     ['a banner of another medium', { ...sound, banner: { medium: 'audio', file: { path: 'b', size: 1 } } }, 'invalid_manifest'],
     ['a banner focal point off the medium', { ...sound, banner: { medium: 'image', file: { path: 'b', size: 1 }, focal: { x: 2, y: 0 } } }, 'invalid_manifest'],
-    ['a banner description over its length', { ...sound, banner: { medium: 'image', file: { path: 'b', size: 1 }, alt: 'x'.repeat(MEMORIES_LIMITS.bannerAlt + 1) } }, 'too_large'],
   ])('refuses %s', (_what, content, code) => {
     expect(validateMemoryContent(content as unknown as ManifestNode['content'] & object)).toMatchObject({ code })
   })
@@ -366,8 +369,11 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
       place: d.memoriesPlace.properties.name.maxLength,
       participant: d.memoriesMemory.properties.participants.items.maxLength,
       participants: d.memoriesMemory.properties.participants.maxItems,
-      bannerAlt: d.memoriesBanner.properties.alt.maxLength,
     }).toEqual(MEMORIES_LIMITS)
+    // the banner has no description, and neither a cover nor a banner names a medium by index
+    expect(Object.keys(d.memoriesBanner.properties)).not.toContain('alt')
+    expect(Object.keys(d.memoriesBanner.properties)).not.toContain('mediaIndex')
+    expect(Object.keys(d.memoriesCover.properties)).not.toContain('mediaIndex')
     expect(d.memoriesChapter.properties.banner.$ref).toBe('#/$defs/memoriesBanner')
     expect(d.memoriesMedium.properties.location.properties.place.maxLength).toBe(MEMORIES_LIMITS.place)
     expect(d.memoriesChapter.properties.participants.maxItems).toBe(MEMORIES_LIMITS.participants)
@@ -381,8 +387,9 @@ describe('the banner travels with its Memory', () => {
   const ref = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 100, wrappedBlobKey: 'k' })
   const stored = {
     medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/quicktime', origin: { mediaId: 'b' },
-    frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay',
+    frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay', // an older client's origin and description travel nowhere
   }
+  const DIG = 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0'
   const importCtx = (content: Record<string, unknown>) =>
     ({
       scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Lisbon', cache: new Map(),
@@ -398,26 +405,31 @@ describe('the banner travels with its Memory', () => {
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(listMedia).mockResolvedValue([])
     vi.mocked(listTree).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3 } as unknown as TreeNode])
-    vi.mocked(uploadBanner).mockResolvedValue({ medium: 'video', uploadId: 'bu', posterUploadId: 'pu', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime' })
+    vi.mocked(uploadBanner).mockResolvedValue({ medium: 'video', uploadId: 'bu', posterUploadId: 'pu', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime', sha256: DIG })
   })
 
   it('a video banner exports as its files and framing, and comes back into the new node\'s slots with them', async () => {
     const { ctx, payloads } = exportCtx({ banner: stored })
     const content = (await exportMemoryContent(ctx))!
     expect(payloads.slice(-2).map((p) => [p.name, p.mediaType])).toEqual([['banner.mov', 'video/quicktime'], ['banner-poster.jpg', 'image/jpeg']])
-    expect(content.banner).toMatchObject({ medium: 'video', frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay', mediaIndex: 1 })
+    expect(content.banner).toMatchObject({ medium: 'video', frame: 'fit', focal: { x: 0.2, y: 0.7 } })
+    expect(content.banner).not.toHaveProperty('alt')
+    expect(content.banner).not.toHaveProperty('mediaIndex')
     expect(validateMemoryContent(content)).toBeNull()
     // read through the member's chunk source over the BANNER ref: the banner's own attachment, nothing of the gallery
     expect(vi.mocked(makeChunkProvider).mock.calls[0][2]).toMatchObject({ blobId: 'v', role: 'BANNER', ownerId: NODE })
 
     const wire = JSON.parse(JSON.stringify(content)) as Record<string, unknown> // as an archive carries it
     await importMemoryContent(MEMORY_KIND)(importCtx(wire))
-    expect(vi.mocked(uploadBanner).mock.calls[0][3]).toMatchObject({ medium: 'video', type: 'video/quicktime' })
+    // a video's file is the banner's original: its digest is read again for the banner's `sha256` and its blob-meta
+    expect(vi.mocked(uploadBanner).mock.calls[0][3]).toMatchObject({
+      medium: 'video', type: 'video/quicktime', sha256: await contentDigest(new File(['x'], 'banner.mov')), video: { upload: expect.any(File) },
+    })
     expect(vi.mocked(writeMemoryBanner)).toHaveBeenCalledWith(expect.objectContaining({
       nodeId: NEW, upload: { uploadId: 'bu', posterUploadId: 'pu' }, surfaceConflict: false,
       banner: {
-        medium: 'video', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime', origin: { mediaId: 'm2' },
-        frame: 'fit', focal: { x: 0.2, y: 0.7 }, alt: 'The bay',
+        medium: 'video', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime', sha256: DIG,
+        frame: 'fit', focal: { x: 0.2, y: 0.7 },
       },
     }))
   })

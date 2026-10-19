@@ -137,7 +137,11 @@ messaging pattern this codebase does not have.
   - **A `storage_key` can legitimately appear twice**, so nothing may assume one row per key.
     `BlobUploadStore.persistBlob` gives a committed blob the same `storage_key` as the upload session it was promoted
     from, and the over-budget purge records a session's objects while deliberately leaving its row standing —
-    which is why `veyq_store_reclaim` carries no unique index on that column.
+    which is why `veyq_store_reclaim` carries no unique index on that column. And **two `veyq_blob` rows may name one
+    key**: a cover, a banner or a gallery original that shares an equal file's stored object inside one node
+    ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5). Such an object is recorded only when its last row
+    goes (`BlobUploadStore.deleteBlobRow`, under the row locks of every row on it), and the sweep's selection
+    (`StoreReclaimStore.due`) skips a key any blob row still names, beside a held one.
   - **The window that excludes the race is stateable, so no design here needs a heuristic.** The write paths leave
     no moment at which an object exists unnamed. At **presign** time: `presignPut` is reached only through
     `presignPuts`, whose one caller (`BlobUploadHandler.presignWindow`) runs *after* `BlobUploadStore.createSession`

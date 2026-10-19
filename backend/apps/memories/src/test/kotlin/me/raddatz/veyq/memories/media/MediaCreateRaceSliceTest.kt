@@ -134,7 +134,7 @@ class MediaCreateRaceSliceTest {
             val answer = whileUncommitted(
                 change = {
                     val session = UploadSessionEntity.findById(first.uploadId)!!
-                    assertNotNull(store.attach(first.mediaId, session, memory, null, emptyList(), null, null, uploaderUserId = userId), "round $round")
+                    assertNotNull(store.attach(first.mediaId, OriginalAttach.Upload(session, null), memory, emptyList(), null, null, uploaderUserId = userId), "round $round")
                 },
                 overlapping = { complete(userId, scopeId, completeBody(memory, second)) },
             )

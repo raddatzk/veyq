@@ -12,6 +12,8 @@ import {
   isLocationPending,
   mediaGpsPoints,
   normalizeLocation,
+  MAX_PLACE_NAME,
+  boundPlaceName,
   sameMemoryLocation,
   setMemoryLocation,
   unsealMemoryLocation,
@@ -96,6 +98,14 @@ describe('mediaGpsPoints', () => {
 })
 
 describe('normalizeLocation', () => {
+  it('cuts a name to MAX_PLACE_NAME code points, never splitting a character (the meta budget\'s bound)', () => {
+    const name = '😀'.repeat(MAX_PLACE_NAME + 5)
+    const read = normalizeLocation({ name, nameSource: 'manual', derivedMode: 'fixed' })!
+    expect(Array.from(read.name)).toHaveLength(MAX_PLACE_NAME)
+    expect(read.name).toBe('😀'.repeat(MAX_PLACE_NAME))
+    expect(boundPlaceName('  Rom  ')).toBe('Rom')
+  })
+
   it('requires a non-empty name (no name ⇒ no location) except a pending auto place', () => {
     expect(normalizeLocation({ nameSource: 'manual', derivedMode: 'fixed' })).toBeNull() // fixed needs a name
     expect(normalizeLocation({ name: '   ', nameSource: 'manual' })).toBeNull() // manual needs a name
@@ -179,6 +189,13 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
     expect(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta).toBe(sealed)
     expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(loc)
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(date) // date survived
+  })
+
+  it('a name over its bound is written cut to it (the meta budget\'s bound holds on the write too)', async () => {
+    mockUpdate()
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, { ...loc, name: 'x'.repeat(MAX_PLACE_NAME + 40) }, { wrappedMeta: null, metaRevision: 0 })
+    const raw = unsealNodeMeta(nodeKey, NODE, sealed).location as { name: string }
+    expect(raw.name).toHaveLength(MAX_PLACE_NAME)
   })
 
   it('a place that is a name only (inbox #458) round-trips the sealed v1 format unchanged, the date beside it', async () => {

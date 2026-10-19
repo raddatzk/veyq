@@ -33,6 +33,7 @@ import {
 } from '../../core/blob/transport'
 import type { BlobDeclare, BlobRef, BlobSource, ReservedUpload, WindowFn } from '../../core/blob/types'
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
+import { contentDigest, sealedByteSize, shareBlob, type SharedBlobRequest, type StoredBlob } from '../../core/blob/sharedBlob'
 import { sniffMediaType } from './download'
 import { readItemPages, type ItemsOnePage } from '../../core/items/itemsLive'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
@@ -538,24 +539,34 @@ export async function resolveMediaType(source: AddMediaSource): Promise<string> 
 
 /**
  * What each blob of a media declares about its bytes (core's `blob-meta`, sealed under that blob's own `K_blob`,
- * inbox #397): the ORIGINAL its type, the file name it was picked under and the file's modified time — the facts the
- * lightbox names, types and badges it by ([originalBlobMeta]); a derivative tier only its type (the deriver always
- * writes a JPEG). Never sent in the clear: the declare carries the seal only.
+ * inbox #397): the ORIGINAL its type, the file name it was picked under, the file's modified time — the facts the
+ * lightbox names, types and badges it by ([originalBlobMeta]) - and the SHA-256 of its bytes, by which a later upload of
+ * the same file into the Memory's cover or banner dialog shares its stored object (ADR 0013 § 5, `storedMatch.ts`); a
+ * derivative tier only its type (the deriver always writes a JPEG). Never sent in the clear: the declare carries the seal.
  */
-function originalBlobMetaOf(source: AddMediaSource): BlobMeta {
-  return { type: source.mediaType, name: source.name, modifiedAt: source.lastModified }
+function originalBlobMetaOf(source: AddMediaSource, sha256: string): BlobMeta {
+  return { type: source.mediaType, name: source.name, modifiedAt: source.lastModified, sha256 }
 }
 /** A derivative tier's and a derived cover's type — `shared/image/mediaDeriver` re-encodes every one as a JPEG. */
 const DERIVED_META: BlobMeta = { type: 'image/jpeg' }
 
 /** Upload progress (0..1) + cancellation hooks for [addMedia], used by the upload queue (uc.memory.upload). */
-export type AddMediaOptions = { onProgress?: (fraction: number) => void; signal?: AbortSignal }
+export type AddMediaOptions = {
+  onProgress?: (fraction: number) => void
+  signal?: AbortSignal
+  /** A stored blob of the target node whose plaintext is the picked file - by its digest and sealed size - which the new
+   *  medium's original shares instead of being uploaded (ADR 0013 § 5: a video banner, `storedMatch.bannerOriginalOf`).
+   *  A member's upload only; absent, the original is uploaded. */
+  storedOriginal?: (sha256: string, byteSize: number) => StoredBlob | null
+}
 
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
   /** The client-minted media id every upload of it was started for (ADR 0072). */
   mediaId: string
-  originalUploadId: string
+  /** The original's upload - or, in its place, a new row on a stored object of the node ([originalShared]). */
+  originalUploadId?: string
+  originalShared?: SharedBlobRequest
   derivatives: { kind: MediaDerivativeKind; uploadId: string }[]
   wrappedMeta: string | null
   wrappedExif: string | null
@@ -594,6 +605,9 @@ export async function uploadMediaVia(
 ): Promise<{ blobId: string; mediaId: string }> {
   throwIfAborted(opts.signal)
   const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
+  // The original's digest (its `blob-meta` `sha256`): read once more, frame by frame, before anything is planned.
+  const sha256 = await contentDigest(typed.blob, opts.signal)
+  const stored = opts.storedOriginal?.(sha256, sealedByteSize(typed.blob.size)) ?? null
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
   // ONE decode of the original: `deriveTiers` produces both tiers from it and hands back the geometry it
@@ -603,7 +617,7 @@ export async function uploadMediaVia(
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
   // memory from the derivation — in order.
   return uploadSealedMedia(scopeId, memoryKey, mediaId, {
-    original: { source: typed.blob, meta: originalBlobMetaOf(typed) },
+    original: { source: typed.blob, meta: originalBlobMetaOf(typed, sha256), ...(stored ? { stored } : {}) },
     tiers: tiers.map((t) => ({ kind: t.kind, source: new Blob([t.bytes as BlobPart]), meta: DERIVED_META })),
     wrappedMeta,
     wrappedExif,
@@ -613,7 +627,8 @@ export async function uploadMediaVia(
 /** A media's blobs and sealed tiers, ready to upload: the original and each role-tagged derivative with the meta its blob
  *  declares, and the two metadata tiers already sealed bound to the media. */
 type SealedMedia = {
-  original: { source: BlobSource; meta?: BlobMeta }
+  /** `stored`: the node already holds these bytes - the original is a shared row on them, nothing uploaded. */
+  original: { source: BlobSource; meta?: BlobMeta; stored?: StoredBlob }
   tiers: { kind: MediaDerivativeKind; source: BlobSource; meta?: BlobMeta }[]
   wrappedMeta: string | null
   wrappedExif: string | null
@@ -624,26 +639,30 @@ async function uploadSealedMedia(
   scopeId: string, memoryKey: Uint8Array, mediaId: string, media: SealedMedia, transport: MediaUploadTransport, opts: AddMediaOptions,
 ): Promise<{ blobId: string; mediaId: string }> {
   const { onProgress, signal } = opts
-  // index 0 = the original, the rest the derivatives in order. Each blob's meta is sealed under its own K_blob as it is planned.
+  const original = { ownerId: mediaId, role: 'ORIGINAL' }
+  // A stored original is a new row on the node's object (ADR 0013 § 5); else index 0 is the original's plan. The rest are
+  // the derivatives in order. Each blob's meta is sealed under its own K_blob as it is planned.
+  const shared = media.original.stored ? shareBlob(scopeId, media.original.stored, memoryKey, original, media.original.meta) : null
   const plans = [
-    planBlob(scopeId, { ownerId: mediaId, role: 'ORIGINAL' }, memoryKey, media.original.source, media.original.meta),
+    ...(shared ? [] : [planBlob(scopeId, original, memoryKey, media.original.source, media.original.meta)]),
     ...media.tiers.map((t) => planBlob(scopeId, { ownerId: mediaId, role: t.kind }, memoryKey, t.source, t.meta)),
   ]
+  const first = shared ? 0 : 1 // where the derivatives' plans start
 
   // reserve one upload session per blob, then read → seal → PUT each chunk straight to the store (no base64, no
   // JSON, no credentials), window by window, passing the abort signal so a cancel stops the in-flight PUTs.
   const uploadIds = await reserveAndPump(plans, (d) => transport.reserve(d), transport.window, onProgress, signal)
 
-  // complete — one logical media: the original + its role-tagged derivative uploads
+  // complete — one logical media: the original (an upload, or the shared row) + its role-tagged derivative uploads
   throwIfAborted(signal)
   const done = await transport.complete({
     mediaId,
-    originalUploadId: uploadIds[0],
-    derivatives: media.tiers.map((t, i) => ({ kind: t.kind, uploadId: uploadIds[i + 1] })),
+    ...(shared ? { originalShared: shared.request } : { originalUploadId: uploadIds[0] }),
+    derivatives: media.tiers.map((t, i) => ({ kind: t.kind, uploadId: uploadIds[i + first] })),
     wrappedMeta: media.wrappedMeta,
     wrappedExif: media.wrappedExif,
   })
-  return { blobId: expectMintedId(plans[0].blobId, done.blobId), mediaId: expectMintedId(mediaId, done.mediaId) }
+  return { blobId: expectMintedId(shared ? shared.ref.blobId : plans[0].blobId, done.blobId), mediaId: expectMintedId(mediaId, done.mediaId) }
 }
 
 /**
@@ -693,8 +712,8 @@ function mediaApiTransport(scopeId: string, nodeId: string): MediaUploadTranspor
           scopeId,
           mediaBatchRequest: {
             items: [{
-              mediaId: media.mediaId, nodeId, originalUploadId: media.originalUploadId, derivatives: media.derivatives,
-              wrappedMeta: media.wrappedMeta, wrappedExif: media.wrappedExif,
+              mediaId: media.mediaId, nodeId, originalUploadId: media.originalUploadId ?? null, originalShared: media.originalShared ?? null,
+              derivatives: media.derivatives, wrappedMeta: media.wrappedMeta, wrappedExif: media.wrappedExif,
             }],
           },
         }),
@@ -724,7 +743,7 @@ export async function addMedia(
 
 // --- the standalone cover blob is core's since inbox #411 ---------------------------------------------------------------
 // Its upload (`uploadCoverImage`), spec and write (`setNodeCover` / `removeNodeCover`) live in `core/node/cover/`; what Memories
-// adds - its second cover source, one of its own photos - is `memoryCover.ts` / `coverLoad.ts`.
+// adds - where an equal picture is already stored, so the cover shares it - is `storedMatch.ts` (`findStoredCover`).
 
 // --- delete / restore / trash (uc.memory.delete-media, cr-0110) -------------
 

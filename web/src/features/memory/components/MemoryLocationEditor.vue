@@ -20,7 +20,7 @@ import Select from 'primevue/select'
 import MemoryMap from './MemoryMap.vue'
 import { reverseGeocode, defaultLevel, nameAtLevel, type GeoLevel } from '../geocode'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
-import type { LatLng, MemoryLocation } from '../memoryLocation'
+import { MAX_PLACE_NAME, type LatLng, type MemoryLocation } from '../memoryLocation'
 
 const props = defineProps<{
   location: MemoryLocation | null // the current stored location (null = a fresh set)
@@ -218,6 +218,7 @@ onBeforeUnmount(() => {
           v-else
           v-model="name"
           class="memory-location-name-field"
+          :maxlength="MAX_PLACE_NAME"
           :placeholder="t('memory.place.namePlaceholder')"
           :aria-label="t('memory.place.name')"
           @input="onNameInput"

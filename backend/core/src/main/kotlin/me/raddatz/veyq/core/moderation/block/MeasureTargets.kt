@@ -68,29 +68,67 @@ class MeasureTargets(
      * lifted by no one and logged so (`MEASURE_LIFTED` on its case, or an instance event for a Server Owner's step on no
      * case), dated from [now]. The pending deletes are flushed first, so the eraser holds every erased row's lock before
      * the measures are read — a taker that locked one before has committed by then (the race above).
+     *
+     * **Except where the stored object survives** (owner 2026-10-19, ADR 0093 § 6): [holding] names, per erased item, the
+     * storage keys of its stored objects that other blob rows of its node still name (a cover or a banner sharing a
+     * medium's object, ADR 0013 § 5). A [BlockKind.CONTENT_ITEM] measure on such an item keeps standing, hanging on those
+     * objects ([ModerationBlockEntity.heldObjects]): every row naming one is still refused as blocked, and it ends with the
+     * objects' last row ([objectsGone]) or a moderator's lift.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun erased(kinds: Collection<BlockKind>, targetIds: Collection<String>, now: Instant = Instant.now()) {
+    fun erased(
+        kinds: Collection<BlockKind>, targetIds: Collection<String>, now: Instant = Instant.now(),
+        holding: Map<String, Set<String>> = emptyMap(),
+    ) {
         if (kinds.isEmpty() || targetIds.isEmpty()) return
         ModerationBlockEntity.getEntityManager().flush()
         targetIds.distinct().chunked(CHUNK).forEach { chunk ->
             ModerationBlockEntity.list("targetId in ?1 and kind in ?2 and activeKey is not null", chunk, kinds.map { it.name })
                 .forEach { row ->
-                    row.liftedAt = now
-                    row.activeKey = null
-                    // The lift's line in the erasure ledger (ADR 0056 decision 8): an item's last line is a lift, so a
-                    // restore of a capture before the erasure never blocks it again.
-                    ledger.blockLifted(row)
-                    val caseId = row.caseId
-                    if (caseId != null) {
-                        log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = row.targetId)
+                    val held = holding[row.targetId].orEmpty()
+                    if (row.blockKind == BlockKind.CONTENT_ITEM && held.isNotEmpty()) {
+                        row.heldObjects = (row.heldKeys + held).sorted().joinToString(" ")
                     } else {
-                        log.append(
-                            ModerationEvent.MEASURE_LIFTED, now, moderatorId = null, actorId = null, reason = row.kind,
-                            targetId = row.targetId, datedFrom = now,
-                        )
+                        end(row, now)
                     }
                 }
+        }
+    }
+
+    /**
+     * The last blob row naming each of [storageKeys] went, **in the eraser's transaction** (`BlobUploadStore.deleteBlobRow`
+     * records the object's reclaim then; `ScopePurge` erases a space's rows at once): a measure that hangs on such an object
+     * ([erased]'s `holding`) lets go of it, and one that holds no object any more ends, as with its target.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun objectsGone(storageKeys: Collection<String>, now: Instant = Instant.now()) {
+        if (storageKeys.isEmpty()) return
+        val gone = storageKeys.toSet()
+        gone.forEach { key ->
+            ModerationBlockEntity.list("activeKey is not null and heldObjects like ?1", "%$key%").forEach { row ->
+                val left = row.heldKeys - gone
+                if (left.size == row.heldKeys.size) return@forEach // the key matched only as a substring of another
+                row.heldObjects = left.sorted().joinToString(" ").ifEmpty { null }
+                if (left.isEmpty()) end(row, now)
+            }
+        }
+    }
+
+    /** End [row] with its target: lifted by no one, logged so, its lift in the erasure ledger. */
+    private fun end(row: ModerationBlockEntity, now: Instant) {
+        row.liftedAt = now
+        row.activeKey = null
+        // The lift's line in the erasure ledger (ADR 0056 decision 8): an item's last line is a lift, so a
+        // restore of a capture before the erasure never blocks it again.
+        ledger.blockLifted(row)
+        val caseId = row.caseId
+        if (caseId != null) {
+            log.appendCase(ModerationEvent.MEASURE_LIFTED, now, caseId, reason = row.kind, targetId = row.targetId)
+        } else {
+            log.append(
+                ModerationEvent.MEASURE_LIFTED, now, moderatorId = null, actorId = null, reason = row.kind,
+                targetId = row.targetId, datedFrom = now,
+            )
         }
     }
 

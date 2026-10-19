@@ -121,9 +121,10 @@ hooks, handing each payload from the walk to the import by chunk instead of thro
 uploads every file again under fresh keys. It is a member flow, as the import is (decision 5), carries exactly what an
 import carries (decision 6), and reuses the import's quota question, `Name (2)`, progress and rollback (decision 8).
 Copying across spaces is not offered: the browser and the tree are one space's. **Rejected:** a server-side object copy
-(a new store operation and endpoints per application, and the operator learns which blob copies which) and a
-deduplicated blob shared by two nodes (it breaks one reference per blob, on which
-[ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)'s reclaim relies, and needs counting).
+(a new store operation and endpoints per application, and the operator learns which blob copies which) and a stored
+object shared by the original and the copy (the operator would learn the same, and a copy is meant to stand on its own;
+a shared object is kept only inside one node, for a cover, a banner and a gallery original,
+[ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5 - a copy and an import upload each blob as its own).
 **A Memory copies its derived tiers, not a re-derivation** (owner decision 2026-10-14): Memories' import decodes each
 original whole to derive its tiers — a video held whole in memory. So for a copy only, never in an archive, Memories'
 hooks hand over each medium's existing thumbnail and preview tiers as payloads read by frame, and its sealed per-medium
@@ -175,7 +176,8 @@ shows it:
           "type": "memories.memory", "schema": 1,
           "date": { "mode": "range", "from": "2025-09-14", "to": "2025-09-17" },
           "participants": ["Anna", "Kevin"],
-          "cover": { "mediaIndex": 0, "crop": { "x": 0, "y": 0, "width": 1, "height": 1 } },
+          "cover": { "file": { "path": "Trip 2025/Lisbon/cover.jpg", "size": 412300, "mediaType": "image/jpeg" },
+                     "crop": { "x": 0, "y": 0, "width": 1, "height": 1 } },
           "media": [
             { "file": { "path": "Trip 2025/Lisbon/IMG_0412.jpg", "size": 3811920, "mediaType": "image/jpeg",
                         "sha256": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809" },

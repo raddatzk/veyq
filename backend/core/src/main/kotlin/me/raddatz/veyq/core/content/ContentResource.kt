@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.generated.model.NodeCoverConflict
 import me.raddatz.veyq.core.generated.model.NodeSummary
 import me.raddatz.veyq.core.generated.model.RemoveNodeCoverRequest
 import me.raddatz.veyq.core.generated.model.SetNodeCoverRequest
+import me.raddatz.veyq.core.blob.toSpec
 import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.core.generated.model.RestoreNodeRequest
 import me.raddatz.veyq.core.generated.model.TrashedNodeSummary
@@ -96,7 +97,8 @@ class ContentResource(
     override fun setNodeCover(scopeId: UUID, nodeId: UUID, setNodeCoverRequest: SetNodeCoverRequest): Response =
         coverResponse(
             covers.set(
-                identity.principal.name, scopeId.toString(), nodeId.toString(), setNodeCoverRequest.uploadId.toString(),
+                identity.principal.name, scopeId.toString(), nodeId.toString(), setNodeCoverRequest.uploadId?.toString(),
+                setNodeCoverRequest.shared?.toSpec(),
                 setNodeCoverRequest.expectedBlobId?.toString(), setNodeCoverRequest.wrappedMeta,
                 setNodeCoverRequest.metaRevision.validated(),
             ),

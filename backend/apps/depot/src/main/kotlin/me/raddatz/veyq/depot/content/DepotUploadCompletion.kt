@@ -56,7 +56,8 @@ class DepotUploadCompletion(
         // A file holds one blob: an item declaring derivatives is no file upload (only reachable by a future caller of
         // the seam — the Depot contract has no derivatives field).
         if (item.derivatives.isNotEmpty()) return failed("upload_mismatch")
-        val session = blobs.findSession(scopeId, item.originalUploadId, opener) ?: return failed("upload_not_found")
+        val uploadId = item.originalUploadId ?: return failed("upload_not_found") // a shared original is media's alone
+        val session = blobs.findSession(scopeId, uploadId, opener) ?: return failed("upload_not_found")
         val manifest = when (val v = uploads.verifyBlob(session)) {
             is BlobVerify.Ok -> v.manifest
             BlobVerify.Budget -> {
@@ -76,6 +77,7 @@ class DepotUploadCompletion(
             AttachOutcome.UploadMismatch -> failed("upload_mismatch")
             AttachOutcome.NodeNotFound -> failed("node_not_found")
             AttachOutcome.IllegalTarget -> failed("illegal_target")
+            AttachOutcome.SharedSourceInvalid -> error("a file's upload attaches no shared row: $outcome")
         }
     }
 

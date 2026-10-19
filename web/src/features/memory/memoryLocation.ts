@@ -40,6 +40,15 @@ export type MemoryLocation = {
 
 const finiteNum = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 
+/**
+ * A place name's bound, in code points: the field of the Memory's sealed meta that could still outgrow its 8192-character
+ * cap (`banner/bannerModel.test.ts`, "the meta budget", seals the worst case with a name at this bound). The editor's
+ * `maxlength`, every read and every write (`setMemoryLocation`) hold it; an import's longer name is cut to it.
+ */
+export const MAX_PLACE_NAME = 200
+/** A name trimmed and cut to [MAX_PLACE_NAME] code points, so no character is split in half. */
+export const boundPlaceName = (v: string): string => Array.from(v.trim()).slice(0, MAX_PLACE_NAME).join('')
+
 const asLatLng = (raw: unknown): LatLng | undefined => {
   if (!raw || typeof raw !== 'object') return undefined
   const p = raw as { lat?: unknown; lng?: unknown }
@@ -65,7 +74,7 @@ export function normalizeLocation(raw: unknown): MemoryLocation | null {
     derivedMode?: unknown
     nameAnchor?: unknown
   }
-  const name = typeof l.name === 'string' ? l.name.trim() : ''
+  const name = typeof l.name === 'string' ? boundPlaceName(l.name) : ''
   const nameSource = l.nameSource === 'geocoded' ? 'geocoded' : 'manual'
   const derivedMode = l.derivedMode === 'fixed' ? 'fixed' : 'auto'
   const pending = derivedMode === 'auto' && nameSource === 'geocoded' && !name
@@ -116,7 +125,8 @@ export async function setMemoryLocation(
   current: SealedMetaState,
 ): Promise<SealedMetaState> {
   const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).location
-  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('location', location, openedWith))
+  const bounded = location ? { ...location, name: boundPlaceName(location.name) } : null
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('location', bounded, openedWith))
   return state
 }
 

@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.blob.AttachOutcome
 import me.raddatz.veyq.core.blob.AttachmentStore
+import me.raddatz.veyq.core.blob.SharedBlobSpec
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.identity.PrincipalKey
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -31,16 +32,34 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
         scopeId: String, nodeId: String, kind: String, session: UploadSessionEntity, manifest: List<Long>?,
         expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
     ): NodeCoverOutcome {
-        when (val o = attachments.attach(scopeId, nodeId, setOf(kind), NodeCover.SLOT, session, manifest, expectedBlobId)) {
-            is AttachOutcome.Attached -> Unit
-            is AttachOutcome.Conflict -> return NodeCoverOutcome.CoverStale(o.currentBlobId)
-            // A concurrent request spent the session first, or the node was trashed since the handler read it.
-            AttachOutcome.UploadNotFound, AttachOutcome.NodeNotFound -> return NodeCoverOutcome.NotFound
-            AttachOutcome.IllegalTarget -> return NodeCoverOutcome.IllegalTarget
-            AttachOutcome.UploadMismatch -> return NodeCoverOutcome.UploadMismatch
-            AttachOutcome.NotAdmitted -> error("a member's cover passes no gate: $o")
-        }
-        return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
+        val o = attachments.attach(scopeId, nodeId, setOf(kind), NodeCover.SLOT, session, manifest, expectedBlobId)
+        return refusal(o) ?: writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
+    }
+
+    /**
+     * [set] with a new row on an object the node already stores in place of an upload (ADR 0013 § 5): the picked image
+     * was found equal to a medium's PREVIEW, so nothing was uploaded. [memberUserId] is the attachment's uploader. A slot
+     * miss commits as [set]'s does (the new row freed, the source's object kept: another row names it).
+     */
+    @Transactional
+    fun setShared(
+        scopeId: String, nodeId: String, kind: String, shared: SharedBlobSpec, memberUserId: String,
+        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
+    ): NodeCoverOutcome {
+        val o = attachments.attachShared(scopeId, nodeId, setOf(kind), NodeCover.SLOT, shared, memberUserId, expectedBlobId)
+        return refusal(o) ?: writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
+    }
+
+    /** The outcome of the slot write, or null when it attached and the meta is next. */
+    private fun refusal(o: AttachOutcome): NodeCoverOutcome? = when (o) {
+        is AttachOutcome.Attached -> null
+        is AttachOutcome.Conflict -> NodeCoverOutcome.CoverStale(o.currentBlobId)
+        // A concurrent request spent the session first, or the node was trashed since the handler read it.
+        AttachOutcome.UploadNotFound, AttachOutcome.NodeNotFound -> NodeCoverOutcome.NotFound
+        AttachOutcome.IllegalTarget -> NodeCoverOutcome.IllegalTarget
+        AttachOutcome.UploadMismatch -> NodeCoverOutcome.UploadMismatch
+        AttachOutcome.SharedSourceInvalid -> NodeCoverOutcome.SharedSourceInvalid
+        AttachOutcome.NotAdmitted -> error("a member's cover passes no gate: $o")
     }
 
     @Transactional

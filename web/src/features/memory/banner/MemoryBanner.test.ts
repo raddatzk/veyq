@@ -18,7 +18,7 @@ import type { Banner } from './bannerModel'
 
 const NODE = 'n1'
 const ref = (blobId: string, role: string) => ({ blobId, chunkCount: 3, byteSize: 300, wrappedBlobKey: 'k', ownerId: NODE, role })
-const image: Banner = { medium: 'image', blob: ref('i', 'BANNER'), frame: 'fill', focal: { x: 0.2, y: 0.85 }, alt: 'The bay' }
+const image: Banner = { medium: 'image', blob: ref('i', 'BANNER'), frame: 'fill', focal: { x: 0.2, y: 0.85 } }
 const video: Banner = {
   medium: 'video', blob: ref('v', 'BANNER'), poster: ref('p', 'BANNER_POSTER'), type: 'video/quicktime', frame: 'fit', focal: { x: 0.5, y: 0.5 },
 }
@@ -40,11 +40,11 @@ beforeEach(() => {
 })
 
 describe('MemoryBanner', () => {
-  it('fills the frame around the focal point, the description as its text', () => {
+  it('fills the frame around the focal point, as a decorative picture (the title follows it)', () => {
     const { wrapper } = mountBanner(image)
     const img = wrapper.get('img.banner-frame-media')
     expect(img.attributes('style')).toContain('object-position: 20% 85%')
-    expect(img.attributes('alt')).toBe('The bay')
+    expect(img.attributes('alt')).toBe('')
     expect(wrapper.find('.banner-frame-backdrop').exists()).toBe(false)
   })
 

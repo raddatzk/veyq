@@ -89,10 +89,11 @@ holds `K_SC`, `K_node`, `K_blob`, or any name.
   [ADR 0072](0072-a-seal-binds-its-object.md)) and the share-record shape. (A chapter carries its **own
   recursive `K_node`**, not the parent's — see *Recursive `K_node`* below.) Group/recipient key-directory trust
   is the active-operator gap already in the Security Model.
-- **Media dedup — decided in [ADR 0013](0013-blob-storage-presigned-direct-to-store.md): declined.** `K_blob`
-  stays **random** (so this ADR's wording holds) and the `dedup_token` vector stays unused: any storage-saving
-  dedup would leak the scope-internal blob-equality structure to the blind operator. Scope-wide convergent
-  dedup remains a possible *future* slice, not a default.
+- **Media dedup — decided in [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5: declined scope-wide.**
+  `K_blob` stays **random** (so this ADR's wording holds) and the `dedup_token` vector stays unused: scope-wide dedup
+  would leak the scope-internal blob-equality structure to the blind operator, and remains a possible *future* slice.
+  Inside one node a cover, a banner or a gallery original equal to the video banner shares a stored object as a second
+  blob row, the same random `K_blob` wrapped again for it.
 
 ## Recursive `K_node` — a chapter carries its own key
 

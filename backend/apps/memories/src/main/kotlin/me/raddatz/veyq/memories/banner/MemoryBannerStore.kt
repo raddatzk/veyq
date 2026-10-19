@@ -2,6 +2,7 @@ package me.raddatz.veyq.memories.banner
 
 import me.raddatz.veyq.core.blob.AttachOutcome
 import me.raddatz.veyq.core.blob.AttachmentStore
+import me.raddatz.veyq.core.blob.SharedBlobSpec
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.identity.PrincipalKey
@@ -29,16 +30,27 @@ import jakarta.transaction.Transactional
 @ApplicationScoped
 class MemoryBannerStore(private val attachments: AttachmentStore, private val nodes: NodesStore) {
 
-    /** One verified upload for one slot, and the blob the caller read there (null: empty). */
-    data class Upload(val session: UploadSessionEntity, val manifest: List<Long>?, val expectedBlobId: String?)
+    /** What fills one slot, and the blob the caller read there (null: empty). */
+    sealed interface Fill {
+        val expectedBlobId: String?
+    }
+
+    /** One verified upload for one slot. */
+    data class Upload(val session: UploadSessionEntity, val manifest: List<Long>?, override val expectedBlobId: String?) : Fill
 
     /**
-     * Attach [banner] to the banner slot and [poster] to the poster slot - or, with no [poster], empty the poster slot of
+     * A new row on an object the node already stores, in place of an upload (ADR 0013 § 5): the picked file was found
+     * equal to a medium's PREVIEW (an image, a video's poster) or ORIGINAL (a video). [memberUserId] is its uploader.
+     */
+    data class Shared(val spec: SharedBlobSpec, val memberUserId: String, override val expectedBlobId: String?) : Fill
+
+    /**
+     * Attach [banner] to the banner slot and [poster] to the poster slot (each an upload or a shared row) - or, with no [poster], empty the poster slot of
      * [expectedPosterBlobId] (an image replacing a video) - and write [wrappedMeta] at [metaRevision].
      */
     @Transactional
     fun set(
-        scopeId: String, nodeId: String, banner: Upload, poster: Upload?, expectedPosterBlobId: String?,
+        scopeId: String, nodeId: String, banner: Fill, poster: Fill?, expectedPosterBlobId: String?,
         wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
     ): MemoryBannerOutcome {
         nodes.lockScope(scopeId)
@@ -83,9 +95,14 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
 
     private fun stale(nodeId: String): MemoryBannerOutcome = slots(nodeId).let { MemoryBannerOutcome.BannerStale(it.first, it.second) }
 
-    /** Attach one upload, or the refusal - every refusal after a write rolls back the whole transaction. */
-    private fun attach(scopeId: String, nodeId: String, slot: String, upload: Upload): MemoryBannerOutcome? =
-        when (attachments.attach(scopeId, nodeId, MemoryBanner.KINDS, slot, upload.session, upload.manifest, upload.expectedBlobId)) {
+    /** Attach one fill, or the refusal - every refusal after a write rolls back the whole transaction. */
+    private fun attach(scopeId: String, nodeId: String, slot: String, fill: Fill): MemoryBannerOutcome? =
+        when (
+            when (fill) {
+                is Upload -> attachments.attach(scopeId, nodeId, MemoryBanner.KINDS, slot, fill.session, fill.manifest, fill.expectedBlobId)
+                is Shared -> attachments.attachShared(scopeId, nodeId, MemoryBanner.KINDS, slot, fill.spec, fill.memberUserId, fill.expectedBlobId)
+            }
+        ) {
             is AttachOutcome.Attached -> null
             // The scope lock held since the compare makes this unreachable; a miss still writes nothing.
             is AttachOutcome.Conflict -> rolledBack(stale(nodeId))
@@ -94,6 +111,7 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
             AttachOutcome.UploadNotFound, AttachOutcome.NodeNotFound -> rolledBack(MemoryBannerOutcome.NotFound)
             AttachOutcome.IllegalTarget -> rolledBack(MemoryBannerOutcome.IllegalTarget)
             AttachOutcome.UploadMismatch -> rolledBack(MemoryBannerOutcome.UploadMismatch)
+            AttachOutcome.SharedSourceInvalid -> rolledBack(MemoryBannerOutcome.SharedSourceInvalid)
             AttachOutcome.NotAdmitted -> error("a member's banner passes no gate")
         }
 

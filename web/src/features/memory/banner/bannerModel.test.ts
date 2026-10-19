@@ -4,12 +4,12 @@ import { planBlob } from '../../../core/blob/transport'
 import { sealNodeMeta, unsealNodeMeta } from '../../../core/node/nodeMeta'
 import { uploadedCover } from '../../../core/node/cover/coverModel'
 import { MAX_PARTICIPANTS } from '../memoryParticipants'
+import { MAX_PLACE_NAME, normalizeLocation } from '../memoryLocation'
 import {
   BANNER_POSTER_ROLE,
   BANNER_ROLE,
   CENTRE,
   DEFAULT_VIDEO_TYPE,
-  MAX_BANNER_ALT,
   bannerBlobIds,
   bannerStyle,
   defaultFrame,
@@ -22,6 +22,8 @@ import {
 
 const NODE = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
 const ref = (blobId: string) => ({ blobId, chunkCount: 2, byteSize: 1234, wrappedBlobKey: 'd3JhcA==' })
+/** A SHA-256 as `sha256` carries it (base64url, 43 characters): the digest of 'abc'. */
+const DIGEST = 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0'
 
 describe('normalizeBanner', () => {
   it('reads an image banner, its ref opening on the node in the BANNER role', () => {
@@ -31,19 +33,25 @@ describe('normalizeBanner', () => {
       blob: { ...ref('b1'), ownerId: NODE, role: BANNER_ROLE },
       frame: 'fill',
       focal: { x: 0.25, y: 0.75 },
-      alt: 'Sunset',
-    })
+    }) // an older client's description is read by nobody
   })
 
-  it('reads a video banner with its poster in the BANNER_POSTER role, its type and its origin', () => {
+  it('reads a video banner with its poster in the BANNER_POSTER role, its type and its file\'s digest', () => {
     const b = normalizeBanner(
-      { medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/quicktime', origin: { mediaId: 'm1' }, frame: 'fit', focal: CENTRE },
+      { medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/quicktime', sha256: DIGEST, origin: { mediaId: 'm1' }, frame: 'fit', focal: CENTRE },
       NODE,
     )
     expect(b?.poster).toEqual({ ...ref('p'), ownerId: NODE, role: BANNER_POSTER_ROLE })
     expect(b?.type).toBe('video/quicktime')
-    expect(b?.origin).toEqual({ mediaId: 'm1' })
+    expect(b?.sha256).toBe(DIGEST)
+    expect(b).not.toHaveProperty('origin') // an older client's origin is read by nobody
     expect(b?.frame).toBe('fit')
+  })
+
+  it('a malformed digest is none', () => {
+    for (const sha256 of ['abc', DIGEST + 'A', DIGEST.slice(0, 42) + 'B', 42]) {
+      expect(normalizeBanner({ medium: 'video', blob: ref('v'), sha256 }, NODE)?.sha256).toBeUndefined()
+    }
   })
 
   it('takes owner and role from where it is read, never from the payload (ADR 0072)', () => {
@@ -66,11 +74,10 @@ describe('normalizeBanner', () => {
     }
   })
 
-  it('an image never reads a poster, and a description is cut to its bound', () => {
-    const b = normalizeBanner({ medium: 'image', blob: ref('b'), poster: ref('p'), alt: 'x'.repeat(MAX_BANNER_ALT + 50) }, NODE)
+  it('an image never reads a poster', () => {
+    const b = normalizeBanner({ medium: 'image', blob: ref('b'), poster: ref('p') }, NODE)
     expect(b?.poster).toBeUndefined()
     expect(b?.type).toBeUndefined()
-    expect(b?.alt).toHaveLength(MAX_BANNER_ALT)
   })
 })
 
@@ -96,7 +103,7 @@ describe('focal point and frame', () => {
 })
 
 describe('sealedBanner / reframedBanner / bannerBlobIds', () => {
-  it('seals only the four fields of a ref, a poster and type only for a video, origin only when given', () => {
+  it('seals only the four fields of a ref, a poster and type only for a video, the digest only when well-formed', () => {
     const plan = { ...ref('b'), ownerId: NODE, role: BANNER_ROLE, wrappedBlobMeta: 'bWV0YQ==' }
     expect(sealedBanner({ medium: 'image', blob: plan, poster: ref('p'), framing: { frame: 'fill', focal: { x: 0.123456, y: 1 } } })).toEqual({
       medium: 'image',
@@ -105,14 +112,15 @@ describe('sealedBanner / reframedBanner / bannerBlobIds', () => {
       focal: { x: 0.1235, y: 1 },
     })
     expect(
-      sealedBanner({ medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/webm', origin: 'm', framing: { frame: 'fit', focal: CENTRE, alt: ' a ' } }),
-    ).toEqual({ medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/webm', origin: { mediaId: 'm' }, frame: 'fit', focal: CENTRE, alt: 'a' })
+      sealedBanner({ medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/webm', sha256: DIGEST, framing: { frame: 'fit', focal: CENTRE } }),
+    ).toEqual({ medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/webm', sha256: DIGEST, frame: 'fit', focal: CENTRE })
+    expect(sealedBanner({ medium: 'image', blob: ref('b'), sha256: 'not-a-digest', framing: { frame: 'fill', focal: CENTRE } })).not.toHaveProperty('sha256')
   })
 
-  it('a re-frame keeps the bytes and every field it does not know, and drops an emptied description', () => {
-    const stored = { medium: 'image', blob: ref('b'), frame: 'fill', focal: CENTRE, alt: 'old', future: 1 }
+  it('a re-frame keeps the bytes and every other field as stored (an older description and origin included)', () => {
+    const stored = { medium: 'image', blob: ref('b'), sha256: DIGEST, frame: 'fill', focal: CENTRE, alt: 'old', origin: { mediaId: 'm' }, future: 1 }
     expect(reframedBanner(stored, { frame: 'fit', focal: { x: 0.1, y: 0.2 } })).toEqual({
-      medium: 'image', blob: ref('b'), frame: 'fit', focal: { x: 0.1, y: 0.2 }, future: 1,
+      medium: 'image', blob: ref('b'), sha256: DIGEST, frame: 'fit', focal: { x: 0.1, y: 0.2 }, alt: 'old', origin: { mediaId: 'm' }, future: 1,
     })
     expect(reframedBanner(null, { frame: 'fill', focal: CENTRE })).toBeNull()
   })
@@ -124,12 +132,19 @@ describe('sealedBanner / reframedBanner / bannerBlobIds', () => {
 })
 
 /**
- * CR decision 3: the meta budget is measured, not assumed. The node's `wrappedMeta` is one seal capped at 8192 base64
- * characters (`content.openapi.yaml`, and `memory-banner.openapi.yaml` the same), shared with everything else a Memory
- * seals there. The worst case: 100 participants, an uploaded cover, a place with every field (a long geocoded name), a
- * range date, and a video banner with its poster, a type, an origin and a 200-character description of 4-byte characters.
+ * The meta budget is measured, not assumed. The node's `wrappedMeta` is one seal capped at 8192 base64 characters
+ * (`content.openapi.yaml`, and `memory-banner.openapi.yaml` the same), shared with everything else a Memory seals there.
+ * The worst case: 100 participants, an uploaded cover, a place with every field and its name at its bound in 4-byte
+ * characters (the one field a member types without another bound - `MAX_PLACE_NAME`), a range date, and a video banner
+ * with its poster, a type and its file's digest. Bite: lift the place name's bound (`boundPlaceName`) to 1000 and the
+ * clamp below, then the seal, go red.
  */
 describe('the meta budget', () => {
+  it('a place name is cut to its bound in code points', () => {
+    const name = '😀'.repeat(MAX_PLACE_NAME + 30)
+    expect(Array.from(normalizeLocation({ name, nameSource: 'manual' })!.name)).toHaveLength(MAX_PLACE_NAME)
+  })
+
   it('the worst case seals under maxLength 8192', () => {
     const key = v1.randomBytes(32)
     const address = { scopeId: crypto.randomUUID(), nodeId: crypto.randomUUID() }
@@ -139,7 +154,7 @@ describe('the meta budget', () => {
       v: 1,
       date: { mode: 'range', from: '2024-07-01', to: '2024-07-31' },
       location: {
-        name: 'Straße der Pariser Kommune 12, Friedrichshain-Kreuzberg, Berlin, 10243, Deutschland — am Ufer der Spree',
+        name: normalizeLocation({ name: '😀'.repeat(MAX_PLACE_NAME * 5), nameSource: 'manual' })!.name,
         nameSource: 'geocoded',
         derived: { lat: 52.51234567891234, lng: 13.43219876543219 },
         derivedMode: 'auto',
@@ -152,8 +167,8 @@ describe('the meta budget', () => {
         blob: plan(BANNER_ROLE),
         poster: plan(BANNER_POSTER_ROLE),
         type: 'video/quicktime',
-        origin: crypto.randomUUID(),
-        framing: { frame: 'fit', focal: { x: 0.33333, y: 0.66666 }, alt: '😀'.repeat(MAX_BANNER_ALT) },
+        sha256: DIGEST,
+        framing: { frame: 'fit', focal: { x: 0.33333, y: 0.66666 } },
       }),
     }
     const sealed = sealNodeMeta(key, address, meta)

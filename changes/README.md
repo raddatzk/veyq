@@ -1789,6 +1789,15 @@ hides in a re-derive: an image derived with an existing tier's own spec in the b
 its bytes. So an amendment names, beside the steps it reverses, each property in the CR's `invariants:` and the ADR's
 *What the server sees* that the replaced mechanism carried, and says whether it still holds and by what.
 
+**A fact stored for a later comparison names the read that brings it to the comparing client.** `cr-cover-banner-upload-only-and-dedup`
+put a file's SHA-256 into the video banner's `blob-meta`, sealed where the bytes are written - and the client that had to
+compare it (a gallery upload looking for the banner's file) reads an attachment only through the refs the node's meta
+names, which carry no `blob-meta`. The digest had to move into the banner's sealed meta as well. So a decision that stores a
+fact for a match says, beside where it is written, which response or ref serves it to the reader that matches - one `grep`
+of the type the reader holds. **And a rule of the form "the last one does X" names its lock:** "reclaim only when no other row
+names the object" read by a plain count leaks the object when its two rows go at once and loses it when a new row races the
+delete; the decision text is where the lock belongs, not the implementer's review.
+
 
 ### Two CRs that write the same page name each other, and split it by section
 

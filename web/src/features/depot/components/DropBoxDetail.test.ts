@@ -219,7 +219,7 @@ describe('DropBoxDetail - its cover', () => {
     await covered.find('.veyq-node-header-actions button[data-action="cover"]').trigger('click')
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
     expect(buttons()).toContain(t('node.cover.remove'))
-    expect(document.body.querySelector('[role="dialog"]')!.textContent, 'no application hint on a drop box').not.toContain(t('memory.cover.galleryHint'))
+    expect(document.body.querySelector('[role="dialog"]')!.textContent, 'no application hint on a drop box').not.toContain('gallery')
   })
 
   it('locked keys or a pending deletion offer none, and the drop box still shows the cover it has', async () => {

@@ -79,6 +79,17 @@ class ModerationBlockEntity : PanacheEntityBase {
     @Column(name = "active_key", length = 96)
     var activeKey: String? = null
 
+    /**
+     * The stored objects (storage keys, space-separated) an item's measure hangs on after the item was erased while other
+     * blob rows still name them (ADR 0093 § 6, ADR 0013 § 5): null while it stands on its target. [MeasureTargets.erased]
+     * sets it, [MeasureTargets.objectsGone] empties it and ends the measure with the objects' last row.
+     */
+    @Column(name = "held_objects")
+    var heldObjects: String? = null
+
+    /** [heldObjects] as a set (empty: none). */
+    val heldKeys: Set<String> get() = heldObjects?.split(' ')?.filter { it.isNotBlank() }?.toSet().orEmpty()
+
     val blockKind: BlockKind get() = BlockKind.valueOf(kind)
 
     /**

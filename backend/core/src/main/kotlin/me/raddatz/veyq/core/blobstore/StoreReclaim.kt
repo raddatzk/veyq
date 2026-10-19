@@ -152,11 +152,19 @@ class StoreReclaimStore {
      * (`StoreReclaimSweep` is the only deleter, `validate_store_reclaim_arity.py` holds that every deleted row's key
      * reaches this list), so no other path needs to know a hold exists. Once the last pin of a key has ended, its row
      * is due exactly as it was; the hold's purge deletes the ended pin rows later, which changes nothing here.
+     *
+     * **And not named by a blob row** - the second half of shared ownership (ADR 0013 § 5): a cover, a banner and a
+     * gallery medium may be rows on one stored object, and the object goes only when no row names it. The first half is
+     * the per-row choke point (`BlobUploadStore.deleteBlobRow` records a key only when its row is the last); this one
+     * holds for every recording path, including one written later that records a shared key directly, so such a path
+     * leaks a record (skipped like a held one, never deferred) and never deletes a live object. A row that still names
+     * the key records it again when it goes. Each half is bitten with the other held off (`SharedBlobSliceTest`).
      */
     fun due(now: Instant, limit: Int): List<StoreReclaimEntity> =
         StoreReclaimEntity.find(
             "from StoreReclaimEntity r where r.abandonedAt is null and r.nextAttemptAt <= ?1 and not exists " +
-                "(select 1 from HoldPinEntity p where p.storageKey = r.storageKey and p.expiresAt > ?1) order by r.createdAt, r.id",
+                "(select 1 from HoldPinEntity p where p.storageKey = r.storageKey and p.expiresAt > ?1) and not exists " +
+                "(select 1 from BlobEntity b where b.storageKey = r.storageKey) order by r.createdAt, r.id",
             now,
         ).page(0, limit).list()
 

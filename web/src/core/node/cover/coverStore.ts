@@ -7,7 +7,7 @@
 //
 // **What it reads.** A node's `cover` field (sealed in its `wrappedMeta`, `coverModel.ts`) under the node's own key. An
 // uploaded image core opens itself (the node's `COVER` blob, `openBlob` / the share's presigned chunks); any other source
-// is the kind's own to read (`registry` `cover.load`, Memories' photo). A kind without a `cover` descriptor has none.
+// is no cover. A kind without a `cover` descriptor has none.
 // Best-effort throughout: no cover, a refused read, a key that does not open - all are "no cover", and the surface draws the
 // node's icon. Nothing throws into a view.
 //
@@ -58,13 +58,11 @@ async function loadCover(scopeId: string, key: Uint8Array, node: CoverSubject, c
   const read = readCover(cover, node.id)
   if (!read) return null
   try {
-    if (read.source.kind === 'upload') {
-      const bytes = await openUploaded(scopeId, key, read.source.ref, guest)
-      return { blob: new Blob([bytes as BlobPart]), crop: read.crop }
-    }
-    const info = registry.kind(node.kind)
-    if (!info.supported || !info.cover?.load) return null // a source this client has no reader for: the icon
-    return await info.cover.load({ scopeId, nodeKey: key, node, cover, guest })
+    // A source other than the upload (a stored cover naming one of the Memory's photos, from before covers were set only
+    // by an upload) has no reader: the icon (uc.platform.node-cover E4).
+    if (read.source.kind !== 'upload') return null
+    const bytes = await openUploaded(scopeId, key, read.source.ref, guest)
+    return { blob: new Blob([bytes as BlobPart]), crop: read.crop }
   } catch {
     return null // a refused read, a key that does not open, a malformed tier: the icon, never a broken tile
   }

@@ -774,6 +774,52 @@ components:
         for.
       example: ORIGINAL
 
+    SharedBlob:
+      # Shared by the content spec (a cover), the memory-banner spec (a banner) and the media spec (a gallery original).
+      type: object
+      description: >
+        A blob row on the stored object of an existing blob, in place of an upload
+        (cr-cover-banner-upload-only-and-dedup, ADR 0013 section 5): the client found that the file it would upload is
+        already stored for this node - it compared a SHA-256 sealed under that blob's own key, so the server compares
+        nothing - and asks for a new row instead. The server copies the object's storage key, shape and chunk manifest
+        from `sourceBlobId`; the new row has its own id and its own `K_blob` wrap and metadata, so it opens bound to its
+        own owner and role (ADR 0072) while sharing the ciphertext objects. The object is reclaimed only when no blob row
+        names it any more. The source must be a blob of this scope that a live medium of the same node, or an attachment
+        of the same node, holds, and not blocked, and the new id must be free; otherwise `shared_source_invalid` (a `422`, or the
+        item's code in a batch) and nothing is written. A
+        member's operation only: no link role sends one.
+      required: [sourceBlobId, blobId, wrappedBlobKey]
+      properties:
+        sourceBlobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The existing blob whose stored object the new row names.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        blobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The client-minted id of the new row (ADR 0072 Decision 3) - the id its `wrappedBlobKey` is sealed bound to. A taken id is refused as an invalid source.
+          example: 3c4d5e6f-7a8b-4c0d-9e2f-3a4b5c6d7e8f
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        wrappedBlobKey:
+          type: string
+          description: The source's `K_blob` wrapped again, under the content key of the node the new row's owner sits on, bound to the new row's id, owner and role (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: Optional - the new row's `blob-meta` sealed under the same `K_blob` (see `startBlobUploads`), written once with the row.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
     MasterKeyWrap:
       # Shared by the account, setup and tenants specs. The annotated variant — the copies used to differ, and
       # the generator's file order alone decided that the backend got this one.

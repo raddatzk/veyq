@@ -68,9 +68,9 @@ import {
 import { fakeApi, stubApi } from '../../test/apiMock'
 import { mediaItem } from '../../test/models'
 import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
-import { readBlobMeta } from '../../core/blob/transport'
+import { planBlob, readBlobMeta, unwrapBlobKey } from '../../core/blob/transport'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -165,7 +165,9 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     completeMedia: vi.fn<MediaApi['completeMedia']>(async ({ mediaBatchRequest }): Promise<MediaBatchResponse> => {
       const item = mediaBatchRequest.items[0]
       completeItem = item
-      return { results: [{ blobId: sessions.get(item.originalUploadId)!.blobId, mediaId: item.mediaId, error: null }] }
+      // a shared original (ADR 0013 § 5) is the row the client minted; an upload's, the session's blob
+      const blobId = item.originalShared ? item.originalShared.blobId : sessions.get(item.originalUploadId!)!.blobId
+      return { results: [{ blobId, mediaId: item.mediaId, error: null }] }
     }),
     listNodeMedia: vi.fn<MediaApi['listNodeMedia']>(async (): Promise<MediaListPage> => {
       const item = captured.completeItem
@@ -175,7 +177,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
           {
             blockedByOperator: false,
             mediaId: item.mediaId, // the client-minted id the upload was completed for
-            ...blobOf(item.originalUploadId),
+            ...blobOf(item.originalUploadId!),
             derivatives: (item.derivatives ?? []).map((d) => ({ kind: d.kind, ...blobOf(d.uploadId) })),
             wrappedMeta: captured.updatedMeta ?? item.wrappedMeta ?? null, // listed for grid layout + date sorting (cr-0068)
             updatedAt: new Date('2026-07-09T12:00:00.000Z'), // the keyset cursor's sort key (cr-0107)
@@ -386,6 +388,45 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     await expect(
       addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver()),
     ).rejects.toThrow('store_unavailable')
+  })
+})
+
+describe('addMedia — a file the node already stores (ADR 0013 § 5: the video banner)', () => {
+  it('an original equal to a stored blob is a shared row: its K_blob wrapped again for the medium, only the tiers uploaded', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    const data = new Uint8Array(10).fill(7)
+    // the node's video banner: the same file, stored under the node's key in the BANNER slot
+    const banner = planBlob(SCOPE_ID, { ownerId: NODE_ID, role: 'BANNER' }, memoryKey, new Blob([data as BlobPart]))
+    const asked: [string, number][] = []
+    const storedOriginal = (sha256: string, byteSize: number) => {
+      asked.push([sha256, byteSize])
+      return sha256 === b64url(v1.sha256Digest(data)) && byteSize === banner.byteSize ? { key: memoryKey, ref: banner } : null
+    }
+    const { blobId, mediaId } = await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: 'video/mp4' }, stubDeriver(), { storedOriginal })
+
+    expect(asked).toEqual([[b64url(v1.sha256Digest(data)), banner.byteSize]])
+    expect(store.captured.startItems.map((i) => i.role), 'no ORIGINAL uploaded').toEqual(['THUMBNAIL', 'PREVIEW'])
+    const item = store.captured.completeItem
+    expect(item.originalUploadId ?? null).toBeNull()
+    expect(item.originalShared).toMatchObject({ sourceBlobId: banner.blobId, blobId })
+    // the shared row opens bound to the medium's ORIGINAL with the banner's K_blob, its blob-meta the file's facts
+    const row = { blobId, chunkCount: banner.chunkCount, byteSize: banner.byteSize, wrappedBlobKey: item.originalShared!.wrappedBlobKey, ownerId: mediaId, role: 'ORIGINAL' }
+    expect(unwrapBlobKey(SCOPE_ID, memoryKey, row)).toEqual(banner.blobKey)
+    expect(readBlobMeta(SCOPE_ID, memoryKey, { ...row, wrappedBlobMeta: item.originalShared!.wrappedBlobMeta })).toMatchObject({ type: 'video/mp4', sha256: b64url(v1.sha256Digest(data)) })
+  })
+
+  it('another file is uploaded as before', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array(10).fill(8) as BlobPart]), mediaType: 'image/png' }, stubDeriver(), { storedOriginal: () => null })
+    expect(store.captured.startItems.map((i) => i.role)).toEqual(['ORIGINAL', 'THUMBNAIL', 'PREVIEW'])
+    expect(store.captured.completeItem.originalShared ?? null).toBeNull()
   })
 })
 
@@ -683,7 +724,9 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
       const { mediaId, wrappedExif, wrappedMeta } = store.captured.completeItem
       const [item] = await listMedia(SCOPE_ID, NODE_ID)
-      expect(originalBlobMeta(SCOPE_ID, memoryKey, item), c.mediaType).toEqual({ v: 1, type: c.mediaType, name: c.name.trim(), modifiedAt: 1_700_000_000_000 })
+      // its SHA-256 too (base64url): what a later upload of the same file into the cover or banner dialog matches (ADR 0013 § 5)
+      const sha256 = b64url(v1.sha256Digest(new Uint8Array(12).fill(4)))
+      expect(originalBlobMeta(SCOPE_ID, memoryKey, item), c.mediaType).toEqual({ v: 1, type: c.mediaType, name: c.name.trim(), modifiedAt: 1_700_000_000_000, sha256 })
       expect(originalMediaType(SCOPE_ID, memoryKey, item), c.mediaType).toBe(c.mediaType)
       // the derivative tiers declare their own type (the deriver's JPEG) and nothing about the file
       for (const d of item.derivatives) {
@@ -1095,11 +1138,15 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
     return addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob, mediaType }, stubDeriver())
   }
 
-  it('reads the original as one slice per frame and never as a whole', async () => {
+  it('reads the original as one slice per frame and never as a whole - its digest first, then the pump', async () => {
     const source = spiedSource(3)
     await upload(fakeStore(), source.blob)
     expect(source.arrayBuffer).not.toHaveBeenCalled()
-    expect(source.slice.mock.calls).toEqual([0, 1, 2].map((i) => [i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE]))
+    const size = source.blob.size
+    // the digest (`blob-meta` `sha256`, ADR 0013 § 5) reads every frame once, bounded by the size; the pump seals each
+    const digest = [0, 1, 2].map((i) => [i * CHUNK_SIZE, Math.min(size, (i + 1) * CHUNK_SIZE)])
+    const pump = [0, 1, 2].map((i) => [i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE])
+    expect(source.slice.mock.calls).toEqual([...digest, ...pump])
   })
 
   it('never has more than PUMP_IN_FLIGHT PUTs in flight for a many-chunk blob', async () => {

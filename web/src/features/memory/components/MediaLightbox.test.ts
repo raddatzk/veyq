@@ -112,7 +112,6 @@ function memberProps(memoryKey: Uint8Array) {
   const source = memberMemorySource({ scopeId: () => SCOPE_ID })
   const l = source.loaders
   return {
-    canSetCover: true,
     canDelete: () => true,
     previewLoader: (it: MediaItem) => l.preview(it, memoryKey),
     originalLoader: (it: MediaItem) => l.original(it, memoryKey),
@@ -123,18 +122,17 @@ function memberProps(memoryKey: Uint8Array) {
     mediaMeta: source.mediaMeta,
   }
 }
-/** What a share guest's source leaves out: no media-meta door, no EXIF, no cover, no delete of this item. */
-const GUEST_WRITES = { mediaMeta: undefined, exifLoader: undefined, canSetCover: false, canDelete: () => false }
+/** What a share guest's source leaves out: no media-meta door, no EXIF, no delete of this item. */
+const GUEST_WRITES = { mediaMeta: undefined, exifLoader: undefined, canDelete: () => false }
 
 function mountLightbox(
   memoryKey: Uint8Array,
   items: MediaItem[],
   startIndex = 0,
-  coverMediaId: string | null = null,
   extraProps: Record<string, unknown> = {},
 ) {
   return mount(MediaLightbox, {
-    props: { memoryKey, items, startIndex, memoryName: 'Rom 2026', coverMediaId, ...memberProps(memoryKey), ...extraProps },
+    props: { memoryKey, items, startIndex, memoryName: 'Rom 2026', ...memberProps(memoryKey), ...extraProps },
     global: { plugins: [realI18n()] },
   })
 }
@@ -202,54 +200,16 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toMatch(/^blob:/)
   })
 
-  it('“Set as cover” emits setCover for the current item (cr-0073 gallery source)', async () => {
+  // A cover and a banner are set only by an upload in their own dialogs: the lightbox offers neither.
+  it('offers no “Set as cover” and no “Use as banner”', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
-
-    const setCover = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t('memory.cover.setFromPhoto'))
-    expect(setCover).toBeTruthy()
-    await setCover!.trigger('click')
-    expect(wrapper.emitted('setCover')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
-  })
-
-  it('marks the current cover photo (aria-pressed + "Current cover") and re-clicking it is a no-op', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { items } = await seedTwo(memoryKey)
-    const wrapper = mountLightbox(memoryKey, items, 0, items[0].mediaId) // item 0 IS the cover
-    await flushPromises()
-
-    const current = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t('memory.cover.isCover'))
-    expect(current).toBeTruthy()
-    expect(current!.attributes('aria-pressed')).toBe('true')
-    await current!.trigger('click')
-    expect(wrapper.emitted('setCover')).toBeFalsy() // clicking the current cover does nothing
-  })
-
-  // uc.memory.banner A1: "Use as banner" hands the shown medium (its decrypted preview, whether it is a video) to the banner
-  // dialog, only with `canSetBanner`; the medium the banner was made from reads "Current banner" and asks for nothing.
-  it('“Use as banner” emits setBanner for the shown medium only where offered, and marks the banner\'s source', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { items } = await seedTwo(memoryKey)
-    const banner = (w: ReturnType<typeof mountLightbox>, key: string) =>
-      w.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t(key))
-
-    const without = mountLightbox(memoryKey, items, 0)
-    await flushPromises()
-    expect(banner(without, 'memory.banner.useAsBanner'), 'not offered without canSetBanner').toBeUndefined()
-
-    const offered = mountLightbox(memoryKey, items, 0, null, { canSetBanner: true })
-    await flushPromises()
-    await banner(offered, 'memory.banner.useAsBanner')!.trigger('click')
-    expect(offered.emitted('setBanner')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId, src: expect.stringMatching(/^blob:/), video: false })
-
-    const current = mountLightbox(memoryKey, items, 0, null, { canSetBanner: true, bannerMediaId: items[0].mediaId })
-    await flushPromises()
-    const pressed = banner(current, 'memory.banner.isBanner')!
-    expect(pressed.attributes('aria-pressed')).toBe('true')
-    await pressed.trigger('click')
-    expect(current.emitted('setBanner')).toBeFalsy()
+    const labels = wrapper.findAll('.media-lightbox-actions button').map((b) => b.attributes('aria-label'))
+    expect(labels).toContain(t('media.download')) // control: the actions are drawn
+    expect(labels.filter((l) => /cover|banner/i.test(l ?? ''))).toEqual([])
+    expect(wrapper.emitted('setCover')).toBeFalsy()
   })
 
   it('pages prev/next through the grid order, fetching the next item’s preview, and clamps at the ends', async () => {
@@ -431,7 +391,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const items = await listMedia(SCOPE_ID, NODE_ID)
     const suggested = pickerNames()
     const exifLoader = vi.fn(() => new Promise<MediaExif | null>(() => {})) // never settles
-    const wrapper = mountLightbox(memoryKey, items, 0, null, { exifLoader })
+    const wrapper = mountLightbox(memoryKey, items, 0, { exifLoader })
     await flushPromises()
 
     const button = wrapper.find(`[aria-label="${t('media.download')}"]`)
@@ -483,7 +443,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     // a 1 GiB original (the share viewer's injection point is the same provider seam the authed default fills)
     const chunks = 4096
     const huge = { chunkCount: chunks, byteSize: chunks * (256 * 1024 + v1.FRAME_OVERHEAD), getPlaintextChunk: vi.fn(async () => new Uint8Array(1)) }
-    const wrapper = mountLightbox(memoryKey, items, 0, null, { videoChunkProvider: () => huge })
+    const wrapper = mountLightbox(memoryKey, items, 0, { videoChunkProvider: () => huge })
     await flushPromises()
     const saveSpy = vi.spyOn(URL, 'createObjectURL') // after the preview minted its own URL
 
@@ -510,7 +470,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       chunkCount: 3, byteSize: 3 * (16 + v1.FRAME_OVERHEAD),
       getPlaintextChunk: vi.fn(async (i: number) => { if (i === 1) throw new Error('chunk_get_failed:500'); return new Uint8Array(16) }),
     }
-    const wrapper = mountLightbox(memoryKey, items, 0, null, { videoChunkProvider: () => failing })
+    const wrapper = mountLightbox(memoryKey, items, 0, { videoChunkProvider: () => failing })
     await flushPromises()
 
     await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
@@ -682,11 +642,10 @@ describe('MediaLightbox — delete (cr-0110)', () => {
   it('where canDelete says no (a viewer, or a guest on what it did not send) there is no trash button and the Delete key does nothing', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
-    const wrapper = mountLightbox(memoryKey, items, 0, null, GUEST_WRITES)
+    const wrapper = mountLightbox(memoryKey, items, 0, GUEST_WRITES)
     await flushPromises()
 
     expect(wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('media.delete'))).toBe(false)
-    expect(wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('memory.cover.setFromPhoto')), 'no set-as-cover either').toBe(false)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
     expect(wrapper.emitted('delete')).toBeFalsy()
   })
@@ -696,7 +655,7 @@ describe('MediaLightbox — delete (cr-0110)', () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
     const own = items[1].mediaId
-    const wrapper = mountLightbox(memoryKey, items, 0, null, { ...GUEST_WRITES, canDelete: (it: MediaItem) => it.mediaId === own })
+    const wrapper = mountLightbox(memoryKey, items, 0, { ...GUEST_WRITES, canDelete: (it: MediaItem) => it.mediaId === own })
     await flushPromises()
     const hasTrash = () => wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('media.delete'))
 
@@ -879,7 +838,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const memoryKey = v1.randomBytes(32)
     const { store, geo, items } = await seedGeotagged(memoryKey)
 
-    mountLightbox(memoryKey, items, 0, null, GUEST_WRITES)
+    mountLightbox(memoryKey, items, 0, GUEST_WRITES)
     await flushPromises()
     await flushPromises()
 
@@ -1085,7 +1044,7 @@ describe('MediaLightbox: the uploader', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
     await router.push('/')
     const wrapper = mount(MediaLightbox, {
-      props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, ...memberProps(memoryKey), ...(uploaderOf ? { uploaderOf } : {}) },
+      props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', ...memberProps(memoryKey), ...(uploaderOf ? { uploaderOf } : {}) },
       global: { plugins: [realI18n(), router] },
     })
     await flushPromises()
@@ -1240,7 +1199,7 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     const create = URL.createObjectURL.bind(URL)
     vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => { const u = create(b); created.push(u); return u })
     const revoke = vi.spyOn(URL, 'revokeObjectURL')
-    const w = mountLightbox(memoryKey, items, 0, null, props)
+    const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     const preview = shown(w).attributes('src')
     layOut(w)
@@ -1269,7 +1228,7 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     const { items } = await seedTwo(memoryKey)
     const zoomTo3x = async (extra: Record<string, unknown>, list = items, fitted = 1000, natural = 2048) => {
       const props = { ...recordedOriginal(memoryKey), ...extra }
-      const w = mountLightbox(memoryKey, list, 0, null, props)
+      const w = mountLightbox(memoryKey, list, 0, props)
       await flushPromises()
       const preview = shown(w).attributes('src')
       layOut(w, fitted, natural)
@@ -1323,7 +1282,7 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     vi.mocked(openShareLightbox).mockResolvedValue(new Uint8Array([0xff, 0xd8, 1]))
     vi.mocked(openShareOriginal).mockResolvedValue(new Uint8Array([0xff, 0xd8, 2]))
     store.blob.presignBlobDownloads.mockClear()
-    const w = mountLightbox(memoryKey, items, 0, null, {
+    const w = mountLightbox(memoryKey, items, 0, {
       ...GUEST_WRITES,
       previewLoader: (it: MediaItem) => l.preview(it, memoryKey),
       originalLoader: (it: MediaItem) => l.original(it, memoryKey),
@@ -1418,7 +1377,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seed(memoryKey, ['image/png', 'video/mp4', 'image/png'])
     const props = recorded(memoryKey)
-    const w = mountLightbox(memoryKey, items, 0, null, props)
+    const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     await press(w)
     await advance(5000)
@@ -1452,7 +1411,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     for (const [name, interact] of Object.entries(interactions)) {
       // attached, so a key dispatched on the toggle bubbles up to the window listener as a real one does
       const w = mount(MediaLightbox, {
-        props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, ...memberProps(memoryKey) },
+        props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', ...memberProps(memoryKey) },
         global: { plugins: [realI18n()] },
         attachTo: document.body,
       })
@@ -1488,7 +1447,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
       if (it.mediaId === items[1].mediaId) await new Promise<void>((r) => { release = r })
       return real(it)
     })
-    const w = mountLightbox(memoryKey, items, 0, null, props)
+    const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     await press(w)
     await advance(5000)
@@ -1506,7 +1465,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
     const props = recorded(memoryKey)
-    const w = mountLightbox(memoryKey, items, 0, null, props)
+    const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     const fetchedFor = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
     expect([fetchedFor(0), fetchedFor(1), fetchedFor(2)]).toEqual([1, 0, 0])
@@ -1546,7 +1505,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     }
     const items = await listMedia(SCOPE_ID, NODE_ID)
     const props = recorded(memoryKey)
-    const w = mountLightbox(memoryKey, items, 0, null, props)
+    const w = mountLightbox(memoryKey, items, 0, props)
     await advance(2000)
     const geocoded = () => geo.mock.calls.filter((c) => String(c[0]).includes('geo.example')).length
     const exifFor = (i: number) => props.exifLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length

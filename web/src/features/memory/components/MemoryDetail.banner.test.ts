@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-// uc.memory.banner A2 (ADR 0102 decision 7): deleting the gallery medium the banner was made from asks first - the banner
-// keeps its own copy, and the confirmation offers to remove it in the same step. Declined, nothing is deleted; accepted, the
-// medium goes to the trash as any other, and the banner goes too only where that was ticked. Nothing else ties the two:
-// another medium's delete asks nothing. The real confirmation dialog, real clicks.
+// uc.memory.banner A2 (ADR 0102 decision 7): deleting the gallery medium that is the banner's picture - its original's SHA-256
+// is the one the banner was made from, the two may share one stored object (ADR 0013 § 5) - asks first: the banner stays, and
+// the confirmation offers to remove it in the same step. Declined, nothing is deleted; accepted, the medium goes to the trash
+// as any other, and the banner goes too only where that was ticked. Nothing else ties the two: another medium's delete asks
+// nothing, and neither does a banner without a digest. The real confirmation dialog, real clicks.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../../api/client', () => ({ blobApi: vi.fn(), contentApi: vi.fn(), loginApi: vi.fn(), tokenApi: vi.fn(), sessionApi: vi.fn() }))
@@ -15,6 +16,7 @@ import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
+import { contentDigest } from '../../../core/blob/sharedBlob'
 import { blobApi, contentApi } from '../../../api/client'
 import { mediaApi, itemFavoritesApi, memoryBannerApi } from '../api'
 import type { MemoryBannerApi } from '../../../api/generated/memory-banner'
@@ -58,15 +60,16 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** A Memory with two media, its banner copied from the first. */
-async function mountWithBanner() {
+/** A Memory with two media, its banner made from the first's file (or, `digest: false`, an older banner with none). */
+async function mountWithBanner(opts: { digest?: boolean } = {}) {
   const memoryKey = v1.randomBytes(32)
   const media = []
   for (const fill of [1, 2]) {
     media.push((await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(fill) as BlobPart]), mediaType: 'image/jpeg' }, deriver)).mediaId)
   }
   const banner = {
-    medium: 'image', blob: { blobId: 'banner-blob', chunkCount: 1, byteSize: 40, wrappedBlobKey: 'd3JhcA==' }, origin: { mediaId: media[0] },
+    medium: 'image', blob: { blobId: 'banner-blob', chunkCount: 1, byteSize: 40, wrappedBlobKey: 'd3JhcA==' },
+    ...(opts.digest === false ? { origin: { mediaId: media[0] } } : { sha256: await contentDigest(new Blob([new Uint8Array(8).fill(1)])) }),
     frame: 'fill', focal: { x: 0.5, y: 0.5 },
   }
   const node = { ...treeNode({ id: NODE_ID, kind: MEMORY_KIND, name: 'Rom 2026', parentId: null }), wrappedMeta: sealNodeMeta(memoryKey, { scopeId: SCOPE_ID, nodeId: NODE_ID }, { v: 1, banner }), metaRevision: 2 }
@@ -83,13 +86,13 @@ async function mountWithBanner() {
   return { w, media, trash, confirm }
 }
 
-describe("deleting the banner's source (uc.memory.banner A2)", () => {
-  it('asks, says the banner keeps its copy, and removes the banner only where that was ticked', async () => {
+describe("deleting the banner's picture (uc.memory.banner A2)", () => {
+  it('asks, says the banner stays, and removes the banner only where that was ticked', async () => {
     const { w, media, trash, confirm } = await mountWithBanner()
     await w.find(`.stub-delete[data-id="${media[0]}"]`).trigger('click')
     await flushPromises()
-    expect(confirm.text()).toContain(t('memory.banner.originNotice'))
-    expect(confirm.text()).toContain(t('memory.banner.originRemove'))
+    expect(confirm.text()).toContain(t('memory.banner.pictureNotice'))
+    expect(confirm.text()).toContain(t('memory.banner.pictureRemove'))
     ;(document.body.querySelector('#confirm-option') as HTMLInputElement).click()
     confirm.click(t('media.delete'))
     await flushPromises()
@@ -120,5 +123,13 @@ describe("deleting the banner's source (uc.memory.banner A2)", () => {
     await flushPromises()
     expect(confirm.isOpen()).toBe(false)
     expect(trash).toHaveBeenCalledWith(media[1])
+  })
+
+  it('an older banner naming its source by origin, without a digest, asks nothing (its origin is read by nobody)', async () => {
+    const { w, media, trash, confirm } = await mountWithBanner({ digest: false })
+    await w.find(`.stub-delete[data-id="${media[0]}"]`).trigger('click')
+    await flushPromises()
+    expect(confirm.isOpen()).toBe(false)
+    expect(trash).toHaveBeenCalledWith(media[0])
   })
 })

@@ -18,14 +18,14 @@ import {
   BannerStaleError,
   MAX_BANNER_IMAGE_BYTES,
   prepareImage,
-  prepareVideo,
+  preparePoster,
   uploadBanner,
   writeMemoryBanner,
 } from './bannerWrite'
 import { CENTRE, sealedBanner } from './bannerModel'
 import { unsealNodeMeta } from '../../../core/node/nodeMeta'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
-import { readBlobMeta, reserveAndPump } from '../../../core/blob/transport'
+import { planBlob, readBlobMeta, reserveAndPump, unwrapBlobKey } from '../../../core/blob/transport'
 import { contentApi } from '../../../api/client'
 import { memoryBannerApi } from '../api'
 import type { ContentApi } from '../../../api/generated/content'
@@ -35,6 +35,8 @@ import type { MediaDeriver } from '../../../shared/image/mediaDeriver'
 import { fakeApi } from '../../../test/apiMock'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
+/** A SHA-256 as `sha256` carries it: the digest of 'abc'. */
+const DIGEST = 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0'
 const NODE = '22222222-2222-4222-8222-222222222222'
 const key = v1.randomBytes(32)
 const metaCtx = { purpose: 'node-meta', scopeId: SCOPE, nodeId: NODE } as const
@@ -55,7 +57,7 @@ describe('preparing the bytes', () => {
     const d = deriver()
     const p = await prepareImage(new Blob([new Uint8Array(10)], { type: 'image/png' }), d)
     expect(d.deriveImage).toHaveBeenCalledWith(expect.anything(), BANNER_IMAGE_SPEC)
-    expect(p.medium).toBe('image')
+    expect(p).toHaveProperty('upload')
     await expect(prepareImage(new Blob([new Uint8Array(10)]), deriver(true))).rejects.toThrow(BANNER_UNREADABLE)
     const huge = { size: MAX_BANNER_IMAGE_BYTES + 1 } as Blob
     const untouched = deriver()
@@ -63,12 +65,10 @@ describe('preparing the bytes', () => {
     expect(untouched.deriveImage).not.toHaveBeenCalled()
   })
 
-  it('a video is taken as it is with its first frame; a frame that does not decode refuses it (Q5: never a banner nothing draws)', async () => {
-    const video = new Blob([new Uint8Array(100)], { type: 'video/quicktime' })
-    const p = await prepareVideo(video, 'video/quicktime', async () => new Uint8Array([0xff, 0xd8]))
-    expect(p).toMatchObject({ medium: 'video', video, type: 'video/quicktime' })
-    await expect(prepareVideo(video, 'video/mp4', async () => { throw new Error('no frame') })).rejects.toThrow(BANNER_UNREADABLE)
-    await expect(prepareVideo(video, 'video/mp4', async () => new Uint8Array())).rejects.toThrow(BANNER_UNREADABLE)
+  it('a video\'s poster is its first frame; a frame that does not decode refuses it (Q5: never a banner nothing draws)', async () => {
+    expect(await preparePoster(async () => new Uint8Array([0xff, 0xd8]))).toHaveProperty('upload')
+    await expect(preparePoster(async () => { throw new Error('no frame') })).rejects.toThrow(BANNER_UNREADABLE)
+    await expect(preparePoster(async () => new Uint8Array())).rejects.toThrow(BANNER_UNREADABLE)
   })
 })
 
@@ -76,7 +76,7 @@ describe('uploadBanner - the node\'s own BANNER (and BANNER_POSTER) blobs', () =
   const plans = () => vi.mocked(reserveAndPump).mock.calls.at(-1)![0] as BlobPlan[]
 
   it('an image: one blob, owned by the node in the BANNER role, sealed as a JPEG under the node\'s key', async () => {
-    const up = await uploadBanner(SCOPE, NODE, key, { medium: 'image', image: new Blob([new Uint8Array([1, 2, 3])]) })
+    const up = await uploadBanner(SCOPE, NODE, key, { medium: 'image', image: { upload: new Blob([new Uint8Array([1, 2, 3])]) } })
     const [plan] = plans()
     expect(plans()).toHaveLength(1)
     expect(plan).toMatchObject({ ownerId: NODE, role: 'BANNER' })
@@ -88,15 +88,48 @@ describe('uploadBanner - the node\'s own BANNER (and BANNER_POSTER) blobs', () =
     expect(readBlobMeta(SCOPE, key, { ...plan, role: 'COVER' }), 'bound to its role').toBeNull()
   })
 
-  it('a video: the poster and the video in ONE start, each in its own role, the video\'s type its own', async () => {
+  it('a video: the poster and the video in ONE start, each in its own role, the video\'s type and digest its own', async () => {
     const video = new Blob([new Uint8Array(500)])
-    const up = await uploadBanner(SCOPE, NODE, key, { medium: 'video', video, type: 'video/webm', poster: new Blob([new Uint8Array([9])]) })
+    const up = await uploadBanner(SCOPE, NODE, key, {
+      medium: 'video', video: { upload: video }, type: 'video/webm', sha256: DIGEST, poster: { upload: new Blob([new Uint8Array([9])]) },
+    })
     const [poster, vid] = plans()
     expect(poster).toMatchObject({ ownerId: NODE, role: 'BANNER_POSTER' })
-    expect(vid).toMatchObject({ ownerId: NODE, role: 'BANNER', source: video }) // the original as it is, read by the pump frame by frame
-    expect(readBlobMeta(SCOPE, key, vid)).toEqual({ v: 1, type: 'video/webm' })
-    expect(up).toMatchObject({ medium: 'video', uploadId: 'up-1', posterUploadId: 'up-0', type: 'video/webm' })
+    expect(vid).toMatchObject({ ownerId: NODE, role: 'BANNER', source: video }) // the file as it is, read by the pump frame by frame
+    expect(readBlobMeta(SCOPE, key, vid)).toEqual({ v: 1, type: 'video/webm', sha256: DIGEST })
+    expect(up).toMatchObject({ medium: 'video', uploadId: 'up-1', posterUploadId: 'up-0', type: 'video/webm', sha256: DIGEST })
     expect(up.poster?.blobId).toBe(poster.blobId)
+  })
+
+  it('a shared part is a new row on the stored blob: its K_blob wrapped again for the slot, nothing uploaded for it', async () => {
+    // A gallery medium's ORIGINAL and PREVIEW, under the Memory's key, owned by the medium.
+    const stored = (role: string) => planBlob(SCOPE, { ownerId: '33333333-3333-4333-8333-333333333333', role }, key, new Blob([new Uint8Array(40)]), { type: 'x' })
+    const original = stored('ORIGINAL')
+    const preview = stored('PREVIEW')
+    const up = await uploadBanner(SCOPE, NODE, key, {
+      medium: 'video', video: { share: { key, ref: original } }, type: 'video/mp4', sha256: DIGEST, poster: { share: { key, ref: preview } },
+    })
+    expect(reserveAndPump, 'nothing to upload').not.toHaveBeenCalled()
+    expect(up.uploadId).toBeUndefined()
+    expect(up.shared).toMatchObject({ sourceBlobId: original.blobId, blobId: up.blob.blobId })
+    expect(up.posterShared).toMatchObject({ sourceBlobId: preview.blobId, blobId: up.poster!.blobId })
+    expect(up.blob.byteSize).toBe(original.byteSize)
+    // The new row opens bound to the node and the BANNER slot, with the same K_blob - so the stored frames open under it.
+    const row = { ...up.blob, ownerId: NODE, role: 'BANNER' }
+    expect(unwrapBlobKey(SCOPE, key, row)).toEqual(original.blobKey)
+    expect(() => unwrapBlobKey(SCOPE, key, { ...row, role: 'ORIGINAL' }), 'bound to its slot').toThrow()
+    expect(readBlobMeta(SCOPE, key, { ...row, wrappedBlobMeta: up.shared!.wrappedBlobMeta })).toEqual({ v: 1, type: 'video/mp4', sha256: DIGEST })
+  })
+
+  it('a shared video with an uploaded poster starts only the poster', async () => {
+    const original = planBlob(SCOPE, { ownerId: '33333333-3333-4333-8333-333333333333', role: 'ORIGINAL' }, key, new Blob([new Uint8Array(40)]))
+    const up = await uploadBanner(SCOPE, NODE, key, {
+      medium: 'video', video: { share: { key, ref: original } }, type: 'video/mp4', sha256: DIGEST, poster: { upload: new Blob([new Uint8Array([9])]) },
+    })
+    expect(plans()).toHaveLength(1)
+    expect(plans()[0]).toMatchObject({ role: 'BANNER_POSTER' })
+    expect(up).toMatchObject({ posterUploadId: 'up-0', uploadId: undefined, posterShared: undefined })
+    expect(up.shared?.sourceBlobId).toBe(original.blobId)
   })
 })
 
@@ -135,11 +168,18 @@ describe('writeMemoryBanner - the slots and the meta that names them, one reques
     const done = await writeMemoryBanner({ ...base(sealMeta({ v: 1, date: { mode: 'single' } })), banner, upload: { uploadId: 'u', posterUploadId: 'pu' } })
     expect(c.updateNode).not.toHaveBeenCalled()
     const req = c.setMemoryBanner.mock.calls[0][0].setMemoryBannerRequest
-    expect(req).toMatchObject({ uploadId: 'u', posterUploadId: 'pu', expectedBlobId: null, expectedPosterBlobId: null, metaRevision: 3 })
+    expect(req).toMatchObject({ uploadId: 'u', posterUploadId: 'pu', shared: null, posterShared: null, expectedBlobId: null, expectedPosterBlobId: null, metaRevision: 3 })
     const sent = openMeta(req.wrappedMeta)
     expect(sent.banner).toEqual(banner)
     expect(sent.date).toEqual({ mode: 'single' })
     expect(done).toEqual({ wrappedMeta: req.wrappedMeta, metaRevision: 4 })
+  })
+
+  it('a shared banner sends its rows in place of the uploads', async () => {
+    const c = api()
+    const shared = { sourceBlobId: 's', blobId: 'b', wrappedBlobKey: 'k', wrappedBlobMeta: null }
+    await writeMemoryBanner({ ...base(null), banner: image('b'), upload: { shared } })
+    expect(c.setMemoryBanner.mock.calls[0][0].setMemoryBannerRequest).toMatchObject({ uploadId: null, shared, posterUploadId: null, posterShared: null })
   })
 
   it('an image replacing a video states BOTH slots it read: the server frees the poster with the video', async () => {

@@ -16,7 +16,7 @@
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "ORIGINAL",
             "wrappedBlobKey": "Am0mAMdgsNRK7cyOkZYCOfcUxLYIeuCkAHlZV081OJqb6/MvyhzljI6hOg9n9+J0APCAm7uvyFR6KhnCfA==",
-            "wrappedBlobMeta": "AhBg3AU2zZ/QhRTGwMZymJkShiSUWl26H7NWF1jmM34vMfuNIQvUcDcpWpkjBIh/d7AkloXA32mk2M7uCcOyuXbyswY1sUjtWx2PbFbAkwAFOLtFEG8suCwJul1TNUIHdYhCpTL5rI8xYWaYpYTQggCPd8bgEEVrMotCLDiEpgLs5ao836rbU7maGUnMYBJQb+5625OU0ROEHlsg4pV5SC8LCShbgKosfBLX9mmrP3wiu2uj+Kw5ZxJKuAwVxd3Vs4p0KxU/sdJanpjx3fRC56c3PTRQZg4updqyUvQRim+at/X5AmwgfNHwGELeRkiokhswtA+YLH90j/7MaYcB0Qvj9jWnnAl0R83jUGHE//GIhbZu0Icep9StOPxb"
+            "wrappedBlobMeta": "AhBg3AU2zZ/QhRTGwMZymJkShiSUWl26H7NWF1jmM34vMfuNIQvUcDcpWpkjBIh/d7AkloXA32mk2M7uCcOyuXbyswY1sUjtWx2PbFbAkwAFOLtFEG8suH0L6RUSJ1cRd5JA0GuYw4JIcxTr58i09xPfALPyByYdYegaaSrR6VGt8rJfreWSP/rjXzyPGRANb+5625OU0ROEHlsg4pV5SC8LCShbgKosfBLX9mmrP3wiu2uj+Kw5ZxJKuAwVxd3Vs4p0KxU/sdJanpjx3fRC56c3PTRQZg4updqyUvQRim+at/X5AmwgfNHwGELeRkiokhswtA+YLH90j/7MaYcB0Qvj9jWnnAl0R83jUGF5rczO6I4gyoLFVemLJeGf"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000003",
@@ -94,6 +94,7 @@
             ],
             "mediaId": "00000000-0000-4000-8000-000000000001",
             "nodeId": "6e5a0000-0000-4000-8000-0000000000b1",
+            "originalShared": null,
             "originalUploadId": "upload-1",
             "wrappedExif": null,
             "wrappedMeta": "AyEBxU/R0BqyJXTLN4qu9bEICJEZM7nrT/IppeRgmOkYAgURMZaSE9eHg6QTxaqPJCHzJh+Cm3Oidb1EhP47yQaWiig+9Mt2PLcBtHtvgv6cjUGJaXtZgSRTkjm/TLsCec0DOZq0xRvIdqhZHj4edRKxLRqciDE7wVyy"

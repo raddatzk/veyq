@@ -11,6 +11,7 @@
 // media.ts's `onProgress?.(0)` right before the chunk PUTs. Operator-blind is entirely `addMedia`'s concern.
 import { computed } from 'vue'
 import { addMedia, type AddMediaSource, type AddMediaOptions } from './media'
+import { bannerOriginalOf } from './storedMatch'
 import {
   enqueue as enqueueJobs,
   useUploadQueue as useCoreUploadQueue,
@@ -176,8 +177,11 @@ export function enqueueUploads(
 ): string | null {
   // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_node (default).
   // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
+  // A member's file equal to the node's video banner shares the banner's stored object (ADR 0013 § 5, `storedMatch.ts`).
   const upload: UploadFn =
-    target.upload ?? ((source, o) => addMedia(target.scopeId!, target.nodeId!, target.memoryKey!, source, undefined, o))
+    target.upload ?? ((source, o) => addMedia(target.scopeId!, target.nodeId!, target.memoryKey!, source, undefined, {
+      ...o, storedOriginal: bannerOriginalOf(target.scopeId!, target.nodeId!, target.memoryKey!),
+    }))
   return enqueueJobs<MediaUploadResult, MediaFileFields, { target: UploadTarget }>(
     selections.map((s) => ({
       name: s.file.name,
