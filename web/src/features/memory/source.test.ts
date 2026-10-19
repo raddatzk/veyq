@@ -302,14 +302,14 @@ describe("the member's source is today's calls, with its scope", () => {
 describe('no door, no right (the invariant every view rests on)', () => {
   const ALL: MemoryRights = {
     ...NO_MEMORY_RIGHTS, navigate: true, download: true, upload: true, deleteMedia: 'any', createMemory: true, createChapter: true,
-    editMeta: true, setCover: true, mark: true, share: true, shareUpload: true, rename: true, deleteNode: true,
+    editMeta: true, setCover: true, setBanner: true, mark: true, share: true, shareUpload: true, rename: true, deleteNode: true,
     mediaTrash: true, buckets: true,
   }
   const member = memberMemorySource({ scopeId: () => SCOPE })
   // [the right, the door it rests on]
   const rests: [keyof MemoryRights, keyof MemorySource][] = [
     ['upload', 'upload'], ['deleteMedia', 'deleteMedia'], ['editMeta', 'nodeMeta'], ['mark', 'marks'],
-    ['mediaTrash', 'trash'], ['buckets', 'buckets'],
+    ['mediaTrash', 'trash'], ['buckets', 'buckets'], ['setBanner', 'banner'],
   ]
   for (const [right, door] of rests) {
     it(`${right} needs the source's ${door}`, () => {
@@ -335,7 +335,7 @@ describe('no door, no right (the invariant every view rests on)', () => {
     for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'deleteNode', 'setCover'] as const) {
       expect(narrowed[k], k).toBe(true)
     }
-    for (const k of ['upload', 'editMeta', 'mark', 'mediaTrash', 'buckets'] as const) expect(narrowed[k], k).toBe(false)
+    for (const k of ['upload', 'editMeta', 'setBanner', 'mark', 'mediaTrash', 'buckets'] as const) expect(narrowed[k], k).toBe(false)
     expect(narrowed.deleteMedia).toBe('none')
   })
 })
