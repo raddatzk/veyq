@@ -45,3 +45,23 @@ export function recordTyped(value: string): string {
   writeFileSync(`${stack().outDir}/canaries-${spec}.json`, JSON.stringify([...set], null, 2), 'utf8')
   return value
 }
+
+/** Per spec file, as [recorded]: the addresses signed up with. */
+const addresses = new Map<string, Set<string>>()
+
+/**
+ * Record [address] — one an account is signed up with — as a `pii` needle of the current test file, then hand it back
+ * (`pii-<spec>.json` in the run directory, the canary files' format). Not a canary: the database, the statement log
+ * and the mailbox hold an account's address by design, so `scripts/run_stack_e2e.py` searches these only in the logs
+ * of the run, every one of which must not hold it (ADR 0092 § 4), and requires each in the statement log first — the
+ * proof that it is an address the instance handled.
+ */
+export function recordPii(address: string): string {
+  if (!address.includes('@')) throw new Error(`recordPii: ${JSON.stringify(address)} is no email address`)
+  const spec = basename(test.info().file).replace(/\.ts$/, '')
+  const set = addresses.get(spec) ?? new Set<string>()
+  set.add(address)
+  addresses.set(spec, set)
+  writeFileSync(`${stack().outDir}/pii-${spec}.json`, JSON.stringify([...set], null, 2), 'utf8')
+  return address
+}
