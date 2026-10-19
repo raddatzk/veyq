@@ -114,7 +114,7 @@ class MediaLockOrderRaceSliceTest {
      */
     @Test
     fun aBannerRemovalAndAMeasureTakerOnItsTwoObjectsBothFinish() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val f = bannerOnTwoObjects()
             val (held, other) = between(
                 first = { StoredObjectLocks.lock(listOf(f.low)) }, // the taker's first lock
