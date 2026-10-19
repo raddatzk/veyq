@@ -24,6 +24,7 @@ const byCode: Record<string, string> = {
   statement_provision_required: 'moderation.errors.provisionRequired',
   extension_reason_not_allowed: 'moderation.errors.extendTypeNotAllowed',
   statement_recipients_changed: 'moderation.errors.recipientsChanged',
+  statement_recipients_too_many: 'moderation.errors.recipientsTooMany',
   objection_not_found: 'moderation.errors.objectionNotFound',
   objection_decided: 'moderation.errors.objectionDecided',
   objection_needs_another_moderator: 'moderation.errors.needsAnotherModerator',

@@ -693,6 +693,10 @@ paths:
             `statement_recipients_changed` = `factsFor` does not name exactly the members the statement goes to.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
+        "422":
+          description: "`statement_recipients_too_many` = with facts, the statement would reach more members than one step can seal them to (4,000, `ModerationStatementRecipients.accounts`); nobody is told only in part."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_recipients_too_many } }
 
   /api/moderation/cases/{caseId}/measures/{measureId}/lift:
     post:
@@ -830,7 +834,9 @@ paths:
         statement goes to — the creator of a blocked link or of the link a blocked guest came through, the uploaders the
         held rows name, every owner of the space on a content block — each with the identity public bundle to seal the
         facts to (`moderation-facts` [caseId, accountId]), and how many guests it names (they are told nothing in veyq).
-        The same target rules as `takeModerationMeasure` (`404 moderation_target_unknown`). Key-proved over this case.
+        The same target rules as `takeModerationMeasure` (`404 moderation_target_unknown`). The list is whole or refused
+        (`422 statement_recipients_too_many`), never cut: a statement reaches every affected member. Key-proved over
+        this case.
       security:
         - bearerAuth: []
       parameters:
@@ -871,6 +877,10 @@ paths:
           description: "`case_not_found`, or `moderation_target_unknown`."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_target_unknown } }
+        "422":
+          description: "`statement_recipients_too_many` = the statement would reach more members than one step can seal its facts to (4,000, `ModerationStatementRecipients.accounts`); nobody is told only in part."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_recipients_too_many } }
 
   /api/moderation/cases/{caseId}/objections/{objectionId}/decision:
     post:
@@ -2159,10 +2169,15 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
         factsFor:
           type: array
-          maxItems: 1000
-          description: The facts sealed to each member `getModerationStatementRecipients` lists; empty without facts.
+          maxItems: 4000
+          description: >
+            The facts sealed to each member `getModerationStatementRecipients` lists; empty without facts. The same bound
+            as that list, at most 4,000 — what one `takeModerationMeasure` body carries under the server's 10 MiB request limit at the
+            smallest sealed facts (about 2.3 KB a member); longer facts reach the body limit sooner. Past it the
+            facts cannot be sealed to every member in one step, and the server refuses rather than tell only some
+            (`422 statement_recipients_too_many`).
           items: { $ref: "#/components/schemas/SealedFactsFor" }
-          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 1000)'
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 4000)'
         deferral:
           description: >
             An authority asked that the affected not be told yet (TCO Art. 11(3); ADR 0093 § 7 — the authority's switch,
@@ -2199,7 +2214,12 @@ components:
       properties:
         accounts:
           type: array
-          maxItems: 1000
+          maxItems: 4000
+          description: >
+            Every member the statement reaches, whole — never a page of them, at most 4,000 — what one `takeModerationMeasure` body carries under the server's 10 MiB request limit at the
+            smallest sealed facts (about 2.3 KB a member); longer facts reach the body limit sooner. Past it the
+            facts cannot be sealed to every member in one step, and the server refuses rather than tell only some
+            (`422 statement_recipients_too_many`).
           items: { $ref: "#/components/schemas/StatementRecipient" }
         guests:
           x-veyq-visibility: measure
