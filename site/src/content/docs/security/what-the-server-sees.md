@@ -118,8 +118,8 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
 
 ### Timestamps
 
-Stored **as written**, to the second, and in two places to the millisecond (a medium's change time; a node's
-creation time, served to members to order equal-named siblings). Nothing rounds them: they tell *when*, never
+Stored **as written**, to the millisecond (a node's creation time is served to members, to order equal-named
+siblings). Nothing rounds them: they tell *when*, never
 *what*.
 
 **A time is stored only where something reads it**: a sort, a purge or expiry cutoff, a served field, or, named as

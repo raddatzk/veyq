@@ -85,7 +85,7 @@ flowchart TB
 
 **The trust boundary is the backend, and the adversary is on the inside of it.** What crosses it is ciphertext
 plus operational metadata the server needs to route and bill bytes: ids, kinds, sizes, timestamps (exact —
-to the second, nothing rounds them), membership, wraps, blinded tokens. What never crosses: a key, a password, a
+to the millisecond, nothing rounds them), membership, wraps, blinded tokens. What never crosses: a key, a password, a
 name, a day, a coordinate, a pixel.
 
 **Third parties are a separate, consented boundary.** A client may reach a geocoder or tile server *directly* —

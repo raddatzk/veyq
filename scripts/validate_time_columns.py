@@ -8,9 +8,12 @@
   1. no column of that schema has the type `TIMESTAMP` or `TIMESTAMP(n)`. MariaDB's `TIMESTAMP` is a 32-bit count of
      seconds: on the pinned 11.4 it holds 1970-01-01T00:00:01Z to 2038-01-19T03:14:07Z, so a share's `expiresAt` in
      2577 failed its `UPDATE` (error 1292, a 500), and the server's own clock reaches the end in 2038. A time column is
-     `DATETIME` or `DATETIME(n)`, holding the UTC wall clock Hibernate writes (`Instant`, bound with a UTC calendar) —
-     so a migration that adds a `TIMESTAMP` column, or a conversion that missed one, is red here;
-  2. the replay found time columns at all (more than zero `DATETIME`s) — a parser that lost the `CREATE TABLE` bodies
+     a `DATETIME`, holding the UTC wall clock Hibernate writes (`Instant`, bound with a UTC calendar) — so a migration
+     that adds a `TIMESTAMP` column, or a conversion that missed one, is red here;
+  2. every `DATETIME` declares a fraction of 3 to 6 digits (`DATETIME(3)`): MariaDB truncates a fraction to the column's
+     precision and H2 rounds it, so a whole-second column stored, on H2, a time up to half a second after the moment it
+     was written — `TenantTermsSliceTest`'s "not after now" went red on it — and two rows of one second tie on MariaDB;
+  3. the replay found time columns at all (more than zero `DATETIME`s) — a parser that lost the `CREATE TABLE` bodies
      would otherwise see no `TIMESTAMP` and pass.
 
 **The defect that bought it.** Inbox #509: the API fuzzing's positive writes (#495) sent a share an `expiresAt` in 2577,
@@ -23,9 +26,7 @@ a domain or a `SET` variable is not seen — the engine's own answer is `StoredT
 `INFORMATION_SCHEMA` on MariaDB (`scripts/run_backend_races_on_mariadb.py`). Flyway's own `flyway_schema_history`
 is no migration's: its `installed_on` stays the `TIMESTAMP` Flyway declares, and neither check reads it. (b) It does not check that a column holds
 UTC: that is the writer's (Hibernate's `Instant` binding) and the H2 test URL's `TIME ZONE=UTC`, held by the same
-test. (c) It does not check precision: a plain `DATETIME` keeps whole seconds on purpose (what the server stores, to
-the second, is a published statement), and a column that orders rows needs `DATETIME(3)` — `backend/CLAUDE.md`
-§ Migrations says which.
+test. (c) A `DATE` column is no time and is not read; its binding is a `LocalDate`'s (`ReleaseNoticeEntity`).
 """
 from __future__ import annotations
 
@@ -54,6 +55,8 @@ RENAME_TO = re.compile(r"^RENAME\s+(?:TO|AS)\s+`?(\w+)`?\s*$", re.IGNORECASE)
 # What ADD/DROP may name that is not a column.
 NOT_A_COLUMN_SPEC = re.compile(r"^(?:ADD|DROP)\s+(CONSTRAINT|PRIMARY|UNIQUE|KEY|INDEX|FOREIGN|CHECK)\b", re.IGNORECASE)
 TIME_TYPE = re.compile(r"^(TIMESTAMP|DATETIME)\b", re.IGNORECASE)
+# A DATETIME with a fraction of 3 to 6 digits.
+DATETIME_FRACTION = re.compile(r"^DATETIME\s*\(\s*[3-6]\s*\)", re.IGNORECASE)
 
 
 def statements(path: pathlib.Path) -> list[str]:
@@ -154,10 +157,14 @@ def main() -> int:
                 continue
             if t.group(1).upper() == "DATETIME":
                 datetimes += 1
+                if not DATETIME_FRACTION.match(definition):
+                    errors.append(f"{table}.{column} is `{definition}` (last declared in {where}): a time column declares "
+                                  f"its millisecond, DATETIME(3) — MariaDB truncates a fraction and H2 rounds it, so a "
+                                  f"whole-second column reads, on H2, up to half a second after it was written.")
             else:
                 errors.append(f"{table}.{column} is `{definition}` (last declared in {where}): a {t.group(1).upper()} "
-                              f"column ends at 2038-01-19T03:14:07Z on MariaDB — declare it DATETIME (or DATETIME(3) "
-                              f"where it orders rows), which holds the UTC wall clock Hibernate writes.")
+                              f"column ends at 2038-01-19T03:14:07Z on MariaDB — declare it DATETIME(3), which "
+                              f"holds the UTC wall clock Hibernate writes.")
     if not datetimes:
         errors.append("the replay found no DATETIME column at all — the migrations' CREATE TABLE bodies were not read, "
                       "so a green here would mean nothing.")

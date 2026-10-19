@@ -39,7 +39,7 @@ in [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
 
 ## Quality notes
 
-- **Operator-blind.** The server sees the chapter node (id / parent / kind / order / timestamps, to the second), the
+- **Operator-blind.** The server sees the chapter node (id / parent / kind / order / timestamps, to the millisecond), the
   ciphertext title + blinded slug, and the **opaque `K_node` wrap** — never a key, name, or pixel. The recursive
   key model keeps least-privilege **crypto-enforced**, not server-gated.
 - **No new key type.** A chapter reuses the Memory key model (`K_node`, the `content-key` wrap purpose bound to

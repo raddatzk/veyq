@@ -64,7 +64,7 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 ## Quality notes
 
 - **Operator-blind.** The veyq server sees the node shape + its timestamps (when it was created or
-  trashed, to the second) + the **opaque `wrappedMeta`** blob; never the Memory's day. The date is sealed in
+  trashed, to the millisecond) + the **opaque `wrappedMeta`** blob; never the Memory's day. The date is sealed in
   `wrappedMeta` and unsealed only on device. (The blob envelope +
   operator-blindness at the node level: [en.memory.node-meta](../enablers/en.memory.node-meta.md).)
 - **`auto` reuses the capture-time tier** the gallery already lists (cr-0064/0066); it is materialized into
