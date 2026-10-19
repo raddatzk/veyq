@@ -29,6 +29,10 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.memories.banner.BannerKit
 import me.raddatz.veyq.memories.banner.MemoryBanner
+import me.raddatz.veyq.memories.media.SharedObjectKit.medium
+import me.raddatz.veyq.memories.media.SharedObjectKit.setBanner
+import me.raddatz.veyq.memories.media.SharedObjectKit.shared
+import me.raddatz.veyq.memories.media.SharedObjectKit.trashAndPurge
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -83,9 +87,6 @@ class SharedBlobSliceTest {
     @Inject
     @All
     lateinit var arms: MutableList<SharedSubtreeContributor>
-
-    /** One medium: its original and its PREVIEW tier, as the gallery's upload completes them. */
-    data class Medium(val mediaId: String, val original: CoverKit.Started, val preview: CoverKit.Started)
 
     // --- a cover on a medium's PREVIEW ---------------------------------------------------------------------------------
 
@@ -428,33 +429,12 @@ class SharedBlobSliceTest {
 
     // --- helpers -------------------------------------------------------------------------------------------------------
 
-    private fun medium(userId: String, scopeId: String, nodeId: String): Medium {
-        val mediaId = UUID.randomUUID().toString()
-        val original = CoverKit.start(userId, scopeId, nodeId, role = "ORIGINAL", ownerId = mediaId)
-        val preview = CoverKit.start(userId, scopeId, nodeId, role = "PREVIEW", ownerId = mediaId)
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body(
-                """{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","originalUploadId":"${original.uploadId}",""" +
-                    """"derivatives":[{"kind":"PREVIEW","uploadId":"${preview.uploadId}"}]}]}""",
-            )
-            .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200).body("results[0].error", nullValue())
-        return Medium(mediaId, original, preview)
-    }
-
-    private fun shared(source: String, blobId: String = UUID.randomUUID().toString()): String =
-        """{"sourceBlobId":"$source","blobId":"$blobId","wrappedBlobKey":"c2hhcmVk","wrappedBlobMeta":null}"""
-
     private fun specOf(source: String): SharedBlobSpec = SharedBlobSpec(source, UUID.randomUUID().toString(), "c2hhcmVk", null)
 
     private fun setCover(userId: String, scopeId: String, nodeId: String, shared: String): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shared":$shared,"expectedBlobId":null,"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/cover").then()
-
-    private fun setBanner(userId: String, scopeId: String, nodeId: String, shared: String, posterShared: String?): ValidatableResponse =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shared":$shared,"posterShared":${posterShared ?: "null"},"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
-            .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/banner").then()
 
     private fun completeShared(
         userId: String, scopeId: String, nodeId: String, mediaId: String, shared: String, previewUploadId: String?,
@@ -463,11 +443,6 @@ class SharedBlobSliceTest {
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$nodeId","mediaId":"$mediaId","originalShared":$shared,"derivatives":$derivatives}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200)
-    }
-
-    private fun trashAndPurge(userId: String, scopeId: String, mediaId: String) {
-        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$mediaId").then().statusCode(204)
-        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/media/$mediaId/purge").then().statusCode(204)
     }
 
     private fun block(scopeId: String, mediaId: String) = QuarkusTransaction.requiringNew().run {

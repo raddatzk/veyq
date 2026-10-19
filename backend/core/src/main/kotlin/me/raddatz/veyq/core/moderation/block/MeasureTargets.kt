@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.moderation.block
 
 import me.raddatz.veyq.core.backup.ErasureLedger
-import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
@@ -72,18 +72,16 @@ class MeasureTargets(
      * are gone, so its objects are read from its case's hold ([held], `CaseSnapshots.rowsOf`): an application names them
      * ([ReportableItems.heldObjectsOf]). None for any other kind, or where no hold holds the item.
      *
-     * Each surviving object's blob rows are locked, as `BlobUploadStore.deleteBlobRow` locks them (by id, key by key): the
-     * race with the object's last row going is the one with the target's — either that delete committed first and the
-     * object is not surviving (the measure ends at once), or it waits for this commit and its [objectsGone] then reads the
-     * measure. Two such that cross on two keys are a deadlock the database breaks by rolling one back whole.
+     * Every blob row on those objects is locked, all at once, in the one lock order ([StoredObjectLocks]) — the taker holds
+     * no scope lock, so it is the transaction that order is for: the race with the object's last row going is the one
+     * with the target's — either that delete committed first and the object is not surviving (the measure ends at once),
+     * or it waits for this commit and its [objectsGone] then reads the measure (`MeasureOnSurvivingObjectRacesSliceTest`).
      */
     @Transactional(Transactional.TxType.MANDATORY)
     fun survivingObjects(kind: BlockKind, targetId: String, held: List<HeldRow>?): Set<String> {
         if (kind != BlockKind.CONTENT_ITEM || held.isNullOrEmpty()) return emptySet()
-        val keys = items.flatMapTo(sortedSetOf()) { it.heldObjectsOf(targetId, held) }
-        return keys.filterTo(LinkedHashSet()) { key ->
-            BlobEntity.find("storageKey = ?1 order by id", key).withLock(LockModeType.PESSIMISTIC_WRITE).list().isNotEmpty()
-        }
+        val keys = items.flatMapTo(LinkedHashSet()) { it.heldObjectsOf(targetId, held) }
+        return StoredObjectLocks.lock(keys).mapTo(sortedSetOf()) { it.storageKey }
     }
 
     /**

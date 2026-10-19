@@ -136,6 +136,8 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         nodes.lockScope(scopeId)
         val kind = liveKind(scopeId, nodeId) ?: return refused(AttachOutcome.NodeNotFound)
         if (kind !in kinds) return refused(AttachOutcome.IllegalTarget)
+        // The source's object and the predecessor's, both locked before either, in the one order (StoredObjectLocks).
+        StoredObjectLocks.lockOf(scopeId, listOf(spec.sourceBlobId, expectedBlobId))
         val blobId = shared.persist(scopeId, nodeId, spec) ?: return refused(AttachOutcome.SharedSourceInvalid)
         val outcome = swapIn(scopeId, nodeId, slot, blobId, Uploader.Member(memberUserId), expectedBlobId)
         if (outcome is AttachOutcome.Attached) nodes.bumpTree(scopeId) // the level view's change, as [attach]'s
