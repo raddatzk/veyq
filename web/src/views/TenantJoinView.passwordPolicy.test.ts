@@ -229,3 +229,19 @@ describe('TenantJoinView — where it must NOT apply', () => {
     expect(login).toHaveBeenCalledWith('owner@acme.example', 'short')
   })
 })
+
+// Beside the floor, because this file already mounts both branches: GDPR Art. 13 applies where an account is born (and
+// where an existing one joins a space with a new username), so both branches link the privacy notice's account passage,
+// in a tab of its own — the invite's secret rides this page's fragment (ADR 0035 decision 8, uc.admin.privacy-notice).
+describe('TenantJoinView — the privacy notice where an account is born', () => {
+  it.each([
+    ['REGISTER', false],
+    ['SIGN IN', true],
+  ])('%s: links the notice at its account passage, in a tab of its own', async (_branch, hasAccount) => {
+    const w = await mountFor(hasAccount)
+    const link = w.find('.join-privacy a')
+    expect(link.attributes('href')).toBe('/privacy#account')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.text()).toBe(t('privacyNotice.atInvite'))
+  })
+})

@@ -77,12 +77,23 @@ describe('OperatorIdentification (uc.admin.operator-details, web)', () => {
     expect(link.attributes('target')).toBe('_blank')
   })
 
+  it('always links the privacy notice too, in a tab of its own — one click from every page (ADR 0035 decision 8)', async () => {
+    fakeApi(publicOperatorApi, { getOperatorDetails: () => Promise.reject(new Error('offline')) })
+    const w = await mountIt()
+    const link = w.find('.operator-identification__privacy')
+    expect(link.text()).toBe('Privacy')
+    expect(link.attributes('href')).toBe('/privacy')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(authenticatedCalls).toEqual([])
+  })
+
   it('speaks the page’s language', async () => {
     stubApi(publicOperatorApi, { getOperatorDetails: identified })
     i18n.global.locale.value = 'de'
     const w = await mountIt()
     expect(w.find('.operator-identification__link').text()).toBe('Impressum')
     expect(w.find('.operator-identification__terms').text()).toBe('Bedingungen dieser Instanz')
+    expect(w.find('.operator-identification__privacy').text()).toBe('Datenschutz')
   })
 
   it('shows no legal notice while nothing of it is published (control: the terms link stays)', async () => {

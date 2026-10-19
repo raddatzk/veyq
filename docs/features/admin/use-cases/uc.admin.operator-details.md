@@ -76,9 +76,9 @@ sequenceDiagram
 - **A3 — A wrong or stale code.** It is refused and spends one of a few attempts; a code expires; a changed
   notification address unconfirms the old confirmation without any further write, and asks again.
 - **A4 — `veyq-admin`.** `mode show` prints the mode, the notice and the preset; `mode set private` refuses without
-  `--accept-notice` and prints the notice either way. `operator show|set|clear` sets the values — `--recipient
-  '<name>|<what they do>|<country>'`, repeatable, replaces the list, `--recipient none` empties it, and `--dpo` sets the
-  officer; the code is typed in the console only, as instance mail's is.
+  `--accept-notice` and prints the notice either way. `operator show|set|clear` sets the values — `--recipients
+  '<name>|<what they do>|<country>; …'` replaces the whole list (the country may be left out, `none` empties it) and
+  `--data-protection-officer` sets the officer; the code is typed in the console only, as instance mail's is.
 - **A5 — The public read fails.** The login and share pages show no identification and block nothing.
 
 ## User impact

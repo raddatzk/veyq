@@ -51,8 +51,7 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
         revision: 2,
         variant: 'REDUCED',
         text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz\nMeldungen prüft ein Mensch.' },
-        record: { en: '### Your IP address\nKept 7 days.', de: '### Deine IP-Adresse\n7 Tage.' },
-        objection: { en: '### Your right to object\nWrite to us.', de: '### Dein Widerspruchsrecht\nSchreib uns.' },
+        record: { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse\nIn der Datenschutzerklärung.' },
       },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
   })
@@ -98,29 +97,26 @@ describe('TermsAcceptView — the operator section after the space’s terms (AD
         revision: 1,
         variant: 'FULL',
         text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz' },
-        record: record ? { en: '### Your IP address\nKept 7 days.', de: '### Deine IP-Adresse' } : null,
-        objection: record ? { en: '### Your right to object\nWrite to us.', de: '### Dein Widerspruchsrecht' } : null,
+        record: record ? { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse' } : null,
       },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
   }
 
-  it('shows the space’s text first, then the section, the record at its anchor and the objection apart', async () => {
+  it('shows the space’s text first, then the section, and the record’s pointer at its anchor linking the notice', async () => {
     served(true)
     const w = await mountReady()
     const body = w.find('.terms-body').text()
     expect(body.indexOf('Be kind.')).toBeGreaterThanOrEqual(0)
     expect(body.indexOf('On this instance')).toBeGreaterThan(body.indexOf('Be kind.'))
-    expect(w.find('#guest-write-record').text()).toContain('Kept 7 days.')
-    const objection = w.find('aside#right-to-object')
-    expect(objection.text()).toContain('Your right to object')
-    expect(w.find('#guest-write-record').text()).not.toContain('right to object') // apart, not inside the record
+    expect(w.find('#guest-write-record').text()).toContain('In the privacy notice.')
+    // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice): linked, not repeated.
+    expect(w.find('#guest-write-record a').attributes('href')).toBe('/privacy#guest-write-record')
   })
 
   it('shows no record passage while the record is off (control: the section itself stays)', async () => {
     served(false)
     const w = await mountReady()
     expect(w.find('#guest-write-record').exists()).toBe(false)
-    expect(w.find('#right-to-object').exists()).toBe(false)
     expect(w.find('[data-testid="operator-section"]').text()).toContain('On this instance')
   })
 })

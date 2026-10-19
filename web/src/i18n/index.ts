@@ -1163,12 +1163,25 @@ const en = {
     contact: 'Contact for users and authorities:',
     contactLanguages: 'Languages: {langs}',
     terms: 'Terms of this instance',
+    privacy: 'Privacy',
   },
   operatorTerms: {
     title: 'Terms of this instance',
     intro: 'This section applies to every space on this instance. A space can add terms of its own, which you see when you join it or open one of its links.',
     loading: 'Loading…',
     loadFailed: 'Couldn’t load the terms of this instance. Please try again later.',
+    // the operator section's pointer to the guest-write record's information, which is the privacy notice's (Q27)
+    recordLink: 'Read it in the privacy notice',
+  },
+  // the instance privacy notice (views/PrivacyNoticeView.vue, ADR 0035 decision 8, GDPR Art. 13) and the links to it
+  // from the places that collect: the invite acceptance, the report dialog's contact field
+  privacyNotice: {
+    title: 'Privacy notice',
+    loading: 'Loading…',
+    loadFailed: 'Couldn’t load the privacy notice of this instance. Please try again later.',
+    askContact: 'To learn what this instance keeps about you, write to its contact:',
+    atInvite: 'What this instance keeps about your account, and why',
+    atReport: 'How your contact is kept, and for how long',
   },
   login: {
     title: 'Sign in',
@@ -2315,6 +2328,11 @@ const en = {
       recordKept: 'When you add something here, your IP address, your source port and the time are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port and the time are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
       recordObjection: 'You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.',
       recordMore: 'Who keeps it, why, and your rights',
+      // the guest id, to name in an objection to the record (GDPR Art. 21(1) with 12(2)): a guest has no account, so this
+      // is how the Server Owner finds its rows; the share identity's random id, which says nothing else
+      guestId: 'Your guest id, to name if you object:',
+      copyGuestId: 'Copy',
+      guestIdCopied: 'Copied',
     },
     // ADR 0030 point 8: no share link is served a guest's name — only the Memory's members read it
     nameVisibility: 'Only the people this belongs to see your name.',
@@ -3497,12 +3515,22 @@ const de: typeof en = {
     contact: 'Kontakt für Nutzende und Behörden:',
     contactLanguages: 'Sprachen: {langs}',
     terms: 'Bedingungen dieser Instanz',
+    privacy: 'Datenschutz',
   },
   operatorTerms: {
     title: 'Bedingungen dieser Instanz',
     intro: 'Dieser Abschnitt gilt für jeden Bereich auf dieser Instanz. Ein Bereich kann eigene Nutzungsbedingungen ergänzen; die siehst du, wenn du ihm beitrittst oder einen seiner Links öffnest.',
     loading: 'Wird geladen…',
     loadFailed: 'Die Bedingungen dieser Instanz konnten nicht geladen werden. Bitte versuche es später noch einmal.',
+    recordLink: 'In der Datenschutzerklärung lesen',
+  },
+  privacyNotice: {
+    title: 'Datenschutzerklärung',
+    loading: 'Wird geladen…',
+    loadFailed: 'Die Datenschutzerklärung dieser Instanz konnte nicht geladen werden. Bitte versuche es später noch einmal.',
+    askContact: 'Was diese Instanz über dich speichert, erfährst du bei ihrem Kontakt:',
+    atInvite: 'Was diese Instanz zu deinem Konto speichert, und warum',
+    atReport: 'Wie dein Kontakt aufbewahrt wird, und wie lange',
   },
   login: {
     title: 'Anmelden',
@@ -4537,6 +4565,9 @@ const de: typeof en = {
       recordKept: 'Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport und die Uhrzeit einen Tag aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast. | Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport und die Uhrzeit {days} Tage aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast.',
       recordObjection: 'Du kannst dem jederzeit aus Gründen widersprechen, die sich aus deiner besonderen Situation ergeben; wenn du das nicht möchtest, kannst du weiterhin ansehen, ohne etwas hinzuzufügen.',
       recordMore: 'Wer es aufbewahrt, warum, und deine Rechte',
+      guestId: 'Deine Gast-Kennung, falls du widersprichst:',
+      copyGuestId: 'Kopieren',
+      guestIdCopied: 'Kopiert',
     },
     nameVisibility: 'Deinen Namen sehen nur die Personen, denen das hier gehört.',
     yourName: 'Dein Name',

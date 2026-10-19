@@ -124,7 +124,7 @@ says what veyq builds and the question stays a named blocker.
   present, with N); `core.breached-password` with a mirror → the mirror's host named, HIBP not (control: default →
   HIBP); *private* with no recipients → the passage absent (control: *organisation* → "not stated by this operator");
   the read answers without a session and writes nothing (`grep` the request log for an address → none).
-- [ ] **3 web + admin-web** — the notice's page (public route on every tenant host), the footer's link and its mount in
+- [x] **3 web + admin-web** — the notice's page (public route on every tenant host), the footer's link and its mount in
   the app shell, the links at the invite acceptance, the report dialog and the first layer; admin-web's recipients and
   officer fields with the suggested rows; the CLI flags. · Done when: `npm run check` green in both; a browser pass of
   the notice signed out, from the invite page, from the report dialog and from a guest's first write, in DE and EN and
