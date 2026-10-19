@@ -196,7 +196,7 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   Memories' `veyq_media_revision` from inbox #341 to #410; core's `veyq_node_items_revision` now, with a foreign key
   onto `veyq_node` that does not cascade — the node-subtree eraser at phase 300 and the scope's node eraser delete the
   row before the node goes), an `updated_at
-  TIMESTAMP` on `veyq_media` (backfilled `= created_at` then; `NOT NULL` and the only creation time since inbox #398), and
+  DATETIME(3)` on `veyq_media` (backfilled `= created_at` then; `NOT NULL` and the only creation time since inbox #398), and
   the keyset's `item_position INT` on `veyq_media` with the index `(node_id, item_position, id)` (decision 3, 6); `listNodeMedia` gains a conditional GET (`If-None-Match`
   → `304`), a `since` cursor (keyset delta), and the current-id-set on a `200` **only when the client's
   `delete_revision` lags** (a delete occurred). All opaque/operational — no key, no plaintext.
