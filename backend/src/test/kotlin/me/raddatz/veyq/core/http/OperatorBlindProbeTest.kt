@@ -136,6 +136,16 @@ class OperatorBlindProbeTest {
         "removeNodeCover" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover/removal", """{"blobId":"${UUID.randomUUID()}","wrappedMeta":"$B64","metaRevision":0}""")
         },
+        // --- a Memory's banner (uc.memory.banner): the cover's gate, Memories' operation ---
+        "setMemoryBanner" to Probe(Address.SCOPE) { s ->
+            Call(
+                "PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/banner",
+                """{"uploadId":"${s.uploadId}","expectedBlobId":null,"expectedPosterBlobId":null,"wrappedMeta":"$B64","metaRevision":0}""",
+            )
+        },
+        "removeMemoryBanner" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/banner/removal", """{"blobId":"${UUID.randomUUID()}","posterBlobId":null,"wrappedMeta":"$B64","metaRevision":0}""")
+        },
         "moveBucketMedia" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media-moves", """{"mediaIds":["${s.mediaId}"],"targetBucketId":"${s.bucketId}"}""")
         },

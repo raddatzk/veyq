@@ -214,7 +214,7 @@ class MalformedRequestSliceTest {
                 statement = ServerOwnerStatementInput(UUID.randomUUID(), ServerOwnerStatementInput.Ground.TERMS_BREACH, factsForLog = facts(sealed)),
             )
         }
-        assertTrue(validator.validate(request("A".repeat(12001))).isNotEmpty(), "sealed facts past 12000 characters")
+        assertTrue(validator.validate(request("A".repeat(12457))).isNotEmpty(), "sealed facts past 12456 characters")
         assertTrue(validator.validate(request("c2VhbGVk")).isEmpty(), "the control: within its bounds")
     }
 

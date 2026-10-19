@@ -96,6 +96,8 @@ page and in your favorites.
   [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a drop box carries one),
   [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the trash keeps a cover for a restore, the purge frees it)
 - Enabler: [en.memory.node-meta](../../memory/enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` envelope the cover field lives in)
+- Sibling: [uc.memory.banner](../../memory/use-cases/uc.memory.banner.md) — Memories' own attachment pair beside the cover,
+  written the cover's way (the slots and the meta in one write) by an operation of its own, so core names no banner
 - Decisions: [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (core's attachments),
   [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md), [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md),
   [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)

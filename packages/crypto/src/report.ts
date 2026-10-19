@@ -236,16 +236,44 @@ export const sealModerationNote = (epoch: number, caseId: string, kem: HybridPub
 export const openModerationNote = (epoch: number, caseId: string, kemSecret: HybridSecret, blob: Uint8Array): string =>
   decodeModerationNote(openAs({ purpose: 'moderation-note', epoch, caseId }, kemSecret, blob))
 
-/**
- * The facts of a statement of reasons, sealed to one affected member's identity (`moderation-facts` [caseId,
- * accountId], ADR 0093 § 7): the note's encoding, so its length tells the server a bucket.
- */
-export const sealModerationFacts = (caseId: string, accountId: string, identity: HybridPublic, facts: string): Uint8Array =>
-  sealTo({ purpose: 'moderation-facts', caseId, accountId }, identity, encodeModerationNote(facts))
+/** A fresh `K_facts`: the key a statement's facts are sealed under once, and that alone is wrapped to each member. */
+export const newFactsKey = (): Uint8Array => crypto.getRandomValues(new Uint8Array(REPORT.keyBytes))
 
-/** Open the facts with the recipient's own identity key, at the case and account the statement names. */
-export const openModerationFacts = (caseId: string, accountId: string, identitySecret: HybridSecret, blob: Uint8Array): string =>
-  decodeModerationNote(openAs({ purpose: 'moderation-facts', caseId, accountId }, identitySecret, blob))
+/** [factsKey] as it is, refused unless it is a 32-byte key — never sealed under or wrapped, nor returned from a wrap. */
+function factsKeyOf(factsKey: Uint8Array): Uint8Array {
+  if (!(factsKey instanceof Uint8Array) || factsKey.length !== REPORT.keyBytes) throw new ReportInvalid('facts key')
+  return factsKey
+}
+
+/**
+ * The facts of a statement of reasons, sealed once under the statement's `K_facts` (`moderation-statement-facts`
+ * [caseId, statementId], ADR 0093 § 7): the note's encoding, so its length tells the server a bucket. Every affected
+ * member opens this one copy with the key wrapped to them, so a member costs a wrap, not a copy of the facts.
+ */
+export const sealStatementFacts = (caseId: string, statementId: string, factsKey: Uint8Array, facts: string): Uint8Array =>
+  seal({ purpose: 'moderation-statement-facts', caseId, statementId }, factsKeyOf(factsKey), encodeModerationNote(facts))
+
+/** Open a statement's facts with its `K_facts`, at the case and statement the member read it under. */
+export const openStatementFacts = (caseId: string, statementId: string, factsKey: Uint8Array, blob: Uint8Array): string =>
+  decodeModerationNote(open({ purpose: 'moderation-statement-facts', caseId, statementId }, factsKey, blob))
+
+/** Wrap a statement's `K_facts` to one affected member's identity (`moderation-facts-key` [caseId, statementId, accountId]). */
+export const wrapFactsKey = (
+  caseId: string,
+  statementId: string,
+  accountId: string,
+  identity: HybridPublic,
+  factsKey: Uint8Array,
+): Uint8Array => sealTo({ purpose: 'moderation-facts-key', caseId, statementId, accountId }, identity, factsKeyOf(factsKey))
+
+/** Unwrap `K_facts` with the member's own identity key, at the case, statement and account the statement names. */
+export const unwrapFactsKey = (
+  caseId: string,
+  statementId: string,
+  accountId: string,
+  identitySecret: HybridSecret,
+  blob: Uint8Array,
+): Uint8Array => factsKeyOf(openAs({ purpose: 'moderation-facts-key', caseId, statementId, accountId }, identitySecret, blob))
 
 /** An objection to a measure, sealed to the epoch's public half (`moderation-objection` [epoch, statementId]). */
 export const sealObjection = (epoch: number, statementId: string, kem: HybridPublic, objection: string): Uint8Array =>

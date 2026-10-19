@@ -1,6 +1,7 @@
 // An affected member's statements of reasons (uc.moderation.object-to-a-measure steps 5, 8, 10): read once per page and
-// afresh after an objection, matched to a blocked item, node or link by its id; the facts open with the member's own
-// identity key (`moderation-facts` [caseId, accountId]), and an objection seals to the moderation key's current epoch
+// afresh after an objection, matched to a blocked item, node or link by its id; the facts' key unwraps with the member's
+// own identity key (`moderation-facts-key` [caseId, statementId, accountId]) and opens the facts sealed once for every
+// member (`moderation-statement-facts` [caseId, statementId]), and an objection seals to the moderation key's current epoch
 // (`moderation-objection` [epoch, statementId]). Nothing here is shown to a guest: a guest has no session to ask with.
 import { reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
@@ -41,16 +42,22 @@ export function statementFor(target: { targetId?: string | null; shareId?: strin
   )
 }
 
-/** The facts the moderators wrote, opened with this member's identity key; null without facts or when they do not open. */
+/**
+ * The facts the moderators wrote: their key unwrapped with this member's identity key, then the one sealed copy opened
+ * with it, both at the statement the member reads; null without facts or when either does not open.
+ */
 export function openFacts(s: ModerationStatement): string | null {
-  if (!s.sealedFacts) return null
+  if (!s.sealedFacts || !s.wrappedFactsKey) return null
   const priv = identityPrivate()
   if (!priv) return null
+  let factsKey: Uint8Array | null = null
   try {
-    return v1.openModerationFacts(s.caseId, account.userId, priv.kemSeed, fromB64std(s.sealedFacts))
+    factsKey = v1.unwrapFactsKey(s.caseId, s.id, account.userId, priv.kemSeed, fromB64std(s.wrappedFactsKey))
+    return v1.openStatementFacts(s.caseId, s.id, factsKey, fromB64std(s.sealedFacts))
   } catch {
     return null
   } finally {
+    factsKey?.fill(0)
     priv.kemSeed.fill(0)
     priv.sign.fill(0)
   }

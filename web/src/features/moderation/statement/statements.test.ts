@@ -1,6 +1,6 @@
 // uc.moderation.object-to-a-measure (web) — the member's side with real crypto: the statements are read only for an
-// unlocked member, matched by the blocked id, the facts open with the member's own identity key at the case and account
-// the statement names, and the objection is sealed to the moderation key's current epoch, bound to its statement — read
+// unlocked member, matched by the blocked id, the facts open with the key wrapped to the member's own identity at the
+// case, statement and account the statement names, and the objection is sealed to the moderation key's current epoch, bound to its statement — read
 // afresh once when the server says the epoch moved on.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
@@ -74,19 +74,28 @@ describe('the statements of an affected member', () => {
     expect(statementFor({ shareId: 'link-1' })?.measureKind).toBe('SHARE')
   })
 
-  it('opens the facts with this member’s identity key, at the case and account the statement names', () => {
+  it('unwraps the facts’ key with this member’s identity key and opens the one sealed copy, at the statement it names', () => {
     const seed = v1.generateModerationKey()
     keys.identity = { kemSeed: v1.moderationKemSecret(seed), sign: new Uint8Array(32) }
     account.userId = ME
-    const sealed = b64std(v1.sealModerationFacts(CASE, ME, v1.moderationBundle(seed).kem, 'the photo shows a threat'))
-    expect(openFacts(statement({ sealedFacts: sealed }))).toBe('the photo shows a threat')
-    // Sealed for another member, or under another case: it does not open here.
-    expect(openFacts(statement({ sealedFacts: sealed, caseId: STATEMENT }))).toBeNull()
+    const k = v1.newFactsKey()
+    const sealedFacts = b64std(v1.sealStatementFacts(CASE, STATEMENT, k, 'the photo shows a threat'))
+    const wrappedFactsKey = b64std(v1.wrapFactsKey(CASE, STATEMENT, ME, v1.moderationBundle(seed).kem, k))
+    const facts = { sealedFacts, wrappedFactsKey }
+    expect(openFacts(statement(facts))).toBe('the photo shows a threat')
+    // Read under another case or another statement, or by another member: it does not open here.
+    expect(openFacts(statement({ ...facts, caseId: STATEMENT }))).toBeNull()
+    expect(openFacts(statement({ ...facts, id: CASE }))).toBeNull()
+    // The key of one statement served beside another statement's facts opens nothing.
+    const other = b64std(v1.sealStatementFacts(CASE, STATEMENT, v1.newFactsKey(), 'another statement'))
+    expect(openFacts(statement({ ...facts, sealedFacts: other }))).toBeNull()
     account.userId = STATEMENT
-    expect(openFacts(statement({ sealedFacts: sealed }))).toBeNull()
-    expect(openFacts(statement({ sealedFacts: undefined }))).toBeNull()
+    expect(openFacts(statement(facts))).toBeNull()
+    account.userId = ME
+    expect(openFacts(statement({ ...facts, sealedFacts: undefined }))).toBeNull()
+    expect(openFacts(statement({ ...facts, wrappedFactsKey: undefined }))).toBeNull()
     keys.identity = null
-    expect(openFacts(statement({ sealedFacts: sealed }))).toBeNull()
+    expect(openFacts(statement(facts))).toBeNull()
   })
 
   it('seals the objection to the current epoch bound to its statement, and reads the key afresh once when it moved on', async () => {

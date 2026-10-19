@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.testing.CoverKit
+import me.raddatz.veyq.memories.banner.BannerKit
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.node.NodeEntity
@@ -91,6 +92,17 @@ class TenantStorageQuotaMemoriesSliceTest {
         val uploadId = memberStartOk(f, f.scopeB, d, ownerId = f.memoryB, role = "COVER")
         CoverKit.set(f.userId, f.scopeB, f.memoryB, uploadId, expectedBlobId = null).statusCode(204)
         assertTenantHolds(f, d.byteSize)
+    }
+
+    /** A Memory's banner (ADR 0102) counts with both its slots: the video and its poster are the tenant's bytes too. */
+    @Test
+    fun aBannerCounts() {
+        val f = fixture()
+        val poster = TestBlob.ofPlaintext(37) // a size neither probe nor `d` has, so a dropped slot shows in the pin
+        val banner = memberStartOk(f, f.scopeB, d, ownerId = f.memoryB, role = MemoryBlobRoles.BANNER)
+        val posterUpload = memberStartOk(f, f.scopeB, poster, ownerId = f.memoryB, role = MemoryBlobRoles.BANNER_POSTER)
+        BannerKit.set(f.userId, f.scopeB, f.memoryB, banner, posterUpload).statusCode(204)
+        assertTenantHolds(f, d.byteSize + poster.byteSize)
     }
 
     /** Purge deletes the blob rows and leaves a reclaim tombstone, which carries no scope and is not counted. */

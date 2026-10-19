@@ -179,6 +179,11 @@ export default defineConfig(({ command }) => {
     test: {
       // Provide the PrimeVue toast service to every mounted component (cr-0157) — see src/test/setup.ts.
       setupFiles: ['./src/test/setup.ts'],
+      // The setup hook imports the registry and, for some suites, heavy modules (pdf.js, the sessions panel's whole
+      // account tree). On a loaded machine (load 20-40, measured 2026-10-19) that import alone passed vitest's default
+      // 10 s and failed `check` with "Hook timed out" while every test in the file was green when run alone. A hook
+      // timeout is not an assertion; 30 s keeps a real hang red without failing on load.
+      hookTimeout: 30_000,
     },
     build: {
       // The minifier drops the bundled dependencies' license comments, so their MIT/Apache/BSD notices would never

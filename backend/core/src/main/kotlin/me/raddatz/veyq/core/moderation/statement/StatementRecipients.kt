@@ -55,16 +55,20 @@ class StatementRecipients {
 
     companion object {
         /**
-         * How many members one step can seal its facts to. The moderator's browser seals one copy per member and sends
-         * them all in the one `takeModerationMeasure` body (`factsFor`, which must name exactly these members), under the
-         * server's request limit (`quarkus.http.limits.max-body-size` is unset: Quarkus' 10,240 KiB). A copy at the
-         * smallest padding bucket is 512 bytes of plaintext plus 1,149 of X-Wing envelope, about 2.3 KB as a JSON entry,
-         * so 4,000 leave room for the rest of the body; longer facts reach the body limit sooner. The list is never cut
-         * to fit — a statement reaches every affected member (ADR 0093 § 7) — so past it a step with facts is refused
-         * (`statement_recipients_too_many`). `ModerationStatementRecipients.accounts` and
-         * `ModerationStatementInput.factsFor` carry the same number.
+         * How many members one step can wrap its facts' key to (ADR 0093 § 7). The moderator's browser seals the facts
+         * once and wraps only `K_facts` per member, sending every wrap in the one `takeModerationMeasure` body
+         * (`factsKeyFor`, which must name exactly these members), under the server's request limit
+         * (`quarkus.http.limits.max-body-size` is unset: Quarkus' 10,240 KiB = 10,485,760 bytes). A wrap is always
+         * 1,181 bytes, 1,576 base64 characters; as a JSON entry with its account id, 1,650 bytes, whatever the facts'
+         * length. Every other field of the body at its largest — the note, the log's facts and a deferral's reason at
+         * 12,456 characters each, the facts sealed once at 10,964, 100 reporter notices at 254-character addresses — is
+         * 80,812 bytes, so at most 6,306 wraps fit; 6,000 make a largest body of 9,980,811 bytes, about 500 KB under the
+         * limit, and `StatementRecipientsBoundSliceTest` sends exactly that body.
+         * The list is never cut to fit — a statement reaches every affected member — so past it a step with facts is
+         * refused (`statement_recipients_too_many`). `ModerationStatementRecipients.accounts` and
+         * `ModerationStatementInput.factsKeyFor` carry the same number.
          */
-        const val MAX_SEALED = 4000
+        const val MAX_SEALED = 6000
     }
 
     /** A link's creator: the live row's, or the held copy's once the link was deleted. */

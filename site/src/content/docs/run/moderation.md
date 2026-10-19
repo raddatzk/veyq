@@ -107,8 +107,9 @@ moderator picks the **Ground** — one of the report categories, the law or the 
 relies on** (a short reference in the clear, such as "§ 86a StGB" or "Space terms, clause 4") and writes **What you
 found**, which explains why the content falls under it. In the second operating mode both are required. The statement
 also says that the measure applies wherever the instance is reached and lasts until it is lifted. The
-browser seals the facts twice: to the moderation key, for the log, and to each member the statement reaches, so the
-server stores neither in the clear. It reaches the creator of a blocked link (or of the link a blocked guest came
+browser seals the facts to the moderation key, for the log, and once more under a key of their own, which it seals to
+each member the statement reaches, so the server stores neither in the clear. One block's statement reaches at most
+6,000 members; past that the block is refused rather than told to only some of them. It reaches the creator of a blocked link (or of the link a blocked guest came
 through), the uploaders the held copy names, and on a content block every owner of the space: each reads it under
 **Blocked by the operator**, and the instance mail tells their account address that it is there — never the facts. A
 guest is told nothing of a moderator's block, having no account (an authority's removal order is different, below). A

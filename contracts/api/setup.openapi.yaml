@@ -121,6 +121,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: setup_already_complete }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
 components:
   schemas:

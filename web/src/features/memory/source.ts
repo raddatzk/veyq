@@ -20,7 +20,7 @@
 // hands in (the node's `K_node` from the tree's chain); the sources move ids, wraps and ciphertext.
 import { computed, inject, provide, ref, type ComputedRef, type InjectionKey } from 'vue'
 import type { GuestAccess } from '../../core/access'
-import { openBlobVia } from '../../core/blob/transport'
+import { makeChunkProvider, openBlobVia, presignAllChunks } from '../../core/blob/transport'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { contentKeyChain } from '../../core/node/tree'
 import { treeStore } from '../../core/node/treeStore'
@@ -81,6 +81,7 @@ import {
 import { forgetOwnShareMedia, loadOwnShareMedia, rememberOwnShareMedia } from './ownShareMedia'
 import type { UploadTarget } from './uploadQueue'
 import type { MemoryRights } from './rights'
+import { uploadBanner, writeMemoryBanner, type PreparedBanner, type UploadedBanner, type WriteMemoryBannerArgs } from './banner/bannerWrite'
 
 /** A node's media as a source lists it — every page of it (ADR 0033 decision 6): the live media and, where the session
  *  polls, the revisions a live poll continues from (the FIRST page's; `null`: this source has no live poll here) and the
@@ -113,8 +114,12 @@ export interface MediaLoaders {
   meta(item: MediaItem, key: Uint8Array): MediaMeta | null
   /** The original's sealed blob meta (type, file name, modified time — inbox #397). */
   blobMeta(item: MediaItem, key: Uint8Array): OpenedBlobMeta | null
-  /** The node's uploaded cover blob (a `COVER` attachment). */
+  /** A blob attached to the node itself, whole: its uploaded cover (`COVER`), its banner's image or poster (`BANNER`,
+   *  `BANNER_POSTER`). */
   coverBlob(ref: BlobRef, key: Uint8Array): Promise<Uint8Array>
+  /** The key-free chunk source over a blob attached to the node itself - a video banner's playback through the service
+   *  worker (ADR 0047) and its streamed export. */
+  attachmentChunks(ref: BlobRef, key: Uint8Array): ChunkProvider
   /** The heavy EXIF bundle, fetched lazily per opened item. Absent: no endpoint serves it to this session (a guest). */
   exif?(item: MediaItem, key: Uint8Array): Promise<MediaExif | null>
 }
@@ -168,6 +173,15 @@ export interface MediaMetaDoor {
   backfillPlace(target: MediaMetaTarget, key: Uint8Array, placeName: string, placeLevel?: string): Promise<MediaMetaWrite>
 }
 
+/** A Memory's banner (uc.memory.banner, ADR 0102): the upload of its bytes and the one write of its slots and the meta
+ *  that names them. A member's only: no link role has a banner operation. */
+export interface BannerDoor {
+  upload(
+    nodeId: string, key: Uint8Array, prepared: PreparedBanner, opts?: { onProgress?: (fraction: number) => void; signal?: AbortSignal },
+  ): Promise<UploadedBanner>
+  write(args: Omit<WriteMemoryBannerArgs, 'scopeId'>): Promise<SealedMetaState>
+}
+
 /** The item marks (ADR 0068): sealed under `K_SC` at `E_0`, the scope members' own. */
 export interface MarksDoor {
   load(nodeId: string, scopeKey: Uint8Array): Promise<void>
@@ -208,6 +222,8 @@ export interface MemorySource {
   readonly trash?: MediaTrashDoor
   /** The node's date and place, their automatic reconcile included. Absent: read-only meta, no reconcile. */
   readonly nodeMeta?: NodeMetaDoor
+  /** The node's banner writes. Absent: the banner is shown, never changed. */
+  readonly banner?: BannerDoor
   /** A medium's capture-time correction and place-name backfill. Absent: the lightbox is read-only. */
   readonly mediaMeta?: MediaMetaDoor
   /** The item marks. Absent: none shown, none loaded. */
@@ -224,6 +240,7 @@ export function sourceRights(rights: MemoryRights, source: MemorySource): Memory
     upload: rights.upload && !!source.upload,
     deleteMedia: rights.deleteMedia !== 'none' && source.deleteMedia?.reach === rights.deleteMedia ? rights.deleteMedia : 'none',
     editMeta: rights.editMeta && !!source.nodeMeta,
+    setBanner: rights.setBanner && !!source.banner,
     // shown only by a source that can read the node's meta as a member: the guest's source carries no `nodeMeta` door
     participants: rights.participants && !!source.nodeMeta,
     mark: rights.mark && !!source.marks,
@@ -272,6 +289,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       meta: (item, key) => openedMeta(scope(), key, item),
       blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       coverBlob: (ref, key) => openBlob(scope(), key, ref),
+      attachmentChunks: (ref, key) => makeChunkProvider(scope(), key, ref, () => presignAllChunks(scope(), ref.blobId)),
       exif: (item, key) => loadMediaExif(scope(), item, key),
     },
     async poll(nodeId, c) {
@@ -301,6 +319,10 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       setLocation: (nodeId, key, location, current) => setMemoryLocation(scope(), nodeId, key, location, current),
       setParticipants: (nodeId, key, userIds, current) => setMemoryParticipants(scope(), nodeId, key, userIds, current),
       write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit),
+    },
+    banner: {
+      upload: (nodeId, key, prepared, opts) => uploadBanner(scope(), nodeId, key, prepared, opts),
+      write: (args) => writeMemoryBanner({ ...args, scopeId: scope() }),
     },
     mediaMeta: {
       set: (target, key, overrideMs) => setMediaMeta(scope(), target, key, overrideMs),
@@ -383,6 +405,8 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
       blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       // The node's uploaded cover through the gated share presign, which serves a cover blob below the share.
       coverBlob: (ref, key) => openBlobVia(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
+      // A video banner's chunks through the same gated presign: the share serves every attachment below its root.
+      attachmentChunks: (ref, key) => makeChunkProvider(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
     },
     ...(contributes ? guestWrites(access, tree, shareId, scope) : {}),
   }

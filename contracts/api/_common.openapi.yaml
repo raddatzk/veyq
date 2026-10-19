@@ -78,6 +78,15 @@ components:
       description: The node's current item revision - echo it as `If-None-Match` on the next poll.
       schema: { type: string, example: "7" }
   responses:
+    RequestTooLarge:
+      description: >
+        The request's declared body is past the server's request limit (`request_too_large`; `quarkus.http.limits.max-body-size`,
+        10,240 KiB unless the instance sets it) — answered on the `Content-Length` header alone, before the body is read or
+        the caller is authenticated, and the connection is closed with it. Every operation that takes a body declares it.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { code: request_too_large }
     ItemsNotModified:
       description: >
         Not Modified - the client's `If-None-Match` equals the node's current item revision; nothing changed. No body,
@@ -405,9 +414,9 @@ components:
           type: string
           description: The sealed facts.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLWZhY3Rz
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12456) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ServerOwnerStatementInput:
       type: object
@@ -480,9 +489,9 @@ components:
           type: string
           description: The sealed reference.
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLXJlZmVyZW5jZQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12000) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 12456) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AuthorityOrderRequest:
       type: object
@@ -606,7 +615,7 @@ components:
           type: string
           description: The authority's reference, sealed (`moderation-order` [epoch, orderId]).
           contentEncoding: base64
-          maxLength: 12000
+          maxLength: 12456
           example: c2VhbGVkLXJlZmVyZW5jZQ==
         providerName:
           x-veyq-visibility: public
@@ -757,11 +766,12 @@ components:
         owning the node defines; core stores and compares it and never interprets it. The blob's `K_blob` wrap is
         sealed bound to it (ADR 0072), so a blob attached in another role does not open, and the crypto suite admits
         any role of this shape with no new seal purpose. Memories' roles are ORIGINAL and its THUMBNAIL/PREVIEW
-        derivatives, and a node's COVER; Files' is FILE_CONTENT. Which roles an upload may carry is the
-        applications' question: a member's upload start refuses a role no application declares (`400
-        invalid_request`), a guest's one the target node's application does not take from a guest (`400
-        invalid_request`, before the link's upload budget is spent; Memories: every role but COVER), and Memories'
-        completion attaches only the role it asks for.
+        derivatives, and a Memory's BANNER and BANNER_POSTER (a member's only); core's is a node's COVER; Files' is
+        FILE_CONTENT. Which roles an upload may carry is the applications' question: a member's upload start refuses
+        a role no application declares (`400 invalid_request`), a guest's one the target node's application does not
+        take from a guest (`400 invalid_request`, before the link's upload budget is spent; Memories: a medium's
+        roles only, never COVER, BANNER or BANNER_POSTER), and Memories' completion attaches only the role it asks
+        for.
       example: ORIGINAL
 
     MasterKeyWrap:

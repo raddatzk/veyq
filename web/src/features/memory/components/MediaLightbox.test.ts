@@ -50,6 +50,7 @@ vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
 }))
 
+import { reactive } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
 import { addMedia, listMedia, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
@@ -177,6 +178,30 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(presigned, 'not one byte of the blocked medium is asked for').not.toContain(store.blobIdOfUpload('up-2'))
   })
 
+  // The gallery's live poll adopts a block on the item the lightbox holds, in place (useMediaGalleryLive): the stage turns
+  // to the placeholder and the decrypted preview is revoked at once; a lift reads the preview again.
+  it('a block that arrives while the medium is open revokes its preview and shows the placeholder; a lift shows it again', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const held = reactive(items.map((it) => ({ ...it }))) // the gallery's items: reactive, patched in place by its poll
+    const revoke = vi.spyOn(URL, 'revokeObjectURL')
+    const wrapper = mountLightbox(memoryKey, held)
+    await flushPromises()
+    const shown = wrapper.find('.media-lightbox-stage img').attributes('src')
+    expect(shown).toMatch(/^blob:/)
+
+    held[0].blocked = true
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-blocked').text()).toBe(t('node.blockedByOperator'))
+    expect(wrapper.find('.media-lightbox-stage img').exists()).toBe(false)
+    expect(revoke, 'the decrypted preview of a blocked medium is revoked').toHaveBeenCalledWith(shown)
+
+    delete held[0].blocked
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-blocked').exists()).toBe(false)
+    expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toMatch(/^blob:/)
+  })
+
   it('“Set as cover” emits setCover for the current item (cr-0073 gallery source)', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
@@ -200,6 +225,31 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(current!.attributes('aria-pressed')).toBe('true')
     await current!.trigger('click')
     expect(wrapper.emitted('setCover')).toBeFalsy() // clicking the current cover does nothing
+  })
+
+  // uc.memory.banner A1: "Use as banner" hands the shown medium (its decrypted preview, whether it is a video) to the banner
+  // dialog, only with `canSetBanner`; the medium the banner was made from reads "Current banner" and asks for nothing.
+  it('“Use as banner” emits setBanner for the shown medium only where offered, and marks the banner\'s source', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const banner = (w: ReturnType<typeof mountLightbox>, key: string) =>
+      w.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t(key))
+
+    const without = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    expect(banner(without, 'memory.banner.useAsBanner'), 'not offered without canSetBanner').toBeUndefined()
+
+    const offered = mountLightbox(memoryKey, items, 0, null, { canSetBanner: true })
+    await flushPromises()
+    await banner(offered, 'memory.banner.useAsBanner')!.trigger('click')
+    expect(offered.emitted('setBanner')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId, src: expect.stringMatching(/^blob:/), video: false })
+
+    const current = mountLightbox(memoryKey, items, 0, null, { canSetBanner: true, bannerMediaId: items[0].mediaId })
+    await flushPromises()
+    const pressed = banner(current, 'memory.banner.isBanner')!
+    expect(pressed.attributes('aria-pressed')).toBe('true')
+    await pressed.trigger('click')
+    expect(current.emitted('setBanner')).toBeFalsy()
   })
 
   it('pages prev/next through the grid order, fetching the next item’s preview, and clamps at the ends', async () => {

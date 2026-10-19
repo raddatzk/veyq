@@ -220,6 +220,10 @@ class ShareContributorSliceTest {
         // a node's cover is a member's write: refused whole, even beside an admissible item
         start("COVER").then().statusCode(400).body("code", equalTo("invalid_request"))
         start("ORIGINAL", "COVER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        // so is a Memory's banner and its poster (ADR 0102): a member's write, never a guest's
+        start("BANNER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        start("BANNER_POSTER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        start("ORIGINAL", "BANNER").then().statusCode(400).body("code", equalTo("invalid_request"))
         // a well-formed token Memories names no role in
         start("FILE_CONTENT").then().statusCode(400).body("code", equalTo("invalid_request"))
         // a malformed token is the contract's own 400, before the handler

@@ -103,6 +103,11 @@ export const SEAL_PURPOSES = {
   'report-share': [['itemKind', 'role'], ['itemId', 'id']],
   // The same for an upload link a WRITE_ONLY guest reports: addressed by the link's share id.
   'report-link': [['shareId', 'shareId']],
+  // A statement of reasons' facts, sealed once by the moderator under the statement's fresh K_facts (ADR 0093 § 7,
+  // ./report.ts) — every affected member opens this one copy with the key wrapped to them (`moderation-facts-key`).
+  // K_facts is unique to the statement, and the seal still binds the case and the statement id the moderator's browser
+  // mints, as a field under its own K_field keeps its object binding (ADR 0072 Decisions 1-3).
+  'moderation-statement-facts': [['caseId', 'id'], ['statementId', 'id']],
 } as const satisfies Schema
 
 /**
@@ -155,9 +160,10 @@ export const SEAL_TO_PURPOSES = {
   // A moderator's free text — a decision's note, a hold extension's reason (ADR 0093 § 11, ./report.ts) — to the
   // epoch's public half, bound to its case so a note moved onto another case's event does not open there.
   'moderation-note': [['epoch', 'uint'], ['caseId', 'id']],
-  // A statement of reasons' facts, sealed by the moderator a second time to one affected member's identity (ADR 0093
-  // § 7), bound to the case and the recipient so a copy served to another member or under another case does not open.
-  'moderation-facts': [['caseId', 'id'], ['accountId', 'id']],
+  // A statement's K_facts, wrapped by the moderator to one affected member's identity (ADR 0093 § 7), bound to the case,
+  // the statement and the member — the member addresses it by the statement and their own account — so a wrap served
+  // to another member, or under another statement, does not open.
+  'moderation-facts-key': [['caseId', 'id'], ['statementId', 'id'], ['accountId', 'id']],
   // An affected member's objection to a measure (ADR 0093 § 7), to the epoch's public half, bound to the statement it
   // answers so an objection moved onto another statement does not open there.
   'moderation-objection': [['epoch', 'uint'], ['statementId', 'id']],

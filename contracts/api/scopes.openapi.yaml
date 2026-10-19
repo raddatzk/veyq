@@ -83,6 +83,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: personal_scope_exists }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     get:
       tags: [scopes]
       operationId: listMyScopes
@@ -192,6 +193,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             The `core.group-space` capability is switched off instance-wide (ADR 0032, ADR 0088): the operator
@@ -373,6 +375,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: already_member }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/members/resolve:
     post:
@@ -443,6 +446,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: member_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/members/{userId}:
     patch:
@@ -482,6 +486,7 @@ paths:
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope, or the caller is not a member of it (`scope_not_found`, indistinguishable per ADR 0042); or no such target member (`member_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
         "409": { description: "The last remaining OWNER cannot be demoted (`last_owner`), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [scopes]
       operationId: removeMember
@@ -592,6 +597,7 @@ paths:
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), an account rotation of the caller queued a rotation of this scope that is still live and excludes them (`rotation_excluded`, nothing stored, ADR 0060 Decision 4), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
         "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
 
   /api/scopes/{scopeId}/rotation/requeue:
@@ -758,6 +764,7 @@ paths:
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
         "409": { description: "The submitted `nameEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/icon:
     post:
@@ -802,6 +809,7 @@ paths:
         "403": { description: "The caller is a member of the scope but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope (or already hard-purged) — or the caller is not a member of it (indistinguishable, ADR 0042) — or it is a PERSONAL scope (which carries no icon).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
         "409": { description: "The submitted `iconEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the scope is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [scopes]
       operationId: clearScopeIcon

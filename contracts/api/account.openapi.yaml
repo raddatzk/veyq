@@ -151,6 +151,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: too_many_devices }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             The capability the wrap's method needs is switched off instance-wide (ADR 0032, ADR 0088):
@@ -247,6 +248,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: username_taken }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/profile/avatar:
     put:
@@ -294,6 +296,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: profile_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [account-profile]
       operationId: clearMyAvatar
@@ -407,6 +410,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: stale_revision }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/identity-pins/entries:
     get:
@@ -532,6 +536,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: stale_revision }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/wraps/{id}:
     delete:
@@ -654,6 +659,7 @@ paths:
               examples:
                 unavailable: { value: { code: rotation_unavailable } }
                 stale: { value: { code: stale_revision } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/rotation/scopes:
     get:
@@ -860,6 +866,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: email_confirmation_invalid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/email-change:
     post:
@@ -924,6 +931,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: The per-account mail budget is spent; retry after the indicated delay. Nothing was stored.
           content:
@@ -992,6 +1000,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: email_change_invalid }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "503":
           description: >
             `mail_unavailable` — this tenant cannot send the notice to the old address. Nothing was changed.
@@ -1073,6 +1082,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: password_change_unavailable }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/account/erasure:
     get:
@@ -1171,6 +1181,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: last_owner_choice_required }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
 components:
   securitySchemes:

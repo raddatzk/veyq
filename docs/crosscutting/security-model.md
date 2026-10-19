@@ -145,6 +145,11 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Depot file's **uploader attribution** (the member
   or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
   `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8);
+  a Memory's **banner** — that it has one and whether it is a video (its `BANNER` / `BANNER_POSTER` attachment rows and
+  their sizes), never its frame, focal point, description or a pixel; a banner copied from a gallery medium can be
+  matched to that medium by its size (a video banner is the original re-sealed as it is) until the small playback copy
+  replaces it, and choosing one downloads the medium's original once ([ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
+  § What the server sees);
   the **last editor of each sealed field group** — a node's name and meta, a share's name, note and private label, a
   group's name and icon, a bucket's name, a medium's meta: the member or guest identity whose write the ciphertext is,
   served to no client and never what was written ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
@@ -377,13 +382,15 @@ server-blind token makes this work without the server ever seeing a name:
   on the admin channel, taken or declined from a moderator's proposal
   ([uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). Measures are clear
   metadata, since the server must refuse what they name; notes and reasons are sealed (`moderation-note` [epoch,
-  caseId]). A moderator's measure carries its **statement of reasons**: the ground in the clear, the facts sealed twice
-  in the moderator's browser — to the moderation key, and to each affected member's identity (`moderation-facts`
-  [caseId, accountId]) — so the affected read them on the placeholder and the server holds neither in the clear; the
+  caseId]). A moderator's measure carries its **statement of reasons**: the ground in the clear, the facts sealed in the
+  moderator's browser to the moderation key for the log, and once more under a fresh `K_facts` bound to the statement
+  (`moderation-statement-facts` [caseId, statementId]) whose key alone is wrapped to each affected member's identity
+  (`moderation-facts-key` [caseId, statementId, accountId]) — so the affected read them on the placeholder and the
+  server holds neither in the clear; the
   instance mail tells them it is there, never the facts. An affected member **objects** once per measure, sealed to the
   moderation key (`moderation-objection` [epoch, statementId]); the server refuses its decision from the moderator who
   took the measure while another holds the key ([uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)).
-  The identity a moderator seals the facts to is the one the server serves, unpinned — the moderation surface holds no
+  The identity a moderator wraps the facts' key to is the one the server serves, unpinned — the moderation surface holds no
   Master Key to read a pin store — which costs nothing against the operator: the Server Owner holds the moderation key
   and reads the log's copy of the same facts anyway. **A Server Owner's own step over content** (a sign-in block, a
   tenant offline) carries a statement too, and it is the one place facts reach a mail: the blocked member cannot sign in

@@ -105,6 +105,7 @@ paths:
             because that is what its replay answers.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
@@ -327,6 +328,7 @@ paths:
             uc.moderation.take-a-measure). Nothing is written in any case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             The instance capability the share's role needs is disabled (`capability_disabled`, ADR 0032) — a
@@ -387,6 +389,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/shares/{shareId}:
     get:
@@ -492,6 +495,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             Unprocessable. Two codes: `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
@@ -732,6 +736,7 @@ paths:
           description: "`case_not_found`, or `nothing_held` = the case's hold has ended."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "503":
           description: The configured object store cannot presign (e.g. the in-memory dev store).
           content:
@@ -795,6 +800,7 @@ paths:
           description: The `identityId` is already taken (`id_taken`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/shares/{shareId}/blob-uploads:
     post:
@@ -857,6 +863,7 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable (`share_not_found`); or the `nodeId` names no live node inside the share's subtree (`node_not_found`, the same for a node outside it as for none).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many uploads for this share in the current window (per-share rate limit).
           content:
@@ -911,6 +918,7 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable (`share_not_found`); or the `nodeId` names no live node inside the share's subtree (`node_not_found`, the same for a node outside it as for none).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many wrong password attempts on this share (the password gate's own limiter).
           content:
@@ -990,6 +998,7 @@ paths:
           description: A sibling under the parent already has that slug (`slug_taken`), the `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is above the scope's current one — nothing stored (`stale_epoch`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             Illegal structure (`illegal_structure` — the parent is missing, trashed, or outside the share's subtree, or
@@ -1074,6 +1083,7 @@ paths:
             rebuilds the placement, ADR 0080 Decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             Illegal structure (`illegal_structure` — the node is the share's root, a guest's identity folder or inside
@@ -1202,6 +1212,7 @@ paths:
           description: "`epoch` is not the moderation key's current epoch (`moderation_epoch_changed`): read the key again and seal anew."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "429":
           description: Too many reports from this address or through this link, or too many wrong password attempts (`rate_limited`).
           content:
