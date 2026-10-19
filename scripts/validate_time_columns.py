@@ -20,7 +20,8 @@ and the `UPDATE` of the `TIMESTAMP` column failed with a 500; every time column 
 **Its limit.** (a) It reads *declarations, not a database*: a column made through dynamic SQL, a `CREATE TABLE … AS
 SELECT` (its columns are not declared; the one such table today is dropped in the same file), or a type named through
 a domain or a `SET` variable is not seen — the engine's own answer is `StoredTimeSliceTest`, which reads
-`INFORMATION_SCHEMA` on MariaDB (`scripts/run_backend_races_on_mariadb.py`). (b) It does not check that a column holds
+`INFORMATION_SCHEMA` on MariaDB (`scripts/run_backend_races_on_mariadb.py`). Flyway's own `flyway_schema_history`
+is no migration's: its `installed_on` stays the `TIMESTAMP` Flyway declares, and neither check reads it. (b) It does not check that a column holds
 UTC: that is the writer's (Hibernate's `Instant` binding) and the H2 test URL's `TIME ZONE=UTC`, held by the same
 test. (c) It does not check precision: a plain `DATETIME` keeps whole seconds on purpose (what the server stores, to
 the second, is a published statement), and a column that orders rows needs `DATETIME(3)` — `backend/CLAUDE.md`

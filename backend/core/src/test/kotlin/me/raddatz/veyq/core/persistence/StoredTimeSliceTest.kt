@@ -89,13 +89,15 @@ class StoredTimeSliceTest {
             "H2 stores the UTC wall clock — without TIME ZONE=UTC it stores the JVM zone's")
     }
 
+    /** Flyway's own `flyway_schema_history.installed_on` is a `TIMESTAMP` of Flyway's DDL, not a veyq column: it is left
+     *  to Flyway, and to the MariaDB image, whose `TIMESTAMP` reaches 2106 from 11.5 on 64-bit platforms. */
     @Test
     fun noColumnIsATimestamp() {
         assumeTrue(onMariaDb(), "H2 names DATETIME and TIMESTAMP alike; scripts/validate_time_columns.py reads the declarations")
         val types = dataSource.connection.use { c ->
             c.prepareStatement(
                 "SELECT table_name, column_name, data_type FROM information_schema.columns " +
-                    "WHERE table_schema = DATABASE() AND data_type IN ('timestamp', 'datetime')",
+                    "WHERE table_schema = DATABASE() AND data_type IN ('timestamp', 'datetime') AND table_name <> 'flyway_schema_history'",
             ).executeQuery().use { rs -> generateSequence { if (rs.next()) "${rs.getString(1)}.${rs.getString(2)}" to rs.getString(3) else null }.toList() }
         }
         assertEquals(emptyList<String>(), types.filter { it.second.equals("timestamp", ignoreCase = true) }.map { it.first })
