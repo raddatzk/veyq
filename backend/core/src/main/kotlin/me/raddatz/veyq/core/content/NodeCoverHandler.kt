@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.SharedBlobSpec
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.FailureStatus.BAD_REQUEST
@@ -36,6 +37,12 @@ sealed interface NodeCoverOutcome {
     /** The upload failed declare-then-verify (its staged objects are on the reclaim list) - a 400. */
     object Budget : NodeCoverOutcome, HttpFailure by httpFailure("budget_exceeded", BAD_REQUEST)
 
+    /** Neither or both of an upload and a shared row - a 400. */
+    object InvalidRequest : NodeCoverOutcome, HttpFailure by Failures.invalidRequest
+
+    /** The shared row's source is no live blob of this node, is blocked, or its new id is taken (ADR 0013 § 5) - a 422. */
+    object SharedSourceInvalid : NodeCoverOutcome, HttpFailure by httpFailure("shared_source_invalid", UNPROCESSABLE)
+
     /** The slot holds another blob than the one the caller stated; nothing attached, a stated upload spent - a 409. */
     data class CoverStale(val currentBlobId: String?) : NodeCoverOutcome, HttpFailure by httpFailure("cover_stale", CONFLICT)
 
@@ -59,19 +66,26 @@ class NodeCoverHandler(
     @All private val kindRules: MutableList<NodeKindRules>,
 ) {
     /**
-     * Make [uploadId] the cover of [nodeId], replacing [expectedBlobId] (null: an empty slot), and write the node's
-     * re-sealed [wrappedMeta] at [metaRevision] - all or nothing ([NodeCoverStore.set]). The upload is the caller's own
-     * (a session another member opened is not found), verified against its declaration before anything is attached.
+     * Make [uploadId] - or, in its place, a new row on an object the node already stores ([shared], ADR 0013 § 5) - the
+     * cover of [nodeId], replacing [expectedBlobId] (null: an empty slot), and write the node's re-sealed [wrappedMeta] at
+     * [metaRevision] - all or nothing ([NodeCoverStore.set]). The upload is the caller's own (a session another member
+     * opened is not found), verified against its declaration before anything is attached; a shared row's source is
+     * checked under the scope lock ([me.raddatz.veyq.core.blob.SharedBlobs]).
      */
     fun set(
-        userId: String, scopeId: String, nodeId: String, uploadId: String, expectedBlobId: String?,
+        userId: String, scopeId: String, nodeId: String, uploadId: String?, shared: SharedBlobSpec?, expectedBlobId: String?,
         wrappedMeta: String, metaRevision: Long,
     ): NodeCoverOutcome {
+        if ((uploadId == null) == (shared == null)) return NodeCoverOutcome.InvalidRequest
         access.check(userId, scopeId, WRITE)
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
         val node = nodes.findInScope(scopeId, nodeId) ?: return NodeCoverOutcome.NotFound
         if (!NodeKindRules.takesCover(kindRules, node.kind)) return NodeCoverOutcome.IllegalTarget
-        val session = blobs.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return NodeCoverOutcome.NotFound
+        val editor = PrincipalKey.User(userId)
+        if (shared != null) {
+            return store.setShared(scopeId, node.id, node.kind, shared, userId, expectedBlobId, wrappedMeta, metaRevision, editor)
+        }
+        val session = blobs.findSession(scopeId, checkNotNull(uploadId), UploadOpener.Member(userId)) ?: return NodeCoverOutcome.NotFound
         if (!session.boundTo(node.id, NodeCover.SLOT)) return NodeCoverOutcome.UploadMismatch
         val manifest = when (val v = uploads.verifyBlob(session)) {
             is BlobVerify.Ok -> v.manifest
@@ -80,7 +94,7 @@ class NodeCoverHandler(
                 return NodeCoverOutcome.Budget
             }
         }
-        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision, PrincipalKey.User(userId))
+        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision, editor)
     }
 
     /** Empty [nodeId]'s cover slot (only while it holds [blobId]) and write the node's [wrappedMeta] without the cover. */

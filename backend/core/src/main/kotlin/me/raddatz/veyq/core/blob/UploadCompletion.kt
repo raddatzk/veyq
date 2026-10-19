@@ -25,11 +25,15 @@ data class CompleteItem(
      *  (ADR 0072). Memories: the media id. */
     val ownerId: String,
     val nodeId: String,
-    val originalUploadId: String,
+    /** The original's upload session - or null where [originalShared] stands in its place. */
+    val originalUploadId: String?,
     val derivatives: List<DerivativeDeclare>,
     /** The application's sealed values for the object, keyed by its own field names, opaque to core: no seal, no
      *  validation (their bounds are the application's request schema's). An absent key is an absent value. */
     val payloads: Map<String, String>,
+    /** In place of [originalUploadId]: the original as a new row on an object the node already stores (ADR 0013 § 5,
+     *  [SharedBlobs]) - a member's completion only, and only where the application takes one (Memories' media). */
+    val originalShared: SharedBlobSpec? = null,
 )
 
 /** Per-item result of `complete`: the original's blob id and the object's [ownerId] on success, else an [error] code. */

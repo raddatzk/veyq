@@ -1191,7 +1191,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReportReceipt" }
         "400":
-          description: Malformed request — an item named twice, a NODE or ITEM without its id, a LINK with one (`invalid_request`).
+          description: Malformed request — a NODE or ITEM without its id, a LINK with one (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
@@ -1205,7 +1205,8 @@ paths:
           description: >
             No such share (disabled, expired, unknown, its space being deleted or its tenant suspended), no or a wrong
             `X-Share-Write` proof, or a missing password token (`share_not_found`, non-enumerable); or an item outside
-            what the link shows (`report_item_not_found`).
+            what the link shows — a node or medium through a `WRITE_ONLY` link, the `LINK` through a `READ` or
+            `READ_WRITE` one (`report_item_not_found`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_not_found } }
         "409":
@@ -1213,6 +1214,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_epoch_changed } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            An item named twice — the same kind and id, two `LINK` items included (`report_item_repeated`, nothing
+            stored): a rule across the items no schema states.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_repeated } }
         "429":
           description: Too many reports from this address or through this link, or too many wrong password attempts (`rate_limited`).
           content:
@@ -1363,7 +1370,27 @@ components:
         drop key. A WRITE_ONLY share carries **no** `wrap` — its guest never holds the shared node's content key —
         and instead the drop public key of the shared root node sealed under `K_share` (`sealedDropPublicKey`); the
         node's first WRITE_ONLY share also carries the drop private key sealed under the node's content key
-        (`sealedDropPrivateKey`), which the server stores on the node. Any other combination is `400 invalid_request`.
+        (`sealedDropPrivateKey`), which the server stores on the node. Any other combination is `400 invalid_request` —
+        the schema's own rule (`if`/`then`/`else` on `role`, inbox #507).
+      # SharingHandler.shareKeys: a key sent as null counts as absent, sent but empty as sent. Under `dependentSchemas`
+      # (on the required `role`), never at the top, where an `if` turns a sibling-annotated `$ref` to this schema into
+      # `Any`; there both generators ignore it (measured on openapi-generator 7.23.0, Kotlin and TypeScript).
+      dependentSchemas:
+        role:
+          if:
+            properties: { role: { const: WRITE_ONLY } }
+          then:
+            required: [sealedDropPublicKey]
+            properties:
+              wrap: { type: "null" }
+              sealedDropPublicKey: { type: string, minLength: 1 }
+              sealedDropPrivateKey: { type: [string, "null"], minLength: 1 }
+          else:
+            required: [wrap]
+            properties:
+              wrap: { type: string, minLength: 1 }
+              sealedDropPublicKey: { type: "null" }
+              sealedDropPrivateKey: { type: "null" }
       properties:
         shareId:
           x-veyq-visibility: id

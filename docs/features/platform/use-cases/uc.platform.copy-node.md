@@ -54,7 +54,7 @@ plain folders inside (no drop key, no links, no guest identities).
 ## Quality notes
 
 - **Operator-blind, also about the copy.** The server sees ordinary creates and uploads of new ids and sizes; it is not
-  told that they copy anything, and no stored object is shared (one reference per blob, [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md), stays true). The size
+  told that they copy anything, and no stored object is shared with the original (each copied blob is a row of its own on an object of its own, [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). Where the original shared one stored object between rows (a Memory's cover or banner and a gallery medium, [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) § 5), the copy and an import do not keep the sharing: each blob is read and uploaded as its own. A copied original keeps its `blob-meta` digest (the same bytes). The size
   and timing of the uploads still resemble the original's - as any upload of the same files would.
 - **Costs what an upload costs.** Every byte is downloaded and uploaded again and counts against the quota twice. A
   server-side object copy or a deduplicated blob was rejected (owner decision 2026-10-14): either would need new

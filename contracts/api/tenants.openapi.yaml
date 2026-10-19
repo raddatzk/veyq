@@ -2310,7 +2310,7 @@ components:
           description: Email of the person who will own the tenant; the invite is bound to it. Server-visible.
           maxLength: 254
           example: kevin@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     ChangeDomainRequest:
       type: object
@@ -2341,7 +2341,7 @@ components:
           description: The new owner email to re-bind the invite to. Server-visible.
           maxLength: 254
           example: partner@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     TenantCreated:
       type: object
@@ -2487,7 +2487,7 @@ components:
           format: email
           maxLength: 254
           example: member@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     SetTenantMemberRoleRequest:
       type: object
@@ -2577,7 +2577,7 @@ components:
           description: Email of the person to invite as a tenant member; the invite is bound to it. Server-visible.
           maxLength: 254
           example: partner@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
         admissionId:
           x-veyq-visibility: id
           type: string
@@ -2890,7 +2890,7 @@ components:
           description: The From address (null ⇒ noreply@<tenant.domain>).
           maxLength: 254
           example: noreply@family.example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
         username:
           x-veyq-visibility: public
           type: [string, "null"]

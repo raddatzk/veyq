@@ -127,8 +127,8 @@ class ItemFavoritesSliceTest {
     }
 
     /**
-     * The partition is per **node**, which is the whole reason the 65 536-char cap stays out of reach and a
-     * toggle does not re-upload the scope. Marks in one Memory must not surface in another.
+     * The partition is per **node**, so a toggle re-uploads that Memory's set, never the scope's. Marks in one Memory
+     * must not surface in another.
      */
     @Test
     fun blobsArePerNodeNotPerScope() {
@@ -143,6 +143,27 @@ class ItemFavoritesSliceTest {
         given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$one/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(1))
+    }
+
+    /**
+     * The cap is the contract's, and it holds a 10,000-photo Memory (inbox #500): 262,144 base64 characters carry a
+     * member's self-tag and 12,284 marks at 16 bytes each. The column is MEDIUMTEXT, so the whole cap is stored, and one
+     * character more is refused before the store.
+     */
+    @Test
+    fun theCapIsTheContractsAndNotOneCharacterMore() {
+        val (userId, scopeId) = seedMember()
+        val node = UUID.randomUUID().toString()
+        val atCap = "A".repeat(262_144)
+        put(userId, scopeId, node, atCap)
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
+            .then().statusCode(200).body("[0].ciphertext", equalTo(atCap))
+        val over = "A".repeat(262_145)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"ciphertext":"$over"}""")
+            .`when`().put("/api/scopes/$scopeId/nodes/$node/item-favorites").then().statusCode(400).body("code", equalTo("invalid_request"))
+        // the refused write changed nothing
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
+            .then().statusCode(200).body("[0].ciphertext", equalTo(atCap))
     }
 
     @Test

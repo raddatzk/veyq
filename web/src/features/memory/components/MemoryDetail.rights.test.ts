@@ -125,53 +125,44 @@ describe('MemoryDetail follows rights', () => {
     expect(updateNode).toHaveBeenCalled()
   })
 
-  // The cover is edited in core's dialog, which the host mounts (inbox #411): this page only ASKS for it, and only where the
-  // rights grant `setCover` - the lightbox offers "set as cover" exactly there (S5 split its one `readonly` per
-  // right), and even a pick forced from it without `setCover` asks for nothing and reaches no write.
-  it('a cover picked in the lightbox asks for the dialog only with setCover; the tile likewise', async () => {
+  // The cover is edited in core's dialog, which the host mounts (inbox #411): this page only ASKS for it, from its tile, and only
+  // where the rights grant `setCover`. A cover is set only by an upload there: the lightbox offers no way in.
+  it('the cover tile asks for the dialog only with setCover; this page writes no cover itself', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
-    const LightboxStub = { props: ['canSetCover'], emits: ['setCover'], template: `<button class="stub-set-cover" @click="$emit('setCover', { mediaId: 'x' })" />` }
     for (const setCover of [false, true]) {
       updateNode.mockClear()
       const w = mount(MemoryDetail, {
         props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setCover } },
-        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub } },
+        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
-      await w.find('[data-media-id] button').trigger('click')
-      expect(w.findComponent(LightboxStub).props('canSetCover'), 'offered in the lightbox').toBe(setCover)
-      await w.find('.stub-set-cover').trigger('click')
       await w.find('.memory-cover-preview').trigger('click')
       await flushPromises()
-      expect(w.emitted('coverFromPhoto')?.length ?? 0, `photo, setCover ${setCover}`).toBe(setCover ? 1 : 0)
       expect(w.emitted('editCover')?.length ?? 0, `tile, setCover ${setCover}`).toBe(setCover ? 1 : 0)
       expect(updateNode, 'this page writes no cover itself').not.toHaveBeenCalled()
       w.unmount()
     }
   })
 
-  // uc.memory.banner: the banner's dialog opens where `setBanner` grants it - the header's action and the lightbox's "Use as
-  // banner" alike - and a pick forced from the lightbox without it opens nothing.
-  it('the banner dialog opens from the header and the lightbox only with setBanner', async () => {
+  // uc.memory.banner: the banner's dialog opens from the header's action where `setBanner` grants it - its only way in.
+  it('the banner dialog opens from the header only with setBanner', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
-    const LightboxStub = { props: ['canSetBanner'], emits: ['setBanner'], template: `<button class="stub-set-banner" @click="$emit('setBanner', { mediaId: 'x', src: null, video: false })" />` }
     const dialog = () => document.body.querySelector('.banner-dialog')
     for (const setBanner of [false, true]) {
       const w = mount(MemoryDetail, {
         props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setBanner } },
-        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub } },
+        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
         attachTo: document.body,
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
       const action = w.find(`.veyq-node-header-actions button[aria-label="${t('memory.banner.add')}"]`)
       expect(action.exists(), `the header's action, setBanner ${setBanner}`).toBe(setBanner)
-      await w.find('[data-media-id] button').trigger('click')
-      expect(w.findComponent(LightboxStub).props('canSetBanner'), 'offered in the lightbox').toBe(setBanner)
-      await w.find('.stub-set-banner').trigger('click')
-      await flushPromises()
-      await vi.waitFor(() => expect(!!dialog(), `the dialog, setBanner ${setBanner}`).toBe(setBanner))
+      if (setBanner) {
+        await action.trigger('click')
+        await vi.waitFor(() => expect(!!dialog(), 'the dialog').toBe(true))
+      }
       w.unmount()
       document.body.innerHTML = ''
     }

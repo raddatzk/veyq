@@ -158,33 +158,14 @@ describe('which nodes carry a cover, and how a source core cannot open is read',
     expect(store.declared.size).toBe(0)
   })
 
-  it('another source is the kind\'s to read: its loader is handed the node\'s key and the field, and its null is the icon', async () => {
-    const load = vi.fn(async () => ({ blob: new Blob([new Uint8Array([7])]), crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } }))
-    kindWith({ load })
-    const photo = { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }
-    const store = createCoverStore(null)
-    store.ensure(SCOPE, [node(sealMeta({ v: 1, cover: photo }), { kind: 'X' })], keyOf)
-    await settle()
-    expect(load).toHaveBeenCalledWith({ scopeId: SCOPE, nodeKey: key, node: expect.objectContaining({ id: NODE }), cover: photo, guest: null })
-    expect(store.covers.value.get(NODE)?.crop).toEqual({ x: 0.1, y: 0.1, width: 0.5, height: 0.5 })
-    expect(openBlob).not.toHaveBeenCalled()
-
-    load.mockResolvedValue(null as unknown as Awaited<ReturnType<typeof load>>)
-    store.ensure(SCOPE, [node(sealMeta({ v: 1, cover: { ...photo, source: { kind: 'media', mediaId: 'm2' } } }), { kind: 'X' })], keyOf)
-    await settle()
-    expect(store.covers.value.has(NODE)).toBe(false)
-  })
-
-  it('a source with no reader on a kind (and a loader that throws) are the icon too', async () => {
+  it('any other source (an older client\'s photo reference) is the icon: nothing is read for it', async () => {
     kindWith({})
     const store = createCoverStore(null)
-    store.ensure(SCOPE, [node(sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' } } }), { kind: 'X' })], keyOf)
+    store.ensure(SCOPE, [node(sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME } }), { kind: 'X' })], keyOf)
     await settle()
     expect(store.covers.value.size).toBe(0)
-    kindWith({ load: vi.fn(async () => { throw new Error('boom') }) })
-    store.ensure(SCOPE, [node(sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm2' } } }), { kind: 'X' })], keyOf)
-    await settle()
-    expect(store.covers.value.size).toBe(0)
+    expect(store.declared.has(NODE), 'it is still declared, so it can be removed').toBe(true)
+    expect(openBlob).not.toHaveBeenCalled()
   })
 })
 

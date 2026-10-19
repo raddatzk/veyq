@@ -16,6 +16,8 @@ import { addMedia, type MediaDeriver } from './media'
 import { addSharePhoto } from './share'
 import { session } from '../../app/session'
 
+/** The original's digest as its `blob-meta` seals it beside the name (ADR 0013 § 5): sealed too, never on the wire. */
+const DIGEST = expect.stringMatching(/^[A-Za-z0-9_-]{43}$/)
 const SCOPE_ID = '33333333-3333-4333-8333-333333333333'
 const NODE_ID = '6e5a0000-0000-4000-8000-0000000000b1'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0'
@@ -126,7 +128,7 @@ describe('the original file name and type never leave the device in the clear', 
     // the scan. The EXIF tier no longer carries the name (inbox #397): nothing parsed, nothing sealed.
     const [original] = declares(sent)
     expect(original.role).toBe('ORIGINAL')
-    expect(openDeclaredMeta(original, memoryKey)).toEqual({ v: 1, type: TYPE, name: NAME, modifiedAt: MODIFIED })
+    expect(openDeclaredMeta(original, memoryKey)).toEqual({ v: 1, type: TYPE, name: NAME, modifiedAt: MODIFIED, sha256: DIGEST })
     const complete = sent.find((s) => s.url.endsWith('/media-batch'))!.json as { items: { wrappedExif: string | null }[] }
     expect(complete.items[0].wrappedExif ?? null).toBeNull()
 
@@ -144,7 +146,7 @@ describe('the original file name and type never leave the device in the clear', 
     await addSharePhoto({ identityId: 'identity-1', contributorToken: 'tok-1', shareId: SHARE_ID, scopeId: SCOPE_ID, sealKey }, video(), noTiers)
 
     const [original] = declares(sent)
-    expect(openDeclaredMeta(original, sealKey)).toEqual({ v: 1, type: TYPE, name: NAME, modifiedAt: MODIFIED })
+    expect(openDeclaredMeta(original, sealKey)).toEqual({ v: 1, type: TYPE, name: NAME, modifiedAt: MODIFIED, sha256: DIGEST })
     expect(sent.some((s) => s.url.endsWith(`/shares/${SHARE_ID}/media`))).toBe(true)
     for (const s of sent) {
       expect(leaks(s, NAME), s.url).toEqual([])

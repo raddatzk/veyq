@@ -171,43 +171,8 @@ describe('a node with a cover', () => {
   })
 })
 
-describe('the application\'s own source (a photo chosen in the gallery)', () => {
-  it('is cropped at once and saved as a media intent carrying the id it was given', async () => {
-    const w = await mountDialog({ source: { id: 'm7', src: 'blob:photo', crop: null }, hint: 'Or use a gallery photo.' })
-    await new Promise((r) => setTimeout(r))
-    expect(cropperImg()!.getAttribute('src')).toBe('blob:photo')
-    expect(body().textContent).toContain('Or use a gallery photo.')
-    await loadCropper(3200, 1800)
-    button(t('node.cover.save'))!.click()
-    const intent = saved(w)
-    if (intent?.kind !== 'media') throw new Error('expected media')
-    expect(intent.mediaId).toBe('m7')
-    expect(near(intent.crop.width, 1)).toBe(true)
-  })
-
-  it('restores the stored crop when that photo already is the cover', async () => {
-    const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.5 }
-    const w = await mountDialog({ cover: { crop }, existingSrc: 'blob:existing', source: { id: 'm7', src: 'blob:photo', crop } })
-    await loadCropper(3200, 1800)
-    button(t('node.cover.save'))!.click()
-    const intent = saved(w)
-    if (intent?.kind !== 'media') throw new Error('expected media')
-    expect(near(intent.crop.x, crop.x) && near(intent.crop.width, crop.width)).toBe(true)
-  })
-
-  it('takes precedence over the current cover: the cropper shows the photo, not the old image', async () => {
-    await mountDialog({ cover: { crop: { x: 0, y: 0, width: 1, height: 1 } }, existingSrc: 'blob:existing', source: { id: 'm7', src: 'blob:photo', crop: null } })
-    await new Promise((r) => setTimeout(r))
-    expect(cropperImg()!.getAttribute('src')).toBe('blob:photo')
-  })
-
-  it('the application\'s hint follows the core text after a space, never glued to its full stop', async () => {
-    await mountDialog({ source: { id: 'm7', src: 'blob:photo', crop: null }, hint: 'Or use a gallery photo.' })
-    await new Promise((r) => setTimeout(r))
-    expect(body().textContent).toContain(`${t('node.cover.copy')} Or use a gallery photo.`)
-  })
-
-  it('without a source there is no hint line of the application\'s', async () => {
+describe('a cover is set only by an upload here', () => {
+  it('offers no other source: no application hint line', async () => {
     await mountDialog()
     await new Promise((r) => setTimeout(r))
     expect(body().textContent).toContain(t('node.cover.copy'))

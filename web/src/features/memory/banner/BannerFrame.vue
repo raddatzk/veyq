@@ -6,13 +6,13 @@
 import { computed } from 'vue'
 import { bannerStyle, type BannerFrame, type FocalPoint } from './bannerModel'
 
-const props = defineProps<{ src: string; frame: BannerFrame; focal: FocalPoint; alt?: string }>()
+const props = defineProps<{ src: string; frame: BannerFrame; focal: FocalPoint }>()
 const style = computed(() => (props.frame === 'fill' ? bannerStyle(props.focal) : undefined))
 </script>
 
 <template>
   <img v-if="frame === 'fit'" class="banner-frame-backdrop" :src="src" alt="" aria-hidden="true" />
-  <img class="banner-frame-media" :class="{ 'is-fit': frame === 'fit' }" :src="src" :alt="alt ?? ''" :style="style" />
+  <img class="banner-frame-media" :class="{ 'is-fit': frame === 'fit' }" :src="src" alt="" :style="style" />
 </template>
 
 <style scoped>

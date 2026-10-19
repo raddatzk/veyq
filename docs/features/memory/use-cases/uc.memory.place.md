@@ -29,7 +29,10 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
    - **typed** → `manual` (e.g. "at grandma's"); or
    - **framed on the map**, if the reverse lookup is enabled → its centre + zoom become the `nameAnchor`, the
      provider returns a name at that resolution → `geocoded`, still editable.
-   On a server without a map the editor is the name field alone (A4).
+   On a server without a map the editor is the name field alone (A4). A name is at most **200 code points** (the field's
+   `maxlength`; every read and write cuts a longer one, an import's too): the place is the one field of the Memory's sealed
+   meta a member types without another bound, and the meta's worst case must stay under its 8192 characters
+   (`bannerModel.test.ts`, "the meta budget").
 4. On save the client seals `{ v, …, location }` into `wrappedMeta` and PATCHes `wrappedMeta`. The Memory's detail
    header shows the named location, and it appears as a pin on the places map.
 

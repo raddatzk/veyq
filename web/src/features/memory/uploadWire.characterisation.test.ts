@@ -25,6 +25,9 @@
 // (Re-blessed for ADR 0093 § 9: `wrappedMeta` is a field envelope now — type 0x03 and a 16-byte salt in front of the
 // nonce, 144 → 168 base64 — and its salt draw shifts the pinned stream, so later `K_blob` wraps, blob metas and PUT
 // digests changed. No path, header, order, count or other length moved.)
+// (Re-blessed for ADR 0013 § 5: the ORIGINAL's `wrappedBlobMeta` now seals the file's `sha256` - the same length, its
+// padding bucket unchanged, the digest drawing no randomness - and a member's complete item names `originalShared: null`
+// beside `originalUploadId`. Nothing else moved: no wrap, no PUT digest, no path, header, order or count.)
 // Every scenario runs twice and must record the same thing both times — the guard against a recording that depends on
 // scheduling rather than on the code.
 //

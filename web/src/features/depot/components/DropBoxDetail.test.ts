@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
-vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn() }))
+vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 vi.mock('../../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo, dismissUndo: vi.fn() }) }))
 vi.mock('../../../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/node/tree')>()),
@@ -219,7 +219,7 @@ describe('DropBoxDetail - its cover', () => {
     await covered.find('.veyq-node-header-actions button[data-action="cover"]').trigger('click')
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
     expect(buttons()).toContain(t('node.cover.remove'))
-    expect(document.body.querySelector('[role="dialog"]')!.textContent, 'no application hint on a drop box').not.toContain(t('memory.cover.galleryHint'))
+    expect(document.body.querySelector('[role="dialog"]')!.textContent, 'no application hint on a drop box').not.toContain('gallery')
   })
 
   it('locked keys or a pending deletion offer none, and the drop box still shows the cover it has', async () => {

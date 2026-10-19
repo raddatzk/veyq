@@ -1,4 +1,4 @@
-# ADR 0013 — Blob storage: S3-only, presigned direct-to-store, no content dedup
+# ADR 0013 — Blob storage: S3-only, presigned direct-to-store, a stored object shared only inside one node
 
 - Status: Accepted
 - Date: 2026-07-08
@@ -24,7 +24,7 @@ Forces:
   non-expiring access to the whole bucket.
 
 This ADR decides it **trimmed to what the first media slice needs** and aligned with the
-[no-dedup decision](#5-no-content-dedup) below.
+[dedup decision](#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider) below.
 
 ## Decision
 
@@ -208,23 +208,50 @@ before a store has passed its check (ADR 0089 decisions 5 and 6), so a client ne
 upload on it. (The capability-discovery manifest, [ADR 0032](0032-capability-discovery-version-gating.md),
 therefore does **not** carry an infra-preflight `directTransport`/`media.*` entry.)
 
-### 5. No content dedup
+### 5. One stored object for an equal file inside one node; nothing wider
 
 `K_blob` is **random per blob** (ADR 0012, verbatim): identical content in two Memories yields **two
-independent ciphertexts and two stored objects** — no cross-blob sharing. We **decline content dedup** for the
-media path. Rationale (decided as a sparring trade-off):
+independent ciphertexts and two stored objects**. Scope-wide dedup stays **declined**: any scheme that saves
+storage lets one stored object serve several references, and the blind server must see that (if only to reclaim
+it), so it learns the scope-internal equality structure ("these two media are the same content"); the leak is in
+the *sharing of storage*, not in the *detection*. On a self-hostable app the operator pays for their own storage,
+so the savings do not buy that leak across a whole space. The `dedup_token` vector in `v1.json` stays **unused**.
 
-- Any scheme that actually *saves* storage must let a single stored object be **referenced by multiple
-  Memories**, and the blind server **must** see that multi-reference (if only for garbage collection). So
-  dedup — whether client- or server-detected — **necessarily leaks the scope-internal equality structure** of
-  blobs to the operator ("these two media are the same content"). The leak is in the *sharing of storage*, not
-  in the *detection*; client-side detection only moves who notices first.
-- That equality-metadata leak runs against the **operator-blind** core promise, and on a **self-hostable** app
-  the operator pays for their own storage — so the savings are weakly motivated.
-- Therefore `K_blob` stays random, the `dedup_token` vector in `v1.json` stays **unused**, and ADR 0012's
-  "random `K_blob`" stays literally correct. If storage pressure ever
-  justifies it, **scope-wide convergent dedup** (`K_blob = HKDF(K_SC, content)`, accepting the equality leak)
-  is a deliberate later slice — not a default.
+**Inside one node, for three slots, the client shares** (owner decision 2026-10-19,
+cr-cover-banner-upload-only-and-dedup). A cover and a banner are set only by an upload in their dialogs; where the
+picked file equals what the node's gallery already stores - or a gallery upload equals the node's video banner -
+the new slot is a **second blob row on the same stored object** instead of a second upload:
+
+- **Detection is the client's.** A gallery original's and a video banner's `blob-meta` carry `sha256`, the
+  SHA-256 of the plaintext (base64url), sealed under that blob's own `K_blob` (a video banner's sealed meta carries
+  it too, where the gallery reads it). A match is the same sealed size, then the same digest; a blob stored before the
+  digest existed is never matched. The server compares nothing.
+- **Only where the stored bytes are the very bytes the slot holds:** a cover and an image banner (a JPEG derived at
+  the PREVIEW tier's spec, long edge 2048 / 0.85) share the medium's **PREVIEW**; a video banner (the file as it is)
+  its **ORIGINAL**, and its poster the medium's PREVIEW; a gallery original a video banner's `BANNER` blob. A gallery
+  upload never shares a cover or an image banner: they hold a derived JPEG, not the file.
+- **The shared row** (`SharedBlob` in `_common`: `sourceBlobId`, a fresh client-minted `blobId`, the same `K_blob`
+  wrapped again bound to the new row's scope, owner, blob and role, ADR 0072, and its own `blob-meta`) gets the
+  source's `storage_key`, shape and manifest copied by the server. Chunk frames bind only their index and total
+  under `K_blob`, so the same ciphertext opens under either row. No new seal purpose, no new table. Each reference
+  still names exactly one row, so "one reference per blob" (ADR 0082) holds; what is shared is the **object**.
+- **Who:** a member who may write the scope, through the cover's, the banner's and the gallery's own writes. The
+  source must be a blob of a live row of the **same node** (a live medium's original or tier, or an attachment, asked
+  of the arms a share's blob GET is authorized against) and not blocked; else `shared_source_invalid`, nothing
+  written. No link role sends one: a guest's upload is never shared.
+- **Shared ownership:** an object is reclaimed only when no blob row names it. Two layers, each pinned with the other
+  out of the way (`SharedBlobSliceTest`): the per-row choke point (`BlobUploadStore.deleteBlobRow`) records the
+  reclaim only when its row is the last - deciding under the row locks of every row on the object - and the reclaim
+  sweep's selection (`StoreReclaimStore.due`) skips a key a blob row still names, so a path that records a shared key
+  directly leaks a record, never deletes a live object. A space's erasure records each key once; the hold pins each
+  key once; the tenant quota counts each object once; a content block reaches every row on the blocked object and
+  hangs on it once its item is erased, ending with the object's last row or a lift (ADR 0093 § 6). The reconcile's claims, the backup's `blob_index` and the erasure ledger's `STORAGE_KEY` already key
+  on the storage key.
+- **What the operator learns:** which existing blob a new row shares - so which medium a cover or a banner shows, or
+  which gallery video is the banner. Accepted (inbox #505, [ADR 0102](0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
+  § What the server sees): the same reader already sees both rows' sizes, and the owner preferred the saved storage.
+- **A copy and an import do not keep the sharing:** each reads every blob and uploads it as its own
+  ([uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)).
 
 ### 6. Store responses are inert — enforced by the signer
 
@@ -290,7 +317,9 @@ serves uploader-chosen bytes on the app origin applies it, and the playback Serv
   path is exercised in normal development. Only the `%test` slice suite keeps the in-memory stub (metadata + wraps
   + declare/verify control plane, no byte transfer); the byte transport itself is additionally covered by the
   opt-in e2e (`VEYQ_S3_E2E=1`).
-- **Cost of no-dedup:** duplicate media is stored once per blob. Accepted for operator-blindness.
+- **Cost of declining scope-wide dedup:** the same file in two nodes (or uploaded twice into one gallery) is stored
+  twice. Accepted for operator-blindness; § 5 shares only a cover's, a banner's and a gallery original's equal file
+  inside one node.
 - **Deferred:** **resuming across a page reload.** Within one page the hard part already exists — a session
   outlives any one URL, and a chunk whose `PUT` failed or whose window expired is re-signed and re-sent without
   restarting the file (§2). What surviving a reload would add is the client persisting the session and its

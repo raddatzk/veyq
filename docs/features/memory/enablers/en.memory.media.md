@@ -28,9 +28,14 @@
 - **`K_blob`** — a fresh **random 32-byte key per blob**, wrapped under the Memory's **`K_node`**
   (`symWrap(K_node, K_blob)`) — or, for a media a WRITE_ONLY guest added, under that guest's own identity key, which
   every reader opens through the Memory's drop key; its metadata tiers follow the same key, including after a
-  member edits them ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). It encrypts that blob's chunk frames and nothing else. **No dedup** — identical
-  content yields a different `K_blob` and a different ciphertext ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup);
-  operator-blind trade-off).
+  member edits them ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). It encrypts that blob's chunk frames and nothing else. **No scope-wide
+  dedup** — identical content yields a different `K_blob` and a different ciphertext; only inside one node does an
+  equal file share a stored object (a cover, a banner, a gallery original equal to the video banner), as a second blob
+  row with the same `K_blob` wrapped again ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)).
+- **An original's `blob-meta`** carries its type, the name it was picked under, its modified time and **`sha256`**,
+  the SHA-256 of its bytes (base64url), so a later upload of the same file into the cover or banner dialog finds it.
+  New uploads only: a medium uploaded before the digest has none and is never matched. The client reads each picked
+  original once more, frame by frame, to hash it before it is planned.
 - **`chunk_frame`** (vector-pinned, `v1.json`) — each chunk is `nonce(12) ‖ AEAD(K_blob, nonce, plaintext,
   aad = u32be(index) ‖ u32be(total))`. The **AAD binds each frame to its position**, so the server cannot
   reorder, drop, or splice chunks without detection on `openFrame`. Every frame but the last carries exactly
@@ -149,9 +154,11 @@ sequenceDiagram
 - **Operator-blind.** Server + object store only ever hold AEAD ciphertext chunks + opaque metadata (ids,
   sizes, manifest, the `K_blob` wrap and the sealed blob meta, the node link). Never a plaintext byte, never a
   content key, never a filename or a media type in clear (both are the original's sealed blob meta).
-- **No content dedup — by decision.** Duplicate media is stored once per blob; the operator never learns
-  blob-equality. The savings dedup would buy aren't worth the scope-internal equality leak on an operator-blind,
-  self-hostable app ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
+- **No scope-wide dedup — by decision.** The same file in two nodes, or twice in one gallery, is stored twice; the
+  operator never learns that. Inside one node a cover, a banner or a gallery original equal to the video banner shares
+  the stored object, and the operator learns which blob it shares - accepted (inbox #505,
+  [ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)). An object goes only
+  with the last row naming it.
 - **Backend is never a byte bottleneck.** It signs short-TTL, single-object, single-method (and, for a `PUT`,
   single-size) capabilities; the bytes go client↔store. Credentials never reach the client.
 - **Position-bound chunks.** The `chunk_frame` AAD (`index ‖ total`) makes reorder/drop/splice detectable —
@@ -170,7 +177,7 @@ sequenceDiagram
 
 - Feature: [Memory](../_index.md)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (S3-only, presigned
-  direct-to-store, no dedup), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_blob` under
+  direct-to-store, a stored object shared only inside one node), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_blob` under
   `K_node`), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` vector)
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (key hierarchy),
   [Account & Key Model](../../account/enablers/en.account.key-model.md)

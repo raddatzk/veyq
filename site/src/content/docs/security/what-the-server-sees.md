@@ -13,6 +13,7 @@ sources:
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0047-inline-video-playback-range-streaming.md
   - docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md
+  - docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md
   - docs/decisions/0014-group-scopes-and-governance.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
@@ -100,10 +101,15 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   served to no one and never what was written. It decides that a guest can take back only an empty upload of its own.
 - A medium's **trash state**: a flag, who trashed it and when, until the scheduled purge.
 - A Memory's **banner**: that it has one and whether it is a video (one or two attachment rows and their sizes), never
-  its framing, its description or its picture. A banner copied from one of the Memory's media can be matched to that
-  medium by its size — a video banner is that video's original, re-sealed as it is — and choosing one downloads the
-  medium's original once
+  its framing or its picture
   ([ADR 0102](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)).
+- **Which gallery item a cover or banner shows, where it shares that item's stored object.** An upload into a
+  Memory's cover or banner equal to a photo or video of the same Memory or chapter (and a gallery upload equal to its
+  video banner) is not stored again: the new blob row names the existing blob and gets its storage key. Accepted for
+  the storage it saves, and the sizes already hint at it: even unshared, a video banner's size can equal its gallery
+  original's, and an image banner's or a cover's the preview's. Nothing wider is deduplicated: the same file in two
+  Memories, or twice in one gallery, is two objects, and a copy or import makes each blob its own
+  ([ADR 0013](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)).
 - Job-queue and op-log offsets, presence facts, and a grant-delivery decline status.
 - An account's **identity-pin entries**: an opaque id per pin (keyed by a Master-Key-derived key, so it names no
   contact and differs between accounts), which entry a write touched, and how many there are — the count was

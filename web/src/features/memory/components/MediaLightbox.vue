@@ -20,7 +20,7 @@
 // **One lightbox for a member and a share guest** (inbox #401). It touches no API itself: every byte and seal comes
 // through the loaders the Memory's data source hands in (`../source.ts`, the member's or the guest's — required, so no
 // default can fall through to a member call), and every write is offered per right, never by a mode flag:
-// 'set as cover' where `canSetCover`, the delete where `canDelete` answers for the shown item (a member's trash any, a
+// the delete where `canDelete` answers for the shown item (a member's trash any, a
 // guest's purge only its own — the parent runs each), the capture-time correction and the place-name backfill where
 // the source carries the medium's meta door (`mediaMeta`), the heavy EXIF where it carries `exifLoader`.
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
@@ -62,13 +62,6 @@ const props = defineProps<{
   items: MediaItem[]
   startIndex: number
   memoryName: string
-  coverMediaId?: string | null // the photo currently used as the Memory's cover — marks the "Set as cover" button
-  /** Offer "use this photo as the Memory's cover" (`setCover` event). */
-  canSetCover: boolean
-  /** The medium the Memory's banner was made from (its sealed `origin`) — marks the "Use as banner" button. */
-  bannerMediaId?: string | null
-  /** Offer "use this photo or video as the Memory's banner" (`setBanner` event, uc.memory.banner A1). */
-  canSetBanner?: boolean
   /** Whether the shown item carries a delete (`delete` event; the parent trashes or purges it, Delete key included). */
   canDelete: (item: MediaItem) => boolean
   previewLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier
@@ -88,7 +81,7 @@ const props = defineProps<{
   /** Who added the shown item (ADR 0083 decision 7): the name, and the member's id only where the name may link to a profile.
    *  Absent: no uploader is shown (a share guest's session carries none). */
   uploaderOf?: (item: MediaItem) => UploaderLabel | null
-  suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (the cover cropper) is open over the lightbox
+  suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (a cover or banner dialog) is open over it
   /** Offer "Report" for the shown item (`report` event; core's dialog, uc.moderation.report): its host decides. */
   canReport?: boolean
 }>()
@@ -96,8 +89,6 @@ const emit = defineEmits<{
   /** Closed — on the item shown last (null: none left), whose grid tile takes the focus back (ADR 0105 decision 5). */
   close: [mediaId: string | null]
   updated: [{ mediaId: string } & SealedMetaState] // a meta write landed, or a conflict handed back the current tier
-  setCover: [{ mediaId: string }] // "use this photo as the Memory's cover" (cr-0073 §gallery-source)
-  setBanner: [{ mediaId: string; src: string | null; video: boolean }] // "use this as the Memory's banner" (uc.memory.banner A1)
   delete: [{ mediaId: string }] // delete this photo: a member's trash with undo (cr-0110), a guest's purge of its own (asked first)
   report: [item: MediaItem] // report this medium (uc.moderation.report): the host opens core's report dialog with its keys
 }>()
@@ -143,8 +134,6 @@ const savingCapturedAt = ref(false)
 const capturedAtError = ref<'failed' | 'conflict' | 'unreadable' | null>(null)
 
 const item = computed(() => props.items[current.value])
-const isCover = computed(() => !!item.value && item.value.mediaId === props.coverMediaId) // this photo is the Memory's cover
-const isBanner = computed(() => !!item.value && item.value.mediaId === props.bannerMediaId) // the banner was made from it
 const canPrev = computed(() => current.value > 0)
 const canNext = computed(() => current.value < props.items.length - 1)
 // A medium a moderator blocked (uc.moderation.take-a-measure) previews nothing: every byte of it answers 451.
@@ -677,7 +666,7 @@ function emitDelete() {
 function onKeydown(event: KeyboardEvent) {
   // Any key pauses the slideshow — except the activation keys on its own toggle, whose click would start it again.
   if (!(isSlideshowToggle(event.target) && (event.key === 'Enter' || event.key === ' '))) pauseOnInteraction(event)
-  if (props.suspendKeys) return // a modal (cover cropper) is open over the lightbox — let it own the keyboard
+  if (props.suspendKeys) return // a modal is open over the lightbox — let it own the keyboard
   if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0, and the arrows' pan while zoomed
   if (event.key === 'Escape') {
     if (zoom.zoomed.value) zoom.reset() // Escape un-zooms first, then closes
@@ -739,32 +728,6 @@ onBeforeUnmount(() => {
           @click="download"
         >
           <span class="pi" :class="downloading ? 'pi-spin pi-spinner' : 'pi-download'" />
-        </button>
-        <button
-          v-if="previewable && canSetCover"
-          class="veyq-icon-button lightbox-icon-button"
-          :class="{ 'lightbox-cover-active': isCover }"
-          type="button"
-          :aria-pressed="isCover"
-          :aria-label="t(isCover ? 'memory.cover.isCover' : 'memory.cover.setFromPhoto')"
-          :title="t(isCover ? 'memory.cover.isCover' : 'memory.cover.setFromPhoto')"
-          @click="!isCover && item && emit('setCover', { mediaId: item.mediaId })"
-        >
-          <span class="pi" :class="isCover ? 'pi-check' : 'pi-image'" />
-        </button>
-        <!-- uc.memory.banner A1: the banner dialog opens over the lightbox on this medium (its keys suspended, as for the
-             cover). The medium is copied from its original on save; the button marks the one the banner was made from. -->
-        <button
-          v-if="previewable && canSetBanner"
-          class="veyq-icon-button lightbox-icon-button"
-          :class="{ 'lightbox-cover-active': isBanner }"
-          type="button"
-          :aria-pressed="isBanner"
-          :aria-label="t(isBanner ? 'memory.banner.isBanner' : 'memory.banner.useAsBanner')"
-          :title="t(isBanner ? 'memory.banner.isBanner' : 'memory.banner.useAsBanner')"
-          @click="!isBanner && item && emit('setBanner', { mediaId: item.mediaId, src: previewUrl, video: !!videoType })"
-        >
-          <span class="pi" :class="isBanner ? 'pi-check' : 'pi-objects-column'" />
         </button>
         <button
           v-if="item && canReport"
@@ -1018,12 +981,6 @@ onBeforeUnmount(() => {
 /* The lightbox trash affordance (cr-0110): a subtle danger tint on hover, set apart from the neutral actions. */
 .lightbox-delete-button:hover {
   color: var(--app-danger);
-}
-/* The "Set as cover" button, when THIS photo is the current cover: an accent-filled state ("it's the cover"). */
-.lightbox-cover-active {
-  color: var(--app-on-fill);
-  background: var(--app-accent);
-  border-color: var(--app-accent);
 }
 /* The mini map in the detail panel: a fixed, unobtrusive band under the rows — an illustration of the
    coordinate, not a second map surface. The compass needle sits over it, anchored to the marker. */

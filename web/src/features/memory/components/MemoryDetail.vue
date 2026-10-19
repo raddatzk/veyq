@@ -18,7 +18,7 @@
 // right itself, and nothing calls an API but through the source. The children that need the source get it by
 // injection (`provideMemoryView`: the organizer). The delete differs honestly by door: a member's trash with undo, a
 // guest's purge of its own media, asked first — on the tile and in the lightbox alike. The lightbox is handed the
-// source's loaders and each write per right (`canSetCover`, `canDelete`, the source's `mediaMeta` door). A guest
+// source's loaders and each write per right (`canDelete`, the source's `mediaMeta` door). A guest
 // mounts this through core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and chapter of its link: it
 // sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
 import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
@@ -44,6 +44,7 @@ import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
 import { isMarkedByMe, markCount, markedByAnyone, clearItemFavorites } from '../itemFavoritesStore'
+import { ItemMarksTooMany } from '../itemFavorites'
 import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
@@ -101,8 +102,6 @@ const emit = defineEmits<{
   metaUpdated: [NodeMetaUpdate]
   /** The cover tile: open core's cover dialog (the host mounts it). */
   editCover: []
-  /** The lightbox's "Set as cover": open it on this photo (`src`: its decrypted thumbnail, null while it has none). */
-  coverFromPhoto: [{ mediaId: string; src: string | null }]
   /** The lightbox's "Report": the host opens core's report dialog for this medium. */
   reportMedium: [item: MediaItem]
 }>()
@@ -124,14 +123,23 @@ const memoryBanner = useMemoryBanner({
   memoryKey: () => props.memoryKey,
   loaders: props.source.loaders,
 })
-/** The open banner dialog, and the gallery medium it was opened on (the lightbox's "Use as banner"). */
-const bannerDialog = ref<{ seed: { mediaId: string; src: string | null; video: boolean } | null } | null>(null)
-function openBannerDialog(seed: { mediaId: string; src: string | null; video: boolean } | null = null) {
+/** Whether the banner dialog is open - the banner's only way in (a file picked there). */
+const bannerDialog = ref(false)
+function openBannerDialog() {
   if (!can.value.setBanner || !props.memoryKey) return
-  bannerDialog.value = { seed }
+  bannerDialog.value = true
 }
-/** The medium the banner was made from: the lightbox marks it, and deleting it asks about the banner (decision 7). */
-const bannerMediaId = computed(() => memoryBanner.banner.value?.origin?.mediaId ?? null)
+/**
+ * Whether a medium is the banner's picture: its original's SHA-256 is the one the banner was made from (the two may share
+ * one stored object, ADR 0013 § 5) - deleting it asks about the banner (ADR 0102 decision 7). A banner or a medium written
+ * without a digest is no match.
+ */
+function isBannerPicture(mediaId: string): boolean {
+  const digest = memoryBanner.banner.value?.sha256
+  const item = items.value.find((i) => i.mediaId === mediaId)
+  if (!digest || !item || !props.memoryKey) return false
+  return props.source.loaders.blobMeta(item, props.memoryKey)?.sha256 === digest
+}
 
 // How far down the sticky stack reaches (the shell's chrome + the stuck tab row): the gallery's windowing keeps a tile the
 // keyboard moves to below it (`MediaGrid`'s `--media-grid-occluded-top`). Measured, because the row's height is the
@@ -209,7 +217,12 @@ async function onToggleMark(mediaId: string) {
   const key = props.scopeKey
   const marks = props.source.marks
   if (!key || !can.value.mark || !marks) return
-  await marks.toggle(mediaId, props.node.id, key)
+  try {
+    await marks.toggle(mediaId, props.node.id, key)
+  } catch (e) {
+    // the heart is already back where it was; this says why (inbox #500)
+    toast.error(t(e instanceof ItemMarksTooMany ? 'media.marks.tooMany' : 'media.marks.saveFailed'))
+  }
 }
 
 watch(
@@ -354,16 +367,14 @@ const {
   onMetaUpdated: (payload) => emit('metaUpdated', payload),
 })
 
-// --- Memory cover (cr-0072 + cr-0073, uc.memory.cover) → extracted into `useMemoryCover` (cr-0146). A chosen
-// image + a 16:9 crop, sealed in the SAME node `wrappedMeta` blob as the date/location (read-modify-write). The
-// source is a Memory photo (reusing its decrypted `thumbs` entry) or an uploaded standalone blob (decrypted on
-// demand; the composable owns that object-URL's lifecycle incl. unmount cleanup). Props passed as getters.
-const { storedCover, coverSrc, coverMediaId, coverSourceOf } = useMemoryCover({
+// --- Memory cover (uc.memory.cover) → `useMemoryCover`. An uploaded image + a 16:9 crop, sealed in the SAME node
+// `wrappedMeta` blob as the date/location (read-modify-write); its blob is decrypted on demand (the composable owns that
+// object-URL's lifecycle incl. unmount cleanup). Props passed as getters.
+const { storedCover, coverSrc } = useMemoryCover({
   scopeId: () => props.scopeId,
   node: () => props.node,
   memoryKey: () => props.memoryKey,
   loaders: props.source.loaders,
-  thumbs,
 })
 
 const bannerEditor = useBannerEditor({
@@ -375,19 +386,8 @@ const bannerEditor = useBannerEditor({
   raw: () => memoryBanner.raw.value,
   onMetaUpdated: (update) => emit('metaUpdated', update),
 })
-function onSetBannerFromMedium(payload: { mediaId: string; src: string | null; video: boolean }) {
-  openBannerDialog(payload)
-}
 
-// The cover photo's thumbnail is the header's image: wanted whether or not its tile is near the gallery's viewport.
-watch(coverMediaId, (id) => wantThumbs('cover', id ? [id] : []), { immediate: true })
-
-// The cover is EDITED in core's dialog (inbox #411), mounted by the host: the tile asks for it, and the lightbox's "Set as
-// cover" hands it the picked photo as the Memory's extra source. Only where the right grants it.
-function onSetCoverFromPhoto(payload: { mediaId: string }) {
-  if (!can.value.setCover) return
-  emit('coverFromPhoto', coverSourceOf(payload.mediaId))
-}
+// The cover is EDITED in core's dialog (inbox #411), mounted by the host: the tile asks for it. Only an upload there sets it.
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
@@ -496,22 +496,23 @@ function canDeleteInLightbox(it: MediaItem): boolean {
 /** The lightbox asked to delete: the door decides how — a trash with undo, or a guest's purge asked first. */
 function onLightboxDelete(payload: { mediaId: string }) {
   if (can.value.deleteMedia === 'own') void onDeleteOwn(payload.mediaId)
-  else if (can.value.setBanner && payload.mediaId === bannerMediaId.value) void onDeleteBannerSource(payload)
+  else if (can.value.setBanner && isBannerPicture(payload.mediaId)) void onDeleteBannerPicture(payload)
   else void onDeleteFromLightbox(payload)
 }
 
 /**
- * Deleting the medium the banner was made from (ADR 0102 decision 7): the confirmation says the banner keeps its own copy
- * and offers to remove it in the same step. Nothing else ties the two: declined, nothing is deleted; accepted, the medium
- * goes to the trash as any other (with its undo), and the banner goes too only where that was ticked.
+ * Deleting the medium that is the banner's picture (ADR 0102 decision 7): the confirmation says the banner stays - its
+ * stored bytes go only with the last row naming them - and offers to remove it in the same step. Nothing else ties the two:
+ * declined, nothing is deleted; accepted, the medium goes to the trash as any other (with its undo), and the banner goes
+ * too only where that was ticked.
  */
-async function onDeleteBannerSource(payload: { mediaId: string }) {
+async function onDeleteBannerPicture(payload: { mediaId: string }) {
   const answer = await askWithOption({
-    header: t('memory.banner.originTitle'),
-    message: t('memory.banner.originNotice'),
+    header: t('memory.banner.pictureTitle'),
+    message: t('memory.banner.pictureNotice'),
     acceptLabel: t('media.delete'),
     acceptIcon: 'pi pi-trash',
-    option: { label: t('memory.banner.originRemove') },
+    option: { label: t('memory.banner.pictureRemove') },
   })
   if (!answer) return
   void onDeleteFromLightbox(payload)
@@ -879,11 +880,7 @@ watch(
       :items="lightboxItems"
       :start-index="lightboxIndex"
       :memory-name="node.name"
-      :cover-media-id="coverMediaId"
-      :suspend-keys="coverEditing || !!bannerDialog"
-      :can-set-cover="can.setCover"
-      :banner-media-id="bannerMediaId"
-      :can-set-banner="can.setBanner"
+      :suspend-keys="coverEditing || bannerDialog"
       :can-delete="canDeleteInLightbox"
       :media-meta="source.mediaMeta"
       :uploader-of="uploaderNames.uploaderOf"
@@ -896,8 +893,6 @@ watch(
       :can-report="canReport"
       @close="onLightboxClose"
       @updated="onCapturedAtUpdated"
-      @set-cover="onSetCoverFromPhoto"
-      @set-banner="onSetBannerFromMedium"
       @delete="onLightboxDelete"
       @report="emit('reportMedium', $event)"
     />
@@ -906,9 +901,8 @@ watch(
       v-if="bannerDialog && memoryKey && can.setBanner"
       :current="memoryBanner.banner.value"
       :current-src="memoryBanner.pictureUrl.value"
-      :seed="bannerDialog.seed"
       :save="bannerEditor.save"
-      @close="bannerDialog = null"
+      @close="bannerDialog = false"
     />
 
     <MemoryDateEditor

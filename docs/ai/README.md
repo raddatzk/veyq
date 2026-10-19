@@ -58,7 +58,9 @@ Five rules follow:
 
 ## The pipeline
 
-1. **Inbox** (`docs/inbox.md`) — a single status table of topics. Low friction.
+1. **Inbox** (`docs/inbox.md`) — a single status table of topics. Low friction. **A done row is deleted**, as
+   a CR is: what it taught already lives where it binds, its history in git. Its number stays reserved and is
+   never reused; the inbox's header names the highest number used, so the next row is numbered right.
 2. **Refine** — pull a topic and refine it *with the user* into durable state. Always check the new
    fits the old: reconcile into existing crosscutting concerns and features/use-cases; never create
    orphan concepts. Durable decisions → an ADR in `docs/decisions/`. This is a sparring

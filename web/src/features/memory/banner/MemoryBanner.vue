@@ -37,8 +37,6 @@ const shown = computed(() => !!props.banner && props.status !== 'failed' && prop
 const isVideo = computed(() => props.banner?.medium === 'video')
 const fit = computed(() => props.banner?.frame === 'fit')
 const mediaStyle = computed(() => (props.banner && !fit.value ? bannerStyle(props.banner.focal) : undefined))
-/** The description is the picture's text; without one the banner is decorative (the title follows it). */
-const alt = computed(() => props.banner?.alt ?? '')
 
 // --- playback, only after the click --------------------------------------------------------------------------------
 const swUrl = ref<string | null>(null)
@@ -109,7 +107,7 @@ onBeforeUnmount(stop)
         class="memory-banner-media"
         :src="videoSrc"
         :style="mediaStyle"
-        :aria-label="alt || t('memory.banner.video')"
+        :aria-label="t('memory.banner.video')"
         controls
         autoplay
         playsinline
@@ -117,13 +115,14 @@ onBeforeUnmount(stop)
       />
     </template>
     <template v-else>
-      <BannerFrame v-if="pictureUrl && banner" :src="pictureUrl" :frame="banner.frame" :focal="banner.focal" :alt="isVideo ? '' : alt" />
+      <!-- Decorative: the banner has no description, and the Memory's title follows it. -->
+      <BannerFrame v-if="pictureUrl && banner" :src="pictureUrl" :frame="banner.frame" :focal="banner.focal" />
       <button
         v-if="isVideo"
         type="button"
         class="memory-banner-play"
         :disabled="loading"
-        :aria-label="alt ? `${t('memory.banner.play')}: ${alt}` : t('memory.banner.play')"
+        :aria-label="t('memory.banner.play')"
         :title="t('memory.banner.play')"
         @click="play"
       >

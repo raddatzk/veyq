@@ -43,7 +43,7 @@ export async function loadFavoritesFor(scopeId: string): Promise<void> {
 }
 
 /**
- * Toggle a node's pinned state — optimistic, reverts on a failed write.
+ * Toggle a node's pinned state — optimistic; a failed write reverts and rethrows (the heart's owner says so).
  *
  * **Refused until the pin set has loaded** (ADR 0077 point 5, inbox #274): the write replaces the whole set, so a
  * toggle before the load (or after one that failed) would store a one-element set over the real pins.
@@ -56,11 +56,12 @@ export async function toggleFavorite(nodeId: string, scopeId: string): Promise<v
   favoritesStore.ids = next
   try {
     await saveFavorites(scopeId, ownKey(), next)
-  } catch {
+  } catch (e) {
     const reverted = new Set(next)
     if (reverted.has(nodeId)) reverted.delete(nodeId)
     else reverted.add(nodeId)
     favoritesStore.ids = reverted
+    throw e // the heart's owner says the pin did not land (inbox #500) - a silent spring-back reads as a missed click
   }
 }
 

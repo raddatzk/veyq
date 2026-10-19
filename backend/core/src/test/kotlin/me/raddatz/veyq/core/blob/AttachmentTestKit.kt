@@ -37,7 +37,8 @@ class ExpenseAttachmentCompletion(
     override fun accepts(nodeKind: String): Boolean = nodeKind == EXPENSE
 
     override fun complete(scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean, attached: (String) -> Unit): CompleteItemResult {
-        val session = blobs.findSession(scopeId, item.originalUploadId, opener) ?: return failed("upload_not_found")
+        val uploadId = item.originalUploadId ?: return failed("upload_not_found") // a shared original is media's alone
+        val session = blobs.findSession(scopeId, uploadId, opener) ?: return failed("upload_not_found")
         val manifest = when (val v = uploads.verifyBlob(session)) {
             is BlobUploadHandler.BlobVerify.Ok -> v.manifest
             BlobUploadHandler.BlobVerify.Budget -> return failed("budget_exceeded")
@@ -49,6 +50,7 @@ class ExpenseAttachmentCompletion(
             AttachOutcome.UploadMismatch -> failed("upload_mismatch")
             AttachOutcome.NodeNotFound -> failed("node_not_found")
             AttachOutcome.IllegalTarget -> failed("illegal_target")
+            AttachOutcome.SharedSourceInvalid -> error("attach never answers a shared row's refusal")
         }
     }
 

@@ -5,9 +5,10 @@
 //
 //   cover = { source: { kind: 'upload', ref: { blobId, chunkCount, byteSize, wrappedBlobKey, ownerId, role } }, crop }
 //
-// Core understands ONE source, the upload. An application may write another beside it (Memories: `{ kind: 'media', mediaId }`,
-// one of its own photos); core carries such a value untouched and hands its reading to the kind's `cover.load`
-// (`registry.ts`). A reader that does not know a source shows no cover - the icon - and never throws.
+// Core understands ONE source, the upload: a cover is set only by an upload in core's dialog. Its blob may be a row on an
+// object the node already stores (a Memory's PREVIEW of an equal photo, ADR 0013 § 5) - to a reader it is an upload like
+// any other. Any other source (a stored `{ kind: 'media' }` of an older client) is carried untouched by every writer and read
+// as no cover - the icon - never a throw.
 //
 // Pure and side-effect free: the sealing is `nodeMeta.ts`, the network is `coverWrite.ts`, the decrypt `coverStore.ts`.
 import type { BlobRef } from '../../blob/types'
@@ -136,14 +137,12 @@ export type DecryptedCover = { blob: Blob; crop: CoverCrop }
 
 /**
  * What core's cover dialog emits on save (inbox #411) - the view seals it:
- * - `upload` - a brand-new image file (uploaded as the node's own cover blob, then framed by `crop`);
- * - `media` - the application's OWN source was chosen (Memories: one of its photos, by the id the application gave); core only
- *   carries the id and asks the kind's `cover.extraSource.seal` for the value to store;
+ * - `upload` - a brand-new image file (uploaded as the node's own cover blob - or a row on an equal stored one, the kind's
+ *   `cover.findStored` - then framed by `crop`);
  * - `keep` - the current cover's image is unchanged, only the crop moved;
  * - `remove` - drop the cover.
  */
 export type CoverSaveIntent =
   | { kind: 'upload'; file: File; crop: CoverCrop }
-  | { kind: 'media'; mediaId: string; crop: CoverCrop }
   | { kind: 'keep'; crop: CoverCrop }
   | { kind: 'remove' }

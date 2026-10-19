@@ -235,6 +235,13 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memory/media.test.ts, src/features/memory/originalName.wire.test.ts]
+  - id: original-carries-its-digest-and-may-share-the-banner
+    text: An original's sealed `blob-meta` carries the SHA-256 of its bytes (base64url), read frame by frame before it is planned, so a later upload of the same file into the cover or banner dialog finds it (a medium without one is never matched). A member's upload of a file equal to the node's video banner (its sealed `sha256` and size) completes with `originalShared` - a new row on the `BANNER` object, its K_blob wrapped again bound to the medium's ORIGINAL, nothing uploaded for it - while its posters are derived and uploaded as always; the object goes only with the last row naming it. Neither form is open to a guest (the seam refuses a contributor's `originalShared`; ADR 0013 § 5).
+    coverage:
+      backend:
+        integration: [SharedBlobSliceTest.aGalleryOriginalSharesTheVideoBannersObject, SharedBlobSliceTest.aSourceTheNodeDoesNotHoldIsRefusedAndNothingIsWritten]
+      web:
+        unit: [src/features/memory/media.test.ts, src/features/memory/storedMatch.test.ts, src/core/blob/sharedBlob.test.ts]
   - id: original-decoded-once-per-upload
     text: Inside addMedia a picked original is decoded ONCE — the preview is derived from it, the thumbnail from the already-downscaled preview, and the intrinsic geometry the metadata tier seals rides back from that same decode instead of a separate probe. Both tiers still arrive at their pinned specs (4032 to 2048 to 512 traverses the same steps of at most 2x that two independent runs did), so the progressive-halving downscale rule is honoured rather than traded for the saving; the tier derivation is therefore ORDERED, preview before thumbnail. A video is unchanged — one poster decode, zero image decodes.
     # The count is bitten by a deriver that records each decode's SOURCE SIZE, so a decode of the original is

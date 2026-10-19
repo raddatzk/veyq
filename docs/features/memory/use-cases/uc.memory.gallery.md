@@ -134,6 +134,9 @@
   again, twice at most. A thumbnail that still cannot be read shows *Could not load* on its tile, never a placeholder
   that waits forever. Members and guests alike; the server sees the same blob ids and the same presigned reads, only
   batched and fewer at once.
+- **E8 — a mark or a pin that does not land** (inbox #500): the heart goes back to where it was and a message says
+  so. One member's marks in one Memory hold 12,284 photos ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md)
+  §4); the next one is refused before anything is sent, and its message asks to remove a mark first.
 
 ## Quality notes
 

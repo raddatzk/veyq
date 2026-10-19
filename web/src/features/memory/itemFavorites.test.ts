@@ -22,7 +22,8 @@ vi.mock('../../app/vault', () => ({ masterKey: () => (vault.mk ? vault.mk.slice(
 const scopes = vi.hoisted(() => ({ unopenable: new Set<string>(), key: null as Uint8Array | null }))
 vi.mock('../spaces/scopes', () => ({ openScopeById: vi.fn() }))
 
-import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey } from './itemFavorites'
+import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey, ItemMarksTooMany, ITEM_MARKS_CIPHERTEXT_MAX } from './itemFavorites'
+import { readFileSync } from 'node:fs'
 import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from './itemFavoritesStore'
 import { itemFavoritesApi, ownItemFavoritesApi } from './api'
 import { openScopeById } from '../spaces/scopes'
@@ -46,10 +47,13 @@ async function blobAs(mk: Uint8Array, ids: string[], nodeId = NODE): Promise<str
   return api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext
 }
 
-/** The ids a written blob holds, whichever plaintext form the tree writes (a bare array, or `{tag, ids}`). */
+/** The plaintext inside a written blob. */
+const plaintextOf = (ciphertext: string, nodeId = NODE) =>
+  v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId }, K_SC, fromB64std(ciphertext))
+
+/** The ids a written blob holds. */
 function idsIn(ciphertext: string, nodeId = NODE): string[] {
-  const pt = JSON.parse(new TextDecoder().decode(v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId }, K_SC, fromB64std(ciphertext))))
-  return [...(Array.isArray(pt) ? pt : pt.ids)].sort()
+  return v1.decodeItemMarks(plaintextOf(ciphertext, nodeId)).ids
 }
 
 /** Serve `entries` as the node's read. Typed as the generated response, so a schema change reaches this file. */
@@ -127,7 +131,7 @@ describe('which item-mark entry is mine (ADR 0068 §9)', () => {
   it('B3: a co-member’s set carrying a copy of the caller’s tag is not mine; the caller’s honest one is', async () => {
     const mine = await blobAs(MK_ME, MINE)
     const copiedTag = tagIn(mine)
-    const forged = sealAsCoMember({ tag: copiedTag, ids: BOBS })
+    const forged = sealAsCoMember(v1.encodeItemMarks(copiedTag, BOBS))
     vault.mk = MK_ME
 
     serve([{ self: true, ciphertext: mine }])
@@ -146,7 +150,7 @@ describe('which item-mark entry is mine (ADR 0068 §9)', () => {
    */
   it('B4: no key a co-member holds reproduces the caller’s tag', async () => {
     const mine = await blobAs(MK_ME, MINE)
-    const real = Buffer.from(fromB64std(tagIn(mine))).toString('hex')
+    const real = Buffer.from(tagIn(mine)).toString('hex')
     const mark = { scopeId: SCOPE, nodeId: NODE, ids: MINE }
     const known = [K_SC, v1.utf8(SCOPE), v1.utf8(NODE), v1.utf8(MINE[0]), ...MEMBER_IDS.map((id) => v1.utf8(id))]
     const candidates = known.flatMap((k) => [
@@ -162,20 +166,22 @@ describe('which item-mark entry is mine (ADR 0068 §9)', () => {
 })
 
 describe('everything not provably mine counts as someone else’s (ADR 0068 §9) — a degradation, never a refusal', () => {
-  it('an own-flagged entry with no tag (a bare array) or a tag that is not base64 is not mine, but still counts', async () => {
+  // inbox #500 dropped the JSON plaintext with no read path: a blob in the old `{tag, ids}` form, or one whose ids are
+  // cut short, opens but does not decode — an empty set nobody owns, while the entries beside it still load.
+  it('an own-flagged entry that is not tag ‖ ids — the old JSON form, an id cut short — is an empty set nobody owns', async () => {
+    const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: sealAsCoMember(MINE) }])
-    let marks = await loadItemFavorites(SCOPE, NODE, K_SC)
-    expect(ownSets(marks)).toEqual([])
-    expect(marks.map((m) => [...m.ids])).toEqual([MINE])
-
-    serve([{ self: true, ciphertext: sealAsCoMember({ tag: '%%not-base64%%', ids: MINE }) }])
-    marks = await loadItemFavorites(SCOPE, NODE, K_SC)
-    expect(ownSets(marks)).toEqual([])
-    expect(marks.map((m) => [...m.ids])).toEqual([MINE])
-
-    serve([{ self: true, ciphertext: sealAsCoMember({ tag: 42, ids: MINE }) }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([])
+    const tag = tagIn(mine)
+    const oldForm = sealAsCoMember(new TextEncoder().encode(JSON.stringify({ tag: Buffer.from(tag).toString('base64'), ids: MINE })))
+    const cut = sealAsCoMember(v1.encodeItemMarks(tag, MINE).slice(0, -1))
+    for (const ciphertext of [oldForm, cut]) {
+      serve([{ self: true, ciphertext }, { self: false, ciphertext: await blobAs(MK_BOB, BOBS) }])
+      vault.mk = MK_ME
+      const marks = await loadItemFavorites(SCOPE, NODE, K_SC)
+      expect(marks.map((m) => [m.own, [...m.ids].sort()])).toEqual([[false, []], [false, BOBS]])
+    }
+    serve([{ self: true, ciphertext: mine }]) // the control: the same tag and ids in the current form are mine
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([MINE])
   })
 
   it('a verifying entry the server did NOT flag is not mine — the flag is the other half', async () => {
@@ -211,18 +217,80 @@ describe('everything not provably mine counts as someone else’s (ADR 0068 §9)
     expect(ownSets(itemFavoritesStore.marks)).toEqual([])
     api.put.mockClear()
 
-    await toggleItemFavorite(CLICKED, SCOPE, NODE, K_SC)
+    await expect(toggleItemFavorite(CLICKED, SCOPE, NODE, K_SC)).rejects.toThrow(/vault is locked/)
 
     expect(api.put).not.toHaveBeenCalled()
     expect(ownSets(itemFavoritesStore.marks)).toEqual([]) // the optimistic own set was reverted
   })
 
-  it('the written plaintext is {tag, ids} and its tag verifies for the caller only', async () => {
+  it('the written plaintext is tag ‖ ids and its tag verifies for the caller only', async () => {
     const mine = await blobAs(MK_ME, MINE)
-    const tag = fromB64std(tagIn(mine))
+    const tag = tagIn(mine)
     const mark = { scopeId: SCOPE, nodeId: NODE, ids: MINE }
     expect(v1.itemMarkSelfTagVerifies(v1.itemMarkSelfKey(MK_ME), mark, tag)).toBe(true)
     expect(v1.itemMarkSelfTagVerifies(v1.itemMarkSelfKey(MK_BOB), mark, tag)).toBe(false)
+  })
+})
+
+// inbox #500: one member's marks in one Memory are one blob, so its size is the limit. 16 bytes a mark lift it from 1,257
+// (a JSON uuid) to 12,284 — every photo of a 10,000-photo Memory — under the contract's 262,144 characters.
+describe('how many marks one Memory holds (inbox #500)', () => {
+  /** `n` distinct canonical media ids, in no particular order. */
+  const manyIds = (n: number) => Array.from({ length: n }, () => crypto.randomUUID())
+
+  it('the cap the client enforces is the contract\'s, on every item-mark ciphertext', () => {
+    const spec = readFileSync(new URL('../../../../contracts/api/memories/item-favorites.openapi.yaml', import.meta.url), 'utf8')
+    const caps = [...spec.matchAll(/maxLength: (\d+)/g)].map((m) => Number(m[1]))
+    expect(caps).toEqual([ITEM_MARKS_CIPHERTEXT_MAX, ITEM_MARKS_CIPHERTEXT_MAX, ITEM_MARKS_CIPHERTEXT_MAX])
+    expect(spec).toContain(`Size(max = ${ITEM_MARKS_CIPHERTEXT_MAX})`)
+  })
+
+  it.each([1_258, 12_000])('%i marks round-trip: written, served, and read back as mine', async (n) => {
+    const ids = manyIds(n)
+    const mine = await blobAs(MK_ME, ids)
+    expect(mine.length).toBeLessThanOrEqual(ITEM_MARKS_CIPHERTEXT_MAX)
+    vault.mk = MK_ME
+    serve([{ self: true, ciphertext: mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([[...ids].sort()])
+  })
+
+  // The last set that fits and the first that does not: the refusal is the client's, before any write, so the server
+  // never sees the attempt and the gallery can say the set is full (MemoryDetail's message).
+  it('12,284 marks fit; the 12,285th is refused before any write', async () => {
+    const ids = manyIds(12_284)
+    vault.mk = MK_ME
+    await saveItemFavorites(SCOPE, NODE, K_SC, new Set(ids))
+    expect(api.put).toHaveBeenCalledTimes(1)
+    // 29 + 32 + 16 × 12,284 = 196,605 bytes, 262,140 base64 characters; one more mark is 262,164, past the cap
+    expect(api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext).toHaveLength(262_140)
+    api.put.mockClear()
+    await expect(saveItemFavorites(SCOPE, NODE, K_SC, new Set([...ids, crypto.randomUUID()]))).rejects.toBeInstanceOf(ItemMarksTooMany)
+    expect(api.put).not.toHaveBeenCalled()
+  })
+
+  it('a toggle past the cap reverts the heart and hands the refusal to the gallery', async () => {
+    const ids = manyIds(12_284)
+    vault.mk = MK_ME
+    serve([{ self: true, ciphertext: await blobAs(MK_ME, ids) }])
+    await loadItemFavoritesFor(SCOPE, NODE, K_SC)
+    api.put.mockClear()
+    await expect(toggleItemFavorite(CLICKED, SCOPE, NODE, K_SC)).rejects.toBeInstanceOf(ItemMarksTooMany)
+    expect(api.put).not.toHaveBeenCalled()
+    expect(ownSets(itemFavoritesStore.marks)).toEqual([[...ids].sort()]) // the set as it was
+  })
+
+  // The ids travel sealed and binary: the blob is 29 bytes of seal around 32 + 16 bytes a mark, and neither an id's
+  // 16 bytes nor its text appear anywhere in what the server stores.
+  it('each mark is 16 bytes inside the seal, and no id appears in the blob in any form', async () => {
+    const ids = manyIds(50)
+    const blob = fromB64std(await blobAs(MK_ME, ids))
+    expect(blob.length).toBe(29 + 32 + 16 * ids.length)
+    expect(plaintextOf(Buffer.from(blob).toString('base64')).length).toBe(32 + 16 * ids.length)
+    const stored = Buffer.from(blob)
+    for (const id of ids) {
+      expect(stored.indexOf(Buffer.from(id.replaceAll('-', ''), 'hex'))).toBe(-1)
+      expect(stored.indexOf(Buffer.from(id, 'utf8'))).toBe(-1)
+    }
   })
 })
 
@@ -294,14 +362,12 @@ describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)'
 /** Every member's account id — what a co-member of a small scope can know by elimination. */
 const MEMBER_IDS = ['b0b00000-0000-4000-8000-000000000001', 'a11ce000-0000-4000-8000-000000000002']
 
-/** The base64 self-tag inside a written blob. */
-function tagIn(ciphertext: string): string {
-  const pt = JSON.parse(new TextDecoder().decode(v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, fromB64std(ciphertext))))
-  return pt.tag as string
+/** The self-tag inside a written blob. */
+function tagIn(ciphertext: string): Uint8Array {
+  return v1.decodeItemMarks(plaintextOf(ciphertext)).tag
 }
 
 /** A plaintext of the co-member's choosing, sealed as any member can: under `K_SC`, bound to this node. */
-function sealAsCoMember(plaintext: unknown): string {
-  const bytes = new TextEncoder().encode(JSON.stringify(plaintext))
-  return Buffer.from(v1.seal({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, bytes)).toString('base64')
+function sealAsCoMember(plaintext: Uint8Array): string {
+  return Buffer.from(v1.seal({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, plaintext)).toString('base64')
 }

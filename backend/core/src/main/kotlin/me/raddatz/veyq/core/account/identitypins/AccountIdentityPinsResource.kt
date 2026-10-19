@@ -55,7 +55,8 @@ class AccountIdentityPinsResource(
 
     override fun writeIdentityPins(identityPinsWrite: IdentityPinsWrite): Response {
         val write = identityPinsWrite.toPinWrite()
-        if (write.contradictory()) return httpError(Failures.invalidRequest)
+        if (write.deletesBesideReplaceAll()) return httpError(Failures.invalidRequest)
+        if (write.contradictory()) return httpError(PinWrite.contradiction)
         return when (val r = handler.write(identity.principal.name, write)) {
             is PutResult.Written -> Response.ok(IdentityPins(blob = write.head, revision = r.revision)).build()
             is HttpFailure -> httpError(r)

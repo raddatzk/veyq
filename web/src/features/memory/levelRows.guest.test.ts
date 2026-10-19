@@ -5,7 +5,7 @@
 // member-only function removed (no heart:
 // pins are the member's own, sealed under the Master Key) and NOTHING of the member's world touched: every authenticated
 // client throws (`test/guestMode.ts`). The covers are core's since inbox #411 (`host.covers`, resolved by the level through
-// the link's own reads - `core/node/cover/coverStore.test.ts`, `coverLoad.test.ts`); here a row only draws what the level hands it.
+// the link's own reads - `core/node/cover/coverStore.test.ts`); here a row only draws what the level hands it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { reactive } from 'vue'
@@ -74,7 +74,7 @@ function head(role: ShareRole): PublicShareHead {
           date: { mode: 'single', from: '2019-07-01', to: '2019-07-01' },
           cover: { source: { kind: 'upload', ref: UPLOAD_REF }, crop: { x: 0, y: 0, width: 1, height: 1 } },
         }),
-        // Dated later, its cover one of its photos (read from the link's media listing).
+        // Dated later, its cover an older client's photo reference: no cover to draw (covers are set only by an upload).
         child(NEW, ROOT, keys.root, keys.new, 'Rom', MEMORY_KIND, {
           date: { mode: 'single', from: '2024-04-02', to: '2024-04-02' },
           cover: { source: { kind: 'media', mediaId: 'm-rom' }, crop: { x: 0, y: 0, width: 1, height: 1 } },

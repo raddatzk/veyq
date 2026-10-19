@@ -28,18 +28,20 @@ bearer = "${VEYQ_FUZZ_TOKEN}"
 # hooks.py's three — every check this file does not switch off.
 
 [checks.negative_data_rejection]
-# A refused request answers 400 or 404, or a negated credential the operation's 401/403 — never Schemathesis' default
-# set (405, 406, 409, 415, 422, 428, 429, 5xx). Which status a location may answer is refusal_by_location's rule
-# (hooks.py); this is the union of what it allows.
-expected-statuses = ["400", "401", "403", "404"]
+# A refused request answers 400 or 404, or a negated credential the operation's 401/403, or a body past the instance's
+# request limit the `413 request_too_large` every operation with a body declares (inbox #508) — never Schemathesis'
+# default set (405, 406, 409, 415, 422, 428, 429, 5xx). Which status a location may answer is refusal_by_location's
+# rule (hooks.py); this is the union of what it allows.
+expected-statuses = ["400", "401", "403", "404", "413"]
 
 [checks.positive_data_acceptance]
 # A request the contract allows is never refused for its shape: anything but `400` (and the shape statuses veyq never
-# declares — 405, 406, 413, 415). The rest is an answer about the instance's state, which a generated request cannot
+# declares — 405, 406, 415). The rest is an answer about the instance's state, which a generated request cannot
 # know: an id nobody has (404), a revision or epoch it did not read (409), a credential it cannot forge (401/403), a
-# semantic rule no schema can say (422), a legal hold (451), something gone (410), mail not configured (503). A 5xx
-# is not_a_server_error's. Runs in positive mode only (the GETs, the writes, the stateful sequences).
-expected-statuses = ["2xx", "3xx", "401", "403", "404", "409", "410", "422", "429", "451", "503", "5xx"]
+# semantic rule no schema can say (422), a legal hold (451), something gone (410), mail not configured (503), a body
+# past the instance's configured request limit (413, declared on every operation with a body). A 5xx is
+# not_a_server_error's. Runs in positive mode only (the GETs, the writes, the stateful sequences).
+expected-statuses = ["2xx", "3xx", "401", "403", "404", "409", "410", "413", "422", "429", "451", "503", "5xx"]
 
 [checks.object_level_authorization]
 # Schemathesis' own check needs its identities from a Web Fuzzing Commons document (`[auth.wfc]`, which replaces the

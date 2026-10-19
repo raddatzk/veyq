@@ -2685,7 +2685,7 @@ components:
           description: The account's address.
           maxLength: 254
           example: member@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
         caseId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -3478,7 +3478,7 @@ components:
           description: The From address; required with a host.
           maxLength: 254
           example: veyq@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
         username:
           x-veyq-visibility: public
           type: [string, "null"]
@@ -3647,7 +3647,7 @@ components:
           description: The account's address.
           maxLength: 254
           example: deputy@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     MintModerationEpochRequest:
       type: object
@@ -3961,7 +3961,7 @@ components:
           maxLength: 254
           minLength: 1
           example: contact@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         contactLanguages:
           x-veyq-visibility: public
           type: [array, "null"]
@@ -3985,7 +3985,7 @@ components:
           maxLength: 254
           minLength: 1
           example: moderation@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         notificationEmail:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -3996,7 +3996,7 @@ components:
           maxLength: 254
           minLength: 1
           example: alerts@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         providerName:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -4025,7 +4025,7 @@ components:
           maxLength: 254
           minLength: 1
           example: info@example.org
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(min = 1, max = 254)'
         providerRepresentative:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -4465,7 +4465,7 @@ components:
           description: The account's address.
           maxLength: 254
           example: member@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
     AccountErasureRequester:
       x-veyq-visibility: enum

@@ -53,9 +53,12 @@ for MariaDB, 50 Gi for Garage's data, 1 Gi each for its metadata and snapshots, 
 **What grows.** Every photo and video is stored as its original plus up to two smaller copies the uploading browser
 makes (a 512 px thumbnail and a 2048 px preview; a video gets a still image for both)
 ([en.memory.derivatives](https://github.com/raddatzk/veyq/blob/main/docs/features/memory/enablers/en.memory.derivatives.md)).
-A file in Depot is one stored object. Nothing is deduplicated: the same file uploaded twice is stored twice, because
-showing the operator which files are equal is the leak veyq declines. One file may be up to 20 GiB. Trashed items
-and spaces in their deletion grace keep their bytes for 30 days, until the scheduled purge.
+A file in Depot is one stored object. Almost nothing is deduplicated: the same file uploaded twice is stored twice,
+because showing the operator which files are equal is the leak veyq declines. The one exception: a Memory's cover or
+banner equal to a photo or video of its own gallery shares that item's stored object
+([ADR 0013](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-one-stored-object-for-an-equal-file-inside-one-node-nothing-wider)).
+One file may be up to 20 GiB. Trashed items and spaces in their deletion grace keep their bytes for 30 days, until the
+scheduled purge.
 
 **Quotas.** You can give each tenant a storage quota: the most it may keep on your store
 ([ADR 0073](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md),

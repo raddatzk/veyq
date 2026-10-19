@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.DerivativeDeclare
+import me.raddatz.veyq.core.blob.SharedBlobSpec
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.node.NodeEntity
@@ -41,21 +42,27 @@ class MediaUploadCompletion(
         scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean,
         attached: (objectId: String) -> Unit,
     ): CompleteItemResult {
-        val original = blobs.findSession(scopeId, item.originalUploadId, opener)
-            ?: return CompleteItemResult(null, null, "upload_not_found")
+        // The original is exactly one of an upload and a shared row (ADR 0013 § 5); a shared one is a member's alone - no
+        // link role sends one (the share contract has no such field), and the seam holds it for every caller.
+        val shared = item.originalShared
+        if ((item.originalUploadId == null) == (shared == null)) return CompleteItemResult(null, null, "invalid_request")
+        if (shared != null && opener !is UploadOpener.Member) return CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
+        val original = item.originalUploadId?.let {
+            blobs.findSession(scopeId, it, opener) ?: return CompleteItemResult(null, null, "upload_not_found")
+        }
         val derivSessions = item.derivatives.map { d ->
             val s = blobs.findSession(scopeId, d.uploadId, opener)
                 ?: return CompleteItemResult(null, null, "upload_not_found")
             d.kind to s
         }
-        val allSessions = listOf(original) + derivSessions.map { it.second }
+        val allSessions = listOfNotNull(original) + derivSessions.map { it.second }
         // Each blob's K_blob wrap is sealed bound to (media, role) (ADR 0072): a session started for another media or
         // in another role would land a blob nobody can open where it is attached, so the item is refused whole. The
         // role is an open token (cr-files-application P3-S2), so a derivative also attaches only in a role Memories
         // names one in: a session started as ORIGINAL, or in any other token, and declared as a derivative of that same
         // kind would pass the binding check alone (the media contract's closed `MediaDerivativeKind` refuses such a
         // kind at the wire; this holds it for every caller of the seam).
-        if (!original.boundTo(item.ownerId, MemoryBlobRoles.ORIGINAL) ||
+        if ((original != null && !original.boundTo(item.ownerId, MemoryBlobRoles.ORIGINAL)) ||
             derivSessions.any { (kind, s) -> kind !in MemoryBlobRoles.DERIVATIVES || !s.boundTo(item.ownerId, kind) }
         ) {
             return CompleteItemResult(null, null, "upload_mismatch")
@@ -63,7 +70,7 @@ class MediaUploadCompletion(
         if (store.mediaIdTaken(item.ownerId)) {
             // Taken by a concurrent complete of this very upload that committed after the session read above? Then
             // the session is spent too, and a replay answers by the session first: `upload_not_found`.
-            val spent = blobs.sessionSpent(original.id)
+            val spent = original != null && blobs.sessionSpent(original.id)
             return CompleteItemResult(null, null, if (spent) "upload_not_found" else "id_taken")
         }
 
@@ -79,8 +86,12 @@ class MediaUploadCompletion(
             }
         }
 
+        val source = when {
+            original != null -> OriginalAttach.Upload(original, manifests[original.id])
+            else -> OriginalAttach.Shared(scopeId, shared!!)
+        }
         val (blobId, mediaId) = store.attach(
-            item.ownerId, original, item.nodeId, manifests[original.id],
+            item.ownerId, source, item.nodeId,
             derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
             item.payloads[META],
             item.payloads[EXIF],
@@ -89,6 +100,7 @@ class MediaUploadCompletion(
             admitted,
             attached,
         ) ?: return CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
+        if (blobId == null) return CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
         return CompleteItemResult(blobId, mediaId, null)
     }
 
@@ -99,19 +111,23 @@ class MediaUploadCompletion(
         /** The [CompleteItem.payloads] key of a medium's sealed EXIF (`wrappedExif`). */
         const val EXIF = "wrappedExif"
 
+        /** The item's error when `originalShared` names no blob the node holds, a blocked one, or a taken id. */
+        const val SHARED_SOURCE_INVALID = "shared_source_invalid"
+
         /**
          * Core's generic item for one medium: [mediaId] as its `ownerId`, the two sealed values as its payloads (a
          * null one is left out — read back as null). The one mapping the member and the guest completion share.
          */
         fun item(
-            mediaId: String, nodeId: String, originalUploadId: String, derivatives: List<DerivativeDeclare>,
-            wrappedMeta: String?, wrappedExif: String?,
+            mediaId: String, nodeId: String, originalUploadId: String?, derivatives: List<DerivativeDeclare>,
+            wrappedMeta: String?, wrappedExif: String?, originalShared: SharedBlobSpec? = null,
         ): CompleteItem = CompleteItem(
             ownerId = mediaId,
             nodeId = nodeId,
             originalUploadId = originalUploadId,
             derivatives = derivatives,
             payloads = listOfNotNull(wrappedMeta?.let { META to it }, wrappedExif?.let { EXIF to it }).toMap(),
+            originalShared = originalShared,
         )
 
         /**

@@ -26,7 +26,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
   `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
-  (`MemoryNodeKindRules.takesCover`), keeps only its second source (one of its photos, offered to core's one cover dialog through the kind's `cover.extraSource`, inbox #411 follow-up); core's `veyq_node` carries no Memories column. Memories' configuration is its own
+  (`MemoryNodeKindRules.takesCover`) and adds one seam, `cover.findStored` (`storedMatch.ts`: an uploaded image equal to a gallery original shares that medium's PREVIEW, ADR 0013 § 5); a cover is set only by an upload in core's dialog; core's `veyq_node` carries no Memories column. Memories' configuration is its own
   mapping, `veyq.media.*` (`MemoriesMediaConfig`, inbox #342).
   A **banner** is Memories' own ([uc.memory.banner](../features/memory/use-cases/uc.memory.banner.md),
   [ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): the node's
@@ -173,8 +173,7 @@ from the link drops, without a reload.
 **A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memory/levelRows.ts`), handed a guest's access and tree,
 gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed with the node's key the link's
 chain opened, each cover through the link's own reads (core's cover store, `core/node/cover/coverStore.ts`: an uploaded cover blob through
-`resolveShareBlob`, which serves a node's cover blob below the share; a chosen photo's thumbnail by Memories' `cover.load`,
-`coverLoad.ts`, from `listShareMedia`, read once and only when a cover needs it), the map over the opened subtree. A Memory or a chapter — below a shared
+`resolveShareBlob`, which serves a node's cover blob below the share), the map over the opened subtree. A Memory or a chapter — below a shared
 folder, or the root of a Memory or chapter link — is the member's `MemoryDetail` (core's `ShareTreePage` mounts the
 kind's `detail`): the gallery, the lightbox with the download, the Chapters tab to navigate into (through the tree's
 link, `#k=` kept); for a contributor besides, the upload into the node on screen and the delete of its own photos on

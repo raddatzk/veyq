@@ -40,7 +40,7 @@ class TreeRevisionBumpsTest {
         "core/src/main/kotlin/me/raddatz/veyq/core/content/NodesStore.kt" to
             setOf("create", "createIdentityFolder", "applyUpdate", "deleteSubtree", "restoreSubtree"),
         "core/src/main/kotlin/me/raddatz/veyq/core/content/NodeSubtreePurge.kt" to setOf("erase"),
-        "core/src/main/kotlin/me/raddatz/veyq/core/blob/AttachmentStore.kt" to setOf("attach", "detach"),
+        "core/src/main/kotlin/me/raddatz/veyq/core/blob/AttachmentStore.kt" to setOf("attach", "attachShared", "detach"),
         "core/src/main/kotlin/me/raddatz/veyq/core/sharing/SharingStore.kt" to setOf("create"),
     )
 

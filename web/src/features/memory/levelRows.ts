@@ -4,9 +4,8 @@
 // the former `MemoriesSection.vue` and `MemoryCard.vue`; what those did beyond drawing lives here:
 //
 // - **The cover** of each Memory (the visual of its row or tile): core's (inbox #411) - the level resolves every node's cover
-//   once (a member's from the shared store, a share guest's through the link's own reads; a photo-of-the-Memory source is read
-//   by `./coverLoad.ts`, the kinds' `cover.load`) and hands the map to this source (`host.covers`), which draws it with the
-//   Memory placeholder tile while there is none.
+//   once (a member's from the shared store, a share guest's through the link's own reads) and hands the map to this source
+//   (`host.covers`), which draws it with the Memory placeholder tile while there is none.
 // - **The sealed date range and place** (the row's `details`, `memoryRowDetails.ts`, left out when absent) from each node's
 //   `wrappedMeta` under the key its parent's chain opens - read from the tree, no media load. A rotated scope mixes epochs
 //   across the level; locked (`epochs` null) means no facts.

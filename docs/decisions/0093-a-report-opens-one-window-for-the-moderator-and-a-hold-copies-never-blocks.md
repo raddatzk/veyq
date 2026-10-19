@@ -254,8 +254,14 @@ erased is **taken and ends at once, not refused** (owner 2026-10-19): the decisi
 stays as the evidence it is. The hold is not ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown —
 the case, the affected's statement, the Art. 18 export — one that ended with its target says so ("ended when the content
 was erased"), never plain "lifted": nobody lifted it. **An address is evidence, never the ground of a block.** A
-copy a member made (Depot's "Copy to…") is a new blob under a new key; with no dedup the server cannot know it, and
-a block reaches only the reported copy.
+copy a member made (Depot's "Copy to…") is a new blob under a new key; the server cannot know it, and a block reaches
+only the reported copy. Where blob rows share one stored object inside a node (a cover, a banner, a gallery original,
+[ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 5), **a block hangs on the stored object** (owner
+2026-10-19): a block on one reaches every row on the object - the same bytes under another id, refused `451` - and
+erasing the blocked item does not end it while another row still holds the object. It then stands on that object alone
+(`veyq_moderation_block.held_objects`) and ends when the object's last row goes (`MeasureTargets.objectsGone`, from
+`BlobUploadStore.deleteBlobRow` and `ScopePurge`) or a moderator lifts it. So deleting a blocked photo never serves it
+again as the Memory's cover or banner.
 
 ### 7. Statement of reasons, and objection
 

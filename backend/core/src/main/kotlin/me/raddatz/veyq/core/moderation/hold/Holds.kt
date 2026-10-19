@@ -49,7 +49,8 @@ class Holds(
         hold.persist()
         val snapshot = HoldSnapshot(hold.id, em)
         contributors.forEach { it.contribute(target, snapshot) }
-        snapshot.copy("veyq_blob", "id", snapshot.blobIds).forEach { blob ->
+        // One pin per stored object: two held rows may name one (a cover sharing a medium's, ADR 0013 § 5).
+        snapshot.copy("veyq_blob", "id", snapshot.blobIds).distinctBy { it.getValue("storage_key") }.forEach { blob ->
             HoldPinEntity().apply {
                 id = UUID.randomUUID().toString()
                 holdId = hold.id
