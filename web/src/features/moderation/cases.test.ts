@@ -69,7 +69,16 @@ const aCase: ModerationCase = {
 }
 
 const NO_FACTS = { ground: 'TERMS_BREACH' as const, facts: '' }
-const STATEMENT_NONE = { ground: 'TERMS_BREACH', provision: null, facts: null, factsFor: [], deferral: null }
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const STATEMENT_NONE = {
+  statementId: expect.stringMatching(UUID_V4),
+  ground: 'TERMS_BREACH',
+  provision: null,
+  facts: null,
+  sealedFacts: null,
+  factsKeyFor: [],
+  deferral: null,
+}
 
 const stub = () =>
   stubApi(moderationApi, {
@@ -246,10 +255,17 @@ describe('the statement of reasons', () => {
     return { secret: v1.moderationKemSecret(k), kem: v1.moderationBundle(k).kem }
   }
 
-  it('seals the facts to the moderation key and to every member the server lists, each under a proof of its own', async () => {
+  it('seals the facts to the moderation key, and once under a key wrapped to every member the server lists', async () => {
     const a = recipient()
+    const b = recipient()
     const identity = (kem: Uint8Array) => b64std(v1.serializeIdentityPublic({ kem, sign: new Uint8Array(32) }))
-    api.getModerationStatementRecipients.mockResolvedValueOnce({ accounts: [{ accountId: ACCOUNT, identityPublicKey: identity(a.kem) }], guests: 1 })
+    api.getModerationStatementRecipients.mockResolvedValueOnce({
+      accounts: [
+        { accountId: ACCOUNT, identityPublicKey: identity(a.kem) },
+        { accountId: REPORT, identityPublicKey: identity(b.kem) },
+      ],
+      guests: 1,
+    })
     await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', provision: ' § 241 StGB ', facts: 'the photo shows a threat' })
     expect(proofFor).toHaveBeenNthCalledWith(1, 'getModerationStatementRecipients', CASE)
     expect(proofFor).toHaveBeenNthCalledWith(2, 'takeModerationMeasure', CASE)
@@ -259,11 +275,26 @@ describe('the statement of reasons', () => {
     // The provision travels in the clear beside the ground (DSA Art. 17(3)(d)), trimmed; the facts stay sealed.
     expect(statement.provision).toBe('§ 241 StGB')
     expect(openNote(statement.facts!.epoch, CASE, statement.facts!.sealedNote)).toBe('the photo shows a threat')
-    expect(statement.factsFor).toHaveLength(1)
-    expect(statement.factsFor![0].accountId).toBe(ACCOUNT)
-    const sealed = statement.factsFor![0].sealedFacts
-    expect(sealed).not.toContain('threat')
-    expect(v1.openModerationFacts(CASE, ACCOUNT, a.secret, Uint8Array.from(atob(sealed), (c) => c.charCodeAt(0)))).toBe('the photo shows a threat')
+    // The statement's id is minted here, and the facts are sealed once, bound to it and to the case.
+    expect(statement.statementId).toMatch(UUID_V4)
+    const bytes = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
+    expect(statement.sealedFacts).not.toContain('threat')
+    // Each member gets only the key, wrapped to their identity at their account; it opens the one sealed copy.
+    expect(statement.factsKeyFor!.map((w) => w.accountId)).toEqual([ACCOUNT, REPORT])
+    const [forA, forB] = statement.factsKeyFor!.map((w) => bytes(w.wrappedFactsKey))
+    const kA = v1.unwrapFactsKey(CASE, statement.statementId, ACCOUNT, a.secret, forA)
+    expect(v1.unwrapFactsKey(CASE, statement.statementId, REPORT, b.secret, forB)).toEqual(kA)
+    expect(v1.openStatementFacts(CASE, statement.statementId, kA, bytes(statement.sealedFacts!))).toBe('the photo shows a threat')
+    // A wrap opens for its own member only.
+    expect(() => v1.unwrapFactsKey(CASE, statement.statementId, REPORT, a.secret, forA)).toThrow(v1.OpenRefused)
+    expect(() => v1.unwrapFactsKey(CASE, statement.statementId, ACCOUNT, b.secret, forA)).toThrow(v1.OpenRefused)
+  })
+
+  it('mints a fresh statement id per step', async () => {
+    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', NO_FACTS)
+    await takeMeasure(CASE, 'CONTENT', { targetId: ITEM }, '', NO_FACTS)
+    const [first, second] = api.takeModerationMeasure.mock.calls.map((c) => c[0].moderationMeasureRequest.statement.statementId)
+    expect(first).not.toBe(second)
   })
 
   it('without facts reads no recipients and seals nothing', async () => {
