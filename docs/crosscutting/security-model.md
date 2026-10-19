@@ -119,8 +119,8 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
   whether a member **has a profile picture** and how often it changed (`avatar_revision`; the picture itself is a
   constant-size sealed blob, [ADR 0084](../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md); contract, crypto and backend built, the web client not yet);
-  server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the second (a
-  medium's change time and a node's creation time to the millisecond — the latter served to members on the node
+  server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the millisecond (a
+  node's creation time is served to members on the node
   listing, `NodeSummary.createdAt`, as the order equal-named siblings are told apart by, [ADR 0015](../decisions/0015-operator-blind-readable-urls.md)); nothing rounds them, so they tell *when*, never *what*.
   **A time is stored only where something reads it** — a sort, a purge or expiry cutoff, a served field, or,
   named as such, an operator reading the database for audit evidence (inbox #318; the root test

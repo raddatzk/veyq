@@ -164,7 +164,10 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   layer refused it: Jackson while binding (an unknown enum value, a wrong type — no scalar is coerced into another,
   `StrictJsonTypes`; a `null` list element, `NullElementsRefused` — a missing or null required field, unparseable
   JSON), bean validation after it (an empty field, a bound, a pattern, an element), or a query parameter that does
-  not convert (`StrictParamConverters`: canonical UUIDs, `true`/`false`, plain integers, enum names). A path segment
+  not convert (`StrictParamConverters`: canonical UUIDs, `true`/`false`, plain integers, enum names). One refusal while
+  binding is no shape's: a well-formed date-time no time column holds (before 1582-10-15, past 9999-12-31, an offset
+  past ±18:00) is `422 date_time_out_of_range` (`StrictJsonTypes`, inbox #509), a bound no date-time schema states,
+  declared by every operation that takes one. A path segment
   that does not convert stays the `404` of an id that names nothing, with `ErrorResponse{code: not_found}`
   (`EmptyNotFoundFilter`). A method a path does not declare answers `405 ErrorResponse{code: method_not_allowed}` with
   an `Allow` naming exactly the path's declared methods, `OPTIONS` and `TRACE` included — the API is same-origin and

@@ -115,7 +115,7 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
   ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md) Decision 7,
   [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The bytes go on the next
   sweep tick; nothing readable references them in between.
-- **Operator-blind, unchanged.** The added state is a lifecycle timestamp (to the second) plus a slug token replaced by
+- **Operator-blind, unchanged.** The added state is a lifecycle timestamp (to the millisecond) plus a slug token replaced by
   an opaque id — the same class of operational metadata the media trash already discloses. No name, no key, no
   content.
 

@@ -25,8 +25,8 @@ import org.junit.jupiter.api.Test
  * move, a trash and a restore keep it).
  *
  * **The precision test bites only on MariaDB.** [aMillisecondIsListedExactly] reads back a stored `.123`: on MariaDB a
- * `created_at TIMESTAMP` (no precision) keeps whole seconds and lists `.000`, but H2 gives a bare `TIMESTAMP` six
- * digits, so on H2 it is green either way. This class therefore runs on MariaDB too
+ * `created_at` with no precision (a bare `DATETIME`) keeps whole seconds and lists `.000`, but H2 gave its bare time
+ * type six digits, so on H2 it is green either way. This class therefore runs on MariaDB too
  * (`python3 scripts/run_backend_races_on_mariadb.py --tests '*NodeCreatedAtCoreSliceTest'`).
  */
 @QuarkusTest

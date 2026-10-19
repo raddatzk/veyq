@@ -53,7 +53,7 @@ ADR 0093 § Legal basis).
 
 **No tension with operator-blindness.** The terms are the space's **public policy** (served to everyone,
 including pre-auth on the login page), and acceptance is **operational metadata** (who accepted which
-revision, and when — to the second) — never user content. It is in fact the one honest surface where a space
+revision, and when — to the millisecond) — never user content. It is in fact the one honest surface where a space
 states its policy to the people it lets in, including what the server it runs on can and cannot see (the
 honest-operator caveat) and that a reported public share is decryptable-on-report.
 

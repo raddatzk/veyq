@@ -1692,6 +1692,12 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: order_exists }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: "A date-time outside the range a stored time holds (`date_time_out_of_range`): 1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00 — a bound no date-time schema states."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: date_time_out_of_range }
 
   /api/instance/operator:
     get:

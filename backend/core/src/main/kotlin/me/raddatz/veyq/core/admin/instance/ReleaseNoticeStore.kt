@@ -10,6 +10,8 @@ import jakarta.persistence.Id
 import jakarta.persistence.PersistenceException
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
+import org.hibernate.annotations.JdbcType
+import org.hibernate.type.descriptor.jdbc.LocalDateJdbcType
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -56,7 +58,11 @@ class ReleaseNoticeEntity : PanacheEntityBase {
     @Column(name = "release_version", nullable = false, length = 32)
     lateinit var releaseVersion: String
 
+    /** A calendar day, bound as the `LocalDate` it is (`setObject`), not through `java.sql.Date`: that one is the JVM
+     *  zone's midnight, which H2 reads in its session's zone — UTC since inbox #509 — and wrote 2029-05-01 as 04-30 on
+     *  a machine in Berlin. MariaDB's driver read it in the JVM's zone and agreed; this form needs no zone on either. */
     @Column(name = "notice_date")
+    @JdbcType(LocalDateJdbcType::class)
     var noticeDate: LocalDate? = null
 
     @Column(name = "days_ahead")
@@ -158,7 +164,7 @@ class ReleaseNoticeStore {
     /**
      * Give back the claim [claimForMail] took, because that send failed: the next check may try again. Only the mailer
      * claims, and only from the check, which never runs twice at once (`ConcurrentExecution.SKIP`), so the claim given
-     * back is the one this run took. (Matched by id alone: a `TIMESTAMP(3)` column does not round-trip an `Instant`'s
+     * back is the one this run took. (Matched by id alone: a `DATETIME(3)` column does not round-trip an `Instant`'s
      * nanoseconds, so an equality on the time would miss on MariaDB.)
      */
     fun releaseClaim(id: String) {

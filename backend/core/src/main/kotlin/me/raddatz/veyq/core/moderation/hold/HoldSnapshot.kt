@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.persistence.EntityManager
 import org.hibernate.Session
 import java.sql.Types
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 /** What a hold is taken on (en.moderation.hold § The snapshot): every target names the space it lies in. */
@@ -95,11 +98,13 @@ class HoldSnapshot internal constructor(private val holdId: String, private val 
 
     /**
      * A column's value as the snapshot keeps it: its text as stored, but a time as the ISO-8601 instant it is (UTC, `Z`).
-     * A `TIMESTAMP` column holds the wall clock of the zone the writer ran in, so its text alone names no instant — the
-     * Art. 18 export read a guest's write two hours off on a machine in Berlin until a time was kept as an instant.
+     * A time column is a `DATETIME` holding the UTC wall clock (inbox #509; H2's test URL keeps its session at UTC too),
+     * so it is read as the `LocalDateTime` it is, at UTC — never through `getTimestamp`, whose calendar is the JVM's: the
+     * Art. 18 export read a guest's write two hours off on a machine in Berlin while a time was read in the JVM's zone.
      */
     private fun text(rs: java.sql.ResultSet, type: Int, i: Int): String? = when (type) {
-        Types.TIMESTAMP, Types.TIMESTAMP_WITH_TIMEZONE -> rs.getTimestamp(i)?.toInstant()?.toString()
+        Types.TIMESTAMP -> rs.getObject(i, LocalDateTime::class.java)?.toInstant(ZoneOffset.UTC)?.toString()
+        Types.TIMESTAMP_WITH_TIMEZONE -> rs.getObject(i, OffsetDateTime::class.java)?.toInstant()?.toString()
         else -> rs.getString(i)
     }
 

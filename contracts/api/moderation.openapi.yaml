@@ -708,7 +708,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_measure_exists } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
-          description: "`statement_recipients_too_many` = with facts, the statement would reach more members than one step can wrap their key to (6,000, `ModerationStatementRecipients.accounts`); nobody is told only in part."
+          description: "`statement_recipients_too_many` = with facts, the statement would reach more members than one step can wrap their key to (6,000, `ModerationStatementRecipients.accounts`); nobody is told only in part. `date_time_out_of_range` = a date-time outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00) — a bound no date-time schema states."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_recipients_too_many } }
 
@@ -840,6 +840,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: "A date-time outside the range a stored time holds (`date_time_out_of_range`): 1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00 — a bound no date-time schema states."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: date_time_out_of_range }
 
   /api/moderation/cases/{caseId}/statement-recipients:
     get:
@@ -1106,6 +1112,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: order_exists } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: "A date-time outside the range a stored time holds (`date_time_out_of_range`): 1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00 — a bound no date-time schema states."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: date_time_out_of_range }
     get:
       tags: [moderation]
       operationId: listModerationOrders
@@ -1181,6 +1193,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: deferral_renewed } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: "A date-time outside the range a stored time holds (`date_time_out_of_range`): 1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00 — a bound no date-time schema states."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: date_time_out_of_range }
 
   /api/moderation/cases/{caseId}/handovers:
     post:
@@ -2102,7 +2120,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: The new end — after the current one, at most six months from now.
+          description: The new end — after the current one, at most six months from now. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `422 date_time_out_of_range`.
           example: 2027-04-01T00:00:00Z
         reasonType:
           oneOf:
@@ -2614,7 +2632,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the statement goes out — at most six weeks from now.
+          description: When the statement goes out — at most six weeks from now. Between 1582-10-15T00:00:00Z and 9999-12-31T23:59:59.999Z, the range a stored time holds, with an offset of at most ±18:00; outside it the request is refused `422 date_time_out_of_range`.
           example: 2026-11-29T00:00:00Z
         reason:
           $ref: "#/components/schemas/SealedModerationNote"
