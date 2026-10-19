@@ -75,9 +75,9 @@ COPY contracts/api ../contracts/api
 # The capability catalog: buildSrc's `generateCapabilityRegister` builds :core's CapabilityIds and their EN/DE texts
 # from it (ADR 0088 decision 13), so without it the compile has no register.
 COPY contracts/platform/capabilities.json ../contracts/platform/capabilities.json
-# The operator section of the terms (ADR 0035 decision 6): :core's processResources puts it into the jar, and the
-# server refuses to start without it.
-COPY contracts/terms/operator-section.json ../contracts/terms/operator-section.json
+# veyq's two fixed texts, the operator section of the terms and the privacy notice (ADR 0035 decisions 6 and 8):
+# :core's processResources puts them into the jar, and the server refuses to start without either.
+COPY contracts/terms/operator-section.json contracts/terms/privacy-notice.json ../contracts/terms/
 # The platform's one major: buildSrc's `generatePlatformMajor` compiles :core's PlatformMajor from it, the major
 # GET /api/setup advertises (ADR 0085 decision 1), so without it the compile has no major.
 COPY VERSION ../VERSION

@@ -119,7 +119,7 @@ says what veyq builds and the question stays a named blocker.
   public read, the recipients and officer values on the operator operations. · Done when: `npm run generate:api`; the
   contracts guards; `npm run check` in `web/` and `admin-web/` once, naming the typed lines the operator request's new
   fields redden (`grep -rln 'supervisoryAuthority' web/src admin-web/src backend/core/src/test e2e`).
-- [ ] **2 backend** — the renderer, the switch-bound passages, the public read per host and locale, the values. · Done
+- [x] **2 backend** — the renderer, the switch-bound passages, the public read per host and locale, the values. · Done
   when: `./gradlew check` green. **Bites, with controls:** the record's switch off → its passage absent (control: on →
   present, with N); `core.breached-password` with a mirror → the mirror's host named, HIBP not (control: default →
   HIBP); *private* with no recipients → the passage absent (control: *organisation* → "not stated by this operator");

@@ -211,6 +211,19 @@ components:
           maxLength: 500
           example: "Landesbeauftragte für Datenschutz, Musterstadt"
 
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+    LocalizedMarkdown:
+      $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+    OperatorSection:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
+    OperatorSectionVariant:
+      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
+
+    # The privacy notice's schemas are this spec's own, its text type included, with no $ref into _common: a _common
+    # schema this spec serves at the response level comes out of the generator under inline names of its own
+    # (`OperatorSectionRecord`, `PrivacyNoticePassagesInner`, measured), which the other specs' runs happen to overwrite
+    # for OperatorSection and nothing would for these. The text has LocalizedMarkdown's shape.
     PrivacyNotice:
       type: object
       description: >
@@ -227,12 +240,18 @@ components:
           description: The notice's revision — it moves with its text, that is with a veyq release, never with a value.
           example: 1
         variant:
-          $ref: "#/components/schemas/OperatorSectionVariant"
+          x-veyq-visibility: enum
+          type: string
+          enum: [FULL, REDUCED]
+          description: >
+            The operating mode's variant, as the operator section's (ADR 0093 § 14): REDUCED in the private mode, where
+            an unset value is absent; FULL otherwise, where it shows as "not stated by this operator".
+          example: FULL
         draftBanner:
           description: >
             The banner every rendering opens with while the text awaits a qualified legal review; absent once reviewed.
           oneOf:
-            - $ref: "#/components/schemas/LocalizedMarkdown"
+            - $ref: "#/components/schemas/PrivacyNoticeText"
             - type: "null"
         passages:
           type: array
@@ -259,14 +278,20 @@ components:
           description: A right to object, shown apart from the rest (GDPR Art. 21(4)).
           example: false
         text:
-          # No description beside the $ref: the generator would emit an inline copy of LocalizedMarkdown.
-          $ref: "#/components/schemas/LocalizedMarkdown"
+          $ref: "#/components/schemas/PrivacyNoticeText"
 
-    ErrorResponse:
-      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
-    LocalizedMarkdown:
-      $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
-    OperatorSection:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
-    OperatorSectionVariant:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
+    PrivacyNoticeText:
+      type: object
+      description: Markdown in each language the notice carries; the client shows the page's language, else the other.
+      required: [de, en]
+      properties:
+        de:
+          x-veyq-visibility: public
+          type: string
+          description: German markdown (neutral-first inclusive language, cc.inclusive-language).
+          example: "## Dein Konto\n…"
+        en:
+          x-veyq-visibility: public
+          type: string
+          description: English markdown.
+          example: "## Your account\n…"

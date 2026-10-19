@@ -10,19 +10,23 @@ import me.raddatz.veyq.core.generated.model.InstanceOperator
 import me.raddatz.veyq.core.generated.model.InstanceOperatorConfirmation
 import me.raddatz.veyq.core.generated.model.InstanceOperatorUpdate
 import me.raddatz.veyq.core.generated.model.OperatorDetails
+import me.raddatz.veyq.core.generated.model.OperatorRecipientSuggestion
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
+import me.raddatz.veyq.core.tenant.RequestTenant
 import me.raddatz.veyq.core.terms.OperatorSections
+import me.raddatz.veyq.core.terms.PrivacyNotices
 import me.raddatz.veyq.core.terms.toWire
 import jakarta.annotation.security.PermitAll
 import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import me.raddatz.veyq.core.generated.model.OperatingMode as WireOperatingMode
+import me.raddatz.veyq.core.generated.model.OperatorRecipient as WireRecipient
 
 /**
  * HTTP adapter for the Server Owner's operating mode and operator details (uc.admin.operator-details). Implements the
@@ -72,6 +76,8 @@ class InstanceOperatorResource(
         providerEmail = providerEmail,
         providerRepresentative = providerRepresentative,
         supervisoryAuthority = supervisoryAuthority,
+        dataProtectionOfficer = dataProtectionOfficer,
+        recipients = recipients.orEmpty().map { PublishedRecipient(it.name, it.purpose, it.country) },
     )
 
     private fun OperatorDetailsView.toWire() = InstanceOperator(
@@ -88,6 +94,11 @@ class InstanceOperatorResource(
         providerEmail = values.providerEmail,
         providerRepresentative = values.providerRepresentative,
         supervisoryAuthority = values.supervisoryAuthority,
+        recipients = values.recipients.map { WireRecipient(name = it.name, purpose = it.purpose, country = it.country) },
+        dataProtectionOfficer = values.dataProtectionOfficer,
+        recipientSuggestions = suggestions.map {
+            OperatorRecipientSuggestion(kind = OperatorRecipientSuggestion.Kind.valueOf(it.kind.name), host = it.host)
+        },
     )
 
     private fun OperatingModeView.toWire() = InstanceOperatingMode(
@@ -115,7 +126,17 @@ class InstanceOperatorResource(
 class OperatorResource(
     private val details: OperatorDetailsHandler,
     private val sections: OperatorSections,
+    private val notices: PrivacyNotices,
+    private val tenant: RequestTenant,
 ) : OperatorApi {
+
+    /**
+     * The instance privacy notice, public (ADR 0035 decision 8; GDPR Art. 13 applies at collection, before any
+     * account): rendered for the space this host serves — its switches decide which passages run here — and for the
+     * instance level on the bootstrap domain or an unknown host. Reading it records nothing and gates nothing.
+     */
+    @RateLimit(key = RateLimitKey.IP) // unauthenticated; read by the public notice page every surface links
+    override fun getPrivacyNotice(): Response = Response.ok(notices.render(tenant.resolve()?.id).toWire()).build()
 
     /**
      * The operator section of the terms, public (ADR 0035 decision 6; DSA Art. 14(1) asks the terms to be publicly
