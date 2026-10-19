@@ -76,7 +76,7 @@ function mockCurator(createNode: Mock<SharingApi['createShare']> = vi.fn<Sharing
   fakeApi(sharesApi, { createShare: createNode })
 }
 /** A guest's two reads: core's resolve (the link + nodes) and Memories' media read (the rows + uploader keys). */
-function mockGuest(resolve: PublicShare, listing: ShareMediaListing = { media: [], identities: [] }) {
+function mockGuest(resolve: PublicShare, listing: ShareMediaListing = { media: [], identities: [], more: false }) {
   stubApi(publicSharesApi, { resolveShare: resolve })
   return stubApi(publicShareMediaApi, { listShareMedia: listing })
 }
@@ -174,6 +174,7 @@ describe('resolveShare (anonymous viewer)', () => {
     }, {
       media: [{ blockedByOperator: false, nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta }],
       identities: [],
+      more: false,
     })
 
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -215,6 +216,7 @@ describe('resolveShare (anonymous viewer)', () => {
     }, {
       media: [{ blockedByOperator: false, nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: chapterMeta }],
       identities: [],
+      more: false,
     })
 
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -308,6 +310,7 @@ describe('resolveShare (anonymous viewer)', () => {
     }, {
       media: [{ blockedByOperator: false, nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }],
       identities: [],
+      more: false,
     })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
     expect(resolved.items).toHaveLength(0)
@@ -347,7 +350,7 @@ describe('resolveShare (anonymous viewer)', () => {
     const { wrap, sealedName } = posted(create)
     const head = { role: 'READ' as const, passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0, blockedByOperator: false }] }
     const row = { nodeId: NODE_ID, blockedByOperator: false, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }
-    const { listShareMedia } = mockGuest(head, { media: [row], identities: [] })
+    const { listShareMedia } = mockGuest(head, { media: [row], identities: [], more: false })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
     expect(resolved.items.map((i) => i.item.mediaId)).toEqual([MEDIA_1])
     expect(listShareMedia).toHaveBeenCalledWith({ shareId: minted.shareId, xSharePassword: undefined })
@@ -646,7 +649,7 @@ describe('password protection (cr-0118)', () => {
         nodes: [{ blockedByOperator: false, id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
       })
     fakeApi(publicSharesApi, { resolveShare: resolveMock })
-    const { listShareMedia } = stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
+    const { listShareMedia } = stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [], more: false } })
     const fragment = b64url(minted.kShare)
     await expect(resolveShare('share-p2', fragment)).rejects.toBeInstanceOf(SharePasswordRequiredError)
     expect(listShareMedia).not.toHaveBeenCalled() // a locked link's media are not asked for
@@ -856,6 +859,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
         { blockedByOperator: false, nodeId: NESTED, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(nestedKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
       ],
       identities: [],
+      more: false,
     })
 
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -934,6 +938,7 @@ describe('openSharedMemory on a folder link (cr-node-key-hierarchy 5b.4b)', () =
       { blockedByOperator: false, nodeId: SIBLING, mediaId: MEDIA_3, blobId: 'b3', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(siblingKey, MEDIA_3, { v: 1, w: 640, h: 480 }) },
     ],
     identities: [],
+    more: false,
   }
 
   it('every media of the subtree lists, each under its own node\'s key from the chain', () => {

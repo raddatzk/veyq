@@ -111,7 +111,11 @@ paths:
         `updatedAt` (the cursor's sort key). The `200` also carries **both revisions** and — **only when a delete
         advanced `deleteRevision`** past the client's echoed `sinceDelete` — the node's current **`mediaIds`** set,
         so the client drops any id it no longer sees (catching a delete and a net-zero delete+add); pure adds/edits
-        stay delta-only. First load: omit `If-None-Match`/`since` for the full list. The client unwraps each
+        stay delta-only. **Pages (ADR 0033 decision 6):** every answer carries at most `limit` rows (the cap, 1000, is
+        `media`'s `maxItems`) and says `more: true` while rows remain past them; the client asks again from the last
+        row's cursor, without `If-None-Match`, until `more` is false. First load: omit `If-None-Match`/`since` and page
+        from the beginning; the revisions it keeps are the first page's (read before its rows, so nothing committed
+        while it pages is lost: the next poll's revision differs and its delta carries the change). The client unwraps each
         `K_blob` under `K_node`, presigns the downloads (`blob-downloads-batch`), and opens the chunks with
         `openFrame`. **Operator-blind** — opaque counters, opaque ids, exact timestamps (`updatedAt` to the millisecond); never
         content, never a key.
@@ -123,14 +127,16 @@ paths:
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsIfNoneMatch"
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSince"
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSinceDelete"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
         - name: state
           in: query
           required: false
           description: >
             Which media to list: **`active`** (default) — the live gallery, the conditional-GET delta above; or
-            **`trashed`** — the node's soft-deleted media for the Trash tab (uc.memory.delete-media), a plain full
-            list (`If-None-Match`/`since`/`sinceDelete` do not apply, `mediaIds` is null), each row carrying
-            `deletedAt` + `deletedBy`. Trashed media never appear in the `active` listing.
+            **`trashed`** — the node's soft-deleted media for the Trash tab (uc.memory.delete-media), a plain list
+            paged by the same `since` / `limit` / `more` (`If-None-Match`/`sinceDelete` do not apply, `mediaIds` is
+            null; the client orders the rows by `deletedAt` once it holds them all), each row carrying `deletedAt` +
+            `deletedBy`. Trashed media never appear in the `active` listing.
           schema: { type: string, default: active, maxLength: 8, example: active }
       responses:
         "200":
@@ -851,12 +857,22 @@ components:
         `mediaRevision`/`deleteRevision` are the node's opaque per-node counters (`mediaRevision` doubles as the
         ETag). `mediaIds` — the node's **current** id set for delete-reconcile — is present **only when a delete
         advanced `deleteRevision`** past the client's `sinceDelete`, and is null on pure adds/edits.
-      required: [media, mediaRevision, deleteRevision]
+      required: [media, mediaRevision, deleteRevision, more]
       properties:
         media:
           type: array
-          description: The delta rows — media whose `updatedAt` is past the `since` cursor, each a full read-back view.
+          description: >
+            The delta rows — media whose `updatedAt` is past the `since` cursor, each a full read-back view — at most
+            `limit` of them, in cursor order (ADR 0033 decision 6).
+          maxItems: 1000
           items: { $ref: "#/components/schemas/MediaSummary" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Rows remain past this page: ask again with the last row's cursor as `since` (and no `If-None-Match`) until
+            this is false.
+          example: false
         mediaRevision:
           x-veyq-visibility: structure
           type: integer

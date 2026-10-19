@@ -183,6 +183,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
         mediaRevision: 1,
         deleteRevision: 0,
         mediaIds: null,
+        more: false,
       }
     }),
     updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>(async ({ mediaMetaUpdate }): Promise<MediaMetaResponse> => {
@@ -1263,6 +1264,7 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
           mediaRevision: 5,
           deleteRevision: 2,
           mediaIds: ['m1', 'm2'],
+          more: false,
         },
       })
 
@@ -1277,7 +1279,7 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
     })
 
     it('threads the conditional-GET params (If-None-Match, since, sinceDelete) through to the client', async () => {
-      const { listNodeMedia } = stubApi(mediaApi, { listNodeMedia: { media: [], mediaRevision: 3, deleteRevision: 0, mediaIds: null } })
+      const { listNodeMedia } = stubApi(mediaApi, { listNodeMedia: { media: [], mediaRevision: 3, deleteRevision: 0, mediaIds: null, more: false } })
       await listMediaPage(SCOPE_ID, NODE_ID, { ifNoneMatch: '3', since: 't,m', sinceDelete: 0 })
       expect(listNodeMedia).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, ifNoneMatch: '3', since: 't,m', sinceDelete: 0 })
     })

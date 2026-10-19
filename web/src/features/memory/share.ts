@@ -337,7 +337,7 @@ function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): Media
 export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
 
 /** No media and no uploader key: what a WRITE_ONLY link is served, and the listing before it is read. */
-export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [] }
+export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [], more: false }
 
 /**
  * Read what a share serves of the Memory's media — Memories' own guest read (`listShareMedia`, no bearer; the guest's
@@ -349,7 +349,11 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
   if (role === ShareRole.WriteOnly) return NO_SHARE_MEDIA
   // A moderator's review lists the media its case's hold copied — never the link's own read (core/sharing/review.ts).
   const review = activeReview()
-  if (review) return caseMediaApi().listCaseMedia({ caseId: review.caseId, ...(await review.proof('listCaseMedia')) })
+  if (review) {
+    // A hold is a snapshot, served in one answer: the listing's shape with nothing past it.
+    const held = await caseMediaApi().listCaseMedia({ caseId: review.caseId, ...(await review.proof('listCaseMedia')) })
+    return { ...held, more: false }
+  }
   try {
     return await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken })
   } catch {

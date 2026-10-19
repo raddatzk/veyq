@@ -95,6 +95,7 @@ export function galleryFakeStore() {
       mediaRevision: media.length,
       deleteRevision: 0,
       mediaIds: null,
+      more: false,
     })),
     // The panel bundle, echoed only through the exif endpoint (kept out of the list) — operator-blind ciphertext.
     getMediaExif: vi.fn<MediaApi['getMediaExif']>(async ({ mediaId }) => ({

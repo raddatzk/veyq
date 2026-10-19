@@ -105,7 +105,7 @@ beforeEach(() => {
   localStorage.clear()
   forgetGuestSession(SHARE)
   authenticatedCalls.length = 0
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-root', MEMORY), row('m-ch', CHAPTER)], identities: [] } })
+  stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-root', MEMORY), row('m-ch', CHAPTER)], identities: [], more: false } })
   vi.mocked(share.openShareGrid).mockResolvedValue(new Uint8Array([1]))
   vi.mocked(share.openShareLightbox).mockResolvedValue(new Uint8Array([2]))
   vi.mocked(share.openShareOriginal).mockResolvedValue(new Uint8Array([3]))
