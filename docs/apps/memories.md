@@ -22,13 +22,19 @@ Gradle module of its own; the web half is separated by import direction only (se
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
-  cover), item favorites (the marks on media; the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), the live gallery list on core's item-list primitive (its counters are core's `veyq_node_items_revision`, bumped by every media writer through `NodeItemsRevisions.bump`; ADR 0033, inbox #410). The media tables key on
+  cover, banner), item favorites (the marks on media; the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), the live gallery list on core's item-list primitive (its counters are core's `veyq_node_items_revision`, bumped by every media writer through `NodeItemsRevisions.bump`; ADR 0033, inbox #410). The media tables key on
   `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
   `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
   (`MemoryNodeKindRules.takesCover`), keeps only its second source (one of its photos, offered to core's one cover dialog through the kind's `cover.extraSource`, inbox #411 follow-up); core's `veyq_node` carries no Memories column. Memories' configuration is its own
   mapping, `veyq.media.*` (`MemoriesMediaConfig`, inbox #342).
-- **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, date and
+  A **banner** is Memories' own ([uc.memory.banner](../features/memory/use-cases/uc.memory.banner.md),
+  [ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): the node's
+  `BANNER` and `BANNER_POSTER` attachments in core's `veyq_node_attachment` (Memories' member-only roles,
+  `MemoryBlobRoles`), written by Memories' `setMemoryBanner` / `removeMemoryBanner` together with the sealed meta that
+  names them (`MemoryBannerStore`, built from core's `AttachmentStore` and `NodesStore`); it adds no table, so every path
+  core runs for an attachment carries it.
+- **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, banners, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
 
@@ -62,7 +68,7 @@ no declaration allows nothing. This is Memories' answer, measured from the code 
 | Delete others' media | ✗ | ✗ (`404 share_media_not_found`) | ✗ | ✗ (`404 share_media_not_found`) |
 | Edit a medium's meta | ✗ (no guest operation) | ✗ (no guest operation) | ✗ | ✗ |
 | Rename a node | ✗ (`share_not_contributable`) | ✗: the root never (`illegal_structure`), a chapter inside a Memory `illegal_scope` | ✓ a child of a `FOLDER`; ✗ the root, a chapter (`illegal_scope`) | ✗ (`share_not_contributable`) |
-| Cover, date, place of a node (`wrappedMeta`, cover blob) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ |
+| Cover, banner, date, place of a node (`wrappedMeta`, cover and banner blobs) | ✗ (no guest operation; an upload start in `COVER`, `BANNER` or `BANNER_POSTER` is `invalid_request`) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ |
 | Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✗ a `MEMORY` or a chapter (`illegal_scope`; owner decision 2026-10-14: a guest creates no application's node; core lets a guest create a `FOLDER` and a kind its application declares guest-creatable, `GuestCreatableKinds`, and Memories declares none) | ✗ (`share_not_contributable`) |
 | Move a node | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`; the root `illegal_structure`) | ✓ a `FOLDER` or `MEMORY` between folders of the subtree; ✗ a chapter out of or into a Memory (`illegal_scope`), anything out of the subtree | ✗ (`share_not_contributable`) |
 | Delete a node | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation, ADR 0080 decision 6) | ✗ |
@@ -135,7 +141,8 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | upload into the node on screen | ✓ | ✗ | ✗ | ✓ | ✓ |
 | delete media | any (trash) | ✗ | ✗ | own (purge) | own (purge) |
 | create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
-| date, place, cover (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |

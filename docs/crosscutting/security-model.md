@@ -145,6 +145,11 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7); a Depot file's **uploader attribution** (the member
   or guest identity that uploaded its current content, on its attachment - served to members only, as `uploaderKey`
   `user:{id}` / `share:{id}`; [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) Decision 8);
+  a Memory's **banner** — that it has one and whether it is a video (its `BANNER` / `BANNER_POSTER` attachment rows and
+  their sizes), never its frame, focal point, description or a pixel; a banner copied from a gallery medium can be
+  matched to that medium by its size (a video banner is the original re-sealed as it is) until the small playback copy
+  replaces it, and choosing one downloads the medium's original once ([ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
+  § What the server sees);
   the **last editor of each sealed field group** — a node's name and meta, a share's name, note and private label, a
   group's name and icon, a bucket's name, a medium's meta: the member or guest identity whose write the ciphertext is,
   served to no client and never what was written ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
