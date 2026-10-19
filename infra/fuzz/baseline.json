@@ -23,36 +23,6 @@
       "reason": "Deferred to inbox #509: an `expiresAt` the TIMESTAMP columns cannot hold (before 1970, after 2038-01-19, or an offset past ±18:00 that java.time cannot read) is refused 400 since this change; JSON Schema's date-time admits it."
     },
     {
-      "id": "f69fd6",
-      "operation": "POST /api/moderation/cases/{caseId}/measures",
-      "check": "negative_data_rejection",
-      "failure": "AcceptedNegativeData",
-      "signature": "413",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #508: a body over the server's 10 MiB request limit (here `factsFor` past its 4,000 items, each with long facts) is refused by the transport with a bare 413 before any shape check — a refusal, but not the contract's 400 ErrorResponse."
-    },
-    {
-      "id": "003cd3",
-      "operation": "POST /api/moderation/cases/{caseId}/measures",
-      "check": "refusal_by_location",
-      "failure": "AcceptedNegativeData",
-      "signature": "413",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #508: the same 413 as this operation's negative_data_rejection entry, reported by veyq's own refusal_by_location (which applies that check per location) — a body over the 10 MiB request limit is refused by the transport before any shape check."
-    },
-    {
-      "id": "cc2e56",
-      "operation": "POST /api/moderation/cases/{caseId}/measures",
-      "check": "status_code_conformance",
-      "failure": "UndefinedStatusCode",
-      "signature": "413",
-      "first_seen": "2026-10-19",
-      "last_seen": "2026-10-19",
-      "reason": "Deferred to inbox #508: the transport's 413 for a body over the 10 MiB request limit is declared by no operation."
-    },
-    {
       "id": "b12c0e",
       "operation": "POST /api/scopes/{scopeId}/blob-uploads-batch",
       "check": "positive_data_acceptance",

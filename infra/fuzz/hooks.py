@@ -17,6 +17,9 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
   unauthenticated caller nothing about the request's shape. The
   marker is the contract's own (the class `validate_field_visibility.py` holds and the e2e token sweep reads), so the
   rule narrows by what the contract says, never by an operation list kept here.
+  **A body past the request limit is refused for its size** (inbox #508): the `413 ErrorResponse{code:
+  request_too_large}` every operation with a body declares (`_common`'s `RequestTooLarge`) is a correct refusal of a
+  negative case too — the server refuses such a body before it reads its shape, and the contract names the answer.
 - **`refusal_echoes_nothing`** — no 4xx body carries a path, query or header value the request sent (six characters or
   more): the refused value is often ciphertext or an opaque id, and the operator-blind boundary applies to errors too
   (developer styleguide §7; `MalformedRequestSliceTest.assertRefused` holds the same rule for its cases).
@@ -117,13 +120,22 @@ def _credential_refusal(case: object, response: object) -> bool:
     return status in ("401", "403") and status in declared and case.operation.label in CREDENTIAL_OPERATIONS  # type: ignore[attr-defined]
 
 
+def _request_too_large(case: object, response: object) -> bool:
+    """The `413 ErrorResponse{code: request_too_large}` every operation with a body declares (`_common`'s
+    `RequestTooLarge`, inbox #508): a body past the instance's request limit is refused before any shape check, so a
+    negated body that is also past the limit is refused for its size — a refusal, and the one the contract names."""
+    declared = {str(k) for k in (case.operation.definition.raw.get("responses") or {})}  # type: ignore[attr-defined]
+    return response.status_code == 413 and "413" in declared and _code(response) == "request_too_large"  # type: ignore[attr-defined]
+
+
 @schemathesis.check
 def refusal_by_location(ctx, response, case):
-    """A negated query, header or body answers 400 `invalid_request`; a negated path segment 400 or 404."""
+    """A negated query, header or body answers 400 `invalid_request`; a negated path segment 400 or 404; a body past
+    the request limit its declared 413."""
     meta = case.meta
     if meta is None or not meta.generation.mode.is_negative:
         return None
-    if _credential_refusal(case, response):
+    if _credential_refusal(case, response) or _request_too_large(case, response):
         return None
     statuses = ["400", "404"] if _negated(case, ParameterLocation.PATH) else ["400"]
     negative_data_rejection(_Context(ctx, statuses), response, case)

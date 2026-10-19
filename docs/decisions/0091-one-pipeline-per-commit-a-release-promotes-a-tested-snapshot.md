@@ -172,7 +172,8 @@ Three structural costs sit on top of those numbers:
      path, query and header parameters included), and every `GET` in **positive** mode with the seeded ids. A
      malformed query or header parameter or body is refused with the contract's `400 invalid_request`; a malformed
      path segment with `400` or `404` — a path id that is no UUID matches no route and answers `404`, as
-     `IdBoundarySliceTest` holds. An operation that takes a credential (a parameter or request-body property marked
+     `IdBoundarySliceTest` holds; a body past the instance's request limit, malformed or not, with the `413
+     request_too_large` every operation with a body declares (inbox #508). An operation that takes a credential (a parameter or request-body property marked
      `x-veyq-visibility: token`) may refuse any of it with its declared `401` or `403`: every request the run sends
      carries a credential it cannot forge, and authentication runs before shape (owner, 2026-10-18). Every answer is a status the operation declares, its body matches the declared
      schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx.
