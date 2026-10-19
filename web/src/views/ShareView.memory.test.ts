@@ -237,7 +237,8 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       kind: 'THUMBNAIL', blobId: THUMB_BLOB, chunkCount: 1, byteSize: 40,
       wrappedBlobKey: b64std(v1.seal(blobKeyContext(SCOPE, { blobId: THUMB_BLOB, ownerId: PHOTO, role: 'THUMBNAIL' }), keys.memory, v1.randomBytes(32))),
     }
-    stubApi(publicShareMediaApi, { listShareMedia: { media: [{ ...row(PHOTO, MEMORY), derivatives: [thumbnail] } as ShareMedia], identities: [], more: false } })
+    const listing = { media: [{ ...row(PHOTO, MEMORY), derivatives: [thumbnail] } as ShareMedia], identities: [], more: false }
+    stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }) })
     const presign = vi.fn(async () => { throw new Error('no store here') })
     fakeApi(publicSharesApi, { resolveShareBlob: presign })
     const w = await mountPage(head(ShareRole.Read))
