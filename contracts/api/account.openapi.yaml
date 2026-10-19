@@ -1495,6 +1495,14 @@ components:
         One write of the pin store (ADR 0104 decision 4): entries to remove, entries to store, and the new head, applied
         together and only if `revision` is still the stored one (optimistic concurrency → `409 stale_revision`).
       required: [revision, head, put, remove, replaceAll]
+      # Whole, because one built from the properties' examples puts and removes the same pin (the items share
+      # `IdentityPinId`'s example), which is the `400` this operation declares — the API fuzzing sent it as valid.
+      example:
+        revision: 3
+        head: c2VhbGVkLXBpbi1zdG9yZS1oZWFk
+        put: [{ pinId: 17918bc1ecce3ff34ef08970207fef3ec29ee3cb6aacaf4384b96b3b458701e7, entry: c2VhbGVkLXBpbi1lbnRyeQ== }]
+        remove: []
+        replaceAll: false
       properties:
         revision:
           x-veyq-visibility: structure
@@ -1529,7 +1537,9 @@ components:
           # Not `delete`: the TypeScript generator reserves the word and emits a model that does not compile.
           description: The `pinId`s of entries to remove; one that is not stored is ignored. Empty with `replaceAll`.
           maxItems: 25000
-          items: { $ref: "#/components/schemas/IdentityPinId" }
+          # An example of its own: `IdentityPinId`'s is the one `put` carries, and a pin both put and removed is the
+          # `400` this write declares (the API fuzzing built one from the two and sent it as valid).
+          items: { $ref: "#/components/schemas/IdentityPinId", example: 5a1f0c3e9b7d2468ace013579bdf2468ace013579bdf2468ace013579bdf2468 }
           example: []
           # The generator types the list `List<String>` and cannot annotate its type argument, so the elements' bounds
           # (`IdentityPinId`'s) ride on the list as `EachElement` (inbox #354; `validate_request_bounds.py` holds them).

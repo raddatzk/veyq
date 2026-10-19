@@ -249,7 +249,7 @@ paths:
                   role: OWNER
                   identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
                   hasGrant: true
-                - userId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+                - userId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                   username: partner
                   avatarRevision: 0
                   role: MEMBER
@@ -331,7 +331,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ScopeMember" }
               example:
-                userId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+                userId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                 username: partner
                 sealedName: c2VhbGVkLW5hbWU=
                 avatarRevision: 0
@@ -415,7 +415,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ResolvedGroupCandidate" }
               example:
-                userId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+                userId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                 username: partner
                 identityPublicKey: bWVtYmVyLXB1YmxpYy1rZXk=
                 requiresConsent: true
@@ -1651,7 +1651,7 @@ components:
           type: string
           format: uuid
           description: Opaque id of the resolved tenant member.
-          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         username:
           x-veyq-visibility: pii
           x-veyq-rationale: >-

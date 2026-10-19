@@ -261,8 +261,12 @@ paths:
       description: >
         Revokes the session family of the presented access token. Idempotent — a missing or
         already-invalid session still returns 204.
+      # The token is optional, not required: an absent, expired or revoked one is the same 204 (`SessionResource.logout`,
+      # lenient on purpose so a client can always sign out). Declared as one, so a check that a required token is
+      # enforced does not read the leniency as a hole (the API fuzzing's `ignored_auth`, ADR 0091 decision 9).
       security:
         - bearerAuth: []
+        - {}
       responses:
         "204":
           description: >

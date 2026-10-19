@@ -155,9 +155,9 @@ paths:
                   originalUploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
                   derivatives:
                     - kind: THUMBNAIL
-                      uploadId: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+                      uploadId: 2b3c4d5e-6f7a-4b9c-8d1e-2f3a4b5c6d7e
                     - kind: PREVIEW
-                      uploadId: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
+                      uploadId: 3c4d5e6f-7a8b-4c0d-9e2f-3a4b5c6d7e8f
       responses:
         "200":
           description: Per-item completion results (success carries the blob id and the object's `mediaId`; failure carries a code).
@@ -571,7 +571,7 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+          example: 2b3c4d5e-6f7a-4b9c-8d1e-2f3a4b5c6d7e
 
     ShareMediaBatchResponse:
       type: object

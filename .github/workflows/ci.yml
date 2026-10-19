@@ -331,8 +331,10 @@ jobs:
     # Every operation of contracts/api gets requests nobody wrote by hand (ADR 0091 decision 9): Schemathesis, in our own
     # image (infra/fuzz/Dockerfile: a pinned base, every package hash-pinned; the runner builds it), against a fresh
     # %e2e fast-jar booted with run_web_e2e.py's primitives — negative cases on
-    # every operation, positive ones on every GET with the ids a seeder created with the real client crypto. Red on a
-    # 5xx, a status or body the contract does not declare, a malformed request accepted or echoed, a failure not in
+    # every operation, positive ones on every GET and every public write the run may change, with the objects a seeder
+    # created with the real client crypto, stateful sequences over inferred links, and a second member who must be
+    # refused what the first keeps in their own space. Red on a 5xx, a status or body the contract does not declare, a
+    # malformed request accepted or echoed, a valid one refused as malformed, a peer let through, a failure not in
     # infra/fuzz/baseline.json, or an invocation that tested nothing. A stage of its own beside web-e2e, which has no
     # budget left for it. Like web-e2e it declares no `services:`: the runner brings up the compose stack itself.
     runs-on: ubuntu-latest

@@ -175,8 +175,32 @@ Three structural costs sit on top of those numbers:
      `IdBoundarySliceTest` holds. An operation that takes a credential (a parameter or request-body property marked
      `x-veyq-visibility: token`) may refuse any of it with its declared `401` or `403`: every request the run sends
      carries a credential it cannot forge, and authentication runs before shape (owner, 2026-10-18). Every answer is a status the operation declares, its body matches the declared
-     schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx. Writes in
-     positive mode and stateful sequences (links) come later, each with its own decision about what a run may change.
+     schema, a refusal echoes nothing it was sent (developer styleguide §7), and no answer is a 5xx.
+   - **Second slice (2026-10-19, inbox #495): positive writes, stateful sequences, a second identity.**
+     - *What a positive run may change:* what the run's own identities own below the tenant — their account's sealed
+       data, their scopes and what is in them, their links. The server checks such a write for shape, ids,
+       membership, revisions and epochs, never for what its ciphertext says, so schema-valid random ciphertext is
+       valid data as far as it can know. **Negative-only:** every admin-listener write (the instance's configuration,
+       by its channel); the writes that change how the run's identities sign in, and the tenant's own configuration
+       and membership (`NEGATIVE_ONLY` in the runner, a reason per entry). A write carrying a credential the run
+       cannot forge is still sent; its declared `401`/`403` is a correct answer. A schema-valid request is never
+       refused `400` (`positive_data_acceptance`); every other refusal is an answer about the instance's state.
+     - *Fixtures:* the seeder makes, with the client's own modules, a Memory with a medium, a bucket and a link, in a
+       group only the owner is a member of — a new set before each public positive invocation, because a negative
+       run learns ids from the responses it reads and a write may trash, revoke, purge or rotate what it is fixed to.
+     - *Links are inferred, not declared:* the contracts carry no `links`; the stateful phase infers them from the
+       schemas and `Location` headers, with only the tenant, owner and scope fixed so a sequence reaches what it
+       creates. Hand-kept links would be a second description of what the schemas say.
+     - *The contracts as the server reads them:* the positive invocations read a copy of the specs in which the
+       contracts' own idioms are spelled for a generator — `contentEncoding: base64` as whole base64 quanta,
+       `@NotBlank` as a non-empty string, `[T, "null"]` with `@NotNull` as `T`, an integer within its generated type.
+       The negative invocations read the contracts as they are.
+     - *The second identity:* a member of the same tenant, of none of the owner's scopes. Every positive request the
+       owner made in its scope and the server accepted is sent again as that peer and must be answered exactly as a
+       scope that does not exist is — the same `404` and `code` (membership is the first guard, ADR 0042); where it
+       names one of the owner's objects, again from the peer's own scope, answered as an object nobody has.
+       Schemathesis' own `object_level_authorization` stays off: it needs both tokens in a file and calls a read a
+       leak only on an equivalent body.
    - **Deterministic.** A fixed seed lives in the runner; a red re-runs to the same request, and the
      run's reports keep a `curl` line per failure. Changing the seed is a commit.
    - **A finding is fixed with a test in the ordinary suite** that fails on the defect, as ADR 0100 decision 11 asks
@@ -198,7 +222,8 @@ Three structural costs sit on top of those numbers:
   staged images by the digests the build hands over, a push or a pull request builds them in the job until a push
   publishes the snapshot); promotion and attestations (decision 5); L2 (inbox #453); the archive and
   L3 (decision 6); the API fuzzing (decision 9, built 2026-10-19: `ci.yml`'s `api-fuzz`, measured locally at
-  159 s for a whole run - the image check, the boot, the seed and the four invocations - on 2026-10-19). None is provable in CI before the
+  159 s for a whole run - the image check, the boot, the seed and the four invocations - on 2026-10-19; the second slice, the
+  same day, 343-438 s for its six). None is provable in CI before the
   repository has a remote.
 - **The local skip of `validate_guard_gaps.py`** is the first piece built (2026-10-16): a green full run stamps the
   hash of `scripts/` and the trust-chain skill, a local run with the same inputs skips, CI never does.
