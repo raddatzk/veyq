@@ -250,7 +250,10 @@ authority's order (§ 12) takes the same steps. **A step ends with its target** 
 when what it stands on is erased — a link deleted, a node or an item purged, a guest identity dropped, a space, an
 account or a tenant purged — the eraser ends it in its own transaction, lifted by no one and logged so; standing on
 nothing it would block nothing and still hold its case's records forever (§ 11). A step taken on a target already
-erased ends at once, the decision and its statement staying. The hold is not ended by it: it keeps its own end (§ 4). **An address is evidence, never the ground of a block.** A
+erased is **taken and ends at once, not refused** (owner 2026-10-19): the decision and its statement stay, and the hold
+stays as the evidence it is. The hold is not ended by it: it keeps its own end (§ 4). Wherever a lifted step is shown —
+the case, the affected's statement, the Art. 18 export — one that ended with its target says so ("ended when the content
+was erased"), never plain "lifted": nobody lifted it. **An address is evidence, never the ground of a block.** A
 copy a member made (Depot's "Copy to…") is a new blob under a new key; with no dedup the server cannot know it, and
 a block reaches only the reported copy.
 
@@ -735,5 +738,6 @@ what is built (`CLAUDE.md`).
 11. **Reported content inside a backup capture.** A capture holds the ciphertext of everything stored when it was
     taken, including content later reported, blocked or confirmed as child sexual abuse material. Whether keeping such
     a capture until it expires at B is possession under § 184b(3) StGB, or covered as it is unreadable to the operator
-    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block or loses a case
-    (`cr-backup-erasure-and-retention` decision 7); this item is only about the capture's own existence.
+    and kept only as a backup, is open (owner question 2026-10-18). A restore no longer undoes a block, loses a case or
+    revives a hold that had ended ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8); this
+    item is only about the capture's own existence.

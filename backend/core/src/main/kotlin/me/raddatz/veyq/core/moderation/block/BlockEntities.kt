@@ -81,6 +81,12 @@ class ModerationBlockEntity : PanacheEntityBase {
 
     val blockKind: BlockKind get() = BlockKind.valueOf(kind)
 
+    /**
+     * Whether it ended with its erased target (ADR 0093 § 6, [MeasureTargets.erased]) — lifted, by no one: every person's
+     * lift and a decided objection's records who lifted it, and a re-applied lift keeps that (`ErasureReapplication`).
+     */
+    val endedWithTarget: Boolean get() = liftedAt != null && liftedBy == null
+
     companion object : PanacheCompanionBase<ModerationBlockEntity, String> {
         fun activeKeyOf(kind: BlockKind, targetId: String) = "${kind.name}:$targetId"
     }

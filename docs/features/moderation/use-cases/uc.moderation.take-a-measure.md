@@ -64,8 +64,10 @@
   medium purged from the trash, a guest identity dropped with the last thing it named, a space, an account or a tenant
   purged — the measure ends in the erasure's transaction, lifted by no one and logged so, and its case's records run to
   their date (ADR 0093 § 11) instead of standing on nothing forever (GDPR Art. 5(1)(e)). Its hold keeps its own end. A
-  measure or a bar taken on a target already erased is taken and ends at once; the decision and its statement stay. A
-  trashed node or medium still stands: only its purge erases it.
+  measure or a bar taken on a target already erased is taken and ends at once, never refused; the decision, its statement
+  and the hold stay. Wherever a lifted measure is shown — the case, the affected's statement, the Art. 18 export — such
+  a one reads "ended when the content was erased" (de: „endete mit dem Löschen“), not "lifted". A trashed node or
+  medium still stands: only its purge erases it.
 
 ## Quality notes
 

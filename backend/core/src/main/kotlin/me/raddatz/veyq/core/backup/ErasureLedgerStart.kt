@@ -46,10 +46,11 @@ class ErasureLedgerStart(
         // Counts only, by kind — never an id (ADR 0092 § 1: a log names no subject).
         log.infof(
             "erasure ledger: %d line(s) read (%d unreadable), erased again %s, %d block(s) taken again, %d lift(s) " +
-                "applied again, %d case stub(s) restored, %d line(s) of an unknown kind; %d erased storage key(s), %d " +
-                "restored row(s) still naming one (served as a missing object); %d line(s) older than %d days dropped",
-            done.lines, read.unreadable, done.erased, done.reblocked, done.relifted, done.caseStubs, done.unknown,
-            done.erasedKeys, done.rowsNamingErasedKeys, dropped, days,
+                "applied again, %d case stub(s) restored, %d case(s) moved on to their last state, %d line(s) of an " +
+                "unknown kind; %d erased storage key(s), %d restored row(s) still naming one (served as a missing " +
+                "object); %d line(s) older than %d days dropped",
+            done.lines, read.unreadable, done.erased, done.reblocked, done.relifted, done.caseStubs, done.casesMoved,
+            done.unknown, done.erasedKeys, done.rowsNamingErasedKeys, dropped, days,
         )
         if (done.unknown > 0) {
             log.errorf("erasure ledger: %d line(s) name a kind no application of this build re-applies", done.unknown)

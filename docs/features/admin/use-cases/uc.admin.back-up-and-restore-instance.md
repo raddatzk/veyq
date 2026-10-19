@@ -172,10 +172,11 @@
 - **A13 — An erasure made after the capture is made again** (ADR 0056 decision 8). The instance keeps an erasure
   ledger, `erasures.log`, beside leg (c)'s key, which no restore touches: one line per hard erasure no restored row
   would trigger again (an account, a tenant, a scope, a node, a medium, a link, a reclaimed storage key) and per
-  moderation block, lift and case. At every start, before it answers a request, the application reads it and erases
-  every listed object whose row exists, through its own eraser; it blocks again an item whose last line is a block and
-  that the restored database does not block, never one lifted since; and it recreates a case the database lacks as a
-  stub. A restore given the ledger (`--erasures`) counts a key it lists as erased, never as missing. Without the ledger
+  moderation block, lift, case and ended hold. At every start, before it answers a request, the application reads it
+  and erases every listed object whose row exists, through its own eraser; it blocks again an item whose last line is a
+  block and that the restored database does not block, never one lifted since; it ends again a hold that ended after the
+  capture; it moves a case the database holds on to the state its last line names, forward only; and it recreates a case
+  the database lacks as a stub. A line it cannot apply fails the start. A restore given the ledger (`--erasures`) counts a key it lists as erased, never as missing. Without the ledger
   the object check runs as before, and says so; a restore onto a new host re-applies only the ledger the operator
   carried there with leg (c).
 - **A8 — Only the users' half is lost.** Nothing here helps. A perfectly restored server whose people lost their
