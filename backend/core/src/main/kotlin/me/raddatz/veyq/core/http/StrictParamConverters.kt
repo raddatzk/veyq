@@ -16,7 +16,7 @@ import java.util.UUID
  *
  * Without these the framework converted leniently or refused with the wrong status: a query parameter it could not
  * convert answered an empty `404` (JAX-RS' rule for a query parameter), `java.util.UUID.fromString` accepts
- * `1-1-1-1-1`, `Boolean.valueOf` reads `revokeLinks=5` as `false`, and an integer took a `+` — the API fuzzing's first
+ * `1-1-1-1-1` and versions the id columns refuse ([StorableUuid]), `Boolean.valueOf` reads `revokeLinks=5` as `false`, and an integer took a `+` — the API fuzzing's first
  * run (cr-api-fuzzing, owner decision Q5). A converter that throws a `WebApplicationException` has it propagated as it
  * is, so the refusal is the status the contract declares. `MalformedRequestSliceTest` holds the query half.
  *
@@ -31,7 +31,7 @@ class StrictParamConverters : ParamConverterProvider {
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any?> getConverter(rawType: Class<T>, genericType: Type?, annotations: Array<out Annotation>?): ParamConverter<T>? {
         val parse: ((String) -> Any?)? = when {
-            rawType == UUID::class.java -> { s -> if (UUID_SHAPE.matches(s)) UUID.fromString(s) else null }
+            rawType == UUID::class.java -> { s -> StorableUuid.parse(s) }
             rawType == java.lang.Boolean::class.java || rawType == java.lang.Boolean.TYPE -> { s ->
                 when (s) {
                     "true" -> true
@@ -55,9 +55,6 @@ class StrictParamConverters : ParamConverterProvider {
     }
 
     private companion object {
-        /** The canonical text form the contract's `format: uuid` means — no shorter groups. */
-        val UUID_SHAPE = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-
         /** A JSON integer as text: no `+`, no leading zeros, no whitespace. */
         val INTEGER_SHAPE = Regex("-?(0|[1-9][0-9]*)")
 

@@ -103,6 +103,34 @@ class IdBoundarySliceTest {
         assertEquals(400, response.statusCode, response.asString())
     }
 
+    // --- a UUID the column cannot hold ---------------------------------------------------------------------------
+
+    /**
+     * MariaDB's `UUID` type refuses some canonical UUIDs (error 1292): measured on the pinned 11.4.13, a version nibble
+     * of 8 or more with a variant byte from 0x01 to 0x80 (`00000000-0000-9000-4000-000000000000`). Java's `UUID` and the
+     * contract's `format: uuid` take them, so a client-minted one reached the `INSERT` and answered 500 — the API fuzzing's
+     * positive writes found it (`createBucket` with a contract example id). Refused at the boundary like any other id
+     * that is not one ([StorableUuid]); H2 stores such a UUID, so this test reds on the missing refusal, not on the DB.
+     */
+    @Test
+    fun aUuidOfAVersionTheColumnCannotHoldIsRefusedAtTheBoundary() {
+        val unstorable = "5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a"
+        val base = "/api/scopes/${space.scopeId}/nodes"
+        val body = send("POST", base, folder(unstorable))
+        assertEquals(400, body.statusCode, body.asString())
+        assertEquals("invalid_request", body.jsonPath().getString("code"))
+        assertEquals(400, send("POST", base, folder(UUID.randomUUID().toString(), parentId = unstorable)).statusCode, "parentId")
+        val list = send("POST", "/api/scopes/${space.scopeId}/blob-downloads-batch", """{"items":[{"blobId":"$unstorable"}]}""")
+        assertEquals(400, list.statusCode, list.asString())
+        assertEquals(404, send("DELETE", "$base/$unstorable").statusCode, "a path segment")
+        assertEquals(404, send("GET", "/api/scopes/$unstorable/nodes").statusCode, "a path scope")
+        // The controls: every version a client mints (4, and 7 for a time-ordered one) and the nil UUID stay ids.
+        for (ok in listOf(UUID.randomUUID().toString(), "01890a5d-ac96-774b-bcce-b302099a8057")) {
+            assertEquals(201, send("POST", base, folder(ok)).statusCode, ok)
+        }
+        assertEquals(404, send("GET", "/api/scopes/00000000-0000-0000-0000-000000000000/nodes").statusCode, "nil: no scope")
+    }
+
     // --- case ---------------------------------------------------------------------------------------------------
 
     @Test

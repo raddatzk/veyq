@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.generated.model.BlockAccountSignInRequest
 import me.raddatz.veyq.core.generated.model.ClaimRequest
 import me.raddatz.veyq.core.generated.model.CreateNodeRequest
 import me.raddatz.veyq.core.generated.model.CreateTenantRequest
+import me.raddatz.veyq.core.generated.model.DeviceRegisterUpdate
 import me.raddatz.veyq.core.generated.model.ErrorResponse
 import me.raddatz.veyq.core.generated.model.ServerOwnerStatementInput
 import me.raddatz.veyq.core.generated.model.ServerOwnerStatementInputFactsForLog
@@ -153,6 +154,42 @@ class MalformedRequestSliceTest {
         mapper.readValue("""{$node,"orderIndex":0}""", CreateNodeRequest::class.java)
         mapper.readValue("""{$order,"deferStatementUntil":"2026-10-20T00:00:00Z"}""", AuthorityOrderRequest::class.java)
         assertEquals("Fuzz", mapper.readValue("""{"tenantName":" Fuzz ","domain":"a.example","ownerEmail":"a@b.example"}""", CreateTenantRequest::class.java).tenantName)
+    }
+
+    /** An integer is a value, not a spelling: JSON Schema's `integer` admits `2.0`, so the contract does, and the API
+     *  fuzzing's positive writes sent one to every integer field (`metaRevision`, `epoch`, `bytes` …) and got `400`
+     *  (ADR 0091 decision 9). A whole number in any spelling binds; a fraction, or a number past the field's type, is
+     *  still refused while binding — no truncation, no wrap-around ([StrictJsonTypes]). */
+    @Test
+    fun aWholeNumberSpelledAsAFloatIsThatIntegerAndNothingElseIs() {
+        val node = """"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"a2V5""""
+        assertEquals(2, mapper.readValue("""{$node,"orderIndex":2.0}""", CreateNodeRequest::class.java).orderIndex)
+        assertEquals(2, mapper.readValue("""{$node,"orderIndex":2e0}""", CreateNodeRequest::class.java).orderIndex)
+        assertEquals(1676914L, mapper.readValue("""{"blob":"YmxvYg==","revision":1676914.0}""", DeviceRegisterUpdate::class.java).revision)
+        for (bad in listOf("1.5", "2147483648", "2147483648.0", "1e300", "-2147483649")) {
+            assertThrows<MismatchedInputException>(bad) { mapper.readValue("""{$node,"orderIndex":$bad}""", CreateNodeRequest::class.java) }
+        }
+        for (bad in listOf("9223372036854775808", "9.3e18", "0.5")) {
+            assertThrows<MismatchedInputException>(bad) { mapper.readValue("""{"blob":"YmxvYg==","revision":$bad}""", DeviceRegisterUpdate::class.java) }
+        }
+    }
+
+    /** A date-time the `TIMESTAMP` columns cannot hold — MariaDB's, from 1970-01-01T00:00:01Z to 2038-01-19T03:14:07Z —
+     *  reached the `UPDATE` and answered 500 (`updateShare` with an `expiresAt` in 2577: the API fuzzing's positive
+     *  writes, ADR 0091 decision 9). Refused while binding, as any date-time that is not one ([StrictJsonTypes]); H2
+     *  stores such an instant, so this reds on the missing refusal, not on the database. */
+    @Test
+    fun aDateTimeTheTimestampColumnsCannotHoldIsInvalidRequest() {
+        val order = """"id":"${UUID.randomUUID()}","kind":"REMOVAL","shareId":"${"a".repeat(43)}","receivedAt":"2026-10-18T07:12:00Z","reference":{"epoch":2,"sealedReference":"cmVm"}"""
+        for (bad in listOf("2577-12-11T13:05:27+01:00", "2038-01-19T03:14:08Z", "1970-01-01T00:00:00Z", "0001-01-01T00:00:00Z")) {
+            assertThrows<MismatchedInputException>(bad) {
+                mapper.readValue("""{$order,"deferStatementUntil":"$bad"}""", AuthorityOrderRequest::class.java)
+            }
+        }
+        // The controls: the edges of the range, in any offset, bind.
+        for (ok in listOf("2038-01-19T03:14:07Z", "2038-01-19T04:14:07+01:00", "1970-01-01T00:00:01Z")) {
+            mapper.readValue("""{$order,"deferStatementUntil":"$ok"}""", AuthorityOrderRequest::class.java)
+        }
     }
 
     /** A JSON `null` binds only where the contract allows one (NullRefused): `orderIndex` is an optional integer with

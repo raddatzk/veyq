@@ -70,9 +70,9 @@ paths:
                   originalUploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
                   derivatives:
                     - kind: THUMBNAIL
-                      uploadId: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+                      uploadId: 2b3c4d5e-6f7a-4b9c-8d1e-2f3a4b5c6d7e
                     - kind: PREVIEW
-                      uploadId: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
+                      uploadId: 3c4d5e6f-7a8b-4c0d-9e2f-3a4b5c6d7e8f
       responses:
         "200":
           description: Per-item completion results (success carries blob+media ids; failure carries a code).
@@ -219,7 +219,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateBucketRequest" }
             example:
-              bucketId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+              bucketId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
               sealedName: YnVja2V0LW5hbWUtY2lwaGVy
       responses:
         "200":
@@ -358,7 +358,7 @@ paths:
             schema: { $ref: "#/components/schemas/MoveMediaRequest" }
             example:
               mediaIds: [2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e]
-              targetBucketId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+              targetBucketId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
       responses:
         "204":
           description: The media were moved to the target bucket.
@@ -601,7 +601,7 @@ components:
       in: path
       required: true
       description: Opaque id of a bucket (a primary or a sub-bucket) within the node.
-      schema: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a }
+      schema: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a }
 
   schemas:
     # --- complete + attach ---------------------------------------------------
@@ -687,7 +687,7 @@ components:
           type: string
           format: uuid
           description: The upload session for this derivative blob, opened by `startBlobUploads`.
-          example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+          example: 2b3c4d5e-6f7a-4b9c-8d1e-2f3a4b5c6d7e
 
     MediaDerivativeKind:
       x-veyq-visibility: enum
@@ -1057,7 +1057,7 @@ components:
         (non-trashed) media in this bucket.
       required: [bucketId, ownerKey, isPrimary, mediaCount]
       properties:
-        bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
         ownerKey:
           x-veyq-visibility: structure
           type: string
@@ -1124,7 +1124,7 @@ components:
           format: uuid
           description: >
             The client-minted UUIDv4 id of the sub-bucket (ADR 0072 Decision 3) — its `sealedName` is sealed bound to it. Taken ⇒ `409 id_taken`.
-          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
         sealedName:
           type: string
           description: The sub-bucket's name sealed under a field key derived from `K_node` (opaque base64).
@@ -1170,7 +1170,7 @@ components:
           type: [string, "null"]
           format: uuid
           description: The destination bucket (same owner as the source), or null ⇒ that owner's primary.
-          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
