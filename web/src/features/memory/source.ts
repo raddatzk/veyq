@@ -7,10 +7,12 @@
 // world, and which one a view holds is fixed at mount (the host picks it by `access.mode`).
 //
 // **A door exists only where the session has it.** Every write and every member-only read is an OPTIONAL member of the
-// source: the guest's has no media trash, no node meta (date, place, cover), no buckets, no item marks, no live poll, no
-// heavy EXIF, no media-meta writes, and its delete reaches only its own media (an irreversible purge, never the member's
-// trash with undo). A view offers an operation where `memoryRights` grants it AND the source carries it
-// (`sourceRights`), so a forgotten guard cannot fall through to a member call — there is no member call to fall to.
+// source: the guest's has no media trash, no node meta (date, place, cover), no buckets, no item marks, no heavy EXIF, no
+// media-meta writes, and its delete reaches only its own media (an irreversible purge, never the member's trash with
+// undo). The live poll both have (inbox #497): a guest's gallery learns of a second uploader's photo as a member's does,
+// on a tag that is a digest of what its link serves (ADR 0081 decision 4). A view offers an operation where
+// `memoryRights` grants it AND the source carries it (`sourceRights`), so a forgotten guard cannot fall through to a
+// member call — there is no member call to fall to.
 // A `WRITE_ONLY` guest holds no key to read anything: its page is the drop (`MemoryShareBody`), never this source's, so
 // the guest source uploads and deletes for a `READ_WRITE` link only.
 //
@@ -29,6 +31,7 @@ import { activeEpochKeys } from '../../app/activeSpace'
 import { listScopeMembers } from '../spaces/members'
 import type { ScopeMember } from '../../api/generated/scopes'
 import { ShareRole } from '../../api/generated/sharing'
+import type { ShareMediaListing } from '../../api/generated/share-media'
 import type { ChunkProvider } from '../../sw/protocol'
 import {
   openGrid,
@@ -36,8 +39,6 @@ import {
   openOriginal,
   openBlob,
   chunkProvider,
-  unsealMeta,
-  originalBlobMeta,
   loadMediaExif,
   listMediaPages,
   deleteMedia,
@@ -59,8 +60,8 @@ import {
   type MediaMeta,
   type MediaMetaTarget,
   type MediaMetaWrite,
-  type MediaPage,
 } from './media'
+import { gridFrameOpener, openedBlobMeta, openedMeta } from './openedListing'
 import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { setMemoryParticipants } from './memoryParticipants'
@@ -69,7 +70,7 @@ import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import {
   addSharePhoto,
   deleteSharePhoto,
-  listShareMedia,
+  readShareMedia,
   openSharedMemory,
   openShareGrid,
   openShareLightbox,
@@ -82,12 +83,21 @@ import type { UploadTarget } from './uploadQueue'
 import type { MemoryRights } from './rights'
 
 /** A node's media as a source lists it — every page of it (ADR 0033 decision 6): the live media and, where the session
- *  polls, the revisions a live poll continues from (the FIRST page's) and the cursor (the LAST page's; `null`: this
- *  source has no live poll, or the node holds nothing yet). */
-export type MediaListing = { items: MediaItem[]; revision: { media: number; delete: number } | null; cursor: string | null }
+ *  polls, the revisions a live poll continues from (the FIRST page's; `null`: this source has no live poll here) and the
+ *  cursor (the LAST page's; `null`: no keyset to continue, or the node holds nothing yet). `tag` is what the poll echoes
+ *  as `If-None-Match`, opaque to the view: a member's is the node's item revision (ADR 0033), a guest's a digest of what
+ *  the link serves (ADR 0081 decision 4). */
+export type MediaListing = { items: MediaItem[]; revision: { tag: string; delete: number } | null; cursor: string | null }
 
 /** Where a live poll continues from (uc.memory.live-updates, cr-0107). */
-export type PollCursor = { mediaRevision: number; since?: string; deleteRevision: number }
+export type PollCursor = { tag: string; since?: string; deleteRevision: number }
+
+/** One live poll's answer: nothing changed (`304`), or the change — a member's keyset delta with the node's id set only
+ *  after a removal, a guest's whole listing with every id it holds (a guest is told no order of changes to continue
+ *  from, ADR 0033 decision 6) — and the revisions the next poll echoes. */
+export type PollPage =
+  | { notModified: true }
+  | { notModified: false; items: MediaItem[]; tag: string; deleteRevision: number; mediaIds: string[] | null; cursor: string | null }
 
 /** How a media's bytes and its listed seals open — every one under `key`, the node's `K_node` from the chain. */
 export interface MediaLoaders {
@@ -187,9 +197,9 @@ export interface MemorySource {
   /** The live media of `nodeId` in full, every page read before it answers. Throws what the read throws. */
   listMedia(nodeId: string): Promise<MediaListing>
   readonly loaders: MediaLoaders
-  /** One live poll from `cursor` (a conditional delta read, every page of it). Absent: no live updates — the view re-reads
+  /** One live poll from `cursor` (a conditional read, every page of it). Absent: no live updates — the view re-reads
    *  after its own writes. */
-  readonly poll?: (nodeId: string, cursor: PollCursor) => Promise<MediaPage>
+  readonly poll?: (nodeId: string, cursor: PollCursor) => Promise<PollPage>
   /** Upload into a node. Absent: this session uploads nothing. */
   readonly upload?: MemoryUpload
   /** Delete media. Absent: this session deletes nothing. */
@@ -252,19 +262,23 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     async listMedia(nodeId) {
       const page = await listMediaPages(scope(), nodeId) // every page — no ETag, so never a 304
       if (page.notModified) return { items: [], revision: null, cursor: null } // unreachable without an ETag: exhaustiveness
-      return { items: page.items, revision: { media: page.mediaRevision, delete: page.deleteRevision }, cursor: page.cursor }
+      return { items: page.items, revision: { tag: String(page.mediaRevision), delete: page.deleteRevision }, cursor: page.cursor }
     },
     loaders: {
-      grid: (item, key, signal) => openGrid(scope(), key, item, signal),
+      grid: (item, key, signal) => openGrid(scope(), key, item, signal, gridFrameOpener(scope(), key)),
       preview: (item, key) => openLightbox(scope(), key, item),
       original: (item, key) => openOriginal(scope(), key, item),
       chunk: (item, key) => chunkProvider(scope(), key, item),
-      meta: (item, key) => unsealMeta(scope(), key, item),
-      blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
+      meta: (item, key) => openedMeta(scope(), key, item),
+      blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       coverBlob: (ref, key) => openBlob(scope(), key, ref),
       exif: (item, key) => loadMediaExif(scope(), item, key),
     },
-    poll: (nodeId, c) => listMediaPages(scope(), nodeId, { ifNoneMatch: String(c.mediaRevision), since: c.since, sinceDelete: c.deleteRevision }),
+    async poll(nodeId, c) {
+      const page = await listMediaPages(scope(), nodeId, { ifNoneMatch: c.tag, since: c.since, sinceDelete: c.deleteRevision })
+      if (page.notModified) return page
+      return { notModified: false, items: page.items, tag: String(page.mediaRevision), deleteRevision: page.deleteRevision, mediaIds: page.mediaIds, cursor: page.cursor }
+    },
     upload: {
       ready: () => true,
       prepare: async () => true,
@@ -333,6 +347,10 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
   const scope = () => access().head.scopeId
   // A served media as the share helpers take it: opened under `key` (the node's, from the chain), its origin on the item.
   const shareItem = (item: MediaItem, key: Uint8Array): ShareItem => ({ item, memoryKey: key, scopeId: scope(), nodeId: '' })
+  // The listing's media of `nodeId`, opened: the walk keys every media by its node; one whose node's key did not open is
+  // not served (`openSharedMemory`), and the filter keeps a moderator's review — the whole held subtree — to this node.
+  const openedIn = (a: GuestAccess, nodeId: string, listing: ShareMediaListing): MediaItem[] =>
+    openSharedMemory(a.head, listing).items.filter((si) => si.nodeId === nodeId).map((si) => si.item)
 
   return {
     scopeId: scope,
@@ -341,19 +359,28 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
       const a = access()
       if (a.role === ShareRole.WriteOnly) return { items: [], revision: null, cursor: null } // served nothing, holds no key (ADR 0031)
       // The guest lists the node it has open, every page of it, as a member does (`listShareMedia` with its node, ADR
-      // 0033 decision 6); the walk keys every media by its node. A media whose node's key did not open is not served
-      // (`openSharedMemory`), and the filter keeps a moderator's review — the whole held subtree — to this node.
-      const listing = await listShareMedia(a.shareId, a.role, a.pwToken, nodeId)
-      const opened = openSharedMemory(a.head, listing)
-      return { items: opened.items.filter((si) => si.nodeId === nodeId).map((si) => si.item), revision: null, cursor: null }
+      // 0033 decision 6), and keeps the listing's tag for the live poll — none for a moderator's review, a snapshot.
+      const read = await readShareMedia(a.shareId, a.role, a.pwToken, nodeId)
+      const items = read ? openedIn(a, nodeId, read.listing) : []
+      return { items, revision: read?.etag ? { tag: read.etag, delete: 0 } : null, cursor: null }
+    },
+    // The guest's live poll (inbox #497): the listing again, conditional on the tag of what the gallery holds — a `304`
+    // while the link serves the same, else the whole listing with every id in it, so the view adds and drops by the one
+    // merge a member's poll goes through. No keyset: a guest pages by id and is told no order of the Memory's changes.
+    async poll(nodeId, c) {
+      const a = access()
+      const read = await readShareMedia(a.shareId, a.role, a.pwToken, nodeId, c.tag)
+      if (!read) return { notModified: true }
+      const items = openedIn(a, nodeId, read.listing)
+      return { notModified: false, items, tag: read.etag ?? c.tag, deleteRevision: 0, mediaIds: items.map((m) => m.mediaId), cursor: null }
     },
     loaders: {
-      grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal),
+      grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal, gridFrameOpener(scope(), key)),
       preview: (item, key) => openShareLightbox(shareId, shareItem(item, key), access().pwToken),
       original: (item, key) => openShareOriginal(shareId, shareItem(item, key), access().pwToken),
       chunk: (item, key) => shareChunkProvider(shareId, shareItem(item, key), downloadRef(item), access().pwToken),
-      meta: (item, key) => unsealMeta(scope(), key, item),
-      blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
+      meta: (item, key) => openedMeta(scope(), key, item),
+      blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       // The node's uploaded cover through the gated share presign, which serves a cover blob below the share.
       coverBlob: (ref, key) => openBlobVia(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
     },

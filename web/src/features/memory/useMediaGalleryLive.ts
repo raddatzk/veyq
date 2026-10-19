@@ -7,7 +7,8 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
 import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
-import { hasDerivatives, unsealMeta, effectiveCapturedAt, type MediaItem } from './media'
+import { hasDerivatives, effectiveCapturedAt, type MediaItem } from './media'
+import { closeListing, openListing, openedMeta } from './openedListing'
 import type { MemorySource } from './source'
 import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
@@ -21,7 +22,7 @@ import { byCaptureTime } from './optimisticUpload'
  *  settle callback (auto-date + auto-location self-heal) run after every list refresh. */
 export interface MediaGalleryLiveCtx {
   /** The session's data source (`./source.ts`): the list, the tiles' bytes, the live poll and the delete — each only
-   *  where the source carries it (a guest's has no poll and no trash). */
+   *  where the source carries it (a guest's has no trash, and its delete reaches its own media only). */
   source: MemorySource
   scopeId: () => string
   node: () => TreeNode
@@ -64,9 +65,10 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const thumbs = pipeline.thumbs // mediaId → thumbnail object URL (derivable items only)
   const thumbFailed = pipeline.failed // mediaIds whose thumbnail read failed for good: the tile's error state
   const status = ref<'loading' | 'ready' | 'error'>('loading')
-  // live media updates (uc.memory.live-updates, cr-0107): the cached per-node counters — mediaRevision (the ETag
-  // echoed as If-None-Match; null until the first load) + deleteRevision (echoed as sinceDelete to gate the id-set).
-  const mediaRevision = ref<number | null>(null)
+  // live media updates (uc.memory.live-updates, cr-0107): the list's tag — the ETag echoed as If-None-Match, opaque here
+  // (a member's: the node's item revision; a guest's: a digest of what its link serves, inbox #497); null until the first
+  // load, and while the source has no live poll — + deleteRevision (echoed as sinceDelete to gate the id-set).
+  const mediaTag = ref<string | null>(null)
   const deleteRevision = ref(0)
   // …and the keyset cursor the next poll continues from: the one the server answered with the last page it read (ADR
   // 0033 decision 6) — never assembled from the items, whose order is the server's to say.
@@ -86,7 +88,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // The effective capture time of an item (from its sealed metadata tier), or undefined when it has none.
   function capturedAtOf(item: MediaItem): number | undefined {
     const key = ctx.memoryKey()
-    return key ? effectiveCapturedAt(unsealMeta(ctx.scopeId(), key, item)) : undefined
+    return key ? effectiveCapturedAt(openedMeta(ctx.scopeId(), key, item)) : undefined
   }
   const sortDirection = computed<1 | -1>(() => (sortDir.value === 'newest' ? -1 : 1))
   // The LISTED media in grid order — the lightbox's world: the `index` below and `openLightboxAt`'s snapshot are
@@ -102,7 +104,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     const key = ctx.memoryKey()
     const m = new Map<string, number>()
     for (const item of items.value) {
-      const dims = key ? unsealMeta(ctx.scopeId(), key, item) : null
+      const dims = key ? openedMeta(ctx.scopeId(), key, item) : null
       m.set(item.mediaId, galleryDisplayAspectRatio(dims?.w, dims?.h))
     }
     return m
@@ -226,21 +228,13 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
 
   // `reset` (a Memory/chapter switch) clears the grid up front; an incremental reload (post-upload batch) merges
   // the fresh list into place so existing tiles don't blink empty — jarring next to the optimistic tiles (cr-0074).
-  /** `list` in grid order, so the tiles on screen when a gallery opens are asked for first (the read scheduler serves a
-   *  lane in the order asked, inbox #488); a media the grid does not show (a mark filter) comes after them. */
-  function inGridOrder(list: readonly MediaItem[]): MediaItem[] {
-    const rank = new Map(sortedItems.value.map((it, i) => [it.mediaId, i]))
-    const at = (m: MediaItem) => rank.get(m.mediaId) ?? Number.MAX_SAFE_INTEGER
-    return [...list].sort((a, b) => at(a) - at(b))
-  }
-
   async function load({ reset = false }: { reset?: boolean } = {}) {
     const key = ctx.memoryKey()
     const nodeId = ctx.node().id
     if (!key) {
       pipeline.revokeAll()
       items.value = []
-      mediaRevision.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
+      mediaTag.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
       deleteRevision.value = 0
       pollSince = undefined
       status.value = 'error'
@@ -249,7 +243,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     if (reset) {
       pipeline.revokeAll()
       items.value = []
-      mediaRevision.value = null
+      mediaTag.value = null
       deleteRevision.value = 0
       pollSince = undefined
     }
@@ -257,15 +251,19 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     try {
       const page = await ctx.source.listMedia(nodeId) // every page of it
       if (ctx.node().id !== nodeId) return // navigated away while listing
+      // Every listed seal opened (in the listing opener Worker, once per seal) before a tile is placed: the order is the
+      // sealed capture time, so it is final only now (ADR 0105 decision 4) — until then the loading state stays.
+      await openListing(ctx.scopeId(), key, page.items)
+      if (ctx.node().id !== nodeId) return
       mergeItems(page.items)
       // The live poll continues from the FIRST page's revisions — read before its rows, so a change committed while the
       // pages came in moves the server past them and the next poll pulls it — and from the LAST page's cursor (ADR 0033
       // decision 6). None: this source has no live poll.
-      mediaRevision.value = page.revision?.media ?? null
+      mediaTag.value = page.revision?.tag ?? null
       deleteRevision.value = page.revision?.delete ?? 0
       pollSince = page.cursor ?? undefined
       status.value = 'ready'
-      await pipeline.decrypt(inGridOrder(page.items), () => ctx.node().id === nodeId)
+      // No thumbnail is read here: the grid asks for the tiles near its viewport, nearest first ([wantThumbs]).
       if (ctx.node().id === nodeId) await ctx.onSettle() // settle: auto-date, then auto-location (RMW-safe)
     } catch {
       if (ctx.node().id === nodeId) status.value = 'error'
@@ -273,38 +271,42 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   }
 
   /** The live poll's tick (uc.memory.live-updates, cr-0107; the conditional read is core's `itemsPollTick`, inbox #410):
-   *  a conditional GET keyed on the cached `mediaRevision`. A 304 is a no-op; a change upserts the keyset delta (new
+   *  a conditional GET keyed on the cached `mediaTag`. A 304 is a no-op; a change upserts the keyset delta (new
    *  tiles auto-insert), reconciles removals via the id-set, and decrypts just the delta's tiles. Node-race-guarded
    *  (`isCurrent`) so a mid-poll navigation can't write into the wrong gallery, and fenced by the live poll's `signal`
    *  so a poll still in flight when the loop stops (close, lock) writes nothing. A failed fetch REJECTS: the loop backs
    *  off and the next successful poll re-syncs in one round-trip (E6) while the last grid stays. */
-  const pollTick = itemsPollTick<MediaItem, string>({
+  const pollTick = itemsPollTick<MediaItem, string, string>({
     cursor: () => {
-      if (!ctx.memoryKey() || !ctx.source.poll || mediaRevision.value === null) return null // no live poll here / not an open, loaded gallery
+      if (!ctx.memoryKey() || !ctx.source.poll || mediaTag.value === null) return null // no live poll here / not an open, loaded gallery
       return {
         key: ctx.node().id,
-        revision: mediaRevision.value,
+        revision: mediaTag.value,
         deleteRevision: deleteRevision.value,
         since: pollSince,
       }
     },
     fetch: async (cursor) => {
       const page = await ctx.source.poll!(cursor.key, {
-        mediaRevision: cursor.revision,
+        tag: cursor.revision,
         since: cursor.since,
         deleteRevision: cursor.deleteRevision,
       })
       return page.notModified
         ? { notModified: true }
-        : { notModified: false, items: page.items, revision: page.mediaRevision, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }
+        : { notModified: false, items: page.items, revision: page.tag, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }
     },
     isCurrent: (nodeId) => ctx.node().id === nodeId,
     apply: async (change, cursor, signal) => {
+      // A delta's seals are opened before it is merged, so an inserted tile takes its final place at once.
+      const key = ctx.memoryKey()
+      if (key) await openListing(ctx.scopeId(), key, change.items)
+      if (signal.aborted || ctx.node().id !== cursor.key) return
       upsertItems(change.items, change.ids)
-      mediaRevision.value = change.revision
+      mediaTag.value = change.revision
       deleteRevision.value = change.deleteRevision
       pollSince = change.cursor ?? pollSince // a delta that carried no row (a removal only) leaves the cursor where it was
-      await pipeline.decrypt(change.items, () => ctx.node().id === cursor.key) // decrypt only the delta's new/changed tiles
+      // a new tile's thumbnail is read when the grid announces it near the viewport ([wantThumbs])
       if (!signal.aborted && ctx.node().id === cursor.key) await ctx.onSettle()
     },
   })
@@ -340,9 +342,17 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and
   // (re)start the poll — but only for an open, unlocked gallery (E4: no K_node ⇒ no polling).
+  // The opened listing this gallery holds (`openedListing.ts`): left when the gallery moves to another node's key or
+  // unmounts, so the listing opener Worker forgets that Memory's keys (ADR 0105 decision 3).
+  let holding: { scopeId: string; key: Uint8Array } | null = null
+  function hold(key: Uint8Array | null) {
+    if (holding && (holding.key !== key || holding.scopeId !== ctx.scopeId())) closeListing(holding.scopeId, holding.key)
+    holding = key ? { scopeId: ctx.scopeId(), key } : null
+  }
   watch(
     () => [ctx.node().id, ctx.memoryKey()] as const,
     () => {
+      hold(ctx.memoryKey())
       lightboxIndex.value = null
       pendingDelete.clear()
       undo.cancel() // a node switch drops any open undo window (the trash stands) + its toast
@@ -358,6 +368,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   onBeforeUnmount(() => {
     stopMediaRevisionPolling() // stop the live poll on close/navigate away
     pipeline.revokeAll()
+    hold(null)
     toast.dismissUndo() // drop any lingering undo-toast (the `useUndo` window tears itself down)
   })
 
@@ -379,5 +390,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     pollMedia,
     liftTombstone,
     removeMedia: removeFromGrid,
+    /** The tiles `owner` (a grid, the cover) wants a thumbnail for, nearest first (ADR 0105 decision 2). */
+    wantThumbs: pipeline.want,
   }
 }

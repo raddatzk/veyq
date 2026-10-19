@@ -22,6 +22,7 @@ import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
+import { blobKeyContext } from '../core/blob/keys'
 
 /** What the guest page touched of the member's world (see the header). */
 const touched = vi.hoisted(() => [] as string[])
@@ -86,6 +87,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { clearUploads } from '../features/memory/uploadQueue'
 import { setViewMode } from '../shared/state/useViewMode'
 import { fakeApi, stubApi } from '../test/apiMock'
+import { apiResponse } from '../test/apiResponse'
 import { realI18n, t } from '../test/i18n'
 import { authenticatedCalls } from '../test/guestMode'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
@@ -136,7 +138,8 @@ beforeEach(async () => {
   vi.clearAllMocks()
   setViewMode('grid')
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
-  stubApi(publicShareMediaApi, { listShareMedia: { media: [row('m-1', MEMORY), row('c-1', CHAPTER)], identities: [], more: false } })
+  const listing = { media: [row('m-1', MEMORY), row('c-1', CHAPTER)], identities: [], more: false }
+  stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }) })
   // A tier read (the lightbox's preview) is refused: the stage shows its error, the download stays.
   fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
   vi.mocked(addSharePhoto).mockResolvedValue({ blobId: 'b-up', mediaId: 'm-up' })
@@ -225,6 +228,28 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     })
   }
 
+  // ADR 0105 decision 2: a guest's gallery is the same windowed grid; the thumbnail of a tile in its window is read through
+  // the link's own presign (`resolveShareBlob`), opened under the Memory's key — never a member's client.
+  it('READ: the windowed grid reads a tile\'s thumbnail through the link\'s own presign, and calls no authenticated client', async () => {
+    const PHOTO = '6e5a0000-0000-4000-8000-000000000901' // seals bind canonical ids
+    const THUMB_BLOB = '6e5a0000-0000-4000-8000-000000000902'
+    const thumbnail = {
+      kind: 'THUMBNAIL', blobId: THUMB_BLOB, chunkCount: 1, byteSize: 40,
+      wrappedBlobKey: b64std(v1.seal(blobKeyContext(SCOPE, { blobId: THUMB_BLOB, ownerId: PHOTO, role: 'THUMBNAIL' }), keys.memory, v1.randomBytes(32))),
+    }
+    const listing = { media: [{ ...row(PHOTO, MEMORY), derivatives: [thumbnail] } as ShareMedia], identities: [], more: false }
+    stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }) })
+    const presign = vi.fn(async () => { throw new Error('no store here') })
+    fakeApi(publicSharesApi, { resolveShareBlob: presign })
+    const w = await mountPage(head(ShareRole.Read))
+    await vi.waitFor(() => expect(tiles(w)).toEqual([PHOTO]))
+    await vi.waitFor(() => expect(presign).toHaveBeenCalled())
+    expect(JSON.stringify(presign.mock.calls[0])).toContain(THUMB_BLOB)
+    await vi.waitFor(() => expect(w.find(`[data-media-id="${PHOTO}"] .media-tile-failed`).exists()).toBe(true)) // no store here: its error tile
+    expectGuestOnly(w)
+    w.unmount()
+  })
+
   it('READ_WRITE: inside the chapter it navigated to, an upload names THAT chapter and seals under its key', async () => {
     saveGuestSession(SHARE, GUEST)
     const w = await mountPage(head(ShareRole.ReadWrite))
@@ -279,7 +304,8 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
 
   it('a CHAPTER link: the chapter\'s detail at the root, under its own key; a contributor uploads into it', async () => {
     saveGuestSession(SHARE, GUEST)
-    stubApi(publicShareMediaApi, { listShareMedia: { media: [row('c-1', CHAPTER)], identities: [], more: false } })
+    const listing = { media: [row('c-1', CHAPTER)], identities: [], more: false }
+    stubApi(publicShareMediaApi, { listShareMedia: listing, listShareMediaRaw: apiResponse(listing, { ETag: '"t1"' }) })
     fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
     const w = await mountPage(head(ShareRole.ReadWrite, { chapterRoot: true }))
     await vi.waitFor(() => expect(tiles(w)).toEqual(['c-1']))
@@ -311,6 +337,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(w.find('[data-testid="guest-write-record-notice"]').exists(), 'no N served: nothing said').toBe(false)
     expect(publicShareMediaApi().listShareMedia, 'an uploader is served no media').not.toHaveBeenCalled()
+    expect(publicShareMediaApi().listShareMediaRaw, 'nor polls any').not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
     expect(touched).toEqual([])
     w.unmount()
@@ -341,6 +368,7 @@ describe('a note that asks to be accepted before the share opens', () => {
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(w.text(), 'the drop page').not.toContain(t('share.uploaderIntro'))
     expect(publicShareMediaApi().listShareMedia, 'no media read').not.toHaveBeenCalled()
+    expect(publicShareMediaApi().listShareMediaRaw, 'no media read').not.toHaveBeenCalled()
   }
 
   for (const role of [ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly]) {

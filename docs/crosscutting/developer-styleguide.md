@@ -166,7 +166,12 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   JSON), bean validation after it (an empty field, a bound, a pattern, an element), or a query parameter that does
   not convert (`StrictParamConverters`: canonical UUIDs, `true`/`false`, plain integers, enum names). A path segment
   that does not convert stays the `404` of an id that names nothing, with `ErrorResponse{code: not_found}`
-  (`EmptyNotFoundFilter`). Core's
+  (`EmptyNotFoundFilter`). A method a path does not declare answers `405 ErrorResponse{code: method_not_allowed}` with
+  an `Allow` naming exactly the path's declared methods, `OPTIONS` and `TRACE` included — the API is same-origin and
+  uses no CORS, so `OPTIONS` is one more undeclared method; `HEAD` follows `GET`. The index is read off the deployed
+  resources at startup (`core/http/DeclaredMethods.kt`, `UndeclaredMethodFilter`); a literal path wins over its
+  templated sibling, an `/api` path no resource declares stays the unknown route for every method, and so, off the
+  admin channel, does a Server-Owner path (`UndeclaredMethodSliceTest`, `ApiMethodIndexContractTest`, inbox #494). Core's
   `core/http/RequestRejectionMappers.kt` holds one mapper per exception type plus one response filter for the empty
   400 Quarkus' body reader answers, so every generated resource — each application's too — answers alike with no
   code of its own; a new refusal path gets its mapper there, never a per-resource catch. **Never an

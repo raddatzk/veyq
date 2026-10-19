@@ -89,7 +89,8 @@ const props = defineProps<{
   canReport?: boolean
 }>()
 const emit = defineEmits<{
-  close: []
+  /** Closed — on the item shown last (null: none left), whose grid tile takes the focus back (ADR 0105 decision 5). */
+  close: [mediaId: string | null]
   updated: [{ mediaId: string } & SealedMetaState] // a meta write landed, or a conflict handed back the current tier
   setCover: [{ mediaId: string }] // "use this photo as the Memory's cover" (cr-0073 §gallery-source)
   delete: [{ mediaId: string }] // delete this photo: a member's trash with undo (cr-0110), a guest's purge of its own (asked first)
@@ -223,6 +224,9 @@ function pauseOnInteraction(event: Event) {
 // established - keep the root's listeners native.
 const rootEl = ref<HTMLElement | null>(null)
 onMounted(() => {
+  // The dialog takes the focus when it opens, so the keys go to it and not to the grid tile that opened it (the grid
+  // moves through its tiles on the same arrow keys); closing hands the focus back to the shown item's tile.
+  rootEl.value?.focus({ preventScroll: true })
   rootEl.value?.addEventListener('pointerdown', pauseOnInteraction, { capture: true })
   rootEl.value?.addEventListener('wheel', pauseOnInteraction, { capture: true, passive: true })
 })
@@ -574,7 +578,7 @@ function next() {
 watch(
   () => props.items.length,
   (len) => {
-    if (len === 0) emit('close')
+    if (len === 0) close()
     else if (current.value >= len) current.value = len - 1
   },
 )
@@ -646,6 +650,11 @@ async function download() {
   }
 }
 
+/** Close on the shown item, so the grid can scroll its tile into view and focus it. */
+function close() {
+  emit('close', item.value?.mediaId ?? null)
+}
+
 function emitDelete() {
   if (!item.value || !props.canDelete(item.value)) return
   emit('delete', { mediaId: item.value.mediaId }) // the parent trashes it with an undo, or purges a guest's own (asked first)
@@ -658,7 +667,7 @@ function onKeydown(event: KeyboardEvent) {
   if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0, and the arrows' pan while zoomed
   if (event.key === 'Escape') {
     if (zoom.zoomed.value) zoom.reset() // Escape un-zooms first, then closes
-    else emit('close')
+    else close()
   } else if (zoom.zoomed.value && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) return // no paging while zoomed (the arrows pan, above)
   else if (event.key === 'ArrowLeft') prev()
   else if (event.key === 'ArrowRight') next()
@@ -684,7 +693,8 @@ onBeforeUnmount(() => {
     role="dialog"
     aria-modal="true"
     :aria-label="memoryName"
-    @click.self="emit('close')"
+    tabindex="-1"
+    @click.self="close()"
   >
     <div class="media-lightbox-topbar">
       <div class="media-lightbox-title">
@@ -752,7 +762,7 @@ onBeforeUnmount(() => {
           class="veyq-icon-button lightbox-icon-button"
           type="button"
           :aria-label="t('media.close')"
-          @click="emit('close')"
+          @click="close()"
         >
           <span class="pi pi-times" />
         </button>
@@ -912,7 +922,7 @@ onBeforeUnmount(() => {
             <template v-if="uploader">
               <dt>{{ t('media.uploadedBy') }}</dt>
               <dd data-testid="lightbox-uploader">
-                <RouterLink v-if="uploader.userId" :to="{ hash: personHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="emit('close')">{{ uploader.name }}</RouterLink>
+                <RouterLink v-if="uploader.userId" :to="{ hash: personHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="close()">{{ uploader.name }}</RouterLink>
                 <template v-else>{{ uploader.name }}</template>
               </dd>
             </template>

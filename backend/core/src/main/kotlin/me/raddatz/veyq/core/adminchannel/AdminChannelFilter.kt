@@ -19,8 +19,9 @@ import org.jboss.resteasy.reactive.server.SimpleResourceInfo
  *
  * **Post-match, and so behind security — deliberately.** `@RolesAllowed` refuses an anonymous request before any
  * post-match filter runs (measured, at every priority), so such a caller gets the 401 it always got and nothing
- * executes (uc A1). A uniform 404 would need a second, path-template matcher in front of JAX-RS, and would hide
- * nothing: the operation list is in a public repository.
+ * executes (uc A1). A uniform 404 would need the path index in front of JAX-RS to answer declared methods too, and
+ * would hide nothing: the operation list is in a public repository. That index does answer the methods such a path
+ * does NOT declare, with this same refusal off the admin channel (`UndeclaredMethodFilter`, inbox #494).
  */
 @ApplicationScoped
 class AdminChannelFilter(private val listener: AdminListener) {
@@ -29,10 +30,10 @@ class AdminChannelFilter(private val listener: AdminListener) {
     fun gate(resource: SimpleResourceInfo, request: HttpServerRequest): Response? {
         if (resource.methodName !in AdminChannelOperations.operationIds) return null
         if (AdminChannel.isAdminChannel(request, listener.port())) return null
-        return UNKNOWN_ROUTE.build()
+        return unknownRoute()
     }
 
-    private companion object {
+    internal companion object {
         /**
          * What an `/api` path no resource declares is answered with: JAX-RS matches nothing and passes the request
          * on, the router runs out of routes, and Vert.x writes its own page — `RoutingContextImpl.DEFAULT_404`, a
@@ -42,9 +43,9 @@ class AdminChannelFilter(private val listener: AdminListener) {
          * test instead of making the refusal quietly distinguishable. (An empty 404 was the first shape; measured, it
          * differs in content type and body, which is exactly what that test exists to catch.)
          */
-        val UNKNOWN_ROUTE: Response.ResponseBuilder
-            get() = Response.status(Response.Status.NOT_FOUND)
-                .type("text/html; charset=utf-8")
-                .entity("<html><body><h1>Resource not found</h1></body></html>")
+        fun unknownRoute(): Response = Response.status(Response.Status.NOT_FOUND)
+            .type("text/html; charset=utf-8")
+            .entity("<html><body><h1>Resource not found</h1></body></html>")
+            .build()
     }
 }

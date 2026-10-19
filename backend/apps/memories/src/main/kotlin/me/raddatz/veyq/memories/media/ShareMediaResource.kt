@@ -10,12 +10,9 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
 import me.raddatz.veyq.memories.generated.api.ShareMediaApi
 import me.raddatz.veyq.memories.generated.model.ShareMediaBatchRequest
-import me.raddatz.veyq.memories.generated.model.ShareMedia
 import me.raddatz.veyq.memories.generated.model.ShareMediaBatchResponse
-import me.raddatz.veyq.memories.generated.model.ShareMediaDerivative
 import me.raddatz.veyq.memories.generated.model.ShareMediaListing
 import me.raddatz.veyq.memories.generated.model.ShareMediaResultItem
-import me.raddatz.veyq.memories.generated.model.UploaderKey
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.core.Response
 import java.util.UUID
@@ -40,43 +37,19 @@ class ShareMediaResource(
             "unbounded BY DECISION, not by omission: neither available axis fits, and the residual gap is recorded in " +
             "cc.security.rate-limit (§ Unbounded by decision) rather than left silent.",
     )
-    override fun listShareMedia(shareId: String, xSharePassword: String?, nodeId: UUID?, after: UUID?, limit: Int?): Response =
-        when (val o = handler.list(shareId, xSharePassword, nodeId?.toString(), after?.toString(), ItemsPage.limitOf(limit))) {
+    override fun listShareMedia(shareId: String, xSharePassword: String?, nodeId: UUID?, after: UUID?, limit: Int?, ifNoneMatch: String?): Response =
+        when (val o = handler.list(shareId, xSharePassword, nodeId?.toString(), after?.toString(), ItemsPage.limitOf(limit), ifNoneMatch)) {
             is ShareMediaListOutcome.Listed -> Response.ok(
                 ShareMediaListing(
-                    media = o.media.map { toShareMedia(it, it.row.mediaId in o.blocked) },
-                    identities = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
+                    media = o.media.map { ShareMediaWire.media(it, it.row.mediaId in o.blocked) },
+                    identities = ShareMediaWire.identities(o.uploaderKeys),
                     more = o.more,
                 ),
-            ).build()
+            ).apply { if (o.etag != null) header("ETag", o.etag) }.build()
+            // inbox #497: the digest of what the read would serve still equals the guest's — nothing to send.
+            is ShareMediaListOutcome.NotModified -> Response.notModified().header("ETag", o.etag).build()
             is HttpFailure -> httpError(o)
         }
-
-    private fun toShareMedia(s: ShareMediaRow, blocked: Boolean) = ShareMedia(
-        nodeId = UUID.fromString(s.nodeId),
-        mediaId = UUID.fromString(s.row.mediaId),
-        blobId = UUID.fromString(s.row.blobId),
-        chunkCount = s.row.chunkCount,
-        byteSize = s.row.byteSize,
-        wrappedBlobKey = s.row.wrappedBlobKey,
-        manifest = s.row.manifest,
-        derivatives = s.row.derivatives.map { d ->
-            ShareMediaDerivative(
-                kind = ShareMediaDerivative.Kind.valueOf(d.kind),
-                blobId = UUID.fromString(d.blobId),
-                chunkCount = d.chunkCount,
-                byteSize = d.byteSize,
-                wrappedBlobKey = d.wrappedBlobKey,
-                manifest = d.manifest,
-                wrappedBlobMeta = d.wrappedBlobMeta,
-            )
-        },
-        wrappedMeta = s.row.wrappedMeta,
-        wrappedBlobMeta = s.row.wrappedBlobMeta,
-        identityId = s.identityId?.let(UUID::fromString),
-        // Kept and marked, not left out (uc.moderation.take-a-measure): the guest sees the placeholder a member sees.
-        blockedByOperator = blocked,
-    )
 
     @PermitAll
     // The attach half of the contributor upload flow — it creates the media rows, so it rides the same per-share

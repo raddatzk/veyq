@@ -19,7 +19,7 @@ vi.mock('../../../api/client', async (orig) => (await import('../../../test/gues
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../../depot/api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../useThumbnailPipeline', () => ({
-  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
+  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), want: vi.fn(), revokeAll: vi.fn() }),
 }))
 
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'

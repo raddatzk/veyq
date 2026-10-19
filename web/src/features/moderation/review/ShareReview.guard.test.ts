@@ -43,7 +43,7 @@ vi.mock('../proof', async (orig) => ({
   proofFor: vi.fn(),
 }))
 vi.mock('../../memory/useThumbnailPipeline', () => ({
-  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
+  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), want: vi.fn(), revokeAll: vi.fn() }),
 }))
 
 import ReviewBody from './ReviewBody.vue'
