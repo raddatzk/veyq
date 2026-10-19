@@ -7,12 +7,16 @@ import me.raddatz.veyq.core.moderation.ModerationPurge
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.bar
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.case
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.export
+import me.raddatz.veyq.core.moderation.cases.CaseTestKit.lift
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.order
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.orderBody
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.take
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.moderation.report.ReportShareEntity
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asGuest
+import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.body
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.item
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.openCase
@@ -33,6 +37,9 @@ import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
@@ -203,5 +210,34 @@ class MeasureOnErasedTargetSliceTest {
             ordered.single { it.kind == BlockKind.CONTENT_NODE.name }.activeKey,
             "control: the node stands, and so does the order's block of it",
         )
+    }
+
+    /**
+     * What it reads as (ADR 0093 § 6): a measure its target's erasure ended says so wherever a lifted measure is shown — on
+     * the case (lifted by no one), in the affected member's statement and in the Art. 18 export (`endedWithTarget`) —
+     * where one a moderator lifted reads as lifted.
+     */
+    @Test
+    fun aMeasureEndedWithItsTargetReadsSoWhereOneAModeratorLiftedReadsLifted() {
+        mod = CaseTestKit.moderator()
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val erased = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val kept = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", erased), item("NODE", kept)))).then().statusCode(201)
+        val erasedCase = openCase("NODE", erased)!!.id
+        val keptCase = openCase("NODE", kept)!!.id
+        measure(mod.take(erasedCase, "CONTENT", targetId = erased))
+        mod.lift(keptCase, measure(mod.take(keptCase, "CONTENT", targetId = kept))).then().statusCode(200)
+        trash(m.scopeId, erased)
+        purgeTrash(m.scopeId)
+
+        mod.case(erasedCase).then().statusCode(200)
+            .body("measures[0].liftedAt", notNullValue()).body("measures[0].liftedBy", nullValue())
+        mod.case(keptCase).then().statusCode(200).body("measures[0].liftedBy", equalTo(mod.id))
+        given().header("Authorization", bearer(m.userId)).`when`().get("/api/statements").then().statusCode(200)
+            .body("statements.find { it.targetId == '$erased' }.endedWithTarget", equalTo(true))
+            .body("statements.find { it.targetId == '$kept' }.endedWithTarget", equalTo(false))
+        mod.export(erasedCase).then().statusCode(200).body("measures[0].endedWithTarget", equalTo(true))
+        mod.export(keptCase).then().statusCode(200).body("measures[0].endedWithTarget", equalTo(false))
     }
 }

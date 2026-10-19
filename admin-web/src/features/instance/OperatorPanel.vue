@@ -2,10 +2,13 @@
 // uc.admin.operator-details (admin-web) — Server → Operator: the instance contact with its languages, the address
 // statements name, the private notification address with its code confirmation (ADR 0097 decision 5, the
 // `InstanceMailPanel` shape), the provider identification and the supervisory authority (ADR 0093 § 11, ADR 0035
-// decisions 6–7). What it keeps honest:
+// decisions 6–7), and for the instance privacy notice the recipients and a data-protection officer (decision 8). What it
+// keeps honest:
 //   - nothing is required: every field may stay empty, and saving never waits on a warning (ADR 0093 § 14);
-//   - the two warnings are the facade's (`operatorWarnings`): only in the organisation mode, the contact one only while
+//   - the warnings are the facade's (`operatorWarnings`): only in the organisation mode, the contact one only while
 //     public links are on — read from the register's effective state, not assumed;
+//   - a recipient the instance suggests (an external store's host, the mail relay's host) is only offered: it becomes a
+//     row the Server Owner completes, and nothing is published until the row is saved (cr-instance-privacy-notice 3);
 //   - the confirmation is the server's answer after each save; this panel never claims an address is confirmed.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -16,7 +19,8 @@ import Message from 'primevue/message'
 import Textarea from 'primevue/textarea'
 import {
   clearOperator, confirmOperatorNotification, getOperator, InstanceOperatorNotificationConfirmationEnum as Confirmation,
-  operatorWarnings, parseLanguages, PUBLIC_SHARES_ID, setOperator, type InstanceOperator,
+  OperatorRecipientSuggestionKindEnum as SuggestionKind, operatorWarnings, parseLanguages, PUBLIC_SHARES_ID, setOperator,
+  suggestionRow, suggestionTaken, type InstanceOperator, type OperatorRecipientSuggestion,
 } from './operator'
 import { listInstanceCapabilities } from './capabilities'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -42,6 +46,9 @@ const providerAddress = ref('')
 const providerEmail = ref('')
 const providerRepresentative = ref('')
 const supervisoryAuthority = ref('')
+/** The recipients as edited: a row's fields as typed, the country empty where not named. */
+const recipients = ref<{ name: string; purpose: string; country: string }[]>([])
+const dataProtectionOfficer = ref('')
 const code = ref('')
 const actionError = ref('')
 const codeError = ref('')
@@ -57,6 +64,30 @@ function apply(o: InstanceOperator) {
   providerEmail.value = o.providerEmail ?? ''
   providerRepresentative.value = o.providerRepresentative ?? ''
   supervisoryAuthority.value = o.supervisoryAuthority ?? ''
+  recipients.value = o.recipients.map((r) => ({ name: r.name, purpose: r.purpose, country: r.country ?? '' }))
+  dataProtectionOfficer.value = o.dataProtectionOfficer ?? ''
+}
+
+const suggestionPurpose = (kind: SuggestionKind) =>
+  t(kind === SuggestionKind.ObjectStore ? 'operator.suggestedObjectStore' : 'operator.suggestedMailRelay')
+
+/** The suggestions no row names yet — what the instance itself knows of, for the Server Owner to confirm. */
+const openSuggestions = computed(() => {
+  const rows = recipients.value.map((r) => ({ name: r.name, purpose: r.purpose, country: r.country || null }))
+  return (op.value?.recipientSuggestions ?? []).filter((s) => !suggestionTaken(s, rows))
+})
+
+function addRecipient() {
+  recipients.value.push({ name: '', purpose: '', country: '' })
+}
+
+function adoptSuggestion(s: OperatorRecipientSuggestion) {
+  const row = suggestionRow(s, suggestionPurpose)
+  recipients.value.push({ name: row.name, purpose: row.purpose, country: '' })
+}
+
+function removeRecipient(i: number) {
+  recipients.value.splice(i, 1)
 }
 
 const { pending: loading, error: loadErr } = useAsyncData(async () => {
@@ -86,6 +117,11 @@ const { run: runSave, pending: saving } = useAsyncAction(
       providerEmail: blank(providerEmail.value),
       providerRepresentative: blank(providerRepresentative.value),
       supervisoryAuthority: blank(supervisoryAuthority.value),
+      // A row with no name or no purpose says nothing a reader could use; the server drops it too.
+      recipients: recipients.value
+        .filter((r) => r.name.trim() && r.purpose.trim())
+        .map((r) => ({ name: r.name.trim(), purpose: r.purpose.trim(), country: blank(r.country) })),
+      dataProtectionOfficer: blank(dataProtectionOfficer.value),
     }))
     code.value = ''
     codeError.value = ''
@@ -184,6 +220,7 @@ const confirmation = computed(() => {
         <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
         <Message v-if="warnings?.contact" severity="warn" :closable="false" class="operator-warn-contact">{{ t('operator.warnContact') }}</Message>
         <Message v-if="warnings?.identification" severity="warn" :closable="false" class="operator-warn-identification">{{ t('operator.warnIdentification') }}</Message>
+        <Message v-if="warnings?.privacy" severity="warn" :closable="false" class="operator-warn-privacy">{{ t('operator.warnPrivacy') }}</Message>
 
         <h3 class="operator-heading">{{ t('operator.contactTitle') }}</h3>
         <label>
@@ -239,7 +276,39 @@ const confirmation = computed(() => {
         </label>
         <label>
           <span>{{ t('operator.supervisoryAuthority') }}</span>
-          <InputText v-model="supervisoryAuthority" autocomplete="off" />
+          <InputText v-model="supervisoryAuthority" class="operator-supervisory-authority" autocomplete="off" />
+        </label>
+
+        <h3 class="operator-heading">{{ t('operator.privacyTitle') }}</h3>
+        <p class="settings-muted">{{ t('operator.privacySub') }}</p>
+        <div v-for="(r, i) in recipients" :key="i" class="operator-recipient" data-testid="operator-recipient">
+          <label>
+            <span>{{ t('operator.recipientName') }}</span>
+            <InputText v-model="r.name" class="operator-recipient__name" autocomplete="off" maxlength="200" />
+          </label>
+          <label>
+            <span>{{ t('operator.recipientPurpose') }}</span>
+            <InputText v-model="r.purpose" class="operator-recipient__purpose" autocomplete="off" maxlength="300" />
+          </label>
+          <label>
+            <span>{{ t('operator.recipientCountry') }}</span>
+            <InputText v-model="r.country" class="operator-recipient__country" autocomplete="off" maxlength="100" />
+          </label>
+          <Button type="button" severity="secondary" text icon="pi pi-times" class="operator-recipient__remove"
+                  :aria-label="t('operator.recipientRemove')" @click="removeRecipient(i)" />
+        </div>
+        <Message v-for="s in openSuggestions" :key="s.kind" severity="info" :closable="false" class="operator-suggestion" :data-kind="s.kind">
+          <span>{{ t('operator.suggested', { host: s.host }) }}</span>
+          <Button type="button" size="small" class="operator-suggestion__add" :label="t('operator.suggestionAdd')" icon="pi pi-plus" @click="adoptSuggestion(s)" />
+        </Message>
+        <div>
+          <Button type="button" severity="secondary" outlined class="operator-add-recipient" :label="t('operator.addRecipient')" icon="pi pi-plus"
+                  :disabled="recipients.length >= 20" @click="addRecipient" />
+        </div>
+        <label>
+          <span>{{ t('operator.dataProtectionOfficer') }}</span>
+          <InputText v-model="dataProtectionOfficer" class="operator-dpo" autocomplete="off" maxlength="500" />
+          <small class="settings-muted">{{ t('operator.dataProtectionOfficerHint') }}</small>
         </label>
 
         <div class="operator-actions">
@@ -258,6 +327,23 @@ const confirmation = computed(() => {
 }
 .operator-code {
   display: grid;
+  gap: 0.5rem;
+}
+.operator-recipient {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1.4fr) minmax(6rem, 0.7fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .operator-recipient {
+    grid-template-columns: 1fr;
+  }
+}
+.operator-suggestion :deep(.p-message-text) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 .operator-actions {

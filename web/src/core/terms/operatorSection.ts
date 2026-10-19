@@ -17,10 +17,9 @@ export interface OperatorSection {
   revision: number
   variant: SectionVariant
   text: SectionText
-  /** The guest-write record's GDPR Art. 13 information — present exactly while that record is on. */
+  /** The pointer to the guest-write record's GDPR Art. 13 information, the privacy notice's — present exactly while
+   *  that record is on. */
   record?: SectionText | null
-  /** The right to object (GDPR Art. 21), stated apart from the rest (Art. 21(4)) — present exactly when `record` is. */
-  objection?: SectionText | null
 }
 
 /** What a member or a guest accepts. */
@@ -48,10 +47,10 @@ export function pickSectionText(text: SectionText | null | undefined, locale: st
   return (locale.startsWith('de') ? de || en : en || de) || ''
 }
 
-/** The anchor of the record's passage on any page that shows the section — the first-layer sentence links it. */
+/** The anchor of the record's pointer on any page that shows the section. */
 export const RECORD_ANCHOR = 'guest-write-record'
 
-/** The public page of the section (router name `operator-terms`), with the record's passage as its anchor. */
+/** The public page of the section (router name `operator-terms`). */
 export const OPERATOR_TERMS_PATH = '/operator-terms'
 
 /** The section as the instance serves it to anyone, or null when the read failed (fail-open: nothing waits on it). */

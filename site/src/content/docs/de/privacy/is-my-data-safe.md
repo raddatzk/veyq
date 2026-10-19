@@ -9,6 +9,7 @@ sources:
   - docs/features/account/use-cases/uc.account.recover-access.md
   - docs/features/sharing/use-cases/uc.sharing.share-contributor.md
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
+  - docs/features/admin/use-cases/uc.admin.privacy-notice.md
 ---
 
 **In einem Satz:** veyq ist **Ende-zu-Ende-verschlüsselt** — deine Fotos, Videos, Tagebuchtexte und
@@ -52,6 +53,14 @@ zu liefern, zu regeln, wer reindarf — sieht der Server ein paar **wenig sensib
 
 Es ist, als sähe man **beschriftete Kisten im Regal und wer einen Schlüssel hat** — nie den Inhalt.
 Genau diese wenigen Fakten machen den Server nutzbar, ohne jemals zu entschlüsseln.
+
+**Was *deine* Instanz speichert, und wer sie betreibt.** Jede veyq-Instanz betreibt jemand — ein Familienmitglied, ein
+Verein, ein Unternehmen —, und jede hat ihre eigene **Datenschutzerklärung**: **Datenschutz**, unten auf jeder Seite,
+auch schon vor der Anmeldung. Sie nennt, wer verantwortlich ist, was diese Instanz zu deinem Konto, deiner Anmeldung
+und einer Meldung von dir speichert, wie lange, wer sonst etwas erhält (wer sie hostet, ein Mail-Dienst) und was du
+verlangen kannst. Den Text schreibt veyq; die Instanz füllt ihre eigenen Angaben ein, also sagt er, was *diese* Instanz
+tut. Die Einladungsseite, das Meldeformular und ein Link, über den du etwas hinzufügst, führen dich zu dem Teil, der
+dich betrifft.
 
 ## Die eine Prüfung, die dein Gerät von selbst verlässt
 

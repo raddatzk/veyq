@@ -4,6 +4,7 @@ description: The duties veyq cannot do for you as the controller — a breach no
 sources:
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
   - docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md
+  - docs/features/admin/use-cases/uc.admin.privacy-notice.md
 ---
 
 > **Research, not legal advice.** What follows names the duties of the GDPR an instance's operator carries and what
@@ -18,6 +19,12 @@ members' accounts (Art. 26) is open
 ([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md#still-open), Still open 6); veyq treats you as the controller until it is answered.
 What members keep — photos, names, notes — is end-to-end encrypted: the server stores it as ciphertext it cannot open,
 and so do you. What follows is the rest: what the server needs in the clear to run, and what leaves it.
+
+What you owe the people themselves when their data is collected (Art. 13) veyq writes for you: the instance's **privacy
+notice**, public at `/privacy` on every space's address and linked wherever data is collected, states each processing
+below from what your instance is set to, filled with your details and the recipients you name
+([The privacy notice](/veyq/run/moderation/#the-privacy-notice)). Keep its tables here and your settings there in step:
+a recipient you add to your record belongs in the notice too.
 
 ## A data breach
 
@@ -44,19 +51,19 @@ in your basis and your recipients. Every row names where veyq keeps the data, so
 
 | Processing | Data, and where | Purpose | Kept |
 |---|---|---|---|
-| Accounts | the email address in the clear, whether it was confirmed, the username of each space-group, public keys; the name and the profile picture **sealed** (`veyq_user`, `veyq_tenant_profile`) | an account, its sign-in and its mail | as long as the account; veyq has no account deletion yet |
+| Accounts | the email address in the clear, whether it was confirmed, the username of each space-group, public keys; the name and the profile picture **sealed** (`veyq_user`, `veyq_tenant_profile`) | an account, its sign-in and its mail | until the account is erased — by its member in the settings or by you (`veyq-admin account erase`): sign-in stops at once, and 30 days later the row and everything that names it go ([Accounts](/veyq/run/first-run/#accounts)) |
 | Sign-in | session records with their times — **no IP address, no User-Agent** (`veyq_session_family` and its tokens); a sign-in challenge naming the address for five minutes | staying signed in, ending sessions | a token 15 minutes (access) or 30 days (refresh), then purged hourly |
 | Cookies | `veyq_refresh` (30 days) or `veyq_refresh_session` (until the browser closes): HttpOnly, SameSite=Strict, sent only to `/api/token/refresh` | keeping a member signed in, which they chose | as stated; signing out clears both |
 | Address mails | the address a confirmation, an address change, a recovery or an invitation goes to (`veyq_email_confirmation`, `veyq_email_change`, `veyq_account_recovery`, `veyq_tenant_invite`) | proving an address, recovering access, inviting | 24 hours valid, then 7 days (recovery 1 hour, then 7 days; an invitation 7 days, then 30) |
-| Terms accepted | account, space-group, revision and time (`veyq_tenant_terms_acceptance`) | evidence of which terms a member agreed to | as long as the space-group |
+| Terms accepted | account, space-group, revision and time (`veyq_tenant_terms_acceptance`) | evidence of which terms a member agreed to | as long as the space-group; an erased account's rows go with it, unless a moderation case names the account — then until that case's records go |
 | Guest-write record | a link guest's IP address, source port and time, its guest identity and what it wrote (`veyq_guest_write_record`) | tracing the misuse of a link once it is reported (Art. 6(1)(f)) | N days, 7 by default — [What a guest's write keeps](/veyq/run/moderation/#what-a-guests-write-keeps); switched by the operating mode |
 | Moderation | reports (category, time, the reporter's account or link in the clear; reason, contact and context **sealed** to the moderation key), cases, holds (copies of the reported rows, guest-write rows with IP addresses included), the moderation log, statements, objections, authority orders, blocks (`veyq_moderation_*`, `veyq_hold*`, `veyq_authority_order`) | the DSA's and the TCO Regulation's notice-and-action duties (Art. 6(1)(c)) and defending against misuse | a hold by its own end; a case whole — reports, measures, statements, objections, orders, its log — on 31 December of the third year after it closed, never while one of its blocks is in force ([Moderation](/veyq/run/moderation/#moderators)) |
 | A reporter's contact | the address a receipt and the decision go to: mailed from memory, kept only **sealed** to the moderation key, apart from the rest of the report | telling a reporter (DSA Art. 16(4) and (5)) | six months after the reporter was told the decision |
 | Moderators | the appointed accounts and each one's confirmed notification address (`veyq_moderator`) | telling moderators of a new case | as long as the appointment; the row stays after a removal |
-| Your own details | the instance contact, the provider identification, your notification address (`veyq_operator_details`, `veyq_instance_mail_settings`) | what a host publishes, and its own mail | until you change them |
+| Your own details | the instance contact, the provider identification, the supervisory authority, a data-protection officer, your notification address (`veyq_operator_details`, `veyq_instance_mail_settings`), and the recipients the privacy notice names (`veyq_operator_recipient`) | what a host publishes, and its own mail | until you change them |
 | Logs | pseudonymous ids (account, tenant, scope, share) and no person: no address, no User-Agent, no email address, no request's URI or text; the admin console's access log keeps no reader's address | operating and securing the service | by size, not time: the period's criterion is the rotation size and a container's recreation, which every upgrade does — [Operations](/veyq/run/operations/#logs) |
 | Rate-limit buckets | the client address, and for recovery and invitation mails the email address, as a bucket's key — in memory only | defending against abuse | until the bucket has refilled after its last request, at most a minute more; gone at a restart |
-| Backups | everything in the database except the guest-write record's rows, plus the store's index | restoring the instance | as long as you keep them — say how long; a backup made otherwise holds the record too ([Backup and restore](/veyq/run/backup-and-restore/)) |
+| Backups | everything in the database except the guest-write record's rows, plus the store's index | restoring the instance | at most B days, 30 until you set it; a restore erases again what was erased after the capture ([Backup and restore](/veyq/run/backup-and-restore/)); a backup made otherwise holds the record too, and you keep it no longer than B |
 
 **What leaves the server, and to whom:**
 
@@ -69,8 +76,8 @@ in your basis and your recipients. Every row names where veyq keeps the data, so
 | The breached-password service (default `api.pwnedpasswords.com`) | from the **browser**: the first five characters of a new password's SHA-1, and the browser's IP address | the capability `core.breached-password` |
 | The place-name service and the map tiles (Memories) | from the **browser**: a place's coordinates and the language; the map area viewed; the browser's IP address | `memories.places`, `memories.map` |
 
-The browser-side services receive data from members' browsers, not from your server, but you chose them: name them in
-what you tell members, or switch them off ([Capabilities](/veyq/run/capabilities/)).
+The browser-side services receive data from members' browsers, not from your server, but you chose them: the privacy
+notice names each by the address you set while it is on, or switch them off ([Capabilities](/veyq/run/capabilities/)).
 
 ## Contracts with your providers
 
@@ -123,8 +130,8 @@ Then, for that id:
 
 **A link's guest** has no account. Its rows hang on its guest identity's id: `veyq_guest_write_record`
 (`share_identity_id`) and, for what a hold copied, the rows of `veyq_hold_row` whose `source_table` is
-`veyq_guest_write_record` and whose payload names that id. The guest page does not show a guest its identity's id
-yet, so a guest can name it only through a moderation case.
+`veyq_guest_write_record` and whose payload names that id. While writes are recorded, the link's page shows the guest
+its id beside its name, to copy, and the privacy notice asks a guest who objects to give it.
 
 **An objection to the guest-write record** (Art. 21) is answered with `veyq-admin guest-write-record forget
 <identity-id>` — [What a guest's write keeps](/veyq/run/moderation/#what-a-guests-write-keeps).

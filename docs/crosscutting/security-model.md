@@ -407,9 +407,12 @@ server-blind token makes this work without the server ever seeing a name:
   moderation path has run on a deployed instance.
   The fixed **operator section** every space's terms carry
   states all this to members and guests — the notice path, what is kept, the measures, the statement and the
-  objection, in the club, organisation or company mode the authorities, and while the guest-write record is on its
-  GDPR Art. 13 information — veyq's text filled with the operator's published values, public without an account
-  ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6); it is a draft until a qualified legal review.
+  objection, and in the club, organisation or company mode the authorities — veyq's text filled with the operator's
+  published values, public without an account ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6).
+  The fixed **instance privacy notice** states the GDPR Art. 13 information for members, reporters and guests — what
+  the server keeps in the clear, why, how long, who receives it, the rights — from what the running instance does and
+  the operator's published values, public at `/privacy` on every tenant host (decision 8). Both are public operational
+  content, never E2EE content, and both are drafts until a qualified legal review.
   Each field revision seals under a `K_field` of its own, which opens nothing else, so a report hands over exactly
   the revisions it names ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are

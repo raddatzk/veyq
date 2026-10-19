@@ -653,6 +653,16 @@
       "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
     },
     {
+      "id": "0d6235",
+      "operation": "GET /api/operator/privacy-notice",
+      "check": "unsupported_method",
+      "failure": "UnsupportedMethodResponse",
+      "signature": "missing_allow_header",
+      "first_seen": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
+    },
+    {
       "id": "ee1fbf",
       "operation": "GET /api/operator/terms",
       "check": "unsupported_method",
@@ -2950,6 +2960,16 @@
       "signature": "missing_allow_header",
       "first_seen": "2026-10-18",
       "last_seen": "2026-10-18",
+      "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
+    },
+    {
+      "id": "462861",
+      "operation": "PUT /api/instance/backup-retention",
+      "check": "unsupported_method",
+      "failure": "UnsupportedMethodResponse",
+      "signature": "missing_allow_header",
+      "first_seen": "2026-10-19",
+      "last_seen": "2026-10-19",
       "reason": "Deferred to inbox #494 (owner decision Q4 of cr-api-fuzzing): an undeclared method answers a bare 405 without Allow (or 404/400), and OPTIONS advertises the resource class's methods - a per-path method index is its own work."
     },
     {

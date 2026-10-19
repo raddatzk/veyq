@@ -2,13 +2,15 @@
 // club, organisation or company instance, so the full variant with the guest-write record's information:
 //
 //   1. Anyone, without an account, opens **Terms of this instance** from the sign-in page and reads the section — the
-//      draft banner first, the record's passage at its anchor, the right to object apart (DSA Art. 14(1)).
+//      draft banner first, and at the record's anchor its pointer to the privacy notice, which holds the record's
+//      information and its right to object (DSA Art. 14(1); ADR 0035 decision 8, Q27 of cr-instance-privacy-notice).
 //   2. The space's owner publishes terms of their own: the Terms panel shows the section read-only below them, and the
 //      owner, like every member, is then asked to agree — to the space's text and the section after it.
 //   3. A guest opening a link of the space meets the same two at the link's terms gate, and after accepting, the link.
 //   4. The Server Owner switches to the private mode in the console: the owner is asked again, now with the reduced
 //      section, and a German visitor reads the reduced section without the record's passage (the private preset
-//      switched the record off). The mode goes back to club, organisation or company at the end.
+//      switched the record off), and the reduced privacy notice: no record passage, and a value left unset absent
+//      rather than a gap. The mode goes back to club, organisation or company at the end.
 //
 // THIS FILE RUNS LAST ON PURPOSE. Publishing terms gates every later guest and every later sign-in of the space, and v1
 // has no way to unpublish them (ADR 0035 decision 1), so it is named to sort after every other feature scenario
@@ -60,8 +62,9 @@ test(
     await expect(section.getByText('Draft: this section has not yet been reviewed by a lawyer.')).toBeVisible()
     await expect(section.getByRole('heading', { name: 'On this instance: reports, measures and what is kept' })).toBeVisible()
     await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toBeVisible() // the full variant
-    await expect(terms.locator('#guest-write-record')).toContainText('Art. 6(1)(f) GDPR')
-    await expect(terms.locator('aside#right-to-object')).toContainText('Art. 21 GDPR')
+    await expect(terms.locator('#guest-write-record')).toContainText('privacy notice of this instance')
+    await expect(terms.getByRole('link', { name: 'Read it in the privacy notice' })).toHaveAttribute('href', '/privacy#guest-write-record')
+    await expect(terms.locator('aside')).toHaveCount(0) // the right to object is the notice's now
     await terms.close()
   },
 )
@@ -158,6 +161,7 @@ test(
     tag: [
       '@uc.account.accept-terms:the-gate-compares-the-triple',
       '@uc.account.accept-terms:the-variant-follows-the-operating-mode',
+      '@uc.admin.privacy-notice:a-missing-value-follows-the-mode',
     ],
   },
   async ({ browser }) => {
@@ -184,6 +188,14 @@ test(
       await expect(reduced.getByRole('heading', { name: 'Inhalte melden' })).toBeVisible()
       await expect(reduced.getByRole('heading', { name: 'Behörden und Kontakt' })).toHaveCount(0)
       await expect(german.locator('#guest-write-record')).toHaveCount(0) // the private preset switched the record off
+
+      // The reduced privacy notice: the record's passage gone with its switch, the recipient's open country simply
+      // absent rather than a gap (owner Q26) — the full one shows "von der Betreiberseite nicht angegeben" there.
+      await german.goto(`${tenantOrigin()}/privacy`)
+      await expect(german.locator('#recipients')).toContainText('E2E Hosting GmbH: hosts the server', { timeout: 60_000 })
+      await expect(german.locator('#recipients')).not.toContainText('nicht angegeben')
+      await expect(german.locator('#guest-write-record')).toHaveCount(0)
+      await expect(german.locator('aside#right-to-object')).toBeVisible() // control: the page rendered, its general right too
       confinement.assertConfined()
     } finally {
       await setMode(console_.page, 'Club, organisation or company')

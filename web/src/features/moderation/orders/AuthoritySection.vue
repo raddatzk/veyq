@@ -46,8 +46,8 @@ const orders = computed(() =>
 )
 
 const LABEL_KEYS = [
-  'case', 'category', 'origin', 'timeZone', 'reported', 'measure', 'lifted', 'uploaderAccount', 'uploaderGuest', 'viaLink',
-  'guestWrite', 'address', 'port', 'observed', 'object', 'noHeld',
+  'case', 'category', 'origin', 'timeZone', 'reported', 'measure', 'lifted', 'endedWithTarget', 'uploaderAccount',
+  'uploaderGuest', 'viaLink', 'guestWrite', 'address', 'port', 'observed', 'object', 'noHeld',
 ] as const satisfies readonly (keyof ExportLabels)[]
 
 function labels(): ExportLabels {

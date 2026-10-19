@@ -29,8 +29,7 @@ const SECTION = {
   revision: 1,
   variant: 'FULL' as const,
   text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz' },
-  record: { en: '### Your IP address when you add something as a guest\nKept 7 days.', de: '### Deine IP-Adresse' },
-  objection: { en: '### Your right to object\nWrite to us.', de: '### Dein Widerspruchsrecht' },
+  record: { en: '### Your IP address when you add something as a guest\nIn the privacy notice.', de: '### Deine IP-Adresse' },
 }
 
 async function mountIt() {
@@ -45,13 +44,17 @@ describe('OperatorTermsView — the operator section, public', () => {
     route.hash = ''
   })
 
-  it('shows the section without an account: the record at its anchor, the objection apart', async () => {
+  it('shows the section without an account: the record’s pointer at its anchor, linking the privacy notice', async () => {
     stubApi(publicOperatorApi, { getOperatorTerms: SECTION, getOperatorDetails: NO_DETAILS })
     const w = await mountIt()
     expect(w.text()).toContain(t('operatorTerms.intro'))
     expect(w.find('[data-testid="operator-section"]').text()).toContain('Reports go to a person.')
-    expect(w.find('#guest-write-record').text()).toContain('Kept 7 days.')
-    expect(w.find('aside#right-to-object').text()).toContain('Your right to object')
+    expect(w.find('#guest-write-record').text()).toContain('In the privacy notice.')
+    // The record's Art. 13 information is the notice's (Q27): the pointer links its passage, in a tab of its own.
+    const link = w.find('#guest-write-record a.operator-section__record-link')
+    expect(link.attributes('href')).toBe('/privacy#guest-write-record')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(w.find('aside').exists()).toBe(false) // no right to object of the section's own any more
     expect(authenticatedCalls).toEqual([])
     w.unmount()
   })

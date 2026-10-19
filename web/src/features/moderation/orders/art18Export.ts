@@ -13,6 +13,7 @@ export interface ExportLabels {
   reported: string
   measure: string
   lifted: string
+  endedWithTarget: string
   uploaderAccount: string
   uploaderGuest: string
   viaLink: string
@@ -48,7 +49,7 @@ export function renderExport(
     `${l.origin}: ${originLabel}`,
     `${l.timeZone}: ${e.timeZone}`,
     ...e.reportedAt.map((d) => `${l.reported}: ${utc(d)}`),
-    ...e.measures.map((m) => `${l.measure}: ${measureLabel(m.kind)} ${m.targetId} — ${utc(m.takenAt)}${m.liftedAt ? ` (${l.lifted} ${utc(m.liftedAt)})` : ''}`),
+    ...e.measures.map((m) => `${l.measure}: ${measureLabel(m.kind)} ${m.targetId} — ${utc(m.takenAt)}${m.liftedAt ? ` (${m.endedWithTarget ? l.endedWithTarget : l.lifted} ${utc(m.liftedAt)})` : ''}`),
     ...e.uploaders.map((u) =>
       u.kind === 'ACCOUNT' ? `${l.uploaderAccount}: ${u.id}` : `${l.uploaderGuest}: ${u.id}${u.shareId ? ` (${l.viaLink} ${u.shareId})` : ''}`,
     ),

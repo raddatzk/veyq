@@ -434,6 +434,24 @@ describe('CaseDetail', () => {
     expect(w.find('.moderation-lift').exists()).toBe(true)
   })
 
+  it('a measure that ended with its erased target says so, where one a moderator lifted says lifted (ADR 0093 § 6)', async () => {
+    const at = new Date('2026-10-18T08:00:00Z')
+    const measure = caseOf().measures[0]
+    const liftEvent = (moderatorId: string | undefined) =>
+      ({ event: 'MEASURE_LIFTED' as const, at, moderatorId, detail: `SHARE ${BLOCKED_LINK}`, epoch: null, sealedText: undefined, until: undefined })
+    // Lifted by no one: the eraser ended it (`MeasureTargets.erased`).
+    const ended = await mountCase(caseOf({ measures: [{ ...measure, liftedAt: at, liftedBy: undefined }], events: [liftEvent(undefined)] }))
+    expect(ended.find('.moderation-measure-ended').exists()).toBe(true)
+    expect(ended.find('.moderation-measure').text()).not.toContain(t('moderation.case.liftedAt', { time: '' }).trim())
+    expect(ended.find('.moderation-event .veyq-row-title').text()).toBe(t('moderation.case.measureEnded'))
+    expect(ended.find('.moderation-lift').exists()).toBe(false)
+    // Control: a moderator lifted it.
+    const lifted = await mountCase(caseOf({ measures: [{ ...measure, liftedAt: at, liftedBy: MODERATOR }], events: [liftEvent(MODERATOR)] }))
+    expect(lifted.find('.moderation-measure-ended').exists()).toBe(false)
+    expect(lifted.find('.moderation-measure').text()).toContain(t('moderation.case.liftedAt', { time: '' }).trim())
+    expect(lifted.find('.moderation-event .veyq-row-title').text()).toBe(t('moderation.case.events.MEASURE_LIFTED'))
+  })
+
   it('an open proposal is shown as such and not offered again', async () => {
     const w = await mountCase(
       caseOf({

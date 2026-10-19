@@ -17,13 +17,12 @@ data class SectionValues(
     val retentionDays: Int,
 )
 
-/** The section rendered for one language each; [record] and [objection] are null while the record is off. */
+/** The section rendered for one language each; [record] — the pointer to the privacy notice — is null while the record is off. */
 data class RenderedSection(
     val revision: Int,
     val variant: SectionVariant,
     val text: SectionTexts,
     val record: SectionTexts?,
-    val objection: SectionTexts?,
 )
 
 /**
@@ -31,15 +30,12 @@ data class RenderedSection(
  * variant, the values and whether the guest-write record is on come in, markdown goes out.
  *
  * - A `full` passage renders only in [SectionVariant.FULL]; a `record` passage exactly while [recordOn], in either
- *   variant — the record's information follows its switch, never the mode.
- * - A line naming an empty value: dropped where it is optional, and in [SectionVariant.REDUCED] ("one left empty is
- *   simply absent", record passage included — the owner's rule for the private mode's privacy texts, Q26 of
- *   cr-instance-privacy-notice); otherwise the value renders as the visible gap ("not stated by this operator").
- * - A newline inside a value renders as ", ", so a typed address cannot start a markdown heading or list.
+ *   variant — the record's pointer follows its switch, never the mode. The record's information itself is the privacy
+ *   notice's ([PrivacyNoticeRenderer], Q27 of cr-instance-privacy-notice).
+ * - The placeholder rules are the ones both fixed texts share ([FixedTextLines]): a line naming an empty value is
+ *   dropped where it is optional and in [SectionVariant.REDUCED], and otherwise shows the visible gap.
  */
 object OperatorSectionRenderer {
-
-    private val PLACEHOLDER = Regex("""\{(\w+)}""")
 
     fun render(text: OperatorSectionText, variant: SectionVariant, values: SectionValues, recordOn: Boolean): RenderedSection {
         fun part(filter: (SectionPassage) -> Boolean, banner: Boolean): SectionTexts? {
@@ -52,34 +48,23 @@ object OperatorSectionRenderer {
         }
         val main = part({ p -> p.part == SectionPart.BOTH || (p.part == SectionPart.FULL && variant == SectionVariant.FULL) }, banner = true)
             ?: error("the operator section has no passage for every variant")
-        val record = if (recordOn) part({ it.part == SectionPart.RECORD && !it.separate }, banner = false) else null
-        val objection = if (recordOn) part({ it.part == SectionPart.RECORD && it.separate }, banner = false) else null
-        return RenderedSection(text.revision, variant, main, record, objection)
+        val record = if (recordOn) part({ it.part == SectionPart.RECORD }, banner = false) else null
+        return RenderedSection(text.revision, variant, main, record)
     }
 
     private fun renderLang(
         text: OperatorSectionText, passages: List<SectionPassage>, variant: SectionVariant, values: SectionValues,
         en: Boolean, banner: Boolean,
     ): String {
-        val lang = { t: SectionTexts -> if (en) t.en else t.de }
         val blocks = passages.map { p ->
-            p.lines.mapNotNull { line -> renderLine(text, lang(line.text), line.optional, variant, values, en) }
-                .joinToString("\n").trim()
+            p.lines.flatMap { line ->
+                FixedTextLines.render(line.text.pick(en), line.optional, variant == SectionVariant.REDUCED, text.gap.pick(en)) {
+                    FixedValue.Text(value(it, values, text, en))
+                } ?: emptyList()
+            }.joinToString("\n").trim()
         }.filter { it.isNotEmpty() }
         val body = blocks.joinToString("\n\n")
-        return if (banner) lang(text.draftBanner) + "\n\n" + body else body
-    }
-
-    private fun renderLine(
-        text: OperatorSectionText, line: String, optional: Boolean, variant: SectionVariant,
-        values: SectionValues, en: Boolean,
-    ): String? {
-        val names = PLACEHOLDER.findAll(line).map { it.groupValues[1] }.toList()
-        val filled = names.associateWith { value(it, values, text, en) }
-        val missing = filled.values.any { it == null }
-        if (missing && (optional || variant == SectionVariant.REDUCED)) return null
-        val gap = if (en) text.gap.en else text.gap.de
-        return PLACEHOLDER.replace(line) { m -> filled.getValue(m.groupValues[1]) ?: gap }
+        return if (banner) text.draftBanner.pick(en) + "\n\n" + body else body
     }
 
     private fun value(name: String, v: SectionValues, text: OperatorSectionText, en: Boolean): String? = when (name) {
@@ -91,13 +76,7 @@ object OperatorSectionRenderer {
         "contactEmail" -> v.contactEmail
         "contactLanguages" -> v.contactLanguages.filter { it.isNotBlank() }.joinToString(", ")
         "privacyContact" -> v.privacyContact
-        "retention" -> {
-            val unit = if (v.retentionDays == 1) text.retentionUnit.one else text.retentionUnit.other
-            (if (en) unit.en else unit.de).replace("{n}", v.retentionDays.toString())
-        }
+        "retention" -> text.retentionUnit.render(v.retentionDays, en)
         else -> error("the operator section names an unknown value {$name}")
-    }?.let { inline(it) }?.takeIf { it.isNotEmpty() }
-
-    private fun inline(value: String): String =
-        value.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+    }
 }

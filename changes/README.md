@@ -76,7 +76,12 @@ a client red names the typed line it expects to fail — and runs `npm run check
 **And a new model's property names are the generator's to keep or change**: cr-bucket-reconcile's `keys` became
 `propertyKeys` in the Kotlin model (a name the generator reserves), found only when phase 2 wrote the first constructor
 call, so the contract was renamed after its phase had committed. A contracts phase that adds a schema writes one use of
-it in each generated language before it commits.
+it in each generated language before it commits. **So are its type names, where a schema crosses into `_common`**:
+cr-instance-privacy-notice's `PrivacyNotice`, served by the operator spec, reached `LocalizedMarkdown` through the
+spec's `_common` alias (and, moved into `_common`, through `_common` itself), and both generators named its parts inline
+either way (`PrivacyNoticePassageText`, `PrivacyNoticePassagesInner`, `OperatorSectionRecord`) — the other specs' runs
+happen to overwrite `OperatorSection` with the right names, and nothing did for the new schema. The rule above was
+skipped, so the backend phase found it and gave the notice a text type of its own; one constructor call would have.
 a client red names the typed line it expects to fail — and runs `npm run check` once to see it. **It finds those lines
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the

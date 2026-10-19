@@ -153,15 +153,16 @@ class TenantTermsOperatorSectionSliceTest {
     }
 
     @Test
-    fun theRecordPassageFollowsItsSwitchInBothVariants() {
+    fun theRecordsPointerFollowsItsSwitchInBothVariants() {
+        // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice); the section
+        // keeps a pointer, there exactly while the record is on — and no right to object of its own any more.
         val (tenantId, member) = acceptedMember("terms-op-record.example.com")
         fun record() = read(member, tenantId).get<Any?>("operatorSection.record")
-        fun objection() = read(member, tenantId).get<Any?>("operatorSection.objection")
 
-        assertTrue(record() != null && objection() != null, "organisation, record on (its preset)")
+        assertTrue(record() != null, "organisation, record on (its preset)")
+        assertNull(read(member, tenantId).get<Any?>("operatorSection.objection"), "the right to object moved to the notice")
         CapabilitySwitchFixtures.with(GuestWriteRecords.SWITCH) {
             assertNull(record(), "organisation, record off")
-            assertNull(objection(), "organisation, record off: no objection either")
         }
 
         modes.set(OperatingMode.PRIVATE) // its preset switches the record off
@@ -170,9 +171,7 @@ class TenantTermsOperatorSectionSliceTest {
         switches.invalidate()
         val on = read(member, tenantId)
         assertEquals("REDUCED", on.getString("operatorSection.variant"))
-        assertTrue(on.getString("operatorSection.record.en").contains("Art. 6(1)(f) GDPR"), "private, record switched on by hand: the information is there")
-        assertTrue(on.getString("operatorSection.objection.en").contains("Art. 21 GDPR"), "and the right to object, apart")
-        assertFalse(on.getString("operatorSection.record.en").contains("not stated by this operator"), "reduced: an unset controller is absent, as in the private mode's privacy texts")
+        assertTrue(on.getString("operatorSection.record.en").contains("privacy notice of this instance"), "private, record switched on by hand: the pointer is there")
     }
 
     // --- helpers ---

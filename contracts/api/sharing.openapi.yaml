@@ -582,11 +582,10 @@ paths:
                 termsRevision: 3
                 terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" }
                 operatorSection:
-                  revision: 1
+                  revision: 2
                   variant: FULL
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                   record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
-                  objection: { de: "### Dein Widerspruchsrecht …", en: "### Your right to object …" }
         "400":
           description: Malformed request — a parameter or the body outside its contract.
           content:
