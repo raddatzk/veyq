@@ -77,6 +77,17 @@ acceptanceCriteria:
           - RotationSliceTest.aStaleRegisterRevisionRollsTheWholeRotationBack
           - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: rotation-rekeys-every-pin-entry
+    # ADR 0104 § Consequences. Bitten: a rotation that ignored a stale pin store answered 200; one that answered the
+    # conflict without the rollback kept the published identity.
+    text: A new Master Key is a new pin-index key, so the rotation re-derives every identity-pin entry's id under it, re-seals each entry and a new head, and carries them as one write that replaces the whole set (replaceAll) inside the rotation's transaction; a rotation whose pin write would keep any entry is refused (400, nothing written), and a stale head revision rolls the rotation back as before.
+    coverage:
+      backend:
+        integration:
+          - RotationSliceTest.aRotationThatKeepsAPinEntryIsRefused
+          - RotationSliceTest.aStalePinStoreRevisionRollsTheWholeRotationBack
+          - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: nothing-outlives-the-rotation-it-raced
     text: A device wrap or a pairing delegation racing the rotation either committed before it — and is deleted, superseded or cut by it — or decides after it and is refused, so no channel bound under the old Master Key survives it; a rotation from a session a password change revoked while it waited writes nothing.
     coverage:

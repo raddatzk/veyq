@@ -9,13 +9,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../account/identityPins', () => ({
   safetyNumber: vi.fn(),
+  safetyNumberOfFingerprint: vi.fn(),
   getPin: vi.fn(),
   acceptKeyChange: vi.fn(),
 }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
-import { acceptKeyChange, getPin, safetyNumber } from '../account/identityPins'
+import { acceptKeyChange, getPin, safetyNumber, safetyNumberOfFingerprint } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { realI18n, t } from '../../test/i18n'
 
@@ -33,7 +34,9 @@ const accept = (w: ReturnType<typeof mountDialog>) => w.findAll('button').find((
 
 beforeEach(() => {
   vi.mocked(safetyNumber).mockImplementation((k) => `sn-${k}`)
-  vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 })
+  // A pin holds a fingerprint (ADR 0104 decision 3); its number renders from that, through its own door.
+  vi.mocked(safetyNumberOfFingerprint).mockImplementation((f) => `sn-${f}`)
+  vi.mocked(getPin).mockResolvedValue({ fingerprint: 'old-key', state: 'pinned', firstSeenAt: 0 })
 })
 
 describe('ChangedKeyReviewDialog — accept drains the scope-rotation worker before the pin moves (inbox #233)', () => {
@@ -106,7 +109,8 @@ describe('ChangedKeyReviewDialog — a key that cannot be read (inbox #246)', ()
 
   it('a pinned key that cannot be read says so, and the current number still shows', async () => {
     vi.mocked(safetyNumber).mockImplementation(refuseBad)
-    vi.mocked(getPin).mockResolvedValueOnce({ key: 'bad-key', state: 'pinned', firstSeenAt: 0 })
+    vi.mocked(safetyNumberOfFingerprint).mockImplementation(refuseBad)
+    vi.mocked(getPin).mockResolvedValueOnce({ fingerprint: 'bad-key', state: 'pinned', firstSeenAt: 0 })
     const w = mountDialog()
     await flushPromises()
 
@@ -121,7 +125,7 @@ describe('ChangedKeyReviewDialog - a VERIFIED contact\'s key changed (ADR 0028 D
   beforeEach(() => vi.clearAllMocks())
 
   it('says the contact was verified and that accepting does not verify the new key', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'verified', firstSeenAt: 0 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'old-key', state: 'verified', firstSeenAt: 0 })
     const w = mountDialog()
     await flushPromises()
     expect(w.get('[data-testid="review-verified-changed"]').text()).toBe(t('safety.reviewVerifiedIntro', { name: '@rotator' }))
@@ -129,7 +133,7 @@ describe('ChangedKeyReviewDialog - a VERIFIED contact\'s key changed (ADR 0028 D
   })
 
   it('control: a pinned contact\'s change reads as the ordinary review', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: 'old-key', state: 'pinned', firstSeenAt: 0 })
     const w = mountDialog()
     await flushPromises()
     expect(w.find('[data-testid="review-verified-changed"]').exists()).toBe(false)

@@ -5,12 +5,11 @@ import { fakeApi } from '../../../test/apiMock'
 import type {
   AccountApi,
   AccountDeviceRegisterApi,
-  AccountIdentityPinsApi,
   AccountRotationApi,
   DeviceRegister,
-  IdentityPins,
   MasterKeyWrap,
 } from '../../../api/generated/account'
+import { fakePinServer, identityKey, pinIdOf, pinOf, pinsOn, sealPinStore, type PinServerState } from '../../../test/pinStore'
 import type { ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
 
 // The APIs and the vault are mocked; the scope layer and **the crypto are real** — both wraps, the identity mint
@@ -27,6 +26,7 @@ import type { ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generate
 // The pin store and the device register are REAL too (only their endpoints are faked): the rotation re-seals both
 // inside its one request (ADR 0060 § Consequences), and what has to be proven about that is that the blobs it
 // sends OPEN under the new Master Key at the revision they will be stored at — which a mocked re-seal cannot say.
+// The pin store is a head plus one entry per pin (ADR 0104): the rotation re-keys every entry, so the ids move too.
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
   accountRotationApi: vi.fn(),
@@ -66,12 +66,11 @@ import { rotateKeys, RotationRefused } from './rotateKeys'
 import {
   accountApi,
   accountDeviceRegisterApi,
-  accountIdentityPinsApi,
   accountRotationApi,
   scopesApi,
 } from '../../../api/client'
 import { identityPrivate, masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
-import { getPin } from '../identityPins'
+import { forgetVerifiedPins, getPin } from '../identityPins'
 import { readRegisterView } from '../deviceRegister'
 import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favorites'
 import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
@@ -136,12 +135,14 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWO
 
 /** The two sealed account documents as fixtures seal them — under the CURRENT Master Key, bound to their revision. */
 const pinsAt = (revision: number) => ({ purpose: 'identity-pins', revision }) as const
+const U1 = 'c0ffee00-0000-4000-8000-0000000000a1'
+const U2 = 'c0ffee00-0000-4000-8000-0000000000a2'
+const U3 = 'c0ffee00-0000-4000-8000-0000000000a3'
 const registerAt = (revision: number) => ({ purpose: 'device-register', revision }) as const
 const enc = new TextEncoder()
 const dec = new TextDecoder()
-const PINNED = { u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 1 } }
-const sealedPins = (revision: number, pins: Record<string, unknown> = PINNED, mk = MK) =>
-  ({ blob: b64std(v1.seal(pinsAt(revision), mk, enc.encode(JSON.stringify({ pins })))), revision })
+const PINNED = { [U1]: pinOf(identityKey()) }
+const sealedPins = (revision: number, pins = PINNED, mk = MK): PinServerState => sealPinStore(mk, pins, revision)
 const REGISTERED = { devices: { d1: { label: 'Work laptop', lastSeenAt: 1 } }, families: { fam1: 'd1' }, wraps: {} }
 const sealedRegister = (revision: number, reg: Record<string, unknown> = REGISTERED, mk = MK) =>
   ({ blob: b64std(v1.seal(registerAt(revision), mk, enc.encode(JSON.stringify(reg)))), revision })
@@ -152,7 +153,7 @@ function fakeServer(
     sole?: string[]
     queued?: string[]
     held?: ScopeSummary[]
-    pins?: IdentityPins
+    pins?: PinServerState
     register?: DeviceRegister
     /** How many rotate calls answer `409 stale_revision` first — each as if another device had just written the
      *  pin store (its revision moves one up, still sealed under the current key). */
@@ -170,12 +171,12 @@ function fakeServer(
   // The two documents as the server holds them, with the stores' real compare-and-set: a write whose revision is
   // not the stored one is `409 stale_revision`. Their own PUTs answer 500 — the outage a re-seal after the publish
   // used to swallow — so a rotation that still wrote them on their own would leave them under the retired key.
-  const pins: IdentityPins = { ...(opts.pins ?? { revision: 0 }) }
+  const pinServer = fakePinServer(opts.pins)
+  const pins = pinServer.state
   const register: DeviceRegister = { ...(opts.register ?? { revision: 0 }) }
-  const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async () => {
+  const putIdentityPins = pinServer.writeIdentityPins.mockImplementation(async () => {
     throw httpError(500)
   })
-  fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ ...pins }), putIdentityPins })
   const putDeviceRegister = vi.fn<AccountDeviceRegisterApi['putDeviceRegister']>(async () => {
     throw httpError(500)
   })
@@ -186,7 +187,7 @@ function fakeServer(
     const req = body.rotateAccountKeysRequest
     if (staleLeft > 0) {
       staleLeft -= 1
-      Object.assign(pins, sealedPins(pins.revision + 1)) // another device wrote meanwhile
+      pinServer.become(sealedPins(pins.revision + 1)) // another device wrote meanwhile
       throw httpError(409, 'stale_revision')
     }
     // One transaction: both documents or nothing (the backend's RotationSliceTest owns that half). A request
@@ -194,7 +195,7 @@ function fakeServer(
     // below run red against a client that still re-sealed after the publish.
     if (req.identityPins && req.identityPins.revision !== pins.revision) throw httpError(409, 'stale_revision')
     if (req.deviceRegister && req.deviceRegister.revision !== register.revision) throw httpError(409, 'stale_revision')
-    if (req.identityPins) Object.assign(pins, { blob: req.identityPins.blob, revision: pins.revision + 1 })
+    if (req.identityPins) pinServer.land(req.identityPins)
     if (req.deviceRegister) Object.assign(register, { blob: req.deviceRegister.blob, revision: register.revision + 1 })
     return { soleMemberScopeIds: opts.sole ?? [], queuedScopeIds: opts.queued ?? [] }
   })
@@ -212,6 +213,7 @@ beforeEach(() => {
   globalThis.indexedDB = new IDBFactory() // this device's trust-state marks (ADR 0028 Decision 7), fresh per test
   vi.mocked(unlockOrigin).mockReturnValue('cold')
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
+  forgetVerifiedPins()
   vi.mocked(identityPrivate).mockImplementation(() => oldPriv())
   vi.mocked(listScopeMembers).mockResolvedValue([])
   vi.mocked(resealFavoritesUnderNewMasterKey).mockResolvedValue(undefined)
@@ -564,14 +566,17 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
 
     // The vault has switched; read both back the way the app does.
     vi.mocked(masterKey).mockImplementation(() => newMasterKey().slice())
-    expect(await getPin('u1')).toEqual(PINNED.u1)
+    forgetVerifiedPins()
+    expect(await getPin(U1)).toEqual(PINNED[U1])
     expect((await readRegisterView(['fam1'], null, 'me')).names).toEqual({ fam1: 'Work laptop' })
 
     // Asserted by OPENING what was sent, not by its presence: under MK', at the revision it is stored at.
     const req = sent(srv)
     expect(req.identityPins.revision).toBe(3)
-    const pinsPlain = JSON.parse(dec.decode(v1.open(pinsAt(4), newMasterKey(), fromB64std(req.identityPins.blob))))
-    expect(pinsPlain).toEqual({ pins: PINNED })
+    const head = JSON.parse(dec.decode(v1.open(pinsAt(4), newMasterKey(), fromB64std(req.identityPins.head))))
+    expect(head).toMatchObject({ version: 2, count: 1 })
+    expect(req.identityPins).toMatchObject({ remove: [], replaceAll: true })
+    expect(pinsOn(newMasterKey(), srv.pins)).toEqual(PINNED) // every entry opens under MK', at MK''s ids
     expect(req.deviceRegister.revision).toBe(2)
     const regPlain = JSON.parse(dec.decode(v1.open(registerAt(3), newMasterKey(), fromB64std(req.deviceRegister.blob))))
     expect(regPlain).toEqual(REGISTERED)
@@ -584,7 +589,8 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
     const req = sent(srv)
     expect(req.identityPins.revision).toBe(0)
-    expect(JSON.parse(dec.decode(v1.open(pinsAt(1), newMasterKey(), fromB64std(req.identityPins.blob))))).toEqual({ pins: {} })
+    expect(JSON.parse(dec.decode(v1.open(pinsAt(1), newMasterKey(), fromB64std(req.identityPins.head))))).toMatchObject({ version: 2, count: 0 })
+    expect(req.identityPins.put).toEqual([])
     expect(req.deviceRegister.revision).toBe(0)
     expect(JSON.parse(dec.decode(v1.open(registerAt(1), newMasterKey(), fromB64std(req.deviceRegister.blob))))).toEqual({
       devices: {},
@@ -603,11 +609,30 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
 
     expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(3)
     expect(sent(srv, 2).identityPins.revision).toBe(5)
-    expect(() => v1.open(pinsAt(6), newMasterKey(), fromB64std(sent(srv, 2).identityPins.blob))).not.toThrow()
+    expect(() => v1.open(pinsAt(6), newMasterKey(), fromB64std(sent(srv, 2).identityPins.head))).not.toThrow()
     expect(sent(srv, 2).identityPublicKey).toBe(sent(srv, 0).identityPublicKey)
     expect(sent(srv, 2).secretKeyProofSignature).toBe(sent(srv, 0).secretKeyProofSignature)
     expect(srv.pins.revision).toBe(6)
     expect(vi.mocked(setUnlocked)).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-keys every pin entry: new ids under the new Master Key, every entry re-sealed, the old ids gone', async () => {
+    // ADR 0104 § Consequences: a new Master Key is a new index key, so the rotation carries the WHOLE set with
+    // `replaceAll`, each entry at the id the new key derives. An entry left at an old id would be one the new key's
+    // reader cannot place — the next read would refuse the store.
+    const three = { [U1]: pinOf(identityKey()), [U2]: pinOf(identityKey(), 'verified'), [U3]: pinOf(identityKey()) }
+    const srv = fakeServer({ pins: sealedPins(3, three), register: sealedRegister(2) })
+    const oldIds = [...srv.pins.entries.keys()].sort()
+
+    await rotateKeys(PASSWORD, SECRET_KEY_B64)
+
+    const req = sent(srv).identityPins
+    expect(req.replaceAll).toBe(true)
+    const newIds = [U1, U2, U3].map((u) => pinIdOf(newMasterKey(), u)).sort()
+    expect(req.put.map((e) => e.pinId).sort()).toEqual(newIds)
+    expect([...srv.pins.entries.keys()].sort()).toEqual(newIds)
+    expect(newIds.filter((id) => oldIds.includes(id))).toEqual([])
+    expect(pinsOn(newMasterKey(), srv.pins)).toEqual(three)
   })
 
   it('control: a first attempt that lands is the only call', async () => {

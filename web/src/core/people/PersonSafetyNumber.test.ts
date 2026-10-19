@@ -21,7 +21,7 @@ vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./direct
 import PersonSafetyNumber from './PersonSafetyNumber.vue'
 import MySafetyNumber from './MySafetyNumber.vue'
 import { getPin, markVerified, myIdentityPublicKeyB64, safetyNumber, IdentityMovedError } from '../../features/account/identityPins'
-import { safetyCodePayload } from '../../features/account/safetyCode'
+import { fingerprintDigestB64, safetyCodePayload } from '../../features/account/safetyCode'
 import { TrustStateRefused } from '../../features/account/trustMarks'
 import { loadIdentityKey } from './directory'
 import { realI18n, t } from '../../test/i18n'
@@ -99,7 +99,7 @@ describe('another member’s safety number (main flow 1-3)', () => {
   })
 
   it('pinned: shows the PIN’s number, not the directory’s, and a changed key points at the review', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'pinned', firstSeenAt: 1 })
     const w = await mountTheirs()
     expect(digits(w)).toBe(safetyNumber(OTHER))
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('verify.badgeChanged'))
@@ -108,33 +108,33 @@ describe('another member’s safety number (main flow 1-3)', () => {
   })
 
   it('control: a pin that holds the directory key reads as pinned, with no review offered', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: DIR, state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'pinned', firstSeenAt: 1 })
     const w = await mountTheirs()
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateUnverified'))
     expect(w.find('[data-testid="person-safety-changed"]').exists()).toBe(false)
   })
 
   it('a verified pin reads as verified', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: DIR, state: 'verified', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'verified', firstSeenAt: 1 })
     const w = await mountTheirs()
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateVerified'))
   })
 
   it('a scanned code of the shown key on an UNPINNED member verifies it, pinning the compared key (one action)', async () => {
     const w = await mountTheirs()
-    vi.mocked(getPin).mockResolvedValue({ key: DIR, state: 'verified', firstSeenAt: 1 }) // what the store holds after
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'verified', firstSeenAt: 1 }) // what the store holds after
     await scan(w, safetyCodePayload(DIR))
     expect(markVerified).toHaveBeenCalledTimes(1)
-    expect(markVerified).toHaveBeenCalledWith(ANNA, DIR, { pinIfUnpinned: true })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: true })
     expect(outcome(w)).toBe(t('safety.verified', { name: 'Anna Meyer' }))
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.stateVerified'))
   })
 
   it('on a PINNED member the match verifies the pin’s key and never asks to pin', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: DIR, state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'pinned', firstSeenAt: 1 })
     const w = await mountTheirs()
     await scan(w, safetyCodePayload(DIR))
-    expect(markVerified).toHaveBeenCalledWith(ANNA, DIR, { pinIfUnpinned: false })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: false })
   })
 
   it('a code of a DIFFERENT key is a mismatch: said, and nothing is written', async () => {
@@ -163,13 +163,13 @@ describe('another member’s safety number (main flow 1-3)', () => {
     await w.get('[data-testid="person-safety-compare-start"]').trigger('click')
     await w.get('[data-testid="person-safety-match"]').trigger('click')
     await flushPromises()
-    expect(markVerified).toHaveBeenCalledWith(ANNA, DIR, { pinIfUnpinned: true })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: true })
   })
 
   it('a key that moved under the compare says so and re-reads what the store holds', async () => {
     vi.mocked(markVerified).mockRejectedValue(new IdentityMovedError(ANNA))
     const w = await mountTheirs()
-    vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'pinned', firstSeenAt: 1 }) // a concurrent pin landed
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'pinned', firstSeenAt: 1 }) // a concurrent pin landed
     await scan(w, safetyCodePayload(DIR))
     expect(outcome(w)).toBe(t('safety.moved', { name: 'Anna Meyer' }))
     expect(digits(w)).toBe(safetyNumber(OTHER)) // the number shown is now the key the store holds
@@ -192,13 +192,13 @@ describe('another member’s safety number (main flow 1-3)', () => {
 
 describe('a verified contact\'s key changed, on the profile (ADR 0028 Decision 3)', () => {
   it('reads louder, and after the review\'s accept the profile reads pinned and offers the compare again', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'verified', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'verified', firstSeenAt: 1 })
     const w = await mountTheirs()
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('safety.badgeVerifiedChanged'))
     expect(w.get('[data-testid="person-safety-changed"]').text()).toContain(t('safety.changedVerifiedNote', { name: 'Anna Meyer' }))
 
     // The review accepts: the store now pins the directory key as `pinned` (acceptKeyChange's own suite pins that).
-    vi.mocked(getPin).mockResolvedValue({ key: DIR, state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(DIR), state: 'pinned', firstSeenAt: 1 })
     await w.get('[data-testid="person-safety-review"]').trigger('click')
     w.getComponent(Review).vm.$emit('accepted')
     await flushPromises()
@@ -207,11 +207,11 @@ describe('a verified contact\'s key changed, on the profile (ADR 0028 Decision 3
     expect(w.find('[data-testid="person-safety-scan"]').exists()).toBe(true)
     expect(w.find('[data-testid="person-safety-compare-start"]').exists()).toBe(true)
     await scan(w, safetyCodePayload(DIR))
-    expect(markVerified).toHaveBeenCalledWith(ANNA, DIR, { pinIfUnpinned: false })
+    expect(markVerified).toHaveBeenCalledWith(ANNA, fingerprintDigestB64(DIR), { pinIfUnpinned: false })
   })
 
   it('control: an ordinary pinned contact\'s change reads as "Key changed"', async () => {
-    vi.mocked(getPin).mockResolvedValue({ key: OTHER, state: 'pinned', firstSeenAt: 1 })
+    vi.mocked(getPin).mockResolvedValue({ fingerprint: fingerprintDigestB64(OTHER), state: 'pinned', firstSeenAt: 1 })
     const w = await mountTheirs()
     expect(w.get('[data-testid="person-safety-state"]').text()).toBe(t('verify.badgeChanged'))
     expect(w.get('[data-testid="person-safety-changed"]').text()).toContain(t('safety.changedNote', { name: 'Anna Meyer' }))

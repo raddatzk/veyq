@@ -17,7 +17,8 @@ import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../../test/httpError'
 import { fakeApi } from '../../../test/apiMock'
 import type { TokenApi } from '../../../api/generated/auth'
-import type { AccountApi, AccountIdentityPinsApi, AccountKeyMaterial } from '../../../api/generated/account'
+import type { AccountApi, AccountKeyMaterial } from '../../../api/generated/account'
+import { fakePinServer, identityKey, sealPinStore } from '../../../test/pinStore'
 
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
@@ -52,7 +53,7 @@ vi.mock('../trustDevice/trustDevice', () => ({
 
 import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { unlockWithGrantedMasterKey } from '../unlock/unlock'
-import { accountApi, tokenApi, accountIdentityPinsApi } from '../../../api/client'
+import { accountApi, tokenApi } from '../../../api/client'
 import { checkAndPin } from '../identityPins'
 import { channelKeys, mintPairingSecret, openGrant, sealGrant } from './pairing'
 import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
@@ -380,29 +381,22 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
     await settle()
     return mk
   }
-  /** The pin store as the server serves it on this device's first read: a valid seal at `revision`. */
-  function servePins(mk: Uint8Array, revision: number) {
-    const blob = b64std(v1.seal({ purpose: 'identity-pins', revision }, mk, new TextEncoder().encode(JSON.stringify({ pins: {} }))))
-    const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>()
-    fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ blob, revision }), putIdentityPins })
-    return putIdentityPins
-  }
+  /** The pin store as the server serves it on this device's first read: a valid, empty store at `revision`. */
+  const servePins = (mk: Uint8Array, revision: number) => fakePinServer(sealPinStore(mk, {}, revision)).writeIdentityPins
+  const CONTACT = 'c0ffee00-0000-4000-8000-0000000000a1'
+  const CONTACT_KEY = identityKey()
 
   it('linked by a device whose pin mark is 5, a v4 pin store on the first read is refused', async () => {
     const mk = await linkedBy(5)
-    const put = servePins(mk, 4)
-    await expect(checkAndPin('u1', 'a2V5LW9uZQ==')).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
-    expect(put).not.toHaveBeenCalled()
+    const write = servePins(mk, 4)
+    await expect(checkAndPin(CONTACT, CONTACT_KEY)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(write).not.toHaveBeenCalled()
   })
 
   it('control: served v5, the store is accepted', async () => {
     const mk = await linkedBy(5)
-    const put = servePins(mk, 5)
-    // The write lands, and the store answers with what it now holds.
-    put.mockImplementation(async ({ identityPinsUpdate }) => ({
-      blob: identityPinsUpdate.blob,
-      revision: identityPinsUpdate.revision! + 1,
-    }))
-    expect(await checkAndPin('u1', 'a2V5LW9uZQ==')).toBe('firstUse')
+    const write = servePins(mk, 5)
+    expect(await checkAndPin(CONTACT, CONTACT_KEY)).toBe('firstUse')
+    expect(write).toHaveBeenCalledTimes(1)
   })
 })
