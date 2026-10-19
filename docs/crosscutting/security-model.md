@@ -211,8 +211,8 @@ but reads every chunk in order, so it shows the operator no more than a whole-bl
 § 3). The app's lines name accounts, tenants, scopes, nodes, shares, blobs and jobs by id, a domain, an exception's
 class, a SQLState and counts — never a key, a token, a sealed value or plaintext metadata, an email address, a network
 address, a User-Agent, a request's URI or input, or a message someone else wrote (a database driver's, a mail
-server's, a remote API's body) — one path open: a constraint violation at commit is logged by Narayana with the
-driver's message (ADR 0092's status line). An unexpected error is logged by its route template and class chain under a random
+server's, a remote API's body); a constraint violation at commit, which Narayana logs, is rewritten to its class chain
+and SQLState (`CommitFailureLogFilter`). An unexpected error is logged by its route template and class chain under a random
 error id; its full text needs a DEBUG category raised on purpose. The admin console's access log keeps no reader's
 address, the bundled proxy keeps no access log, and the e2e sweep fails a run whose logs hold a sealed value, a token
 or an address a suite signed up with ([cc.security.wire-assertion](cc.security.wire-assertion.md)). A log is
@@ -493,10 +493,15 @@ Wrapping a content key to "Bob" needs Bob's identity public key, which the opera
 from its directory. A malicious server could serve an attacker's key instead (key-substitution / MITM)
 and read what is wrapped to it. The defense is **trust-on-first-use pinning + safety-number verification**:
 
-- **Pin on first use (TOFU).** The first time a client wraps to Bob's identity key it **pins** the full
-  identity public bundle (`kem`, the X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign` Ed25519), keyed by `userId`, and
-  proceeds (*pinned, unverified*). The **pin store is client-side, synced across the user's devices, and
-  sealed under the master key** — the server never sees a pin or the who-trusts-whom graph (operator-blind).
+- **Pin on first use (TOFU).** The first time a client wraps to Bob's identity key it **pins** the fingerprint
+  hash of the full identity public bundle (`kem`, the X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign`
+  Ed25519) — the digest the safety number is — keyed by `userId`, and proceeds (*pinned, unverified*). The **pin
+  store is client-side, synced across the user's devices, and sealed under the master key**: one sealed entry per
+  pin at an opaque keyed id, held together by a sealed head whose digest covers every entry, so a withheld, added,
+  rolled-back or moved entry is refused like a rolled-back store
+  ([ADR 0104](../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)). The
+  server never sees a pin or the who-trusts-whom graph (operator-blind); it sees how many pins an account holds,
+  which the grant rows already let it count.
 - **A key change is surfaced, split by whether a human is present.** A key ≠ pin is "**attack OR a
   legitimate identity rotation**" ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md)),
   indistinguishable on-wire. In the **UI** it is

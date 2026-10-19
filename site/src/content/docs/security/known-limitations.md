@@ -2,6 +2,7 @@
 title: Known limitations
 description: Every residual of the built system in one place — why it remains, where it is decided, and what would close it.
 sources:
+  - docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md
   - docs/crosscutting/security-model.md
   - docs/decisions/0028-identity-authenticity-tofu-verification.md
   - docs/decisions/0024-scope-key-rotation.md
@@ -134,7 +135,7 @@ places:
 
 | Mark | What the device refuses | Decided in |
 |---|---|---|
-| Pin store | a store below the highest revision it opened, a missing store once it held one, a store that does not open — before every read and every write | ADR 0028 Decision 7 |
+| Pin store | a store below the highest revision it opened, a missing store once it held one, a store that does not open, an entry withheld, added, rolled back or moved under its head — before every read and every write | ADR 0028 Decision 7, ADR 0104 |
 | Device register | the same rule | ADR 0028 Decision 7 |
 | Per-scope epoch floor | a grant below the highest epoch it has held for that scope; it never seals under a lower one | ADR 0024 Decision 6 |
 

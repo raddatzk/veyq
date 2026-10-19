@@ -12,10 +12,10 @@ acceptanceCriteria:
     text: >-
       The export answers, behind the key proof, the case id, the category, the times in UTC, the uploaders the held rows
       name and the held guest-write records with their address, port and time and the time zone stated — never content
-      — and the surface renders it as a text block to copy.
+      — and the surface renders it as a text block to copy. It carries every uploader the case names, however many.
     coverage:
       backend:
-        integration: [AuthorityOrdersSliceTest.theExportCarriesTheClearFieldsAndTheHeldGuestWriteRecordAndAHandoverChangesNoHold]
+        integration: [AuthorityOrdersSliceTest.theExportCarriesTheClearFieldsAndTheHeldGuestWriteRecordAndAHandoverChangesNoHold, CaseUploadersBoundSliceTest.aCaseOfMoreThanAThousandUploadersShowsAndExportsEveryOne, CaseUploadersBoundSliceTest.theCaseAndTheExportCarryOneBound]
       web:
         unit: [src/features/moderation/orders/art18Export.test.ts, src/features/moderation/orders/AuthoritySection.test.ts]
   - id: the-handover-is-logged

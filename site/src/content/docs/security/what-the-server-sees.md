@@ -62,7 +62,8 @@ Sealed client-side, never readable by the server:
 - a blob's **type, upload name and modification time**, in a seal under the blob's own key, padded to a 256-byte
   bucket so its length shows one of four sizes, never how long a name is. A Memories original's file name and media
   type (photo, video or PDF) live there, so the operator learns neither;
-- bucket and uploader names, a share's note and private name, and the identity pin store.
+- bucket and uploader names, a share's note and private name, and every identity pin: whom it pins, the key's
+  fingerprint, its state and when it was first seen, each in an entry sealed under the Master Key.
 
 Each text or icon field (a name, a node's or a medium's metadata, a share's note and label, a member's name and
 picture) seals under a key of its own, derived per write. Inside its ciphertext the server stores the 16-byte random
@@ -98,6 +99,10 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   served to no one and never what was written. It decides that a guest can take back only an empty upload of its own.
 - A medium's **trash state**: a flag, who trashed it and when, until the scheduled purge.
 - Job-queue and op-log offsets, presence facts, and a grant-delivery decline status.
+- An account's **identity-pin entries**: an opaque id per pin (keyed by a Master-Key-derived key, so it names no
+  contact and differs between accounts), which entry a write touched, and how many there are — the count was
+  never hidden, and the grant rows let the server count the identities a key-holder wrapped to anyway
+  ([ADR 0104](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) decision 5).
 
 ### Timestamps
 
@@ -213,9 +218,9 @@ A log holds less than the database, never more. The application's lines name acc
 shares, blobs and jobs **by id**, with a domain, an exception's class, a database's SQLState and counts. They never
 carry a key, a token, a sealed value, plaintext metadata, an email address, a network address, a User-Agent, a
 request's URI or what it sent, or text someone else wrote (a database's message, a mail server's reply, a remote
-API's body) — with one path left: when two requests race for the same email address and the database refuses the
-second as it commits, the transaction manager's warning carries the database's message, which names that address.
-An error the server had no answer for is logged by a random error id, its route template and its exception's class
+API's body). That includes the one line the transaction manager writes when the database refuses a write only as it
+commits, as when two requests race for the same email address: it names the error's type and SQLState, not the
+database's message. An error the server had no answer for is logged by a random error id, its route template and its exception's class
 chain; its full text is written only while an operator has raised one category on purpose. The
 admin console's access log keeps no reader's address; the bundled proxy keeps no access log, which a posture check
 holds; the object store logs warnings only. A rate limiter keeps a client's address, or an email address for the

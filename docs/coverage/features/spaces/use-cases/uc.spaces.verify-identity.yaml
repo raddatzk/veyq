@@ -9,7 +9,7 @@ title: Trust-on-first-use, notice, and review a changed identity key
 # `planned` flag even though cr-0098/cr-0099 built and unit-tested them. Only `changed-key-review` had a ref.
 acceptanceCriteria:
   - id: tofu-pin-on-first-use
-    text: The first time a client wraps to a contact's identity key it pins the full identity public bundle (kem+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one blob sealed under the Master Key, synced across the account, account-global (one pin per contact across tenants). The server sees one opaque ciphertext, never a userId, key, or count.
+    text: The first time a client wraps to a contact's identity key it pins the fingerprint hash of the full identity public bundle (kem+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one entry per pin sealed under the Master Key at an opaque id, under a sealed head, synced across the account, account-global (one pin per contact across tenants). The server sees opaque ids and ciphertext, never a userId, key or state.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
       backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobRevisionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
@@ -34,12 +34,13 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/spaces/ChangedKeyReviewDialog.test.ts] }
   - id: operator-blind-pinning
-    text: Verification is client-only (compare against the sealed pin, no server call) and the pin store is one Master-Key-sealed ciphertext, so the operator never learns who pinned or verified whom, nor the count — the trust graph stays off the server.
-    # Real but indirect: no test asserts the negative (that a growing pin/verified set never changes the wire
-    # shape) as its own property. Coverage here is inferred — the backend refs prove the wire shape is always
-    # exactly {blob, revision}, the web refs prove the compare functions make no network call — not a dedicated
+    text: Verification is client-only (compare against the sealed pin, no server call) and every pin is a Master-Key-sealed entry at an opaque id, so the operator never learns who pinned or verified whom — the trust graph stays off the server. It does learn how many pins an account holds, as it always could (ADR 0104 decision 5).
+    # Real but indirect: no test asserts the negative (that what the server stores names no contact) as its own
+    # property. Coverage here is inferred — the backend refs prove the wire shape is opaque ids, sealed entries and a
+    # sealed head, the web refs prove the compare functions make no network call — not a dedicated
     # "operator learns nothing" test. Named honestly rather than stretched; a stronger direct test is a genuine
-    # gap, not a citation problem.
+    # gap, not a citation problem. Until ADR 0104 this text also claimed the count was hidden; the single blob's length
+    # (29 + 1,771 x n bytes) had always shown it, so the claim was corrected, not defended.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
       backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobRevisionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToRevisionOne] }
@@ -52,6 +53,30 @@ acceptanceCriteria:
     # slot per account); the worker's pause and the notices that name a refusal are pinned where they live.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/account/trustMarks.test.ts, src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts, src/app/activeSpace.test.ts] }
+  - id: a-key-holder-pins-past-the-old-ceiling
+    # ADR 0104, inbox #491: the single 1 MiB blob refused the 445th pin (400 invalid_request, swallowed by the
+    # grant-delivery poller). Bitten: without the account lock the racing first writes answered a 500 (the primary
+    # key); with the entries written before the head's compare-and-set the stale write's put landed; without the cap a
+    # 25,001st entry landed. The 1,000-member run on the dev stack is a hand proof, not a coverage surface.
+    text: Each pin is one entry sealed under the Master Key at an opaque id only the account computes (HMAC of the contact's userId under a Master-Key-derived key), and the store's head binds the whole set by a digest. A pin, an accept and a verify write one entry plus the head in one compare-and-set on the head's revision — a stale revision lands nothing of the write, and two racing first writes answer one success and one stale_revision — so a key-holder's store grows past the old 1 MiB single-blob ceiling (444 pins) and one write stays the size of one entry. A store holds at most 25,000 entries, the bound of the one write that carries them all.
+    coverage:
+      backend:
+        integration:
+          - IdentityPinsSliceTest.aWriteOf25000EntriesLandsAndTheStoreHoldsNoMore
+          - IdentityPinsSliceTest.staleRevisionAfterAWriteIsConflictAndNothingOfItLands
+          - IdentityPinsSliceTest.twoRacingFirstWritesAnswerOneWrittenAndOneStale
+          - IdentityPinsSliceTest.theListingPagesInPinIdOrderByKeyset
+          - IdentityPinsSliceTest.aContradictoryWriteIs400AndStoresNothing
+      web: { unit: [src/features/account/identityPins.test.ts] }
+  - id: a-withheld-or-rolled-back-entry-is-refused
+    # ADR 0104 decision 4, ADR 0028 Decision 7 per entry. Bitten: with the digest check skipped, the withheld, added,
+    # rolled-back and moved cases each read as a store (the moved one only as unreadable — the seal's refusal, not the
+    # digest's, which is why each negative anchors on trust_state_rolled_back); with the id derivation unchecked, the
+    # entry sealed for another contact opened.
+    text: A device recomputes the head's set digest over the listed entries and refuses (trust_state_rolled_back) a withheld, added, rolled-back or moved entry while the head did not move; a head that moved between its read and the listing is read again, not refused. An entry whose userId does not derive its id, and a listing that does not advance, are refused as unreadable. The entries are listed once per head revision; a later read under the same head is the head alone, which the marks still guard.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/account/trustReset/noServerReachesTheReset.test.ts] }
+      backend: { integration: [IdentityPinsSliceTest.theListingPagesInPinIdOrderByKeyset, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
   - id: a-refused-pin-store-is-started-over-only-by-the-user
     text: A refused pin store can be started over only by the user, on a device, after a confirmation that names the cost (every contact first-seen again, every verification gone, a key that changed meanwhile accepted as new); no server response reaches it. It writes the empty store one revision above the served one, never over a copy that opens, and sets this device's mark to the revision it wrote — the one place a mark goes down. The residual is stated, not closed — a server can withhold the store until the user resets it, now visibly and with consent.
     # ADR 0028 Decision 7's way back (inbox #192). Bitten: swapping the mark's set for a raise reddened the

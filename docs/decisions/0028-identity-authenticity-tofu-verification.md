@@ -1,9 +1,9 @@
 # ADR 0028 — Identity authenticity: TOFU pinning + safety-number verification
 
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the pin store's and the device
-  register's counter is a **revision** (`revision`, was `version`). [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
-  (proposed 2026-10-19) changes the pin store's shape — one sealed entry per pin under a sealed head — and, with it,
-  what Decision 1 pins and which revision Decision 7 marks; this record is edited when that lands.
+  register's counter is a **revision** (`revision`, was `version`); by [ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
+  (2026-10-19): the pin store is one sealed entry per pin under a sealed head — Decision 1's *what is pinned* and
+  Decision 7's *which revision is marked* say so in place.
 - Date: 2026-07-07
 
 ## Context
@@ -35,10 +35,16 @@ Adopt **trust-on-first-use (TOFU) pinning + out-of-band safety-number verificati
 split by whether a human is present. Key Transparency stays the (out-of-scope) end-state.
 
 1. **Pin on first use.** The first time a client wraps to a member's identity key it **pins** it (state:
-   *pinned, unverified*) and proceeds. What is pinned is the **full identity public bundle** (`kem`, the
-   X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign` Ed25519), keyed by `userId` (identity is account-global, so one pin per contact
-   across all tenants). The **pin store is client-side, synced across the user's devices, and sealed under the
-   master key** — the server stores only ciphertext and never sees a pin or the trust graph (operator-blind).
+   *pinned, unverified*) and proceeds. What is pinned is the **fingerprint hash of the full identity public
+   bundle** (`kem`, the X-Wing encapsulation key over X25519 + ML-KEM-768, + `sign` Ed25519) — the domain-separated
+   SHA-256 the safety number and its QR already are (Decision 3) — keyed by `userId` (identity is account-global, so
+   one pin per contact across all tenants). Every reader of a pin compares it for equality with a served key or shows
+   its safety number, both functions of that hash, and equality of the hash is equality of the bundle up to a SHA-256
+   second preimage ([ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
+   decision 3). The **pin store is client-side, synced across the user's devices, and sealed under the master key**
+   — one sealed entry per pin at an opaque id under a sealed head (ADR 0104) — so the server stores only ciphertext
+   and never sees a pin, a contact or the trust graph (operator-blind). It does see how many pins there are, as it
+   always could (ADR 0104 decision 5).
 
 2. **A key ≠ pin is surfaced, not silently trusted — response depends on the path:**
    - **Human path (UI):** a **notice**, *not* a hard block (a legitimate rotation must not lock a contact out).
@@ -112,12 +118,18 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 7. **A device never accepts older trust state than it has held, and a store that does not open is an error,
    not an empty store.** The pin store lives on the server, so the server decides which copy a device reads.
    Binding the store's revision into its seal ([ADR 0072](0072-a-seal-binds-its-object.md)) makes that revision
-   authentic, not fresh. So each device keeps a **local high-water mark** — the highest pin-store revision it has
-   opened — and refuses a served store below it, on every read **and before every write**, because a write
+   authentic, not fresh. So each device keeps a **local high-water mark** — the highest revision of the pin
+   store's head it has opened — and refuses a served store below it, on every read **and before every write**,
+   because a write
    re-seals what it read and would otherwise make the rollback its own. It refuses a missing store once it has
    held one, and it refuses a store that fails to open instead of reading it as empty: an empty store is exactly
    what turns a detected key change back into a silent first use, and a rolled-back one can reinstate a retired
    key as a match.
+   - **Per entry, the head carries the set.** The pins are entries the server could withhold, add, roll back or
+     move one at a time while the head's revision stays honest; the head's sealed digest over every entry turns
+     each of those into the same refusal as a rolled-back store (`trust_state_rolled_back`), and a head that moved
+     during the listing is read again ([ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)
+     decision 4).
    - **The same rule covers the other sealed account document**, the device register
      ([en.account.device-register](../features/account/enablers/en.account.device-register.md)), and the
      per-scope epoch floor of [ADR 0024](0024-scope-key-rotation.md) Decision 6 uses the same mechanism.
@@ -166,7 +178,7 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   no safer than Plain for that contact; strict mode (4), once built, is the answer for those who want enforcement.
   Stated, not hidden.
 - **Operator-blindness preserved.** The pin store is sealed under the master key; the server never learns who
-  pinned or verified whom. It gains only a small **grant-delivery decline** status (a worker refusing a job) —
+  pinned or verified whom — only how many pins an account holds, which the grant rows already let it count. It gains only a small **grant-delivery decline** status (a worker refusing a job) —
   operational metadata, no trust graph.
 - **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** Enforcement is client-side, so it holds against
   an active operator only on a client that operator does not serve, and there only as far as the pin store is

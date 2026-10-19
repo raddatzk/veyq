@@ -11,7 +11,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
-import { safetyNumber, getPin } from '../account/identityPins'
+import { safetyNumber, safetyNumberOfFingerprint, getPin } from '../account/identityPins'
 import { acceptChangedKey } from './acceptChangedKey'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
@@ -22,13 +22,13 @@ const visible = defineModel<boolean>('visible', { required: true })
 const emit = defineEmits<{ accepted: [] }>()
 const { t } = useI18n()
 
-const expected = ref('') // the pinned key's safety-number (what the caller trusted before)
+const expected = ref('') // the pin's safety-number, from its stored fingerprint (what the caller trusted before)
 const current = ref('') // the directory key's safety-number (what is shown now)
 const error = ref('')
 // inbox #246: a key this device cannot decode has no safety number. An unreadable served (current) key disables
 // the accept — there is nothing to compare, and pinning bytes the identity codec refuses would only fail later; an
 // unreadable pinned (expected) key only loses its reference number, since the out-of-band compare is against the
-// current one.
+// current one. A pin holds the fingerprint, not the key (ADR 0104 decision 3), so its number renders from that.
 const currentUnreadable = ref(false)
 const expectedUnreadable = ref(false)
 /** The accept failed on a refused pin store — the error then links to the settings hub's reset. */
@@ -43,20 +43,20 @@ watch(
     error.value = ''
     const pin = await getPin(props.member.userId).catch(() => null)
     wasVerified.value = pin?.state === 'verified'
-    const expectedNumber = pin ? numberOf(pin.key) : ''
+    const expectedNumber = pin ? orNull(() => safetyNumberOfFingerprint(pin.fingerprint)) : ''
     expected.value = expectedNumber ?? ''
     expectedUnreadable.value = expectedNumber === null
-    const currentNumber = numberOf(props.member.identityPublicKey)
+    const currentNumber = orNull(() => safetyNumber(props.member.identityPublicKey))
     current.value = currentNumber ?? ''
     currentUnreadable.value = currentNumber === null
   },
   { immediate: true },
 )
 
-/** The key's safety number, or `null` when the identity codec refuses its bytes. */
-function numberOf(keyB64: string): string | null {
+/** A safety number, or `null` when its input does not decode (a key the identity codec refuses, a garbled hash). */
+function orNull(number: () => string): string | null {
   try {
-    return safetyNumber(keyB64)
+    return number()
   } catch {
     return null
   }

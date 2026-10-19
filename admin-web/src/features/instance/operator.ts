@@ -8,8 +8,10 @@
 //   - the privacy notice's recipients (ADR 0035 decision 8): what they do is a fixed kind the notice names in each of its
 //     languages, and only an OTHER one carries the operator's own words ([recipientFits], the server's rule); a row as
 //     the CLI types it ([parseRecipient]), and a suggestion the instance makes turned into a row of its kind the Server
-//     Owner completes ([suggestionRow]) — never stored as is.
+//     Owner completes ([suggestionRow]) — never stored as is. Where they are is an ISO 3166-1 alpha-2 code of the
+//     backend's list (`./countries`), which the notice names in each page's language.
 import { instanceOperatorApi } from '../../api/client'
+import { countryCode } from './countries'
 import {
   OperatingMode,
   OperatorRecipientKind,
@@ -119,8 +121,9 @@ export const CLI_RECIPIENT_KINDS: Readonly<Record<string, OperatorRecipientKind>
 
 /**
  * A recipient as the CLI takes it: `<name>|<kind>|<country>`, the kind one of [CLI_RECIPIENT_KINDS] and an `other` one
- * with its description after a colon (`other:sends sign-in texts`), the country optional; null when malformed — an
- * unknown kind, an `other` without its words, or words on any other kind ([recipientFits]).
+ * with its description after a colon (`other:sends sign-in texts`), the country an ISO 3166-1 alpha-2 code (`DE`, in
+ * either case) and optional; null when malformed — an unknown kind, an `other` without its words, words on any other
+ * kind ([recipientFits]), or a country that is no code of the backend's list ([countryCode]).
  */
 export function parseRecipient(typed: string): OperatorRecipient | null {
   const [name, what, country, ...rest] = typed.split('|').map((x) => x.trim())
@@ -128,7 +131,9 @@ export function parseRecipient(typed: string): OperatorRecipient | null {
   const colon = what.indexOf(':')
   const kind = CLI_RECIPIENT_KINDS[(colon < 0 ? what : what.slice(0, colon)).trim().toLowerCase()]
   const description = colon < 0 ? null : what.slice(colon + 1).trim() || null
-  const r: OperatorRecipient = { name, kind, description, country: country || null }
+  const code = country ? countryCode(country) : null
+  if (country && !code) return null
+  const r: OperatorRecipient = { name, kind, description, country: code }
   return kind && recipientFits(r) ? r : null
 }
 
