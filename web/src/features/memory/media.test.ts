@@ -16,7 +16,9 @@ import {
   addMedia,
   listMedia,
   listMediaPage,
-  newestCursor,
+  listMediaPages,
+  listTrash,
+  MEDIA_PAGE_LIMIT,
   openBlob,
   openOriginal,
   gridRef,
@@ -1223,30 +1225,52 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
 })
 
 describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
-  const item = (id: string, updatedAt: string): MediaItem => ({
-    mediaId: id,
-    original: { blobId: `b-${id}`, chunkCount: 1, byteSize: 0, wrappedBlobKey: 'aw==', ownerId: id, role: 'ORIGINAL' },
-    derivatives: [],
-    updatedAt: new Date(updatedAt),
+  const row = (id: string) => ({
+    blockedByOperator: false,
+    mediaId: id, blobId: `b-${id}`, chunkCount: 1, byteSize: 0, wrappedBlobKey: 'aw==',
+    derivatives: [], wrappedMeta: null, updatedAt: new Date('2026-07-09T12:00:00.000Z'),
   })
 
-  describe('newestCursor', () => {
-    it('is undefined for an empty grid', () => {
-      expect(newestCursor([])).toBeUndefined()
+  describe('listMediaPages', () => {
+    it('reads every page, from the cursor each answered, and keeps the first page\'s revisions and the last page\'s cursor', async () => {
+      const pages: Record<string, MediaListPage> = {
+        first: { media: [row('m1'), row('m2')], mediaRevision: 5, deleteRevision: 2, mediaIds: null, more: true, cursor: '7,m2' },
+        '7,m2': { media: [row('m3')], mediaRevision: 6, deleteRevision: 3, mediaIds: ['m3'], more: true, cursor: '9,m3' },
+        '9,m3': { media: [row('m4')], mediaRevision: 6, deleteRevision: 3, mediaIds: null, more: false, cursor: '9,m4' },
+      }
+      const { listNodeMedia } = fakeApi(mediaApi, { listNodeMedia: async (r) => pages[r.since ?? 'first'] })
+      const read = await listMediaPages(SCOPE_ID, NODE_ID)
+      if (read.notModified) throw new Error('a first load is never a 304')
+      expect(read.items.map((i) => i.mediaId)).toEqual(['m1', 'm2', 'm3', 'm4'])
+      expect([read.mediaRevision, read.deleteRevision, read.mediaIds, read.cursor]).toEqual([5, 2, null, '9,m4'])
+      expect(vi.mocked(listNodeMedia).mock.calls.map(([r]) => [r.since, r.sinceDelete, r.ifNoneMatch, r.limit])).toEqual([
+        [undefined, undefined, undefined, MEDIA_PAGE_LIMIT],
+        ['7,m2', 2, undefined, MEDIA_PAGE_LIMIT], // a later page: no If-None-Match, the first page's delete revision
+        ['9,m3', 2, undefined, MEDIA_PAGE_LIMIT],
+      ])
     })
 
-    it('picks the latest updatedAt and formats "updatedAt,mediaId"', () => {
-      const cursor = newestCursor([item('a', '2026-07-09T10:00:00.000Z'), item('b', '2026-07-09T12:00:00.000Z')])
-      expect(cursor).toBe('2026-07-09T12:00:00.000Z,b')
+    it('ends a poll at its 304 without a second read', async () => {
+      const { listNodeMedia } = fakeApi(mediaApi, {
+        listNodeMedia: async () => {
+          throw new ResponseError({ status: 304 } as Response, 'Not Modified')
+        },
+      })
+      expect(await listMediaPages(SCOPE_ID, NODE_ID, { ifNoneMatch: '5', since: '7,m2', sinceDelete: 1 })).toEqual({ notModified: true })
+      expect(listNodeMedia).toHaveBeenCalledTimes(1)
     })
 
-    it('breaks a same-timestamp tie by the larger mediaId (so all seen rows are ≤ the cursor)', () => {
-      const t = '2026-07-09T12:00:00.000Z'
-      expect(newestCursor([item('a', t), item('c', t), item('b', t)])).toBe(`${t},c`)
-    })
-
-    it('round-trips millisecond precision losslessly (matches the server TIMESTAMP(3))', () => {
-      expect(newestCursor([item('a', '2026-07-09T12:34:56.789Z')])).toBe('2026-07-09T12:34:56.789Z,a')
+    it('lists the trash in every page, newest-trashed first', async () => {
+      const trashed = (id: string, at: string) => ({ ...row(id), deletedAt: new Date(at) })
+      fakeApi(mediaApi, {
+        listNodeMedia: async (r) => {
+          expect(r.state).toBe('trashed')
+          return r.since
+            ? { media: [trashed('t3', '2026-07-09T11:00:00.000Z')], mediaRevision: 1, deleteRevision: 1, mediaIds: null, more: false, cursor: '2,t3' }
+            : { media: [trashed('t1', '2026-07-09T10:00:00.000Z'), trashed('t2', '2026-07-09T12:00:00.000Z')], mediaRevision: 1, deleteRevision: 1, mediaIds: null, more: true, cursor: '1,t2' }
+        },
+      })
+      expect((await listTrash(SCOPE_ID, NODE_ID)).map((i) => i.mediaId)).toEqual(['t2', 't3', 't1'])
     })
   })
 
@@ -1264,7 +1288,8 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
           mediaRevision: 5,
           deleteRevision: 2,
           mediaIds: ['m1', 'm2'],
-          more: false,
+          more: true,
+          cursor: '12,m1',
         },
       })
 
@@ -1276,12 +1301,13 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
       expect(page.mediaRevision).toBe(5)
       expect(page.deleteRevision).toBe(2)
       expect(page.mediaIds).toEqual(['m1', 'm2'])
+      expect([page.more, page.cursor]).toEqual([true, '12,m1'])
     })
 
-    it('threads the conditional-GET params (If-None-Match, since, sinceDelete) through to the client', async () => {
+    it('threads the conditional-GET params (If-None-Match, since, sinceDelete) and the page limit through to the client', async () => {
       const { listNodeMedia } = stubApi(mediaApi, { listNodeMedia: { media: [], mediaRevision: 3, deleteRevision: 0, mediaIds: null, more: false } })
       await listMediaPage(SCOPE_ID, NODE_ID, { ifNoneMatch: '3', since: 't,m', sinceDelete: 0 })
-      expect(listNodeMedia).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, ifNoneMatch: '3', since: 't,m', sinceDelete: 0 })
+      expect(listNodeMedia).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, ifNoneMatch: '3', since: 't,m', sinceDelete: 0, limit: MEDIA_PAGE_LIMIT })
     })
 
     it('returns { notModified: true } on a 304 (idle fast path), swallowing the ResponseError', async () => {

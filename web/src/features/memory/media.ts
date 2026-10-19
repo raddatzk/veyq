@@ -33,7 +33,7 @@ import {
 import type { BlobDeclare, BlobRef, BlobSource, ReservedUpload, WindowFn } from '../../core/blob/types'
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
 import { sniffMediaType } from './download'
-import { newestItemsCursor } from '../../core/items/itemsLive'
+import { readItemPages, type ItemsOnePage } from '../../core/items/itemsLive'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from '../../core/node/sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
@@ -173,7 +173,7 @@ export type MediaItem = {
   /** The revision [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
    *  public-share viewer, which never writes; a write that lacks it states 0 and re-bases on the `409`. */
   metaRevision?: number
-  /** When this media last changed (cr-0107) — the `(updatedAt, mediaId)` pair is the live-updates keyset cursor.
+  /** When this media last changed (cr-0107) — served, not the keyset: a page answers its own `cursor` (ADR 0033 decision 3).
    *  Present for the authenticated gallery (`listMedia`/`listMediaPage`); absent for the public-share snapshot
    *  viewer, which doesn't poll (the sharing resolve carries no per-media timestamp). */
   updatedAt?: Date
@@ -787,12 +787,19 @@ export async function restoreMedia(scopeId: string, mediaId: string): Promise<vo
 
 /**
  * List a node's TRASHED media for the Trash tab (cr-0110): the soft-deleted items with their deletion audit
- * (`deletedAt`/`deletedBy`), newest-trashed first — a plain full list (not the live conditional-GET). Each item
- * still carries its original + derivative tiers, so the tab renders thumbnails the same way the gallery does.
+ * (`deletedAt`/`deletedBy`), newest-trashed first — every page of the listing (not the live conditional-GET; it pages
+ * on the live list's keyset, so the order by `deletedAt` is set here, once every page is in). Each item still carries
+ * its original + derivative tiers, so the tab renders thumbnails the same way the gallery does.
  */
 export async function listTrash(scopeId: string, nodeId: string): Promise<MediaItem[]> {
-  const page = await withRefresh(() => mediaApi().listNodeMedia({ scopeId, nodeId, state: 'trashed' }))
-  return pageItems(nodeId, page)
+  const read = await readItemPages(
+    () => readMediaPage(scopeId, nodeId, { state: 'trashed' }),
+    (since) => readMediaPage(scopeId, nodeId, { since, state: 'trashed' }),
+    (m) => m.mediaId,
+  )
+  const items = read.notModified ? [] : read.items // nothing conditional was asked: exhaustiveness only
+  const at = (m: MediaItem) => m.deletedAt?.getTime() ?? 0
+  return items.sort((a, b) => at(b) - at(a) || (a.mediaId < b.mediaId ? -1 : a.mediaId > b.mediaId ? 1 : 0))
 }
 
 /**
@@ -806,32 +813,65 @@ export async function purgeMedia(scopeId: string, mediaId: string): Promise<void
 // --- read-back -------------------------------------------------------------
 
 /**
- * One conditional-GET page of a node's media (uc.memory.live-updates, cr-0107, ADR 0033). A poll echoes the
- * cached `mediaRevision` as `ifNoneMatch`; unchanged ⇒ `{ notModified: true }` (the server ran no media query).
- * On a change ⇒ a **keyset delta** — only the media past the `since` cursor (`"updatedAt,mediaId"`) — plus both
- * revisions and, **only when a delete advanced `deleteRevision`** past the echoed `sinceDelete`, the node's
- * current `mediaIds` set for delete-reconcile (else null). First load: omit `ifNoneMatch`/`since` for the full
- * list. Operator-blind: opaque counters + ids + wraps only.
+ * How many media one page of the list asks for (ADR 0033 decision 6; the server's cap is 1000, `ItemsLimit`).
+ */
+export const MEDIA_PAGE_LIMIT = 500
+
+/**
+ * A node's media read in full — every page of it (uc.memory.live-updates, cr-0107, ADR 0033 decisions 2, 3 and 6). A
+ * poll echoes the cached `mediaRevision` as `ifNoneMatch`; unchanged ⇒ `{ notModified: true }` (the server ran no media
+ * query). On a change ⇒ a **keyset delta** — only the media past the `since` cursor, in pages until none remain — with
+ * the FIRST page's revisions, the node's current `mediaIds` set for delete-reconcile only when a delete advanced
+ * `deleteRevision` past the echoed `sinceDelete` (else null), and the `cursor` of the last page — what the next poll
+ * echoes as `since` (null: no page carried a row; keep the one held). First load: omit `ifNoneMatch`/`since`.
+ * Operator-blind: opaque counters + ids + wraps only.
  */
 export type MediaPage =
   | { notModified: true }
-  | { notModified: false; items: MediaItem[]; mediaRevision: number; deleteRevision: number; mediaIds: string[] | null }
+  | { notModified: false; items: MediaItem[]; mediaRevision: number; deleteRevision: number; mediaIds: string[] | null; cursor: string | null }
 
+/** ONE page of the list as the server answers it — what [listMediaPages] reads in a loop. */
+export type MediaOnePage =
+  | { notModified: true }
+  | { notModified: false; items: MediaItem[]; mediaRevision: number; deleteRevision: number; mediaIds: string[] | null; more: boolean; cursor: string | null }
+
+/** One page of a node's media — `limit` items at most ([MEDIA_PAGE_LIMIT] by default), `more` while more remain. The
+ *  one call of the media list; [listMediaPages] is the loop over it, and no other caller pages by hand. */
 export async function listMediaPage(
   scopeId: string,
   nodeId: string,
-  opts: { ifNoneMatch?: string; since?: string; sinceDelete?: number } = {},
-): Promise<MediaPage> {
+  opts: { ifNoneMatch?: string; since?: string; sinceDelete?: number; limit?: number; state?: 'trashed' } = {},
+): Promise<MediaOnePage> {
+  const page = await readMediaPage(scopeId, nodeId, opts)
+  if (page.notModified) return page
+  return { notModified: false, items: page.items, mediaRevision: page.revision, deleteRevision: page.deleteRevision, mediaIds: page.ids, more: page.more, cursor: page.cursor }
+}
+
+async function readMediaPage(
+  scopeId: string,
+  nodeId: string,
+  opts: { ifNoneMatch?: string; since?: string; sinceDelete?: number; limit?: number; state?: 'trashed' },
+): Promise<ItemsOnePage<MediaItem>> {
   try {
     const page = await withRefresh(() =>
-      mediaApi().listNodeMedia({ scopeId, nodeId, ifNoneMatch: opts.ifNoneMatch, since: opts.since, sinceDelete: opts.sinceDelete }),
+      mediaApi().listNodeMedia({
+        scopeId,
+        nodeId,
+        ifNoneMatch: opts.ifNoneMatch,
+        since: opts.since,
+        sinceDelete: opts.sinceDelete,
+        limit: opts.limit ?? MEDIA_PAGE_LIMIT,
+        ...(opts.state ? { state: opts.state } : {}),
+      }),
     )
     return {
       notModified: false,
       items: pageItems(nodeId, page),
-      mediaRevision: page.mediaRevision,
+      revision: page.mediaRevision,
       deleteRevision: page.deleteRevision,
-      mediaIds: page.mediaIds ?? null,
+      ids: page.mediaIds ?? null,
+      more: page.more ?? false,
+      cursor: page.cursor ?? null,
     }
   } catch (e) {
     if (isHttpStatus(e, HttpStatus.notModified)) return { notModified: true } // idle fast path — nothing changed
@@ -840,20 +880,32 @@ export async function listMediaPage(
 }
 
 /**
- * List a node's media in full (opaque metadata + the K_blob wraps for the original + every derivative tier). A
- * thin wrapper over [listMediaPage] with no cursor/ETag, so the server always returns the whole list — used
- * where a snapshot suffices (cover picker, tests); the live gallery uses [listMediaPage] directly to poll deltas.
+ * Every page of a node's media from `opts` (core's [readItemPages]): the first read is conditional when `ifNoneMatch` is
+ * given, every later one continues from the page before's cursor with the first page's delete revision. The one loop
+ * the gallery's first load, its live poll, the cover picker and the export go through.
  */
-export async function listMedia(scopeId: string, nodeId: string): Promise<MediaItem[]> {
-  const page = await listMediaPage(scopeId, nodeId)
-  return page.notModified ? [] : page.items // no ifNoneMatch was sent, so a 304 is impossible — the guard is just exhaustiveness
+export async function listMediaPages(
+  scopeId: string,
+  nodeId: string,
+  opts: { ifNoneMatch?: string; since?: string; sinceDelete?: number } = {},
+): Promise<MediaPage> {
+  const read = await readItemPages(
+    () => readMediaPage(scopeId, nodeId, opts),
+    (since, sinceDelete) => readMediaPage(scopeId, nodeId, { since, sinceDelete }),
+    (m) => m.mediaId,
+  )
+  if (read.notModified) return read
+  return { notModified: false, items: read.items, mediaRevision: read.revision, deleteRevision: read.deleteRevision, mediaIds: read.ids, cursor: read.cursor }
 }
 
-/** The newest `(updatedAt, mediaId)` keyset cursor across [items] — what a live poll echoes as `since`; undefined
- *  when none carry an `updatedAt` (e.g. an empty grid). Millisecond-precision by construction (a JS `Date`), which
- *  round-trips losslessly against the server's `TIMESTAMP(3)` so the same rows are never re-fetched. */
-export function newestCursor(items: readonly MediaItem[]): string | undefined {
-  return newestItemsCursor(items, (it) => it.mediaId, (it) => it.updatedAt)
+/**
+ * List a node's media in full (opaque metadata + the K_blob wraps for the original + every derivative tier): every page,
+ * no ETag — used where a snapshot suffices (cover picker, export, tests); the live gallery reads [listMediaPages] for its
+ * revisions and cursor.
+ */
+export async function listMedia(scopeId: string, nodeId: string): Promise<MediaItem[]> {
+  const page = await listMediaPages(scopeId, nodeId)
+  return page.notModified ? [] : page.items // no ifNoneMatch was sent, so a 304 is impossible — the guard is just exhaustiveness
 }
 
 /**

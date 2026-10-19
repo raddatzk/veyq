@@ -24,7 +24,7 @@ vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()
 vi.mock('./media', async (orig) => {
   const real = await orig<typeof import('./media')>()
   const names = [
-    'openGrid', 'openLightbox', 'openOriginal', 'openBlob', 'chunkProvider', 'loadMediaExif', 'listMediaPage', 'deleteMedia',
+    'openGrid', 'openLightbox', 'openOriginal', 'openBlob', 'chunkProvider', 'loadMediaExif', 'listMediaPages', 'deleteMedia',
     'restoreMedia', 'listTrash', 'purgeMedia', 'setMediaMeta', 'backfillPlaceName',
     'listBuckets', 'createBucket', 'renameBucket', 'deleteBucket', 'moveBucketMedia',
   ] as const
@@ -126,7 +126,10 @@ describe("the guest's source reads the link, and only the link", () => {
       expect(atRoot.items.map((i) => i.mediaId)).toEqual(['m-root'])
       expect(atChapter.items.map((i) => i.mediaId)).toEqual(['m-ch'])
       expect(atRoot.revision, 'no revisions: a guest has no live poll').toBeNull()
-      expect(vi.mocked(publicShareMediaApi().listShareMedia).mock.calls[0][0]).toEqual({ shareId: SHARE, xSharePassword: PW })
+      expect(vi.mocked(publicShareMediaApi().listShareMedia).mock.calls.map(([r]) => r), 'its open node, a page each').toEqual([
+        { shareId: SHARE, xSharePassword: PW, nodeId: MEMORY, after: undefined, limit: media.MEDIA_PAGE_LIMIT },
+        { shareId: SHARE, xSharePassword: PW, nodeId: CHAPTER, after: undefined, limit: media.MEDIA_PAGE_LIMIT },
+      ])
       expect(authenticatedCalls).toEqual([])
     })
 
@@ -252,14 +255,14 @@ describe("the member's source is today's calls, with its scope", () => {
   const gridSignal = new AbortController().signal // a grid's read can be dropped while it waits (inbox #488)
   // [what the view calls, the module function it must reach, the arguments it must reach it with]
   const doors: [string, () => unknown, (...a: never[]) => unknown, unknown[]][] = [
-    ['listMedia', () => src.listMedia('n'), media.listMediaPage, [S, 'n']],
+    ['listMedia', () => src.listMedia('n'), media.listMediaPages, [S, 'n']],
     ['loaders.grid', () => src.loaders.grid(item, key, gridSignal), media.openGrid, [S, key, item, gridSignal]],
     ['loaders.preview', () => src.loaders.preview(item, key), media.openLightbox, [S, key, item]],
     ['loaders.original', () => src.loaders.original(item, key), media.openOriginal, [S, key, item]],
     ['loaders.chunk', () => src.loaders.chunk(item, key), media.chunkProvider, [S, key, item]],
     ['loaders.coverBlob', () => src.loaders.coverBlob(item.original, key), media.openBlob, [S, key, item.original]],
     ['loaders.exif', () => src.loaders.exif!(item, key), media.loadMediaExif, [S, item, key]],
-    ['poll', () => src.poll!('n', { mediaRevision: 7, since: 'c', deleteRevision: 2 }), media.listMediaPage, [S, 'n', { ifNoneMatch: '7', since: 'c', sinceDelete: 2 }]],
+    ['poll', () => src.poll!('n', { mediaRevision: 7, since: 'c', deleteRevision: 2 }), media.listMediaPages, [S, 'n', { ifNoneMatch: '7', since: 'c', sinceDelete: 2 }]],
     ['deleteMedia.trash', () => (src.deleteMedia!.reach === 'any' ? src.deleteMedia!.trash('m-1') : null), media.deleteMedia, [S, 'm-1']],
     ['deleteMedia.restore', () => (src.deleteMedia!.reach === 'any' ? src.deleteMedia!.restore('m-1') : null), media.restoreMedia, [S, 'm-1']],
     ['trash.list', () => src.trash!.list('n'), media.listTrash, [S, 'n']],

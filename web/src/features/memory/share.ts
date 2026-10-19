@@ -49,6 +49,7 @@ import {
   uploadMediaVia,
   createBrowserDeriver,
   type BlobRef,
+  MEDIA_PAGE_LIMIT,
   type MediaItem,
   type MediaUploadTransport,
   type AddMediaSource,
@@ -341,11 +342,14 @@ export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [], mo
 
 /**
  * Read what a share serves of the Memory's media — Memories' own guest read (`listShareMedia`, no bearer; the guest's
- * password token as for the resolve): the sealed rows under the shared subtree and the wrapped keys of the WRITE_ONLY
- * identities whose rows those are. A WRITE_ONLY link is served nothing (ADR 0031), so it is not asked. Throws
- * [ShareUnavailableError] when the read is refused (a link revoked since its resolve answers 404 here too).
+ * password token as for the resolve): the sealed rows under the shared subtree, or under the one node [nodeId] a guest has
+ * open, and the wrapped keys of the WRITE_ONLY identities whose rows those are. EVERY page of it (ADR 0033 decision 6): a
+ * page is at most [MEDIA_PAGE_LIMIT] media in id order, the next asked after the last id, until the server says no more
+ * remain — merged into one listing (the identities once each). A WRITE_ONLY link is served nothing (ADR 0031), so it is
+ * not asked. Throws [ShareUnavailableError] when a read is refused (a link revoked since its resolve answers 404 here too,
+ * and so does a node the link does not serve).
  */
-export async function listShareMedia(shareId: string, role: ShareRole, pwToken?: string): Promise<ShareMediaListing> {
+export async function listShareMedia(shareId: string, role: ShareRole, pwToken?: string, nodeId?: string): Promise<ShareMediaListing> {
   if (role === ShareRole.WriteOnly) return NO_SHARE_MEDIA
   // A moderator's review lists the media its case's hold copied — never the link's own read (core/sharing/review.ts).
   const review = activeReview()
@@ -354,11 +358,24 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
     const held = await caseMediaApi().listCaseMedia({ caseId: review.caseId, ...(await review.proof('listCaseMedia')) })
     return { ...held, more: false }
   }
-  try {
-    return await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken })
-  } catch {
-    throw new ShareUnavailableError('not_found')
+  const media: ShareMediaListing['media'] = []
+  const identities = new Map<string, ShareMediaListing['identities'][number]>()
+  let after: string | undefined
+  for (;;) {
+    let page: ShareMediaListing
+    try {
+      page = await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken, nodeId, after, limit: MEDIA_PAGE_LIMIT })
+    } catch {
+      throw new ShareUnavailableError('not_found')
+    }
+    media.push(...page.media)
+    for (const i of page.identities) identities.set(i.identityId, i)
+    const last = page.media.at(-1)?.mediaId
+    if (!page.more) break
+    if (!last || last === after) throw new Error('share_media_page_did_not_advance') // a page that says more must move on
+    after = last
   }
+  return { media, identities: [...identities.values()], more: false }
 }
 
 /**
