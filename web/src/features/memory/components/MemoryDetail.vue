@@ -21,7 +21,7 @@
 // source's loaders and each write per right (`canSetCover`, `canDelete`, the source's `mediaMeta` door). A guest
 // mounts this through core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and chapter of its link: it
 // sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Tabs from 'primevue/tabs'
@@ -193,6 +193,7 @@ const {
   pollMedia,
   liftTombstone,
   removeMedia,
+  wantThumbs,
 } = useMediaGalleryLive({
   source: props.source,
   scopeId: () => props.scopeId,
@@ -313,6 +314,9 @@ const { storedCover, coverSrc, coverMediaId, coverSourceOf } = useMemoryCover({
   loaders: props.source.loaders,
   thumbs,
 })
+
+// The cover photo's thumbnail is the header's image: wanted whether or not its tile is near the gallery's viewport.
+watch(coverMediaId, (id) => wantThumbs('cover', id ? [id] : []), { immediate: true })
 
 // The cover is EDITED in core's dialog (inbox #411), mounted by the host: the tile asks for it, and the lightbox's "Set as
 // cover" hands it the picked photo as the Memory's extra source. Only where the right grants it.
@@ -440,6 +444,19 @@ const chunkLoader = (it: MediaItem) => loaders.chunk(it, lightboxKey.value)
 const metaResolver = (it: MediaItem) => loaders.meta(it, lightboxKey.value)
 const blobMetaResolver = (it: MediaItem) => loaders.blobMeta(it, lightboxKey.value)
 const exifLoader = loaders.exif ? (it: MediaItem) => loaders.exif!(it, lightboxKey.value) : undefined
+
+// The grids a lightbox opens from: closing it scrolls the shown item's tile into view and focuses it (ADR 0105
+// decision 5) — in the gallery, or in the contributors' view when it was opened there.
+type FocusableGrid = { focusItem: (id: string) => Promise<void> | void }
+const galleryGrid = ref<FocusableGrid | null>(null)
+const bucketsView = ref<FocusableGrid | null>(null)
+async function onLightboxClose(mediaId: string | null) {
+  lightboxIndex.value = null
+  if (!mediaId) return
+  await nextTick()
+  const grid = activeTab.value === 'beitraege' ? bucketsView.value : activeTab.value === 'gallery' ? galleryGrid.value : null
+  await grid?.focusItem(mediaId)
+}
 
 // The Trash tab loads lazily on open — no extra list on every Memory open.
 watch(activeTab, (tab) => { if (tab === 'trash') void loadTrash() })
@@ -583,7 +600,13 @@ watch(
             <p v-if="markFilter !== 'all' && !layoutItems.length" class="veyq-empty">
               {{ markFilter === 'mine' ? t('media.marks.emptyMine') : t('media.marks.emptyEveryone') }}
             </p>
-            <MediaGrid v-else :items="layoutItems" :aria-label="t('media.gallery')">
+            <MediaGrid
+              v-else
+              ref="galleryGrid"
+              :items="layoutItems"
+              :aria-label="t('media.gallery')"
+              @window="(ids) => wantThumbs('gallery', ids)"
+            >
               <template #tile="{ tile, item }">
                 <!-- optimistic in-grid upload tile (cr-0074): the shared OptimisticTile (preview + progress / retry) -->
                 <OptimisticTile
@@ -673,6 +696,7 @@ watch(
              legacy MemoryAssetBuckets UX. Always present; the primary is virtual until a sub-bucket/upload materializes it. -->
         <TabPanel v-if="showBeitraege" value="beitraege">
           <MemoryBuckets
+            ref="bucketsView"
             :scope-id="scopeId"
             :node-id="node.id"
             :memory-key="memoryKey"
@@ -682,6 +706,7 @@ watch(
             @open-lightbox="openBucketLightbox"
             @changed="onBucketChanged"
             @upload-bucket="onBucketUpload"
+            @window="(ids) => wantThumbs('buckets', ids)"
           />
         </TabPanel>
 
@@ -771,7 +796,7 @@ watch(
       :blob-meta-resolver="blobMetaResolver"
       :exif-loader="exifLoader"
       :can-report="canReport"
-      @close="lightboxIndex = null"
+      @close="onLightboxClose"
       @updated="onCapturedAtUpdated"
       @set-cover="onSetCoverFromPhoto"
       @delete="onLightboxDelete"

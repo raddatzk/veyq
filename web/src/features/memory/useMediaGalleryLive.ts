@@ -227,14 +227,6 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
 
   // `reset` (a Memory/chapter switch) clears the grid up front; an incremental reload (post-upload batch) merges
   // the fresh list into place so existing tiles don't blink empty — jarring next to the optimistic tiles (cr-0074).
-  /** `list` in grid order, so the tiles on screen when a gallery opens are asked for first (the read scheduler serves a
-   *  lane in the order asked, inbox #488); a media the grid does not show (a mark filter) comes after them. */
-  function inGridOrder(list: readonly MediaItem[]): MediaItem[] {
-    const rank = new Map(sortedItems.value.map((it, i) => [it.mediaId, i]))
-    const at = (m: MediaItem) => rank.get(m.mediaId) ?? Number.MAX_SAFE_INTEGER
-    return [...list].sort((a, b) => at(a) - at(b))
-  }
-
   async function load({ reset = false }: { reset?: boolean } = {}) {
     const key = ctx.memoryKey()
     const nodeId = ctx.node().id
@@ -270,7 +262,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       deleteRevision.value = page.revision?.delete ?? 0
       pollSince = page.cursor ?? undefined
       status.value = 'ready'
-      await pipeline.decrypt(inGridOrder(page.items), () => ctx.node().id === nodeId)
+      // No thumbnail is read here: the grid asks for the tiles near its viewport, nearest first ([wantThumbs]).
       if (ctx.node().id === nodeId) await ctx.onSettle() // settle: auto-date, then auto-location (RMW-safe)
     } catch {
       if (ctx.node().id === nodeId) status.value = 'error'
@@ -313,7 +305,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       mediaRevision.value = change.revision
       deleteRevision.value = change.deleteRevision
       pollSince = change.cursor ?? pollSince // a delta that carried no row (a removal only) leaves the cursor where it was
-      await pipeline.decrypt(change.items, () => ctx.node().id === cursor.key) // decrypt only the delta's new/changed tiles
+      // a new tile's thumbnail is read when the grid announces it near the viewport ([wantThumbs])
       if (!signal.aborted && ctx.node().id === cursor.key) await ctx.onSettle()
     },
   })
@@ -397,5 +389,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     pollMedia,
     liftTombstone,
     removeMedia: removeFromGrid,
+    /** The tiles `owner` (a grid, the cover) wants a thumbnail for, nearest first (ADR 0105 decision 2). */
+    wantThumbs: pipeline.want,
   }
 }

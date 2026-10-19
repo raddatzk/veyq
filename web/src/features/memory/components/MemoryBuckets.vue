@@ -39,6 +39,8 @@ const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
   openLightbox: [{ items: MediaItem[]; index: number }]
   uploadBucket: [string | null] // open the upload scoped to this bucket (null = your primary)
+  /** The tiles its grid mounts, nearest first: the parent gallery reads their thumbnails (ADR 0105 decision 2). */
+  window: [ids: string[]]
 }>()
 
 const { t, locale } = useI18n()
@@ -385,6 +387,10 @@ async function undoDelete() {
 }
 onBeforeUnmount(() => { toast.dismissUndo() }) // drop any lingering undo-toast (the `useUndo` window tears itself down)
 
+// The windowed grid (ADR 0105): the detail hands the focus back here when a lightbox opened from this view closes.
+const grid = ref<{ focusItem: (id: string) => Promise<void> } | null>(null)
+defineExpose({ focusItem: (id: string) => grid.value?.focusItem(id) })
+
 // --- upload / drag-drop into the active bucket ------------------------------
 
 function onDrop(event: DragEvent) {
@@ -483,7 +489,14 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
 
       <!-- the grid -->
       <p v-if="!filteredMedia.length" class="veyq-empty">{{ t('memory.buckets.emptyBucket') }}</p>
-      <MediaGrid v-else :items="layoutItems" :aria-label="activeBucket?.displayName ?? t('memory.buckets.title')">
+      <MediaGrid
+        v-else
+        ref="grid"
+        :items="layoutItems"
+        :aria-label="activeBucket?.displayName ?? t('memory.buckets.title')"
+        :select-on-space="toggleSelect"
+        @window="(ids) => emit('window', ids)"
+      >
         <template #tile="{ tile, item }">
           <MediaTile
             :style="{ transform: `translate(${tile.left}px, ${tile.top}px)`, width: `${tile.renderedWidth}px`, height: `${tile.renderedHeight}px` }"
