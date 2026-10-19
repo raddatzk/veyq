@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.block
 
+import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
@@ -41,6 +42,7 @@ class ContentView internal constructor(val nodeIds: Set<String>, val itemIds: Se
 @ApplicationScoped
 class ModerationBlocks(
     private val arms: Instance<SharedSubtreeContributor>,
+    private val blobs: BlobUploadStore,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
 ) {
@@ -83,12 +85,18 @@ class ModerationBlocks(
         return ContentView(if (roots.isEmpty()) emptySet() else below(scopeId, roots), itemIds)
     }
 
-    /** Whether a byte read of [blobId] in [scopeId] is refused: it hangs under a blocked node or on a blocked item. */
+    /**
+     * Whether a byte read of [blobId] in [scopeId] is refused: it, or another row on the same stored object, hangs under a
+     * blocked node or on a blocked item. A block reaches the **object** (ADR 0013 § 5): a cover sharing a blocked
+     * medium's object serves the same bytes, so it is refused with it. While the block stands - a block that ends with
+     * its erased target (ADR 0093 § 6) no longer reaches a row that outlived it, as it never reached a copy.
+     */
     fun blobBlocked(scopeId: String, blobId: String): Boolean {
         val view = contentView(scopeId)
         if (view.isEmpty) return false
-        if (view.nodeIds.isNotEmpty() && arms.any { blobId in it.authorizedBlobIds(scopeId, view.nodeIds.toList()) }) return true
-        return view.itemIds.any { itemId -> items.any { blobId in it.blobIdsOf(itemId) } }
+        val rows = blobs.rowsOnSameObject(scopeId, blobId) + blobId
+        if (view.nodeIds.isNotEmpty() && arms.any { arm -> arm.authorizedBlobIds(scopeId, view.nodeIds.toList()).any { it in rows } }) return true
+        return view.itemIds.any { itemId -> items.any { item -> item.blobIdsOf(itemId).any { it in rows } } }
     }
 
     /** [roots] and every node below them in [scopeId], trashed ones included (the tree by parent, breadth first). */

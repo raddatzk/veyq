@@ -18,4 +18,11 @@ interface SharedSubtreeContributor {
      * `deletedAt is null` predicate — in [scopeId]: the set a share's blob GET is authorized against.
      */
     fun authorizedBlobIds(scopeId: String, liveNodeIds: List<String>): Set<String>
+
+    /**
+     * Whether [blobId] is in [authorizedBlobIds] for the one live node [liveNodeId] - the question a shared blob row asks
+     * of its source (`SharedBlobs`, ADR 0013 § 5). An arm with many rows per node answers it by
+     * a targeted read; it must answer exactly as the set does (`SharedBlobSliceTest` holds each arm to that).
+     */
+    fun holds(scopeId: String, liveNodeId: String, blobId: String): Boolean = blobId in authorizedBlobIds(scopeId, listOf(liveNodeId))
 }

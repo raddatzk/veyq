@@ -7,6 +7,8 @@ import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.SharedBlobSpec
+import me.raddatz.veyq.core.blob.SharedBlobs
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.items.ItemsCursor
@@ -69,6 +71,14 @@ data class DerivativeRow(
 /** A verified derivative upload to attach: its role + session + the verified per-chunk manifest. */
 data class DerivativeAttach(val kind: String, val session: UploadSessionEntity, val manifest: List<Long>?)
 
+/** Where a medium's original comes from: its verified upload, or a new row on an object the node already stores. */
+sealed interface OriginalAttach {
+    data class Upload(val session: UploadSessionEntity, val manifest: List<Long>?) : OriginalAttach
+
+    /** ADR 0013 § 5: the picked file was found equal to the node's video banner; [scopeId] is the completion's. */
+    data class Shared(val scopeId: String, val spec: SharedBlobSpec) : OriginalAttach
+}
+
 /** A node's uploader bucket for the "Beiträge" tab (en.memory.buckets, cr-0113): opaque owner_key + structure + count. */
 data class BucketRow(
     val bucketId: String,
@@ -95,6 +105,7 @@ data class BucketRow(
 @ApplicationScoped
 class MediaStore(
     private val blobs: BlobUploadStore,
+    private val shared: SharedBlobs,
     private val nodes: NodesStore,
     private val items: NodeItemsRevisions,
     /** Core's guest-write record: a medium's rows go with the medium (ADR 0093 § 10), from [purgeMediaRows]. */
@@ -119,7 +130,10 @@ class MediaStore(
      * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
      * session becomes `veyq_media.blob_id`; each derivative becomes its own blob + a `veyq_media_derivative`
      * row. One transaction — all blobs, the media, and the derivative rows commit together. Returns
-     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent, or [admitted] refuses.
+     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent, or [admitted] refuses;
+     * (null, mediaId) — nothing written — when a shared original's source does not pass [SharedBlobs.persist].
+     * A shared original ([OriginalAttach.Shared], ADR 0013 § 5) is a new row on the stored object of the node's video
+     * banner: nothing of it was uploaded, its derivatives (the posters) were, as always.
      * [admitted] is the caller's gate asked again, before anything else in this transaction — a guest's link under
      * the row lock its delete holds (`ShareMediaHandler.complete`); a member's complete passes none.
      *
@@ -132,9 +146,8 @@ class MediaStore(
     @Transactional
     fun attach(
         mediaId: String,
-        original: UploadSessionEntity,
+        original: OriginalAttach,
         nodeId: String,
-        originalManifest: List<Long>?,
         derivatives: List<DerivativeAttach>,
         wrappedMeta: String?,
         wrappedExif: String?,
@@ -143,17 +156,29 @@ class MediaStore(
         admitted: () -> Boolean = { true },
         /** Told the medium's id last, once it is attached (the guest-write record, ADR 0093 § 10); never on a refusal. */
         attached: (mediaId: String) -> Unit = {},
-    ): Pair<String, String>? {
+    ): Pair<String?, String>? {
         if (!admitted()) return null
-        val sessionIds = listOf(original.id) + derivatives.map { it.session.id }
+        val scopeId = when (original) {
+            is OriginalAttach.Upload -> original.session.scopeId
+            is OriginalAttach.Shared -> original.scopeId
+        }
+        // A shared original's source is checked under the scope row's lock, the order every attachment writer takes
+        // (scope, then the sessions it spends), so a removal of the banner it shares is seen or waits (`SharedBlobs`).
+        if (original is OriginalAttach.Shared) nodes.lockScope(scopeId)
+        val sessionIds = listOfNotNull((original as? OriginalAttach.Upload)?.session?.id) + derivatives.map { it.session.id }
         if (sessionIds.sumOf { UploadSessionEntity.delete("id = ?1", it) } != sessionIds.size.toLong()) {
             QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
             return null
         }
-        val scopeId = original.scopeId
+        val originalBlobId = when (original) {
+            is OriginalAttach.Upload -> blobs.persistBlob(original.session, original.manifest)
+            is OriginalAttach.Shared -> shared.persist(scopeId, nodeId, original.spec) ?: run {
+                QuarkusTransaction.setRollbackOnly() // the derivatives' sessions stay open for a retry as an upload
+                return null to mediaId
+            }
+        }
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
         val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
-        val originalBlobId = blobs.persistBlob(original, originalManifest)
         val now = Instant.now()
         val medium = MediaEntity().apply {
             id = mediaId

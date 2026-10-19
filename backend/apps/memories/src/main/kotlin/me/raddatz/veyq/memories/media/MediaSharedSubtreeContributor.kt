@@ -21,4 +21,16 @@ class MediaSharedSubtreeContributor : SharedSubtreeContributor {
         }
         return ids
     }
+
+    /** The set's predicate for one blob, by two counts instead of a row per medium: a live medium's original, or a tier of one. */
+    override fun holds(scopeId: String, liveNodeId: String, blobId: String): Boolean =
+        MediaEntity.count("scopeId = ?1 and nodeId = ?2 and deletedAt is null and blobId = ?3", scopeId, liveNodeId, blobId) > 0 ||
+            MediaDerivativeEntity.getEntityManager()
+                .createQuery(
+                    "select count(d) from MediaDerivativeEntity d, MediaEntity m where d.blobId = ?1 and m.id = d.mediaId " +
+                        "and m.scopeId = ?2 and m.nodeId = ?3 and m.deletedAt is null",
+                    java.lang.Long::class.java,
+                )
+                .setParameter(1, blobId).setParameter(2, scopeId).setParameter(3, liveNodeId)
+                .singleResult.toLong() > 0
 }

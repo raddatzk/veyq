@@ -25,8 +25,8 @@ class StorageUsage(private val em: EntityManager) {
     fun lockTenant(tenantId: String): TenantEntity? = TenantEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)
 
     /**
-     * What tenant [tenantId] holds in the store (ADR 0073 §2): every blob in its scopes — originals, derivatives,
-     * covers — plus every open session there. Reclaim tombstones carry no scope, so they are not counted.
+     * What tenant [tenantId] holds in the store (ADR 0073 §2): every stored object in its scopes — originals,
+     * derivatives, covers, each object once — plus every open session there. Reclaim tombstones carry no scope, so they are not counted.
      */
     fun tenantUsage(tenantId: String): Long =
         (em.createNativeQuery(tenantUsageSql("WHERE t.id = :key")).setParameter("key", tenantId).singleResult as Array<*>)
@@ -42,16 +42,22 @@ class StorageUsage(private val em: EntityManager) {
      * The id is cast to text: a native `SELECT` of a `UUID` column hands back `byte[]` on H2 (measured), not the
      * `String` the callers read, and the cast reads the same on both engines (inbox #387).
      *
-     * The one tenant total, per tenant row [where] admits: its blobs' sizes plus its open sessions', through
+     * The one tenant total, per tenant row [where] admits: its stored objects' sizes plus its open sessions', through
      * `veyq_scope.tenant_id`. The tenant filter sits on the outer row, and each term is a correlated subquery, so
      * the locked single-tenant check reads only that tenant's scopes (`ix_scope_tenant`, `ix_blob_scope`).
+     *
+     * **A stored object counts once**, however many blob rows name it (a cover or a banner sharing a medium's object,
+     * ADR 0013 § 5): a row counts only when no row of a lower id names its `storage_key` (`ix_blob_storage_key`). Rows on
+     * one object are always in one scope, so the lowest one is the tenant's. A `NOT EXISTS`, not a `DISTINCT` derived
+     * table: MariaDB lets no derived table reference the outer tenant row.
      */
     private fun tenantUsageSql(where: String): String =
         """
         SELECT CAST(t.id AS CHAR(36)),
                COALESCE((SELECT SUM(b.byte_size) FROM veyq_blob b
                    JOIN veyq_scope sc ON sc.id = b.scope_id
-                  WHERE sc.tenant_id = t.id), 0)
+                  WHERE sc.tenant_id = t.id
+                    AND NOT EXISTS (SELECT 1 FROM veyq_blob o WHERE o.storage_key = b.storage_key AND o.id < b.id)), 0)
              + COALESCE((SELECT SUM(s.byte_size) FROM veyq_upload_session s
                    JOIN veyq_scope sc ON sc.id = s.scope_id
                   WHERE sc.tenant_id = t.id), 0)

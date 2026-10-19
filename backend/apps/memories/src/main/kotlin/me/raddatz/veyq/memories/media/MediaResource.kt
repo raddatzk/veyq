@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.blob.toSpec
 import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.memories.generated.api.MediaApi
 import me.raddatz.veyq.memories.generated.model.MediaBatchRequest
@@ -57,10 +58,11 @@ class MediaResource(
             MediaUploadCompletion.item(
                 mediaId = item.mediaId.toString(),
                 nodeId = item.nodeId.toString(),
-                originalUploadId = item.originalUploadId.toString(),
+                originalUploadId = item.originalUploadId?.toString(),
                 derivatives = item.derivatives.orEmpty().map { DerivativeDeclare(it.kind.value, it.uploadId.toString()) },
                 wrappedMeta = item.wrappedMeta,
                 wrappedExif = item.wrappedExif,
+                originalShared = item.originalShared?.toSpec(),
             )
         }
         return when (val o = handler.complete(identity.principal.name, scopeId.toString(), items)) {

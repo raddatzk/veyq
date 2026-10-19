@@ -109,12 +109,64 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore) {
     fun findBlob(scopeId: String, blobId: String): BlobEntity? =
         BlobEntity.findById(blobId)?.takeIf { it.scopeId == scopeId }
 
-    /** Delete a blob row by id (if present) and put its store objects on the reclaim list, in the caller's
-     *  transaction (cover + trash purge). The row is the only thing that knows the `storage_key`, so the record
-     *  and the delete are one step, not two. */
+    /**
+     * A new row on the stored object of [source] (ADR 0013 § 5, the contract's `SharedBlob`):
+     * the client's own id, `K_blob` wrap and `blob-meta` - so it opens bound to its own owner and role (ADR 0072) - and
+     * the source's `storage_key`, shape and manifest, copied here and never taken from the request. Joins the caller's
+     * transaction; [SharedBlobs.persist] decided first that the node holds the source. Nothing is uploaded or verified:
+     * the objects are the source's, verified when it was.
+     */
+    fun persistSharedRow(source: BlobEntity, spec: SharedBlobSpec): String {
+        BlobEntity().apply {
+            id = spec.blobId
+            scopeId = source.scopeId
+            storageKey = source.storageKey
+            chunkCount = source.chunkCount
+            byteSize = source.byteSize
+            wrappedBlobKey = spec.wrappedBlobKey
+            wrappedBlobMeta = spec.wrappedBlobMeta
+            manifest = source.manifest
+        }.persist()
+        return spec.blobId
+    }
+
+    /** Every row of [scopeId] on the same stored object as [blobId] - itself included; empty for an unknown id. A shared
+     *  object never crosses a scope ([SharedBlobs.persist] takes its source in the scope it writes). What a content block
+     *  asks ([me.raddatz.veyq.core.moderation.block.ModerationBlocks.blobBlocked]): a block reaches the object. */
+    fun rowsOnSameObject(scopeId: String, blobId: String): Set<String> =
+        BlobEntity.getEntityManager()
+            .createQuery(
+                "select b2.id from BlobEntity b1, BlobEntity b2 where b1.id = ?1 and b1.scopeId = ?2 " +
+                    "and b2.storageKey = b1.storageKey and b2.scopeId = b1.scopeId",
+                String::class.java,
+            )
+            .setParameter(1, blobId).setParameter(2, scopeId)
+            .resultList.toSet()
+
+    /**
+     * Delete a blob row by id (if present), in the caller's transaction, and put its store objects on the reclaim list
+     * **only when no other row names them** - the per-row half of shared ownership (ADR 0013 § 5): a cover or a banner
+     * may share its stored object with a gallery medium, and deleting either row must leave the other's bytes. The
+     * caller deleted its own reference to [blobId] first (`fk_*_blob` refuses otherwise). The row is the only thing that
+     * knows the `storage_key`, so the record and the delete are one step, not two.
+     *
+     * **Every row on the object is read under its row lock** (ordered by id, so two of these never wait on each other in
+     * a cycle), and that lock is the decision: not every caller holds the scope row's lock (the trash purges lock media
+     * rows only), and two deletes of the two rows of one object that each counted the other by a plain read would both
+     * keep the object - a leak. Locked, the second waits for the first and reads what it committed. [SharedBlobs.persist]
+     * locks its source the same way, so a new row on an object being deleted is either refused or seen.
+     *
+     * The second half is the sweep's own selection ([me.raddatz.veyq.core.blobstore.StoreReclaimStore.due] skips a key
+     * any blob row still names), so a path that records a shared key directly - an eraser written later that does not
+     * come through here - still deletes no live object. Each half is bitten with the other held off
+     * (`SharedBlobSliceTest`).
+     */
     fun deleteBlobRow(blobId: String?) {
         val blob = blobId?.let { BlobEntity.findById(it) } ?: return
-        reclaim.record(blob.storageKey, blob.chunkCount)
+        val onObject = BlobEntity.find("storageKey = ?1 order by id", blob.storageKey)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).list()
+        if (onObject.none { it.id == blob.id }) return // deleted by a peer that committed while this waited
+        if (onObject.none { it.id != blob.id }) reclaim.record(blob.storageKey, blob.chunkCount)
         BlobEntity.deleteById(blob.id)
     }
 

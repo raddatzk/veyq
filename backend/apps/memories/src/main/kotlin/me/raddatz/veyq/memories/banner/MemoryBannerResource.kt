@@ -8,6 +8,7 @@ import me.raddatz.veyq.memories.generated.api.MemoryBannerApi
 import me.raddatz.veyq.memories.generated.model.MemoryBannerConflict
 import me.raddatz.veyq.memories.generated.model.RemoveMemoryBannerRequest
 import me.raddatz.veyq.memories.generated.model.SetMemoryBannerRequest
+import me.raddatz.veyq.core.blob.toSpec
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -17,7 +18,8 @@ import java.util.UUID
  * HTTP adapter for a Memory's banner (uc.memory.banner, ADR 0102). Implements the generated [MemoryBannerApi]; thin
  * (ADR 0001) - delegates to [MemoryBannerHandler]. `@Authenticated`: a member's bearer token, and the handler asks for
  * write access to the scope; no share route reaches it. Operator-blind: only upload ids, blob ids and the opaque
- * `wrappedMeta` cross - never which medium, the frame, the focal point or the description.
+ * `wrappedMeta` cross - never the frame or the focal point. A shared row's source blob id names the medium whose stored
+ * object the banner shares (ADR 0013 § 5), the accepted residual of ADR 0102 § What the server sees.
  */
 @Authenticated
 @RateLimitExempt(
@@ -34,7 +36,8 @@ class MemoryBannerResource(
         respond(
             handler.set(
                 identity.principal.name, scopeId.toString(), nodeId.toString(),
-                setMemoryBannerRequest.uploadId.toString(), setMemoryBannerRequest.posterUploadId?.toString(),
+                setMemoryBannerRequest.uploadId?.toString(), setMemoryBannerRequest.shared?.toSpec(),
+                setMemoryBannerRequest.posterUploadId?.toString(), setMemoryBannerRequest.posterShared?.toSpec(),
                 setMemoryBannerRequest.expectedBlobId?.toString(), setMemoryBannerRequest.expectedPosterBlobId?.toString(),
                 setMemoryBannerRequest.wrappedMeta, setMemoryBannerRequest.metaRevision.validated(),
             ),
