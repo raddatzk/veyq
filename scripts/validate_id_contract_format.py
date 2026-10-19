@@ -43,6 +43,8 @@ NOT_A_ROW_ID = {
     "suiteId": "names a crypto suite (e.g. `v1`), a label the conformance vectors pin, not a row id",
     "capabilityId": "a capability register id, the lowercase-dotted catalog path (e.g. `core.remember-device`, "
                     "contracts/platform/capabilities.json), not a row id",
+    "pinId": "an identity pin's keyed id, HMAC-SHA256 under a Master-Key-derived key as 64 lowercase hex characters "
+             "(ADR 0104 decision 1), column veyq_identity_pin_entry.pin_id VARCHAR(64), not a UUID",
 }
 
 errors: list[str] = []

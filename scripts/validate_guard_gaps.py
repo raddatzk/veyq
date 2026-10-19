@@ -225,7 +225,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   81 a stylesheet rule whose class only a `*.test.ts` spells — rejected: `validate_stylesheet_anchors` leaves test
      evidence (tests, `src/test/` helpers, snapshots, fixtures, goldens) out of its markup vocabulary. Until then a
      test asserting a button does NOT carry a class kept that class's hiding rule anchored (inbox #362)
-  82 `putIdentityPins` declaring and carrying its counter as `version` again, consistently on both sides — rejected:
+  82 `writeIdentityPins` declaring and carrying its counter as `version` again, consistently on both sides — rejected:
      `validate_write_concurrency` refuses a declared revision field with a version-shaped name (ADR 0086). Until
      inbox #452 the pins, the register and the terms carried a bare `version`, and the guard read it as a counter
      without asking what it was called
@@ -1390,16 +1390,17 @@ def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
 
 def forge_revision_field_named_version(root: pathlib.Path) -> str:
     # Both sides renamed together, so every other rule still holds: only the word is wrong.
-    _in_operation(root, "account.openapi.yaml", "putIdentityPins", "          - field: revision\n",
+    _in_operation(root, "account.openapi.yaml", "writeIdentityPins", "          - field: revision\n",
                   "          - field: version\n")
-    _in_request_property(root, "account.openapi.yaml", "IdentityPinsUpdate", "revision",
+    _in_request_property(root, "account.openapi.yaml", "IdentityPinsWrite", "revision",
                          "        revision:\n", "        version:\n")
     f = root / "contracts" / "api" / "account.openapi.yaml"
-    head, sep, tail = f.read_text().partition("    IdentityPinsUpdate:\n")
-    if not sep or "      required: [blob, revision]\n" not in tail:
-        raise ForgeError("account.openapi.yaml IdentityPinsUpdate: required anchor not found (drifted?)")
-    f.write_text(head + sep + tail.replace("      required: [blob, revision]\n", "      required: [blob, version]\n", 1))
-    return "putIdentityPins declares and carries its counter as `version` (must be REJECTED, ADR 0086)"
+    head, sep, tail = f.read_text().partition("    IdentityPinsWrite:\n")
+    required = "      required: [revision, head, put, delete, replaceAll]\n"
+    if not sep or required not in tail:
+        raise ForgeError("account.openapi.yaml IdentityPinsWrite: required anchor not found (drifted?)")
+    f.write_text(head + sep + tail.replace(required, required.replace("[revision,", "[version,"), 1))
+    return "writeIdentityPins declares and carries its counter as `version` (must be REJECTED, ADR 0086)"
 
 
 DEMO_SPEC = "contracts/api/demo/demo.openapi.yaml"

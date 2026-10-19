@@ -302,8 +302,8 @@ class OperatorBlindProbeTest {
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +
                 "where claims are refused.",
-            "getAccountKeyMaterial", "addAccountWrap", "deleteAccountWrap", "getIdentityPins", "putIdentityPins",
-            "getDeviceRegister", "putDeviceRegister", "rotateAccountKeys", "changePassword", "listSessionFamilies",
+            "getAccountKeyMaterial", "addAccountWrap", "deleteAccountWrap", "getIdentityPins", "writeIdentityPins",
+            "listIdentityPinEntries", "getDeviceRegister", "putDeviceRegister", "rotateAccountKeys", "changePassword", "listSessionFamilies",
             "revokeOtherSessionFamilies", "revokeSessionFamily", "delegatePairingSession", "sealPairingChannel",
             "clearDeclinesForAcceptedKey", "getAccountEmail", "confirmEmail", "listRotationScopeStates",
             "getOwnAccountErasurePreview", "eraseOwnAccount",
