@@ -127,13 +127,22 @@ async function submitSignIn(page: Page, account: Account): Promise<void> {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 }
 
-/** The space's home on [origin], signing in first when this document asks for it. */
-async function reachHome(device: Device, origin: string, account: Account): Promise<void> {
+/**
+ * The space's home on [origin], signing in first when this document asks for it — [ready] says the home is up. The
+ * document must be the app's: a domain whose routers the projector has just put back answers the proxy's own 404 until
+ * Traefik applies the file (see [expectOffline]), and a 404 is a loaded page, not a failed navigation, so it is retried
+ * here rather than waited on below.
+ */
+async function reachHome(
+  device: Device, origin: string, account: Account,
+  ready: (page: Page) => Locator = (page) => page.getByRole('button', { name: 'New', exact: true }),
+): Promise<void> {
   const { page } = device
   await expect(async () => {
-    await page.goto(origin)
+    const response = await page.goto(origin)
+    expect(response?.ok(), `${origin} serves the app`).toBe(true)
   }).toPass({ timeout: 60_000, intervals: [1_000] })
-  const home = page.getByRole('button', { name: 'New', exact: true })
+  const home = ready(page)
   const email = page.getByLabel('Email', { exact: true })
   await expect(home.or(email)).toBeVisible({ timeout: 60_000 })
   if (await email.isVisible()) await submitSignIn(page, account)
@@ -152,12 +161,34 @@ async function openSettingsOn(device: Device, origin: string, account: Account, 
 /** A row of the members panel, by the per-tenant handle it shows (`@handle`). */
 const memberRow = (page: Page, handle: string): Locator => page.locator('.member-row').filter({ hasText: `@${handle}` })
 
-/** The space's offline page, on a document loaded afresh. */
-async function expectOffline(page: Page, origin: string): Promise<void> {
+/**
+ * [domain]'s tenant offline for [device]'s member, the two ways ADR 0066 and ADR 0101 decision 10 make it observable:
+ *
+ *   - **At the edge, its domain no longer reaches the app** — the ingress is withdrawn, so a document loaded afresh is
+ *     the proxy's own 404. Polled, because Traefik applies a change of the projector's file at most once per
+ *     `providersThrottleDuration` (2 s) and the projector's temp file, written into the watched directory before its
+ *     rename, can spend that slot on the old content: for up to 2 s the withdrawn routers still serve, and in that
+ *     window only, the app answers `/api/setup` with `403 tenant_suspended` and shows "This space is temporarily
+ *     offline". This test once read that page on a fresh document: green while console clicks beat the window
+ *     (delete, stop and reactivate inside 0.9 s), red the first time a loaded host applied the file at once.
+ *   - **From the member's other space ([from]), the switcher marks it "Temporarily offline" and cannot enter it** —
+ *     `my-tenants` carries the status the gate refuses by, which no routing delay touches.
+ */
+async function expectOffline(device: Device, account: Account, domain: string, name: string, from: string): Promise<void> {
+  const { page } = device
   await expect(async () => {
-    await page.goto(origin)
-    await expect(page.getByText('This space is temporarily offline')).toBeVisible({ timeout: 5_000 })
-  }).toPass({ timeout: 60_000, intervals: [2_000] })
+    const response = await page.goto(`https://${domain}`)
+    expect(response?.status(), `${domain} no longer reaches the app`).toBe(404)
+  }).toPass({ timeout: 60_000, intervals: [1_000] })
+
+  const switchSpace = (p: Page) => p.getByRole('button', { name: 'Switch space' })
+  await reachHome(device, from, account, switchSpace)
+  await switchSpace(page).click()
+  const entry = page.locator('.sidebar-tenant-overview .sidebar-tenant-link').filter({ hasText: name })
+  await expect(entry).toContainText('Temporarily offline')
+  await expect(entry).not.toContainText(domain)
+  await expect(entry).toBeDisabled()
+  await page.keyboard.press('Escape')
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -341,6 +372,7 @@ test(
   },
   async () => {
     const keepOrigin = `https://${keepDomain()}`
+    const eraseOrigin = `https://${eraseDomain()}` // B's other space (it joined A's tenant above)
     const { page } = admin
     await openTenant(page, 'E2E Keep')
     await expect(tenantBadge(page)).toHaveText('Active')
@@ -357,7 +389,7 @@ test(
     await expect(page.getByRole('button', { name: 'Stop deletion' })).toBeVisible()
 
     // Offline at once for its member, exactly as a suspension; the member is told by mail, and their account stays.
-    await expectOffline(bob.page, keepOrigin)
+    await expectOffline(bob, accountB, keepDomain(), 'E2E Keep', eraseOrigin)
     const [mail] = await awaitMails(accountB.email, DELETION_MAIL)
     expect(mail!.text).toContain('Your account')
     expect(mail!.text).toContain('stays')
@@ -365,7 +397,7 @@ test(
     // A stop returns it offline (suspended), not online: the lever brings it back.
     await page.getByRole('button', { name: 'Stop deletion' }).click()
     await expect(tenantBadge(page)).toHaveText('Suspended')
-    await expectOffline(bob.page, keepOrigin)
+    await expectOffline(bob, accountB, keepDomain(), 'E2E Keep', eraseOrigin)
     await page.getByRole('button', { name: 'Bring back online' }).click()
     await expect(tenantBadge(page)).toHaveText('Active')
 
