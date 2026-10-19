@@ -31,7 +31,9 @@
    representative), the supervisory authority, the **recipients** the privacy notice names — each a name, what they
    do for the instance as a kind from a fixed list (hosts the server, stores the encrypted files, relays the mail,
    keeps the backups, or *other* with a short description of the Server Owner's own, which both language versions show
-   as typed) and their country — and a **data-protection officer** where one is appointed
+   as typed) and their country, picked from a searchable list the console names in its own language and stored as
+   its ISO 3166-1 alpha-2 code, which the notice names in each of its languages — and a **data-protection officer**
+   where one is appointed
    ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 8). The panel offers a suggested recipient
    row of its kind for what the instance itself knows — an external store's host, the instance mail relay's host —
    which the Server Owner completes and keeps or drops; a suggestion is never published until it is saved as a row. Saving
@@ -79,7 +81,8 @@ sequenceDiagram
 - **A4 — `veyq-admin`.** `mode show` prints the mode, the notice and the preset; `mode set private` refuses without
   `--accept-notice` and prints the notice either way. `operator show|set|clear` sets the values — `--recipients
   '<name>|<kind>|<country>; …'` replaces the whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup`
-  or `other:<what they do>`; the country may be left out, `none` empties it) and
+  or `other:<what they do>`; the country a two-letter ISO 3166-1 code such as `DE`, which may be left out; `none`
+  empties it) and
   `--data-protection-officer` sets the officer; the code is typed in the console only, as instance mail's is.
 - **A5 — The public read fails.** The login and share pages show no identification and block nothing.
 

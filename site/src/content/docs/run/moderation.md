@@ -442,12 +442,14 @@ empty:
   what they do and the country they do it in — and a **data-protection officer** where you have appointed one. What
   they do you pick from a list the notice words in each of its languages: *hosts the server*, *stores the encrypted
   files*, *relays the mail*, *keeps the backups*, or *other* with a short description of yours, which both language
-  versions show as you typed it, in quotes. The panel suggests a row of its kind for what the instance itself knows — an
+  versions show as you typed it, in quotes. The country you pick from a list too, and each language version names it
+  in its own language. The panel suggests a row of its kind for what the instance itself knows — an
   external store's host, the instance mail relay's host — which you complete with the provider's name and country and
   keep or drop; nothing is published until you save it as a row. With the CLI:
-  `veyq-admin operator set --recipients 'Example Hosting GmbH|hosting|Germany; Mail AG|mail-relay; SMS AG|other:sends sign-in texts'
+  `veyq-admin operator set --recipients 'Example Hosting GmbH|hosting|DE; Mail AG|mail-relay; SMS AG|other:sends sign-in texts'
   --data-protection-officer 'DSB GmbH, dsb@example.org'` (the kinds `hosting`, `object-storage`, `mail-relay`,
-  `backup` and `other:<what they do>`; `--recipients` replaces the whole list, `none` empties it).
+  `backup` and `other:<what they do>`; the country its two-letter ISO 3166-1 code; `--recipients` replaces the whole
+  list, `none` empties it).
 
 These are public: the app reads them before sign-in on every address of the instance, and shows the identification
 and the contact with its languages, where they are set, behind **Legal notice** on the sign-in and share pages and at

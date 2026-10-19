@@ -231,8 +231,12 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    or a second relay. What they do is a **fixed kind** — hosting, object storage, mail relay, backups, other — which the
    notice's own text names in each language, so the German and the English notice never mix languages (owner
    2026-10-19); only *other* takes a short description of the operator's own (at most 120 characters), shown as typed
-   and quoted on both pages, the one place the operator's language shows through, and visibly as theirs. A suggested
-   row comes with its kind. A space's own mail relay is named generically, as the space owner's choice: who controls it is
+   and quoted on both pages, the one place the operator's language shows through, and visibly as theirs. The country is
+   an **ISO 3166-1 alpha-2 code** picked from a list — the backend's JDK's (`Locale.getISOCountries()`), copied for the
+   clients in `contracts/terms/recipient-countries.json` — and each page names it in its own language from the JDK's
+   locale data ("Deutschland" on the German page, "Germany" on the English one), so a country typed in one language
+   never reaches the other's page (owner 2026-10-19); a code the backend does not know is refused. A suggested row comes
+   with its kind. A space's own mail relay is named generically, as the space owner's choice: who controls it is
    the joint-control question. A guest objecting to the record names the identity whose rows are erased by a **guest
    id** its own view shows to copy (Art. 21(1) with 12(2)), the share identity's random id; an objection erases the
    rows so far and does not stop later writes from being recorded, and the notice says so (owner: keep it so).
