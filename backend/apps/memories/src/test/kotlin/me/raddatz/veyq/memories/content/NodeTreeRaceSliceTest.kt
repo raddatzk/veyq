@@ -6,12 +6,12 @@ import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.memories.media.MediaStore
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.config.VeyqConfig
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -57,7 +57,7 @@ class NodeTreeRaceSliceTest {
 
     @Test
     fun aNodeCreatedUnderAFolderBeingTrashedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val child = UUID.randomUUID().toString()
@@ -76,7 +76,7 @@ class NodeTreeRaceSliceTest {
 
     @Test
     fun aNodeMovedUnderAFolderBeingTrashedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
@@ -102,7 +102,7 @@ class NodeTreeRaceSliceTest {
      */
     @Test
     fun aPhotoPurgedWhileItsSubtreeIsErasedDoesNotRollTheEraseBack() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = seedMemberScope()
             val (memory, chapter) = expiredSubtree(scopeId)
             val photo = trashedPhoto(scopeId, memory)

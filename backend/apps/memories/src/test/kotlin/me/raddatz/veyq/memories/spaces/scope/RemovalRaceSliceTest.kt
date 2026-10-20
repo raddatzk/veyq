@@ -10,13 +10,13 @@ import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.membership.TestAdmission
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -57,7 +57,7 @@ class RemovalRaceSliceTest {
 
     @Test
     fun aLinkCreatedByAMemberBeingRemovedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val member = t.member()
             val group = t.group(member)
@@ -76,7 +76,7 @@ class RemovalRaceSliceTest {
 
     @Test
     fun aLinkReissuedByAMemberBeingRemovedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val member = t.member()
             val group = t.group(member)
@@ -105,7 +105,7 @@ class RemovalRaceSliceTest {
      */
     @Test
     fun anItemFavoriteOfAMemberBeingRemovedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val member = t.member()
             val group = t.group(member)

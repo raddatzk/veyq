@@ -4,7 +4,6 @@ import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.identityKeyJson
@@ -12,6 +11,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -46,7 +46,7 @@ class GuestWriteRaceSliceTest {
 
     @Test
     fun anUploadCompletedWhileItsLinkIsDeletedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val shareId = uploaderShare(userId, memory)
@@ -71,7 +71,7 @@ class GuestWriteRaceSliceTest {
 
     @Test
     fun anIdentityNamedWhileItsLinkIsDeletedIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val shareId = uploaderShare(userId, memory)

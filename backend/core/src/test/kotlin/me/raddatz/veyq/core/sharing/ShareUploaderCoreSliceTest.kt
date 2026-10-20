@@ -5,13 +5,13 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.TestIds
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.DROP_PRIVATE_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.DROP_PUBLIC_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -55,7 +55,7 @@ class ShareUploaderCoreSliceTest {
         // The rename reads the Memory before the first WRITE_ONLY link's drop-key write commits and flushes after it.
         // A full-row UPDATE wrote the `null` drop key it had read back: the link answered CREATED, and every upload
         // sealed to it could no longer be opened by the Memory's members (inbox #224).
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, "MEMORY", parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val renamed = "cmVuYW1lZA==" // "renamed"

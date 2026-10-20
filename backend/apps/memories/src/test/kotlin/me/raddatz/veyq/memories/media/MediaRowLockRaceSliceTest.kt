@@ -6,11 +6,11 @@ import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.node.NodeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -44,7 +44,7 @@ class MediaRowLockRaceSliceTest {
 
     @Test
     fun aTrashOfAGuestUploadBeingDeletedAnswersNotFound() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val g = guestUpload()
             val trashed = whileUncommitted(
                 change = { assertTrue(sharing.deleteOwn(g.scopeId, g.nodeId, g.mediaId, g.identityId), "round $round") },
@@ -59,7 +59,7 @@ class MediaRowLockRaceSliceTest {
 
     @Test
     fun aMoveOfAGuestUploadBeingDeletedAnswersAsAReplay() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val g = guestUpload()
             val moved = whileUncommitted(
                 change = { assertTrue(sharing.deleteOwn(g.scopeId, g.nodeId, g.mediaId, g.identityId), "round $round") },
@@ -81,7 +81,7 @@ class MediaRowLockRaceSliceTest {
      */
     @Test
     fun aGuestDeleteOfAnUploadMovedOutOfTheSubtreeMeanwhileAnswersNotFound() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val g = guestUploadBelowAFolder()
             val deleted = whileUncommitted(
                 change = {

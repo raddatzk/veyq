@@ -8,9 +8,9 @@ import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import me.raddatz.veyq.core.spaces.scope.ScopesHandler
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -40,7 +40,7 @@ class PurgeRaceCoreSliceTest {
 
     @Test
     fun anUploadWindowedWhileTheIdlePurgeRunsKeepsItsSession() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val sessionId = idleSession()
             whileUncommitted(
                 change = { blobs.touchWindow(sessionId) },
@@ -55,7 +55,7 @@ class PurgeRaceCoreSliceTest {
 
     @Test
     fun aGroupRestoredWhileThePurgeRunsSurvives() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = expiredGroup()
             whileUncommitted(
                 change = { scopes.restore(scopeId) },
@@ -70,7 +70,7 @@ class PurgeRaceCoreSliceTest {
 
     @Test
     fun aRestoreOfAGroupThePurgeIsErasingAnswersNotFound() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (owner, scopeId) = expiredGroup()
             val outcome = whileUncommitted(
                 change = { scopePurge.purge(scopeId) },

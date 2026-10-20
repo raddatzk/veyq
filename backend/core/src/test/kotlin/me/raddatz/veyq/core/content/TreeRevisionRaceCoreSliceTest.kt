@@ -14,6 +14,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -85,7 +86,7 @@ class TreeRevisionRaceCoreSliceTest {
     /** A held create (its scope lock and its bump uncommitted): the overlapping create waits, then counts after it. */
     @Test
     fun anOverlappingCreateWaitsForAHeldOneAndCountsToo() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val status = whileUncommitted(
                 change = {

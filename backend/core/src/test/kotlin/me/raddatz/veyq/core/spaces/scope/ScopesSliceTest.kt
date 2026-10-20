@@ -22,11 +22,11 @@ import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TestAdmission
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -710,7 +710,7 @@ class ScopesSliceTest {
         // The epoch gate (`nameEpoch == currentEpoch`) reads the epoch before the write's transaction: a rotation that
         // commits in between let a name sealed under the pre-rotation epoch land — readable by a member the rotation
         // removed (ADR 0024). The write itself must re-check the epoch and answer StaleEpoch (inbox #224, #275).
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
             val outcome = whileUncommitted(
                 change = { rotateToEpochOne(owner, scopeId, round) },
@@ -730,7 +730,7 @@ class ScopesSliceTest {
 
     @Test
     fun anIconSetWhoseGatePassedBeforeARotationCommittedIsStale() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
             val outcome = whileUncommitted(
                 change = { rotateToEpochOne(owner, scopeId, round) },
@@ -761,7 +761,7 @@ class ScopesSliceTest {
         // `currentEpoch` back: the counter would step backwards and the next rotation would issue an epoch number
         // already in use (inbox #224). The clear stays a managed write, so it is this race's writer — the rename and
         // the icon set are epoch-gated updates of their own columns.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
             QuarkusTransaction.requiringNew().run { ScopeEntity.findById(scopeId)!!.sealedIcon = sealedIcon }
             whileUncommitted(

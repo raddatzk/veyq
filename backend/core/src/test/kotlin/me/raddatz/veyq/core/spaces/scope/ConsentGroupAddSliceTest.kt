@@ -12,8 +12,8 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -269,7 +269,7 @@ class ConsentGroupAddSliceTest {
         // The role change reads the membership before the invitee's accept commits and flushes after it. A full-row
         // UPDATE wrote `pendingConsent = true` back: the accepted member was a proposal again, and grant delivery
         // skips proposals, so they never got the key (inbox #224).
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (owner, scopeId, tenantId) = seedMemberScope(ScopeEntity.GROUP)
             val invitee = seedUser()
             QuarkusTransaction.requiringNew().run {

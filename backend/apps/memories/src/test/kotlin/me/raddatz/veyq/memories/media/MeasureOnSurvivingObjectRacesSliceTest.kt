@@ -20,11 +20,11 @@ import me.raddatz.veyq.core.moderation.report.ReportTestKit.openCase
 import me.raddatz.veyq.core.moderation.statement.RecipientKind
 import me.raddatz.veyq.core.moderation.statement.StatementGround
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.banner.BannerKit
 import me.raddatz.veyq.memories.banner.MemoryBannerOutcome
 import me.raddatz.veyq.memories.banner.MemoryBannerStore
@@ -95,7 +95,7 @@ class MeasureOnSurvivingObjectRacesSliceTest {
     @Test
     fun aBannerRemovalInsideAnUncommittedMeasureEndsIt() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val w = world()
             val members = decisions.recipientsOf(w.caseId, MeasureStep.CONTENT, null, w.mediaId).first!!
                 .map { it.first }.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }
@@ -122,7 +122,7 @@ class MeasureOnSurvivingObjectRacesSliceTest {
     @Test
     fun aMeasureInsideAnUncommittedBannerRemovalEndsAtOnce() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val w = world()
             val status = whileUncommitted(
                 change = { assertEquals(MemoryBannerOutcome.Done, removeBanner(w), "round $round") },

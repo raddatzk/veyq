@@ -3,12 +3,12 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -32,7 +32,7 @@ class SubtreeBoundaryRaceCoreSliceTest {
 
     @Test
     fun aBoundedMoveIntoAFolderAMemberMovesOutMeanwhileIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val loser = whileUncommitted(
                 change = { assertEquals(UpdateNodeOutcome.Updated, memberMovesAOut(t), "round $round: a out of the boundary") },
@@ -49,7 +49,7 @@ class SubtreeBoundaryRaceCoreSliceTest {
 
     @Test
     fun aBoundedCreateUnderAFolderAMemberMovesOutMeanwhileIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val id = UUID.randomUUID().toString()
             val loser = whileUncommitted(

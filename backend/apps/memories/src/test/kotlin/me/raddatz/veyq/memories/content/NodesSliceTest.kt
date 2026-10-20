@@ -3,12 +3,12 @@ package me.raddatz.veyq.memories.content
 import me.raddatz.veyq.core.testing.TestFixtures.FIXTURE_EDITOR
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.items.NodeItemsRevisions
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -47,7 +47,7 @@ class NodesSliceTest {
         // last seen revision was the restored one missed the add (uc.memory.live-updates, inbox #224). Since inbox #341
         // the counter is no column of the node row at all (core's veyq_node_items_revision), so a node write cannot reach
         // it; this keeps the observable pinned across that move.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (_, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val renamed = "cmVuYW1lZA==" // "renamed"

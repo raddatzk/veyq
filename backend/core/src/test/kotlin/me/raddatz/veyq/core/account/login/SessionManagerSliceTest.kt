@@ -19,6 +19,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.UUID
+import me.raddatz.veyq.core.testing.raceRounds
+import me.raddatz.veyq.core.testing.holdForOverlap
 
 /**
  * Slice tests for the session manager (uc.account.sessions): list every active session, end one remotely, and
@@ -159,22 +161,24 @@ class SessionManagerSliceTest {
         // The real revoke runs in a transaction whose commit the test holds back, and a refresh of the target starts
         // inside that window. The rotation used to read the family unlocked and save it whole, so its flush wrote the
         // `ACTIVE` it had read over the revoke that answered 204 — and the new token kept rotating.
-        repeat(ROUNDS) { round ->
+        raceRounds(ROUNDS) { round ->
             val caller = login()
             val target = login()
             val revoked = java.util.concurrent.CountDownLatch(1)
             val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
             val answer = try {
-                val revoke = pool.submit {
-                    QuarkusTransaction.requiringNew().run {
-                        sessions.revokeFamilyForUser(USER_ID, target.familyId)
-                        revoked.countDown()
-                        Thread.sleep(HOLD_MS) // the commit, held back
-                    }
-                }
+                val revoke = pool.submit(
+                    java.util.concurrent.Callable {
+                        QuarkusTransaction.requiringNew().call {
+                            sessions.revokeFamilyForUser(USER_ID, target.familyId)
+                            revoked.countDown()
+                            holdForOverlap() // the commit, held back
+                        }
+                    },
+                )
                 revoked.await()
                 val r = refresh(target.refreshToken).then().extract()
-                revoke.get()
+                revoke.get().requireForced()
                 r.statusCode() to (if (r.statusCode() == 200) r.path<String>("refreshToken") else null)
             } finally {
                 pool.shutdownNow()
@@ -385,7 +389,6 @@ class SessionManagerSliceTest {
     companion object {
         /** A refresh racing a revoke; the held commit made the resurrection 5 of 5 in the probe. */
         private const val ROUNDS = 5
-        private const val HOLD_MS = 300L
 
         private const val EMAIL = "sessions-test@example.com"
         private const val OTHER_EMAIL = "sessions-stranger@example.com"

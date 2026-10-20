@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.depot.DepotNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -70,7 +71,7 @@ class DropFolderRaceSliceTest {
 
     @Test
     fun aGuestsCreateWhileAMemberMovesItsFolderOutIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val folder = (ensure(t.link) as DropFolderOutcome.Folder).folder.nodeId
             val answer = whileUncommitted(

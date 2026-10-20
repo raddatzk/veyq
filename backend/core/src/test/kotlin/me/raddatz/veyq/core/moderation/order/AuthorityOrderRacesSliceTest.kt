@@ -10,12 +10,12 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -44,7 +44,7 @@ class AuthorityOrderRacesSliceTest {
     @Test
     fun aSecondRemovalOrderInsideTheFirstKeepsItsBlocksAndAnswersItsBlockTime() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val m = seedMemberScope(ScopeEntity.GROUP)
             val root = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             seedAttachment(m.scopeId, root, NodeCover.SLOT, uploaderUserId = m.userId)

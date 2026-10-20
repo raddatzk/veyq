@@ -18,11 +18,11 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.SharingStore
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -74,7 +74,7 @@ class MeasureTargetErasureRacesSliceTest {
     @Test
     fun aPurgeInsideAnUncommittedContentBlockEndsIt() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val w = world()
             val members = run {
                 decisions.recipientsOf(w.caseId, MeasureStep.CONTENT, null, w.root).first!!.map { it.first }.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }
@@ -99,7 +99,7 @@ class MeasureTargetErasureRacesSliceTest {
     @Test
     fun aContentBlockInsideAnUncommittedPurgeEndsAtOnce() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val w = world()
             val status = whileUncommitted(
                 change = { purge(w) },
@@ -114,7 +114,7 @@ class MeasureTargetErasureRacesSliceTest {
     @Test
     fun aLinkBlockInsideAnUncommittedDeleteOfTheLinkEndsAtOnce() {
         val mod = CaseTestKit.moderator()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val w = world()
             val status = whileUncommitted(
                 change = { assertEquals(true, sharing.delete(w.shareId), "round $round") },

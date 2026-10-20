@@ -5,13 +5,13 @@ import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.UpdateNodeOutcome
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.holdForOverlap
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -67,7 +67,7 @@ class ShareNodeRaceCoreSliceTest {
 
     @Test
     fun aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val loser = whileUncommitted(
                 change = { assertEquals(UpdateNodeOutcome.Updated, memberMoves(t, t.a, t.outside), "round $round: a out") },
@@ -83,7 +83,7 @@ class ShareNodeRaceCoreSliceTest {
 
     @Test
     fun aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val id = UUID.randomUUID().toString()
             val loser = whileUncommitted(
@@ -100,7 +100,7 @@ class ShareNodeRaceCoreSliceTest {
 
     @Test
     fun aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             for ((what, change) in listOf<Pair<String, (Tree) -> Unit>>(
                 "revoke" to { t -> assertEquals(true, store.revoke(t.userId, t.link.shareId)) },
                 "delete" to { t -> assertEquals(true, store.delete(t.link.shareId)) },
@@ -120,7 +120,7 @@ class ShareNodeRaceCoreSliceTest {
 
     @Test
     fun aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val id = UUID.randomUUID().toString()
             val pool = Executors.newFixedThreadPool(2)
@@ -133,15 +133,18 @@ class ShareNodeRaceCoreSliceTest {
                         QuarkusTransaction.requiringNew().call {
                             ScopeEntity.lockRow(t.scopeId)
                             scopeHeld.countDown()
-                            Thread.sleep(OVERLAP_HOLD_MS)
-                            sharing.reactivate(t.userId, t.link.shareId)
+                            val overlap = holdForOverlap() // the guest's create reaches the scope row meanwhile
+                            overlap to sharing.reactivate(t.userId, t.link.shareId)
                         }
                     },
                 )
                 if (!scopeHeld.await(10, TimeUnit.SECONDS)) reactivation.get(1, TimeUnit.SECONDS)
                 val create = pool.submit(Callable { inRequest { guestCreates(t, t.root, id) } })
-                assertEquals(ReactivateShareOutcome.Done, reactivation.get(30, TimeUnit.SECONDS), "round $round: the re-activation")
-                assertEquals(CreateShareNodeOutcome.Created(id), create.get(30, TimeUnit.SECONDS), "round $round: the guest's create")
+                val (overlap, reactivated) = reactivation.get(30, TimeUnit.SECONDS)
+                val created = create.get(30, TimeUnit.SECONDS)
+                overlap.requireForced()
+                assertEquals(ReactivateShareOutcome.Done, reactivated, "round $round: the re-activation")
+                assertEquals(CreateShareNodeOutcome.Created(id), created, "round $round: the guest's create")
             } finally {
                 pool.shutdownNow()
             }

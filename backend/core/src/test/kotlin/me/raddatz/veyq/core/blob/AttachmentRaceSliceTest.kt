@@ -4,11 +4,11 @@ import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -45,7 +45,7 @@ class AttachmentRaceSliceTest {
 
     @Test
     fun twoFirstAttachesIntoOneEmptySlotHaveOneWinnerAndAConflict() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val node = seedNode(scopeId, EXPENSE, wrappedContentKey = CONTENT_KEY)
             val peer = AttachmentUploads.open(blobs, userId, scopeId, node, SLOT)
@@ -63,7 +63,7 @@ class AttachmentRaceSliceTest {
 
     @Test
     fun twoReplacesOfOneExpectedBlobHaveOneWinnerAndAConflict() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val node = seedNode(scopeId, EXPENSE, wrappedContentKey = CONTENT_KEY)
             val old = AttachmentUploads.open(blobs, userId, scopeId, node, SLOT)
@@ -87,7 +87,7 @@ class AttachmentRaceSliceTest {
 
     @Test
     fun oneUploadAttachedTwiceAtOnceAttachesOnceAndTheOtherIsUploadNotFound() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val node = seedNode(scopeId, EXPENSE, wrappedContentKey = CONTENT_KEY)
             val upload = AttachmentUploads.open(blobs, userId, scopeId, node, SLOT)
@@ -113,7 +113,7 @@ class AttachmentRaceSliceTest {
      */
     @Test
     fun anAttachOverlappingATrashOfItsNodeAttachesNothing() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val node = seedNode(scopeId, EXPENSE, wrappedContentKey = CONTENT_KEY)
             val upload = AttachmentUploads.open(blobs, userId, scopeId, node, SLOT)
@@ -139,7 +139,7 @@ class AttachmentRaceSliceTest {
 
     @Test
     fun anAttachOverlappingTheGroupsPurgeWritesNothing() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val node = seedNode(scopeId, EXPENSE, wrappedContentKey = CONTENT_KEY)
             val upload = AttachmentUploads.open(blobs, userId, scopeId, node, SLOT)

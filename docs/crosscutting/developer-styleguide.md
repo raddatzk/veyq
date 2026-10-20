@@ -262,6 +262,15 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   after the other, and stay green with the lock removed. So a race test is bitten by removing the lock it guards, and
   asserts what the loser must not have done, not only what the winner did. What bought it: cr-moderation-review-and-measures'
   first decision/report races started both writers at a barrier and were green with every lock taken out.
+- **A held round counts only when its order was forced.** A 300 ms hold forces nothing when the other side reaches its
+  lock later (under load a first call can take seconds), and that round tests the other order, green. So the hold
+  checks before it commits (`holdForOverlap`, under `whileUncommitted` and every hand-held commit): the other side
+  finished inside the hold, or the engine shows it waiting on the holder — InnoDB's lock waits (the race runner grants
+  its user `PROCESS`), H2's `SESSIONS.BLOCKER_ID`, and for a wait H2 names no blocker for (an uncommitted unique key,
+  retried inside one statement) one statement running ≥ 100 ms while the holder is the only other session with
+  uncommitted rows. An unforced round throws `OrderNotForced`; the rounds run through `raceRounds`, which runs that
+  round again on fresh rows (5 attempts) and then fails by name — so a round body builds its own rows. What bought it:
+  inbox #512, a loaded `MeasureTargetErasureRacesSliceTest` round measured with nobody waiting on the held commit, green.
 - The **coverage validators** (Python; added with the first feature slice, per start-light) check the
   trust chain: every behavior maps to its use-case coverage.
 

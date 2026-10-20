@@ -7,13 +7,13 @@ import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.UpdateNodeOutcome
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.testing.FakePresignProfile
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.memories.media.ShareMediaCompleteOutcome
 import me.raddatz.veyq.memories.media.ShareMediaHandler
@@ -85,7 +85,7 @@ class GuestCompleteTargetRaceSliceTest {
     }
 
     private fun raceAgainst(what: String, change: (Tree) -> Unit) {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = tree()
             val uploadId = startStaged(t)
             val answer = whileUncommitted(change = { change(t) }, overlapping = { complete(t, uploadId) })

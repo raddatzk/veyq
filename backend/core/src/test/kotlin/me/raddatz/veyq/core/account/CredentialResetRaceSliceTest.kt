@@ -18,10 +18,10 @@ import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.WrapMethod
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -81,7 +81,7 @@ class CredentialResetRaceSliceTest {
     fun aSignInWithTheReplacedPasswordDoesNotSurviveTheResetOrChangeItRaced() {
         // A rotation keeps the password, so a sign-in after it is legitimate and races nothing it should not.
         for (cleanup in listOf(Cleanup.RESET, Cleanup.CHANGE)) {
-            repeat(RACE_ROUNDS) { round ->
+            raceRounds { round ->
                 val account = seedAccount()
                 val nonce = challenge(account.email)
                 val status = whileUncommitted(
@@ -102,7 +102,7 @@ class CredentialResetRaceSliceTest {
     @Test
     fun aDeviceWrapDoesNotSurviveTheResetChangeOrRotationItRaced() {
         for (cleanup in Cleanup.entries) {
-            repeat(RACE_ROUNDS) { round ->
+            raceRounds { round ->
                 val account = seedAccount()
                 val status = whileUncommitted(
                     change = cleanupOf(cleanup, account),
@@ -120,7 +120,7 @@ class CredentialResetRaceSliceTest {
     @Test
     fun aPairingDelegationDoesNotSurviveTheResetChangeOrRotationItRaced() {
         for (cleanup in Cleanup.entries) {
-            repeat(RACE_ROUNDS) { round ->
+            raceRounds { round ->
                 val account = seedAccount()
                 val handle = answeredChannel()
                 val status = whileUncommitted(
@@ -146,7 +146,7 @@ class CredentialResetRaceSliceTest {
         // it ran: serially that delegation is either revoked with the rest or refused as a dead session. Unlike a
         // reset it replaces no credential a sign-in could beat it to — the password still signs in a moment later —
         // so the race is the delegation: a session minted by a device that is being signed out.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val signedOut = seedAccount()
             val handle = answeredChannel()
             val status = whileUncommitted(
@@ -169,7 +169,7 @@ class CredentialResetRaceSliceTest {
         // The other order: the delegation holds its transaction open, and the sign-out must wait for it and end what it
         // minted rather than enumerate past the uncommitted family. Held as its store calls, in its order:
         // `PairingHandler.delegate` opens a transaction of its own and would commit inside the hold.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val delegating = seedAccount()
             val held = answeredChannel()
             whileUncommitted(
@@ -190,7 +190,7 @@ class CredentialResetRaceSliceTest {
         // The cleanups race each other too. Each checks its proof against the account as it reads it — the change its
         // attestation against the auth key, both of them the caller's session — so that read is taken under the
         // account lock: a check read before it passed against the key or the session the held cleanup was replacing.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             // A change attested by the replaced password, after a change installed a new one: serially a 403.
             val changed = seedAccount()
             val afterChange = whileUncommitted(
@@ -227,7 +227,7 @@ class CredentialResetRaceSliceTest {
     fun aCleanupThatStartsWhileASignInOrAWrapIsUncommittedStillEndsIt() {
         // The other order: the writer holds its transaction open, and the cleanup must wait for it and then end what
         // it wrote — not enumerate past the uncommitted row.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val account = seedAccount()
             val nonce = challenge(account.email)
             val reset = cleanupOf(Cleanup.RESET, account)

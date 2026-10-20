@@ -6,10 +6,10 @@ import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.membership.TestAdmission
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -86,7 +86,7 @@ class RemovalRaceCoreSliceTest {
 
     @Test
     fun aGroupCreatedByAMemberBeingRemovedFromTheTenantIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val member = t.member()
             val scopeId = UUID.randomUUID().toString()
@@ -103,7 +103,7 @@ class RemovalRaceCoreSliceTest {
 
     @Test
     fun aPersonalSpaceCreatedByAMemberBeingRemovedFromTheTenantIsRefused() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val member = t.member()
             val scopeId = UUID.randomUUID().toString()
@@ -120,7 +120,7 @@ class RemovalRaceCoreSliceTest {
 
     @Test
     fun aMemberBeingRemovedFromTheTenantIsNotAddedToAGroup() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val t = Tenant()
             val target = t.member(username = "target")
             val group = t.group()

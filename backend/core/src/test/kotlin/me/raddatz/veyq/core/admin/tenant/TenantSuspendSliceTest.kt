@@ -7,8 +7,8 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -188,7 +188,7 @@ class TenantSuspendSliceTest {
     fun aTermsEditOverlappingASuspensionLeavesTheTenantSuspended() {
         // The tenant owner's terms edit reads the row ACTIVE before the Server Owner's suspension commits and flushes
         // after it. A full-row UPDATE wrote the `status` it had read back, and the suspension was undone.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (tenantId, _) = seedActiveTenant()
             val revision = whileUncommitted(
                 change = { assertTrue(store.suspend(tenantId)) },
@@ -203,7 +203,7 @@ class TenantSuspendSliceTest {
 
     @Test
     fun aQuotaChangeOverlappingASuspensionLeavesTheTenantSuspended() {
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (tenantId, _) = seedActiveTenant()
             whileUncommitted(
                 change = { assertTrue(store.suspend(tenantId)) },

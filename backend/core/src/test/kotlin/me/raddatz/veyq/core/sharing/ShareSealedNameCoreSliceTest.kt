@@ -6,14 +6,14 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.holdForOverlap
+import me.raddatz.veyq.core.testing.raceRounds
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -26,7 +26,9 @@ import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -169,7 +171,7 @@ class ShareSealedNameCoreSliceTest {
     @Test
     fun aReSealOverlappingARevokeKeepsBothWrites() {
         val w = world()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val shareId = createShare(w.owner, w.folder)
             val outcome = whileUncommitted(
                 change = { assertTrue(sharing.revoke(w.owner, shareId), "round $round") },
@@ -180,7 +182,7 @@ class ShareSealedNameCoreSliceTest {
             assertFalse(r.enabled, "round $round: the re-seal switched the revoked link back on")
             assertEquals(newName, r.sealedName, "round $round")
         }
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val shareId = createShare(w.owner, w.folder)
             val outcome = whileUncommitted(
                 change = { assertTrue(sharing.setSealedName(shareId, newName, PrincipalKey.User(w.owner)), "round $round") },
@@ -203,11 +205,12 @@ class ShareSealedNameCoreSliceTest {
     @Test
     fun aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock() {
         val w = world()
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val shareId = createShare(w.owner, w.folder)
             given().header("Authorization", bearer(w.owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
 
             val scopeLocked = CountDownLatch(1)
+            val reSealRef = AtomicReference<Future<*>>()
             val pool = Executors.newFixedThreadPool(2)
             try {
                 val reactivation = pool.submit(
@@ -215,8 +218,10 @@ class ShareSealedNameCoreSliceTest {
                         QuarkusTransaction.requiringNew().call {
                             ScopeEntity.lockRow(w.scopeId) // the re-activation's first lock, taken early
                             scopeLocked.countDown()
-                            Thread.sleep(OVERLAP_HOLD_MS) // the re-seal now runs, and takes what it takes
-                            handler.reactivate(w.member, shareId) // joins: the scope row again, then the share row
+                            // The re-seal now runs, and takes what it takes: the share row alone ends inside the hold, a
+                            // reach for the scope row is seen waiting on it — either is the order this round means.
+                            val overlap = holdForOverlap { reSealRef.get()?.isDone == true }
+                            overlap to handler.reactivate(w.member, shareId) // joins: the scope row again, then the share row
                         }
                     },
                 )
@@ -231,9 +236,12 @@ class ShareSealedNameCoreSliceTest {
                             request.terminate()
                         }
                     },
-                )
-                assertEquals(SetShareSealedNameOutcome.Done, reSeal.get(30, TimeUnit.SECONDS), "round $round")
-                assertEquals(ReactivateShareOutcome.Done, reactivation.get(30, TimeUnit.SECONDS), "round $round")
+                ).also(reSealRef::set)
+                val sealed = reSeal.get(30, TimeUnit.SECONDS)
+                val (overlap, reactivated) = reactivation.get(30, TimeUnit.SECONDS)
+                overlap.requireForced()
+                assertEquals(SetShareSealedNameOutcome.Done, sealed, "round $round")
+                assertEquals(ReactivateShareOutcome.Done, reactivated, "round $round")
             } finally {
                 pool.shutdownNow()
             }

@@ -27,6 +27,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Callable
+import me.raddatz.veyq.core.testing.raceRounds
+import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
+import me.raddatz.veyq.core.testing.holdForOverlap
 
 /**
  * The queued scope rotation's lifecycle (uc.spaces.complete-queued-rotation): who is offered the job, when a later
@@ -102,7 +106,7 @@ class QueuedRotationSliceTest {
     fun aClaimRacingAJoinLandsAfterTheEvent() {
         // D3's lock: the join reads the PENDING job under PESSIMISTIC_WRITE, so a claim's compare-and-set on that
         // row waits for the event to commit — the claim, and the directory read after it, come after the event.
-        repeat(ROUNDS) { round ->
+        raceRounds(ROUNDS) { round ->
             val t = tenant()
             val worker = t.member()
             val cut = t.member()
@@ -114,19 +118,22 @@ class QueuedRotationSliceTest {
             val joined = CountDownLatch(1)
             val pool = Executors.newFixedThreadPool(2)
             try {
-                val event = pool.submit {
-                    QuarkusTransaction.requiringNew().run {
-                        store.originateScopeRotation(group, MAX_ATTEMPTS)
-                        joined.countDown()
-                        Thread.sleep(HOLD_MS) // the event's commit, held back
-                    }
-                }
+                val event = pool.submit(
+                    Callable {
+                        QuarkusTransaction.requiringNew().call {
+                            store.originateScopeRotation(group, MAX_ATTEMPTS)
+                            joined.countDown()
+                            holdForOverlap() // the event's commit, held back
+                        }
+                    },
+                )
                 joined.await()
                 val claim: Future<Response> = pool.submit<Response> { claim(worker, CapabilityTags.SCOPE_ROTATION) }
-                Thread.sleep(HOLD_MS / 2)
+                Thread.sleep(OVERLAP_HOLD_MS / 2)
                 assertFalse(claim.isDone, "round $round: the claim returned while the event joining its job was uncommitted")
-                event.get(5, TimeUnit.SECONDS)
+                val overlap = event.get(5, TimeUnit.SECONDS)
                 val answer = claim.get(5, TimeUnit.SECONDS)
+                overlap.requireForced()
                 assertEquals(200, answer.statusCode(), "round $round")
                 assertEquals(pending, answer.path<String>("jobId"), "round $round: the claim holds the job the event joined")
                 assertEquals(listOf(pending), liveRotationJobs(group), "round $round: the join created no second job")
@@ -210,7 +217,7 @@ class QueuedRotationSliceTest {
 
     @Test
     fun aDeliveryCompletionThatLostItsLeaseWritesNothing() {
-        repeat(ROUNDS) { round ->
+        raceRounds(ROUNDS) { round ->
             val t = tenant()
             val stale = t.member(MembershipEntity.OWNER)
             val reclaimer = t.member(MembershipEntity.OWNER)
@@ -242,7 +249,7 @@ class QueuedRotationSliceTest {
 
     @Test
     fun aRotationCompletionThatLostItsLeaseWritesNothing() {
-        repeat(ROUNDS) { round ->
+        raceRounds(ROUNDS) { round ->
             val t = tenant()
             val stale = t.member()
             val reclaimer = t.member()
@@ -295,16 +302,18 @@ class QueuedRotationSliceTest {
         val reclaimed = CountDownLatch(1)
         val pool = Executors.newSingleThreadExecutor()
         try {
-            val reclaim = pool.submit {
-                QuarkusTransaction.requiringNew().run {
-                    assertNotNull(handler.claim(reclaimer, listOf(tag), null), "the reclaim must win the job")
-                    reclaimed.countDown()
-                    Thread.sleep(HOLD_MS) // the reclaim's commit, held back
-                }
-            }
+            val reclaim = pool.submit(
+                Callable {
+                    QuarkusTransaction.requiringNew().call {
+                        assertNotNull(handler.claim(reclaimer, listOf(tag), null), "the reclaim must win the job")
+                        reclaimed.countDown()
+                        holdForOverlap() // the reclaim's commit, held back
+                    }
+                },
+            )
             reclaimed.await()
             val answer = stale()
-            reclaim.get(5, TimeUnit.SECONDS)
+            reclaim.get(5, TimeUnit.SECONDS).requireForced() // a stale side that came after the commit raced nothing
             return answer
         } finally {
             pool.shutdownNow()
@@ -414,6 +423,5 @@ class QueuedRotationSliceTest {
         const val LOST_GRANT = "bG9zdC1ncmFudA=="
         const val MAX_ATTEMPTS = 5
         const val ROUNDS = 3
-        const val HOLD_MS = 300L
     }
 }

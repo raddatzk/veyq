@@ -5,13 +5,13 @@ import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
-import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.testing.raceRounds
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -228,7 +228,7 @@ class MediaBucketsSliceTest {
     fun aMetaEditOverlappingASubBucketDeleteKeepsTheReparent() {
         // The meta edit reads the medium before the delete's reparent commits and flushes after it. A full-row UPDATE
         // wrote the deleted bucket's id back onto the medium.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
@@ -254,7 +254,7 @@ class MediaBucketsSliceTest {
         // The move reads its target bucket before the bucket's delete commits and writes after it: the medium was
         // left pointing at a bucket that no longer exists. The move must see the delete and answer as it would for a
         // bucket that is gone (Forbidden), leaving the medium where it was.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
@@ -280,7 +280,7 @@ class MediaBucketsSliceTest {
     fun aSubBucketDeleteOverlappingAMoveIntoItCarriesTheMovedMedium() {
         // The other order: the move commits first. The delete must wait for it and carry the moved medium to the
         // primary like every other medium of the bucket, not leave it behind for the foreign key to null out.
-        repeat(RACE_ROUNDS) { round ->
+        raceRounds { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
