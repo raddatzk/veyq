@@ -18,6 +18,16 @@ class GuestWriteRecordHoldSnapshot : HoldSnapshotContributor {
 
     override fun contribute(target: HoldTarget, snapshot: HoldSnapshot) {
         val ids = LinkedHashSet<String>()
+        if (target is HoldTarget.Name) {
+            // A name: the records of that name's writes alone — the node's other writes were not reported — and of the
+            // identity that last wrote it.
+            GuestWriteRecordEntity.list("objectId = ?1 and fieldGroup = ?2", target.nodeId, GuestWriteRecords.NAME).mapTo(ids) { it.id }
+            snapshot.identityIds.filter(UUID_SHAPE::matches).chunked(BATCH).forEach { batch ->
+                GuestWriteRecordEntity.list("objectId in ?1", batch).mapTo(ids) { it.id }
+            }
+            snapshot.copy("veyq_guest_write_record", "id", ids)
+            return
+        }
         // Only a UUID can be an object: a copied share row's id is no UUID, and a native UUID column refuses one outright.
         (snapshot.copiedIds + snapshot.identityIds).filter(UUID_SHAPE::matches).chunked(BATCH).forEach { batch ->
             GuestWriteRecordEntity.list("objectId in ?1", batch).mapTo(ids) { it.id }

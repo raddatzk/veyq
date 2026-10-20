@@ -25,8 +25,11 @@ enum class ReportCategory(val urgent: Boolean) {
     fun mostUrgent(other: ReportCategory): ReportCategory = if (other.ordinal < ordinal) other else this
 }
 
-/** What a reported item is (the wire's `kind`). A LINK's id is its share id. */
-enum class ReportItemKind { NODE, ITEM, LINK }
+/**
+ * What a reported item is (the wire's `kind`). A LINK's id is its share id; a NAME's is its node's — a node's name on its
+ * own (ADR 0093 § 9), whose report share holds that name's field key alone and whose hold is the node's one row.
+ */
+enum class ReportItemKind { NODE, ITEM, NAME, LINK }
 
 /**
  * What opened a case: a report, or an authority's order (ADR 0093 § 12) — decided from the start, with no report — or,

@@ -184,7 +184,7 @@ class AccountPurge(
         // The terms acceptance history (ADR 0101 decision 6): kept under the opaque id while a case names the account.
         if (!TermsEvidence.namesAtErasure(accountId)) TenantTermsAcceptanceEntity.delete("userId", accountId)
         // After the terms question, which asks whether one stands: a measure on the account ends with it.
-        steps.targetErased(accountId, listOf(BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT), Instant.now())
+        steps.targetErased(accountId, listOf(BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT, BlockKind.CONTENT_UPLOADER), Instant.now())
         AccountErasureEntity.deleteById(accountId)
         // The erasure ledger's line (ADR 0056 decision 8, ADR 0101 decision 8), in this transaction, before the row goes:
         // a restore of a capture older than this brings the account back, and the start erases it again ([reapply]).
@@ -242,6 +242,7 @@ class AccountPurge(
             // The moderation records the law keeps to their case's log retention date (ADR 0101 decision 7).
             "veyq_moderation_report.reporter_account" to kept("a report the person made, kept to its case's log retention"),
             "veyq_moderation_block.target_id" to kept("a measure on the account stays as the record it is"),
+            "veyq_moderation_block_reach.target_id" to kept("a node or an item an uploader's block covers, never an account"),
             "veyq_moderation_block.taken_by" to kept("the moderation log's actor, kept to its case's log retention"),
             "veyq_moderation_block.lifted_by" to kept("the moderation log's actor, kept to its case's log retention"),
             "veyq_moderation_proposal.target_id" to kept("a proposed step on the account, kept to its case's log retention"),

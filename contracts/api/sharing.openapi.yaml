@@ -660,7 +660,7 @@ paths:
         cr-moderation-review-and-measures, uc.moderation.review-a-case): every report of the case with its sealed part and
         its report share, and the held snapshot as a `PublicShare` — the held nodes of a reported node's subtree as
         `nodes` (the root carries its own held `encryptedName`, which the report's `NODE_NAME` field key opens), a
-        reported link's held name and note, the held links rooted in the subtree in `heldLinks` (a guest's report hands
+        reported name's one held node with its name and placement and nothing else, a reported link's held name and note, the held links rooted in the subtree in `heldLinks` (a guest's report hands
         over the link's `LINK_NAME` field key, which opens one of their names). `role` is `READ` and `wrap` null: the
         moderator holds the node key from the report share. Read from the snapshot only, so it answers after the share,
         the node or the space were deleted, and for content a measure blocks. Each fetch is logged as the case's
@@ -2150,8 +2150,8 @@ components:
         itemKind:
           x-veyq-visibility: enum
           type: string
-          description: What was reported — a node, an application's item (a Memories medium) or an upload link.
-          enum: [NODE, ITEM, LINK]
+          description: What was reported — a node, an application's item (a Memories medium), a node's name on its own, or an upload link.
+          enum: [NODE, ITEM, NAME, LINK]
           example: NODE
         itemId:
           x-veyq-visibility: id

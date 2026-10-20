@@ -5,27 +5,31 @@ import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.IdClass
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
 /**
  * What a measure blocks (ADR 0093 §§ 5-6, uc.moderation.take-a-measure). The wire's `CONTENT` is [CONTENT_NODE] or
- * [CONTENT_ITEM] by the kind of the case's item, and its `REPORTER` is [REPORTER_ACCOUNT] or [REPORTER_LINK] by who
- * reported; [MEMBER_SIGN_IN], [TENANT_OFFLINE] and [TENANT_DELETED] are the Server Owner's alone. [TENANT_OFFLINE] and
+ * [CONTENT_ITEM] by the kind of the case's item (a reported name: its node), its `UPLOADER_CONTENT` is
+ * [CONTENT_UPLOADER] — everything one uploader uploaded to the space, the items it counted when it was taken listed in
+ * `veyq_moderation_block_reach` ([ModerationBlockReachEntity]), its target the uploader — and its `REPORTER` is
+ * [REPORTER_ACCOUNT] or [REPORTER_LINK] by who reported; [MEMBER_SIGN_IN], [TENANT_OFFLINE] and [TENANT_DELETED] are the Server Owner's alone. [TENANT_OFFLINE] and
  * [TENANT_DELETED] are **records**, not the lockout: each is written only for a suspension or a deletion over content, so
  * its statement of reasons has a measure to hang on and the records stay while it stands (ADR 0093 §§ 7, 11; ADR 0101
  * decision 10); what refuses the tenant is its status (ADR 0066), and no read of [ModerationBlocks] asks these kinds.
  */
 enum class BlockKind {
-    SHARE, CONTENT_NODE, CONTENT_ITEM, GUEST_IDENTITY, MEMBER_SIGN_IN, TENANT_OFFLINE, TENANT_DELETED, REPORTER_ACCOUNT,
-    REPORTER_LINK;
+    SHARE, CONTENT_NODE, CONTENT_ITEM, CONTENT_UPLOADER, GUEST_IDENTITY, MEMBER_SIGN_IN, TENANT_OFFLINE, TENANT_DELETED,
+    REPORTER_ACCOUNT, REPORTER_LINK;
 
     /** The kind as the moderation surface names it (`ModerationMeasureKind`); null for the Server Owner's step. */
     val wire: String?
         get() = when (this) {
             SHARE -> "SHARE"
             CONTENT_NODE, CONTENT_ITEM -> "CONTENT"
+            CONTENT_UPLOADER -> "UPLOADER_CONTENT"
             GUEST_IDENTITY -> "GUEST_IDENTITY"
             REPORTER_ACCOUNT, REPORTER_LINK -> "REPORTER"
             MEMBER_SIGN_IN, TENANT_OFFLINE, TENANT_DELETED -> null
@@ -33,6 +37,9 @@ enum class BlockKind {
 
     /** A Server Owner's own step (ADR 0099 § 6): its statement goes by mail, with the facts, never into the app. */
     val isServerOwnerStep: Boolean get() = this == MEMBER_SIGN_IN || this == TENANT_OFFLINE || this == TENANT_DELETED
+
+    /** A step that refuses content to everyone: a node, an item, or everything one uploader uploaded to a space. */
+    val isContent: Boolean get() = this == CONTENT_NODE || this == CONTENT_ITEM || this == CONTENT_UPLOADER
 
     /** The bars of a reporter: no step against what was reported, so they neither decide a case nor keep its hold. */
     val isBar: Boolean get() = this == REPORTER_ACCOUNT || this == REPORTER_LINK
@@ -99,7 +106,46 @@ class ModerationBlockEntity : PanacheEntityBase {
     val endedWithTarget: Boolean get() = liftedAt != null && liftedBy == null
 
     companion object : PanacheCompanionBase<ModerationBlockEntity, String> {
-        fun activeKeyOf(kind: BlockKind, targetId: String) = "${kind.name}:$targetId"
+        /**
+         * One measure in force per target and kind; an uploader's per space too ([BlockKind.CONTENT_UPLOADER]: a member
+         * uploads to more than one space, and each space's block is its own decision).
+         */
+        fun activeKeyOf(kind: BlockKind, targetId: String, scopeId: String? = null) =
+            if (kind == BlockKind.CONTENT_UPLOADER) "${kind.name}:$scopeId:$targetId" else "${kind.name}:$targetId"
+    }
+
+    /** This measure's own active key ([activeKeyOf]). */
+    fun ownActiveKey(): String = activeKeyOf(blockKind, targetId, scopeId)
+}
+
+/**
+ * One item an uploader's block covers (`veyq_moderation_block_reach`, [BlockKind.CONTENT_UPLOADER]): [itemKind] `NODE`
+ * (a node whose content the uploader put there) or `ITEM` (an application's item), [targetId] its id. Written once, when
+ * the measure is taken; a row goes when its item is erased ([MeasureTargets.erased]) and with its measure.
+ */
+@Entity
+@Table(name = "veyq_moderation_block_reach")
+@IdClass(ModerationBlockReachEntity.Key::class)
+@DynamicUpdate
+class ModerationBlockReachEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "block_id", columnDefinition = "uuid")
+    lateinit var blockId: String
+
+    @Id
+    @Column(name = "item_kind", length = 8)
+    lateinit var itemKind: String
+
+    @Id
+    @Column(name = "target_id", length = 64)
+    lateinit var targetId: String
+
+    /** The composite key. */
+    data class Key(var blockId: String = "", var itemKind: String = "", var targetId: String = "") : java.io.Serializable
+
+    companion object : PanacheCompanionBase<ModerationBlockReachEntity, Key> {
+        const val NODE = "NODE"
+        const val ITEM = "ITEM"
     }
 }
 

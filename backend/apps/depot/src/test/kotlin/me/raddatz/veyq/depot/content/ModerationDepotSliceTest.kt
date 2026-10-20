@@ -81,6 +81,36 @@ class ModerationDepotSliceTest {
         given().header("Authorization", bearer(m.userId)).`when`().delete("/api/scopes/${m.scopeId}/nodes/$file").then().statusCode(204)
     }
 
+    /**
+     * Everything from one uploader over Depot's files (uc.moderation.take-a-measure A8): the files whose content the
+     * member uploaded to the space are counted and blocked as nodes — the reported one and one elsewhere in the space —
+     * while a file they upload after the decision is served (the control on the same predicate).
+     */
+    @Test
+    fun everythingFromOneUploaderBlocksTheFilesTheyUploadedAndNotOneAddedAfter() {
+        val mod = CaseTestKit.moderator()
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val folder = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val elsewhere = seedNode(m.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val file = seedNode(m.scopeId, DepotNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        val other = seedNode(m.scopeId, DepotNodeKinds.FILE, parentId = elsewhere, wrappedContentKey = CONTENT_KEY)
+        complete(m.userId, m.scopeId, file, start(m.userId, m.scopeId, file, TestBlob.ofChunks(1))).statusCode(200)
+        val otherBlob = complete(m.userId, m.scopeId, other, start(m.userId, m.scopeId, other, TestBlob.ofChunks(1))).statusCode(200)
+            .extract().path<String>("blobId")
+        asMember(m.userId, m.scopeId, body(listOf(item("NODE", file)))).then().statusCode(201)
+        val caseId = openCase("NODE", file)!!.id
+        mod.call("getModerationCase", caseId, "GET", "/api/moderation/cases/$caseId").then().statusCode(200)
+            .body("targets.uploaders.find { it.id == '${m.userId}' }.items", equalTo(2))
+
+        mod.take(caseId, "UPLOADER_CONTENT", targetId = m.userId).then().statusCode(201).body("measures[0].items", equalTo(2))
+        download(m.userId, m.scopeId, otherBlob).body("results[0].error", equalTo("blocked_by_operator"))
+        // Uploaded after the decision: not what a person decided on.
+        val later = seedNode(m.scopeId, DepotNodeKinds.FILE, parentId = elsewhere, wrappedContentKey = CONTENT_KEY)
+        val laterBlob = complete(m.userId, m.scopeId, later, start(m.userId, m.scopeId, later, TestBlob.ofChunks(1))).statusCode(200)
+            .extract().path<String>("blobId")
+        download(m.userId, m.scopeId, laterBlob).body("results[0].error", nullValue()).body("results[0].presignedGets", notNullValue())
+    }
+
     private fun start(userId: String, scopeId: String, node: String, blob: TestBlob): String {
         val uploadId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare("d3JhcA==", ownerId = node, role = DepotBlobRoles.FILE_CONTENT)}]}""")
