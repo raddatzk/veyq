@@ -79,7 +79,7 @@ acceptanceCriteria:
           - GrantWriterSnapshotSliceTest.aRotationRecordsTheRotatorsKeyOnEveryGrantItWrites
           - GrantWriterSnapshotSliceTest.aGrantDeliveryRecordsTheWorkersKey
       web:
-        unit: [src/features/spaces/scopes.test.ts, src/features/memory/sealBinding.test.ts]
+        unit: [src/features/spaces/scopes.test.ts, src/features/memories/sealBinding.test.ts]
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/features/node-urls.spec.ts`) drives `switch-space-by-fragment` in Chromium

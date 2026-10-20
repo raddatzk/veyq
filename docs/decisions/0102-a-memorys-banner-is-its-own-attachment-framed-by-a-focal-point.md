@@ -80,7 +80,7 @@ medium whose original has that digest is the banner's picture (decision 7). A st
 older client's) are read by nobody and kept by every other writer. The meta's size is bounded (`maxLength: 8192`, shared
 with the cover, the place and 100 participants): the worst case — those, a range date, the place's name at its bound of
 200 code points in 4-byte characters (`MAX_PLACE_NAME`, held by the editor, every read and every write), and a video
-banner with its poster, a type and the digest — is sealed under the cap by `web/src/features/memory/banner/bannerModel.test.ts`
+banner with its poster, a type and the digest — is sealed under the cap by `web/src/features/memories/banner/bannerModel.test.ts`
 ("the meta budget"). A **focal point**, not a crop: the display
 sets `object-fit: cover` with an `object-position` derived from it, so one point frames the medium in 3:1 and 16:9 alike.
 `frame` is decided once in the editor — `fill` for a landscape or square medium, `fit` for a portrait one (height >

@@ -7,8 +7,8 @@ import { getTenantMailSettings } from '../tenant/tenantMailSettings'
 import { ensurePersonalScope, listMyScopes, openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { listTree } from '../../core/node/tree'
-import { createMemory } from '../memory/memoryNodes'
-import { addMedia, listMedia, unsealMeta } from '../memory/media'
+import { createMemory } from '../memories/memoryNodes'
+import { addMedia, listMedia, unsealMeta } from '../memories/media'
 import { ScopeKind } from '../../api/generated/scopes'
 
 /**

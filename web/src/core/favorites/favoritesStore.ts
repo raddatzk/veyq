@@ -10,7 +10,7 @@
 // (src/core/favorites/favoritesPrivacy.test.ts).
 //
 // The **item** marks inside a Memory are the other object and Memories': shared on purpose, sealed under
-// `K_SC` (features/memory/itemFavorites.ts).
+// `K_SC` (features/memories/itemFavorites.ts).
 //
 // **A pinned id is inert when its node does not resolve.** The server cannot read the set, so a purged node's id cannot be
 // removed server-side; every view resolves the ids against the loaded tree and skips what is not there (the sidebar), and a

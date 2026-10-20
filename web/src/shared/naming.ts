@@ -1,4 +1,4 @@
-// Pure slug/naming util (ADR 0045 §3 tier-2b, cr-0175). Lifted out of the mixed `features/memory/tree.ts` so
+// Pure slug/naming util (ADR 0045 §3 tier-2b, cr-0175). Lifted out of the mixed `features/memories/tree.ts` so
 // StrykerJS — which mutates whole files — has a pure, scorable target instead of one drowned in `contentApi`
 // wiring. No I/O, no crypto keys: deterministic string→string only. `slugify`'s output seeds the blinded-token
 // derivation (`tree.ts` slugTokenFor → `v1.slugToken`), so every byte here is behaviour-load-bearing — a change

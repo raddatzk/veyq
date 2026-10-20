@@ -22,7 +22,7 @@ import { favoritesStore, clearFavorites, loadFavoritesFor } from './favoritesSto
 import { loadFavorites, saveFavorites } from './favorites'
 import { masterKey } from '../../app/vault'
 import { filesApi } from '../../features/depot/api'
-import { MEMORY_KIND } from '../../features/memory/kinds'
+import { MEMORY_KIND } from '../../features/memories/kinds'
 import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { ShareRole } from '../../api/generated/sharing'
 import type { FileListPage } from '../../api/generated/depot'

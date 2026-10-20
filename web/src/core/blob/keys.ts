@@ -1,6 +1,6 @@
 // The blob read's pure crypto (ADR 0072, inbox #489): the `K_blob` wrap's binding, its unwrap, a listed blob's sealed
 // metadata and the frames' open — the part of `transport.ts` that touches no network, no API client and no page state,
-// so a Web Worker can import it (Memories' listing opener, `features/memory/listingOpener.worker.ts`) without pulling
+// so a Web Worker can import it (Memories' listing opener, `features/memories/listingOpener.worker.ts`) without pulling
 // the app in. `transport.ts` re-exports what its callers always imported from it.
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'

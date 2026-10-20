@@ -18,33 +18,33 @@ title: Share note — a curator attaches an editable message to a share
 # inside the sealed note, so the wire and the backend are unchanged and there is no backend behaviour to cover. The
 # acceptance is client-only localStorage keyed by share id + the digest of the opened plaintext (the server records
 # nothing about the accountless visitor). Its wire half (a minted note with the switch resolves with the gate, and
-# `mustAccept` is no field on the raw wire) also runs in src/features/memory/folderShare.e2e.test.ts.
+# `mustAccept` is no field on the raw wire) also runs in src/features/memories/folderShare.e2e.test.ts.
 acceptanceCriteria:
   - id: curator-sets-note-at-creation
     text: When creating a share, the curator may attach an optional note; the client seals it under a field key derived from K_share (AAD share-note) and stores it alongside sealed_share_key (K_share sealed under K_SC at the scope's current epoch, with that epoch). A share with no note stores nothing and shows no banner.
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithNoteThenAnonymousResolveReturnsIt, ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey] }
-      web: { unit: [src/features/memory/share.test.ts] }
+      web: { unit: [src/features/memories/share.test.ts] }
   - id: note-shown-and-rendered-on-share-page
     text: The anonymous resolveShare returns sealedNote; the share page unwraps it with the fragment K_share and renders it as markdown (safe subset) — a banner for READ/READ_WRITE, the instruction above the name field for WRITE_ONLY.
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithNoteThenAnonymousResolveReturnsIt] }
-      web: { unit: [src/features/memory/share.test.ts] }
+      web: { unit: [src/features/memories/share.test.ts] }
   - id: note-editable-in-place
     text: The curator edits an existing share's note (per-locale) + name without a new link — recover K_share from sealed_share_key, re-seal, call the owner-gated updateShare (PATCH, a full replace of note + name); the same shareId then shows the new values. A non-owner edit is a 404; a blank clears it.
     coverage:
       backend: { integration: [ShareNoteSliceTest.ownerEditsTheNoteInPlaceAtTheSameShareId, ShareNoteSliceTest.editingWithNullClearsTheNote, ShareNoteSliceTest.aNonOwnerEditIs404AndLeavesTheNoteUnchanged, ShareNoteSliceTest.renameViaUpdateShareChangesTheNameKeepsTheNoteAndTheLink] }
-      web: { unit: [src/features/memory/share.test.ts] }
+      web: { unit: [src/features/memories/share.test.ts] }
   - id: operator-blind
     text: The server stores only ciphertext — sealed_note (per-locale) + sealed_share_name + sealed_share_key (openable only with K_SC, which the operator lacks); K_share is never in the clear, the name is never served to the viewer, and updateShare swaps one ciphertext for another. No key or plaintext crosses the boundary (ADR 0036).
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey, ShareNoteSliceTest.createWithANameShowsItInTheManageListButNeverToTheViewer] }
-      web: { unit: [src/features/memory/share.test.ts] }
+      web: { unit: [src/features/memories/share.test.ts] }
   - id: share-key-recoverable-by-members-only
     text: A share's K_share is recoverable only by the Memory's scope members - its recovery copy is sealed under K_SC(epoch), which no share link carries. So no link, with or without a dump, opens another share's password, private label or note, or rebuilds its link. The copy is sealed at the scope's current epoch - a create at any other epoch is 409 stale_epoch with nothing written, and a key without its epoch (or the reverse) is 400.
     coverage:
       backend: { integration: [ShareKeyRecoveryEpochSliceTest.aCreateAtAnEpochOtherThanTheScopesCurrentIs409StaleEpochAndWritesNothing, ShareKeyRecoveryEpochSliceTest.aKeyWithoutItsEpochAndAnEpochWithoutItsKeyAreEach400, ShareKeyRecoveryEpochSliceTest.aCreateAtTheCurrentEpochSucceedsAndTheManageListServesThatEpoch] }
-      web: { unit: [src/features/memory/share.test.ts] }
+      web: { unit: [src/features/memories/share.test.ts] }
   - id: note-acceptance-switch-sealed-inside-the-note
     text: >
       With a note, the curator may tick "must be accepted before opening" — a checkbox under the note editor, off by
@@ -54,7 +54,7 @@ acceptanceCriteria:
       operator cannot tell which links ask. A note with no text seals nothing, switch or not.
     coverage:
       web:
-        unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/shareNote.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
+        unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/shareNote.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/memories/components/ShareCreateDialog.test.ts]
   - id: note-acceptance-gate-on-the-share-page
     text: >
       A note that asks to be accepted is a gate of the share page after the password and the tenant's terms and

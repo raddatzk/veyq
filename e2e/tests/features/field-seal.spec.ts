@@ -21,7 +21,7 @@ import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from 
 test.describe.configure({ mode: 'serial' })
 
 // The round trip's photo (1×1 JPEG with EXIF): what the guest contributes, so its name has a bucket to show under.
-const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 
 const stamp = randomBytes(3).toString('hex')
 const folderBefore = `Ordner Alpha vom Dachboden ${stamp}`

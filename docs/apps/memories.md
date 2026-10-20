@@ -10,7 +10,7 @@ Gradle module of its own; the web half is separated by import direction only (se
 
 - **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's. On the wire a kind is an open token (the
   `NodeKind` of `contracts/api/_common.openapi.yaml`, `^[A-Z][A-Z0-9_]{0,15}$`, which core's specs alias), so the
-  two values are Memories' own: `MemoriesNodeKinds` in the backend, `features/memory/kinds.ts` in the web, with their
+  two values are Memories' own: `MemoriesNodeKinds` in the backend, `features/memories/kinds.ts` in the web, with their
   rules (`MemoryNodeKindRules`, `registerKind`).
 - **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `item-favorites.openapi.yaml`, `share-media.openapi.yaml`
   — a guest's media under a share link: the list a guest is served with the uploader keys that open it
@@ -131,7 +131,7 @@ upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSlic
 ### What the web offers — the rights matrix
 
 One view per kind serves a member and a guest ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
-Consequences, inbox #401); what it shows is `memoryRights(access, target)` (`web/src/features/memory/rights.ts`,
+Consequences, inbox #401); what it shows is `memoryRights(access, target)` (`web/src/features/memories/rights.ts`,
 pinned row by row in `rights.test.ts`): pure, every right false unless a row grants it, an unknown role or kind
 grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 
@@ -158,7 +158,7 @@ the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unk
 `move` says yes and is deleted with it where `deleteNode` does (core's delete, as the Memory's own page asks the host for),
 so a guest's selection moves a Memory a folder holds and deletes none. These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
-most a guest page can ever offer. Memories' source is `web/src/features/memory/source.ts` (inbox #401 S4): the
+most a guest page can ever offer. Memories' source is `web/src/features/memories/source.ts` (inbox #401 S4): the
 member's wraps the scope's calls; the guest's reads the link's media listing (each node's own media from the subtree's),
 opens every tier through the share presign, and — for `READ_WRITE` only — uploads into the node on screen, naming it
 (the root names none) and sealing under that node's key from the chain, and purges what this device sent
@@ -170,7 +170,7 @@ decision 4, never the node's item revision), and a change answers the whole list
 told no order of the Memory's changes to continue a keyset from — so another uploader's photo appears, and one gone
 from the link drops, without a reload.
 
-**A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memory/levelRows.ts`), handed a guest's access and tree,
+**A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memories/levelRows.ts`), handed a guest's access and tree,
 gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed with the node's key the link's
 chain opened, each cover through the link's own reads (core's cover store, `core/node/cover/coverStore.ts`: an uploaded cover blob through
 `resolveShareBlob`, which serves a node's cover blob below the share), the map over the opened subtree. A Memory or a chapter — below a shared
@@ -199,7 +199,7 @@ contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` t
 only `FOLDER`), declares that a `MEMORY` and a `CHAPTER` may be the root of a share of every role through
 `ShareRoots` and takes guest writes under both through `ShareGuestWrites` (one set, `MemoriesNodeKinds.SHARE_ROOTS`). Memories' tests run in `:apps:memories`, beside the
 core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
-by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
+by import direction only**: `features/memories` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
 (inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
 leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #411), the name, the meta line "Memory" plus the details date range and place (`details`, `memoryRowDetails.ts`: each left out when the Memory has none, the same for a share guest, [apps/README](README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), a primary click that opens it, rename and move in

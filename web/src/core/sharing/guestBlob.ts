@@ -3,9 +3,9 @@
 // an upload at its next window) and `resolveShareBlob` (the presigned GETs of a blob under the shared subtree), shaped as
 // the reserve/window/presign functions core's `core/blob/transport.ts` pumps and reads with. Kind-neutral: the target
 // node and the role come from the caller; which kinds take a guest's upload is the server's `ShareGuestWrites`.
-// The one copy: Depot's guest upload and Memories' guest media transport (`features/memory/share.ts`) both reserve and
+// The one copy: Depot's guest upload and Memories' guest media transport (`features/memories/share.ts`) both reserve and
 // window here (inbox #376) — Memories' wire is pinned byte for byte by its characterisation test
-// (`features/memory/uploadWire.characterisation.test.ts`), which held unchanged across the merge.
+// (`features/memories/uploadWire.characterisation.test.ts`), which held unchanged across the merge.
 import { publicSharesApi } from '../../api/client'
 import { windowPuts } from '../blob/transport'
 import { readScheduler, type Presigned, type ReadOpts } from '../blob/readScheduler'

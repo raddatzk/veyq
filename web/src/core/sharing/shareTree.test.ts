@@ -1,6 +1,6 @@
 // The kind-independent subtree walk (cr-node-key-hierarchy 5b.2): a guest opens each descendant's key and name under its
 // parent's key, top-down from the root key the share's own wrap holds. Kinds here are the platform's own `FOLDER` and
-// an arbitrary token — the walk never reads one. The Memories suite (`features/memory/share.test.ts`) drives the same
+// an arbitrary token — the walk never reads one. The Memories suite (`features/memories/share.test.ts`) drives the same
 // walk end to end through `openSharedMemory`.
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'

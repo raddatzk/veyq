@@ -1,7 +1,7 @@
 // The gallery's client crypto at volume (cr-volume-measurement-local): per photo, what opening a 10,000-photo
 // Chapter costs on the device before any pixel is decoded — the listed tier (`unsealMeta`), the thumbnail's `K_blob`
 // (`unwrapBlobKey`) and its one frame (`openFrame`, a thumbnail-sized frame). The single-operation benches give the
-// per-operation time; the 10,000 ones the total. `npx vitest bench src/features/memory/media.bench.ts`; `vitest run`
+// per-operation time; the 10,000 ones the total. `npx vitest bench src/features/memories/media.bench.ts`; `vitest run`
 // does not collect bench files, so `npm run check` is unchanged. TEMPORARY: `cr-volume-measurement-cax` deletes it.
 import { bench, describe, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'

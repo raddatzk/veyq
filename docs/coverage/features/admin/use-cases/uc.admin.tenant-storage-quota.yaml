@@ -53,7 +53,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/core/blob/queue.test.ts
-          - src/features/memory/uploadQueue.test.ts
+          - src/features/memories/uploadQueue.test.ts
           - src/core/blob/UploadStatusMenu.test.ts
           - src/core/node/cover/useNodeCover.test.ts
           - src/features/tenant/TenantStoragePanel.test.ts

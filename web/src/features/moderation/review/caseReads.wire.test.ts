@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { session } from '../../../app/session'
 import { caseReviewApi } from '../../../api/client'
-import { caseMediaApi } from '../../memory/api'
+import { caseMediaApi } from '../../memories/api'
 import { caseFilesApi } from '../../depot/api'
 
 const CASE_ID = '7c000000-0000-4000-8000-000000000004'

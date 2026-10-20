@@ -11,7 +11,7 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/memories/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../features/depot/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 const route = vi.hoisted(() => ({ params: { shareId: 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_3' }, hash: '', query: {} as Record<string, string> }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
@@ -24,8 +24,8 @@ import ShareView from './ShareView.vue'
 import { resolvePublicShare, fetchShareTerms, type PublicShareHead } from '../core/sharing/resolvePublicShare'
 import { FOLDER_KIND } from '../core/node/kind'
 import { sealName, wrapContentKey } from '../core/node/tree'
-import { MEMORY_KIND } from '../features/memory/kinds'
-import { publicShareMediaApi } from '../features/memory/api'
+import { MEMORY_KIND } from '../features/memories/kinds'
+import { publicShareMediaApi } from '../features/memories/api'
 import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import { stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'

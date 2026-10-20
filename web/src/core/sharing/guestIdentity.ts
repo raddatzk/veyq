@@ -2,7 +2,7 @@
 // whatever the shared root's kind: the display name sealed under the root's key, the anonymous identity it creates and
 // the session the guest's device keeps. Core's, because a folder link's guest names itself exactly as a Memory link's
 // does; an application adds only what is its own (Memories: the WRITE_ONLY uploader, whose name is sealed under a key
-// of its own wrapped to the drop key — ADR 0031 point 7 — and which therefore stays in `features/memory/share.ts`).
+// of its own wrapped to the drop key — ADR 0031 point 7 — and which therefore stays in `features/memories/share.ts`).
 import { computed, ref, type ComputedRef } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
@@ -22,7 +22,7 @@ export const identityNameContext = (scopeId: string, shareId: string, identityId
  * link's ROOT key, which need not be the node the member looks at — a folder link's guest who uploads below the folder —
  * so the caller passes the node's own key and its ancestors', NEAREST FIRST, as the session holds them through the chain
  * (`contentKeyChain`); a WRITE_ONLY guest's name opens only under its own `K_up`. Every application reads a guest's name
- * here: Memories' contributor buckets (`features/memory/mediaBuckets.ts`) and Depot's uploader (`features/depot/uploader.ts`).
+ * here: Memories' contributor buckets (`features/memories/mediaBuckets.ts`) and Depot's uploader (`features/depot/uploader.ts`).
  */
 export function openIdentityName(
   scopeId: string, shareId: string, identityId: string, sealedName: string, keys: Iterable<Uint8Array>,
@@ -88,7 +88,7 @@ export async function createGuestIdentity(
  * Name the guest of a READ_WRITE link once for every body of it (cr-node-key-hierarchy 5b.4b): {@link createGuestIdentity}
  * under the SHARE ROOT's key — whichever body asks first, so a folder link's guest is named under the folder's key even
  * when its first write is in a Memory below — and saved as the link's one session ({@link saveGuestSession}). A member
- * opens the name through the chain (the node's key or one of its ancestors', `features/memory/mediaBuckets.ts`).
+ * opens the name through the chain (the node's key or one of its ancestors', `features/memories/mediaBuckets.ts`).
  */
 export async function nameShareGuest(
   head: PublicShareHead, { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },

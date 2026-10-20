@@ -13,8 +13,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/banner/bannerModel.test.ts
-          - src/features/memory/banner/useMemoryBanner.test.ts
+          - src/features/memories/banner/bannerModel.test.ts
+          - src/features/memories/banner/useMemoryBanner.test.ts
   - id: one-write-for-slots-and-meta
     text: setMemoryBanner attaches the banner's upload(s) - or, per slot, a shared row on an object the node stores - and compare-and-sets the meta in one transaction — both slots are compared first and a stale slot (`banner_stale`) or a stale meta (`stale_revision`) writes nothing and leaves the uploads open; a replaced blob (and a poster an image replaces) is freed with a reclaim record in the same write; removeMemoryBanner frees both slots and writes the meta without the banner, idempotently.
     coverage:
@@ -26,9 +26,9 @@ acceptanceCriteria:
           - MemoryBannerSliceTest.aStaleSlotWritesNothingAndNamesWhatTheSlotsHold
       web:
         unit:
-          - src/features/memory/banner/bannerWrite.test.ts
-          - src/features/memory/banner/useBannerEditor.test.ts
-          - src/features/memory/banner/BannerDialog.test.ts
+          - src/features/memories/banner/bannerWrite.test.ts
+          - src/features/memories/banner/useBannerEditor.test.ts
+          - src/features/memories/banner/BannerDialog.test.ts
   - id: members-only-write-guests-see
     text: Only a member who may write the scope sets, re-frames or removes a banner; no link role has a banner operation or may upload in a banner role; a READ or READ_WRITE guest sees the banner exactly as a member does, read from the node's own attachment through the share's gated route.
     coverage:
@@ -40,10 +40,10 @@ acceptanceCriteria:
           - OperatorBlindProbeTest.everyContractOperationIsProbedOrExcludedWithAReason
       web:
         unit:
-          - src/features/memory/rights.test.ts
-          - src/features/memory/source.test.ts
-          - src/features/memory/components/MemoryDetail.rights.test.ts
-          - src/features/memory/components/MemoryDetail.guest.test.ts
+          - src/features/memories/rights.test.ts
+          - src/features/memories/source.test.ts
+          - src/features/memories/components/MemoryDetail.rights.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
   - id: not-in-the-gallery
     text: A banner's bytes never appear as a medium — not in the media list, the item count, the live-update revision or the media trash — whether uploaded or sharing a gallery medium's stored object, and an upload started in a banner role is never completed as a medium's blob.
     coverage:
@@ -59,12 +59,12 @@ acceptanceCriteria:
         integration: [SharedBlobSliceTest.aVideoBannerSharesTheMediumsOriginalAndPreviewAndKeepsThemPastIt, SharedBlobSliceTest.aGalleryOriginalSharesTheVideoBannersObject, SharedBlobSliceTest.theSweepSkipsARecordedKeyThatABlobRowStillNames, SharedBlobSliceTest.theScopesErasureRecordsAnObjectOnce, SharedBlobSliceTest.eachArmAnswersHoldsAsItsSetDoes, SharedBlobSliceTest.aBlockOnAnErasedMediumHangsOnTheBannersObjectUntilItsLastRowGoes, SharedBlobSliceTest.aLiftedMeasureServesTheBannerAgain]
       web:
         unit:
-          - src/features/memory/banner/useBannerEditor.test.ts
-          - src/features/memory/banner/bannerWrite.test.ts
-          - src/features/memory/banner/BannerDialog.test.ts
-          - src/features/memory/components/MemoryDetail.banner.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
-          - src/features/memory/media.test.ts
+          - src/features/memories/banner/useBannerEditor.test.ts
+          - src/features/memories/banner/bannerWrite.test.ts
+          - src/features/memories/banner/BannerDialog.test.ts
+          - src/features/memories/components/MemoryDetail.banner.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
+          - src/features/memories/media.test.ts
   - id: lifecycle-follows-the-memory
     text: The banner's attachments are trashed and restored with the Memory, freed by its purge, by the scope's erasure (account erasure, tenant deletion), counted in the tenant's quota, copied and pinned by a hold on a report of the Memory, and exported, imported and copied with the Memory.
     coverage:
@@ -76,15 +76,15 @@ acceptanceCriteria:
           - TenantStorageQuotaMemoriesSliceTest.aBannerCounts
       web:
         unit:
-          - src/features/memory/exportImport.test.ts
+          - src/features/memories/exportImport.test.ts
   - id: frame-and-focal-point
     text: The banner's frame is 3:1 on a wide column and 16:9 on a narrow one, at most 35 % of the viewport's height; fill keeps the stored focal point in view in both; a portrait medium defaults to fit with blurred, enlarged sides drawn by the client and may switch to fill; the banner scrolls away and the tab row sticks below the shell's top bar (at the top on a share page).
     coverage:
       web:
         unit:
-          - src/features/memory/banner/bannerModel.test.ts
-          - src/features/memory/banner/MemoryBanner.test.ts
-          - src/features/memory/banner/BannerDialog.test.ts
+          - src/features/memories/banner/bannerModel.test.ts
+          - src/features/memories/banner/MemoryBanner.test.ts
+          - src/features/memories/banner/BannerDialog.test.ts
     gaps:
       - surface: web
         reason: >-
@@ -97,9 +97,9 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/banner/MemoryBanner.test.ts
-          - src/features/memory/banner/useMemoryBanner.test.ts
-          - src/features/memory/banner/BannerDialog.test.ts
+          - src/features/memories/banner/MemoryBanner.test.ts
+          - src/features/memories/banner/useMemoryBanner.test.ts
+          - src/features/memories/banner/BannerDialog.test.ts
 gaps:
   stack: >-
     Lane L1's browser pass (`e2e/tests/features/memory-banner.spec.ts`: an uploaded landscape image framed at a wide and a

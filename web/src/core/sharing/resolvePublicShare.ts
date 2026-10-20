@@ -8,7 +8,7 @@
 //
 // What this half does NOT do is read or open anything the application owns: the root `K_node` (the share's `wrap`),
 // the chapters' keys and an uploader's drop key are the application's to open (`openSharedMemory` in
-// features/memory/share.ts), and what it attached under the nodes is its own guest read (`listShareMedia`) — the
+// features/memories/share.ts), and what it attached under the nodes is its own guest read (`listShareMedia`) — the
 // resolve serves no application data. The head hands the application the unlocked response and `K_share`, nothing else.
 import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'

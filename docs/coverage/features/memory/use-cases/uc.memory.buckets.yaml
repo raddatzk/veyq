@@ -16,7 +16,7 @@ acceptanceCriteria:
       backend:
         integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary]
       web:
-        unit: [src/features/memory/media.buckets.test.ts]
+        unit: [src/features/memories/media.buckets.test.ts]
   - id: derived-primary-buckets
     text: A Memory's buckets are materialized lazily via find-or-create on (node_id, owner_key) — one primary per uploader, virtual until that uploader has at least one medium. (Uniqueness holds for sequential resolves, which is what these tests pin; it is not enforced by a constraint — see ADR 0034 §4 + architecture §11.)
     coverage:
@@ -28,17 +28,17 @@ acceptanceCriteria:
       backend:
         integration: [MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName, MediaBucketsSliceTest.memberMayManageAnotherRootsSubBucket, MediaBucketsSliceTest.memberCreatesSubUnderAnotherRootInheritingItsOwner, MediaBucketsSliceTest.createSubRejectsNonPrimaryParent, MediaBucketsSliceTest.crossOwnerMoveIsRejected, MediaBucketsSliceTest.primaryBucketNotRenameableNorDeletable, MediaBucketsSliceTest.aMetaEditOverlappingASubBucketDeleteKeepsTheReparent, MediaBucketsSliceTest.aMoveIntoASubBucketBeingDeletedIsRefused]
       web:
-        unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
+        unit: [src/features/memories/media.buckets.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
   - id: contributions-tab-primary-grouping
     text: A "Beiträge" tab lists the Memory's uploaders by their primary bucket (with per-bucket counts); selecting one filters the existing MediaGrid + lightbox to that uploader. Bucket names are unsealed with K_node client-side (a contributor's sealed name, shown marked as a guest's - "Ben (guest)", inbox #433 - while a sub-bucket's name, a member's, is not; a member's the per-tenant username), an unsealable name falling back to a neutral placeholder. An explicit action bar (cr-0122) adds per-tile selection (checkbox top-left, 3-dot top-right), a select-all/deselect toggle, and visible Move / Delete (delete = a straight soft-delete to trash with a local undo bar); the bucket actions (upload / new sub / rename / delete) are buttons beside the picker, enabled per the cr-0123 curation authz.
     coverage:
       web:
-        unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
+        unit: [src/features/memories/media.buckets.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
   - id: move-beyond-one-request
     text: Moving more media than one request carries moves all of them — the selection goes out as consecutive requests inside the contract's `MoveMediaRequest.mediaIds` bound, which the server enforces. The slices are not atomic together; a failing one surfaces through the move dialog's error after the earlier ones have moved.
     coverage:
       web:
-        unit: [src/features/memory/media.buckets.test.ts]
+        unit: [src/features/memories/media.buckets.test.ts]
   - id: guest-names-for-members-only
     text: >-
       A guest's name reaches the Memory's members only, through their bucket list. No guest read of a public share
@@ -56,7 +56,7 @@ acceptanceCriteria:
         integration: [ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, ShareGuestNamesSliceTest.aContributorLinkIsServedNoneOfItsOwnGuests, ShareGuestNamesSliceTest.aViewerLinkThatWasAContributorLinkKeepsNoGuest, ShareGuestNamesSliceTest.onlyAnUploadersMediaNamesItsIdentity, ShareGuestNamesSliceTest.theResolveServesNoMediaAndNoIdentities, ShareGuestNamesSliceTest.theMembersStillReadBothNames]
       web:
         unit: [src/views/ShareView.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts, src/features/memory/shareUploader.e2e.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts, src/features/memories/shareUploader.e2e.test.ts]
   - id: operator-blind-buckets
     text: Grouping and ownership run over the opaque owner_key + the bucket structure (node, parentage, is_primary, counts) the operator already relays; names are unsealed client-side and a wrong AAD context can never open one. The operator never learns a cleartext bucket/uploader name nor any content, and a personal Memory with no share exposes only the account owner's owner_key.
     coverage:
@@ -68,7 +68,7 @@ acceptanceCriteria:
       backend:
         integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName]
       web:
-        unit: [src/features/memory/media.buckets.test.ts]
+        unit: [src/features/memories/media.buckets.test.ts]
   - id: contributors-grid-is-windowed
     text: >-
       The contributors' view is the same windowed grid: a bucket of thousands mounts about a window and announces it to
@@ -76,7 +76,7 @@ acceptanceCriteria:
       focused tile toggles its checkbox as a click does (ADR 0105 decisions 1, 2 and 5).
     coverage:
       web:
-        unit: [src/features/memory/components/MemoryBuckets.test.ts]
+        unit: [src/features/memories/components/MemoryBuckets.test.ts]
     gaps:
       - surface: web
         reason: >-

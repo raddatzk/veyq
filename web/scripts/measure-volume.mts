@@ -21,7 +21,7 @@ import { gzipSync } from 'node:zlib'
 import type { Exchange } from './apiTransport.mts'
 import { accounts, die, exchanges, manifest, signIn } from './volumeHarness.mts'
 import { contentApi, scopesApi } from '../src/api/client'
-import { mediaApi } from '../src/features/memory/api'
+import { mediaApi } from '../src/features/memories/api'
 
 const axis = process.argv[2] ?? ''
 const a = accounts()

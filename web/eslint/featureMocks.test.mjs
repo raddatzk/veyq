@@ -10,18 +10,18 @@ RuleTester.describe = describe
 RuleTester.it = it
 RuleTester.itOnly = it.only
 
-const IN_FEATURES = '/repo/web/src/features/memory/components/Thing.test.ts'
+const IN_FEATURES = '/repo/web/src/features/memories/components/Thing.test.ts'
 const OUTSIDE = '/repo/web/src/components/app/AppSidebar.test.ts'
 const bare = { messageId: 'bare' }
 const tester = new RuleTester({ languageOptions: { ecmaVersion: 'latest', sourceType: 'module' } })
 
 describe('reachesFeatures', () => {
   it('resolves a relative path against the test file', () => {
-    expect(reachesFeatures('../media', IN_FEATURES)).toBe(true) // features/memory/media
+    expect(reachesFeatures('../media', IN_FEATURES)).toBe(true) // features/memories/media
     expect(reachesFeatures('./shareLink', IN_FEATURES)).toBe(true)
     expect(reachesFeatures('../../spaces/scopes', IN_FEATURES)).toBe(true) // features/spaces/scopes
     expect(reachesFeatures('../../../app/vault', IN_FEATURES)).toBe(false) // src/app — not a features module
-    expect(reachesFeatures('../../features/memory/coverStore', OUTSIDE)).toBe(true)
+    expect(reachesFeatures('../../features/memories/coverStore', OUTSIDE)).toBe(true)
     expect(reachesFeatures('../account/identityPins', OUTSIDE)).toBe(false) // src/components/account
     expect(reachesFeatures('./ShareDialog.vue', IN_FEATURES)).toBe(false) // a component, not a module
   })
@@ -43,7 +43,7 @@ tester.run('feature-mocks-bare-fn', plugin.rules['feature-mocks-bare-fn'], {
     { filename: IN_FEATURES, code: "vi.mock('./tree', () => ({ nodeContentKey: () => new Uint8Array(32) }))", errors: [bare] },
     { filename: IN_FEATURES, code: "vi.mock('../../spaces/scopes', () => ({ list: vi.fn().mockResolvedValue([]) }))", errors: [bare] },
     { filename: IN_FEATURES, code: "vi.mock('../media', () => { return { openBlob: function () {} } })", errors: [bare] },
-    { filename: OUTSIDE, code: "vi.mock('../../features/memory/coverStore', () => ({ ensureCovers: vi.fn(() => 0) }))", errors: [bare] },
+    { filename: OUTSIDE, code: "vi.mock('../../features/memories/coverStore', () => ({ ensureCovers: vi.fn(() => 0) }))", errors: [bare] },
     { filename: OUTSIDE, code: "vi.mock('../../features/x', () => ({ a: () => 1, b: vi.fn(), c: vi.fn(f) }))", errors: [bare, bare] },
   ],
 })

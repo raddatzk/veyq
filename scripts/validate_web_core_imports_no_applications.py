@@ -2,9 +2,11 @@
 """Guard that the web core does not import, nor name the kinds of, an application, and that no application imports
 another (ADR 0079, web phase).
 
-**What it asserts.** The applications are the directories of `APPLICATIONS` below (today `web/src/features/memory`,
+**What it asserts.** The applications are the directories of `APPLICATIONS` below (today `web/src/features/memories`,
 Memories', and `web/src/features/depot`, Depot's), each keyed by its owner name — the directory its specs live in under
-`contracts/api/<owner>/`, the owner rule `buildSrc`'s `SpecSets` builds by (inbox #344) — **plus every generated API
+`contracts/api/<owner>/`, the owner rule `buildSrc`'s `SpecSets` builds by (inbox #344) — and named for it: the
+directory is `web/src/features/<owner>`, derived from `OWNERS`, never listed (inbox #324 moved `features/memory` there),
+so a directory named otherwise is a missing one — **plus every generated API
 client whose `generate:api` run reads an application's spec**: an application owns the clients generated from its
 own `contracts/api/<owner>/`. Core is everything else under `web/src` — by exclusion, so a new directory is guarded
 the day it appears. The client half is **derived**, never listed: each `openapi-generator-cli generate` step of
@@ -15,8 +17,8 @@ its line lands. Core's own clients (`blob`, `content`, …) stay core's: importi
 Dependencies run application → core, never back, and never application → application. Five rules:
 - **import** (core): no core file names an application by an import specifier — `from '…'` (so also
   `export … from '…'`), `import('…')`, or a bare `import '…'`. A relative specifier is resolved against the importing
-  file and tested for landing inside an application or one of its generated clients, so `'../../memory/memoryNodes'`
-  and `'../features/memory/memoryNodes'` are the same edge, as are `'../generated/media'` and
+  file and tested for landing inside an application or one of its generated clients, so `'../../memories/memoryNodes'`
+  and `'../features/memories/memoryNodes'` are the same edge, as are `'../generated/media'` and
   `'../../api/generated/media/models'`; a non-relative specifier that spells an application's directory or client
   path is refused too (no alias exists today).
 - **application** (every application): no file of one application names ANOTHER application, or another
@@ -31,7 +33,7 @@ Dependencies run application → core, never back, and never application → app
   (cr-platform-contract-split slice 4) the generated client has no `NodeKind` enum and core types a kind as a string
   with a `FOLDER_KIND` constant (`core/node/kind.ts`), so a literal is the spelling left; the enum spelling stays
   matched for a client generated from an older contract. Each application's constants live in the application
-  (`features/memory/kinds.ts`, `features/depot/kinds.ts`), which the import rule already keeps from core. The kinds
+  (`features/memories/kinds.ts`, `features/depot/kinds.ts`), which the import rule already keeps from core. The kinds
   are listed here by hand (a kind is a value, not a path): a new application adds its kinds to `KIND`.
 - **i18n** (core): no file names a message key of an application's i18n namespace — a quoted `'memory.…'`,
   `'media.…'` (Memories') or `'depot.…'` (Depot's) — `I18N_NAMESPACES`, by hand like `KIND`. The catalog is one file
@@ -60,8 +62,8 @@ files on the day it landed, so a plain guard would have been red — and the all
 boundary was drawn; a list that can be added to is a list that is added to, so the mechanism went with the last entry.)
 
 **The defect that bought it.** No incident — the web half of ADR 0079 was prose until this guard. `app/`,
-`components/app/`, `sw/`, `views/` and three core features imported `features/memory` directly, which also made two
-import cycles (`app/activeSpace` ↔ the Memories tree store, `features/spaces` ↔ `features/memory`); an application
+`components/app/`, `sw/`, `views/` and three core features imported `features/memories` directly, which also made two
+import cycles (`app/activeSpace` ↔ the Memories tree store, `features/spaces` ↔ `features/memories`); an application
 that core cannot import is what makes a second one possible. The application rule came with that second one
 (cr-files-application F0), before any Depot file could reach into Memories.
 
@@ -91,12 +93,12 @@ WEB = ROOT / "web"
 SRC = WEB / "src"
 PACKAGE = WEB / "package.json"
 GENERATE_SCRIPT = "generate:api"
-# Every application: its owner name (the directory of its specs, `contracts/api/<owner>/`, and its backend module
-# `:apps:<owner>`) → its directory relative to web/src. The one place to change when an application is added or renamed.
-APPLICATIONS: dict[str, tuple[str, ...]] = {
-    "memories": ("features", "memory"),
-    "depot": ("features", "depot"),
-}
+# Every application by its owner name — the directory of its specs (`contracts/api/<owner>/`) and its backend module
+# (`:apps:<owner>`). The one place to change when an application is added or renamed.
+OWNERS = ("memories", "depot")
+# Its directory relative to web/src is DERIVED from the owner name, never listed: `features/<owner>`, as the backend
+# derives `:apps:<owner>` (ADR 0079). A web directory named otherwise is a missing one, and a missing one is red.
+APPLICATIONS: dict[str, tuple[str, ...]] = {owner: ("features", owner) for owner in OWNERS}
 CONTRACTS_API = ("contracts", "api")  # relative to the repo root; a spec directly in a directory below it is an application's
 COMPOSITION_ROOT = "applications.ts"  # relative to web/src; exact path, never a directory
 GENERATED = ("api", "generated")  # untracked client; defines the kinds, so it names them
@@ -256,7 +258,8 @@ def main() -> int:
     if not (SRC.is_dir() and files) or missing:
         print(f"WEB-CORE-IMPORTS FAILED — no source under {SRC.relative_to(ROOT)}, or an application directory is "
               f"missing ({', '.join('/'.join(d) for d in missing) or 'none'}); the guard would check nothing there. "
-              "If web/ moved or an application was renamed, move this guard's APPLICATIONS with it.")
+              "If web/ moved or an application was renamed, move this guard's OWNERS with it — an application's "
+              "web directory is features/<owner>.")
         return 1
     try:
         if not PACKAGE.is_file():

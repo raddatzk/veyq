@@ -43,7 +43,7 @@ vi.mock('../../../app/vault', () => ({
   identityPrivate: vi.fn(),
 }))
 vi.mock('../../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
-vi.mock('../../memory/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
+vi.mock('../../memories/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
 // The two Argon-bearing KEK derivations run for REAL but at a light cost. They stay **input-sensitive**, which
@@ -73,10 +73,10 @@ import { identityPrivate, masterKey, setUnlocked, unlockOrigin } from '../../../
 import { forgetVerifiedPins, getPin } from '../identityPins'
 import { readRegisterView } from '../deviceRegister'
 import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favorites'
-import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
+import { retagItemMarksUnderNewMasterKey } from '../../memories/itemFavorites'
 import { httpError } from '../../../test/httpError'
 import { registry } from '../../../core/applications/registry'
-import { memoriesLifecycle } from '../../memory/lifecycle'
+import { memoriesLifecycle } from '../../memories/lifecycle'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'

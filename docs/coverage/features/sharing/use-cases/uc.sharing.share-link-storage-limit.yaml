@@ -56,4 +56,4 @@ acceptanceCriteria:
     text: A visitor whose upload is refused with `quota_exceeded` sees that the link takes no more uploads right now, is offered no retry, and is never told whether the link or the tenant was full.
     coverage:
       web:
-        unit: [src/features/memory/components/OptimisticTile.test.ts]
+        unit: [src/features/memories/components/OptimisticTile.test.ts]

@@ -4,7 +4,7 @@
 // `main.ts` calls it before `boot()` resolves the first route; `src/test/setup.ts` calls it for every suite.
 // Write-once: a second call throws at the first re-registered kind, which is the point (the registry's header).
 import { registry } from './core/applications/registry'
-import { registerMemories } from './features/memory/register'
+import { registerMemories } from './features/memories/register'
 import { registerDepot } from './features/depot/register'
 
 export function registerApplications(): void {

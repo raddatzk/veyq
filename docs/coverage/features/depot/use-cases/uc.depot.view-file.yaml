@@ -109,7 +109,7 @@ acceptanceCriteria:
       backend:
         integration: [ModerationDepotSliceTest.aBlockedFileIsNeitherReadNorReplacedByAnyoneWhileTheReviewStillReadsIt]
       web:
-        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/views/MemoryHomeView.registry.test.ts]
+        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memories/components/FolderShareGuest.test.ts, src/views/MemoryHomeView.registry.test.ts]
     gaps:
       - surface: web
         reason: >-

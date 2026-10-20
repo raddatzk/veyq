@@ -2,15 +2,15 @@
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
-vi.mock('../../features/memory/media', () => ({ addMedia: vi.fn() }))
+vi.mock('../../features/memories/media', () => ({ addMedia: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import AppTopbar from './AppTopbar.vue'
 import { setBreadcrumb } from '../../app/breadcrumb'
 import { realI18n } from '../../test/i18n'
-import { addMedia } from '../../features/memory/media'
-import { enqueueUploads, clearUploads } from '../../features/memory/uploadQueue'
+import { addMedia } from '../../features/memories/media'
+import { enqueueUploads, clearUploads } from '../../features/memories/uploadQueue'
 
 const mountTopbar = () => mount(AppTopbar, { global: { plugins: [realI18n(), PrimeVue] } })
 

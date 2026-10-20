@@ -15,7 +15,7 @@ acceptanceCriteria:
       backend:
         integration: [ReportCoreSliceTest.aMemberReportsANodeOfTheirSpaceAndTheServerKeepsOnlyTheClearFields, ReportCoreSliceTest.aNodeOfAnotherSpaceRefusesTheWholeReportAndAStrangersSpaceIsTheUnknownScope, ReportCoreSliceTest.aTrashedNodeIsNotWhatTheReporterSees, ReportMemoriesSliceTest.aMemberReportsALiveMediumOfTheirSpaceAndNotATrashedOne, OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate]
       web:
-        unit: [src/core/report/report.wire.test.ts, src/core/report/reportKeys.test.ts, src/features/memory/mediumReportKeys.test.ts]
+        unit: [src/core/report/report.wire.test.ts, src/core/report/reportKeys.test.ts, src/features/memories/mediumReportKeys.test.ts]
   - id: a-guest-reports-only-inside-the-link
     text: >-
       A guest of a READ or READ_WRITE link reports a node or a medium inside the link's subtree; one outside it is

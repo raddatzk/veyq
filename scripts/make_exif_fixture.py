@@ -14,14 +14,14 @@ Re-run after changing which tags the client reads:
 
     python3 scripts/make_exif_fixture.py
 
-Output: web/src/features/memory/__fixtures__/exif-sample.jpg
+Output: web/src/features/memories/__fixtures__/exif-sample.jpg
 """
 from __future__ import annotations
 
 import struct
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "web/src/features/memory/__fixtures__/exif-sample.jpg"
+OUT = Path(__file__).resolve().parent.parent / "web/src/features/memories/__fixtures__/exif-sample.jpg"
 
 # A 1x1 greyscale baseline JPEG (SOI … EOI). Produced once with Pillow
 # (`Image.new('L', (1, 1), 128).save(buf, 'JPEG', quality=25)`) and frozen here so this script needs nothing

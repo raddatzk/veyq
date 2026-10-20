@@ -21,8 +21,8 @@ acceptanceCriteria:
           - NodeCoverMemoriesSliceTest.aMemoryAndAChapterTakeACoverWithoutTouchingTheGallery
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/mediaRevisionPolling.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/mediaRevisionPolling.test.ts
           - src/core/items/itemsLive.test.ts
   - id: keyset-delta-on-change
     text: On a revision change the server returns only media past the client's (position, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and continues from the cursor the server answered. A medium's position is the node revision its last change bumped to (veyq_media.item_position), stamped under the revision row's lock, so positions become visible in commit order (ADR 0033 decision 3).
@@ -35,8 +35,8 @@ acceptanceCriteria:
           - NodeItemsRevisionsCoreSliceTest.theEtagAndTheCursorRoundTripLeniently
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: delete-reconcile
     text: A change response also carries the node's current mediaId set; the client drops any cached id no longer present. Because it is the set (not a count), a removal AND a net-zero delete+add are both caught. The id-set is returned only on a revision change, never scanned per idle poll.
     coverage:
@@ -48,17 +48,17 @@ acceptanceCriteria:
       web:
         unit:
           - src/core/items/itemsLive.test.ts
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: live-auto-insert
     text: While a Memory is open, the client short-polls (visibility-gated — pauses when the tab is hidden, ticks once immediately on return, stops on close); new media auto-inserts as tiles into the open grid and removed media drops out, with no manual reload, reusing the optimistic-tile grid + mergeItems reconcile.
     coverage:
       web:
         unit:
-          - src/features/memory/mediaRevisionPolling.test.ts
+          - src/features/memories/mediaRevisionPolling.test.ts
           - src/core/items/itemsLive.test.ts
           - src/shared/state/livePoller.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: operator-blind-live
     text: The server sees only an opaque revision counter, opaque mediaIds, a medium's position (a revision it handed out itself), exact timestamps (a medium's updatedAt, to the millisecond), a page size, and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_node/K_share never touch the server.
     coverage:
@@ -68,7 +68,7 @@ acceptanceCriteria:
           - MediaSliceTest.deleteBumpsBothCountersAndIdSetOmitsRemoved
       web:
         unit:
-          - src/features/memory/media.test.ts
+          - src/features/memories/media.test.ts
   - id: first-load-in-pages
     text: The first load, and a poll whose delta is longer than a page, reads the list in pages of at most `limit` items (the server's cap is 1000, the response's `maxItems`; the client asks for MEDIA_PAGE_LIMIT), each page answering `more` while items remain and its `cursor`, the next asked from that cursor without If-None-Match, until every item is held. Each page is read with the same number of queries whatever its size. The client keeps the first page's revisions and the last page's cursor.
     coverage:
@@ -83,8 +83,8 @@ acceptanceCriteria:
       web:
         unit:
           - src/core/items/itemsLive.test.ts
-          - src/features/memory/media.test.ts
-          - src/features/memory/useMediaGalleryLive.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/useMediaGalleryLive.test.ts
   - id: paging-loses-no-concurrent-change
     text: A change committed while a client pages — an add, an edit of a row already paged, a removal — reaches it by the next poll from the first page's revisions; and no commit order of two concurrent writers can put a row behind a cursor the client already passed (the keyset is a position handed out under the revision row's lock, not a timestamp).
     coverage:
@@ -95,7 +95,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/core/items/itemsLive.test.ts
-          - src/features/memory/useMediaGalleryLive.test.ts
+          - src/features/memories/useMediaGalleryLive.test.ts
   - id: guest-live-poll
     # Alternate flow E7, inbox #497 (ADR 0033 decision 7, ADR 0081 decision 4).
     text: >-
@@ -115,8 +115,8 @@ acceptanceCriteria:
           - ShareMediaLivePollSliceTest.aWriteOnlyLinkIsServedNothingUnderAConstantTag
       web:
         unit:
-          - src/features/memory/source.test.ts
-          - src/features/memory/components/MemoryDetail.guest.test.ts
+          - src/features/memories/source.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
   - id: block-and-lift-live
     # Alternate flow E8 (uc.moderation.take-a-measure, ADR 0093 § 6).
     text: >-
@@ -131,9 +131,9 @@ acceptanceCriteria:
           - ShareMediaLivePollSliceTest.aGuestsPollIsA304UntilWhatTheLinkServesChanges
       web:
         unit:
-          - src/features/memory/useMediaGalleryLive.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
-          - src/features/memory/components/MemoryDetail.guest.test.ts
+          - src/features/memories/useMediaGalleryLive.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
   - id: node-block-reaches-open-memory
     # Alternate flow E9, inbox #503 (ADR 0081 decision 5, ADR 0033 § Consequences).
     text: >-

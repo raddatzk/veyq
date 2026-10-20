@@ -23,9 +23,9 @@ acceptanceCriteria:
         unit:
           - src/shared/state/useViewMode.test.ts
           - src/core/node/ViewModeToggle.test.ts
-          - src/features/memory/levelRows.test.ts
+          - src/features/memories/levelRows.test.ts
           - src/core/node/LevelView.test.ts
-          - src/features/memory/components/SpaceMap.test.ts
+          - src/features/memories/components/SpaceMap.test.ts
   - id: row-details
     text: A row or tile shows, under the name, the kind and the details its application supplies through the row (`LevelRow.details`) - a Memory's date and place from its unsealed node meta (locale-formatted, each left out when the Memory has none, never a placeholder), a file's size and modified time (human-readable units, EN and DE; the modified time left out when the blob carries none), a drop box's people count - the same for a share guest, as real text in reading order; a list row's visual is larger than before (4.5 x 3 rem, 6.5 x 4 rem from 521 px) and a tile is a 16:9 cover (columns 280 to 340 px), tokens only, no horizontal overflow at phone width.
     coverage:
@@ -34,9 +34,9 @@ acceptanceCriteria:
           - src/core/node/levelRow.test.ts
           - src/core/node/components/LevelRowItem.test.ts
           - src/core/node/levelRowStyle.test.ts
-          - src/features/memory/memoryRowDetails.test.ts
-          - src/features/memory/levelRows.test.ts
-          - src/features/memory/levelRows.guest.test.ts
+          - src/features/memories/memoryRowDetails.test.ts
+          - src/features/memories/levelRows.test.ts
+          - src/features/memories/levelRows.guest.test.ts
           - src/features/depot/levelRows.test.ts
           - src/shared/formatBytes.test.ts
   - id: application-tabs
@@ -84,7 +84,7 @@ acceptanceCriteria:
     text: Creating a folder/Memory seals the name + blinded slug under the parent's key (K_SC at the scope root) and POSTs only ciphertext (every node births its random key, wrapped under the same parent key).
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
-      web: { unit: [src/core/node/tree.test.ts, src/core/node/LevelView.test.ts, src/features/memory/levelRows.test.ts, src/core/node/FolderNameDialog.test.ts, src/core/node/FolderNameDialog.slug.test.ts, src/features/memory/components/MemoryNodeDialog.test.ts] }
+      web: { unit: [src/core/node/tree.test.ts, src/core/node/LevelView.test.ts, src/features/memories/levelRows.test.ts, src/core/node/FolderNameDialog.test.ts, src/core/node/FolderNameDialog.slug.test.ts, src/features/memories/components/MemoryNodeDialog.test.ts] }
   - id: rename-and-delete-subtree
     text: Rename re-seals the name + recomputes the slug; delete removes the node and its whole subtree.
     coverage:
@@ -117,8 +117,8 @@ acceptanceCriteria:
           - src/core/node/components/LevelRowItem.test.ts
           - src/features/depot/levelRows.test.ts
           - src/features/depot/levelRows.guest.test.ts
-          - src/features/memory/levelRows.test.ts
-          - src/features/memory/levelRows.guest.test.ts
+          - src/features/memories/levelRows.test.ts
+          - src/features/memories/levelRows.guest.test.ts
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`, `e2e/tests/features/field-seal.spec.ts`,

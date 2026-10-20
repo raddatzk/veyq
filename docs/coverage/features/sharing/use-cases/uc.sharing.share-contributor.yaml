@@ -12,7 +12,7 @@ title: Share a Memory as a contributor link (anyone with the link can add photos
 # and moderation are separate later slices.
 #
 # cr-sharing-contributor-e2e added the first LIVE coverage of this (or any) sharing flow:
-# src/features/memory/shareContributor.e2e.test.ts drives curator -> READ_WRITE share -> anonymous resolve ->
+# src/features/memories/shareContributor.e2e.test.ts drives curator -> READ_WRITE share -> anonymous resolve ->
 # named identity -> two real presigned uploads direct-to-store -> gated blob read-back -> the curator recovering
 # the contributor's name, against a real backend + MariaDB + the bundled store. It is the only layer that can
 # reach the second byte transport at all (startShareBlobUploads -> real PUTs -> completeShareMedia), which the
@@ -24,8 +24,8 @@ acceptanceCriteria:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
       web:
-        unit: [src/features/memory/share.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        unit: [src/features/memories/share.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: naming-proves-the-link-key
     text: Naming yourself proves the visitor holds the link's key, not only its id (ADR 0076). Every share is created with writeVerifier = SHA-256(writeToken), writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId), for every role (a READ link can be flipped to READ_WRITE); createShareIdentity presents the token as X-Share-Write. A missing, malformed or wrong token, the stored verifier itself, a token derived for another link, and a share holding no verifier all answer the non-enumerable 404 and write no identity; the whole link names a guest, who then uploads through the contributor token as before. A guest named before a verifier went missing keeps uploading. The manage list marks each READ_WRITE or WRITE_ONLY link holding no verifier (newGuestsRefused) — and no READ link, and no link that holds one — and the panel shows that mark on the row. Every row also says whether it holds no verifier whatever its role (writeVerifierMissing), and a role edit that would make such a link a READ_WRITE one warns and offers the renew, since an edit never adds a verifier.
     coverage:
@@ -35,8 +35,8 @@ acceptanceCriteria:
       backend:
         integration: [ShareWriteProofSliceTest.anIdWithoutTheKeyNamesNoGuest, ShareWriteProofSliceTest.aViewerLinkFlippedToContributorIsGatedByTheSameProof, ShareWriteProofSliceTest.aShareWithoutAVerifierTakesNoNewGuestButKeepsItsOld, ShareWriteProofSliceTest.createWithoutAVerifierIs400AndStoresNothing, ShareWriteProofSliceTest.theManageListMarksAGuestLinkThatHoldsNoVerifier, ShareWriteProofSliceTest.theManageListSaysWhichLinksHoldNoVerifierWhateverTheirRole]
       web:
-        unit: [src/features/memory/share.test.ts, src/features/memory/components/ShareDialog.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        unit: [src/features/memories/share.test.ts, src/features/memories/components/ShareDialog.test.ts, src/features/memories/components/ShareCreateDialog.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: sealed-name-anonymous-identity
     text: Before contributing, the visitor must enter a display name (mandatory) — asked at its first write in the share page's one naming dialog, never on a screen in front of the content. The client seals it under a field key derived from K_node and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_node-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
     coverage:
@@ -48,8 +48,8 @@ acceptanceCriteria:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
       web:
-        unit: [src/features/memory/share.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        unit: [src/features/memories/share.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: not-you-forgets-the-device-session
     text: >-
       Named, the page says whose session this device holds on the link, with a "Not you?" that asks first and then
@@ -59,7 +59,7 @@ acceptanceCriteria:
       WRITE_ONLY link (Memories', Depot's).
     coverage:
       web:
-        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/depot/components/DropBoxShareBody.test.ts, src/features/memory/source.test.ts]
+        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/depot/components/DropBoxShareBody.test.ts, src/features/memories/source.test.ts]
   - id: share-scoped-upload
     text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_node and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:
@@ -68,7 +68,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve, ShareContributorSliceTest.badTokenRejectedOnUpload]
       web:
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: contributes-in-the-member-view
     text: >-
       A READ_WRITE link's page is the member's Memory view with a contributor's rights (inbox #401): the gallery and
@@ -79,7 +79,7 @@ acceptanceCriteria:
       lightbox, asked first, then purged for good; nobody else's does, and no member-only control is offered.
     coverage:
       web:
-        unit: [src/views/ShareView.memory.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/features/memory/source.test.ts, src/features/memory/components/MediaLightbox.test.ts]
+        unit: [src/views/ShareView.memory.test.ts, src/features/memories/components/MemoryDetail.guest.test.ts, src/features/memories/source.test.ts, src/features/memories/components/MediaLightbox.test.ts]
   - id: direct-append-attribution
     text: Contributed media attaches to the node the guest uploaded into (the shared root, share.nodeId, or a Memory or chapter below it), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous media read serves it with no identityId, and neither the resolve nor the media read serves a contributor identity or name; the stamp and the sealed name reach the Memory's members through their bucket list, which groups by it (ADR 0030 point 8). A guest's page renders all contributed media inline.
     coverage:
@@ -90,7 +90,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve, ShareGuestNamesSliceTest.aContributorLinkIsServedNoneOfItsOwnGuests, ShareGuestNamesSliceTest.onlyAnUploadersMediaNamesItsIdentity]
       web:
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: operator-blind
     text: The server stores only the share record (shareId + wrap + plaintext role + sealed name + nodeId), an opaque share_identity (sealed contributor name + token hash + shareId), a share_identity_id stamp on media, and ciphertext blobs. It never sees K_share, K_node, the Memory name, the contributor's name, the photo bytes, or who the person is. The no-install contributor page carries the same trust-tier honesty (footer link, ADR 0026); a reported share is decryptable (T&S corollary), intended.
     coverage:
@@ -101,8 +101,8 @@ acceptanceCriteria:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
       web:
-        unit: [src/features/memory/share.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        unit: [src/features/memories/share.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: abuse-controls-and-revoke
     text: The unauthenticated upload path is gated by curator opt-in (role READ_WRITE) + the per-identity contributor token + the share enabled flag; revoke/expiry stops new uploads AND reads (403/404). The per-blob byte budget (ADR 0013) and a per-share rate limit are defense-in-depth. Soft (L1) revocation does not retract already-uploaded media (like already-read content); the curator deletes unwanted photos individually.
     coverage:
@@ -118,14 +118,14 @@ acceptanceCriteria:
       backend:
         integration: [ShareUploadWindowSliceTest.revokingTheLinkStopsAnInFlightUploadAtItsNextWindow]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: role-mutable-in-place
     text: A curator changes an existing share's role in place (READ <-> READ_WRITE) via PATCH updateShare { role } (cr-0119, ADR 0036) — the same link / wrap / K_share are untouched (role is server-enforced plaintext authz, no re-crypto), so the new grant bites on the next guest request (a promote enables contribution at once; a demote 403s new uploads, already-contributed photos stay). Restricted to READ <-> READ_WRITE - setting role=WRITE_ONLY, or changing a WRITE_ONLY share's role, is 422 invalid_role_change (the write-only drop-box is its own separate action, its promise not flippable on distributed links). Owner-gated (a non-owner is 404, like the note edit); role is optional on the PATCH (omitted for a plain note/name edit). Web - the normal edit dialog shows the READ/READ_WRITE switcher (never the uploader variant).
     coverage:
       backend:
         integration: [ShareNoteSliceTest.promoteViewerToContributorInPlaceKeepsTheLinkAndEnablesContribution, ShareNoteSliceTest.roleChangeToUploaderIs422, ShareNoteSliceTest.changingAnUploaderShareRoleIs422]
       web:
-        unit: [src/features/memory/components/ShareCreateDialog.test.ts]
+        unit: [src/features/memories/components/ShareCreateDialog.test.ts]
   - id: picked-photo-is-never-silently-dropped
     text: >-
       A photo the visitor picked is uploaded — losing one silently is worse than failing loudly, and a visitor
@@ -138,7 +138,7 @@ acceptanceCriteria:
       curator's own (inbox #401).
     coverage:
       web:
-        unit: [src/features/memory/components/MemoryDetail.optimistic.test.ts]
+        unit: [src/features/memories/components/MemoryDetail.optimistic.test.ts]
   - id: contributor-root-kinds
     text: >-
       A contributor link may be rooted at a Memory, a chapter or a folder (ADR 0080 decisions 6 and 13). A chapter
@@ -149,7 +149,7 @@ acceptanceCriteria:
         integration: [ChapterShareSliceTest.aContributorOnAChapterUploadsIntoItAndDeletesOnlyItsOwn, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole, CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, ShareRootsSliceTest.aFolderIsNoDropBox]
       web:
         unit: [src/views/MemoryHomeView.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/folderShare.wire.test.ts]
-        e2e: [src/features/memory/chapterShare.e2e.test.ts]
+        e2e: [src/features/memories/chapterShare.e2e.test.ts]
   - id: rights-inherit-below-a-folder
     text: >-
       A READ_WRITE folder link gives its guest a contributor's rights in every Memory or chapter below the folder: an
@@ -163,8 +163,8 @@ acceptanceCriteria:
       backend:
         integration: [SubtreeUploadSliceTest.aFolderContributorUploadsIntoAMemoryAndAChapterBelow, SubtreeUploadSliceTest.aFolderContributorDeletesOnlyItsOwnAndOnlyInsideTheSubtree, SubtreeUploadSliceTest.aTargetTheLinkDoesNotReachIsRefused, SubtreeUploadSliceTest.aReadGuestIsRefusedForEveryTarget, SubtreeUploadSliceTest.anUploaderNamesNothingButItsRoot, SubtreeUploadSliceTest.aMemoryContributorUploadsIntoAChapterBelow, SubtreeUploadSliceTest.theLinkLimitCountsMediaInEveryNodeOfTheSubtree, ShareRootsSliceTest.aGuestOfAReadWriteFolderShareUploadsNothing, GuestCompleteTargetRaceSliceTest.aCompletionIntoAMemoryAMemberTrashesMeanwhileIsRefused, GuestCompleteTargetRaceSliceTest.aCompletionIntoAMemoryAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, GuestCompleteTargetRaceSliceTest.aCompletionOnALinkRevokedMeanwhileIsRefused]
       web:
-        unit: [src/features/memory/shareTarget.wire.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/views/ShareView.memory.test.ts]
-        e2e: [src/features/memory/folderShareUpload.e2e.test.ts]
+        unit: [src/features/memories/shareTarget.wire.test.ts, src/features/memories/components/MemoryDetail.guest.test.ts, src/views/ShareView.memory.test.ts]
+        e2e: [src/features/memories/folderShareUpload.e2e.test.ts]
   - id: folder-guest-tree-operations
     text: >-
       A READ_WRITE folder link's guest creates folders (and, through Depot, files) inside the shared subtree and moves or renames
@@ -177,8 +177,8 @@ acceptanceCriteria:
       backend:
         integration: [ShareNodesCoreSliceTest.aGuestCreatesAFolderAndANestedNodeAndAMemberListsThem, ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aStalePlacementRevisionIsAConflictAndWritesNothing, ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing, ShareNodesCoreSliceTest.anEpochBelowTheCurrentIsStoredAsSentWithNoPayload, ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aGuestCreatesNothingOutsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverRenamesTheShareRoot, ShareNodesCoreSliceTest.aTrashedShareRootTakesNoTreeOperation, ShareNodesSliceTest.aGuestMovesAndRenamesAMemoryBetweenTwoSubfoldersOfASharedFolder, ShareNodeRaceCoreSliceTest.aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile, ShareNodeRaceCoreSliceTest.aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/ShareTreePage.test.ts, src/views/ShareView.naming.test.ts, src/features/memory/levelRows.guest.test.ts]
-        e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/ShareTreePage.test.ts, src/views/ShareView.naming.test.ts, src/features/memories/levelRows.guest.test.ts]
+        e2e: [src/features/memories/folderShareGuest.e2e.test.ts]
     gaps:
       - surface: web
         reason: >-
@@ -203,8 +203,8 @@ acceptanceCriteria:
         integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ShareNodesSliceTest.aGuestCreatesNoMemoryInAFolder, ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, CoreAloneSliceTest.aFolderGuestCreatesFoldersOnly, ModuleCompositionTest.aFolderGuestCreatesFoldersAndTheDeclaredKindsOnly, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
         unit: [GuestNodeRulesPartitionTest.inAFolderAGuestCreatesAFolderOrADeclaredKindAndMovesAnyKind, GuestCreatableKindsTest.twoDeclarationsOfOneKindFailStartupNamingTheKindAndBoth, DepotNodeKindRulesTest.aSecondClaimOfFileFailsStartup]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memory/rights.test.ts]
-        e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/views/LevelNewMenu.entries.test.ts, src/features/memories/rights.test.ts]
+        e2e: [src/features/memories/folderShareGuest.e2e.test.ts]
   - id: a-guests-write-records-the-address-the-network-vouches-for
     text: >-
       While core.public-shares.guest-write-record is on, every write that enters a guest as last editor — naming

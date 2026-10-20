@@ -15,7 +15,7 @@
 // asserted on the raw wire (`…Raw(…).raw.json()`), because the generated client drops a field the spec does not name
 // (web/CLAUDE.md). The unit layer (`core/sharing/folderShare.wire.test.ts`) proves the request against a recorded fetch.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/memory/folderShare.e2e.test.ts
+//   python3 scripts/run_web_e2e.py web/src/features/memories/folderShare.e2e.test.ts
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'

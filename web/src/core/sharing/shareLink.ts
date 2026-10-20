@@ -1,7 +1,7 @@
 // Assembling a share's **copyable link** — the one part of sharing that knows the deployment's origin.
 //
 // Split out of the share data layer deliberately (`./manageShares.ts`, and the Memories application's
-// `features/memory/share.ts`, which re-exports this file from its old path so its dialogs and their mocks stay put). That
+// `features/memories/share.ts`, which re-exports this file from its old path so its dialogs and their mocks stay put). That
 // layer is the sharing **data layer**: crypto plus the generated
 // client, and the surface a headless suite drives end to end. A link is neither — `${origin}/s/{id}#k=…` is a
 // presentation of a share, assembled where a human is about to copy it, and the origin is a property of the
@@ -14,7 +14,7 @@
 // `window is not defined` before its first assertion, and the fix was mistaken for a test affordance —
 // a shim in the bootstrap — when it was a layering fault the whole time.
 //
-// Which is the rule this file exists to keep: **the share data layer (`manageShares.ts`, `features/memory/share.ts`)
+// Which is the rule this file exists to keep: **the share data layer (`manageShares.ts`, `features/memories/share.ts`)
 // stays importable without a DOM.** If something here ever needs to move back, that is the signal a presentation
 // concern is leaking into the data path again. (The terms-acceptance helpers in `resolvePublicShare.ts` are the
 // deliberate exception — a `localStorage` flag genuinely is browser state, not a layering fault, and

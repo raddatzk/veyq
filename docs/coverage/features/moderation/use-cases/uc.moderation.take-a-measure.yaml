@@ -68,7 +68,7 @@ acceptanceCriteria:
       backend:
         integration: [ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
       web:
-        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memory/components/MediaTile.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/views/MemoryHomeView.registry.test.ts, src/features/memory/useMediaTrash.test.ts]
+        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memories/components/MediaTile.test.ts, src/features/memories/components/MediaLightbox.test.ts, src/features/memories/components/FolderShareGuest.test.ts, src/views/MemoryHomeView.registry.test.ts, src/features/memories/useMediaTrash.test.ts]
   - id: every-measure-is-lifted-and-logged
     text: >-
       Every measure is lifted by any moderator (a sign-in block by the Server Owner), the target serves again unchanged,

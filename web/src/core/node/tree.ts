@@ -346,7 +346,7 @@ export function sameKeyOr(previous: Uint8Array | null | undefined, next: Uint8Ar
  * The content keys of `nodeId` and of every ancestor up to its scope-root node, NEAREST FIRST (`[0]` is the node's own,
  * {@link nodeContentKey}), opened top-down as there. Empty when the node is not in the tree or its chain does not reach
  * the scope root. What a member reads that was sealed under an ANCESTOR's key needs it: a folder link's guest names
- * itself under the folder's key, and its name is read on a Memory below (`features/memory/mediaBuckets.ts`).
+ * itself under the folder's key, and its name is read on a Memory below (`features/memories/mediaBuckets.ts`).
  */
 export function contentKeyChain(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array[] {
   const byId = new Map(tree.map((n) => [n.id, n]))

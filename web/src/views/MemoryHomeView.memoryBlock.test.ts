@@ -28,8 +28,8 @@ vi.mock('../api/client', async (importOriginal) => ({
   contentApi: vi.fn(),
   blobApi: vi.fn(),
 }))
-vi.mock('../features/memory/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../features/memory/api')>()),
+vi.mock('../features/memories/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/memories/api')>()),
   mediaApi: vi.fn(),
 }))
 vi.mock('../core/favorites/favoritesStore', () => ({
@@ -53,11 +53,11 @@ import { ITEMS_POLL } from '../core/items/itemsLive'
 import { sealName, wrapContentKey, type NodeAddress } from '../core/node/tree'
 import { hashForNode } from '../core/node/location'
 import { contentApi, blobApi } from '../api/client'
-import { mediaApi } from '../features/memory/api'
+import { mediaApi } from '../features/memories/api'
 import { listMyTenants } from '../features/spaces/scopes'
-import { addMedia, type MediaDeriver } from '../features/memory/media'
-import { MEMORY_KIND } from '../features/memory/kinds'
-import { galleryFakeStore } from '../features/memory/components/galleryFakeStore'
+import { addMedia, type MediaDeriver } from '../features/memories/media'
+import { MEMORY_KIND } from '../features/memories/kinds'
+import { galleryFakeStore } from '../features/memories/components/galleryFakeStore'
 import { fakeApi } from '../test/apiMock'
 import { apiResponse } from '../test/apiResponse'
 import { httpError } from '../test/httpError'

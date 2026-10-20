@@ -4,7 +4,7 @@
 // size — and, only when a removal happened since the client last synced, the node's current id set; this module is
 // everything the client does
 // with that, so an application supplies only its FETCH (its generated client) and its REDUCER (what its view does
-// with a delta). Memories' gallery is the first user (`features/memory/useMediaGalleryLive.ts`); core names no application.
+// with a delta). Memories' gallery is the first user (`features/memories/useMediaGalleryLive.ts`); core names no application.
 //
 // Four pieces, none holding state of their own:
 //

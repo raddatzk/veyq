@@ -18,7 +18,7 @@ import {
 import { breadcrumbOf } from './browse'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { DROPBOX_KIND } from '../../features/depot/kinds'
 import type { TreeNode } from './tree'
 import { treeNode } from '../../test/models'

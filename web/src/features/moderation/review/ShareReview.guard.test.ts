@@ -35,20 +35,20 @@ function reviewClients<T extends object>(mod: T): T {
 
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../../api/client', async (orig) => reviewClients(await orig<object>()))
-vi.mock('../../memory/api', async (orig) => reviewClients(await orig<object>()))
+vi.mock('../../memories/api', async (orig) => reviewClients(await orig<object>()))
 vi.mock('../../depot/api', async (orig) => reviewClients(await orig<object>()))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: <T>(f: () => Promise<T>) => f() }))
 vi.mock('../proof', async (orig) => ({
   ...(await orig<object>()),
   proofFor: vi.fn(),
 }))
-vi.mock('../../memory/useThumbnailPipeline', () => ({
+vi.mock('../../memories/useThumbnailPipeline', () => ({
   useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), want: vi.fn(), revokeAll: vi.fn() }),
 }))
 
 import ReviewBody from './ReviewBody.vue'
 import { caseReviewApi } from '../../../api/client'
-import { caseMediaApi } from '../../memory/api'
+import { caseMediaApi } from '../../memories/api'
 import { caseFilesApi } from '../../depot/api'
 import { proofFor } from '../proof'
 import { clearModerationKeys, holdModerationKeys } from '../moderationKeys'
@@ -56,7 +56,7 @@ import { activeReview } from '../../../core/sharing/review'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
 import { ShareRole, type CaseReview, type ShareNode } from '../../../api/generated/sharing'
-import { MEMORY_KIND } from '../../memory/kinds'
+import { MEMORY_KIND } from '../../memories/kinds'
 import { FILE_KIND } from '../../depot/kinds'
 import { stubApi } from '../../../test/apiMock'
 import { realI18n } from '../../../test/i18n'

@@ -22,7 +22,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeKindMatrixSliceTest.moveFollowsTheMatrix, DepotNodeSliceTest.aFileIsRenamedAndMovedBetweenFolders]
       web:
-        unit: [src/core/node/move.test.ts, src/core/node/MoveNodeDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/memory/register.test.ts, src/features/depot/register.test.ts]
+        unit: [src/core/node/move.test.ts, src/core/node/MoveNodeDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/memories/register.test.ts, src/features/depot/register.test.ts]
 
   - id: who-may-move-what
     text: "A member moves any node it may write (not during a pending deletion), a guest's identity folder or a file in one out of a drop box included; a READ_WRITE guest moves only a node a FOLDER of its subtree holds — never the link's root, never in or of an identity folder, never a chapter or a drop box — and only through its link after the page's naming flow; a READ or WRITE_ONLY guest moves nothing. A guest's move touches no authenticated client."
@@ -30,7 +30,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox]
       web:
-        unit: [src/core/access.test.ts, src/features/depot/rights.test.ts, src/features/memory/rights.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetail.rights.test.ts, src/core/node/LevelView.test.ts]
+        unit: [src/core/access.test.ts, src/features/depot/rights.test.ts, src/features/memories/rights.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/depot/levelRows.test.ts, src/features/depot/levelRows.guest.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/core/node/LevelView.test.ts]
 
   - id: refusals-are-explained-by-name
     text: "Each server refusal of a move is said by its code — slug_taken, illegal_structure, illegal_scope, stale_epoch, share_not_contributable, a gone node or link, rate_limited, scope_deleting — and a lost race (stale_placement, after the write's own bounded re-read) re-reads the tree so the next attempt builds on the node as it now is; a guest who declines to name itself sends nothing and is told nothing."

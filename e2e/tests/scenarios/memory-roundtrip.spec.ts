@@ -27,7 +27,7 @@ interface Instance {
 // A JPEG web/'s own tests read EXIF from (1×1, grayscale, decodable): the bytes the page seals carry readable text, so
 // a photo uploaded unsealed is a hit in the bucket. The repository is mounted read-only at /repo in the browser
 // container (infra/e2e/docker-compose.e2e.yml).
-const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 // Text inside the fixture's EXIF and XMP (`strings` on the file): sealed with the photo (its bytes, wrappedExif).
 const PHOTO_TEXT = ['Marienplatz at golden hour', '(c) 2021 A. Photographer']
 

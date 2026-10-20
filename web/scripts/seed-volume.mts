@@ -45,14 +45,14 @@ import { createContentNode, listTree, nodeContentKey, type TreeNode, type NodePa
 import { FOLDER_KIND } from '../src/core/node/kind'
 import { hashForNode, TENANT_SCOPE } from '../src/core/node/location'
 import { registry } from '../src/core/applications/registry'
-import { MEMORY_KIND, CHAPTER_KIND } from '../src/features/memory/kinds'
-import { createChapter, createMemory } from '../src/features/memory/memoryNodes'
-import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/features/memory/media'
+import { MEMORY_KIND, CHAPTER_KIND } from '../src/features/memories/kinds'
+import { createChapter, createMemory } from '../src/features/memories/memoryNodes'
+import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/features/memories/media'
 import { runGrantDeliveryWorker } from '../src/features/tasks/grantDeliveryWorker'
 import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } from '../src/features/account/profile/profile'
 import { httpStatus } from '../src/shared/httpError'
 
-// The Memories application's route slug, as its registration (`features/memory/register.ts`, which imports Vue
+// The Memories application's route slug, as its registration (`features/memories/register.ts`, which imports Vue
 // components and so cannot load here) claims it — only so `hashForNode` builds the URL the browser leg opens.
 registry.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
 

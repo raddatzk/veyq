@@ -3,7 +3,7 @@
 // depend on our typed surface, never on the generator's runtime details. Every spec generates into a client package
 // of its own (`./generated` for setup, `./generated/<spec>` for the rest). This file builds **core's** clients
 // only: the Memories application's (`contracts/api/memories/` → `./generated/media`, `./generated/item-favorites`) are
-// built in `features/memory/api.ts` on the params exported below, because core imports no application client
+// built in `features/memories/api.ts` on the params exported below, because core imports no application client
 // (ADR 0079; `validate_web_core_imports_no_applications.py`).
 import { Configuration, SetupApi } from './generated'
 import {
@@ -45,7 +45,7 @@ export function setupApi(): SetupApi {
 // The one bearer-credential contract every authed client shares: same-origin basePath + the access token
 // from the in-memory session. Each generated package has its own Configuration class but the same parameter
 // shape, so this single source feeds them all — change the token source once, here. Exported for an
-// application's own clients (`features/memory/api.ts`), which core does not import (ADR 0079).
+// application's own clients (`features/memories/api.ts`), which core does not import (ADR 0079).
 export const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
 
 // The token-less counterpart: same-origin basePath and no credential at all, so no Authorization header is sent.
@@ -151,7 +151,7 @@ export function contentApi(): ContentApi {
 
 // The platform's generic blob transfer (core's `blob` tag, ADR 0079): start an upload, sign each next window,
 // presign downloads. Completing an upload is the application's (Memories' `mediaApi().completeMedia`, built in
-// `features/memory/api.ts`) - or core's, for a node's cover (`contentApi().setNodeCover`, inbox #411).
+// `features/memories/api.ts`) - or core's, for a node's cover (`contentApi().setNodeCover`, inbox #411).
 export function blobApi(): BlobApi {
   return new BlobApi(new BlobConfiguration(bearerParams()))
 }

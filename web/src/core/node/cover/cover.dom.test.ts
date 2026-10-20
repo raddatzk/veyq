@@ -27,7 +27,7 @@ vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), op
 vi.mock('../../sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/c0']) }))
 vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 // A Memory's cover upload first asks Memories where an equal picture is stored (ADR 0013 § 5): none here.
-vi.mock('../../../features/memory/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
+vi.mock('../../../features/memories/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
 
 import LevelView from '../LevelView.vue'
 import { childrenOf } from '../browse'
@@ -37,11 +37,11 @@ import { clearUploads } from '../../blob/queue'
 import { openBlob, openBlobVia } from '../../blob/transport'
 import { shareChunkUrls } from '../../sharing/guestBlob'
 import { uploadCoverImage, writeNodeCover } from './coverWrite'
-import { findStoredCover } from '../../../features/memory/storedMatch'
+import { findStoredCover } from '../../../features/memories/storedMatch'
 import { uploadedCover } from './coverModel'
 import { resetCovers } from './coverStore'
 import { filesApi } from '../../../features/depot/api'
-import { MEMORY_KIND } from '../../../features/memory/kinds'
+import { MEMORY_KIND } from '../../../features/memories/kinds'
 import { FILE_KIND, DROPBOX_KIND } from '../../../features/depot/kinds'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { FileListPage } from '../../../api/generated/depot'

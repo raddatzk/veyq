@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { favoriteRights } from './rights'
 import { FOLDER_KIND } from '../node/kind'
-import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import type { Access } from '../access'
 import { guestAccessOf, memberAccessOf } from '../../test/models'

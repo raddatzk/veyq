@@ -43,7 +43,7 @@ acceptanceCriteria:
     text: A client hides/omits a feature whose capability id is ABSENT from the manifest, and renders normally when present. A missing capability degrades gracefully (feature hidden, never invoked), never throws.
     coverage:
       web:
-        unit: [src/shared/state/useCapabilities.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
+        unit: [src/shared/state/useCapabilities.test.ts, src/features/memories/components/ShareCreateDialog.test.ts]
   - id: operator-disable-enforced
     text: A switched-off capability is omitted from the manifest AND its endpoint answers 422 capability_disabled; the manifest is a UX hint and the server-side enforcement is the authority (a stale or ignoring client still cannot use it). One slice test per gate - share links (create, reactivate, reissue), the drop-box node, the group create, the two device wraps, every pairing endpoint.
     coverage:
@@ -60,7 +60,7 @@ acceptanceCriteria:
       backend:
         integration: [CapabilityDisabledSliceTest.aSwitchedOffDropBoxRefusesWriteOnlyAndLeavesReadWriteThrough, CapabilityDisabledSliceTest.aSwitchedOffChildRefusesItsRoleAndLeavesTheParentsRoleThrough]
       web:
-        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/features/memory/rights.test.ts, src/features/depot/rights.test.ts, src/core/access.test.ts]
+        unit: [src/features/memories/components/ShareCreateDialog.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts, src/core/access.test.ts]
   - id: catalog-serves-usecases
     text: A capability is a coarser projection over use-cases, not a 1:1 rename (ADR 0032 §6). Each catalog entry in contracts/platform/capabilities.json declares a serves [uc.…] back-ref (catalog-only, NOT on the wire), and a validator enforces every serves resolves to a real use-case — so the catalog can't be a typo or drift from the graph. The catalog is append-only; an id may be reserved ahead of first advertisement and is advertised active only once its use-cases are built. The catalog file is the list; the entries and the use-cases each serves are not counted here.
     coverage:
@@ -75,14 +75,14 @@ acceptanceCriteria:
         unit: [CapabilityRegistryTest.aSwitchedOffParentSwitchesOffItsChildrenAndNotItsSiblings, CapabilityRegistryTest.aSwitchedOffChildLeavesItsParentAndItsSiblingActive, CapabilityRegistryTest.anAdvertisedIdsParentEntryIsAdvertisedToo]
         integration: [CapabilityDisabledSliceTest.aSwitchedOffParentDropsEveryShareIdAndRefusesADropBoxLink, DropBoxCapabilitySliceTest.aSwitchedOffParentRefusesANewDropBoxThroughThePath]
       web:
-        unit: [src/features/platform/capabilities.test.ts, src/features/memory/rights.test.ts, src/features/depot/rights.test.ts]
+        unit: [src/features/platform/capabilities.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts]
   - id: feature-switch-refuses-only-new
     text: A feature switch refuses what is new and leaves what exists usable (ADR 0088 decision 5) - with core.group-space off a new group is refused while an existing group is renamed; with core.remember-device.passwordless off a DEVICE_KEY wrap is refused while a DEVICE wrap is still enrolled; with the drop-box leaf off a new drop box is refused while an existing one is renamed. An existing contributor link keeps its role on screen when contribute is off.
     coverage:
       backend:
         integration: [CapabilityDisabledSliceTest.groupSpaceOffRefusesANewGroupAndKeepsAnExistingOneUsable, CapabilityDisabledSliceTest.passwordlessOffRefusesADeviceKeyWrapAndStillEnrolsADeviceWrap, DropBoxCapabilitySliceTest.anExistingDropBoxIsRenamedWhileTheSwitchIsOff]
       web:
-        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts]
+        unit: [src/features/memories/components/ShareCreateDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts]
 # scripts/validate_capabilities.py enforces catalog-serves-usecases at the doc-graph level (every serves -> a real,
 # built use-case), run in the CI trust-chain alongside validate_feature_wiring. The Phase-3 live smoke (uploader
 # disabled -> option gone + forced createShare WRITE_ONLY rejected; a major bump -> the incompatibility screen) is a

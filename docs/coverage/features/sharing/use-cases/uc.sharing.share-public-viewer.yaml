@@ -16,7 +16,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.listReturnsCallersSharesForTheMemory]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: anonymous-resolve-decrypt
     text: GET /api/shares/{shareId} is unauthenticated and returns the record plus the sealed subtree (Memory node + chapters, under K_node). The viewer unwraps K_node with the fragment key and decrypts names/layout/metadata locally, rendering the Memory read-only. The shareId alone is inert — without the fragment key nothing decrypts; both halves are required.
     coverage:
@@ -26,16 +26,16 @@ acceptanceCriteria:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareCoreSliceTest.unknownShareResolves404, ShareGuestNamesSliceTest.theResolveServesNoMediaAndNoIdentities]
       web:
-        unit: [src/features/memory/share.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        unit: [src/features/memories/share.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: anonymous-media-read
     text: GET /api/shares/{shareId}/media is unauthenticated, passes the same password gate as the resolve, and returns the Memory's media metadata (sealed under field keys derived from K_node) plus the wrapped keys of the uploader identities whose media it holds — never a name. The viewer decrypts it locally with the K_node the resolve's wrap yields.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, SharePasswordSliceTest.theMediaReadRequiresThePasswordToken]
       web:
-        unit: [src/features/memory/share.test.ts, src/features/memory/source.test.ts]
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        unit: [src/features/memories/share.test.ts, src/features/memories/source.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: guest-sees-the-member-view
     text: >-
       A READ link's page is the member's view with every member-only function absent (inbox #401): behind the shell's
@@ -49,7 +49,7 @@ acceptanceCriteria:
       and place are never written back. A WRITE_ONLY link alone gets its application's drop page.
     coverage:
       web:
-        unit: [src/views/ShareView.memory.test.ts, src/views/ShareView.registry.test.ts, src/core/sharing/ShareTreePage.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/features/memory/components/MediaLightbox.test.ts]
+        unit: [src/views/ShareView.memory.test.ts, src/views/ShareView.registry.test.ts, src/core/sharing/ShareTreePage.test.ts, src/features/memories/components/MemoryDetail.guest.test.ts, src/features/memories/components/MediaLightbox.test.ts]
   - id: gated-blob-read
     text: A share-scoped blob endpoint authorizes a read iff the blob is attached under the shared subtree (a structural check on opaque ids), returns a presigned store URL, and the viewer fetches bytes directly from the object store. The operator never learns which media a viewer opens. A cross-share/out-of-subtree blob id is 404.
     coverage:
@@ -60,14 +60,14 @@ acceptanceCriteria:
       backend:
         integration: [ShareSliceTest.gatedBlobAllowsInSubtreeAnd404sOutOfSubtree]
       web:
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: soft-revoke-and-expiry
     text: enabled=false or a passed expiresAt makes the resolve AND the gated blob endpoint 404 (same shape as an unknown id — non-enumerable). There is no content-key rotation for a viewer share; content a visitor already downloaded is not retractable (stated limitation).
     coverage:
       backend:
         integration: [ShareSliceTest.revokeMakesGuestPaths404, ShareSliceTest.expiredShareResolves404]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: set-and-show-expiry-web
     text: The web curator can set an optional expiry on a share — on create AND edit (a date picker; the link works through the end of the chosen day) — and sees it on the manage list next to the created date. On edit expiresAt is a full replace like sealedNote/sealedShareName — the dialog pre-fills it and re-sends it, so an unrelated edit keeps it, and toggling it off clears it. The backend accepts + enforces expiresAt on both create and update.
     coverage:
@@ -75,22 +75,22 @@ acceptanceCriteria:
         integration: [ShareNoteSliceTest.ownerSetsAnExpiryInPlaceAndAnExpiredShareResolves404, ShareNoteSliceTest.ownerClearsAnExpiryInPlaceAndTheShareResolvesAgain, ShareNoteSliceTest.aFullReplaceEditThatOmitsExpiresAtClearsIt]
       web:
         unit:
-          - src/features/memory/components/ShareCreateDialog.test.ts
-          - src/features/memory/components/ShareDialog.test.ts
+          - src/features/memories/components/ShareCreateDialog.test.ts
+          - src/features/memories/components/ShareDialog.test.ts
   - id: least-privilege-personal-only
     text: A share exposes only that one Memory subtree — K_node is random and independently wrapped, so the link reveals neither K_SC (the rest of the scope) nor any sibling Memory's K_node (crypto-enforced least privilege, ADR 0012). Which node kinds may be a share root, with which roles, is the kind's owner's (ShareRoots, ADR 0080) — a MEMORY and a CHAPTER with every role (a chapter link is a smaller Memory link — its guest reads the chapter and nothing of the Memory above or of a sibling chapter, ADR 0080 decisions 9 and 13), a FOLDER with READ or READ_WRITE (never WRITE_ONLY), any other kind none (422). This use-case's v1 was personal-scope only; group/tenant Memories became shareable in cr-0104 (uc.sharing.share-shared-scope), gated on scope membership.
     coverage:
       backend:
         integration: [ShareSliceTest.resolveLeaksNothingOutsideTheSubtree, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole, ShareRootsSliceTest.aFolderIsNoDropBox, ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: operator-blind-and-tier-honesty
     text: The server stores only shareId, the wrap, the plaintext role, the sealed name, and nodeId — never K_share/K_node/names/viewer/which-media. The no-install viewer is operator-served web (passive-operator-safe, not operator-proof against an active foreign operator); this is surfaced honestly via a footer link to veyq's security documentation, not an explicit in-viewer warning. Self-hosted (operator = curator) makes the gap moot.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.createRequiresAuth]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: folder-share-root
     text: >-
       A member shares a folder READ through core's own dialog: the link wraps the folder's own key under K_share and
@@ -106,8 +106,8 @@ acceptanceCriteria:
       backend:
         integration: [CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, CoreAloneSliceTest.aGuestOfAFolderShareResolvesTheSubtreeUnderIt]
       web:
-        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/ShareTreePage.test.ts, src/core/sharing/ShareTreePage.breadcrumb.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/memory/levelRows.guest.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/views/ShareView.folder.test.ts]
-        e2e: [src/features/memory/folderShare.e2e.test.ts]
+        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/ShareTreePage.test.ts, src/core/sharing/ShareTreePage.breadcrumb.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memories/components/FolderShareGuest.test.ts, src/features/memories/levelRows.guest.test.ts, src/features/memories/components/MemoryDetail.guest.test.ts, src/views/ShareView.folder.test.ts]
+        e2e: [src/features/memories/folderShare.e2e.test.ts]
   - id: chapter-share-root
     text: >-
       A member shares a chapter through the same dialogs as a Memory, worded for a chapter. The chapter link's guest
@@ -117,8 +117,8 @@ acceptanceCriteria:
       backend:
         integration: [ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole]
       web:
-        unit: [src/views/MemoryHomeView.test.ts, src/features/memory/share.test.ts, src/views/ShareView.test.ts, src/views/ShareView.memory.test.ts, src/features/memory/components/ShareDialog.test.ts]
-        e2e: [src/features/memory/chapterShare.e2e.test.ts]
+        unit: [src/views/MemoryHomeView.test.ts, src/features/memories/share.test.ts, src/views/ShareView.test.ts, src/views/ShareView.memory.test.ts, src/features/memories/components/ShareDialog.test.ts]
+        e2e: [src/features/memories/chapterShare.e2e.test.ts]
   - id: root-rename-reseals-share-names
     text: >-
       When a member renames a share root, that member's client re-seals the new name under every share's own

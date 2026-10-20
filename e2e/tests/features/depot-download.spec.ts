@@ -36,7 +36,7 @@ test.describe.configure({ mode: 'serial' })
 const FRAME = 256 * 1024
 // 24 whole frames and a short last one: past the pump's four in flight many times over, and not frame-aligned.
 const FILE_BYTES = 24 * FRAME + 4_321
-const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 
 const stamp = randomBytes(3).toString('hex')
 const folder = `Ablage für Rechnungen ${stamp}`

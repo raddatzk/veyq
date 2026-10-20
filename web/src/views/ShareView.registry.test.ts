@@ -52,7 +52,7 @@ import {
 } from '../core/sharing/resolvePublicShare'
 import { createRegistry, type Registry } from '../core/applications/registry'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
-import { MEMORY_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND } from '../features/memories/kinds'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 import { OPERATOR_SECTION } from '../test/models'

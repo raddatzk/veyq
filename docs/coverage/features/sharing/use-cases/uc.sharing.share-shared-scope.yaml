@@ -17,7 +17,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSliceTest.nonMemberCreateIs404, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: removal-deactivates-shares
     text: Removing a member from a scope soft-revokes (enabled=false) every share that member created in that scope; the anonymous resolve + gated blob endpoint then 404. Runs independently of the group scope-key rotation the removal also triggers.
     coverage:
@@ -29,7 +29,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareSharedScopeSliceTest.reactivateByAnotherMemberTransfersOwnershipAndResolves, ShareSharedScopeSliceTest.reactivateByNonMemberIs404, ShareSharedScopeSliceTest.aReactivationByAMemberBeingRemovedLeavesTheLinkOff]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: follows-new-content
     text: Because K_node is stable and never re-keyed (ADR 0024, no re-encryption), content added to the shared Memory after a rotation seals under the same K_node and is visible via the existing share; the URL/fragment never changes and no re-wrap is performed.
     coverage:
@@ -41,7 +41,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSharedScopeSliceTest.listForNodeShowsEveryMembersSharesWithMineFlag]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: reactivation-refuses-a-departed-members-link
     text: >
       Re-activation is refused 409 reissue_required, nothing written, when a bulk switch-off marked the share, when its
@@ -56,21 +56,21 @@ acceptanceCriteria:
         unit: [ReissuePolicyTest.aBulkSwitchOffAloneRequiresAReissue, ReissuePolicyTest.aDepartedOwnerAloneRequiresAReissue, ReissuePolicyTest.aCopyBelowTheCurrentEpochAloneRequiresAReissue, ReissuePolicyTest.aCopyMintedBeforeARemovalAloneRequiresAReissue, ReissuePolicyTest.aShareWithoutACopyIsJudgedByTheSwitchOffAndItsOwnerAlone]
         integration: [ShareSharedScopeSliceTest.reactivatingARemovedMembersShareIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingAShareSealedBeforeTheKeyChangedIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingOwnShareSealedAtTheCurrentEpochResolves, ShareSharedScopeSliceTest.reactivatingARemovedTenantMembersTenantShareIs409ReissueRequired, ShareSharedScopeSliceTest.aCoMembersTenantLinkMintedBeforeARemovalIsNotRevived, ShareSharedScopeSliceTest.aCoMembersTenantLinkWithoutACopyIsRevivedAfterARemoval, ShareSharedScopeSliceTest.aCoSharedGroupLinkIsMarkedBeforeItsQueuedRotationRuns]
       web:
-        unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
+        unit: [src/features/memories/components/ShareDialog.test.ts, src/features/memories/share.test.ts]
   - id: reissue-replaces-a-link-in-one-request
     text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, a WRITE_ONLY keeping the Memory's drop key) and deletes the old one (a tombstone it can never come back from) in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
     coverage:
       backend:
         integration: [ShareSharedScopeSliceTest.reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory, ShareSharedScopeSliceTest.aReissuedLinkCannotComeBack, ShareSharedScopeSliceTest.reissueAtAStaleEpochIs409AndWritesNothing, ShareSharedScopeSliceTest.aCoMembersEnabledShareIsNotReissuableButADisabledOneIsAdopted, ShareSharedScopeSliceTest.anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap, ShareSharedScopeSliceTest.aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memories/share.test.ts]
   - id: a-share-is-reissued-at-most-once
     text: A share is re-issued at most once (inbox #252). The re-issue spends the old share by a checked compare-and-set — its deletion where it is not deleted yet, the transaction's first write — so of two concurrent re-issues exactly one mints a link and the other, like any later re-issue of a deleted share, is 409 share_deleted with nothing written; a non-member still gets the non-enumerable 404. The renew dialog never retries that conflict, says the link was already renewed or deleted and has the manage list re-read (A4, ADR 0075 point 1).
     coverage:
       backend:
         integration: [ShareSharedScopeSliceTest.twoConcurrentReissuesOfOneShareMintExactlyOneLink, ShareSharedScopeSliceTest.aReissuedShareRefusesASecondReissueWithAConflict, ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere]
       web:
-        unit: [src/features/memory/share.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
+        unit: [src/features/memories/share.test.ts, src/features/memories/components/ShareCreateDialog.test.ts]
   - id: removal-can-turn-off-every-link
     text: A removal-rotation with revokeLinks turns off every enabled share of the group, whoever created it, in the removal's transaction; without it only the removed member's own go off; revokeLinks without removesUserId is 400 with nothing stored. The removal confirmation carries the opt-in, unchecked by default (ADR 0075).
     coverage:
@@ -96,7 +96,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ShareSharedScopeSliceTest.aCoMembersLinkIsDeletableOnlyOnceItsOwnerLeft]
       web:
-        unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
+        unit: [src/features/memories/components/ShareDialog.test.ts, src/features/memories/share.test.ts]
   - id: a-stopped-link-says-why
     text: >
       Every row of the manage list carries why a guest is not served the link now (`guestStops`, empty exactly when one
@@ -111,7 +111,7 @@ acceptanceCriteria:
         unit: [CapabilityRegistryTest.offSwitchesNameEverySwitchOnThePathRootFirstInstanceBeforeTenantAndAreEmptyExactlyWhenActive, LinkRequirementsTest.missedNamesEveryRequirementALinkMissesThePasswordFirstAndTheRefusalIsItsFirst]
         integration: [ShareGuestStopsCoreSliceTest.aServedLinkListsNoStopAndARevokedOrExpiredOneSaysSo, ShareGuestStopsCoreSliceTest.aSpaceBeingDeletedSaysSoToTheMemberWhoStillReadsIt, ShareGuestStopsCoreSliceTest.theListAndTheGuestGateAgreeOverTheMatrix, ShareGuestStopsCoreSliceTest.aGuestIsNeverToldTheStops]
       web:
-        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memory/components/ShareDialog.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts, src/features/memory/share.test.ts]
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memories/components/ShareDialog.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts, src/features/memories/share.test.ts]
     gaps:
       - surface: web
         reason: >-
@@ -128,7 +128,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareGuestStopsCoreSliceTest.aMemberGivesAStoppedLinkAPasswordAndItsGuestMeetsThePromptInsteadOfThe404, ShareGuestStopsCoreSliceTest.aMemberGivesAStoppedLinkAnEndDateWithinTheLifetimeAndTheSameLinkServesAgain, ShareGuestStopsCoreSliceTest.aWriteThatMeetsOneRequirementOfTwoIsRefusedAndOneThatMeetsBothServes, ShareGuestStopsCoreSliceTest.aLinkOlderThanTheLifetimeIsRefusedEveryEditAndIsRenewedAsANewLink, ShareGuestStopsCoreSliceTest.aSwitchedOffLinkThatMissesAPasswordIsSwitchedBackOnAndThenGivenOne]
       web:
-        unit: [src/core/sharing/ShareGuestStops.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/memory/components/ShareCreateDialog.test.ts, src/features/memory/components/ShareDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts, src/features/memories/components/ShareCreateDialog.test.ts, src/features/memories/components/ShareDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
     gaps:
       - surface: web
         reason: >-

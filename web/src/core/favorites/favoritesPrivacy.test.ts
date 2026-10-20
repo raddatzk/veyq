@@ -3,7 +3,7 @@
 //
 // Two things make this test different from everything in favoritesStore.test.ts, and both are deliberate:
 //
-//  1. It does NOT mock `features/memory/favorites` — the seal is the thing under test, so the real data layer
+//  1. It does NOT mock `features/memories/favorites` — the seal is the thing under test, so the real data layer
 //     has to run and the ciphertext it PUTs is the evidence.
 //  2. It asserts on the RAW `v1.open` throwing, never on `loadFavorites` returning nothing. `loadFavorites`
 //     swallows a failed unwrap by design (a corrupt blob must not block browse, and favorites.test.ts asserts
