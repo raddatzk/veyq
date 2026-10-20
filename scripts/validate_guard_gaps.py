@@ -857,7 +857,7 @@ def forge_attachment_node_eraser_keeps_the_blobs(root: pathlib.Path) -> str:
     # the guard is green, and every purged file leaves a blob row and its store objects behind with no reference
     # and no sweep. Freeing is the purge slice test's (`NodeAttachmentSliceTest`), not a grep's.
     f = _attachment_file(root, ATTACHMENT_NODE_ERASER)
-    f.write_text(_sub(f.read_text(), "        attachments.forEach { blobs.deleteBlobRow(it.blobId) }\n", ""))
+    f.write_text(_sub(f.read_text(), "        blobs.deleteBlobRows(scopeId, attachments.map { it.blobId })\n", ""))
     return "core's attachment NodeSubtreeEraser deleting rows but not their blobs (an OPEN gap — freeing is not read)"
 
 
