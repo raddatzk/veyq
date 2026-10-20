@@ -6,18 +6,22 @@ gallery or social network.
 
 ## Source of truth
 
-**`web/src/styles/`** — core's stylesheets (`base` tokens, `ui`, `layout`, `forms`, `markdown`, `media`, `pdf`,
-`settings`, **`dark`**); `web/src/style.css` is the import barrel. **An application's own global classes are its own
-sheet in its directory** (`web/src/features/memories/memories.css`, inbox #513), imported by the application, never by
+**`web/src/styles/`** — core's stylesheets (`base` tokens, `ui`, `layout`, `forms`, `markdown`, `settings`,
+**`dark`**); `web/src/style.css` is the import barrel. **An application's own global classes are its own
+sheet in its directory** (`web/src/features/memories/memories.css`, inbox #513 — the media lightbox too since #517;
+`web/src/features/depot/depot.css`, the PDF text layer, #517), imported by the application, never by
 the barrel: it loads with the application, *before* `style.css`, so a rule of it that styles an element a core class
 also styles compounds with that class (`.veyq-card.memory-card`) and wins by specificity, never by source order — and
-its dark twins sit at its end, not in `dark.css`. Individual edits carry a comment with their
+its dark twins sit at its end, not in `dark.css`. Which rules tie is measured in the built bundle, not read off the
+sheets: #517's move compounded eleven lightbox rules (`.veyq-icon-button.lightbox-nav`,
+`.veyq-surface.media-lightbox-details`, `.veyq-text-button.lightbox-text-button`, …) once the computed style of every
+lightbox element was compared before and after. Individual edits carry a comment with their
 reason where the reason isn't obvious. It read *~175 KB* until 2026-09-21, when the 67 % of it that no markup
 had ever matched was deleted (#146) — the sheets had come across from the pre-E2EE source with the design
 system of views this repo never had. Re-measure before quoting the size; `du -ch web/src/styles/*.css`.
 
-**`admin-web/src/styles/`** is a five-sheet **copy** of it — everything but `layout`, `markdown`, `media` and `pdf`,
-which style a Memory shell, a gallery and a viewer that surface does not have — and the rules on this page
+**`admin-web/src/styles/`** is a five-sheet **copy** of it — everything but `layout` and `markdown`, which style a
+Memory shell and rendered Markdown that surface does not have — and the rules on this page
 govern it too. The copy is deliberate, not drift: [ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)
 keeps the two packages independent in everything but `@veyq/crypto`, so a redesign of one is never a regression
 in the other. **The flip side is that nothing here is automatically true of both** — a token added on this side

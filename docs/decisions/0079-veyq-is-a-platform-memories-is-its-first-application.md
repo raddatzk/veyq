@@ -305,13 +305,16 @@ on their own.
   create and every node's rename are core's own dialog, FOLDER's share dialog is core's), while the top-bar tray and
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
   core's own, listing every application's uploads, so no application adds it). **Strings and styles follow the
-  directories (inbox #513):** each application's i18n namespaces (`memory`/`media`, `depot`) are its own catalog,
+  directories (inbox #513, #517):** each application's i18n namespaces (`memory`/`media`, `depot`) are its own catalog,
   `features/<owner>/i18n.ts`, which the composition root's catalog half (`web/src/applicationMessages.ts`, data only, so
   every test file gets it) adds at build time to core's one vue-i18n instance — write-once, a namespace already held
-  throws; core's catalog (`i18n/index.ts`) holds core's alone. Memories' global classes are its own stylesheet,
-  `features/memories/memories.css`, imported by the application with their dark twins; the core part of the old
+  throws; core's catalog (`i18n/index.ts`) holds core's alone. Each application's global classes are its own
+  stylesheet, imported by the application with their dark twins: Memories' `features/memories/memories.css` (the old
+  `styles/memory.css`'s Memories part and the media lightbox of the old `styles/media.css`), Depot's
+  `features/depot/depot.css` (the PDF text layer of the old `styles/pdf.css`); the core part of the old
   `styles/memory.css` went to core (the rendered Markdown to `styles/markdown.css`, the image cropper's classes renamed
-  `veyq-cropper*` in `shared/ui/ImageCropper.vue`). An application's sheet loads with the application, before core's
+  `veyq-cropper*` in `shared/ui/ImageCropper.vue`), and `styles/` holds no application's sheet any more. An
+  application's sheet loads with the application, before core's
   `style.css`, so a rule of it that styles a core class's element compounds with that class and wins by specificity,
   never by source order (the sheet's header). The kind is a string token on both
   sides, so that core never names an application's kind (`MEMORY`, `CHAPTER`, `FILE`, `DEPOT_DROPBOX`) is guarded
