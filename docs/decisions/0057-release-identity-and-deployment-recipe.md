@@ -21,9 +21,9 @@ Five facts, measured on this tree:
 
 1. **No release has ever been built.** `container.yml`'s first job (the publish workflow then; `ci.yml` since ADR 0091)
    runs `major="$(tr -d '[:space:]' < VERSION)"`, and there is no `VERSION` file — so the job dies at its first
-   command. `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0` in [`infra/.env.example`](../../infra/.env.example)
-   therefore names an artifact with no producer, in a three-part shape this pipeline never emits (it publishes
-   `<major>`, `<major>.<minor>`, `sha-<sha>`, `latest`).
+   command. `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0` in [`infra/.env.example`](../../infra/docker/.env.example)
+   (now in `infra/docker/`) therefore names an artifact with no producer, in a three-part shape this pipeline never
+   emits (it publishes `<major>`, `<major>.<minor>`, `sha-<sha>`, `latest`).
 2. **The version is a function of the registry, not of the tree.** The workflow asks the registry for the
    highest published minor and increments it. The same commit published twice is two versions, and a checkout
    cannot answer which version it is.
@@ -94,8 +94,8 @@ major ≥ 1, which the owner declares on the `release:` line of `scripts/applied
 one tree. A snapshot has none: it names a build, not a release.
 
 **3. The deployment recipe is the release's assets; the binding is the release, not the image.** A release carries
-its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`: `infra/docker-compose.prod.yml`,
-`infra/.env.example` and every file the compose file reads beside itself (`garage.toml`), derived from the compose
+its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`: `infra/docker/docker-compose.prod.yml`,
+`infra/docker/.env.example` and every file the compose file reads beside itself (`garage.toml`), derived from the compose
 file by `scripts/release_assets.py` rather than listed, beside `veyqctl`, the backup tool and a manifest naming both
 images by `tag@digest` and every asset by its sha256 ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)
 decision 3). No image carries a recipe. Two things follow:

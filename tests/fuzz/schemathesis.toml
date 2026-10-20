@@ -1,0 +1,52 @@
+# The API fuzzing's configuration (ADR 0091 decision 9) — read by the pinned Schemathesis image that
+# `scripts/run_api_fuzz.py` runs, once per spec file and invocation. The runner adds what differs per invocation on
+# the command line (the listener, the mode, the operations, the seed); the positive invocations' fixed ids are a
+# `[parameters]` table it appends to a copy of this file, because a fixed parameter overrides generation and the
+# negative invocations must generate every path id themselves.
+
+# veyq's own checks: refusal_by_location, refusal_echoes_nothing (the module docstring says what each holds).
+hooks = "tests/fuzz/hooks.py"
+
+[generation]
+# No example database: a run reproduces from its seed alone (the runner's `--seed`, `--generation-deterministic`),
+# never from what an earlier run found on this disk.
+database = "none"
+# The bearer token is no parameter to negate: a request without one answers the generic `401 authentication_failed`
+# (`AuthExceptionMappers`), which `ignored_auth` holds for every operation — a negative case that only drops the token
+# would hold it a second time, against the 400/404 a malformed request owes.
+with-security-parameters = false
+
+# The bearer token the seeder (`web/scripts/fuzz-seed.mts`) signed in for, handed to the container in the
+# environment: never on a command line, never in a file the image reads.
+[auth.openapi.bearerAuth]
+bearer = "${VEYQ_FUZZ_TOKEN}"
+
+# --- the checks ---------------------------------------------------------------------------------------------------
+# On: not_a_server_error, status_code_conformance, content_type_conformance, response_schema_conformance,
+# response_headers_conformance, negative_data_rejection, missing_required_header, unsupported_method,
+# allow_header_conformance, ignored_auth, positive_data_acceptance, use_after_free, ensure_resource_availability, and
+# hooks.py's three — every check this file does not switch off.
+
+[checks.negative_data_rejection]
+# A refused request answers 400 or 404, or a negated credential the operation's 401/403, or a body past the instance's
+# request limit the `413 request_too_large` every operation with a body declares (inbox #508) — never Schemathesis'
+# default set (405, 406, 409, 415, 422, 428, 429, 5xx). Which status a location may answer is refusal_by_location's
+# rule (hooks.py); this is the union of what it allows.
+expected-statuses = ["400", "401", "403", "404", "413"]
+
+[checks.positive_data_acceptance]
+# A request the contract allows is never refused for its shape: anything but `400` (and the shape statuses veyq never
+# declares — 405, 406, 415). The rest is an answer about the instance's state, which a generated request cannot
+# know: an id nobody has (404), a revision or epoch it did not read (409), a credential it cannot forge (401/403), a
+# semantic rule no schema can say (422), a legal hold (451), something gone (410), mail not configured (503), a body
+# past the instance's configured request limit (413, declared on every operation with a body). A 5xx is
+# not_a_server_error's. Runs in positive mode only (the GETs, the writes, the stateful sequences).
+expected-statuses = ["2xx", "3xx", "401", "403", "404", "409", "410", "413", "422", "429", "451", "503", "5xx"]
+
+[checks.object_level_authorization]
+# Schemathesis' own check needs its identities from a Web Fuzzing Commons document (`[auth.wfc]`, which replaces the
+# bearer auth above and would carry both tokens in a file) and calls a read a leak only when the peer gets an
+# equivalent body. veyq's rule is stricter and stated as a status — a non-member is refused exactly like a scope that
+# does not exist — so hooks.py's `peer_is_refused` holds it instead, on every accepted request in the owner's scope,
+# writes included.
+enabled = false

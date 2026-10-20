@@ -68,7 +68,7 @@ an image that is not on this host (a bare name would otherwise be pulled from Do
 the run prints says that nothing was verified.
 
 **`.env` from the template.** `install` copies the release's `.env` template (`env.example`: the tree's
-`infra/.env.example`, published without the leading period a GitHub Release asset cannot keep) line by line: the four
+`infra/docker/.env.example`, published without the leading period a GitHub Release asset cannot keep) line by line: the four
 secrets it knows are generated, the two image lines come from the manifest, and every other value the template assigns is the
 operator's — given with `--set KEY=VALUE`, or asked for at a terminal, the template's value shown as the example;
 without a terminal a missing one is refused, named. A `--set` key the template does not assign is kept below it.

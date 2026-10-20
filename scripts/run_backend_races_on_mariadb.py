@@ -35,7 +35,7 @@ MariaDB hides without it, and fails by name rather than counting an unchecked ro
 
 **What it never touches.** The owner's dev database (`veyq-mariadb`, port 3306). The container here has its own
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
-in a `finally`. Its image is read from `infra/docker-compose.yml`, so the pin has one home.
+in a `finally`. Its image is read from `infra/docker/docker-compose.yml`, so the pin has one home.
 
 **Not a `validate_*` guard; a CI job, not yet an admitted one.** It needs Docker, so it runs as `ci.yml`'s
 `backend-races` job, not in the buildless glob. No run has executed that job yet (the repository has no remote), so
@@ -62,16 +62,18 @@ from pathlib import Path
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 REPO = Path(__file__).resolve().parent.parent
 BACKEND = REPO / "backend"
-COMPOSE_FILE = REPO / "infra" / "docker-compose.yml"
+COMPOSE_FILE = repo_layout.DEV_COMPOSE
 NAME = f"veyq-race-mariadb-{os.getpid()}"
 PASSWORD = "race"  # a throwaway container's credential, not a secret
 RACE_CALL = re.compile(r"\b(race|whileUncommitted|holdForOverlap)\(|\bCountDownLatch\b|\bCyclicBarrier\b")
 
 
 def pinned_image() -> str:
-    """The MariaDB image `infra/docker-compose.yml` pins — the one production runs."""
+    """The MariaDB image `infra/docker/docker-compose.yml` pins — the one production runs."""
     for line in COMPOSE_FILE.read_text().splitlines():
         m = re.match(r"\s*image:\s*(mariadb:\S+)", line)
         if m:

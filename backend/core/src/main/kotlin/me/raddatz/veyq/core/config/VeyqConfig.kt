@@ -559,7 +559,7 @@ interface VeyqConfig {
         @WithDefault("blobs")
         fun bucket(): String
 
-        /** Must match `s3_region` in `infra/garage.toml` — SigV4 signs the region. */
+        /** Must match `s3_region` in `infra/docker/garage.toml` — SigV4 signs the region. */
         @WithDefault("us-east-1")
         fun region(): String
     }

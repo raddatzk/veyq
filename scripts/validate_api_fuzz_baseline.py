@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hold the API fuzzing's baseline (`infra/fuzz/baseline.json`) to its rules (ADR 0091 decision 9).
+"""Hold the API fuzzing's baseline (`tests/fuzz/baseline.json`) to its rules (ADR 0091 decision 9).
 
 **What it asserts.** The baseline is the list of Schemathesis failures a run accepts (`scripts/run_api_fuzz.py`); every
 entry of it:
@@ -36,8 +36,10 @@ from pathlib import Path
 
 import contract_specs
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
-BASELINE = ROOT / "infra" / "fuzz" / "baseline.json"
+BASELINE = repo_layout.FUZZ_DIR / "baseline.json"
 INBOX = ROOT / "docs" / "inbox.md"
 METHODS = ("get", "put", "post", "delete", "patch", "head", "options")
 IDENTITY = ("operation", "check", "failure", "signature")

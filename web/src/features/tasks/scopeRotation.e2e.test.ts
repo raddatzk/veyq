@@ -16,7 +16,7 @@
 //
 // The tenant domain is `veyq.localhost` — a valid dotted domain AND an RFC 6761 loopback name, so it serves as
 // both the tenant domain and the fetch Host with no manual Host juggling. Run against a FRESH instance:
-//   docker compose -f infra/docker-compose.yml down -v && up -d  → restart backend  →
+//   docker compose -f infra/docker/docker-compose.yml down -v && up -d  → restart backend  →
 //   VEYQ_E2E=1 npx vitest run scopeRotation.e2e
 // Or let `python3 scripts/run_web_e2e.py` do all of that, which is what CI runs.
 import { beforeAll, describe, it, expect } from 'vitest'

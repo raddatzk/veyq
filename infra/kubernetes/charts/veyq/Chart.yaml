@@ -1,0 +1,27 @@
+apiVersion: v2
+name: veyq
+description: >-
+  Self-hostable, end-to-end-encrypted memory sharing. The operator-blind server, its administration surface,
+  MariaDB and the bundled Garage object store on an operator's own Kubernetes cluster (ADR 0064) — the same
+  four workloads infra/docker/docker-compose.prod.yml runs beside its Traefik, whose job a Gateway API implementation
+  of the operator's choice does here: the chart owns one Gateway, tenant domains are projected as HTTPRoutes (and,
+  under per-domain TLS, ListenerSets) by the backend itself, and certificates are obtained through cert-manager.
+type: application
+# A placeholder no publish uses. The publish packages the chart with its own release version as BOTH `version` and
+# `appVersion` (`<major>.<minor>`, or `<major>.<minor>-SNAPSHOT`; ADR 0057 §1, ADR 0064), and the minor is a commit
+# count — so no tree can hold the real value, and writing one here would be a number that is wrong on the next
+# commit. `appVersion` is the image tag the values default to, so an install from a checkout sets `image.tag` and
+# `admin.image.tag` (https://raddatzk.github.io/veyq/run/new-instance/, Kubernetes); an install from the registry needs neither.
+version: 0.0-dev
+appVersion: "0.0-dev"
+# The floor is the Gateway API CRDs', not the chart's own: v1.5 (the first with ListenerSet in the standard channel)
+# validates with CEL and was tested on Kubernetes 1.31–1.35, and its TLSRoute validation requires 1.31 (its release
+# notes). `restricted` PodSecurity admission, which every pod here is written to pass, is GA from 1.25 — below it.
+kubeVersion: ">=1.31.0-0"
+keywords:
+  - veyq
+  - e2ee
+  - self-hosted
+home: https://github.com/raddatzk/veyq
+sources:
+  - https://github.com/raddatzk/veyq

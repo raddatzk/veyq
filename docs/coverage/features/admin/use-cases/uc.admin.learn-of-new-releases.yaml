@@ -73,7 +73,7 @@ gaps:
     `npm run check`, and wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.
   web: "No web surface: the Server Owner's client is admin-web (ADR 0065), where this use-case lives."
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/instance-mail.spec.ts`) drives
+    Lane L1's browser suite (`tests/e2e/tests/features/instance-mail.spec.ts`) drives
     `the-check-can-be-switched-off-and-pointed-elsewhere`, `the-address-is-confirmed-before-any-notice`,
     `instance-mail-reaches-only-the-server-owner`, `a-newer-release-is-noticed-in-the-console`,
     `majors-are-told-apart-and-an-unscheduled-one-is-urgent` and `each-notice-is-mailed-once-with-a-calendar-date` in

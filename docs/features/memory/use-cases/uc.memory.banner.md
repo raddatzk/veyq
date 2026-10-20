@@ -6,7 +6,7 @@
   ([en.memory.playback-derivative](../enablers/en.memory.playback-derivative.md), planned with the client worker queue,
   inbox #23). Since 2026-10-19 it is set only by an upload in its dialog, an upload equal to a gallery file shares its
   stored object, and it has no description (cr-cover-banner-upload-only-and-dedup). Its browser pass is written as lane
-  L1's `e2e/tests/features/memory-banner.spec.ts` and not yet run - the dialogs' browser pass is owed (inbox #511).
+  L1's `tests/e2e/tests/features/memory-banner.spec.ts` and not yet run - the dialogs' browser pass is owed (inbox #511).
 - **Primary actor:** A member with an **unlocked vault** who may write the Memory's scope (the cover's right,
   `memoryRights.setBanner` = `setCover`) and has a Memory or a Chapter open. **Secondary:** anyone who opens it — a member,
   or a guest of a `READ` or `READ_WRITE` link, who sees the banner exactly as a member does.

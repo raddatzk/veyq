@@ -134,7 +134,7 @@ gaps:
     `operator`). admin-web's job has never executed, so ADR 0040 admits it nowhere; on its first run they become refs
     on the criteria named in each criterion's gap.
   stack: >-
-    Lane L1's first-run scenario (`e2e/tests/setup/first-run.setup.ts`) chooses the mode at setup, switches it both ways
+    Lane L1's first-run scenario (`tests/e2e/tests/setup/first-run.setup.ts`) chooses the mode at setup, switches it both ways
     in the console with the warnings per mode, publishes the contact and the identification, and opens the tenant's
     sign-in page to find the identification behind its footer link, in Chromium against the release candidate's two
     images; each test is tagged with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`; the lane's

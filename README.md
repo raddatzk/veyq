@@ -45,7 +45,8 @@ just a sovereignty preference here; anything that erodes it is a security regres
 | [`web/`](web/CLAUDE.md) | Vue 3 client. All content crypto runs here |
 | [`docs/`](docs/README.md) | Internal engineering state — architecture, ADRs, features, coverage |
 | [`site/`](site/src/content/docs/start.md) | The project website (what veyq is, its applications, EN + DE) and the published documentation: using veyq (EN + DE, plain language), running an instance, security |
-| [`infra/`](infra/README.md) | Local dev stack (Docker Compose) |
+| [`infra/`](infra/README.md) | Deployment — `infra/docker/` (the app image, the dev and production Compose files), `infra/kubernetes/` (the Helm chart) — and the local dev stack |
+| `tests/` | The harnesses: lane L1's browser suite (`tests/e2e/`), the API fuzzer (`tests/fuzz/`) |
 
 Start at [`docs/architecture/README.md`](docs/architecture/README.md) for the whole-system view, or
 [`docs/crosscutting/security-model.md`](docs/crosscutting/security-model.md) if you came to check the
@@ -54,7 +55,7 @@ encryption claim.
 ## Development
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
 Then the backend (`cd backend && ./gradlew quarkusDev`) and the web client (`cd web && npm run dev`). Each

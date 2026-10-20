@@ -1,6 +1,6 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
-- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run, the Memory round trip and eight feature scenarios (the capability off states; every field read back after a reload and on a second device; a guest's take-back; the release check, its notices and instance mail; moderators sharing the moderation key; Depot's streamed download through each save target; Depot's file section; its live updates and a drop box across separate browser contexts, decision 7) in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `e2e/`), and lane L1's job in `ci.yml` (`stack`, per architecture after the build; the publish waits on it, decision 2 — it pulls `build-<sha>-<arch>` by digest where a run pushed it, today the dispatch, and builds in its own job where none did, until a push publishes the snapshot (ADR 0091 decision 5)) — run locally, step by step; no CI run, which awaits the remote
+- Status: Accepted 2026-10-16; built so far: L1 installs the candidate through `veyqctl install --unsigned-local` from its release assets (decision 1), then first run, the Memory round trip and eight feature scenarios (the capability off states; every field read back after a reload and on a second device; a guest's take-back; the release check, its notices and instance mail; moderators sharing the moderation key; Depot's streamed download through each save target; Depot's file section; its live updates and a drop box across separate browser contexts, decision 7) in a browser, and the ADR 0053 sweeps over the run's stack (`scripts/run_stack_e2e.py`, `scripts/e2e_sweeps.py` and `tests/e2e/`), and lane L1's job in `ci.yml` (`stack`, per architecture after the build; the publish waits on it, decision 2 — it pulls `build-<sha>-<arch>` by digest where a run pushed it, today the dispatch, and builds in its own job where none did, until a push publishes the snapshot (ADR 0091 decision 5)) — run locally, step by step; no CI run, which awaits the remote
 - Date: 2026-10-16
 
 ## Context
@@ -30,7 +30,7 @@ What a green run proves today stops short of what a Server Owner runs:
    both images by digest, the very files a promotion publishes as the immutable GitHub Release ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3) — through
    `veyqctl install` with `--source` pointed at a local directory in the mirror layout (§7) and `--unsigned-local`
    for images that are not yet signed. So the operator's path is the tested path, and no harness re-implements it.
-   The only file laid over the recipe is `infra/e2e/docker-compose.e2e.yml`, the instance's operator override file
+   The only file laid over the recipe is `tests/e2e/stack/docker-compose.e2e.yml`, the instance's operator override file
    (`compose.override.yml`, which `veyqctl` lays over the recipe on every command), which adds an ACME test
    server and the browser, and gives the instance only what the public internet gives an operator's: DNS for its own
    domain (an alias of Traefik on `edge`, so the app reaches its public origin), a CA it trusts (the run's Pebble
@@ -74,12 +74,12 @@ What a green run proves today stops short of what a Server Owner runs:
    Rejected: the admin port the recipe publishes on the host's loopback — a container reaches the host's 127.0.0.1
    on Docker Desktop and not on a Linux runner, so a laptop would run another path than CI. **The trust store
    without `certutil`**: the image carries `libnss3` (Chromium links it) and Python, not `libnss3-tools`, and
-   installing it would need the network at run time; `infra/e2e/nss_trust_root.py` calls the NSS functions
+   installing it would need the network at run time; `tests/e2e/stack/nss_trust_root.py` calls the NSS functions
    `certutil -A` calls, through `ctypes` — measured: Chromium loads a page whose leaf the root issued, and refuses it
    (`ERR_CERT_AUTHORITY_INVALID`) without. A Chrome `CACertificates` policy file was tried first and is not read by
    Playwright's Chromium.
 
-4. **The driver is Playwright, in a workspace package `e2e/`.** TypeScript like both surfaces, Apache-2.0, actively
+4. **The driver is Playwright, in a workspace package `tests/e2e/`.** TypeScript like both surfaces, Apache-2.0, actively
    maintained, its own `npm run check`. It sees web/ and admin-web/ only as a browser does and imports neither; it
    may import `@veyq/crypto` (the reason it joins the npm workspace, as ADR 0065 allows for that one package — it
    reads the Secret Key back out of the Emergency Kit with the shared `veyqkit:` codec). `@playwright/test` is pinned
@@ -125,7 +125,7 @@ What a green run proves today stops short of what a Server Owner runs:
 ## Consequences
 
 - **Nothing is proven before the repository has a remote.** Until then the proof is a local run of
-  `scripts/run_stack_e2e.py` against locally built images, and — ADR 0040 — no coverage ref may point at `e2e/`
+  `scripts/run_stack_e2e.py` against locally built images, and — ADR 0040 — no coverage ref may point at `tests/e2e/`
   until a CI run's log shows the test executed.
 - **The coverage model gains a surface, `stack`** (answer 2), unadmitted until a CI run executed it.
 - **The harness follows the operator's tool.** With [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md), L1 is `veyqctl install` and ADR 0091's L2 and L3 are
@@ -150,7 +150,7 @@ What a green run proves today stops short of what a Server Owner runs:
 1. **The whole suite on every push and pull request** — replaced at the same refine by ADR 0091 decision 4, which the
    owner chose over the first answer (smoke per push, the full tier per publish): a regression is cheapest found at
    the commit that causes it.
-2. **Coverage gets a surface of its own, `stack`**, resolving refs relative to `e2e/` (`validate_coverage.py`'s
+2. **Coverage gets a surface of its own, `stack`**, resolving refs relative to `tests/e2e/` (`validate_coverage.py`'s
    `SURFACES` + `FILE_ROOTS`, the extension point that file names). Filing a spec under `web` or `admin-web` would
    claim a surface's own CI job ran it, which none does; one spec also drives both. `stack` is not OWED, and it is
    admitted (ADMITTED) only after a CI log shows its suite executed (ADR 0040) — until the repository has a remote,
@@ -160,4 +160,4 @@ What a green run proves today stops short of what a Server Owner runs:
 4. **First run is driven through the UI, once per run, by the `setup` project** — it is the scenario, not a fixture.
    A scenario that needs more state than first run leaves (a second member, a populated space) builds it through the
    UI too while the suite is small; an API seeder is introduced only when a scenario's setup dominates its runtime, and
-   then it is `@veyq/crypto` plus the generated clients inside `e2e/`, never an import from `web/src/test/`.
+   then it is `@veyq/crypto` plus the generated clients inside `tests/e2e/`, never an import from `web/src/test/`.

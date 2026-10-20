@@ -92,7 +92,7 @@ gaps:
     `auth_attestation.erase_account` vector; crypto's job has never executed, so ADR 0040 admits it nowhere. The backend
     asserts the same vector (`AuthAttestationTest`).
   stack: >-
-    Lane L1's browser pass (`e2e/tests/features/tenant-and-account-erasure.spec.ts`) erases an account in the settings through to
+    Lane L1's browser pass (`tests/e2e/tests/features/tenant-and-account-erasure.spec.ts`) erases an account in the settings through to
     the refused sign-in, with the last owner's choice, and stops an erasure in the console, against the release
     candidate's two images. Green only in local runs of `scripts/run_stack_e2e.py`; the lane's CI job awaits its first
     run.

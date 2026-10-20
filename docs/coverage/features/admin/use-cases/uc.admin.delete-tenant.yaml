@@ -61,6 +61,6 @@ gaps:
     `src/views/AdminConsoleView.test.ts` (the ownerless marker) and `src/cli/cli.test.ts` (`tenant delete` with and
     without `--over-content`, `stop-deletion`, `invite-owner`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
   stack: >-
-    Lane L1's browser pass (`e2e/tests/features/tenant-and-account-erasure.spec.ts`) deletes a tenant in the console with its typed
+    Lane L1's browser pass (`tests/e2e/tests/features/tenant-and-account-erasure.spec.ts`) deletes a tenant in the console with its typed
     domain and stops the deletion, against the release candidate's two images. Green only in local runs of
     `scripts/run_stack_e2e.py`; the lane's CI job awaits its first run.

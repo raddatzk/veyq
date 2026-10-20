@@ -4,7 +4,7 @@ title: Report what you see
 # Built by cr-report-and-hold: core/moderation/report (ReportHandler, CaseNotices, ReportReceived) and core/moderation/hold
 # (Holds, the snapshot seam, StoreReclaimStore.due's skip) on the backend, Memories' MediaReportableItems and
 # MediaHoldSnapshot; core/report (the dialog, the bundle, the actions) on web, Memories' lightbox and mediumReportKeys;
-# packages/crypto's report.ts. Lane L1's browser pass is e2e/tests/features/report.spec.ts, tagged per criterion; `stack`
+# packages/crypto's report.ts. Lane L1's browser pass is tests/e2e/tests/features/report.spec.ts, tagged per criterion; `stack`
 # waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: a-member-reports-what-their-space-holds
@@ -115,5 +115,5 @@ gaps:
     The report bundle's layouts and seals are pinned by packages/crypto's src/report.test.ts and src/v1.conformance.test.ts
     (the-report-arrives-sealed: an older epoch's key opens nothing), but crypto's CI job has never executed (ADR 0040).
   stack: >-
-    e2e/tests/features/report.spec.ts tags a member's and a guest's report with the dialog, the new-case mail and the
+    tests/e2e/tests/features/report.spec.ts tags a member's and a guest's report with the dialog, the new-case mail and the
     receipt; stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

@@ -174,7 +174,7 @@ the app which store it runs: the operator tells it, for this run. Two ways, the 
 
   the bundled store     The recipe's environment already holds its hint — `VEYQ_BUNDLED_STORE_ENDPOINT` (the
                         internal name, the very one this tool's container must reach) and
-                        `VEYQ_BUNDLED_STORE_ADMIN_TOKEN` (compose: `GARAGE_ADMIN_TOKEN` of `infra/.env`). The S3 key
+                        `VEYQ_BUNDLED_STORE_ADMIN_TOKEN` (compose: `GARAGE_ADMIN_TOKEN` of `infra/docker/.env`). The S3 key
                         pair is DERIVED from that token, exactly as the backend derives it
                         ([derive_bundled_credentials]; `BundledStoreCredentialsTest` and this tool's self-test pin
                         one vector on both sides), so nothing is typed.
@@ -219,8 +219,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 REPO =Path(__file__).resolve().parent.parent
-DEFAULT_COMPOSE = REPO / "infra" / "docker-compose.yml"
-DEFAULT_BACKUP_ROOT = REPO / "infra" / "backups"
+# Spelled here, not imported from `repo_layout.py`: this file ships alone (the tools image's `/opt/veyq/`, a release
+# asset beside `veyqctl`), where that module is not. `instance_backup_selftest.py` holds the two to it in the repository.
+DEFAULT_COMPOSE = REPO / "infra/docker/docker-compose.yml"
+DEFAULT_BACKUP_ROOT = REPO / "infra/backups"
 
 # Pinned by tag AND multi-arch index digest, like every other moving part of the bundled stack (mariadb:11.4,
 # dxflrs/garage:v2.0.0, traefik:v3.6, axllent/mailpit:v1.20.0) — and DB_IMAGE to the very digest the compose files
@@ -1059,14 +1061,14 @@ def app_release(compose_file: Path, service: str) -> tuple[str | None, str]:
     `unstamped-build` (the instance runs an image the release pipeline never stamped — A3, the same shape as
     A1), `no-app-service` (this compose file declares none, as the dev stack does not — the backend runs
     outside it), `no-app-container` (declared, never created), and the three that are about this host rather
-    than about the instance: `no-compose-file`, `compose-unresolvable` (an `infra/.env` that is not in reach)
+    than about the instance: `no-compose-file`, `compose-unresolvable` (an `infra/docker/.env` that is not in reach)
     and `docker-unavailable`.
 
     The service is looked up in **two** steps on purpose. `docker compose ps <service>` exits non-zero both
     when docker is unreachable and when the file simply has no such service, so a single call reports the dev
     stack — whose compose file deliberately has no `app` — as a broken host. Measured, not assumed: that is
     exactly what the first version of this function did. `--no-interpolate` for the same reason one step later:
-    without it, `config` on the production compose file fails whenever `infra/.env` is not in reach, and a
+    without it, `config` on the production compose file fails whenever `infra/docker/.env` is not in reach, and a
     missing variable would again be reported as a missing docker.
     """
     if not compose_file.is_file():
@@ -1088,7 +1090,7 @@ def app_release(compose_file: Path, service: str) -> tuple[str | None, str]:
         capture_output=True, text=True,
     )
     if found.returncode != 0:
-        # `ps` DOES interpolate, so an unresolved `${VAR:?…}` — an `infra/.env` that is not in reach — fails
+        # `ps` DOES interpolate, so an unresolved `${VAR:?…}` — an `infra/docker/.env` that is not in reach — fails
         # here in exactly the same way an unreachable daemon does. Ask docker itself which it was.
         alive = subprocess.run(["docker", "version", "--format", "{{.Server.Version}}"], capture_output=True, text=True)
         return None, ("compose-unresolvable" if alive.returncode == 0 else "docker-unavailable")
@@ -2140,7 +2142,7 @@ PARTIAL = ".partial"
 # release a new major is entered from — the predecessor the release's own upgrade proof and chart check ran from
 # (`release_assets.py --major-entry`), or null.
 RELEASE_FILE = Path("/opt/veyq/release.json")
-# ADR 0057's release grammar, `<major>.<minor>` with an optional `-SNAPSHOT` (charts/veyq/Chart.yaml says the same).
+# ADR 0057's release grammar, `<major>.<minor>` with an optional `-SNAPSHOT` (infra/kubernetes/charts/veyq/Chart.yaml says the same).
 RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-SNAPSHOT)?")
 
 

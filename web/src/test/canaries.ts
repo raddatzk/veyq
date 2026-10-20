@@ -64,7 +64,7 @@ function walk(value: unknown, into: Set<string>): void {
 /**
  * The shortest canary the sweep can tell from chance, when it is spelled only in the base64/base64url/hex alphabet
  * (inbox #323), and the test against it. ONE rule for both recorders — this one and the browser suite's
- * `recordTyped` (`e2e/src/canaries.ts`) — so it lives in `@veyq/crypto/canaryRule`, the one package both may import;
+ * `recordTyped` (`tests/e2e/src/canaries.ts`) — so it lives in `@veyq/crypto/canaryRule`, the one package both may import;
  * re-exported here under the names this file always had. The measurements behind 10 are stated there.
  */
 export { MIN_CANARY_LENGTH, collidesWithCiphertext } from '@veyq/crypto/canaryRule'

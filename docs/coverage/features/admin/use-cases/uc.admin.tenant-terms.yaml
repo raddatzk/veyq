@@ -55,5 +55,5 @@ acceptanceCriteria:
         unit: [src/features/tenant/termsTemplate.test.ts]
 gaps:
   stack: >-
-    Lane L1 walks this in a browser in e2e/tests/features/terms-operator-section.spec.ts, tagged per criterion
+    Lane L1 walks this in a browser in tests/e2e/tests/features/terms-operator-section.spec.ts, tagged per criterion
     (cr-operator-section-of-the-terms), but no CI run has executed that lane yet (ADR 0040).

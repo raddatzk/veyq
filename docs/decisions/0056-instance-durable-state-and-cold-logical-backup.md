@@ -315,7 +315,7 @@ halves, on both targets in step:
   named as the one that fails quietly.
 - **Every deployment artifact must persist leg (c), and the obligation outlives the one that first met it.**
   A container that is recreated without a persisted key path regenerates the key and walks into the `MISMATCH`
-  state on its own — an instance that boots, serves every page, and can admit nobody. `infra/docker-compose.prod.yml`
+  state on its own — an instance that boots, serves every page, and can admit nobody. `infra/docker/docker-compose.prod.yml`
   mounts a named volume for it and `scripts/validate_config_secret_persistence.py` holds the three files that
   have to agree about that path — the `Dockerfile`'s `WORKDIR`, `VeyqConfig`'s default, and the compose mount —
   to each other. That guard sees compose files in this tree only: for Kubernetes, a bare `docker run` or a

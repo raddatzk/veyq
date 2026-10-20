@@ -713,6 +713,14 @@ named them. Resolve every relative specifier against its file and test where it 
 `validate_web_core_imports_no_applications.py` reads an edge — and a docs tree that shares the name
 (`docs/features/memory/`) is set apart by its prefix, not by hand.
 
+**Before its hits are classified, a move's locator sorts the files by how each is consumed.** A file that *ships
+alone* cannot import a sibling the move adds: `cr-repo-layout-infra-and-tests` switched every script to one
+`repo_layout.py`, and `instance_backup.py` runs from the tools image's `/opt/veyq/` and as a release asset, where that
+module is not — every in-repo check would have stayed green over a broken `backup-gate`. A *checksummed* file cannot be
+edited at all: a comment in the core baseline migration names the dev compose file, and rewriting it reddened
+`validate_migration_versions.py` (`db/migration/` is out of every move's locator). And a link a guard resolves breaks
+in the phase that moves its target, so that phase re-points it, not a later docs phase.
+
 ### Promote one-shot proofs to permanent guards
 
 When a CR's correctness rests on a structural invariant it
@@ -1882,7 +1890,7 @@ The generated resource then `@Consumes` JSON, and RESTEasy answers a request wit
 handler, however optional the body is. cr-statement-legal-gaps gave `suspendTenant` an optional statement: admin-web's
 generated client sends the header on every call and kept working, while nine slice tests and two projector tests that
 posted the suspension bare went red at once. So a CR that adds an optional body to an existing operation greps its
-route across the test trees, `e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
+route across the test trees, `tests/e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
 contract that the request is JSON either way.
 
 ### A locator for an endpoint's callers greps its route, not only its operation name

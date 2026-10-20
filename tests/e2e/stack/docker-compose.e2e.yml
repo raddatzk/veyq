@@ -1,0 +1,193 @@
+# The ONLY differences between an end-to-end run and a Server Owner's instance: the ACME server standing in for Let's
+# Encrypt, the DNS name and CA trust the public internet would give the instance, the mail relay its provider would,
+# the release stamp and the stub release mirror that let the release check find something (below, at `app` and
+# `release-mirror`), the store's request log the wire sweep's control reads (at `garage`), and the browser that drives
+# it (ADR 0090 § Decisions 1 and 3). scripts/run_stack_e2e.py
+# installs the candidate with `veyqctl install` and makes this file the instance's operator override
+# (`<home>/compose.override.yml`), so it is laid OVER the release's own recipe (never over this checkout's copy) on
+# every command veyqctl runs, interpolated from the `.env` veyqctl writes (the run's own `${VEYQ_E2E_*}` values go in
+# through `--set`):
+#
+#     docker compose -p veyq-e2e-<stamp> -f <home>/releases/<release>/docker-compose.prod.yml \
+#         -f <home>/compose.override.yml --env-file <home>/.env up -d --wait
+#
+# Pebble is Let's Encrypt's own test ACME server, so Traefik walks the real issuance path — resolver, account, order,
+# and the /acme volume it must be able to write (ADR 0071's silent failure: an unwritable /acme keeps Traefik up and
+# serving its default certificate). VEYQ_ACME_CASERVER already exists in the recipe for staging; nothing in the
+# production file is edited for this. Every other service, network, posture and secret is the operator's: this file
+# adds four services, gives Traefik's ACME client one CA to trust and the app the release stamp and check interval
+# of the release-check test double (at `app`), and must never weaken what the recipe sets. The browser is a CLIENT of
+# the instance — it publishes nothing and changes no operator service — and sits behind a profile, so `up` never
+# starts it.
+#
+# What the internet gives a real instance and a run has to give itself (found in cr-stack-e2e phase 2): the store
+# check uploads a test object through the PUBLIC origin the backend signs for (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`,
+# `https://<domain>`), from inside the app container — so the app must resolve its own domain to Traefik (public DNS
+# and the host's hairpin, on a real host) and trust the certificate Traefik serves there (a public CA's, on a real
+# host). Here: `<domain>` is an alias of Traefik on `edge`, and the app's JVM trusts the run's Pebble root and nothing
+# else (a truststore the orchestrator writes with the candidate image's own keytool, read through JAVA_TOOL_OPTIONS,
+# which neither the image nor the recipe sets). Without them no tenant can be created, since a tenant needs a store
+# that passed its check.
+#
+# PEBBLE_VA_ALWAYS_VALID: tenant domains are created at run time (`family.veyq.test`), and Pebble would have to
+# resolve each one to Traefik — on its own HTTP-01 port, 5002 by default, not 80 — to validate it. What is under test
+# is OUR wiring, not Let's Encrypt's validator; the price is that Traefik's challenge router on :80 is not exercised.
+#
+# The posture is held BY HAND here: scripts/validate_compose_posture.py reads the production file only (cr-stack-e2e
+# phase 1 decided to keep it so — this file never runs on an operator's host). Pebble, Mailpit, the release mirror and
+# the browser get the recipe's x-hardened triple and a non-root uid, measured to run that way.
+services:
+  pebble:
+    image: ghcr.io/letsencrypt/pebble:2.10.1@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    # The image has no USER and would run as root. It writes nothing and binds only ports above 1024.
+    user: "65532:65532"
+    networks: [edge]
+    # Its listener certificate (test/certs/localhost/cert.pem, SANs localhost, pebble, 127.0.0.1) is the image's own
+    # and is valid until 2027-10-03; a Pebble bump re-reads that date.
+    command: ["-config", "/test/config/pebble-config.json", "-strict"]
+    environment:
+      PEBBLE_VA_ALWAYS_VALID: "1"
+      PEBBLE_VA_NOSLEEP: "1"
+    # The management port serves the run's freshly generated root (/roots/0), the one CA the run's certificate
+    # assertion trusts. Loopback only, on an ephemeral host port (`docker compose port pebble 15000`), so two runs or
+    # anything else on the host never collide on it.
+    ports:
+      - "127.0.0.1::15000"
+
+  # The mail relay an operator's provider gives the instance (ADR 0097's instance mail, ADR 0048's tenant mail): the
+  # SMTP host a Server Owner types into Server → Mail. Mailpit, the dev stack's own pin (infra/docker/docker-compose.yml),
+  # accepts everything over plain SMTP on :1025 and keeps it in memory; the suite reads what arrived through its HTTP
+  # API on :8025 (`mailApi` in stack.json) — the confirmation code a save mails, the notices. On `admin`, the one
+  # network the app and the browser share that is not the internet-facing `edge`; its alias is a dotted name because
+  # the settings take only one (`instance.openapi.yaml`'s host pattern refuses a bare `mailpit`). The image has no
+  # USER and would run as root; measured to run with the triple, a non-root uid and only /tmp writable.
+  mailpit:
+    image: axllent/mailpit:v1.20.0@sha256:6105f08377323c3e11a21b6e5e51648e33151fb4e525aab8d0961573c9e94a4d
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    user: "65532:65532"
+    tmpfs: [/tmp]
+    networks:
+      admin:
+        aliases: ["mail.relay.test"]
+
+  traefik:
+    depends_on:
+      pebble:
+        condition: service_started
+    environment:
+      # Traefik's ACME client (lego) must trust Pebble's own HTTPS listener: the orchestrator copies Pebble's minica
+      # root out of the pinned image above into the run directory and names it here.
+      LEGO_CA_CERTIFICATES: /pebble/minica.pem
+    volumes:
+      - ${VEYQ_E2E_PEBBLE_MINICA:?set by scripts/run_stack_e2e.py}:/pebble/minica.pem:ro
+    networks:
+      # Public DNS for the bootstrap domain, as seen from the app on `edge` (the header says why).
+      edge:
+        aliases: ["${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/docker/.env}"]
+
+  # The store's request log back on, for the run only: the recipe sets `garage=warn`, which drops it (ADR 0092 § 5), and
+  # the container sweep's per-run control is a run-unique key sent to the bucket that Garage's log must then carry
+  # (cc.security.wire-assertion; the `window` stage of scripts/run_stack_e2e.py). The one place this file raises what an
+  # operator's instance logs, and only on a stack that serves no real reader.
+  garage:
+    environment:
+      RUST_LOG: garage=info
+
+  app:
+    environment:
+      # The public CA's trust, for the certificates the run's Pebble issued (the header says why). The password guards
+      # nothing: the store holds one public certificate, and Java asks for one.
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/pebble/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12
+        -Djavax.net.ssl.trustStorePassword=veyq-e2e
+      # The release stamp of THIS RUN's instance (the test double of `release-mirror` below): the release `veyqctl`
+      # installed it as, read by `veyq.release.version`. It overrides the image's own `-SNAPSHOT` stamp for this
+      # container only — the image is not rebuilt and carries no release's name.
+      VEYQ_VERSION: ${VEYQ_E2E_RELEASE_STAMP:?set by scripts/run_stack_e2e.py}
+      # `veyq.release-check.every` (24h by default): the check runs when the app starts — before the console can point
+      # it anywhere — and then only a day later, so a run would never see it read the mirror. Every 5 s, the check the
+      # Server Owner points at the mirror reads it within seconds, with no "check now" the product does not have.
+      VEYQ_RELEASE_CHECK_EVERY: 5s
+    # No internet for the release check's default source: until the suite points it at the mirror, the check reads the
+    # GitHub Releases every 5 s. These names resolve to the app's own loopback, so each read fails at once, inside the
+    # container (ADR 0097 § Consequences: an offline run's check fails, and the run does not count it as a defect).
+    extra_hosts:
+      - "api.github.com:127.0.0.1"
+      - "github.com:127.0.0.1"
+    volumes:
+      - ${VEYQ_E2E_APP_TRUSTSTORE:?set by scripts/run_stack_e2e.py}:/pebble/truststore.p12:ro
+
+  # Lane L1's browser (ADR 0090 decision 3, cr-stack-e2e phase 2): Playwright in its official image, on the run's
+  # networks, so a laptop runs exactly what CI runs — the browser never runs on the host (macOS has no certutil, and its
+  # Chromium reads no NSS db). The orchestrator starts it with `compose run --rm browser` after `up`; the profile keeps
+  # `up` from starting it. The image's Playwright version is tests/e2e/package.json's exact pin (the orchestrator refuses a
+  # mismatch); bump both together.
+  #
+  # How it reaches the instance, decided in phase 2 — the way an operator does, without publishing anything:
+  #   - the domain through Traefik: on `edge`, Chromium resolves `veyq.test` and every `*.veyq.test` to the `traefik`
+  #     service (`--host-resolver-rules`, tests/e2e/playwright.config.ts), as public DNS resolves an operator's domain to
+  #     the host; TLS is Traefik's, with the certificate Pebble issued;
+  #   - the admin console through a tunnel: on `admin`, a loopback listener on the admin port forwards to `admin:8080`
+  #     (tests/e2e/src/tunnel.ts), the in-container `ssh -L` of run/first-run.mdx, so the console opens at
+  #     `http://localhost:<ADMIN_PORT>` — a secure context, as an operator's tunnel gives one. Rejected: the host's
+  #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
+  #     runner, so the run would differ between a laptop and CI.
+  browser:
+    image: &playwright mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    profiles: [browser]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    # The host user's uid, so what the run writes into its run directory stays the host's to read and delete.
+    user: "${VEYQ_E2E_UID:?set by scripts/run_stack_e2e.py}:${VEYQ_E2E_GID:?set by scripts/run_stack_e2e.py}"
+    init: true
+    # Chromium's shared memory; Docker's 64 MB default crashes renderers on a busy page.
+    shm_size: 1gb
+    tmpfs: [/tmp]
+    networks: [edge, admin]
+    working_dir: /repo/tests/e2e
+    environment:
+      HOME: /tmp/home
+      VEYQ_STACK_FILE: /out/stack.json
+    volumes:
+      # The checkout read-only: tests/e2e/, packages/crypto/ and the root node_modules the host installed through
+      # scripts/npm_ci_no_deprecated.py — nothing is installed in here. Pure-JS packages only on this path
+      # (@playwright/test, @veyq/crypto, @noble/*), so a macOS install runs in this Linux image unchanged.
+      - ${VEYQ_E2E_REPO:?set by scripts/run_stack_e2e.py}:/repo:ro
+      # The run directory: Pebble's root in, the report, traces, junit.xml and instance.json out.
+      - ${VEYQ_E2E_RUN_DIR:?set by scripts/run_stack_e2e.py}:/out
+    # Trust the run's Pebble root (and nothing more) in the NSS db Chromium reads, then run the whole suite.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - python3 /repo/tests/e2e/stack/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/node_modules/@playwright/test/cli.js test "$$@"
+      - browser
+
+  # The release mirror an operator may point the release check at (ADR 0097 decision 1, uc.admin.learn-of-new-releases)
+  # — a TEST DOUBLE, like Pebble, decided by the owner for inbox #464 (option (a), 2026-10-17). The check reads releases
+  # only on a release-stamped build, and the lane's candidate is a `-SNAPSHOT` by design (ci.yml's `version` job), so
+  # the run stamps ITS instance (`app` above) and serves releases newer than that stamp. The files are the publish's own
+  # producer's (`scripts/release_assets.py`, which run_stack_e2e.py calls once per release into the run directory's
+  # `mirror/`): `releases.json` and `<tag>/manifest.json`, the two files the app's mirror reader (`ReleaseFeed.Mirror`)
+  # reads — it verifies no signature (a forged list can at worst produce a false notice, ADR 0097 decision 2), so the
+  # unsigned files are what a mirror serves it. Plain HTTP on `admin`, the network the app and the mail relay share:
+  # the source accepts an `http` address (`ReleaseNoticesHandler`), and the mirror's TLS is not what is under test. A
+  # static file server from the Playwright image this file already pins (`python3 -m http.server`), with the recipe's
+  # x-hardened triple and a non-root uid; it writes nothing.
+  release-mirror:
+    image: *playwright
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    user: "65532:65532"
+    entrypoint: ["python3", "-u", "-m", "http.server", "8080", "--bind", "0.0.0.0", "--directory", "/srv/mirror"]
+    volumes:
+      - ${VEYQ_E2E_RELEASE_MIRROR:?set by scripts/run_stack_e2e.py}:/srv/mirror:ro
+    networks:
+      admin:
+        aliases: ["releases.mirror.test"]

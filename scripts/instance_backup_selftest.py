@@ -44,7 +44,8 @@ This asserts, with no daemon and no root:
      bound, B read from the database and 30 when it cannot be, the gate's prune at every start and never on a refusal,
      a pool's ledger entries past B dropped with the objects only they named, and the `prune` and `retention` commands;
   12. the erasure ledger in the object check (L1–L3): a key the ledger lists is erased, not missing, in `restore` and
-     in `verify --against-store`; with no ledger, today's refusal, and the restore says that none was given.
+     in `verify --against-store`; with no ledger, today's refusal, and the restore says that none was given;
+  13. in a repository checkout, the tool's default compose file and backup root are `scripts/repo_layout.py`'s.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -1509,6 +1510,21 @@ def pool_cases(tmp: pathlib.Path) -> None:
     p5_builder_is_copy_only(tmp)
 
 
+def layout_cases() -> None:
+    """The tool's repository defaults are `repo_layout.py`'s (ADR 0106). The tool ships alone and cannot import that
+    module, so it spells the two paths; here, in the repository, they are held to it. In the tools image, where the
+    module is not beside this file, there is no repository to default into and the case is skipped, said so."""
+    try:
+        import repo_layout
+    except ImportError:
+        print("skip the tool's repository defaults against scripts/repo_layout.py — not in a repository checkout")
+        return
+    check("the default compose file is repo_layout's dev Compose file",
+          ib.DEFAULT_COMPOSE == repo_layout.DEV_COMPOSE, f"{ib.DEFAULT_COMPOSE} != {repo_layout.DEV_COMPOSE}")
+    check("the default backup root is repo_layout's",
+          ib.DEFAULT_BACKUP_ROOT == repo_layout.BACKUP_ROOT, f"{ib.DEFAULT_BACKUP_ROOT} != {repo_layout.BACKUP_ROOT}")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-") as tmp:
         tmp_path = pathlib.Path(tmp)
@@ -1528,6 +1544,7 @@ def main() -> int:
         schema_only_cases(pathlib.Path(tmp))
     blob_index_cases()
     store_cases()
+    layout_cases()
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1

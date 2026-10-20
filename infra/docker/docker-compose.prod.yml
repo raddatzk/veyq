@@ -1,0 +1,331 @@
+# Production stack for a self-hosted veyq instance: the app, its database, the bundled object store, and a
+# Traefik that terminates TLS in front of both. See https://raddatzk.github.io/veyq/run/new-instance/.
+#
+#     docker compose -f infra/docker/docker-compose.prod.yml up -d
+#
+# It is a STANDALONE file, deliberately not an override of docker-compose.yml. That file has no app service at
+# all (the backend is run from the IDE), publishes 3306/19000/18080, and ships `change-me` passwords — an
+# override would inherit a file whose entire premise is that the app is elsewhere, and inherit a known password
+# by accident.
+#
+# Every secret is REQUIRED and has no default: `${VAR:?…}` fails the `up` when it is unset. A prod stack that
+# boots with `change-me` is worse than one that refuses to boot. Copy infra/docker/.env.example to infra/docker/.env
+# (gitignored) and fill it in.
+
+# The project name is a property of THIS FILE — not of the directory it is run from, and not of a flag an
+# operator has to remember on every command. Without it Compose derives the project from the file's directory,
+# which both compose files share, and two things follow that no amount of prose prevents: an unqualified
+# `down -v` meant for the dev stack destroys the production volumes, and `scripts/instance_backup.py` — whose
+# `docker compose … exec` emits no `-p` — aims the documented production capture at whatever happens to be
+# running out of `infra/docker/`, backing up the wrong instance and reporting success. Naming it here is what keeps
+# `infra_*` (dev) and `veyq_*` (prod) apart on one host. `scripts/validate_release_identity.py` holds it.
+name: veyq
+
+# The container posture every service below merges in (ADR 0071 §1): no capabilities, no privilege escalation, a
+# read-only root. What a process still writes is a named volume or a `tmpfs:` of its own, each measured by
+# running the pinned image this way — a missed scratch path fails at runtime, never at `compose config`.
+# `scripts/validate_compose_posture.py` holds every service to it, and holds the user and the networks below.
+x-hardened: &hardened
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  read_only: true
+
+# Every service's log, bounded by size (ADR 0092 § 5; GDPR Art. 5(1)(e)). Without this block a container logs to the
+# daemon's default driver, which on a stock Linux Docker is `json-file` with no rotation — a log that only ever grows,
+# kept for as long as the container exists. Rotation is by SIZE, never by time (no driver offers time on both deployment
+# targets): at most max-file × max-size per container, 30 MB, the oldest file deleted when a new one starts. 10m × 3 is
+# deliberately small — the app logs ids, not people (ADR 0092 § 3), and an idle instance's few lines a day span weeks
+# in it, while a noisy store or a crash loop cannot fill the disk. A log shipper's own retention is the operator's.
+# `scripts/validate_compose_posture.py` holds every service to this block.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  # Compose has no `fsGroup`, and a named volume inherits ownership only from the image directory it covers:
+  # Garage's image is scratch and seeds nothing, and Traefik's leaves /acme root-owned — as a non-root uid, Garage
+  # then exits and Traefik stays up and silently never obtains a certificate (ADR 0071, measured). So this
+  # one-shot step chowns each such volume's ROOT before its service starts, holding CAP_CHOWN alone. The uid is
+  # the path it mounts the volume under (`/chown/<uid>/…`), so the script carries no uid of its own; the guard
+  # holds each one to the `user:` of the service that writes the volume. A root that already matches is left
+  # alone, so every later `up` is a no-op, and it never walks a store's data tree. The image is busybox for its
+  # `sh`, `stat` and `chown` and nothing else: a step that does one thing reads as that thing. It is pinned by
+  # digest like every other image here, and Dependabot's `docker-compose` ecosystem bumps it.
+  volume-ownership:
+    image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    <<: *hardened
+    logging: *logging
+    user: "0:0"
+    cap_add: [CHOWN]
+    restart: "no"
+    network_mode: none
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for dir in /chown/*/*; do
+          uid=$${dir#/chown/}; uid=$${uid%%/*}
+          if [ "$$(stat -c %u:%g "$$dir")" != "$$uid:$$uid" ]; then chown "$$uid:$$uid" "$$dir"; echo "chowned $$dir"; fi
+        done
+    volumes:
+      - veyq-garage-meta:/chown/1000/garage-meta
+      - veyq-garage-data:/chown/1000/garage-data
+      - veyq-garage-snapshots:/chown/1000/garage-snapshots
+      - veyq-acme:/chown/65532/acme
+
+  mariadb:
+    image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
+    restart: unless-stopped
+    <<: *hardened
+    logging: *logging
+    # The image's own `mysql` user, which owns /var/lib/mysql in the image — so the volume is seeded writable and
+    # needs no ownership step. The two tmpfs are its socket/pid directory and its scratch.
+    user: "999:999"
+    tmpfs: [/run/mysqld, /tmp]
+    # Shares a network with the app alone, and that network has no route out: the internet-facing proxy cannot
+    # open a connection here (ADR 0071 §3).
+    networks: [db]
+    environment:
+      MARIADB_DATABASE: veyq
+      MARIADB_USER: veyq
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/docker/.env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in infra/docker/.env}
+    # No published port. The app reaches it on the compose network; a backup capture reaches it through
+    # `docker compose exec`, which needs no port either.
+    volumes:
+      - veyq-mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  garage:
+    image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
+    restart: unless-stopped
+    <<: *hardened
+    logging: *logging
+    # The uid the chart runs it as. The image has no USER, so without this it runs as root.
+    user: "1000:1000"
+    depends_on:
+      volume-ownership:
+        condition: service_completed_successfully
+    networks: [edge]
+    environment:
+      # garage.toml carries no secrets so one config serves both stacks; these are the real ones.
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/docker/.env (64 hex chars)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/docker/.env}
+      # The image bakes in `garage=info`, which logs EVERY S3 and admin request: the peer's address and port, the
+      # method and the URI with its query — object keys and presign signatures (ADR 0092 § 5). `warn` keeps warnings
+      # and errors and drops that request log. `garage` is a target prefix, so it covers every crate of the binary
+      # (the request line's target is `garage_api_common::generic_server`). Raising it to `info` for troubleshooting
+      # brings the per-request log, and every reader's address with it, back; the Run area's Logs section says so.
+      # The chart sets the same (`garage.logFilter`).
+      RUST_LOG: garage=warn
+    volumes:
+      - "./garage.toml:/etc/garage.toml:ro"
+      - veyq-garage-meta:/var/lib/garage/meta
+      - veyq-garage-data:/var/lib/garage/data
+      - veyq-garage-snapshots:/var/lib/garage/snapshots
+
+  app:
+    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
+    restart: unless-stopped
+    # No `user:` — the image declares it (Dockerfile `USER`), and the guards read it there. /tmp is the JVM's
+    # scratch (hsperfdata, the Vert.x cache).
+    <<: *hardened
+    logging: *logging
+    tmpfs: [/tmp]
+    # The one service on all three networks: it is the only peer the proxy, the database and the admin surface
+    # each need.
+    networks: [edge, db, admin]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      garage:
+        condition: service_started
+    environment:
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:mariadb://mariadb:3306/veyq
+      QUARKUS_DATASOURCE_USERNAME: veyq
+      QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/docker/.env}
+      # HSTS on the app's responses (ADR 0069). The switch is the DEPLOYMENT's, named for it rather than for
+      # this service, so every origin this stack serves answers to the one value — https://raddatzk.github.io/veyq/run/new-instance/ says when to
+      # turn it off. Traefik adds nothing: the app sends its own headers.
+      VEYQ_HTTP_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
+      # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where this stack's
+      # Garage is and its admin token. The Server Owner then chooses "Use the bundled store" in the admin console
+      # (or `veyq-admin store set --bundled`) and enters nothing else: the S3 key pair is DERIVED from the token,
+      # so no key pair lives in this file. The store is reached INTERNALLY; presigned URLs are SIGNED for the
+      # public origin so a browser fetches them same-origin, with no CORS (ADR 0013 §4) — both must be set.
+      # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) — layout, bucket, key, grant
+      # and CORS policy — which is why this recipe has no init sidecar and builds nothing. It runs in the
+      # background and can never fail the boot; `GET /api/instance/store-provisioning` reports how it went.
+      # The admin plane is a DIFFERENT port from the S3 one, and is deliberately not published.
+      VEYQ_BUNDLED_STORE_ENDPOINT: http://garage:3900
+      VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/docker/.env}
+      VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT: http://garage:3903
+      VEYQ_BUNDLED_STORE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/docker/.env}
+      # Leg (c) of the backup, on the volume below. An ABSOLUTE path outside /work on purpose: /work holds
+      # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
+      # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.
+      VEYQ_SECURITY_CONFIG_SECRET_FILE: /var/lib/veyq/config-secret.key
+      # ALL of this stack's routing (ADR 0063). The app renders one file into the volume Traefik file-watches:
+      # the services below, VEYQ_DOMAIN's routers, every non-suspended tenant's, and the admin router when
+      # ADMIN_DOMAIN is set. Creating a tenant makes its domain route with no compose edit and no restart.
+      VEYQ_TENANT_INGRESS_DYNAMIC_CONFIG_PATH: /etc/traefik/dynamic/tenants.yml
+      VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN: ${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/docker/.env}
+      VEYQ_TENANT_INGRESS_ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      # This file's topology, which the rendered services point at. The app upstream is its PUBLIC listener,
+      # never the admin listener on 8090 (ADR 0065).
+      VEYQ_TENANT_INGRESS_UPSTREAM_APP: http://app:8080
+      VEYQ_TENANT_INGRESS_UPSTREAM_BLOBS: http://garage:3900
+      VEYQ_TENANT_INGRESS_UPSTREAM_ADMIN: http://admin:8080
+      # Where the client's source port comes from (ADR 0094 decision 7): the header Traefik's local plugin below
+      # overwrites on every request. A literal, never a knob: the app's routing file attaches the plugin exactly
+      # when this says `header`, and a header the edge does not overwrite is one a client writes.
+      VEYQ_HTTP_CLIENT_PORT_SOURCE: header
+    volumes:
+      # THE reason this file exists. Without it every `up -d --force-recreate` regenerates the KEK, the
+      # veyq_instance fingerprint reports configSecretState: MISMATCH, and the instance refuses member invites
+      # and password resets with 503 mail_unavailable (ADR 0050, ADR 0055, ADR 0056 § Consequences).
+      - veyq-config-secret:/var/lib/veyq
+      # Routing config only — never a secret, never content (ADR 0063 § Consequences). Read-write here because
+      # the app is the only writer; read-only on traefik, which only ever reads it.
+      - veyq-traefik-dynamic:/etc/traefik/dynamic
+    # MaxRAMPercentage in the image's ENTRYPOINT is a percentage of the CONTAINER limit; without one the JVM
+    # sizes its heap off host RAM.
+    mem_limit: ${VEYQ_MEM_LIMIT:-1g}
+    healthcheck:
+      # /api/setup: unauthenticated, served only once Flyway has migrated, and the first call every client
+      # makes — the same probe scripts/run_web_e2e.py uses. This backend has no smallrye-health extension, so
+      # there is no /q/health/ready to poll.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/setup"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  # The Server-Owner administration surface (ADR 0065) — its own image, its own origin, and by default not
+  # reachable from the internet at all.
+  #
+  # Two exposure modes, one image, chosen by whether ADMIN_DOMAIN is set. Unset (the DEFAULT): no router at all,
+  # and the port below binds to 127.0.0.1, so the surface is reachable only from the host itself —
+  # `ssh -L 8081:127.0.0.1:${ADMIN_PORT} the-host` and browse localhost:8081. That is also what makes first-run setup
+  # independent of DNS and TLS. Set: the app renders an own-domain router with its own certificate.
+  #
+  # The port is bound to 127.0.0.1 explicitly — the first `ports:` entry in this file besides Traefik's own.
+  # A bare "${ADMIN_PORT}:8080" would publish on 0.0.0.0 and hand the whole internet the highest-privilege
+  # surface this instance serves, which is the exact opposite of what extracting it was for. The container
+  # side is 8080, not 80: the admin image runs unprivileged (uid 101, admin-web/Dockerfile) and cannot bind 80.
+  admin:
+    image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
+    restart: unless-stopped
+    # No `user:`, as for the app. /tmp holds nginx's pid and temp paths; the entrypoint renders its site into
+    # conf.d. A tmpfs over an image directory keeps that directory's root-owned 0775, so conf.d is opened to its
+    # one writer by mode rather than by repeating the image's uid here.
+    <<: *hardened
+    logging: *logging
+    tmpfs: [/tmp, "/etc/nginx/conf.d:mode=1777"]
+    networks: [admin]
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      # Where nginx proxies /api/* — the app's ADMIN LISTENER on the compose network, never the public domain
+      # and never its public port 8080, which 404s every Server-Owner operation (ADR 0065). Nothing else in this
+      # file routes to 8090: the rendered app service points at VEYQ_TENANT_INGRESS_UPSTREAM_APP, and the listener
+      # is not EXPOSEd. Resolved at REQUEST time, so this container starts and stays useful even while the app is
+      # still migrating.
+      BACKEND_URL: http://app:8090
+      # The deployment's HSTS switch, the same key and default as the app's above — one value for both origins
+      # (docs/crosscutting/cc.security.csp.md § admin-web). The image's entrypoint refuses anything but true/false.
+      VEYQ_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-8081}:8080"
+
+  # TLS is a PRECONDITION here, not a deployment preference. `veyq.session.cookie.secure=true` is the shipped
+  # default, so over plain HTTP the refresh cookie is set and never sent back — "remember me" breaks silently.
+  # And every invitation link is built as https://<domain>/tenant/accept#<token>, so an HTTP-only instance mails
+  # links pointing at a scheme it does not answer.
+  traefik:
+    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    restart: unless-stopped
+    <<: *hardened
+    logging: *logging
+    # Any non-root uid; this one is the image-agnostic `nonroot` convention. Docker lets a container bind :80/:443
+    # without a capability. It reads the app's routing file as "other", which is why the app writes it 0644.
+    user: "65532:65532"
+    depends_on:
+      volume-ownership:
+        condition: service_completed_successfully
+    # Never on `db`. On `admin` only because the router rendered for ADMIN_DOMAIN points at the admin container.
+    networks: [edge, admin]
+    command:
+      # The ONLY provider: the file the app renders (ADR 0063). No Docker provider, so no Docker socket — a `:ro`
+      # mount of it restricts nothing about the API, and this container faces the internet. `watch` is what makes
+      # a new tenant's domain live without restarting anything; the file is written by an atomic rename, so a
+      # reload can never read half of it.
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      # Its own errors only, set rather than inherited, and no access log (ADR 0092 § 5, owner Q30): an access log
+      # records every reader with every share id read, and the app's error id answers what a 5xx log would. An
+      # operator who wants one turns it on as their own processing. validate_compose_posture.py assertion 6 holds both.
+      - "--log.level=ERROR"
+      # veyq's client-address middleware (traefik-clientaddr.go, ADR 0094 decision 7), loaded from the two files
+      # mounted below — a LOCAL plugin, interpreted by Traefik's own Yaegi, never fetched (a remote catalog plugin
+      # would make every start depend on the network). Traefik files it under `experimental`, so an upgrade of the
+      # pinned image may change it; a plugin that no longer loads fails the app's routers loudly (404).
+      - "--experimental.localplugins.clientaddr.modulename=github.com/raddatzk/veyq/clientaddr"
+      - "--entrypoints.web.address=:80"
+      # :80 exists only for the ACME HTTP-01 challenge and to redirect everything else to :443.
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=${VEYQ_ACME_EMAIL:?set VEYQ_ACME_EMAIL in infra/docker/.env}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # Point this at Let's Encrypt's staging directory while you are still testing a deployment. In production 5
+      # failed validations lock a hostname out for an hour, and 50 issued certificates per registered domain per
+      # week is the cap a burst of test tenants reaches (letsencrypt.org/docs/rate-limits). Staging certificates are
+      # not browser-trusted: switch back before you hand the instance to anyone.
+      - "--certificatesresolvers.letsencrypt.acme.caserver=${VEYQ_ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - veyq-acme:/acme
+      # Read-only: the projector owns this file, and a proxy that could write it would be a second author of the
+      # routing whose edits the next full regenerate silently discards.
+      - veyq-traefik-dynamic:/etc/traefik/dynamic:ro
+      # The plugin, file by file: a release asset is a flat name and cannot start with a period, so the manifest
+      # travels as traefik-clientaddr.yml and becomes `.traefik.yml` here. Traefik's working directory is `/`.
+      - "./traefik-clientaddr.go:/plugins-local/src/github.com/raddatzk/veyq/clientaddr/clientaddr.go:ro"
+      - "./traefik-clientaddr.yml:/plugins-local/src/github.com/raddatzk/veyq/clientaddr/.traefik.yml:ro"
+
+volumes:
+  veyq-mariadb-data:
+  veyq-garage-meta:
+  veyq-garage-data:
+  veyq-garage-snapshots:
+  veyq-acme:
+  # Leg (c). Small, and the difference between a restorable instance and one that boots into MISMATCH.
+  veyq-config-secret:
+  # The ingress projection (ADR 0063) — derived state, not durable: it is NOT part of a backup, because the
+  # `tenant` table it is generated from is, and the app rewrites it in full at startup.
+  veyq-traefik-dynamic:
+
+# Separated by peer (ADR 0071 §3). Every service names its networks, so Compose creates no `default` for a service
+# to land on unnoticed. A command that joins this stack — the backup's rclone container — names one of these:
+# the store is on `veyq_edge`.
+networks:
+  # The internet-facing proxy, the app, and the store the proxy routes the bucket's path to.
+  edge:
+  # The app and the database, and nothing else. `internal`: no route out, since the database needs none.
+  db:
+    internal: true
+  # The admin surface and the app's admin listener, plus the proxy for the ADMIN_DOMAIN router. Not `internal`,
+  # because a published port needs a network with a route out.
+  admin:

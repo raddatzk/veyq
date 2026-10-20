@@ -10,7 +10,7 @@
 // a hand run against a locally-composed stack.
 export const MAILPIT = process.env.VEYQ_MAILPIT ?? 'http://localhost:18025'
 
-/** Mailpit's SMTP port as published on the host — `infra/docker-compose.yml` maps `11025 -> 1025`. */
+/** Mailpit's SMTP port as published on the host — `infra/docker/docker-compose.yml` maps `11025 -> 1025`. */
 export const MAILPIT_SMTP_PORT = 11025
 
 /** Whether a Mailpit answers at [MAILPIT] at all — `bootstrap:user` points a tenant at it only when one does. */

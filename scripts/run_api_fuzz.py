@@ -37,13 +37,13 @@ the run directory) in which three of the contracts' own idioms are spelled the w
 `[T, "null"]` with `@NotNull` as `T` ([enforced] says why each is what the contract already means). The contracts are
 not changed by it.
 
-**What the image checks** is `infra/fuzz/schemathesis.toml` (the checks, the auth) and `infra/fuzz/hooks.py` (veyq's
+**What the image checks** is `tests/fuzz/schemathesis.toml` (the checks, the auth) and `tests/fuzz/hooks.py` (veyq's
 three own checks: a refusal by location, a refusal that echoes nothing, and `peer_is_refused` — every positive request
 the owner made in its scope and the server accepted is sent again as the peer and must be refused as a scope that does
 not exist is). The seed is [SEED], the generation deterministic: a red re-runs to the same request. Changing the seed is
 a commit (ADR 0091 decision 9).
 
-**Red when** a failure is not in `infra/fuzz/baseline.json` (Schemathesis' own verdict, its exit code), an invocation
+**Red when** a failure is not in `tests/fuzz/baseline.json` (Schemathesis' own verdict, its exit code), an invocation
 of a spec file exits non-zero for any other reason, an invocation ERRORED on an operation (a network error is no
 green), or an invocation **tested no operation** — read from its JSON report, never from the exit code, because "the
 guard held" and "nothing ran" exit alike (changes/README.md § a bite test must tell them apart). The baseline's own
@@ -59,9 +59,9 @@ response schema went unchecked and the peer was never sent them, because no seed
 case, a statement, a task) or no generated request is one the instance accepts; and per spec file whether the stateful
 phase inferred any link at all.
 
-**The image is our own** (`infra/fuzz/Dockerfile`, owner decision Q8 of cr-api-fuzzing): a Python base pinned by
-digest, Schemathesis from PyPI with every package hash-pinned (`infra/fuzz/requirements.txt`, written by
-`infra/fuzz/lock.py`). The official `schemathesis/schemathesis` image also installs TraceCov, a proprietary,
+**The image is our own** (`tests/fuzz/Dockerfile`, owner decision Q8 of cr-api-fuzzing): a Python base pinned by
+digest, Schemathesis from PyPI with every package hash-pinned (`tests/fuzz/requirements.txt`, written by
+`tests/fuzz/lock.py`). The official `schemathesis/schemathesis` image also installs TraceCov, a proprietary,
 binary-only coverage plugin, and loads it on every run; ours carries only the MIT tool, and `hooks.py` refuses to load
 if TraceCov is ever imported. The runner builds it before the first invocation, tagged by the hash of the directory's
 build inputs ([IMAGE_INPUTS]), so a changed pin is a new image and an unchanged one a cache hit.
@@ -72,9 +72,9 @@ domain, which the backend resolves the tenant from) and `veyq-admin.internal`. T
 `%e2e` (Quarkus' production default host), and the admin channel admits a non-global peer (`AdminChannel`), which a
 bridge or Docker Desktop's gateway is. Measured on Docker Desktop (macOS, arm64) only; a Linux runner is CI's.
 
-**Sharing the developer's compose stack.** Like `run_web_e2e.py`, it uses `infra/docker-compose.yml`'s MariaDB and
+**Sharing the developer's compose stack.** Like `run_web_e2e.py`, it uses `infra/docker/docker-compose.yml`'s MariaDB and
 store — its own database and bucket only, and `up --no-recreate`, so a running stack is never recreated. From a
-git worktree, pin the stack to the main checkout's `infra/` (`VEYQ_INFRA_DIR=<main>/infra`) and the jar to the
+git worktree, pin the stack to the main checkout's `infra/docker/` (`VEYQ_INFRA_DIR=<main>/infra/docker`) and the jar to the
 worktree's (`VEYQ_JAR`), as that script's `compose_up` explains; `run_pipeline.py` does the first for every job.
 
 **Measured** (2026-10-19, local: macOS arm64, Docker Desktop, a load average of 11-21 from parallel sessions;
@@ -88,7 +88,7 @@ it does not.
 
 Usage:
     python3 scripts/run_api_fuzz.py                      # the whole run, as CI calls it
-    python3 scripts/run_api_fuzz.py --baseline-update    # also merge this run's failures into infra/fuzz/baseline.json
+    python3 scripts/run_api_fuzz.py --baseline-update    # also merge this run's failures into tests/fuzz/baseline.json
     python3 scripts/run_api_fuzz.py --only <spec-key>    # one spec file (a local debugging convenience)
 
 Prerequisite: the fast-jar (`cd backend && ./gradlew quarkusBuild`) and web's dependencies (`npm ci` at the root, which
@@ -96,7 +96,8 @@ generates web's API client). A stale jar answers for code the run never saw (`ru
 
 Environment (all optional):
     VEYQ_JAR                The fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
-    VEYQ_INFRA_DIR          The `infra/` whose compose stack to use (see above).
+    VEYQ_INFRA_DIR          The directory holding the Compose files whose stack to use (`DOCKER_DIR` in
+                            `scripts/repo_layout.py`; see above).
     VEYQ_FUZZ_PORT          The backend's public port. Default: 18480
     VEYQ_FUZZ_ADMIN_PORT    Its admin-listener port. Default: 18490
     VEYQ_FUZZ_OUT           The root of the run directories. Default: .fuzz-out
@@ -131,9 +132,11 @@ os.environ["VEYQ_ADMIN_PORT"] = os.environ.get("VEYQ_FUZZ_ADMIN_PORT", "18490")
 import contract_specs  # noqa: E402
 import run_web_e2e as e2e  # noqa: E402
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 REPO = Path(__file__).resolve().parent.parent
 WEB = REPO / "web"
-FUZZ = REPO / "infra" / "fuzz"
+FUZZ = repo_layout.FUZZ_DIR
 CONFIG = FUZZ / "schemathesis.toml"
 BASELINE = FUZZ / "baseline.json"
 
@@ -248,10 +251,10 @@ def image_tag() -> str:
 
 
 def build_image() -> str:
-    """Our Schemathesis image (`infra/fuzz/Dockerfile`), built unless this very set of pins is built already."""
+    """Our Schemathesis image (`tests/fuzz/Dockerfile`), built unless this very set of pins is built already."""
     tag = image_tag()
     if subprocess.run(["docker", "image", "inspect", tag], capture_output=True).returncode != 0:
-        log(f"building {tag} from infra/fuzz/")
+        log(f"building {tag} from tests/fuzz/")
         e2e.run(["docker", "build", "--quiet", "-t", tag, str(FUZZ)])
     return tag
 
@@ -688,7 +691,7 @@ def verdict(results: list[Result]) -> tuple[list[str], list[str]]:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--baseline-update", action="store_true",
-                        help="merge this run's failures into infra/fuzz/baseline.json (each needs a reason by hand)")
+                        help="merge this run's failures into tests/fuzz/baseline.json (each needs a reason by hand)")
     parser.add_argument("--only", action="append", default=[], help="run only this spec key (repeatable)")
     args = parser.parse_args(argv)
 

@@ -139,6 +139,8 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 import contract_specs  # where the specs live and which directories hold an application's — derived, never listed
 from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + literals blanked, offsets kept
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = backend_tree.BACKEND
 SETTINGS = BACKEND / "settings.gradle.kts"
@@ -172,7 +174,7 @@ ARCHIVES_NAME = re.compile(r"\barchivesName\b|\barchivesBaseName\b")
 ARCHIVES_NAME_WHY = ("Quarkus cannot map a renamed project's test-fixtures jar, so a `testFixtures(project(…))` "
                      "dependency silently drops out of a @QuarkusTest's application (measured 2026-10-05). The jar is "
                      "named by the group: `<group>.<project name>.jar` in quarkus-app/lib/main.")
-DOCKERFILE = ROOT / "Dockerfile"
+DOCKERFILE = repo_layout.APP_DOCKERFILE
 BUILD_BASE_STAGE = "backend-build-base"
 BASE_NAME = "application.properties"
 PROFILE_FILE = re.compile(r"^application-([\w.-]+)\.properties$")

@@ -71,7 +71,7 @@ acceptanceCriteria:
         unit: [src/features/memories/components/MemoryDetailHost.cover.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/features/memories/useMemoryCover.test.ts, src/features/memories/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/coverStore.test.ts, src/features/memories/storedMatch.test.ts, src/features/memories/levelRows.test.ts, src/features/memories/levelRows.guest.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/memories-styles.spec.ts`) drives `dialog-crops-and-saves-one-write` as
+    Lane L1's browser suite (`tests/e2e/tests/features/memories-styles.spec.ts`) drives `dialog-crops-and-saves-one-write` as
     far as the dialog's cropper: a Memory's cover dialog frames a picked image in core's `veyq-cropper` classes, read as
     computed styles in light and dark (inbox #513 renamed them from `memory-cover-*`); the Save and its write are not
     driven there. Written, not yet run: the suite waits for the V1 heavy stage, and ADR 0040 admits `stack` refs only once

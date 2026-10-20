@@ -83,19 +83,20 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11)
      — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
      The derived list is printed on the OK line. Plus: every veyq image
-     tag written down under `infra/` or on the Run pages (`site/src/content/docs/run/`, where the operator
-     procedures live) matches a tag the pipeline emits.
+     tag written down in a tracked deployment file (`TAG_SCAN_DIRS`: `infra/`, lane L1's overlay, the API fuzzer)
+     or on the Run pages (`site/src/content/docs/run/`, where the operator procedures live) matches a tag the
+     pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
-     `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
+     `infra/docker/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
      `.github/workflows/ci.yml` actually publishes — the set is read out of that workflow's build
      matrix, never listed here (§ *a guard derives its anchor set from the code*). A recipe that builds is a
      recipe only `docker compose` can deploy: Compose hides it by building on the operator's host, and
      [ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)'s Helm chart cannot, because a
      chart has nothing to build with.
   6. **The production project name is a property of the compose file, not a rule stated in prose.**
-     `infra/docker-compose.prod.yml` declares a top-level `name:`, and no file of durable state instructs
+     `infra/docker/docker-compose.prod.yml` declares a top-level `name:`, and no file of durable state instructs
      `-p <that name>` / `--project-name <that name>`. Compose derives a project from the compose file's
-     *directory* when the file names none, and both compose files sit in `infra/` — so a production procedure
+     *directory* when the file names none, and both compose files sit in `infra/docker/` — so a production procedure
      that depends on an operator remembering a flag is one shell away from addressing the wrong stack. The two
      halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
      flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
@@ -199,7 +200,7 @@ run, where its absence is a loud red at the shallow refusal). It cannot prove a 
 refused, or that the registry holds what the workflow says it would push — this repository has **no remote**
 and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. It says nothing
 about the backup manifest's `app.version` (its observable is a capture run against a live instance, not a file),
-and its scan for written-down image tags covers `infra/` and the Run pages only: `docs/` quotes the *old, wrong*
+and its scan for written-down image tags covers `TAG_SCAN_DIRS` and the Run pages only: `docs/` quotes the *old, wrong*
 shapes on purpose, as the defect being described.
 
 Assertion 4's limits. **The guard and the producer share one derivation**, so a way of reading a file that the
@@ -231,7 +232,7 @@ or an action other than the login and build-push ones — is not held; the recog
 action names in the code.
 
 **Assertion 5's own limit, and it is deliberate: it is scoped to the RELEASE RECIPE and says nothing about
-`infra/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
+`infra/docker/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
 legitimate thing to want — so forbidding one from a guard whose subject is *releases* would be this guard
 overreaching into a file it has no argument about. It also reads the compose file rather than a registry, so
 "the workflow publishes this name" means the matrix says so, never that a push ever succeeded (see the
@@ -239,7 +240,7 @@ no-remote limit above).
 
 Assertion 6 adds two limits of its own, and the first is the one that matters. **It reads the file, so it says
 nothing about the project the operator actually brought their stack up under.** `docker compose -p something-else
--f infra/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
+-f infra/docker/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
 green here means the *procedure* can no longer be wrong by default, never that a given host is right. `veyqctl`
 closes that for an instance it manages — it records the project at `install` and names it on every command — which
 is the tool's job and explicitly not this guard's.
@@ -276,12 +277,15 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     sys.exit(2)
 
 import release_assets  # the producer: assertion 4 holds it to its own derivation, assertion 2 its release number
+import repo_layout  # where the deployment files and the test harnesses live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 VERSION_FILE = ROOT / "VERSION"
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
-INFRA = ROOT / "infra"
+# The tracked files whose written-down image tags assertion 4 scans: the deployment, and the two harnesses that run
+# the deployment (lane L1's overlay, the API fuzzer) - named, so a move of either does not quietly change the scan.
+TAG_SCAN_DIRS = (repo_layout.INFRA_DIR, repo_layout.E2E_STACK_DIR, repo_layout.FUZZ_DIR)
 
 # `VERSION` holds the major alone; the minor is a commit count, so no tree can hold it (ADR 0057 §1).
 MAJOR = re.compile(r"^([0-9]+)$")
@@ -296,7 +300,7 @@ REFUSE_STEP, TAG_STEP = "assert-release-unpublished", "release-tag"
 BUILD_JOB = "build"
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
-CHART_DIR = ROOT / "charts/veyq"
+CHART_DIR = repo_layout.CHART_DIR
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -376,7 +380,7 @@ if version_text is None:
     fail(
         "there is no VERSION file at the repository root. It IS the release identity (ADR 0057 §1): without it "
         "the publish workflow dies on its first command and nothing can ever be published, while "
-        "infra/.env.example tells the operator to pin an image tag that has no producer."
+        "infra/docker/.env.example tells the operator to pin an image tag that has no producer."
     )
 elif not version_match:
     fail(
@@ -1225,12 +1229,12 @@ if not refusals:
                     )
 
 written_tags = 0
-# Tracked files only, as in assertion 9's flag scan. A gitignored `infra/.env` is one operator's local pin (a
+# Tracked files only, as in assertion 9's flag scan. A gitignored `infra/docker/.env` is one operator's local pin (a
 # dev build's `veyq:cr162`, say), not something this repository tells anyone to run — scanning it made the
 # guard red on that machine and green in CI over the same commit.
 RUN_PAGES = ROOT / "site/src/content/docs/run"  # the operator procedures (ADR 0087), which write tags down too
 tracked_infra = subprocess.run(
-    ["git", "ls-files", "-z", "--", str(INFRA.relative_to(ROOT)), str(RUN_PAGES.relative_to(ROOT))],
+    ["git", "ls-files", "-z", "--", *map(repo_layout.rel, TAG_SCAN_DIRS), repo_layout.rel(RUN_PAGES)],
     cwd=ROOT, capture_output=True, text=True,
 )
 if tracked_infra.returncode != 0:
@@ -1262,7 +1266,7 @@ for path in sorted(ROOT / rel for rel in tracked_infra.stdout.split("\0") if rel
 
 # ---- 5. the release recipe runs only images an operator can PULL ---------------------------------------------
 
-PROD_COMPOSE = INFRA / "docker-compose.prod.yml"
+PROD_COMPOSE = repo_layout.PROD_COMPOSE
 
 # A veyq-namespaced image name where an image reference would carry one: at the start of the value, or after a
 # registry/owner `/`, and ending at the tag separator or the value's end. Deliberately NOT anchored on the whole
@@ -1447,7 +1451,7 @@ if prod_project:
 # The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
 # plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
 VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
-CHART = ROOT / "charts/veyq/Chart.yaml"
+CHART = CHART_DIR / "Chart.yaml"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 # The registry the publish pushes to. The owner is not taken from the workflow — there it is
 # `github.repository_owner`, which is whoever runs it, a fork included — but from the chart's `home`, the one
@@ -1692,7 +1696,7 @@ else:
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
-        f"no literal veyq image tag found anywhere under {INFRA.relative_to(ROOT)}/ or "
+        f"no literal veyq image tag found anywhere under {'/, '.join(map(repo_layout.rel, TAG_SCAN_DIRS))}/ or "
         f"{RUN_PAGES.relative_to(ROOT)}/ — this half of the guard "
         f"checked NOTHING and would report green either way"
     )

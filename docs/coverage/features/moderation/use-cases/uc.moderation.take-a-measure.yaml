@@ -6,7 +6,7 @@ title: Take a measure
 # presignGets callers' block check and the listings' blockedByOperator in core, Memories and Depot; features/moderation's
 # decision panel and the "Blocked by the operator" placeholder (LevelView, MediaTile, MediaLightbox) on web; the
 # proposals and the sign-in blocks in admin-web's Server → Moderation and `veyq-admin moderation proposals|decline`,
-# `account block|unblock`. Lane L1's browser pass is e2e/tests/features/review-and-measures.spec.ts, tagged per
+# `account block|unblock`. Lane L1's browser pass is tests/e2e/tests/features/review-and-measures.spec.ts, tagged per
 # criterion; `stack` waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: a-blocked-share-answers-as-an-unknown-link
@@ -118,6 +118,6 @@ gaps:
     —, features/instance/moderation.test.ts, cli/cli.test.ts for `moderation proposals|decline` and
     `account block|unblock`), but admin-web's job has never executed (ADR 0040).
   stack: >-
-    e2e/tests/features/review-and-measures.spec.ts (lane L1, being written with cr-moderation-review-and-measures) tags
+    tests/e2e/tests/features/review-and-measures.spec.ts (lane L1, being written with cr-moderation-review-and-measures) tags
     blocked-content-is-refused-and-marked, placeholder-for-members-and-guests and every-measure-is-lifted-and-logged;
     stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

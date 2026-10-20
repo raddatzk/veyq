@@ -1,0 +1,26 @@
+{
+  "name": "@veyq/e2e",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "//": "Lane L1's browser suite (ADR 0090, ADR 0091 decision 3): drives admin-web and web in Chromium against an instance booted from the release candidate's own image and compose recipe. It imports nothing from web/ or admin-web/ — it sees them only as a browser does — and @veyq/crypto only to read back what the browser produced (the Emergency Kit's Secret Key), which is why it is a workspace member (ADR 0090 decision 4). Started by scripts/run_stack_e2e.py inside the pinned Playwright image on the run's compose network, never on the host and never against a dev stack.",
+  "//playwright": "Pinned EXACTLY, not by range: the browser it drives is the one baked into the Playwright image tests/e2e/stack/docker-compose.e2e.yml pins by digest, and a library one patch apart from its browser fails at launch ('Executable doesn't exist'). scripts/run_stack_e2e.py refuses a run whose installed @playwright/test is not the image's version. Bump both together.",
+  "scripts": {
+    "test": "playwright test",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "list": "playwright test --list",
+    "spec-urls": "node --test spec-urls.test.mjs",
+    "check": "npm run lint && npm run typecheck && npm run spec-urls && npm run list"
+  },
+  "dependencies": {
+    "@veyq/crypto": "*"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.7.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0"
+  }
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run web's `VEYQ_E2E=1` suites against a live backend + a real object store, one file at a time.
 
-**What it does.** Brings up the bundled stack from `infra/docker-compose.yml` (`--profile s3 --profile mail`:
+**What it does.** Brings up the bundled stack from `infra/docker/docker-compose.yml` (`--profile s3 --profile mail`:
 MariaDB, Garage, Traefik, Mailpit) and — because ADR 0067 made the backend the only thing that can turn a
 running store into a usable one — boots one throwaway backend whose sole job is to provision it. Then per e2e
 file: gives it its OWN database, boots a fresh
@@ -106,7 +106,8 @@ Environment (all optional):
     VEYQ_JAR              Backend fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
     VEYQ_PORT             Backend HTTP port. Default: 8080
     VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090
-    VEYQ_INFRA_DIR        The `infra/` whose compose stack to use. Default: this checkout's (see [compose_up] for a worktree)
+    VEYQ_INFRA_DIR        The directory holding the Compose files whose stack to use (a checkout's `DOCKER_DIR` in
+                          `scripts/repo_layout.py`). Default: this checkout's (see [compose_up] for a worktree)
     VEYQ_HOST             Tenant domain + fetch Host. Default: veyq.localhost
     VEYQ_BOOT_SECS        Readiness timeout per boot. Default: 120
     VEYQ_TEST_MS          Default per-test timeout passed to vitest. Default: 120000
@@ -135,6 +136,7 @@ from typing import Iterable, NamedTuple
 # script's own directory — `scripts/` — on `sys.path`, which also holds when `validate_e2e_discovery.py`
 # imports this module by path.
 import instance_backup
+import repo_layout
 # The ADR 0053 sweeps, shared with `run_stack_e2e.py` and bound to this file's dev stack below ([DEV]). The pure
 # parts are re-exported under the names this module always had: the guards that import it by path call them here.
 import e2e_sweeps as sweeps
@@ -145,21 +147,32 @@ from e2e_sweeps import (  # noqa: F401 - re-exported for scripts/validate_wire_l
 
 REPO = Path(__file__).resolve().parent.parent
 WEB = REPO / "web"
-# `VEYQ_INFRA_DIR` pins the stack to another checkout's `infra/` — see the worktree note in [compose_up].
-INFRA = Path(os.environ.get("VEYQ_INFRA_DIR", REPO / "infra"))
+# `VEYQ_INFRA_DIR` names the directory holding the Compose files (ADR 0106: `infra/docker/` of a checkout), and pins
+# the stack to another checkout's — see the worktree note in [compose_up].
+INFRA = Path(os.environ.get("VEYQ_INFRA_DIR", repo_layout.DOCKER_DIR))
 COMPOSE_FILE = INFRA / "docker-compose.yml"
 COMPOSE = ["docker", "compose", "-f", str(COMPOSE_FILE), "--profile", "s3", "--profile", "mail"]
-# The network a group's capture/restore containers join to reach the store by its INTERNAL name. Compose derives
-# a project name from the compose file's DIRECTORY unless the file declares one, and this one deliberately does
-# not (a `name:` here would change the real network while this derivation kept naming the old one) — so this is
-# `infra_default`, derived rather than hardcoded, because the derivation is the rule and the string is only
-# today's answer to it.
-DOCKER_NETWORK = f"{COMPOSE_FILE.parent.name}_default"
 
-# The production stack is a SECOND compose project on the same host, and the line above is exactly why that is a
-# hazard rather than a detail: the derivation reads the compose file's DIRECTORY, both files live in `infra/`,
-# and a capture pointed at the production file therefore resolves whatever is running out of `infra/` — which on
-# any developer's host is the stack this orchestrator just brought up. See [rehearse_production_project].
+
+def compose_project(compose_file: Path) -> str:
+    """The project a Compose file runs as, by Compose's own rule: the file's top-level `name:`, else its directory's
+    name. Read rather than hardcoded, because the rule is the authority and the string only today's answer to it."""
+    try:
+        text = compose_file.read_text()
+    except OSError:
+        return compose_file.parent.name
+    declared = re.search(r"^name:\s*['\"]?([^'\"\s#]+)", text, re.MULTILINE)
+    return declared.group(1) if declared else compose_file.parent.name
+
+
+# The network a group's capture/restore containers join to reach the store by its INTERNAL name: the dev project's
+# default network. The dev file declares its project (`name: infra`, ADR 0106 decision 2), so this is
+# `infra_default` wherever the file sits.
+DOCKER_NETWORK = f"{compose_project(COMPOSE_FILE)}_default"
+
+# The production stack is a SECOND compose project on the same host. Both files sit in one directory, and only the
+# production file's own `name: veyq` keeps a capture pointed at it from resolving the dev stack this orchestrator
+# just brought up. See [rehearse_production_project].
 PROD_COMPOSE_FILE = INFRA / "docker-compose.prod.yml"
 
 # Where a run's artifacts land. A CONSTANT only — `main()` creates it, never module scope:
@@ -182,7 +195,7 @@ JAR = Path(os.environ.get("VEYQ_JAR", REPO / "backend/build/quarkus-app/quarkus-
 BOOT_SECS = int(os.environ.get("VEYQ_BOOT_SECS", "120"))
 TEST_MS = os.environ.get("VEYQ_TEST_MS", "120000")
 
-# Documented throwaway credentials from infra/docker-compose.yml — not secrets. The app user `veyq` holds grants
+# Documented throwaway credentials from infra/docker/docker-compose.yml — not secrets. The app user `veyq` holds grants
 # on the `veyq` database ONLY, so each e2e database is created as root and then granted to it.
 DB_ROOT_PASSWORD = os.environ.get("VEYQ_DB_ROOT_PASSWORD", "change-me-root")
 DB_APP_USER = "veyq"
@@ -203,7 +216,7 @@ def restore_database(index: int) -> str:
 
 
 # The bundled store's ADMIN plane (a different port from the S3 one), published local-only by
-# infra/docker-compose.yml. This script READS it to confirm the backend provisioned the store; it never writes
+# infra/docker/docker-compose.yml. This script READS it to confirm the backend provisioned the store; it never writes
 # through it. Documented throwaway dev token, not a secret.
 GARAGE_ADMIN = os.environ.get("VEYQ_GARAGE_ADMIN", "http://127.0.0.1:19003")
 GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-token")
@@ -212,7 +225,7 @@ GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-t
 # exact alias, so the name is a contract between this file and that class.
 STORE_BUCKET = "blobs"
 STORE_KEY_ALIAS = "veyq-app"
-# The store's compose service, and its S3 API as `infra/docker-compose.yml` publishes it to this host (`19000:3900`)
+# The store's compose service, and its S3 API as `infra/docker/docker-compose.yml` publishes it to this host (`19000:3900`)
 # — the endpoint `%e2e` hands the jar, so every presigned URL of a run goes through it. [plant_store_sentinel]
 # sends the run's log control there.
 STORE_SERVICE = "garage"
@@ -221,7 +234,7 @@ STORE_S3 = "http://127.0.0.1:19000"
 # the store sweep's mirror ([backup_env], [DEV]).
 STORE_INTERNAL = "http://garage:3900"
 
-# The throwaway mailbox, published by `infra/docker-compose.yml`'s `mail` profile. It is EXPORTED to each suite as
+# The throwaway mailbox, published by `infra/docker/docker-compose.yml`'s `mail` profile. It is EXPORTED to each suite as
 # `VEYQ_MAILPIT` rather than left to the suite's own default: mail is no longer one feature's substrate — a member
 # invite's token travels by mail only (ADR 0055 §2) — and the thing that starts a substrate is the thing that
 # should name its address.
@@ -294,7 +307,7 @@ def compose_up() -> None:
     # resolve against THIS checkout, so every service with one gets a new config hash and is recreated onto the
     # worktree's files — the developer's own dev containers, left mounting a directory that is deleted with the
     # worktree (measured 2026-09-24: `veyq-garage` rebound to the worktree's `garage.toml`). From a worktree, run
-    # THIS checkout's copy with `VEYQ_INFRA_DIR=<main checkout>/infra`: the stack stays the main checkout's while
+    # THIS checkout's copy with `VEYQ_INFRA_DIR=<main checkout>/infra/docker`: the stack stays the main checkout's while
     # the suites, contracts and jar are the worktree's. Running the MAIN checkout's copy instead (the earlier advice
     # here) runs the main checkout's SUITES — wrong whenever the web code changed along with the backend.
     run(COMPOSE + ["up", "-d"])
@@ -749,7 +762,7 @@ def backup_tool_result(*args: str, env_extra: dict[str, str] | None = None) -> s
     Split out of [backup_tool] for the one rehearsal whose subject is the tool's *failure*
     ([rehearse_production_project]): a capture that must not resolve a stack cannot be run through a wrapper
     whose only outcome for a non-zero exit is to end the process. `env_extra` is what the operator's
-    `infra/.env` would supply — see [production_compose_env] for why its absence is not a neutral difference.
+    `infra/docker/.env` would supply — see [production_compose_env] for why its absence is not a neutral difference.
     """
     # `verify` touches no instance, so it takes no network.
     network = [] if args[0] == "verify" else ["--docker-network", DOCKER_NETWORK]
@@ -1155,7 +1168,7 @@ DECOY_DOMAIN = "decoy.invalid"
 
 
 def production_compose_env() -> dict[str, str]:
-    """Stand in for the operator's `infra/.env` — DERIVED from the file, never listed beside it.
+    """Stand in for the operator's `infra/docker/.env` — DERIVED from the file, never listed beside it.
 
     Compose interpolates the entire production file before it resolves anything, so a `${VAR:?…}` with no value
     kills the command with `required variable … is missing a value`. That is not a project-resolution failure

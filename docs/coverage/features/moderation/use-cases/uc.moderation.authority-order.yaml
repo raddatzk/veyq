@@ -6,7 +6,7 @@ title: Act on an authority's order
 # packages/crypto; features/moderation/orders (the order form, the Annex texts pinned from
 # contracts/moderation/authority-order-forms.json) and CaseDetail's deferral on web; Server → Moderation's order form and
 # `veyq-admin order remove|preserve|inform` in admin-web. Lane L1's browser pass is
-# e2e/tests/features/takedown-orders-and-art18.spec.ts, tagged per criterion; `stack` and `admin-web` wait under gaps.
+# tests/e2e/tests/features/takedown-orders-and-art18.spec.ts, tagged per criterion; `stack` and `admin-web` wait under gaps.
 acceptanceCriteria:
   - id: an-order-goes-with-its-case
     text: >-
@@ -82,5 +82,5 @@ gaps:
     The moderation-order seal is pinned by its vector and packages/crypto/src/report.test.ts, but the crypto job has
     never executed (ADR 0040).
   stack: >-
-    e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) times a removal order from each door to the guest's
+    tests/e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) times a removal order from each door to the guest's
     404 and copies the Annex II text; stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

@@ -1,0 +1,230 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  # One pod, and never two — not even during an upgrade. See app in values.yaml: the schema migrates at boot
+  # with no gate, and Recreate is what makes "one migrator at a time" true.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "veyq.labels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+      annotations:
+        # A changed ConfigMap restarts the pod: Quarkus reads the properties file once, at boot.
+        checksum/config: {{ include (print .Template.BasePath "/app-configmap.yaml") . | sha256sum }}
+        {{- if .Values.backup.enabled }}
+        # The capture request (ADR 0098 decision 7), visible on the pod: a changed value is a new revision, so the old
+        # pod stops first and the gate captures a cold database.
+        veyq/backup-request: {{ .Values.backup.request | quote }}
+        {{- end }}
+    spec:
+      serviceAccountName: veyq-app
+      # The token IS the cluster identity: the backend reads its namespace and reaches the API server through it.
+      automountServiceAccountToken: true
+      securityContext:
+        # The image's runtime user (Dockerfile: `USER 10001`). fsGroup is what makes the PVC below writable —
+        # a claim comes up root-owned and, unlike a Docker named volume, inherits nothing from the image. A
+        # first-ever install without it reproduces the AccessDeniedException restart-loop the compose recipe
+        # already paid for once (scripts/validate_app_volume_ownership.py's docstring). Declarative, so no
+        # chown init container, and what `restricted` expects.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      {{- if .Values.backup.enabled }}
+      # The backup gate (ADR 0098), before the container that migrates. Under Recreate the old pod has terminated
+      # before this one is created, so the capture is cold by construction. It reads what the app reads — the database
+      # by the app's own URL and user, the bundled store's hint — and LESS: no config-secret mount, so no capture on
+      # the claim can hold the KEK (scripts/chart_meta_check.py (xxiv)). Same pod, so the NetworkPolicy set gains no
+      # peer. What it decides and refuses: scripts/instance_backup.py `gate`.
+      initContainers:
+        - name: backup-gate
+          image: {{ include "veyq.toolsImage" . | quote }}
+          imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+          args: ["gate"]
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: VEYQ_BACKUP_TARGET_RELEASE
+              value: {{ include "veyq.appRelease" . | quote }}
+            - name: VEYQ_BACKUP_REQUEST
+              value: {{ .Values.backup.request | quote }}
+            - name: VEYQ_BACKUP_KEEP
+              value: {{ .Values.backup.keep | quote }}
+            - name: VEYQ_BACKUP_DIR
+              value: /backup
+            - name: VEYQ_BACKUP_DB_URL
+              value: {{ include "veyq.jdbcUrl" . | quote }}
+            - name: VEYQ_BACKUP_DB_USER
+              value: {{ include "veyq.dbUser" . | quote }}
+            - name: VEYQ_BACKUP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: mariadbPassword
+            - name: VEYQ_BUNDLED_STORE_ENDPOINT
+              value: {{ include "veyq.bundledStoreEndpoint" . | quote }}
+            - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: garageAdminToken
+            {{- with .Values.backup.store.existingSecret }}
+            # A store of the operator's own: what the gate cannot read from the database without the KEK.
+            - name: VEYQ_BACKUP_STORE_ENDPOINT
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: endpoint}}
+            - name: VEYQ_BACKUP_STORE_BUCKET
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: bucket}}
+            - name: VEYQ_BACKUP_STORE_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: accessKey}}
+            - name: VEYQ_BACKUP_STORE_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: secretKey}}
+            - name: VEYQ_BACKUP_STORE_REGION
+              valueFrom: {secretKeyRef: {name: {{ . | quote }}, key: region, optional: true}}
+            {{- end }}
+          volumeMounts:
+            - name: backup
+              mountPath: /backup
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.backup.resources | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: {{ include "veyq.appImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+            # The admin listener (veyq.admin-channel.port, ADR 0065): the only door the Server-Owner operations
+            # answer on. Reached through `veyq-app-admin` alone, and by policy from the admin pod alone
+            # (networkpolicy.yaml) — never through `veyq-app`, which every route may aim at.
+            - name: admin
+              containerPort: 8090
+          env:
+            # Mirrors infra/docker/docker-compose.prod.yml's app service, name for name, so the two recipes can be read
+            # against each other. What differs is said where it differs.
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: {{ include "veyq.jdbcUrl" . | quote }}
+            - name: QUARKUS_DATASOURCE_USERNAME
+              value: {{ include "veyq.dbUser" . | quote }}
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: mariadbPassword
+            {{- with .Values.app.trustedProxies }}
+            # The hops in front of the Gateway (ADR 0094), only when set — see app.trustedProxies in values.yaml.
+            - name: VEYQ_HTTP_TRUSTED_PROXIES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- $clientPort := .Values.app.clientPort | default dict }}
+            {{- if eq (include "veyq.clientPortSource" .) "proxyProtocol" }}
+            # The client's port from the PROXY header the Gateway opens each connection with (ADR 0094 decision 7) —
+            # the source and the protocol together, or the app refuses to start. See app.clientPort in values.yaml.
+            - name: VEYQ_HTTP_CLIENT_PORT_SOURCE
+              value: proxy-protocol
+            - name: QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL
+              value: "true"
+            {{- else if eq (include "veyq.clientPortSource" .) "header" }}
+            # The client's port from a header your edge overwrites on every request (ADR 0094 decision 7).
+            - name: VEYQ_HTTP_CLIENT_PORT_SOURCE
+              value: header
+            {{- with $clientPort.header }}{{ if ne . "X-Veyq-Client-Addr" }}
+            - name: VEYQ_HTTP_CLIENT_PORT_HEADER
+              value: {{ . | quote }}
+            {{- end }}{{ end }}
+            {{- end }}
+            # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
+            - name: VEYQ_HTTP_HSTS_ENABLED
+              value: {{ .Values.hsts.enabled | quote }}
+            # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where the chart's
+            # Garage is, the host browsers reach it at, and its admin token. The Server Owner chooses "Use the
+            # bundled store" in the admin console and enters nothing else: the S3 key pair is DERIVED from the
+            # token, so the chart holds no key pair. The store is reached INTERNALLY; presigned URLs are signed
+            # for the store's OWN public host, verbatim — the departure from compose's same-origin path route
+            # (ADR 0064, ADR 0067 Decision 5).
+            - name: VEYQ_BUNDLED_STORE_ENDPOINT
+              value: {{ include "veyq.bundledStoreEndpoint" . | quote }}
+            - name: VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT
+              value: https://{{ required "storeDomain is required" .Values.storeDomain }}
+            - name: VEYQ_BUNDLED_STORE_SIGNING_MODE
+              value: store-origin
+            # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) over its admin API — a
+            # different port from the S3 one, reachable on the Service and deliberately on no route.
+            - name: VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT
+              value: http://veyq-garage:3903
+            - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: garageAdminToken
+            # The KEK, on the claim below — an ABSOLUTE path outside /work, which holds the application itself.
+            - name: VEYQ_SECURITY_CONFIG_SECRET_FILE
+              value: /var/lib/veyq/config-secret.key
+            # The bootstrap domain is routed by the chart's own HTTPRoute and EXCLUDED from the projection; the
+            # Kubernetes-only half of the routing settings is the properties file below.
+            - name: VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN
+              value: {{ required "domain is required" .Values.domain | quote }}
+            - name: QUARKUS_CONFIG_LOCATIONS
+              value: /etc/veyq/application.properties
+          volumeMounts:
+            - name: config-secret
+              mountPath: /var/lib/veyq
+            - name: config
+              mountPath: /etc/veyq
+              readOnly: true
+            # The JVM's scratch (hsperfdata, the Vert.x cache) under the read-only root.
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /api/setup
+              port: {{ include "veyq.probePort" . }}
+            periodSeconds: {{ .Values.app.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.app.startupProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /api/setup
+              port: {{ include "veyq.probePort" . }}
+            periodSeconds: {{ .Values.app.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.app.readinessProbe.timeoutSeconds }}
+          {{- if .Values.app.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/setup
+              port: {{ include "veyq.probePort" . }}
+            periodSeconds: {{ .Values.app.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.app.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.app.livenessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+      volumes:
+        - name: config-secret
+          persistentVolumeClaim:
+            claimName: veyq-config-secret
+        - name: config
+          configMap:
+            name: veyq-app
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.backup.enabled }}
+        # The operator's claim (backup.existingClaim): the chart creates none, so `helm uninstall` keeps the backups.
+        - name: backup
+          persistentVolumeClaim:
+            claimName: {{ .Values.backup.existingClaim | quote }}
+        {{- end }}

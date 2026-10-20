@@ -79,7 +79,7 @@ in CI.
 [`scripts/run_stack_e2e.py`](../../scripts/run_stack_e2e.py) boots the release candidate from its own recipe under a
 compose project of its own and drives it in Chromium ([ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md));
 after the browser stage it sweeps that project with the sensors above. Its canaries are what the browser suite
-**typed** — and the text inside the photo it uploaded — recorded by `recordTyped` (`e2e/src/canaries.ts`), which
+**typed** — and the text inside the photo it uploaded — recorded by `recordTyped` (`tests/e2e/src/canaries.ts`), which
 refuses a value by the same collision rule `recordCanaries` uses (`@veyq/crypto/canaryRule`, one rule for both
 recorders): the account password and Secret Key (never sent at all), the owner's real name, the Memory's name, the
 photo's file name and EXIF text, the share's label. Every spec file that executed a test must have recorded some.
@@ -90,11 +90,11 @@ photo's file name and EXIF text, the share's label. Every spec file that execute
 | Object store (the bucket `blobs`) | `sweep_store()` | the database's own `veyq_blob` count: rows with an empty mirror fail |
 | Every container log of the project, since the run began | `sweep_containers()` | the sentinel key, sent through Traefik on the public origin to the bucket and found percent-encoded in Garage's log; the `app` container's log must name its database (Flyway's JDBC line) — the backend's log is a container log here |
 | Statement log, for the window around the browser stage | `StatementLog`, `sweep_statements()` | the two sentinel statements; and, since the app's pool connected at `up`, before the window, the owner's email in a literal the backend sent (`written`) in place of a `Connect` entry |
-| Every container log, for the `pii` set | `sweep_containers(pii=…)` | at least one address (`freshOwner` records each, `e2e/src/accounts.ts`), and each in the statement log: an account the instance created ([`pii_control()`](#the-pii-needle-set)) |
+| Every container log, for the `pii` set | `sweep_containers(pii=…)` | at least one address (`freshOwner` records each, `tests/e2e/src/accounts.ts`), and each in the statement log: an account the instance created ([`pii_control()`](#the-pii-needle-set)) |
 
 The store's request log the container control reads exists only because the run asks for it: the production recipe
 and the chart run Garage at `RUST_LOG=garage=warn`, which logs no request
-([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) § 5), and `infra/e2e/docker-compose.e2e.yml`
+([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) § 5), and `tests/e2e/stack/docker-compose.e2e.yml`
 raises it back to `garage=info` for the lane; the development stack keeps the image's own `garage=info`.
 
 Not swept on the lane, by construction: the HTTP recording and the capability tokens derived from it (the browser
@@ -110,7 +110,7 @@ nowhere else** — every boot log (`sweep_logs()`) and every container log (`swe
 
 - **Recorded where an account is signed up**, by `recordPii` — `birthInstance` and `onboardMember` in
   `web/src/test/e2eBootstrap.ts` (`VEYQ_PII_FILE`, one `pii-<tag>.json` per suite), `freshOwner` in
-  `e2e/src/accounts.ts` (`pii-<spec>.json`) — in the canary files' format, in files of their own, so no other surface
+  `tests/e2e/src/accounts.ts` (`pii-<spec>.json`) — in the canary files' format, in files of their own, so no other surface
   ever reads them. A hit is reported led by `pii`.
 - **Its control, `pii_control()`:** zero addresses is a failure, as zero logs is, and each address must be one the
   instance handled — in a mail or a database dump of the run (`run_web_e2e.py`; every signed-up address is invited

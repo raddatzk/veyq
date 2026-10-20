@@ -63,9 +63,11 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-COMPOSE = ROOT / "infra/docker-compose.prod.yml"
-ENV_TEMPLATE = ROOT / "infra/.env.example"
+COMPOSE = repo_layout.PROD_COMPOSE
+ENV_TEMPLATE = repo_layout.ENV_TEMPLATE
 # The template's asset name. GitHub renames a release asset whose name starts or ends with a period (its REST docs,
 # "Upload a release asset"), so `.env.example` would be published under another name than the manifest lists and every
 # `veyqctl install` from GitHub would miss it. The compose file never reads the template, so its asset drops the dot.

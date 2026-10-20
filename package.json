@@ -7,7 +7,7 @@
     "packages/crypto",
     "web",
     "admin-web",
-    "e2e"
+    "tests/e2e"
   ],
   "//engines": "The Node the workspace supports, stated so a wrong local one is named once, here, instead of as one EBADENGINE warning per package (inbox #353). It is the intersection of what the locked tree declares (measured 2026-10-10: abbrev and nopt `^22.22.2 || ^24.15.0 || >=26.0.0`, the eslint family `^20.19.0 || ^22.13.0 || >=24`, vitest `^20.0.0 || ^22.0.0 || >=24.0.0`). The images and CI run Node 22 (the Dockerfiles' `node:22-bookworm-slim`, the workflows' `node-version: \"22\"`); an odd, non-LTS release such as 23 is outside every one of those ranges.",
   "engines": {

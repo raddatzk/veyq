@@ -165,7 +165,7 @@ because no container log driver offers a time bound on both targets.
 | Backups | — | — | the deletion concept is [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) decision 8's; a log is in no backup veyq takes |
 
 The e2e stacks keep `garage=info`: the wire sweep's per-run control is a key planted in the store's request log. Only
-`infra/e2e/docker-compose.e2e.yml` sets it; the development stack inherits the image's `info` (M10).
+`tests/e2e/stack/docker-compose.e2e.yml` sets it; the development stack inherits the image's `info` (M10).
 
 ### 6. Legal basis and disclosure, for logs
 

@@ -2,7 +2,7 @@
 """Every test of lane L1's browser suite names the acceptance criteria it covers, and every `stack` coverage ref names
 a test tagged with its criterion (ADR 0091 decision 3; cr-stack-e2e phase 4).
 
-**What it asserts.** The anchor set is every test declared in `e2e/tests/**/*.ts` — found by reading the files, never
+**What it asserts.** The anchor set is every test declared in `tests/e2e/tests/**/*.ts` — found by reading the files, never
 listed — and every coverage file under `docs/coverage/features/`:
 
   1. **Every test carries a tag, and every tag names a criterion.** A test is a call `test(…)` (or `test.only`,
@@ -12,7 +12,7 @@ listed — and every coverage file under `docs/coverage/features/`:
      wording of a criterion (ADR 0091 decision 3): the tag points at the one sentence, and a tag whose use-case or
      criterion is misspelt — or was renamed under it — is red, never a label nobody resolves.
   2. **Every `stack` ref names a tagged test.** A ref under `coverage.stack.<level>` of criterion C in use-case U is a
-     path relative to `e2e/`; that file must be one of the suite's and must declare a test tagged `@U:C`. A ref to a
+     path relative to `tests/e2e/`; that file must be one of the suite's and must declare a test tagged `@U:C`. A ref to a
      file that only exercises the criterion on the way to another is a claim nothing in the file makes.
   3. **Every use-case a tag names addresses `stack`** — a `stack` ref on one of its criteria, or a use-case-level
      `gaps.stack` saying why there is none. Until a CI run admits `stack` (ADR 0040, `validate_coverage.py`'s
@@ -45,8 +45,10 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-E2E = ROOT / "e2e"
+E2E = repo_layout.E2E_DIR
 TESTS = E2E / "tests"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
 SURFACE = "stack"

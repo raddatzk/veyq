@@ -18,12 +18,12 @@ veyq splits its configuration in two
 - **Everything else is set in the admin console** and stored in the database. Today that is the object store.
 
 `scripts/validate_run_config_reference.py` fails when a variable of the production compose file or of
-`infra/.env.example`, or a key of the chart's `values.yaml`, is missing from this page.
+`infra/docker/.env.example`, or a key of the chart's `values.yaml`, is missing from this page.
 
 ## Docker Compose: `.env`
 
 `veyqctl install` writes `/opt/veyq/.env` (mode `0600`) from the release's template, `env.example` — the tree's
-`infra/.env.example` ([Set up a new instance](/veyq/run/new-instance/#install)). It generates the four secrets, writes
+`infra/docker/.env.example` ([Set up a new instance](/veyq/run/new-instance/#install)). It generates the four secrets, writes
 the two image lines from the release's manifest, and takes every other value from `--set KEY=VALUE` or asks for it; an
 optional variable is given the same way. `upgrade` keeps every value, and every key the new template does not name.
 By hand, copy the template to `.env` and fill it in: every required variable has no default, and a missing one fails

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every service of the production compose recipe runs unprivileged, the internet-facing proxy cannot reach the database, the client port's source is true, and every log is bounded.
 
-**What it asserts** (ADR 0071), over `infra/docker-compose.prod.yml` as YAML with its merge keys resolved, and
+**What it asserts** (ADR 0071), over `infra/docker/docker-compose.prod.yml` as YAML with its merge keys resolved, and
 over every service the file declares — the set is the file's, never a list here:
 
   1. **The posture, on every service:** `cap_drop` includes `ALL`, `security_opt` includes
@@ -38,7 +38,7 @@ over every service the file declares — the set is the file's, never a list her
      with every share id read; and it sets its own level, `--log.level` of `ERROR`, `FATAL` or `PANIC`, rather than
      inheriting the image's. The level is the clause's positive control: the proxy's flags were read.
 
-**Scoped to the production file on purpose.** The dev stack (`infra/docker-compose.yml`) is not internet-facing:
+**Scoped to the production file on purpose.** The dev stack (`infra/docker/docker-compose.yml`) is not internet-facing:
 it runs no app container, publishes its ports for a developer's host, and ships `change-me` passwords. A rule
 that made its services unprivileged would guard a stack nobody deploys.
 
@@ -98,8 +98,10 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-COMPOSE = ROOT / "infra" / "docker-compose.prod.yml"
+COMPOSE = repo_layout.PROD_COMPOSE
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BUILD_JOB = "build"
 

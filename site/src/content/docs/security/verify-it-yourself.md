@@ -177,7 +177,7 @@ key's own guard, promised by ADR 0044, is **planned**, not built.
 ### How to run it
 
 The sweep needs Docker and a built backend fast-jar. It brings up the bundled stack from
-[`infra/docker-compose.yml`](https://github.com/raddatzk/veyq/blob/main/infra/docker-compose.yml) (MariaDB,
+[`infra/docker/docker-compose.yml`](https://github.com/raddatzk/veyq/blob/main/infra/docker/docker-compose.yml) (MariaDB,
 Garage, Traefik, Mailpit), gives each suite file its own database and a fresh backend boot, and sweeps after
 each one. With the
 workspace installed (`npm ci` above), build the jar first:

@@ -38,7 +38,7 @@ limit of the convention rather than of this file.
 
 **Second assertion — a bare build builds what ships.** Every `(dockerfile, target)` pair in the build job's matrix
 of `.github/workflows/ci.yml` (read out of the workflow, never listed) names that file's **last** stage,
-because `docker build .` with no `--target` builds the last stage. Bought on 2026-09-28 (inbox #191): the app
+because a `docker build` with no `--target` builds the last stage. Bought on 2026-09-28 (inbox #191): the app
 `Dockerfile` ended on `runtime-native` while the release publishes `runtime-jvm`, so a bare build built the
 unshipped target — and that target did not even build (its `microdnf install curl` conflicted with the base's
 `curl-minimal`), which is how a plain `docker build .` met a failure no released image had. That target has since
