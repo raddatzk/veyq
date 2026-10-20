@@ -17,8 +17,8 @@ multi-ecosystem-groups:
       interval: "weekly"
 
 updates:
-  # The npm workspace's one lockfile is at the root (web/, admin-web/ and packages/crypto/ are its members), so
-  # this is the directory that reaches all three. It bumps the openapi-generator-cli WRAPPER only: the generator
+  # The npm workspace's one lockfile is at the root (web/, admin-web/, packages/crypto/ and tests/e2e/ are its
+  # members), so this is the directory that reaches all four. It bumps the openapi-generator-cli WRAPPER only: the generator
   # JAR it runs is chosen by `generator-cli.version` in web/ and admin-web/openapitools.json and pinned in
   # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
   - package-ecosystem: "npm"
@@ -43,21 +43,21 @@ updates:
     multi-ecosystem-group: "app-runtime"
     open-pull-requests-limit: 1
 
-  # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): the app image's at
-  # the root, the admin image's in admin-web/ and the tools image's in tools/.
+  # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): the app image's in
+  # infra/docker/, the admin image's in admin-web/ and the tools image's in infra/kubernetes/tools/.
   - package-ecosystem: "docker"
     directories:
-      - "/"
+      - "/infra/docker"
       - "/admin-web"
-      - "/tools"
+      - "/infra/kubernetes/tools"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
 
-  # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker-compose.yml and the
-  # release recipe infra/docker-compose.prod.yml.
+  # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker/docker-compose.yml
+  # and the release recipe infra/docker/docker-compose.prod.yml.
   - package-ecosystem: "docker-compose"
-    directory: "/infra"
+    directory: "/infra/docker"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
@@ -65,7 +65,7 @@ updates:
   # `helm` reads Chart.yaml dependencies (the chart has none) AND every `image:` string in values*.yaml — the
   # chart's mariadb and garage pins. The ci/ values files sit one directory down and name no third-party image.
   - package-ecosystem: "helm"
-    directory: "/charts/veyq"
+    directory: "/infra/kubernetes/charts/veyq"
     patterns:
       - "*"
     multi-ecosystem-group: "images"

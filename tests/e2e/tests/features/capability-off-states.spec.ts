@@ -30,7 +30,7 @@ interface Entry {
   whenOff: { en: string }
 }
 
-const CATALOG = fileURLToPath(new URL('../../../contracts/platform/capabilities.json', import.meta.url))
+const CATALOG = fileURLToPath(new URL('../../../../contracts/platform/capabilities.json', import.meta.url))
 const entries = (JSON.parse(readFileSync(CATALOG, 'utf8')) as { capabilities: Record<string, Entry> }).capabilities
 
 const DROP_BOX = 'core.public-shares.drop-box'

@@ -90,8 +90,8 @@ services:
     environment:
       MARIADB_DATABASE: veyq
       MARIADB_USER: veyq
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/.env}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in infra/.env}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/docker/.env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in infra/docker/.env}
     # No published port. The app reaches it on the compose network; a backup capture reaches it through
     # `docker compose exec`, which needs no port either.
     volumes:
@@ -115,8 +115,8 @@ services:
     networks: [edge]
     environment:
       # garage.toml carries no secrets so one config serves both stacks; these are the real ones.
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/.env (64 hex chars)}
-      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/.env}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/docker/.env (64 hex chars)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/docker/.env}
       # The image bakes in `garage=info`, which logs EVERY S3 and admin request: the peer's address and port, the
       # method and the URI with its query — object keys and presign signatures (ADR 0092 § 5). `warn` keeps warnings
       # and errors and drops that request log. `garage` is a target prefix, so it covers every crate of the binary
@@ -131,7 +131,7 @@ services:
       - veyq-garage-snapshots:/var/lib/garage/snapshots
 
   app:
-    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
+    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
     restart: unless-stopped
     # No `user:` — the image declares it (Dockerfile `USER`), and the guards read it there. /tmp is the JVM's
     # scratch (hsperfdata, the Vert.x cache).
@@ -149,7 +149,7 @@ services:
     environment:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:mariadb://mariadb:3306/veyq
       QUARKUS_DATASOURCE_USERNAME: veyq
-      QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/.env}
+      QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/docker/.env}
       # HSTS on the app's responses (ADR 0069). The switch is the DEPLOYMENT's, named for it rather than for
       # this service, so every origin this stack serves answers to the one value — https://raddatzk.github.io/veyq/run/new-instance/ says when to
       # turn it off. Traefik adds nothing: the app sends its own headers.
@@ -164,9 +164,9 @@ services:
       # background and can never fail the boot; `GET /api/instance/store-provisioning` reports how it went.
       # The admin plane is a DIFFERENT port from the S3 one, and is deliberately not published.
       VEYQ_BUNDLED_STORE_ENDPOINT: http://garage:3900
-      VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
+      VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/docker/.env}
       VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT: http://garage:3903
-      VEYQ_BUNDLED_STORE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/.env}
+      VEYQ_BUNDLED_STORE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/docker/.env}
       # Leg (c) of the backup, on the volume below. An ABSOLUTE path outside /work on purpose: /work holds
       # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
       # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.
@@ -175,7 +175,7 @@ services:
       # the services below, VEYQ_DOMAIN's routers, every non-suspended tenant's, and the admin router when
       # ADMIN_DOMAIN is set. Creating a tenant makes its domain route with no compose edit and no restart.
       VEYQ_TENANT_INGRESS_DYNAMIC_CONFIG_PATH: /etc/traefik/dynamic/tenants.yml
-      VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN: ${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
+      VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN: ${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/docker/.env}
       VEYQ_TENANT_INGRESS_ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
       # This file's topology, which the rendered services point at. The app upstream is its PUBLIC listener,
       # never the admin listener on 8090 (ADR 0065).
@@ -220,7 +220,7 @@ services:
   # surface this instance serves, which is the exact opposite of what extracting it was for. The container
   # side is 8080, not 80: the admin image runs unprivileged (uid 101, admin-web/Dockerfile) and cannot bind 80.
   admin:
-    image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
+    image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
     restart: unless-stopped
     # No `user:`, as for the app. /tmp holds nginx's pid and temp paths; the entrypoint renders its site into
     # conf.d. A tmpfs over an image directory keeps that directory's root-owned 0775, so conf.d is opened to its
@@ -283,7 +283,7 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.email=${VEYQ_ACME_EMAIL:?set VEYQ_ACME_EMAIL in infra/.env}"
+      - "--certificatesresolvers.letsencrypt.acme.email=${VEYQ_ACME_EMAIL:?set VEYQ_ACME_EMAIL in infra/docker/.env}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"

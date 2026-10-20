@@ -31,7 +31,7 @@ const moderatorReference = `BKA TCO-${stamp}-1`
 const ownerReference = `BKA TCO-${stamp}-2`
 const handoverReference = `BKA Vorgang ${stamp}`
 const guestName = `Gast der Anordnung ${stamp}`
-const PHOTO = fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 const ORDER_NOTICE = /Something you uploaded through this link was removed on an order of an authority, received on /
 
 let owner: Device

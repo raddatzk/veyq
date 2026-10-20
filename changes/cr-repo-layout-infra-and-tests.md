@@ -60,7 +60,7 @@ Build stage 1 of [ADR 0106](../docs/decisions/0106-deployment-under-infra-tests-
   `validate_guard_gaps.py` (guards changed); `chart_upgrade_check_selftest.py`, `instance_backup_selftest.py`,
   `upgrade_proof_selftest.py`, `mutation_meta_check_selftest.py` green; `docker compose -f infra/docker-compose.yml
   config --quiet` green and its `name` is `infra`.
-- [ ] **2 the move** — `git mv` per the table, then only the mechanical readers: `repo_layout.py`'s constants; the
+- [x] **2 the move** — `git mv` per the table, then only the mechanical readers: `repo_layout.py`'s constants; the
   workflows (`ci.yml` matrix `dockerfile:`, the L1 `file:` / `--file`, `helm package`, paths and working directories),
   `.github/dependabot.yml` (`/` → `/infra/docker`, `/tools` → `/infra/kubernetes/tools`, `/infra` → `/infra/docker`,
   `/charts/veyq` → `/infra/kubernetes/charts/veyq`); `launcher/infra/build.gradle.kts` (the main checkout's

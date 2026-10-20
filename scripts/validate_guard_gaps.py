@@ -439,7 +439,7 @@ B64_CAP_ANCHOR = ("contracts/api/scopes.openapi.yaml", "maxLength: 21884", "maxL
 FREETEXT_CAP_ANCHOR = ("contracts/api/_common.openapi.yaml", "maxLength: 20000", "maxLength: 999996")
 # The volume that carries the config-secret KEK across a container recreate — the hole ADR 0056 § Consequences
 # surfaced and cr-instance-backup-and-restore closed. Removing it is the whole forgery.
-PROD_COMPOSE = "infra/docker-compose.prod.yml"
+PROD_COMPOSE = "infra/docker/docker-compose.prod.yml"
 CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 # Where a fourth veyq_blob reference arm is forged: a scope is the plausible place for one (a space banner),
 # and it is one of the entities the delete paths already touch.
@@ -895,7 +895,7 @@ def forge_core_depends_on_application(root: pathlib.Path) -> str:
 
 
 SETTINGS = "backend/settings.gradle.kts"
-DOCKERFILE = "Dockerfile"
+DOCKERFILE = "infra/docker/Dockerfile"
 # The Dockerfile's build-base `COPY` of Memories' build file; the forged application's is planted beside it.
 MEMORIES_BUILD_COPY = "backend/apps/memories/build.gradle.kts"
 
@@ -1248,9 +1248,9 @@ def forge_forwarded_for_read_through_an_assembled_name(root: pathlib.Path) -> st
 def forge_fuzz_baseline_5xx_under_another_check(root: pathlib.Path) -> str:
     # validate_api_fuzz_baseline refuses a 5xx by its CHECK NAME: an entry that records the same 500 as an undeclared
     # status passes. The operation is read out of a spec, so a renamed path does not turn this into a different red.
-    f = root / "infra/fuzz/baseline.json"
+    f = root / "tests/fuzz/baseline.json"
     if not f.is_file():
-        raise ForgeError("infra/fuzz/baseline.json is missing — the API fuzzing's baseline moved or was deleted")
+        raise ForgeError("tests/fuzz/baseline.json is missing — the API fuzzing's baseline moved or was deleted")
     doc = json.loads(f.read_text())
     doc["entries"] = list(doc.get("entries") or []) + [{
         "operation": "GET /api/setup", "check": "status_code_conformance", "failure": "UndefinedStatusCode",

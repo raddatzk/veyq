@@ -88,7 +88,7 @@ services:
     networks:
       # Public DNS for the bootstrap domain, as seen from the app on `edge` (the header says why).
       edge:
-        aliases: ["${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}"]
+        aliases: ["${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/docker/.env}"]
 
   # The store's request log back on, for the run only: the recipe sets `garage=warn`, which drops it (ADR 0092 § 5), and
   # the container sweep's per-run control is a run-unique key sent to the bucket that Garage's log must then carry
@@ -150,7 +150,7 @@ services:
     shm_size: 1gb
     tmpfs: [/tmp]
     networks: [edge, admin]
-    working_dir: /repo/e2e
+    working_dir: /repo/tests/e2e
     environment:
       HOME: /tmp/home
       VEYQ_STACK_FILE: /out/stack.json
@@ -165,7 +165,7 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - python3 /repo/infra/e2e/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/node_modules/@playwright/test/cli.js test "$$@"
+      - python3 /repo/tests/e2e/stack/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/node_modules/@playwright/test/cli.js test "$$@"
       - browser
 
   # The release mirror an operator may point the release check at (ADR 0097 decision 1, uc.admin.learn-of-new-releases)

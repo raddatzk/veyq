@@ -5,7 +5,7 @@
 # negative invocations must generate every path id themselves.
 
 # veyq's own checks: refusal_by_location, refusal_echoes_nothing (the module docstring says what each holds).
-hooks = "infra/fuzz/hooks.py"
+hooks = "tests/fuzz/hooks.py"
 
 [generation]
 # No example database: a run reproduces from its seed alone (the runner's `--seed`, `--generation-deterministic`),

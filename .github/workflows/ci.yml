@@ -132,7 +132,7 @@ jobs:
     name: Backend races on MariaDB
     # The race classes `./gradlew check` runs on H2, run again on the production engine. H2 cannot show what MariaDB
     # does under overlap: on 2026-10-03 three races green on H2 were red there (ADR 0078). The runner derives the
-    # race classes from the code and starts its own throwaway MariaDB from the image infra/docker-compose.yml pins
+    # race classes from the code and starts its own throwaway MariaDB from the image infra/docker/docker-compose.yml pins
     # (tag + digest), so the pin keeps one home — which is why this job declares no `services:`, as web-e2e does not.
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -191,6 +191,12 @@ jobs:
       # admin surface could still be published beside a green app image (ADR 0065 — one release, its images).
       - name: Run admin surface checks
         working-directory: admin-web
+        run: npm run check
+
+      # Lane L1's browser suite runs only in `stack-e2e`, so its lint, its types, its spec list and its specs'
+      # out-of-tree fixture paths (`new URL('../../../../…', import.meta.url)`) are checked here, on every commit.
+      - name: Run browser suite checks
+        working-directory: tests/e2e
         run: npm run check
 
   chart:
@@ -329,13 +335,13 @@ jobs:
   api-fuzz:
     name: API fuzzing (Schemathesis, from the contracts)
     # Every operation of contracts/api gets requests nobody wrote by hand (ADR 0091 decision 9): Schemathesis, in our own
-    # image (infra/fuzz/Dockerfile: a pinned base, every package hash-pinned; the runner builds it), against a fresh
+    # image (tests/fuzz/Dockerfile: a pinned base, every package hash-pinned; the runner builds it), against a fresh
     # %e2e fast-jar booted with run_web_e2e.py's primitives — negative cases on
     # every operation, positive ones on every GET and every public write the run may change, with the objects a seeder
     # created with the real client crypto, stateful sequences over inferred links, and a second member who must be
     # refused what the first keeps in their own space. Red on a 5xx, a status or body the contract does not declare, a
     # malformed request accepted or echoed, a valid one refused as malformed, a peer let through, a failure not in
-    # infra/fuzz/baseline.json, or an invocation that tested nothing. A stage of its own beside web-e2e, which has no
+    # tests/fuzz/baseline.json, or an invocation that tested nothing. A stage of its own beside web-e2e, which has no
     # budget left for it. Like web-e2e it declares no `services:`: the runner brings up the compose stack itself.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -500,13 +506,13 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
           - image: veyq
-            dockerfile: Dockerfile
+            dockerfile: infra/docker/Dockerfile
             target: runtime-jvm
           - image: veyq-admin
             dockerfile: admin-web/Dockerfile
             target: runtime-nginx
           - image: veyq-tools
-            dockerfile: tools/Dockerfile
+            dockerfile: infra/kubernetes/tools/Dockerfile
             target: runtime-tools
     steps:
       - name: Check out repository
@@ -664,7 +670,7 @@ jobs:
   # Lane L1 (ADR 0090; ADR 0091 decision 3): the release candidate installed the way a Server Owner installs it —
   # `veyqctl install --unsigned-local` from the release assets `scripts/release_assets.py` produces for these two
   # images — with a real ACME certificate from Pebble, first run, a Memory round trip and the feature scenarios driven
-  # in Chromium (`e2e/`, in the Playwright image the overlay pins), then the ADR 0053 sweeps over the whole stack. One
+  # in Chromium (`tests/e2e/`, in the Playwright image the overlay pins), then the ADR 0053 sweeps over the whole stack. One
   # instance per run; the orchestrator prints every stage's wall time into its summary, which the job's budget (ADR
   # 0091 decision 1, 15 min) is held against.
   #
@@ -738,7 +744,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: Dockerfile
+          file: infra/docker/Dockerfile
           target: runtime-jvm
           platforms: ${{ matrix.platform }}
           push: false
@@ -779,7 +785,7 @@ jobs:
           VEYQ_VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          docker build --file Dockerfile --target runtime-jvm --platform "$PLATFORM" \
+          docker build --file infra/docker/Dockerfile --target runtime-jvm --platform "$PLATFORM" \
             --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
             --tag "veyq:candidate-${ARCH}" .
           docker build --file admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \
@@ -1192,7 +1198,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$REGISTRY_TOKEN" | helm registry login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          helm package charts/veyq --version "$VERSION" --app-version "$VERSION" --destination "${RUNNER_TEMP}/chart"
+          helm package infra/kubernetes/charts/veyq --version "$VERSION" --app-version "$VERSION" --destination "${RUNNER_TEMP}/chart"
           helm push "${RUNNER_TEMP}/chart/veyq-${VERSION}.tgz" "$CHART_REGISTRY" 2>&1 | tee "${RUNNER_TEMP}/chart-push.log"
           # Measured with Helm 4.0.1: a push prints `Pushed: <ref>` and `Digest: sha256:<64 hex>`, and that digest
           # is the sha256 of the manifest `docker buildx imagetools inspect --raw` returns for the same tag.

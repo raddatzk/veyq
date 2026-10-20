@@ -21,9 +21,9 @@ Five facts, measured on this tree:
 
 1. **No release has ever been built.** `container.yml`'s first job (the publish workflow then; `ci.yml` since ADR 0091)
    runs `major="$(tr -d '[:space:]' < VERSION)"`, and there is no `VERSION` file — so the job dies at its first
-   command. `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0` in [`infra/.env.example`](../../infra/.env.example)
-   therefore names an artifact with no producer, in a three-part shape this pipeline never emits (it publishes
-   `<major>`, `<major>.<minor>`, `sha-<sha>`, `latest`).
+   command. `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0` in [`infra/.env.example`](../../infra/docker/.env.example)
+   (now in `infra/docker/`) therefore names an artifact with no producer, in a three-part shape this pipeline never
+   emits (it publishes `<major>`, `<major>.<minor>`, `sha-<sha>`, `latest`).
 2. **The version is a function of the registry, not of the tree.** The workflow asks the registry for the
    highest published minor and increments it. The same commit published twice is two versions, and a checkout
    cannot answer which version it is.

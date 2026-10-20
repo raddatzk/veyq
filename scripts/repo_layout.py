@@ -22,8 +22,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 INFRA_DIR = ROOT / "infra"
 # What Docker builds and Compose runs. The dev file declares its project name (`infra`), so the directory's name is
 # not the project's (ADR 0106 decision 2).
-DOCKER_DIR = INFRA_DIR
-APP_DOCKERFILE = ROOT / "Dockerfile"
+DOCKER_DIR = INFRA_DIR / "docker"
+# Built from the repository root, as before the move (`docker build -f infra/docker/Dockerfile .`).
+APP_DOCKERFILE = DOCKER_DIR / "Dockerfile"
 DEV_COMPOSE = DOCKER_DIR / "docker-compose.yml"
 PROD_COMPOSE = DOCKER_DIR / "docker-compose.prod.yml"
 # The Compose files a guard over "every compose file" reads - named, never globbed: lane L1's overlay is not one of
@@ -35,16 +36,18 @@ ENV_TEMPLATE = DOCKER_DIR / ".env.example"
 BACKUP_ROOT = INFRA_DIR / "backups"
 
 # The Helm chart, and the image only the chart runs (ADR 0098).
-CHART_DIR = ROOT / "charts/veyq"
-TOOLS_DOCKERFILE = ROOT / "tools/Dockerfile"
+KUBERNETES_DIR = INFRA_DIR / "kubernetes"
+CHART_DIR = KUBERNETES_DIR / "charts/veyq"
+TOOLS_DOCKERFILE = KUBERNETES_DIR / "tools/Dockerfile"
 # Where a release before ADR 0106 carries its chart: `chart_upgrade_check.py` reads a predecessor's tree, which may
 # be of either layout (ADR 0106 decision 3).
 LEGACY_CHART_PATH = "charts/veyq"
 
 # The test harnesses: the browser suite (the npm workspace `@veyq/e2e`), lane L1's Compose overlay, the API fuzzer.
-E2E_DIR = ROOT / "e2e"
-E2E_STACK_DIR = INFRA_DIR / "e2e"
-FUZZ_DIR = INFRA_DIR / "fuzz"
+TESTS_DIR = ROOT / "tests"
+E2E_DIR = TESTS_DIR / "e2e"
+E2E_STACK_DIR = E2E_DIR / "stack"
+FUZZ_DIR = TESTS_DIR / "fuzz"
 
 
 def rel(path: pathlib.Path) -> str:

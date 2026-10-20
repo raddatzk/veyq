@@ -205,7 +205,9 @@ test-results/
 # veyq local wiki diagram preview (scripts/render-diagrams.sh)
 .wiki-preview/
 
-# Local deployment secrets
+# Local deployment secrets — Compose reads `.env` beside the compose file. `infra/.env` is where it lived before
+# ADR 0106; still ignored, so a checkout that has not moved its copy yet cannot commit it.
+infra/docker/.env
 infra/.env
 # Instance backups (scripts/instance_backup.py). The dump is the whole instance, and a capture told
 # `--key-beside-dump` also holds the config-secret KEK — this directory must never become a commit.

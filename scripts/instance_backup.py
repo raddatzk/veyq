@@ -221,7 +221,7 @@ from typing import NamedTuple
 REPO =Path(__file__).resolve().parent.parent
 # Spelled here, not imported from `repo_layout.py`: this file ships alone (the tools image's `/opt/veyq/`, a release
 # asset beside `veyqctl`), where that module is not. `instance_backup_selftest.py` holds the two to it in the repository.
-DEFAULT_COMPOSE = REPO / "infra/docker-compose.yml"
+DEFAULT_COMPOSE = REPO / "infra/docker/docker-compose.yml"
 DEFAULT_BACKUP_ROOT = REPO / "infra/backups"
 
 # Pinned by tag AND multi-arch index digest, like every other moving part of the bundled stack (mariadb:11.4,
