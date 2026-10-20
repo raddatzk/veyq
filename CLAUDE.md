@@ -30,8 +30,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   loading; an application may use core, never the reverse, never another application). **The backend is split** —
   Gradle modules `:core` (`backend/core`, `me.raddatz.veyq.core`) and `:apps:memories` (`backend/apps/memories`,
   `me.raddatz.veyq.memories`), composed by the root `backend/` into one fast-jar; the direction is the build's and
-  `validate_backend_module_graph.py`'s. **The web is split by import direction only** — `web/src/features/memory` is
-  the application, reached through a build-time registry, its directory and slots still Memories-shaped. ADR 0079's
+  `validate_backend_module_graph.py`'s. **The web is split by import direction only** — `web/src/features/memories` is
+  the application (each application's directory is `features/<owner>`, derived by the web guard), reached through a build-time registry. ADR 0079's
   Consequences say what is still open, and [`docs/apps/`](docs/apps/README.md) maps what belongs where.
 - `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
   localhost-only by default ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). A pure client

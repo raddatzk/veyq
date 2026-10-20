@@ -128,11 +128,11 @@ here; the server is blind.
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
   **A change to the bytes a seal writes** (another envelope, a salt, one more random draw) also moves
-  `features/memory/uploadWire.characterisation.test.ts`'s snapshots, whose randomness is ONE pinned stream: re-bless
+  `features/memories/uploadWire.characterisation.test.ts`'s snapshots, whose randomness is ONE pinned stream: re-bless
   them with `-u` and read the diff against what its header says may move (the field seal's salt shifted every later
   wrap and digest, ADR 0093 § 9).
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
-  The applications are `src/features/memory/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
+  The applications are `src/features/memories/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
   the level list, upload, download, the drop box — [docs/apps/depot.md](../docs/apps/depot.md)) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
@@ -152,7 +152,7 @@ here; the server is blind.
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **People and participants (ADR 0083, `uc.memory.participants`).** A Memory lists who was there as OPAQUE USER IDS in its sealed meta
-  (`participants: { userIds }`, `features/memory/memoryParticipants.ts`; cap 100 - `wrappedMeta` is limited to 8192 chars). The id list is the only
+  (`participants: { userIds }`, `features/memories/memoryParticipants.ts`; cap 100 - `wrappedMeta` is limited to 8192 chars). The id list is the only
   thing stored: **never a name or a snapshot of one** - a share serves the node's meta unchanged and its guest holds `K_node`, so the
   guest exclusion is the interface's (`memoryRights().participants` is false for every share role, fail-closed) and the ids are what keep the
   residual harmless; if participants ever carry names, ADR 0083 decision 4 is open again. The write merges on `409` through
@@ -247,7 +247,7 @@ here; the server is blind.
   header's `core-actions` (`FileDetail`, `DropBoxDetail`, `MemoryDetailHost`), so an application that draws `NodeHeader` adds one line
   and no heart of its own. `app/activeSpace` clears and loads the set with the scope and `rotateKeys` re-seals it - both directly, not
   through an application's lifecycle hook. A share guest's list is empty and the store is never read for it. The item MARKS inside a
-  Memory stay Memories' (`features/memory/itemFavorites*`, `generated/item-favorites`).
+  Memory stay Memories' (`features/memories/itemFavorites*`, `generated/item-favorites`).
 
   **The tabs are a pure FILTER** (inbox #348, `core/node/levelTabs.ts`): `All | one tab per application`, the tab named by
   its kinds' `list.tabLabel` (kinds sharing a label share a tab, its id the first kind - what `shared/state/useLevelTab`
@@ -346,13 +346,13 @@ here; the server is blind.
   and map from the guest's tree (the covers are core's, `core/node/cover/`, resolved by the level), Depot's rows read and write through Depot's data
   source (`features/depot/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
   grants it AND the source carries it — `sourceRights` — and the guest's source has no delete, no rename), and so
-  does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
+  does Memories' detail (`features/memories/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
   lightbox's loaders and — by injection, `useMemoryView`, which throws outside a detail — the organizer touch no API but
   through it; the guest's has no trash, node meta, cover, marks, buckets, live poll or EXIF, and its delete is a purge of
   its own). A drop page (`ShareBodyProps`) is handed the
   guest's `access` too and names its uploader on the page (the identity key is its application's). What a view offers is its
   application's pure, fail-closed rights function over `access` and `targetOf(tree, node)` — `memoryRights`
-  (`features/memory/rights.ts`), `depotRights` (`features/depot/rights.ts`), core's
+  (`features/memories/rights.ts`), `depotRights` (`features/depot/rights.ts`), core's
   `folderRights` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
   `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
   so no share button appears whose dialog the host cannot mount.
@@ -370,9 +370,9 @@ here; the server is blind.
   lists); the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
-  `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memory/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the
-  kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
-  is one file and `styles/memory.css` is global.
+  `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memories/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the
+  kinds — the registry's `{ supported: false }` answer and its tests do; the i18n catalog
+  is one file and `styles/memory.css` is global (inbox #513).
   **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one
   evaluates the application before the test file's `vi.mock`s and disarms them — 119 files went red). A
   node-environment suite gets no registry, so one that exercises a hook registers the real `memoriesLifecycle`
