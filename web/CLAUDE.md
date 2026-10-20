@@ -383,7 +383,7 @@ here; the server is blind.
   `[A-Za-z0-9+/]*={0,2}`, so base64url is rejected with 400 at the boundary.
 - **Operator-blind:** seal/derive everything client-side; never send the password, plaintext or raw keys.
   See [security model](../docs/crosscutting/security-model.md) and
-  [account & key model](../docs/crosscutting/account-key-model.md).
+  [account & key model](../docs/features/account/enablers/en.account.key-model.md).
 - **`jsqr` is a knowingly-stale dependency — don't "fix" it, don't widen it.** The root `CLAUDE.md` forbids
   *keeping* a dep abandoned by its maintainers; this is the one granted exception, so its reason lives here
   and not in a commit nobody reads. *Measured 2026-08-13:* `cozmo/jsQR` is neither archived nor
