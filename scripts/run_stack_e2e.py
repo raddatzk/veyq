@@ -151,12 +151,14 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
 # The ADR 0053 sweeps, shared with run_web_e2e.py and parameterised by compose project (ADR 0090 decision 5).
 import e2e_sweeps as sweeps  # noqa: E402 - after the PyYAML check, which it needs too
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
-OVERLAY = ROOT / "infra" / "e2e" / "docker-compose.e2e.yml"
+OVERLAY = repo_layout.E2E_STACK_DIR / "docker-compose.e2e.yml"
 # The publish's producer: the candidate becomes a release in the mirror layout `veyqctl --source` reads (ADR 0096).
 RELEASE_ASSETS = ROOT / "scripts" / "release_assets.py"
 RUN_ROOT = ROOT / ".e2e-stack-out"
-E2E_PACKAGE = ROOT / "e2e" / "package.json"
+E2E_PACKAGE = repo_layout.E2E_DIR / "package.json"
 INSTALLED_PLAYWRIGHT = ROOT / "node_modules" / "@playwright" / "test" / "package.json"
 # What the browser container is told it may reach (e2e/src/stack.ts). Paths are the container's: the run directory
 # is mounted at /out.

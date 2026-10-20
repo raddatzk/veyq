@@ -17,6 +17,8 @@ build is `verdict`'s. This asserts each of them:
      rather than guessed;
   4. the verdict: no finding is OK either way; findings exit 0 "information only" while `release: none`, and 1 once a
      release is set.
+  5. where a predecessor's chart is looked for (ADR 0106 decision 3): this layout's path first, `charts/veyq` second,
+     and a predecessor carrying neither skipped.
 
 What it cannot show: that the two renders are the predecessor's and the candidate's - the run itself is that proof.
 Not a `validate_*.py`: it asserts nothing about the repository, only about the check, and it runs in `ci.yml`'s
@@ -223,10 +225,32 @@ def verdict_cases() -> None:
     check("findings once a release is set -> 1, naming the release", code == 1 and "202610041201" in line, line)
 
 
+def layout_cases() -> None:
+    """ADR 0106 decision 3: a predecessor's chart is found at this layout's path or at the one before it. Spelled with
+    a path of its own for "this layout", so the cases hold apart even while the two layouts' paths are one."""
+    new, old = "infra/kubernetes/charts/veyq", "charts/veyq"
+
+    def find(*present: str):
+        return cuc.predecessor_chart_path(lambda p: p in present, current=new, legacy=old)
+
+    found = find(new)
+    check("a predecessor carrying the chart at this layout's path is found there", found == new, f"found {found}")
+    found = find(old)
+    check("a predecessor carrying the chart at charts/veyq is found there", found == old, f"found {found}")
+    found = find(new, old)
+    check("a predecessor carrying both is read at this layout's path", found == new, f"found {found}")
+    found = find()
+    check("a predecessor carrying neither is skipped (None)", found is None, f"found {found}")
+    defaults = cuc.predecessor_chart_path.__defaults__
+    check("the lookup defaults to this checkout's chart path, then charts/veyq",
+          defaults == (cuc.repo_layout.CHART_PATH, "charts/veyq"), f"defaults {defaults}")
+
+
 refusal_cases()
 control_cases()
 quantity_cases()
 verdict_cases()
+layout_cases()
 
 if failures:
     print(f"CHART UPGRADE CHECK SELFTEST FAILED: {len(failures)} case(s)")

@@ -45,8 +45,10 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-E2E = ROOT / "e2e"
+E2E = repo_layout.E2E_DIR
 TESTS = E2E / "tests"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
 SURFACE = "stack"

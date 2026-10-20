@@ -32,6 +32,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+import repo_layout  # noqa: E402 - where the dev Compose file lives (ADR 0106)
 NAME = "veyq-bench-387"
 VOLUME = "veyq-bench-387-data"
 PASSWORD = "bench-only-387"
@@ -50,10 +52,10 @@ def sh(args, **kw):
 
 
 def image() -> str:
-    text = (ROOT / "infra" / "docker-compose.yml").read_text()
+    text = repo_layout.DEV_COMPOSE.read_text()
     m = re.search(r"image:\s*(mariadb:\S+@sha256:[0-9a-f]{64})", text)
     if not m:
-        sys.exit("no pinned mariadb image in infra/docker-compose.yml")
+        sys.exit(f"no pinned mariadb image in {repo_layout.rel(repo_layout.DEV_COMPOSE)}")
     return m.group(1)
 
 

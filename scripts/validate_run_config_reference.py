@@ -36,11 +36,13 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAGE = ROOT / "site/src/content/docs/run/configuration.md"
-COMPOSE = ROOT / "infra/docker-compose.prod.yml"
-ENV_EXAMPLE = ROOT / "infra/.env.example"
-VALUES = ROOT / "charts/veyq/values.yaml"
+COMPOSE = repo_layout.PROD_COMPOSE
+ENV_EXAMPLE = repo_layout.ENV_TEMPLATE
+VALUES = repo_layout.CHART_DIR / "values.yaml"
 
 INTERPOLATION = re.compile(r"(?<!\$)\$\{([A-Z_][A-Z0-9_]*)")
 ENV_SET = re.compile(r"^([A-Z_][A-Z0-9_]*)=")

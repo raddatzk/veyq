@@ -36,11 +36,13 @@ did not run (the pipeline is then *not* green); 0 only when every job ran green 
 `--dry-run` prints that plan without running anything. Each job's log, and `summary.json`, land in
 `.pipeline-out/<run>/` (gitignored); the clones are removed afterwards (`--keep` keeps them).
 
-**Sharing the host's one compose stack.** `scripts/run_web_e2e.py` brings up `infra/docker-compose.yml`, whose
-compose project is named after its directory and whose containers have fixed names. From a clone, that is the same
-project as the developer's dev stack with every bind mount pointing into a directory about to be deleted, so it
-would recreate the developer's containers onto it. Every job therefore gets `VEYQ_INFRA_DIR` = the main checkout's
-`infra/` (unless the caller set it), the procedure that script documents for a worktree. On a host already running
+**Sharing the host's one compose stack.** `scripts/run_web_e2e.py` brings up the dev Compose file, whose project
+name (`infra`, declared in the file) and container names are fixed. From a clone, that is the same project as the
+developer's dev stack with every bind mount pointing into a directory about to be deleted, so it would recreate the
+developer's containers onto it. Every job therefore gets `VEYQ_INFRA_DIR` = the main checkout's Compose directory
+(`repo_layout.DOCKER_DIR`, ADR 0106) unless the caller set it, the procedure that script documents for a worktree.
+The path is this checkout's layout applied to the main checkout, so a branch that moves the directory runs its
+pipeline only once the move is on the main checkout. On a host already running
 a Docker-heavy e2e or stack run, leave the Docker jobs out (`--skip-job web-e2e …`) and say so: they are reported
 `not run`, never green.
 
@@ -83,6 +85,8 @@ import sys
 import tempfile
 import threading
 import time
+
+import repo_layout  # where the Compose directory lives (ADR 0106)
 
 try:
     import yaml
@@ -631,7 +635,8 @@ class Run:
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.out = OUT / stamp
         self.work = pathlib.Path(tempfile.mkdtemp(prefix="veyq-pipeline-"))
-        self.infra = os.environ.get("VEYQ_INFRA_DIR") or str(main_checkout() / "infra")
+        # The main checkout's Compose directory, which `VEYQ_INFRA_DIR` names (ADR 0106: `infra/docker/`).
+        self.infra = os.environ.get("VEYQ_INFRA_DIR") or str(main_checkout() / repo_layout.rel(repo_layout.DOCKER_DIR))
         self.os_name = {"darwin": "macOS", "linux": "Linux"}.get(sys.platform, sys.platform)
 
     def github(self) -> dict:

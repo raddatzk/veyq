@@ -96,7 +96,8 @@ generates web's API client). A stale jar answers for code the run never saw (`ru
 
 Environment (all optional):
     VEYQ_JAR                The fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
-    VEYQ_INFRA_DIR          The `infra/` whose compose stack to use (see above).
+    VEYQ_INFRA_DIR          The directory holding the Compose files whose stack to use (`DOCKER_DIR` in
+                            `scripts/repo_layout.py`; see above).
     VEYQ_FUZZ_PORT          The backend's public port. Default: 18480
     VEYQ_FUZZ_ADMIN_PORT    Its admin-listener port. Default: 18490
     VEYQ_FUZZ_OUT           The root of the run directories. Default: .fuzz-out
@@ -131,9 +132,11 @@ os.environ["VEYQ_ADMIN_PORT"] = os.environ.get("VEYQ_FUZZ_ADMIN_PORT", "18490")
 import contract_specs  # noqa: E402
 import run_web_e2e as e2e  # noqa: E402
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 REPO = Path(__file__).resolve().parent.parent
 WEB = REPO / "web"
-FUZZ = REPO / "infra" / "fuzz"
+FUZZ = repo_layout.FUZZ_DIR
 CONFIG = FUZZ / "schemathesis.toml"
 BASELINE = FUZZ / "baseline.json"
 

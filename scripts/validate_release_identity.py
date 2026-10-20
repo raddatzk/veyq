@@ -83,8 +83,9 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11)
      — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
      The derived list is printed on the OK line. Plus: every veyq image
-     tag written down under `infra/` or on the Run pages (`site/src/content/docs/run/`, where the operator
-     procedures live) matches a tag the pipeline emits.
+     tag written down in a tracked deployment file (`TAG_SCAN_DIRS`: `infra/`, lane L1's overlay, the API fuzzer)
+     or on the Run pages (`site/src/content/docs/run/`, where the operator procedures live) matches a tag the
+     pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
      `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
      `.github/workflows/ci.yml` actually publishes — the set is read out of that workflow's build
@@ -199,7 +200,7 @@ run, where its absence is a loud red at the shallow refusal). It cannot prove a 
 refused, or that the registry holds what the workflow says it would push — this repository has **no remote**
 and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. It says nothing
 about the backup manifest's `app.version` (its observable is a capture run against a live instance, not a file),
-and its scan for written-down image tags covers `infra/` and the Run pages only: `docs/` quotes the *old, wrong*
+and its scan for written-down image tags covers `TAG_SCAN_DIRS` and the Run pages only: `docs/` quotes the *old, wrong*
 shapes on purpose, as the defect being described.
 
 Assertion 4's limits. **The guard and the producer share one derivation**, so a way of reading a file that the
@@ -276,12 +277,15 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     sys.exit(2)
 
 import release_assets  # the producer: assertion 4 holds it to its own derivation, assertion 2 its release number
+import repo_layout  # where the deployment files and the test harnesses live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 VERSION_FILE = ROOT / "VERSION"
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
-INFRA = ROOT / "infra"
+# The tracked files whose written-down image tags assertion 4 scans: the deployment, and the two harnesses that run
+# the deployment (lane L1's overlay, the API fuzzer) - named, so a move of either does not quietly change the scan.
+TAG_SCAN_DIRS = (repo_layout.INFRA_DIR, repo_layout.E2E_STACK_DIR, repo_layout.FUZZ_DIR)
 
 # `VERSION` holds the major alone; the minor is a commit count, so no tree can hold it (ADR 0057 §1).
 MAJOR = re.compile(r"^([0-9]+)$")
@@ -296,7 +300,7 @@ REFUSE_STEP, TAG_STEP = "assert-release-unpublished", "release-tag"
 BUILD_JOB = "build"
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
-CHART_DIR = ROOT / "charts/veyq"
+CHART_DIR = repo_layout.CHART_DIR
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -1230,7 +1234,7 @@ written_tags = 0
 # guard red on that machine and green in CI over the same commit.
 RUN_PAGES = ROOT / "site/src/content/docs/run"  # the operator procedures (ADR 0087), which write tags down too
 tracked_infra = subprocess.run(
-    ["git", "ls-files", "-z", "--", str(INFRA.relative_to(ROOT)), str(RUN_PAGES.relative_to(ROOT))],
+    ["git", "ls-files", "-z", "--", *map(repo_layout.rel, TAG_SCAN_DIRS), repo_layout.rel(RUN_PAGES)],
     cwd=ROOT, capture_output=True, text=True,
 )
 if tracked_infra.returncode != 0:
@@ -1262,7 +1266,7 @@ for path in sorted(ROOT / rel for rel in tracked_infra.stdout.split("\0") if rel
 
 # ---- 5. the release recipe runs only images an operator can PULL ---------------------------------------------
 
-PROD_COMPOSE = INFRA / "docker-compose.prod.yml"
+PROD_COMPOSE = repo_layout.PROD_COMPOSE
 
 # A veyq-namespaced image name where an image reference would carry one: at the start of the value, or after a
 # registry/owner `/`, and ending at the tag separator or the value's end. Deliberately NOT anchored on the whole
@@ -1447,7 +1451,7 @@ if prod_project:
 # The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
 # plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
 VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
-CHART = ROOT / "charts/veyq/Chart.yaml"
+CHART = CHART_DIR / "Chart.yaml"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 # The registry the publish pushes to. The owner is not taken from the workflow — there it is
 # `github.repository_owner`, which is whoever runs it, a fork included — but from the chart's `home`, the one
@@ -1692,7 +1696,7 @@ else:
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
-        f"no literal veyq image tag found anywhere under {INFRA.relative_to(ROOT)}/ or "
+        f"no literal veyq image tag found anywhere under {'/, '.join(map(repo_layout.rel, TAG_SCAN_DIRS))}/ or "
         f"{RUN_PAGES.relative_to(ROOT)}/ — this half of the guard "
         f"checked NOTHING and would report green either way"
     )

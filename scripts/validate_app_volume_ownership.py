@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every named volume the app WRITES must be a path the runtime image already owns.
 
-**What it asserts.** For each compose service under `infra/` that runs the veyq app, take every mount whose
+**What it asserts.** For each service of the Compose files (`repo_layout.COMPOSE_FILES`) that runs the veyq app, take every mount whose
 source is a **named volume declared in that file** and that is not read-only, and assert that every
 `runtime-*` stage of the `Dockerfile` (a) creates the mount's container path and (b) `chown`s it to the
 runtime user the stage's `USER` names. Both halves matter and neither implies the other: Docker seeds a fresh
@@ -56,9 +56,10 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOCKERFILE = ROOT / "Dockerfile"
-INFRA = ROOT / "infra"
+DOCKERFILE = repo_layout.APP_DOCKERFILE
 
 # `FROM <image> AS <stage>` — the stage name is what a compose `build.target` names.
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -169,7 +170,11 @@ if not stages:
     errors.append("Dockerfile declares no `runtime-*` stage — there is no image for a volume to be seeded from")
 
 checked = 0
-for compose in sorted(INFRA.glob("*.yml")) + sorted(INFRA.glob("*.yaml")):
+for compose in repo_layout.COMPOSE_FILES:
+    if not compose.is_file():
+        errors.append(f"{repo_layout.rel(compose)} does not exist — scripts/repo_layout.py names a Compose file the "
+                      f"tree does not hold")
+        continue
     try:
         doc = yaml.safe_load(compose.read_text()) or {}
     except yaml.YAMLError as exc:
@@ -210,7 +215,7 @@ if checked == 0:
     # A guard that inspected nothing must not report success: the app service losing its volumes, or this
     # guard's app detection drifting, both land here and both are findings.
     errors.append(
-        "no writable named-volume mount was found on any app service under infra/ — either the production "
+        "no writable named-volume mount was found on any app service of the Compose files — either the production "
         "stack stopped persisting anything, or this guard no longer recognises the app service"
     )
 

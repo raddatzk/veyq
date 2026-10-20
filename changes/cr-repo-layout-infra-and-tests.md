@@ -50,7 +50,7 @@ Build stage 1 of [ADR 0106](../docs/decisions/0106-deployment-under-infra-tests-
 
 ## Phases
 
-- [ ] **1 readers that work on both layouts** — on the untouched tree, in a commit of its own
+- [x] **1 readers that work on both layouts** — on the untouched tree, in a commit of its own
   (`changes/README.md` § *A move re-points its readers first*):
   `chart_upgrade_check.py` finds the predecessor's chart at the new path, else at `charts/veyq` (bite: point the
   lookup at the old path only, the selftest must show it would skip; then restore); `docker-compose.yml` declares

@@ -249,12 +249,14 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CHART = ROOT / "charts" / "veyq"
+CHART = repo_layout.CHART_DIR
 CI_DIR = CHART / "ci"
 SINK_KT = backend_tree.source_file("me.raddatz.veyq.core.tenant.KubernetesGatewaySink")
 CONFIG_KT = backend_tree.source_file("me.raddatz.veyq.core.config.VeyqConfig")
-DOCKERFILE = ROOT / "Dockerfile"
+DOCKERFILE = repo_layout.APP_DOCKERFILE
 
 ENV_KEY = "VEYQ_SECURITY_CONFIG_SECRET_FILE"
 # The same anchors the compose guards use, for the same reasons.

@@ -142,13 +142,15 @@ except ImportError:
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
 WEB = ROOT / "web"
 CRYPTO = ROOT / "packages" / "crypto"
 ADMIN_WEB = ROOT / "admin-web"
-E2E = ROOT / "e2e"
+E2E = repo_layout.E2E_DIR
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # The surface set, and the whole of it: every surface a CI job is written to run. Adding one permits gaps on it

@@ -106,7 +106,8 @@ Environment (all optional):
     VEYQ_JAR              Backend fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
     VEYQ_PORT             Backend HTTP port. Default: 8080
     VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090
-    VEYQ_INFRA_DIR        The `infra/` whose compose stack to use. Default: this checkout's (see [compose_up] for a worktree)
+    VEYQ_INFRA_DIR        The directory holding the Compose files whose stack to use (a checkout's `DOCKER_DIR` in
+                          `scripts/repo_layout.py`). Default: this checkout's (see [compose_up] for a worktree)
     VEYQ_HOST             Tenant domain + fetch Host. Default: veyq.localhost
     VEYQ_BOOT_SECS        Readiness timeout per boot. Default: 120
     VEYQ_TEST_MS          Default per-test timeout passed to vitest. Default: 120000
@@ -135,6 +136,7 @@ from typing import Iterable, NamedTuple
 # script's own directory — `scripts/` — on `sys.path`, which also holds when `validate_e2e_discovery.py`
 # imports this module by path.
 import instance_backup
+import repo_layout
 # The ADR 0053 sweeps, shared with `run_stack_e2e.py` and bound to this file's dev stack below ([DEV]). The pure
 # parts are re-exported under the names this module always had: the guards that import it by path call them here.
 import e2e_sweeps as sweeps
@@ -145,21 +147,32 @@ from e2e_sweeps import (  # noqa: F401 - re-exported for scripts/validate_wire_l
 
 REPO = Path(__file__).resolve().parent.parent
 WEB = REPO / "web"
-# `VEYQ_INFRA_DIR` pins the stack to another checkout's `infra/` — see the worktree note in [compose_up].
-INFRA = Path(os.environ.get("VEYQ_INFRA_DIR", REPO / "infra"))
+# `VEYQ_INFRA_DIR` names the directory holding the Compose files (ADR 0106: `infra/docker/` of a checkout), and pins
+# the stack to another checkout's — see the worktree note in [compose_up].
+INFRA = Path(os.environ.get("VEYQ_INFRA_DIR", repo_layout.DOCKER_DIR))
 COMPOSE_FILE = INFRA / "docker-compose.yml"
 COMPOSE = ["docker", "compose", "-f", str(COMPOSE_FILE), "--profile", "s3", "--profile", "mail"]
-# The network a group's capture/restore containers join to reach the store by its INTERNAL name. Compose derives
-# a project name from the compose file's DIRECTORY unless the file declares one, and this one deliberately does
-# not (a `name:` here would change the real network while this derivation kept naming the old one) — so this is
-# `infra_default`, derived rather than hardcoded, because the derivation is the rule and the string is only
-# today's answer to it.
-DOCKER_NETWORK = f"{COMPOSE_FILE.parent.name}_default"
 
-# The production stack is a SECOND compose project on the same host, and the line above is exactly why that is a
-# hazard rather than a detail: the derivation reads the compose file's DIRECTORY, both files live in `infra/`,
-# and a capture pointed at the production file therefore resolves whatever is running out of `infra/` — which on
-# any developer's host is the stack this orchestrator just brought up. See [rehearse_production_project].
+
+def compose_project(compose_file: Path) -> str:
+    """The project a Compose file runs as, by Compose's own rule: the file's top-level `name:`, else its directory's
+    name. Read rather than hardcoded, because the rule is the authority and the string only today's answer to it."""
+    try:
+        text = compose_file.read_text()
+    except OSError:
+        return compose_file.parent.name
+    declared = re.search(r"^name:\s*['\"]?([^'\"\s#]+)", text, re.MULTILINE)
+    return declared.group(1) if declared else compose_file.parent.name
+
+
+# The network a group's capture/restore containers join to reach the store by its INTERNAL name: the dev project's
+# default network. The dev file declares its project (`name: infra`, ADR 0106 decision 2), so this is
+# `infra_default` wherever the file sits.
+DOCKER_NETWORK = f"{compose_project(COMPOSE_FILE)}_default"
+
+# The production stack is a SECOND compose project on the same host. Both files sit in one directory, and only the
+# production file's own `name: veyq` keeps a capture pointed at it from resolving the dev stack this orchestrator
+# just brought up. See [rehearse_production_project].
 PROD_COMPOSE_FILE = INFRA / "docker-compose.prod.yml"
 
 # Where a run's artifacts land. A CONSTANT only — `main()` creates it, never module scope:

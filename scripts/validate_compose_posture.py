@@ -98,8 +98,10 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-COMPOSE = ROOT / "infra" / "docker-compose.prod.yml"
+COMPOSE = repo_layout.PROD_COMPOSE
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BUILD_JOB = "build"
 

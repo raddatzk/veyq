@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that a containerised veyq keeps its config-secret KEK across a container recreate.
 
-**What it asserts.** For every service in every compose file under `infra/` that runs the veyq **app**, the path
+**What it asserts.** For every service in every Compose file (`repo_layout.COMPOSE_FILES`) that runs the veyq **app**, the path
 `veyq.security.config-secret-file` resolves to *inside that container* lives under a mount that survives the
 container. Resolution follows the real rule rather than a paraphrase of it:
 
@@ -14,7 +14,7 @@ or type checks against each other. It also asserts that **every `runtime-*` targ
 service that names a published `image:` cannot say which target it runs, so the relative default is only
 resolvable while the targets have not drifted apart. There is one today (`runtime-jvm`; inbox #200 removed
 `runtime-native`), so that half bites only once a second target exists. And it refuses to pass vacuously: zero
-app services across all of `infra/` is a failure, not a green run over nothing.
+app services across the Compose files is a failure, not a green run over nothing.
 
 **The defect that bought it.** ADR 0056 § Consequences surfaced it and this guard's CR fixed it: no image
 declared a volume for the key file and no compose file mounted one, so a recreated app container regenerated
@@ -54,10 +54,11 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOCKERFILE = ROOT / "Dockerfile"
+DOCKERFILE = repo_layout.APP_DOCKERFILE
 CONFIG_KT = backend_tree.source_file("me.raddatz.veyq.core.config.VeyqConfig")
-INFRA = ROOT / "infra"
 
 ENV_KEY = "VEYQ_SECURITY_CONFIG_SECRET_FILE"
 
@@ -167,8 +168,11 @@ if not kt_match:
 default_path = kt_match.group(1) if kt_match else None
 
 checked = 0
-for compose in sorted(list(INFRA.glob("*.yml")) + list(INFRA.glob("*.yaml"))):
-    rel = compose.relative_to(ROOT).as_posix()
+for compose in repo_layout.COMPOSE_FILES:
+    rel = repo_layout.rel(compose)
+    if not compose.is_file():
+        errors.append(f"{rel} does not exist — scripts/repo_layout.py names a Compose file the tree does not hold")
+        continue
     try:
         doc = yaml.safe_load(compose.read_text()) or {}
     except yaml.YAMLError as e:
@@ -242,7 +246,7 @@ if not checked and not errors:
     # The `NoE2eFilesError` lesson, in another surface: a guard that checked nothing and a guard whose subject
     # is sound report the same green.
     errors.append(
-        f"no veyq app service found in any compose file under {INFRA.relative_to(ROOT)}/ — this guard checked "
+        f"no veyq app service found in any of the Compose files ({', '.join(map(repo_layout.rel, repo_layout.COMPOSE_FILES))}) — this guard checked "
         f"NOTHING and would report green either way"
     )
 

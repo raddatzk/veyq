@@ -2,7 +2,8 @@
 """A `helm upgrade` of the chart from the upgrade predecessor's to this checkout's, checked without a cluster.
 
 **What it asserts** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md) § Decision, the chart-upgrade check). It reads the
-predecessor's `charts/veyq` out of git (`git archive`, no worktree, no build) and renders it and this checkout's chart
+predecessor's chart out of git (`git archive`, no worktree, no build) - at this checkout's chart path, else at
+`charts/veyq`, where a release before ADR 0106 carries it (decision 3) - and renders it and this checkout's chart
 with the same values - each of the CANDIDATE's `ci/*.yaml`, like for like - then compares the two renders object by
 object, keyed by `(kind, metadata.name)`. It refuses, each with a reason naming the object and the field:
 
@@ -27,8 +28,8 @@ candidate's schema and render, or the upgrade fails before it starts.
 **The predecessor** is the upgrade proof's ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)
 Decision 7): `run_web_e2e.default_predecessor_ref()`, so the commit before the one under test while
 `scripts/applied_migrations.sha256` says `release: none`, then the newest `v<major>.<minor>` tag the first parent
-contains. `--upgrade-from <ref>` names another one, as it does for the proof. A predecessor without `charts/veyq` is said and skipped - nothing to
-upgrade from.
+contains. `--upgrade-from <ref>` names another one, as it does for the proof. A predecessor with a chart at neither path is said and skipped -
+nothing to upgrade from.
 
 **The verdict** is [verdict]'s alone, on the same `release:` line the upgrade proof reads: while it is `none` the
 findings are printed with their reasons and the run exits 0, "information only" - a chart before the first release
@@ -74,11 +75,12 @@ from decimal import Decimal, InvalidOperation
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import chart_render  # noqa: E402 - the one `helm template` both chart scripts render through
+import repo_layout  # noqa: E402 - where the chart lives, in this checkout's layout and in the one before it
 import run_web_e2e as e2e  # noqa: E402 - the upgrade proof's predecessor and its pin line
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-CHART_PATH = "charts/veyq"
-CHART = ROOT / CHART_PATH
+ROOT = repo_layout.ROOT
+CHART_PATH = repo_layout.CHART_PATH
+CHART = repo_layout.CHART_DIR
 WHO = "chart upgrade check"
 
 # The kinds whose loss loses data: a StatefulSet's claims and a standalone claim (refusal 7).
@@ -257,18 +259,31 @@ def predecessor(ref: str | None) -> tuple[str, str]:
     return asked, found.stdout.decode().strip()
 
 
+def predecessor_chart_path(has_chart, current: str = CHART_PATH,
+                           legacy: str = repo_layout.LEGACY_CHART_PATH) -> str | None:
+    """Where a predecessor's tree carries the chart: this checkout's path first, the layout before ADR 0106 second
+    (decision 3) - so the first release after a move still checks an upgrade instead of reporting none. `has_chart`
+    answers whether a path holds a `Chart.yaml`; None where neither does."""
+    for path in dict.fromkeys((current, legacy)):
+        if has_chart(path):
+            return path
+    return None
+
+
 def extract_chart(commit: str, into: pathlib.Path) -> pathlib.Path | None:
-    """The predecessor's `charts/veyq`, unpacked from git into `into`; None where that commit has no chart."""
-    if not git("ls-tree", "--name-only", commit, "--", f"{CHART_PATH}/Chart.yaml").stdout.strip():
+    """The predecessor's chart, unpacked from git into `into`; None where that commit has no chart."""
+    path = predecessor_chart_path(
+        lambda p: bool(git("ls-tree", "--name-only", commit, "--", f"{p}/Chart.yaml").stdout.strip()))
+    if path is None:
         return None
-    archive = git("archive", "--format=tar", commit, "--", CHART_PATH)
+    archive = git("archive", "--format=tar", commit, "--", path)
     if archive.returncode != 0:
-        print(f"{WHO}: `git archive {commit[:12]} -- {CHART_PATH}` failed: {archive.stderr.decode().strip()}",
+        print(f"{WHO}: `git archive {commit[:12]} -- {path}` failed: {archive.stderr.decode().strip()}",
               file=sys.stderr)
         sys.exit(2)
     with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
         tar.extractall(into)
-    return into / CHART_PATH
+    return into / path
 
 
 def render(chart: pathlib.Path, values: pathlib.Path, what: str, problems: list[str]) -> list[dict] | None:
@@ -299,7 +314,8 @@ def main(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="chart-upgrade-") as tmp:
         old_chart = extract_chart(commit, pathlib.Path(tmp))
         if old_chart is None:
-            print(f"{WHO}: the predecessor carries no {CHART_PATH} - there is no chart to upgrade from; skipped")
+            print(f"{WHO}: the predecessor carries no chart (neither {CHART_PATH} nor {repo_layout.LEGACY_CHART_PATH}) - "
+                  f"there is no chart to upgrade from; skipped")
             return 0
         # Like for like: both charts with each of the candidate's values files.
         for values in candidate_values:

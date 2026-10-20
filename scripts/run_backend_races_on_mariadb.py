@@ -62,9 +62,11 @@ from pathlib import Path
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 REPO = Path(__file__).resolve().parent.parent
 BACKEND = REPO / "backend"
-COMPOSE_FILE = REPO / "infra" / "docker-compose.yml"
+COMPOSE_FILE = repo_layout.DEV_COMPOSE
 NAME = f"veyq-race-mariadb-{os.getpid()}"
 PASSWORD = "race"  # a throwaway container's credential, not a secret
 RACE_CALL = re.compile(r"\b(race|whileUncommitted|holdForOverlap)\(|\bCountDownLatch\b|\bCyclicBarrier\b")

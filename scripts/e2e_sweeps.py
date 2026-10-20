@@ -69,7 +69,8 @@ class SweepError(RuntimeError):
 
 
 def shown(path: Path) -> Path:
-    """A path for a log line: relative to this checkout where it is inside it — `VEYQ_INFRA_DIR` may point outside."""
+    """A path for a log line: relative to this checkout where it is inside it — `VEYQ_INFRA_DIR` (the directory holding
+    the Compose files, `DOCKER_DIR` in `scripts/repo_layout.py`) may point outside."""
     try:
         return path.relative_to(REPO)
     except ValueError:

@@ -69,9 +69,11 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-E2E = ROOT / "e2e"
+E2E = repo_layout.E2E_DIR
 READINGS = ROOT / ".run" / "measurements"
 DOMAIN = "veyq.test"  # run_stack_e2e.DOMAIN: Pebble's certificate, Traefik's alias, the tenant's domain
 CONNECT = ("127.0.0.1", 443)

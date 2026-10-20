@@ -3,6 +3,13 @@
 #   docker compose up -d        (from backend/)
 #   docker compose down         (stop; data is kept in the named volume)
 #   docker compose down -v      (stop AND wipe the data — fresh instance)
+
+# The project name is a property of THIS FILE, not of the directory it sits in (ADR 0106 decision 2): the dev stack
+# has been project `infra` since it was born, so its volumes are `infra_veyq-*` and its network `infra_default`.
+# Derived from the directory instead, a move of this file would start the stack on empty volumes under another name.
+# `scripts/run_web_e2e.py` reads the network's name from here.
+name: infra
+
 services:
   mariadb:
     image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
