@@ -60,6 +60,9 @@ const options = computed(() => [
   font-size: 0.92rem;
   line-height: 1.45;
 }
+.mode-choice__notice p:last-child {
+  margin-bottom: 0;
+}
 .mode-choice__accept {
   display: flex;
   align-items: center;

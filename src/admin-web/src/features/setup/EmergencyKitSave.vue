@@ -52,10 +52,6 @@ async function download() {
 </template>
 
 <style scoped>
-/* The parent's action button follows the confirm row directly: keep it off the checkbox. */
-.kit-save {
-  margin-bottom: 1.25rem;
-}
 .kit-save > * + * {
   margin-top: 0.85rem;
 }

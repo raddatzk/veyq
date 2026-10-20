@@ -131,6 +131,7 @@ async function copyLink() {
 <style scoped>
 .field-hint {
   display: block;
+  margin: 0;
   opacity: 0.7;
   font-size: 0.85em;
 }
