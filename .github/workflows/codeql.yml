@@ -43,12 +43,16 @@ jobs:
             actions:
               - '.github/workflows/codeql.yml'
               - '.github/**'
+            # contracts/api/** in both: the backend's interfaces and the web clients are generated from it at build
+            # time, so a spec change is a change to the code CodeQL analyzes.
             java-kotlin:
               - '.github/workflows/codeql.yml'
               - 'src/backend/**'
+              - 'contracts/api/**'
             javascript-typescript:
               - '.github/workflows/codeql.yml'
               - 'src/web/**'
+              - 'contracts/api/**'
               - 'site/**'
               - '**/*.js'
               - '**/*.mjs'
