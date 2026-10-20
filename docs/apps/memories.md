@@ -199,7 +199,7 @@ contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` t
 only `FOLDER`), declares that a `MEMORY` and a `CHAPTER` may be the root of a share of every role through
 `ShareRoots` and takes guest writes under both through `ShareGuestWrites` (one set, `MemoriesNodeKinds.SHARE_ROOTS`). Memories' tests run in `:apps:memories`, beside the
 core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
-by import direction only**: `features/memories` is the application (core imports it nowhere but the composition root
+by import direction**: `features/memories`, named for its owner as `:apps:memories` is, is the application (core imports it nowhere but the composition root
 and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
 (inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
 leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #411), the name, the meta line "Memory" plus the details date range and place (`details`, `memoryRowDetails.ts`: each left out when the Memory has none, the same for a share guest, [apps/README](README.md#how-an-application-shows-facts-in-a-levels-rows-and-tiles)), a primary click that opens it, rename and move in
@@ -207,8 +207,8 @@ the row's menu (the favorite heart on the row is core's own action, the same for
 and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
 files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370; one list of
 the three, `memoryViews.ts`), and its create and share dialogs ride on its kinds
-(a rename is core's, as a folder's create is), though its directory name is still Memories-shaped (the top-bar tray and
-the sidebar pins are ordered lists, today unused by Memories: the sidebar's Favorites section is core's; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
+(a rename is core's, as a folder's create is); the top-bar tray and
+the sidebar pins are ordered lists, today unused by Memories (the sidebar's Favorites section is core's; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
 batches with every other application's). What core still knows of Memories, and what is open on both sides,
 [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences lists.
 

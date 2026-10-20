@@ -51,7 +51,7 @@ media tables. What is built and what is open: the ADR's Consequences.
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs) but not by directory name. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
+| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
 | [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |

@@ -700,6 +700,13 @@ hard-coded fallback directory the rename rewrote to the new path — stayed gree
 exact hole this order exists to close. The same order holds for the last step of a series: the move lands green
 first, and only then do the guards that judge its result change.
 
+**A directory move's locator resolves specifiers; a grep for the path finds only the readers that spell it.** Moving
+`web/src/features/memory` (inbox #324), `git grep features/memory` found 600 readers and missed 29: imports from a
+sibling feature (`'../memory/memoryNodes'`, `'../../memory/api'`) never spell the parent directory, and only `vue-tsc`
+named them. Resolve every relative specifier against its file and test where it lands — the way
+`validate_web_core_imports_no_applications.py` reads an edge — and a docs tree that shares the name
+(`docs/features/memory/`) is set apart by its prefix, not by hand.
+
 ### Promote one-shot proofs to permanent guards
 
 When a CR's correctness rests on a structural invariant it

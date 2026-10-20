@@ -288,12 +288,14 @@ on their own.
   the photo source Memories once added is gone; a stored photo reference reads as no cover. **Residual, accepted** (inbox #505):
   a shared cover row names the medium's PREVIEW blob, so the operator can tell which medium is the cover. A guest sees the
   cover through the share's gated blob route and gets no action in this step.
-  **The web side is separated by import direction, not by name or by kind:** `web/src/features/memories` is the
+  **The web side is separated by import direction, not by kind:** `web/src/features/memories` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
   application fills, which body renders a public share, and what runs when a scope is entered or reset and when the
-  Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
-  directory is still named `features/memories`; the folder level view is core's (`core/node/LevelView.vue`) and each
+  Master Key rotates (that hook is required: a rotation refuses to start without it). An application's directory is
+  named for its owner, `web/src/features/<owner>` (Memories' moved from `features/memory`, inbox #324), and the web
+  guard derives it from the owner name instead of listing it, so a directory named otherwise is a missing one and red.
+  The folder level view is core's (`core/node/LevelView.vue`) and each
   application contributes ROW DATA per kind through the registry (inbox #407: the sections are retired, core draws ONE
   list of the folders and every kind's rows — a factory per application answers a row per node: icon or cover, title,
   meta line, primary click and rights-gated actions) — naming the presentations it switches between beyond core's grid
@@ -302,7 +304,12 @@ on their own.
   (`LevelRowsContext.viewMode`, inbox #404: no factory reads the stored preference) — and so its create and share dialogs (a folder's
   create and every node's rename are core's own dialog, FOLDER's share dialog is core's), while the top-bar tray and
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
-  core's own, listing every application's uploads, so no application adds it); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
+  core's own, listing every application's uploads, so no application adds it). Not done on the web: the i18n catalog
+  is one file (each application's keys are its own top-level namespaces, `memory`/`media` and `depot`, and the guard's
+  i18n rule keeps core from reading them), and `styles/memory.css` is global — and not only Memories': of the 39
+  classes it defines, 4 are used by core alone (the cover cropper's), 4 by core and an application, 25 by Memories
+  alone, 6 by nothing (measured at inbox #324's close by a scan of every non-test `.ts`/`.vue` under `web/src`); inbox
+  #513 holds both. The kind is a string token on both
   sides, so that core never names an application's kind (`MEMORY`, `CHAPTER`, `FILE`, `DEPOT_DROPBOX`) is guarded
   (both kind rules read literals, from lists a new application must extend by hand: a kind missing there is guarded by
   nothing, and nothing turns red), not typed, and no compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
