@@ -214,7 +214,7 @@ on their own.
   no such module, or nested deeper, fails the build while it configures. The package root `me.raddatz.veyq` — also the Gradle `group`, so
   the module jars' prefix — is the owner's domain `raddatz.me` reversed; it was `com.veyq` until
   2026-10-05, and the rename moved no class between packages. Each module owns its migrations under one global version scheme
-  (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)
+  (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../src/backend/CLAUDE.md)
   § Migrations): a core migration names no application table, an application's references only core's and its own.
   Core reaches application code through fourteen interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `ShareRoots` (which roles a node of the kind may

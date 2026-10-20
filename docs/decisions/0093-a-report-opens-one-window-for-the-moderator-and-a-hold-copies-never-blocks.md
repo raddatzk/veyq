@@ -98,7 +98,7 @@ Five facts shape the design:
   folder (`veyq_node.share_identity_id`) and a share's creator (`veyq_share.owner_account`). It records nobody for
   a node's name or meta, a share's note or name, a bucket's name, or a space's name and icon (M, both baselines).
 - **A seal opens with its object's key, and that key opens more.** Before § 9 a field was sealed with AES-GCM
-  directly under its object's key ([`seal.ts`](../../packages/crypto/src/seal.ts), M): a node's name with its
+  directly under its object's key ([`seal.ts`](../../src/packages/crypto/src/seal.ts), M): a node's name with its
   parent's key, a node's meta and a bucket's name with `K_node`, a share's note and names with `K_share`. Only a
   group's name and a space's icon used keys derived for that field alone (`group-name-key`, `K_icon`), and those per
   epoch. A media is not a node: its `K_blob`s are

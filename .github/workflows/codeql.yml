@@ -45,10 +45,10 @@ jobs:
               - '.github/**'
             java-kotlin:
               - '.github/workflows/codeql.yml'
-              - 'backend/**'
+              - 'src/backend/**'
             javascript-typescript:
               - '.github/workflows/codeql.yml'
-              - 'web/**'
+              - 'src/web/**'
               - 'site/**'
               - '**/*.js'
               - '**/*.mjs'

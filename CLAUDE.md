@@ -99,6 +99,6 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   rule. Never to git: a reason only a `git log` holds is one the next reader will not find.
 
 ## Prove your work
-Each surface's own `CLAUDE.md` names its check: [`backend/CLAUDE.md`](backend/CLAUDE.md) (`./gradlew check`),
-[`web/CLAUDE.md`](web/CLAUDE.md) (`npm run check`). The doc trust chain is the `trust-chain` CI job
+Each surface's own `CLAUDE.md` names its check: [`backend/CLAUDE.md`](src/backend/CLAUDE.md) (`./gradlew check`),
+[`web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`). The doc trust chain is the `trust-chain` CI job
 (`scripts/validate_*.py`); run it before claiming a doc change is sound.

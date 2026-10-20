@@ -1,0 +1,49 @@
+{
+  "name": "veyq-admin-web",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "//": "The Server-Owner administration surface as its own deployable (ADR 0065). A pure client of the existing backend Admin API \u2014 no DB, no KEK, no new backend surface. It shares exactly ONE thing with `web/`: @veyq/crypto, because first-run setup performs a real cold account birth and a second copy of that would be a security defect. Everything else (router, state, UI, generated client) is this package's own, on purpose.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node22 --define:process.env.NODE_ENV=\\\"production\\\" --outfile=dist-cli/cli.js",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "npm run generate:api",
+    "generate:api": "node ../../scripts/verify_openapi_generator_jar.mjs && openapi-generator-cli generate -g typescript-fetch -i ../../contracts/api/setup.openapi.yaml -o src/api/generated --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../../contracts/api/auth.openapi.yaml -o src/api/generated/auth --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../../contracts/api/tenants.openapi.yaml -o src/api/generated/tenants --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../../contracts/api/instance.openapi.yaml -o src/api/generated/instance --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false",
+    "verify:argon-worker": "node ../packages/crypto/scripts/assert-argon-worker-in-dist.mjs dist",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:argon-worker && npm run build:cli"
+  },
+  "dependencies": {
+    "@primeuix/themes": "^2.0.3",
+    "@veyq/crypto": "*",
+    "jspdf": "^4.2.1",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.5.5",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.42",
+    "vue-i18n": "^11.4.12",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@intlify/message-compiler": "^11.4.12",
+    "@openapitools/openapi-generator-cli": "^2.41.0",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "@vue/test-utils": "^2.5.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.7.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "happy-dom": "^20.9.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.2"
+  }
+}

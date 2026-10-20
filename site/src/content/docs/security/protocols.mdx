@@ -15,7 +15,7 @@ This page walks through every protocol in which veyq creates, moves, or replaces
 login, device linking, member admission, sharing, rotation and revocation, and recovery. Each section names its
 participants, gives the steps in prose and as one sequence diagram, and then states what the server learns, what it
 cannot do, and what remains open. Byte formats are not restated here. They live in the conformance-pinned suite
-[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts) and its vectors
+[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts) and its vectors
 [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json).
 
 :::caution[Which client the claims apply to]
@@ -70,7 +70,7 @@ Opening content needs the Master Key, which only the unlock step produces.
    two Master Key wraps, the auth **public** key, the proof **public** key and the suite id. The password, the
    Secret Key and the Master Key never leave the device. The same birth runs at first-run setup (the Server Owner)
    and when an account is born by joining a tenant through an invite
-   ([`accountBirth.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/accountBirth.ts)).
+   ([`accountBirth.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/accountBirth.ts)).
 3. **Login (challenge-response).** The client re-derives the auth keypair, asks for a challenge, and gets a
    single-use, time-bounded nonce. The server issues one whether or not the account exists. The client signs the
    nonce and sends back the email, the nonce and the signature. The server consumes that one challenge, checks the

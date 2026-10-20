@@ -101,7 +101,7 @@ To check that a release you run is the one that was published, see [Verify a rel
 :::note
 The normative sources are the [security model](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md)
 and the ADRs under [`docs/decisions/`](https://github.com/raddatzk/veyq/tree/main/docs/decisions). Byte formats
-are specified only by [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts)
+are specified only by [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts)
 and its vectors, [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json).
 Where this area and those files disagree, the files win.
 :::

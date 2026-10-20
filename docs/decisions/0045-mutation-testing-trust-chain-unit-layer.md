@@ -24,7 +24,7 @@ the defect"*): here nothing notices, which is the whole point.
 | Surface | Finding |
 |---|---|
 | **web crypto** (`v1.ts`, 361 LOC) | Already pinned by a **known-answer battery** — `v1.conformance.test.ts` asserts ~20 exact output bytes against `contracts/crypto/vectors/v1.json`. An identity mutant (`aeadSeal=pt`, `symWrap(k,x)=x`) dies by construction: the pinned `sym_master_key.blob` begins `02‖nonce‖tag`, never the plaintext. The place #99 feared weakest is the counter-example. A KAT is strictly stronger than mutation for what it covers. |
-| **backend** | Performs **no content crypto** (hard invariant, [`backend/CLAUDE.md`](../../backend/CLAUDE.md)) — only SHA-256 token verifiers, Ed25519 verify, CSPRNG. The security-critical logic is authz/share/scope/session **decisions**, already covered by strong `@QuarkusTest` slices (44 slice classes vs. 4 boot-free unit files). The mutation cost driver there is the **Quarkus boot per covering test**, not the mutant count (the decision logic is ~85 LOC). |
+| **backend** | Performs **no content crypto** (hard invariant, [`backend/CLAUDE.md`](../../src/backend/CLAUDE.md)) — only SHA-256 token verifiers, Ed25519 verify, CSPRNG. The security-critical logic is authz/share/scope/session **decisions**, already covered by strong `@QuarkusTest` slices (44 slice classes vs. 4 boot-free unit files). The mutation cost driver there is the **Quarkus boot per covering test**, not the mutant count (the decision logic is ~85 LOC). |
 
 No mutation tooling exists (web = vitest; backend = Gradle/Quarkus/Kotlin). This is greenfield.
 

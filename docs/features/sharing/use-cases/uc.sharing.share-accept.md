@@ -62,7 +62,7 @@ stored is no triple, so that visitor is asked once more, and the next accept dro
 **Honest about its limits — this is an operational gate, not enforcement.** A client-side localStorage gate is
 **bypassable** by an accountless visitor (devtools, a fresh profile, or resolving the share directly). It is the
 same class of gate as the member terms gate, which the code frames as *"an operational gate, not a confidentiality
-control"* ([activeSpace.ts](../../../../web/src/app/activeSpace.ts)) — it records consent and surfaces the policy,
+control"* ([activeSpace.ts](../../../../src/web/src/app/activeSpace.ts)) — it records consent and surfaces the policy,
 it does not *prevent* access, and it is **not** a legal-non-repudiation record for an accountless visitor (ADR 0035
 §3 states this limit). Because the terms carry the legally-meaningful clauses, the operator's real protection is the
 **decryptable-on-report** review-and-removal path (security model), not this prompt. Consistent with that, the gate

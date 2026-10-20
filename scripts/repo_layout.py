@@ -21,9 +21,9 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# The code surfaces (ADR 0106 decision 5). `SRC` is the repository root until stage 2 moves them under `src/`; a
-# reader built on these names follows that move without an edit of its own.
-SRC = ROOT
+# The code surfaces (ADR 0106 decision 5), under `src/` since stage 2. Not to be confused with a surface's own `src/`
+# (`web/src`, a Gradle module's `src/main`), which is the surface's business.
+SRC = ROOT / "src"
 BACKEND = SRC / "backend"
 WEB = SRC / "web"
 ADMIN_WEB = SRC / "admin-web"
@@ -74,8 +74,7 @@ CHART_PATH = rel(CHART_DIR)
 
 
 def surface_paths(surface: pathlib.Path) -> tuple[str, str]:
-    """(`surface` in this layout, in the layout before stage 2) - repository-relative, the forms `git ls-tree` takes.
-    The two are one path while `SRC` is the root."""
+    """(`surface` in this layout, in the layout before stage 2) - repository-relative, the forms `git ls-tree` takes."""
     return rel(surface), LEGACY_SURFACES[surface]
 
 

@@ -254,7 +254,7 @@ object moved **out of the Memories module into the platform's**:
 
 - Supersedes nothing; it **discharges** [ADR 0014](0014-group-scopes-and-governance.md) §7, whose open question
   ("folded in when favorites reach group scopes") is answered by §1–§3 above.
-- Owner map: [docs/apps/memories.md](../apps/memories.md) (the marks) and [web/CLAUDE.md](../../web/CLAUDE.md) (the pin in core), [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) (core and applications)
+- Owner map: [docs/apps/memories.md](../apps/memories.md) (the marks) and [web/CLAUDE.md](../../src/web/CLAUDE.md) (the pin in core), [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) (core and applications)
 - Enabler: [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md) (both objects)
 - Use-case: [uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) (the filter + the aggregate)
 - Concepts: [Security Model](../crosscutting/security-model.md) § *What is encrypted vs. server-visible*

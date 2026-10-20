@@ -213,7 +213,10 @@ infra/.env
 # `--key-beside-dump` also holds the config-secret KEK — this directory must never become a commit.
 # `.dockerignore` keeps it out of the build context for the same reason.
 infra/backups/
-# Local dev secrets — Quarkus dev-mode auto-loads backend/.env (SMTP creds, real cloud keys); keep it untracked.
+# Local dev secrets — Quarkus dev-mode auto-loads src/backend/.env (SMTP creds, real cloud keys); keep it untracked.
+# `backend/.env` is where it lived before ADR 0106 stage 2; still ignored, so a checkout that has not moved its copy
+# yet cannot commit it (a merge does not move an ignored file).
+src/backend/.env
 backend/.env
 load/k6/users.local.json
 !load/k6/users.local.example.json

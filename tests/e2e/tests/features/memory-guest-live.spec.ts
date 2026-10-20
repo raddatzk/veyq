@@ -17,7 +17,7 @@ import { newDevice, signInOwner, type Device } from '../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
-const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Wanderung über den Rennsteig ${stamp}`
 const shareLabel = `Für die Wandergruppe ${stamp}`

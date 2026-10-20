@@ -67,7 +67,7 @@ new shape.
   `vite.config.ts` lookup of decision 5 (it works at either depth). · Done when: every `scripts/validate_*.py` green
   including `validate_guard_gaps.py --force`; every `scripts/*_selftest.py` green; each decision-2 bite and each new
   guard's bite observed red, then restored; `npm run check` in `web/`.
-- [ ] **2 the move** — `git mv` the four trees, then the mechanical readers: `repo_layout.py`; the Dockerfiles
+- [x] **2 the move** — `git mv` the four trees, then the mechanical readers: `repo_layout.py`; the Dockerfiles
   (decision 4); `.gitignore`, `.dockerignore` (decision 7); root `package.json` workspaces and a regenerated
   `package-lock.json` (the `//lockfile` traps; the diff shows only the workspace paths and their links moving);
   `.github/workflows/*` (`working-directory`, the mutation and CodeQL `paths:` filters, cache paths, the admin

@@ -45,7 +45,7 @@ that a test no CI run executes makes no coverage claim.
 
 [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json)
 is the single source of truth for what suite v1 *is* on the wire. The implementation,
-[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts), is held to it,
+[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts), is held to it,
 and every seal purpose has exactly one vector
 ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
 rule 4, [ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)
@@ -118,7 +118,7 @@ layer: StrykerJS for the TypeScript crypto, and PIT for the backend's policy log
 ([ADR 0045](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md)).
 In `packages/crypto` the break threshold is **100, with no margin**: every equivalent mutant is disabled at its
 own line with its measured reason, so a margin would buy only blindness. The reasoning lives in
-[`stryker.config.mjs`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/stryker.config.mjs).
+[`stryker.config.mjs`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/stryker.config.mjs).
 From `packages/crypto/` (and again from `web/`, which has its own scope):
 
 ```sh
@@ -227,7 +227,7 @@ it, and this repository has run none since its import.
 
 ## The scope-access probe
 
-[`OperatorBlindProbeTest`](https://github.com/raddatzk/veyq/blob/main/backend/src/test/kotlin/me/raddatz/veyq/core/http/OperatorBlindProbeTest.kt)
+[`OperatorBlindProbeTest`](https://github.com/raddatzk/veyq/blob/main/src/backend/src/test/kotlin/me/raddatz/veyq/core/http/OperatorBlindProbeTest.kt)
 is, despite its name, **an authorization probe, not a blindness test**. It is the enforcement guard for the
 scope-access gate
 ([uc.spaces.scope-access](https://github.com/raddatzk/veyq/blob/main/docs/features/spaces/use-cases/uc.spaces.scope-access.md),

@@ -41,8 +41,8 @@ just a sovereignty preference here; anything that erodes it is a security regres
 | Path | What it is |
 |---|---|
 | [`contracts/`](contracts/) | OpenAPI + crypto vectors — the source of truth code is **generated** from |
-| [`backend/`](backend/CLAUDE.md) | Quarkus / Kotlin. Performs no content crypto, never sees a password |
-| [`web/`](web/CLAUDE.md) | Vue 3 client. All content crypto runs here |
+| [`backend/`](src/backend/CLAUDE.md) | Quarkus / Kotlin. Performs no content crypto, never sees a password |
+| [`web/`](src/web/CLAUDE.md) | Vue 3 client. All content crypto runs here |
 | [`docs/`](docs/README.md) | Internal engineering state — architecture, ADRs, features, coverage |
 | [`site/`](site/src/content/docs/start.md) | The project website (what veyq is, its applications, EN + DE) and the published documentation: using veyq (EN + DE, plain language), running an instance, security |
 | [`infra/`](infra/README.md) | Deployment — `infra/docker/` (the app image, the dev and production Compose files), `infra/kubernetes/` (the Helm chart) — and the local dev stack |
@@ -59,8 +59,8 @@ docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
 Then the backend (`cd backend && ./gradlew quarkusDev`) and the web client (`cd web && npm run dev`). Each
-surface documents its own checks: [`backend/CLAUDE.md`](backend/CLAUDE.md) (`./gradlew check`) and
-[`web/CLAUDE.md`](web/CLAUDE.md) (`npm run check`).
+surface documents its own checks: [`backend/CLAUDE.md`](src/backend/CLAUDE.md) (`./gradlew check`) and
+[`web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`).
 
 ## Security
 

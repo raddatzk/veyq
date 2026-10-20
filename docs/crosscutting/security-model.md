@@ -11,7 +11,7 @@
 > For a Server Owner handling a reported share: [Moderation](../../site/src/content/docs/run/moderation.md).
 > For security researchers, the docs site's Security area: [Start here](../../site/src/content/docs/security/start-here.md), [Threat model](../../site/src/content/docs/security/threat-model.md), [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md), [Cryptography](../../site/src/content/docs/security/cryptography.md), [Key hierarchy](../../site/src/content/docs/security/key-hierarchy.md), [Protocols](../../site/src/content/docs/security/protocols.mdx), [Known limitations](../../site/src/content/docs/security/known-limitations.md), [Roadmap](../../site/src/content/docs/security/roadmap.md), [Reporting a vulnerability](../../site/src/content/docs/security/reporting.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
-> [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
+> [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
 This document is the **target model**. What ships in the first build is tracked via the inbox and
 change-requests, not here — with one exception: [§ What holds today](#what-holds-today-on-a-client-the-operator-does-not-serve)
@@ -91,7 +91,7 @@ range API whether the password appears in known breaches. The fences apply like 
   password could not be checked. Stopping there would block every password choice on an instance with no
   internet, for a check nobody opted into.
 
-**Verification:** [`passwordWarning.test.ts`](../../web/src/features/account/passwordWarning.test.ts) (identical
+**Verification:** [`passwordWarning.test.ts`](../../src/web/src/features/account/passwordWarning.test.ts) (identical
 in `admin-web/`) pins the rule on the request itself: nothing while typing; one prefix of the finished password on
 blur; no second request for an unchanged blur; a password changed since is queried again on submit; nothing for a
 password the policy refuses; a hit blocks the submit until "Use it anyway"; an edit clears that acceptance; a check
@@ -240,7 +240,7 @@ personal memory that is publicly shared becomes "shared" for these purposes.
 ## Key hierarchy (envelope encryption)
 
 Content is protected by layered envelopes so grants are cheap and shares are least-privilege. The
-byte-level detail lives in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and every seal binds the object it belongs to ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)); account-level detail (unlock methods, recovery) in the account/key
+byte-level detail lives in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and every seal binds the object it belongs to ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)); account-level detail (unlock methods, recovery) in the account/key
 model. The shape:
 
 ```mermaid
@@ -332,7 +332,7 @@ server-blind token makes this work without the server ever seeing a name:
   key** (`K_SC` at the root) and the parent slot (the parent's node id, or the scope id at the root), so the same
   name under two parents yields unrelated tokens
   ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 2;
-  `slugToken` in [`v1.ts`](../../packages/crypto/src/v1.ts), vectors `slug_token` and `directory_entry`).
+  `slugToken` in [`v1.ts`](../../src/packages/crypto/src/v1.ts), vectors `slug_token` and `directory_entry`).
   `fold` is the node kind's slug function — `slugify` for containers, `fileNameSlug` for files — and is frozen into
   every stored token. The server enforces uniqueness per parent (`UNIQUE(parent_id, slug_token)`) without seeing
   names. A keyed MAC (not a plain hash), so the operator — lacking the parent's key — cannot reverse low-entropy

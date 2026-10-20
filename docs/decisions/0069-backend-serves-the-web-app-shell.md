@@ -47,7 +47,7 @@ inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-pres
    own catch-all already sends an unknown path to sign-in. The `#fragment` never reaches the server, so the
    secrets in `/recover#…` and `/tenant/accept#…` stay in the browser, which is what ADR 0015 relies on.
 2. **The CSP is a response header, with no `<meta>` in production.**
-   [`csp.ts`](../../web/src/shared/security/csp.ts) remains the one source of the policy:
+   [`csp.ts`](../../src/web/src/shared/security/csp.ts) remains the one source of the policy:
    - The web build emits the policy as a file inside `dist`.
    - The backend reads that file at startup and appends, per response, the origin a browser fetches store objects
      from to `connect-src`. That origin comes from the signer's own endpoint resolution, so the policy cannot

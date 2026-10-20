@@ -25,7 +25,7 @@ import { newDevice, signInOwner, type Device } from '../../src/devices'
 test.describe.configure({ mode: 'serial' })
 
 // The round trip's photo (1×1 JPEG with EXIF): something for the guest to decrypt once the password let it in.
-const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Hochzeit im Gartenhaus ${stamp}`

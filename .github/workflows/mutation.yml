@@ -19,11 +19,11 @@ on:
     # Source AND tests: a change to either can move the score (a weakened assertion lives in a *.test.ts), so
     # either must re-run the gate.
     paths:
-      - "packages/crypto/**"
-      - "web/src/**"
-      - "web/stryker.config.mjs"
-      - "web/stryker.mutate.json"
-      - "web/package.json"
+      - "src/packages/crypto/**"
+      - "src/web/src/**"
+      - "src/web/stryker.config.mjs"
+      - "src/web/stryker.mutate.json"
+      - "src/web/package.json"
       - "package.json"
       - "package-lock.json"
       - "scripts/mutation_meta_check.py"
@@ -36,11 +36,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/crypto/**"
-      - "web/src/**"
-      - "web/stryker.config.mjs"
-      - "web/stryker.mutate.json"
-      - "web/package.json"
+      - "src/packages/crypto/**"
+      - "src/web/src/**"
+      - "src/web/stryker.config.mjs"
+      - "src/web/stryker.mutate.json"
+      - "src/web/package.json"
       - "package.json"
       - "package-lock.json"
       - "scripts/mutation_meta_check.py"
@@ -82,8 +82,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            web/reports/stryker-incremental.json
-            packages/crypto/reports/stryker-incremental.json
+            src/web/reports/stryker-incremental.json
+            src/packages/crypto/reports/stryker-incremental.json
           key: stryker-incremental-${{ github.sha }}
           restore-keys: |
             stryker-incremental-
@@ -100,13 +100,13 @@ jobs:
       # each manifest must be mutated where its killing tests live — a single run across the boundary would
       # report a green score over uncovered files, the exact failure the meta-check below exists to catch.
       - name: "Run shared-crypto mutation gate (scope: stryker.mutate.json)"
-        working-directory: packages/crypto
+        working-directory: src/packages/crypto
         # Full scope, incremental-accelerated. stryker.config.mjs breaks the build below the calibrated break
         # threshold — that is the gate.
         run: npm run mutation
 
       - name: Run web crypto-logic mutation gate (the six files that stayed in web/)
-        working-directory: web
+        working-directory: src/web
         run: npm run mutation
 
       - name: Meta-check selftest (the total-vs-per-glob asymmetry is as documented)

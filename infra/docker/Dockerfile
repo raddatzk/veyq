@@ -7,10 +7,11 @@
 # Was `frontend/` — the surface is `web/` since the greenfield reset.
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
 # The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
-# root and `web/` resolves `@veyq/crypto` through it, so the stage builds from /src with web/ as a workspace
-# rather than treating web/ as a standalone project. `/src/contracts` keeps generate:api's `../contracts/api`
-# resolving from /src/web exactly as it does in the checkout.
-WORKDIR /src/web
+# root and `src/web/` resolves `@veyq/crypto` through it, so the stage builds from /repo with src/web/ as a
+# workspace rather than treating it as a standalone project. The image mirrors the checkout under /repo (ADR 0106
+# decision 6): `/repo/contracts` keeps generate:api's `../../contracts/api` resolving from /repo/src/web exactly as
+# it does in the checkout.
+WORKDIR /repo/src/web
 # The OpenAPI TypeScript client is GENERATED and deliberately never tracked (web/.gitignore:1-4, mirroring the
 # backend), so a clean checkout has no src/api/generated. @openapitools/openapi-generator-cli is a Java tool,
 # which is why this stage needs a JRE — the recovered original never did, because back then it did not generate.
@@ -18,29 +19,30 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 # The specs must land BEFORE `npm ci`: web/package.json has `"prepare": "npm run generate:api"`, which npm
-# runs as part of the install, and generate:api reads `../contracts/api/*.openapi.yaml` relative to web/.
+# runs as part of the install, and generate:api reads `../../contracts/api/*.openapi.yaml` relative to src/web/.
 # (Measured the hard way — with this COPY below the install, `npm ci` fails with "spec file is not found".)
-COPY contracts/api /src/contracts/api
+COPY contracts/api /repo/contracts/api
 # The generator JAR's verifier and its pin, before `npm ci` for the same reason as the specs: `prepare` runs
-# generate:api, which runs ../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).
-COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha256 /src/scripts/
+# generate:api, which runs ../../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).
+COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha256 /repo/scripts/
 # Every manifest the workspace resolution reads, and nothing else, so a source edit does not bust the install
-# layer. packages/crypto/ is copied WHOLE rather than manifest-only: it is consumed as TypeScript source (no
+# layer. src/packages/crypto/ is copied WHOLE rather than manifest-only: it is consumed as TypeScript source (no
 # build step), and npm links it into node_modules at install time, so the sources have to be there already.
-COPY package.json package-lock.json /src/
-COPY packages/crypto /src/packages/crypto
+COPY package.json package-lock.json /repo/
+COPY src/packages/crypto /repo/src/packages/crypto
 # openapitools.json travels with the manifest: `prepare` runs generate:api during `npm ci`, and both the JAR
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
-COPY web/package.json web/openapitools.json ./
+COPY src/web/package.json src/web/openapitools.json ./
 # Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
 # ci.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
 # job (ADR 0091 decision 2: the build itself no longer waits for the tests, so the premise is "before published").
 # scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
 RUN npm ci
-COPY web/ ./
-# The platform's one major: vite.config.ts compiles the web gate's EXPECTED_MAJOR from `../VERSION` (ADR 0085
-# decision 1), so the build fails without it. After the install, so a new major does not bust that layer.
-COPY VERSION /src/VERSION
+COPY src/web/ ./
+# The platform's one major: vite.config.ts compiles the web gate's EXPECTED_MAJOR from the repository's `VERSION`,
+# found by walking up from the client (ADR 0085 decision 1), so the build fails without it. After the install, so a
+# new major does not bust that layer.
+COPY VERSION /repo/VERSION
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
 # (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold. verify:csp is
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
@@ -49,45 +51,47 @@ RUN npm run build && npm run verify:no-backdoor && npm run verify:csp
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS backend-build-base
-WORKDIR /code/backend
+WORKDIR /repo/src/backend
 # gradle.properties (build-JVM heap) is not an optional extra, and neither is :core's pitest.scope.json:
 # core/build.gradle.kts parses the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both
 # postdate the recovered original (the mutation gate is ADR 0045 / #99), which is why it did not copy them.
-COPY backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties ./
-COPY backend/gradle ./gradle
+COPY src/backend/gradlew src/backend/gradlew.bat src/backend/build.gradle.kts src/backend/settings.gradle.kts src/backend/gradle.properties ./
+COPY src/backend/gradle ./gradle
 # The convention plugins every module applies (`veyq.module`, `veyq.openapi`): Gradle builds buildSrc before it
 # configures any project, so the warm-up below compiles it (and fetches its plugins) into this cached layer.
 # .dockerignore keeps a host's buildSrc/build and .gradle out.
-COPY backend/buildSrc ./buildSrc
+COPY src/backend/buildSrc ./buildSrc
 # Every module settings.gradle.kts includes needs its directory and build file here, or the warm-up dies configuring
 # it ("Configuring project ':core' without an existing directory is not allowed"). The modules are project
 # dependencies of the one fast-jar, not images of their own (ADR 0079); validate_backend_module_graph.py rule (e).
-COPY backend/core/build.gradle.kts backend/core/pitest.scope.json ./core/
-COPY backend/apps/memories/build.gradle.kts ./apps/memories/
-COPY backend/apps/depot/build.gradle.kts ./apps/depot/
+COPY src/backend/core/build.gradle.kts src/backend/core/pitest.scope.json ./core/
+COPY src/backend/apps/memories/build.gradle.kts ./apps/memories/
+COPY src/backend/apps/depot/build.gradle.kts ./apps/depot/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 
 FROM backend-build-base AS backend-build-jvm
 # Was `COPY docs/api ../docs/api`. The specs live in contracts/ (API-first, CLAUDE.md), and buildSrc's `veyq.openapi`
-# reads them from `../contracts/api` (`VeyqOpenApiExtension`) — absent during the warm-up above, which it tolerates.
-COPY contracts/api ../contracts/api
+# reads them from `../../contracts/api` (`VeyqOpenApiExtension`) — absent during the warm-up above, which it tolerates.
+COPY contracts/api /repo/contracts/api
 # The capability catalog: buildSrc's `generateCapabilityRegister` builds :core's CapabilityIds and their EN/DE texts
 # from it (ADR 0088 decision 13), so without it the compile has no register.
-COPY contracts/platform/capabilities.json ../contracts/platform/capabilities.json
+COPY contracts/platform/capabilities.json /repo/contracts/platform/capabilities.json
 # veyq's two fixed texts, the operator section of the terms and the privacy notice (ADR 0035 decisions 6 and 8):
 # :core's processResources puts them into the jar, and the server refuses to start without either.
-COPY contracts/terms/operator-section.json contracts/terms/privacy-notice.json ../contracts/terms/
+COPY contracts/terms/operator-section.json contracts/terms/privacy-notice.json /repo/contracts/terms/
 # The platform's one major: buildSrc's `generatePlatformMajor` compiles :core's PlatformMajor from it, the major
 # GET /api/setup advertises (ADR 0085 decision 1), so without it the compile has no major.
-COPY VERSION ../VERSION
-COPY backend/src ./src
-COPY backend/core/src ./core/src
-COPY backend/apps/memories/src ./apps/memories/src
-COPY backend/apps/depot/src ./apps/depot/src
+COPY VERSION /repo/VERSION
+# Two different `src`: the source's `src/backend/` is the repository's directory of code surfaces (ADR 0106); the
+# target's `./src`, `./core/src` are a Gradle module's own sources inside the backend.
+COPY src/backend/src ./src
+COPY src/backend/core/src ./core/src
+COPY src/backend/apps/memories/src ./apps/memories/src
+COPY src/backend/apps/depot/src ./apps/depot/src
 # The license texts buildSrc's ThirdPartyLicenses appends to the backend's notices; `quarkusBuild` runs it after itself.
-COPY backend/licenses ./licenses
-COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
+COPY src/backend/licenses ./licenses
+COPY --from=frontend-build /repo/src/web/dist ./src/main/resources/META-INF/resources
 # Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, backend/build.gradle.kts:26)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.
 RUN ./gradlew --no-daemon quarkusBuild -x test
@@ -154,13 +158,13 @@ RUN apt-get update \
     && chmod 0700 /var/lib/veyq \
     && chmod 0755 /etc/traefik/dynamic \
     && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
-COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-app /work/quarkus-app
+COPY --from=backend-build-jvm --chown=10001:10001 /repo/src/backend/build/quarkus-app /work/quarkus-app
 # The AGPL travels with the object code it covers (§4/§6): a pulled image is a conveyed copy. The same path in
 # both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses); the web
 # bundle's own are served by the app, at /third-party-licenses.txt. The MariaDB driver (LGPL-2.1) stays a jar of
 # its own in lib/main, which is what lets a recipient replace it.
 COPY LICENSE NOTICE /usr/share/licenses/veyq/
-COPY --from=backend-build-jvm /code/backend/build/third-party-licenses/THIRD-PARTY-LICENSES.txt /usr/share/licenses/veyq/
+COPY --from=backend-build-jvm /repo/src/backend/build/third-party-licenses/THIRD-PARTY-LICENSES.txt /usr/share/licenses/veyq/
 USER 10001
 # The public port only. The admin listener (veyq.admin-channel.port, 8090 — ADR 0065) is deliberately NOT
 # exposed: `docker run -P` publishes every EXPOSEd port, and that one must only ever be reached by the admin

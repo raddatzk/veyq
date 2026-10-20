@@ -38,7 +38,7 @@ names another one, and a ref older than the seeder is refused. The run's summary
 builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
 refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
 gates nothing; `ci.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
-([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
+([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/src/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
 images, so a pull, an `up` that migrates, and the rollback stay unrehearsed; and it says nothing
 about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
 fields and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` ([Upgrade](/veyq/run/upgrade/), Kubernetes), and a cluster leg is inbox #430.

@@ -10,8 +10,8 @@ sources:
 
 veyq's cryptography is one versioned suite, `v1`, built from standard primitives only. This page explains what it
 uses and why. It does not restate a byte layout: those are normative in
-[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts), the raw
-primitives in [`packages/crypto/src/primitives.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/primitives.ts),
+[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts), the raw
+primitives in [`packages/crypto/src/primitives.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/primitives.ts),
 and the conformance vectors in
 [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json).
 The decision behind all of it is

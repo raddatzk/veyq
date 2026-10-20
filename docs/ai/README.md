@@ -391,8 +391,8 @@ this section only points at it (rule 2) — assembling this picture by hand each
 - **Assertion strength** is the one edge no resolvability guard can reach — a test that asserts nothing still
   resolves. [ADR 0045](../decisions/0045-mutation-testing-trust-chain-unit-layer.md) closes it on the **unit
   layer only**, via mutation score (Stryker on `web`, PIT on `backend`), scoped by the two manifests
-  [`web/stryker.mutate.json`](../../web/stryker.mutate.json) +
-  [`backend/core/pitest.scope.json`](../../backend/core/pitest.scope.json) and self-checked by
+  [`web/stryker.mutate.json`](../../src/web/stryker.mutate.json) +
+  [`backend/core/pitest.scope.json`](../../src/backend/core/pitest.scope.json) and self-checked by
   `scripts/mutation_meta_check*.py` — which sit **outside** the `validate_*` glob on purpose (they need a
   built report).
 - **The skills layer** — [ADR 0046](../decisions/0046-operative-lore-in-skills-and-agents.md): conditional

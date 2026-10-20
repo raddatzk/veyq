@@ -110,7 +110,7 @@ covered by `trust-chain`'s trigger (which names *"a report, a CR, a handoff"*):
 |---|---|
 | phase order contracts→backend→web | `changes/README.md` § phases + [`ai/README.md`](../ai/README.md) § what counts as verified |
 | each phase self-verifies ("Done when") | `changes/README.md` § phases |
-| surface check cmd (+ `generate:api` *before* `check`) | [`backend/CLAUDE.md`](../../backend/CLAUDE.md), [`web/CLAUDE.md`](../../web/CLAUDE.md) |
+| surface check cmd (+ `generate:api` *before* `check`) | [`backend/CLAUDE.md`](../../src/backend/CLAUDE.md), [`web/CLAUDE.md`](../../src/web/CLAUDE.md) |
 | coverage is part, not a follow-up | `changes/README.md` § coverage is part of the work |
 | trust-chain guards green via the glob | `changes/README.md` § trust-chain guards |
 | promote a one-shot proof → permanent guard | `changes/README.md` § promote one-shot proofs |
@@ -134,7 +134,7 @@ caught inside the refine that wrote 0045, and its corrections are in the doc):
 | CI shape: PR, path-gated, report-before-gate | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 4 + `mutation.yml`, `mutation-backend.yml` |
 | the total-vs-per-glob meta-check asymmetry | `scripts/mutation_meta_check.py` + `scripts/mutation_meta_check_backend.py` docstrings |
 | KAT-beats-mutation finding; blind spots | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context + Consequences |
-| operational: `npm run mutation` PR-only; in-place footgun | [`web/CLAUDE.md`](../../web/CLAUDE.md) |
+| operational: `npm run mutation` PR-only; in-place footgun | [`web/CLAUDE.md`](../../src/web/CLAUDE.md) |
 
 The residual non-restate value of either — a trigger at the work's start and one ordered checklist — rests on an
 **unmeasured** failure (a session skipping the canonical entry), so it stays deferred until such a failure is

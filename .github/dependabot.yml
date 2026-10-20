@@ -37,7 +37,7 @@ updates:
   # parentheses matched, `:apps:memories` → apps/memories) and fetches each subproject's build file; it adds buildSrc
   # when the directory exists, and gradle/libs.versions.toml at this entry's root. So no `directories:` list.
   - package-ecosystem: "gradle"
-    directory: "/backend"
+    directory: "/src/backend"
     patterns:
       - "*"
     multi-ecosystem-group: "app-runtime"
@@ -48,7 +48,7 @@ updates:
   - package-ecosystem: "docker"
     directories:
       - "/infra/docker"
-      - "/admin-web"
+      - "/src/admin-web"
       - "/infra/kubernetes/tools"
     patterns:
       - "*"

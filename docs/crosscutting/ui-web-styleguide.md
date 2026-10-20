@@ -158,7 +158,7 @@ or a one-off `1rem` label sitting in them.
   `components/app/` or `views/`; what is Memories' (media, gallery, covers, its level rows, its dialogs and share
   body) lives under `features/memories/`. Core renders an application's component only through the registry (a kind's
   detail or level section, a slot) and never imports it
-  ([web/CLAUDE.md](../../web/CLAUDE.md) says what an application registers; the guard enforces the direction).
+  ([web/CLAUDE.md](../../src/web/CLAUDE.md) says what an application registers; the guard enforces the direction).
 
 ## Buttons & dialog actions
 

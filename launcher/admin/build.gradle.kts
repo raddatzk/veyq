@@ -1,7 +1,7 @@
-// `admin:*` — the Server-Owner administration surface (admin-web/, ADR 0065), through its own npm scripts.
+// `admin:*` — the Server-Owner administration surface (src/admin-web/, ADR 0065), through its own npm scripts.
 @Suppress("UNCHECKED_CAST")
 val ports = gradle.extra["veyq.ports"] as Map<String, String>
-val adminDir = rootDir.resolve("admin-web")
+val adminDir = rootDir.resolve("src/admin-web")
 
 tasks.register<Exec>("bootstrap") {
     group = "veyq"
@@ -31,8 +31,8 @@ tasks.register<Exec>("build") {
 
 tasks.register<Exec>("image") {
     group = "veyq"
-    description = "Builds the admin image veyq-admin:local from admin-web/Dockerfile, context the repo root as " +
+    description = "Builds the admin image veyq-admin:local from src/admin-web/Dockerfile, context the repo root as " +
         "container.yml builds it."
     workingDir = rootDir
-    commandLine("docker", "build", "-f", "admin-web/Dockerfile", "-t", "veyq-admin:local", ".")
+    commandLine("docker", "build", "-f", "src/admin-web/Dockerfile", "-t", "veyq-admin:local", ".")
 }

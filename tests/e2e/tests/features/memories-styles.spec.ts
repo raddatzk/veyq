@@ -31,7 +31,7 @@ const stamp = randomBytes(3).toString('hex')
 const memoryName = `Stilprobe ${stamp}`
 const chapterName = `Erstes Kapitel ${stamp}`
 const photoName = `Leuchtturm bei Ebbe ${stamp}.jpg`
-const PHOTO = readFileSync(fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
+const PHOTO = readFileSync(fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
 
 let member: Device
 const consoleErrors: string[] = []

@@ -6,8 +6,8 @@
   A **model** enabler: it states what is sealed under what, not a flow.
 - **Status:** **built** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 9, built by cr-text-fields-seal-under-their-own-key (2026-10-17). The one implementation is `@veyq/crypto`'s
-  field seal ([`seal.ts`](../../../../packages/crypto/src/seal.ts) `FIELD_PURPOSES`, `sealField`, `openField`,
-  `fieldKeyOf`, `openFieldWith`; the envelope in [`primitives.ts`](../../../../packages/crypto/src/primitives.ts)),
+  field seal ([`seal.ts`](../../../../src/packages/crypto/src/seal.ts) `FIELD_PURPOSES`, `sealField`, `openField`,
+  `fieldKeyOf`, `openFieldWith`; the envelope in [`primitives.ts`](../../../../src/packages/crypto/src/primitives.ts)),
   pinned by `field_seal` in [`v1.json`](../../../../contracts/crypto/vectors/v1.json).
 - **Provides:** for every text or icon field, a key that opens **one revision of that one field** and nothing else:
   the key a report of a field will hand over to the moderator, and the moderator's open with it.

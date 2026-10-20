@@ -204,7 +204,7 @@ gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<mino
   at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
 - **The first `1.x` release is one commit, then a release dispatch:** `VERSION` set to `1` **and** the `release:`
   line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
-  on a released migration is never edited ([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations).
+  on a released migration is never edited ([backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 
 **No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
 held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
@@ -225,7 +225,7 @@ This file keeps the development stack and how a release is cut.
 
 `npm run bootstrap:user` (`./gradlew backend:seed`) births one user who is Server Owner **and** owner of a
 `*.localhost` tenant with a personal scope, over the real API, and writes its key material back into `.run/.env`
-([`web/CLAUDE.md`](../web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
+([`web/CLAUDE.md`](../src/web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
 
 ```sh
 ./gradlew infra:wipe infra:up

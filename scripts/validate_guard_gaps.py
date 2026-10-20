@@ -91,7 +91,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      checks sat until #153
   28 `MoveMediaRequest.mediaIds`' `@Size` says one more than its `maxItems` — rejected: the two are one rule
      written twice, value for value, and an annotation drifting from its schema is the same gap as a missing one
-  29 a `web/src` comment citing a use-case id under a real feature that names no doc — rejected:
+  29 a `src/web/src` comment citing a use-case id under a real feature that names no doc — rejected:
      `validate_doc_citations` resolves `uc.`/`en.`/`cc.` ids, not only `ADR NNNN`. Before it, 7 such ids dangled
      at 12 sites across the client, the backend and a spec, and two agents followed them into nothing (inbox #122)
   31 a German site page declaring one doc fewer than its English page — rejected: `validate_wiki_sources` holds a
@@ -122,7 +122,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `import`, so a re-export cannot launder the edge
   41 a dynamic `import('…')` of the application in a core file — rejected: the same edge in its lazy spelling
   42 a sibling of the composition root (`applications2.ts`) importing the application — rejected: the exemption is
-     the exact path `web/src/applications.ts`, not a directory or a prefix
+     the exact path `src/web/src/applications.ts`, not a directory or a prefix
   43 a multi-line import of the application in a core file — rejected: the specifier is read after `from`, and the
      `} from '…'` line of a multi-line import does not start with `import`
   44 a bare side-effect `import '…'` of the application in a core file — rejected: the third spelling of the edge
@@ -137,7 +137,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      enum it is spelled through was no Memories package. A KDoc naming the kind sits beside it and must not be what
      is read. The contract's `NodeKind` is an open token since cr-platform-contract-split slice 4 and generates no
      enum; the forgery is text, so it still pins that spelling, and a literal `"MEMORY"` is read by the same rule
-  50 a forged second application (`backend/apps/other`, included, copied by the Dockerfile, indexed) depending on
+  50 a forged second application (`src/backend/apps/other`, included, copied by the Dockerfile, indexed) depending on
      `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) — an application never depends on another
      (ADR 0079 Decision 4). Gradle accepts that edge without complaint, and no real second application exists yet,
      so a forged one is the only lever; everything else about it is made valid so (b) is what rejects it
@@ -152,7 +152,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      rule (f). Without the convention plugin the module has no group (its jar loses its `me.raddatz.veyq.` name), no
      toolchain, no test JVM settings, and — for a module with the Quarkus plugin — a second `quarkusBuild`. (It
      forged the retired `:test-support` project's build file until the helpers became `:core`'s test fixtures.)
-  54 the Dockerfile's `backend-build-base` stage no longer copying `backend/buildSrc` — rejected:
+  54 the Dockerfile's `backend-build-base` stage no longer copying `src/backend/buildSrc` — rejected:
      `validate_backend_module_graph` rule (e). The warm-up `gradlew help` would find no `veyq.module` plugin, so the
      image does not build, while `./gradlew check` in a checkout stays green
   55 the root declaring `implementation(testFixtures(project(":core")))` — rejected: `validate_backend_module_graph`
@@ -216,7 +216,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_web_core_imports_no_applications`' i18n rule. Every catalog merges into one vue-i18n instance, so the
      key resolves and every test is green; core's delete dialog did exactly this and titled a Depot drop box "Delete Memory" (inbox #375)
   79 admin-web's light `--app-primary` set back to Aura's emerald-500 (`#10b981`, white label 2.54:1) — rejected:
-     `validate_web_contrast` reads `admin-web/src/styles/base.css` as well as web's (inbox #390). Until then that
+     `validate_web_contrast` reads `src/admin-web/src/styles/base.css` as well as web's (inbox #390). Until then that
      guard's limit (e) said admin-web was not covered, and the copy ADR 0065 keeps failed 34 pairs unseen
   80 `ClaimRequest.capabilityTags` loses its `EachElement`, its `items` `$ref` to the bounded `CapabilityTag` left
      standing — rejected: `validate_request_bounds` rule 6 reads a list of scalars' element bounds and requires the
@@ -229,24 +229,24 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_write_concurrency` refuses a declared revision field with a version-shaped name (ADR 0086). Until
      inbox #452 the pins, the register and the terms carried a bare `version`, and the guard read it as a counter
      without asking what it was called
-  85 core's catalog (`web/src/i18n/index.ts`) carrying a `memory` block again — rejected:
+  85 core's catalog (`src/web/src/i18n/index.ts`) carrying a `memory` block again — rejected:
      `validate_web_core_imports_no_applications`' catalog rule: an application's namespaces live in its own
      `features/<owner>/i18n.ts` (inbox #513). The runtime would refuse it only when Memories registers its own
      `memory` next to it; a catalog that moved back whole would pass every test
   86 Depot's catalog carrying a `media` block — rejected: an application's catalog names exactly its own namespaces,
      so one cannot take over another's strings by declaring them (the runtime's write-once merge refuses the clash
      too, but only for a namespace someone else already registered)
-  87 the composition root's catalog half (`web/src/applicationMessages.ts`) importing Memories' `register` — rejected:
+  87 the composition root's catalog half (`src/web/src/applicationMessages.ts`) importing Memories' `register` — rejected:
      that file is held to an application's catalog by exact path (the catalog-root rule); anything else imported
      there would load an application's code into every test file and around the registry's composition root
   88 a `features/depot` file reading Memories' `'media.…'` key — rejected: the application rule reads another
      application's i18n namespace as the edge it is; the merged instance resolves it, so no test would notice
-  89 a dead rule in an application's own stylesheet (`web/src/features/memories/memories.css`) — rejected:
+  89 a dead rule in an application's own stylesheet (`src/web/src/features/memories/memories.css`) — rejected:
      `validate_stylesheet_anchors` reads every `.css` under a package's `src/`, not only `src/styles/`. Until inbox
      #513 moved Memories' rules out of `styles/memory.css`, that guard read `src/styles/` and the barrel alone, so the
      move would have taken its 87 anchor compounds out of its sight with nothing turning red (and
      `shared/ui/shareGate.css`'s 10 had never been in it)
-  90 a dead rule in Depot's own stylesheet (`web/src/features/depot/depot.css`) — rejected: the second application's
+  90 a dead rule in Depot's own stylesheet (`src/web/src/features/depot/depot.css`) — rejected: the second application's
      sheet (inbox #517 moved `styles/pdf.css` there) is read as well; 89 alone would stay green if the guard's walk
      narrowed to Memories' directory, which is where the first application sheet happened to sit
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
@@ -317,7 +317,7 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      open on purpose** — the same response is red under `not_a_server_error` in the same run, and that entry is the
      one the guard refuses, so a 5xx cannot be accepted through the baseline as a whole. Pinned so the limit in
      that guard's docstring is executable rather than a sentence.
-  30 a `web/src` comment citing a use-case id under a feature directory that does not exist passes
+  30 a `src/web/src` comment citing a use-case id under a feature directory that does not exist passes
      `validate_doc_citations`, which reads an id only under a real feature directory. **Left open on purpose** —
      that anchor is what keeps attribute chains (`.parent.parent`, `.value.trim()`) from reading as ids; without
      it the guard cries wolf on Python and TypeScript alike. Pinned so tightening the anchor flips it visibly.
@@ -443,29 +443,29 @@ PROD_COMPOSE = "infra/docker/docker-compose.prod.yml"
 CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 # Where a fourth veyq_blob reference arm is forged: a scope is the plausible place for one (a space banner),
 # and it is one of the entities the delete paths already touch.
-SCOPE_ENTITY = "backend/core/src/main/kotlin/me/raddatz/veyq/core/scope/ScopeEntity.kt"
+SCOPE_ENTITY = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/scope/ScopeEntity.kt"
 SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
 # Named the way a real later core migration is (V<yyyymmddHHMM>__core_<slug>.sql), above every pinned version.
-BANNER_MIGRATION = "backend/core/src/main/resources/db/migration/V209912312359__core_guard_gap_scope_banner.sql"
+BANNER_MIGRATION = "src/backend/core/src/main/resources/db/migration/V209912312359__core_guard_gap_scope_banner.sql"
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
-TRASH_PURGE = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaTrashPurge.kt"
-TENANT_HANDLER = "backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/TenantHandler.kt"
+TRASH_PURGE = "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaTrashPurge.kt"
+TENANT_HANDLER = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/TenantHandler.kt"
 # The suspend arm re-projects inside its `Done` block, before mailing a statement of reasons (cr-statement-legal-gaps).
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) {\n            reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
 # `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
-MEDIA_SHARE_CONTRIBUTOR = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaSharedSubtreeContributor.kt"
+MEDIA_SHARE_CONTRIBUTOR = "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaSharedSubtreeContributor.kt"
 DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
 
 # Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
 # bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
-RECOVERY_RESOURCE = "backend/core/src/main/kotlin/me/raddatz/veyq/core/account/recovery/RecoveryResource.kt"
+RECOVERY_RESOURCE = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/account/recovery/RecoveryResource.kt"
 RECOVERY_RESOURCE_ANCHOR = "class RecoveryResource("
 # Where a forwarded-for read through an assembled name is forged: the rate limiter is the resolver's first consumer,
 # so a hand parse beside it is where one would plausibly come back.
-RATE_LIMIT_FILTERS = "backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitFilters.kt"
+RATE_LIMIT_FILTERS = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitFilters.kt"
 RATE_LIMIT_FILTERS_ANCHOR = "@Provider\n@RateLimit(key = RateLimitKey.IP)"
 TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
@@ -615,7 +615,7 @@ def forge_unadmitted_surface_ref(root: pathlib.Path) -> str:
     f = root / COV_APPEARANCE
     f.write_text(_sub(f.read_text(), f"[{WEB_TEST_REF}]",
                       f"[{WEB_TEST_REF}] }}\n      admin-web: {{ unit: [{ADMIN_WEB_TEST_REF}]"))
-    if not (root / "admin-web" / ADMIN_WEB_TEST_REF).exists():
+    if not (root / "src" / "admin-web" / ADMIN_WEB_TEST_REF).exists():
         raise ForgeError(f"admin-web test file missing (moved?): {ADMIN_WEB_TEST_REF}")
     return "an admin-web ref on an implemented use-case — a surface no run has admitted (must be REJECTED)"
 
@@ -706,7 +706,7 @@ def forge_ratelimit_state_under_another_name(root: pathlib.Path) -> str:
     # validate_ratelimit_core matches on the FILENAME (*Limiter*/*Counter*), so a limiter that avoids both name
     # parts holds its own map unseen. This is the whole reach of a buildless grep — pinned, not fixed: enforcing a
     # name nobody has written yet is not decidable, and the alternative (a reflection sweep) leaves the glob.
-    (root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareThrottle.kt").write_text(textwrap.dedent("""\
+    (root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareThrottle.kt").write_text(textwrap.dedent("""\
         package me.raddatz.veyq.core.sharing
 
         import java.util.concurrent.ConcurrentHashMap
@@ -726,7 +726,7 @@ def forge_scoped_policy_gains_unlisted_dependency(root: pathlib.Path) -> str:
     # `paths:` filter, so editing the helper alone moves the mutation score without triggering the gate. Not
     # fixable by this guard's mechanism — a path filter cannot follow imports — so it is pinned, not closed. If
     # someone ever teaches the guard to walk dependencies, this case flips red instead of landing silently.
-    helper = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/membership/PolicyHelper.kt"
+    helper = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/membership/PolicyHelper.kt"
     helper.write_text(textwrap.dedent("""\
         package me.raddatz.veyq.core.membership
 
@@ -735,7 +735,7 @@ def forge_scoped_policy_gains_unlisted_dependency(root: pathlib.Path) -> str:
             fun isLastOwner(owners: Int): Boolean = owners <= 1
         }
         """))
-    policy = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
+    policy = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
     src = policy.read_text()
     if "import me.raddatz.veyq.core.membership.MembershipEntity" not in src:
         raise ForgeError("MembershipPolicy's MembershipEntity import drifted — re-anchor this forgery")
@@ -799,10 +799,10 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
     return "a purge deleting store objects inline under a renamed, fully-qualified receiver (must be REJECTED)"
 
 
-CORE_NODE_FORGERY = "backend/core/src/main/kotlin/me/raddatz/veyq/core/node/GuardGapProbe.kt"
+CORE_NODE_FORGERY = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/node/GuardGapProbe.kt"
 
 
-MEDIA_SCOPE_ERASER = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaScopeEraser.kt"
+MEDIA_SCOPE_ERASER = "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaScopeEraser.kt"
 
 
 def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
@@ -813,7 +813,7 @@ def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
     return "the media ScopeEraser no longer deleting MediaEntity (must be REJECTED — veyq_media would block the scope row)"
 
 
-MEDIA_NODE_ERASER = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaNodeSubtreeEraser.kt"
+MEDIA_NODE_ERASER = "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaNodeSubtreeEraser.kt"
 
 
 def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
@@ -826,7 +826,7 @@ def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
     return "the media NodeSubtreeEraser deleted (must be REJECTED — media and buckets would outlive their node)"
 
 
-ATTACHMENT_DIR = "backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/"
+ATTACHMENT_DIR = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/"
 ATTACHMENT_CONTRIBUTOR = ATTACHMENT_DIR + "AttachmentSharedSubtreeContributor.kt"
 ATTACHMENT_NODE_ERASER = ATTACHMENT_DIR + "AttachmentNodeSubtreeEraser.kt"
 ATTACHMENT_SCOPE_ERASER = ATTACHMENT_DIR + "AttachmentScopeEraser.kt"
@@ -881,7 +881,7 @@ def forge_attachment_node_eraser_keeps_the_blobs(root: pathlib.Path) -> str:
     return "core's attachment NodeSubtreeEraser deleting rows but not their blobs (an OPEN gap — freeing is not read)"
 
 
-CORE_BUILD = "backend/core/build.gradle.kts"
+CORE_BUILD = "src/backend/core/build.gradle.kts"
 CORE_BUILD_DEPS_ANCHOR = "dependencies {\n"
 
 
@@ -894,17 +894,17 @@ def forge_core_depends_on_application(root: pathlib.Path) -> str:
     return ":core's build file depending on :apps:memories (must be REJECTED — core depends on no application)"
 
 
-SETTINGS = "backend/settings.gradle.kts"
+SETTINGS = "src/backend/settings.gradle.kts"
 DOCKERFILE = "infra/docker/Dockerfile"
 # The Dockerfile's build-base `COPY` of Memories' build file; the forged application's is planted beside it.
-MEMORIES_BUILD_COPY = "backend/apps/memories/build.gradle.kts"
+MEMORIES_BUILD_COPY = "src/backend/apps/memories/build.gradle.kts"
 
 
 def forge_application_depends_on_application(root: pathlib.Path) -> str:
     # A forged application, valid in every respect the module guard checks — included, composed by the root, indexed,
     # copied by the Dockerfile, named by the convention — except for one edge: to the first application.
     _compose_in_root(root, ":apps:other")
-    app = root / "backend/apps/other"
+    app = root / "src/backend/apps/other"
     (app / "src/main/resources/META-INF").mkdir(parents=True)
     (app / "src/main/resources/META-INF/beans.xml").write_text("")
     (app / "build.gradle.kts").write_text(
@@ -914,14 +914,14 @@ def forge_application_depends_on_application(root: pathlib.Path) -> str:
     s.write_text(s.read_text() + '\ninclude(":apps:other")\n')
     d = root / DOCKERFILE
     text = d.read_text()
-    if MEMORIES_BUILD_COPY not in text or "backend/apps/memories/src" not in text:
+    if MEMORIES_BUILD_COPY not in text or "src/backend/apps/memories/src" not in text:
         raise ForgeError(f"the Dockerfile no longer copies {MEMORIES_BUILD_COPY} and its src — re-anchor this forgery")
-    text = text.replace(MEMORIES_BUILD_COPY, f"{MEMORIES_BUILD_COPY} backend/apps/other/build.gradle.kts", 1)
-    d.write_text(text.replace("backend/apps/memories/src", "backend/apps/memories/src backend/apps/other/src", 1))
+    text = text.replace(MEMORIES_BUILD_COPY, f"{MEMORIES_BUILD_COPY} src/backend/apps/other/build.gradle.kts", 1)
+    d.write_text(text.replace("src/backend/apps/memories/src", "src/backend/apps/memories/src src/backend/apps/other/src", 1))
     return "a forged second application depending on :apps:memories (must be REJECTED — no application → application)"
 
 
-MEMORIES_BUILD = "backend/apps/memories/build.gradle.kts"
+MEMORIES_BUILD = "src/backend/apps/memories/build.gradle.kts"
 
 
 def forge_module_renames_its_jar(root: pathlib.Path) -> str:
@@ -933,7 +933,7 @@ def forge_module_renames_its_jar(root: pathlib.Path) -> str:
 
 
 MODULE_PLUGIN_REQUEST = 'id("veyq.module")'
-BUILD_SRC_COPY = "COPY backend/buildSrc ./buildSrc\n"
+BUILD_SRC_COPY = "COPY src/backend/buildSrc ./buildSrc\n"
 
 
 def forge_module_without_convention_plugin(root: pathlib.Path) -> str:
@@ -945,8 +945,8 @@ def forge_module_without_convention_plugin(root: pathlib.Path) -> str:
     return ":apps:memories applying the Kotlin plugin instead of veyq.module (must be REJECTED — an unconventional module)"
 
 
-ROOT_BUILD = "backend/build.gradle.kts"
-CORE_FIXTURES_BEANS = "backend/core/src/testFixtures/resources/META-INF/beans.xml"
+ROOT_BUILD = "src/backend/build.gradle.kts"
+CORE_FIXTURES_BEANS = "src/backend/core/src/testFixtures/resources/META-INF/beans.xml"
 
 
 def forge_fixtures_on_runtime_classpath(root: pathlib.Path) -> str:
@@ -981,9 +981,9 @@ def forge_image_without_build_src(root: pathlib.Path) -> str:
     d = root / DOCKERFILE
     text = d.read_text()
     if BUILD_SRC_COPY not in text:
-        raise ForgeError("the Dockerfile has no `COPY backend/buildSrc ./buildSrc` line — re-anchor this forgery")
+        raise ForgeError("the Dockerfile has no `COPY src/backend/buildSrc ./buildSrc` line — re-anchor this forgery")
     d.write_text(text.replace(BUILD_SRC_COPY, ""))
-    return "the Dockerfile's build-base stage without backend/buildSrc (must be REJECTED — the warm-up finds no plugin)"
+    return "the Dockerfile's build-base stage without src/backend/buildSrc (must be REJECTED — the warm-up finds no plugin)"
 
 
 def forge_core_declares_application_package(root: pathlib.Path) -> str:
@@ -1010,7 +1010,7 @@ def forge_core_names_memory_kind(root: pathlib.Path) -> str:
 
 def forge_core_names_memory_blob_role(root: pathlib.Path) -> str:
     # A core rule about a Memories blob role: the contract's role is an open token, so a literal is the only spelling.
-    f = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/GuardGapProbe.kt"
+    f = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/GuardGapProbe.kt"
     if not f.parent.is_dir():
         raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/blob moved")
     f.write_text("package me.raddatz.veyq.core.blob\n\n"
@@ -1024,7 +1024,7 @@ def forge_core_names_memory_blob_role(root: pathlib.Path) -> str:
 def forge_kernel_imports_slice(root: pathlib.Path) -> str:
     # A kernel package reaching into a slice: the shape the 2026-09-23 review found (tenant kernel classes on the
     # admin feature's tenant entity). Kernel membership is the declared KERNEL list, not a directory.
-    f = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/tenant/GuardGapProbe.kt"
+    f = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/tenant/GuardGapProbe.kt"
     if not f.parent.is_dir():
         raise ForgeError(f"{f.parent.relative_to(root)} is missing — the tenant kernel package moved")
     f.write_text("package me.raddatz.veyq.core.tenant\n\nimport me.raddatz.veyq.core.admin.tenant.TenantStore\n\n"
@@ -1036,9 +1036,9 @@ WEB_GUARD = "validate_web_core_imports_no_applications.py"
 
 
 def _plant_web(root: pathlib.Path, rel: str, text: str) -> None:
-    f = root / "web" / "src" / rel
-    if not (root / "web" / "src" / "features" / "memories").is_dir():
-        raise ForgeError("web/src/features/memories is gone — re-anchor this forgery on the application directory")
+    f = root / "src" / "web" / "src" / rel
+    if not (root / "src" / "web" / "src" / "features" / "memories").is_dir():
+        raise ForgeError("src/web/src/features/memories is gone — re-anchor this forgery on the application directory")
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(text)
 
@@ -1090,8 +1090,8 @@ def forge_web_core_glob(root: pathlib.Path) -> str:
 
 
 def _plant_depot(root: pathlib.Path, rel: str, text: str) -> None:
-    if not (root / "web" / "src" / "features" / "depot").is_dir():
-        raise ForgeError("web/src/features/depot is gone — re-anchor this forgery on the Depot application directory")
+    if not (root / "src" / "web" / "src" / "features" / "depot").is_dir():
+        raise ForgeError("src/web/src/features/depot is gone — re-anchor this forgery on the Depot application directory")
     _plant_web(root, rel, text)
 
 
@@ -1125,9 +1125,9 @@ def forge_web_core_reads_application_i18n(root: pathlib.Path) -> str:
 
 
 def _insert_after(root: pathlib.Path, rel: str, anchor: str, text: str) -> None:
-    f = root / "web" / "src" / rel
+    f = root / "src" / "web" / "src" / rel
     if not f.is_file() or anchor not in f.read_text():
-        raise ForgeError(f"web/src/{rel} or its anchor {anchor!r} is gone — re-anchor this forgery on the catalog layout")
+        raise ForgeError(f"src/web/src/{rel} or its anchor {anchor!r} is gone — re-anchor this forgery on the catalog layout")
     f.write_text(f.read_text().replace(anchor, anchor + text, 1))
 
 
@@ -1153,7 +1153,7 @@ def forge_web_application_reads_another_namespace(root: pathlib.Path) -> str:
     return "a features/depot file reading Memories' i18n key 'media.title' (must be REJECTED — no application → application)"
 
 
-DEPOT_BUILD = "backend/apps/depot/build.gradle.kts"
+DEPOT_BUILD = "src/backend/apps/depot/build.gradle.kts"
 
 
 def forge_depot_depends_on_memories(root: pathlib.Path) -> str:
@@ -1265,9 +1265,9 @@ def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
     # applies is green wherever it sits behind a combinator. The live anchor is read out of the sheet rather
     # than spelled here: pinning one class name would turn a rename into a red guard, which is the opposite of
     # what a gap-pin is for.
-    sheet = root / "web" / "src" / "styles" / "ui.css"
+    sheet = root / "src" / "web" / "src" / "styles" / "ui.css"
     if not sheet.is_file():
-        raise ForgeError("web/src/styles/ui.css is missing — the shared primitives sheet moved or was deleted")
+        raise ForgeError("src/web/src/styles/ui.css is missing — the shared primitives sheet moved or was deleted")
     src = sheet.read_text()
     m = re.search(r"^\.([a-z][a-z0-9-]*)\s*\{", src, re.M)
     if not m:
@@ -1281,12 +1281,12 @@ def forge_class_anchored_only_by_a_test(root: pathlib.Path) -> str:
     # inbox #362: a rule whose class only a TEST spells (an assertion that a button does NOT carry it) stayed
     # "anchored" until validate_stylesheet_anchors stopped reading test evidence as markup. The test file is
     # found, not named, so a renamed test cannot turn this case red.
-    sheet = root / "web" / "src" / "styles" / "ui.css"
+    sheet = root / "src" / "web" / "src" / "styles" / "ui.css"
     if not sheet.is_file():
-        raise ForgeError("web/src/styles/ui.css is missing — the shared primitives sheet moved or was deleted")
-    tests = sorted((root / "web" / "src").rglob("*.test.ts"))
+        raise ForgeError("src/web/src/styles/ui.css is missing — the shared primitives sheet moved or was deleted")
+    tests = sorted((root / "src" / "web" / "src").rglob("*.test.ts"))
     if not tests:
-        raise ForgeError("no *.test.ts under web/src — re-anchor this forgery")
+        raise ForgeError("no *.test.ts under src/web/src — re-anchor this forgery")
     sheet.write_text(sheet.read_text() + "\n.guard-gap-only-a-test-names-this {\n  display: none;\n}\n")
     tests[0].write_text(tests[0].read_text()
                         + "\n// expect(button.classes()).not.toContain('guard-gap-only-a-test-names-this')\n")
@@ -1296,18 +1296,18 @@ def forge_class_anchored_only_by_a_test(root: pathlib.Path) -> str:
 def forge_dead_rule_in_application_sheet(root: pathlib.Path) -> str:
     # inbox #513: an application's sheet lives in its own directory, outside src/styles/. Found, not named: any .css
     # under features/memories, so a renamed sheet re-anchors itself.
-    sheets = sorted((root / "web" / "src" / "features" / "memories").rglob("*.css"))
+    sheets = sorted((root / "src" / "web" / "src" / "features" / "memories").rglob("*.css"))
     if not sheets:
-        raise ForgeError("no .css under web/src/features/memories — re-anchor this forgery on an application's sheet")
+        raise ForgeError("no .css under src/web/src/features/memories — re-anchor this forgery on an application's sheet")
     sheets[0].write_text(sheets[0].read_text() + "\n.guard-gap-no-markup-applies-this {\n  color: red;\n}\n")
     return "a dead rule in Memories' own stylesheet outside src/styles/ (must be REJECTED — every sheet under src/ is read)"
 
 
 def forge_dead_rule_in_depot_sheet(root: pathlib.Path) -> str:
     # inbox #517: Depot's sheet, the second application's. Found, not named, as in 89.
-    sheets = sorted((root / "web" / "src" / "features" / "depot").rglob("*.css"))
+    sheets = sorted((root / "src" / "web" / "src" / "features" / "depot").rglob("*.css"))
     if not sheets:
-        raise ForgeError("no .css under web/src/features/depot — re-anchor this forgery on Depot's sheet")
+        raise ForgeError("no .css under src/web/src/features/depot — re-anchor this forgery on Depot's sheet")
     sheets[0].write_text(sheets[0].read_text() + "\n.guard-gap-no-depot-markup-applies-this {\n  color: red;\n}\n")
     return "a dead rule in Depot's own stylesheet (must be REJECTED — every application's sheet is read, not only Memories')"
 
@@ -1316,9 +1316,9 @@ def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
     # The defect that bought the guard, put back on the copy it did not read at first: admin-web's light primary
     # set to Aura's emerald-500 under white text (2.54:1). The token's current value is matched, not spelled, so
     # a palette tweak that stays at AA does not turn this case red.
-    sheet = root / "admin-web" / "src" / "styles" / "base.css"
+    sheet = root / "src" / "admin-web" / "src" / "styles" / "base.css"
     if not sheet.is_file():
-        raise ForgeError("admin-web/src/styles/base.css is missing — the admin surface's token sheet moved")
+        raise ForgeError("src/admin-web/src/styles/base.css is missing — the admin surface's token sheet moved")
     src, n = re.subn(r"(--app-primary:\s*)#[0-9a-fA-F]{3,6};", r"\g<1>#10b981;", sheet.read_text(), count=1)
     if not n:
         raise ForgeError("no --app-primary hex in admin-web's base.css — re-anchor this forgery")
@@ -1329,7 +1329,7 @@ def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
 def _web_comment_citing(root: pathlib.Path, feature: str) -> None:
     # A new file rather than an edit: the probe needs no anchor in existing source, so it cannot drift. The id is
     # assembled, not written, so this guard's own source carries no dangling id for anyone to copy.
-    probe = root / "web" / "src" / "guardGapProbe.ts"
+    probe = root / "src" / "web" / "src" / "guardGapProbe.ts"
     probe.write_text("// " + ".".join(["uc", feature, "guard-gap-no-such-doc"]) + " (web) — a guard-gap probe\n"
                      "export const guardGapProbe = 1\n")
 
@@ -1338,7 +1338,7 @@ def forge_feature_id_dangles(root: pathlib.Path) -> str:
     if not (root / "docs" / "features" / "memory").is_dir():
         raise ForgeError("docs/features/memory is gone — re-anchor this forgery on a live feature directory")
     _web_comment_citing(root, "memory")
-    return "a web/src comment citing a use-case id under a real feature that names no doc"
+    return "a src/web/src comment citing a use-case id under a real feature that names no doc"
 
 
 def forge_feature_id_under_unknown_feature(root: pathlib.Path) -> str:
@@ -1346,7 +1346,7 @@ def forge_feature_id_under_unknown_feature(root: pathlib.Path) -> str:
     if (root / "docs" / "features" / feature).exists():
         raise ForgeError(f"docs/features/{feature} exists — pick another non-feature name")
     _web_comment_citing(root, feature)
-    return "a web/src comment citing a use-case id under a feature that does not exist (the anchor open gap)"
+    return "a src/web/src comment citing a use-case id under a feature that does not exist (the anchor open gap)"
 
 
 SITE_PAGES = pathlib.Path("site/src/content/docs")
@@ -1472,7 +1472,7 @@ def forge_revision_field_named_version(root: pathlib.Path) -> str:
 
 
 DEMO_SPEC = "contracts/api/demo/demo.openapi.yaml"
-SPEC_SETS_KT = "backend/buildSrc/src/main/kotlin/me/raddatz/veyq/buildlogic/SpecSets.kt"
+SPEC_SETS_KT = "src/backend/buildSrc/src/main/kotlin/me/raddatz/veyq/buildlogic/SpecSets.kt"
 PACKAGE_ROOT_FUN = 'fun packageRootOf(owner: String) = "me.raddatz.veyq.$owner.generated"'
 
 
@@ -1488,7 +1488,7 @@ def _plant_demo_module(root: pathlib.Path, opt_in: bool) -> None:
     # An application valid in every respect the module guard checks — included, composed by the root, indexed, copied
     # by the Dockerfile, named by the convention, depending on core only — so rule (d) is what judges its specs.
     _compose_in_root(root, ":apps:demo")
-    app = root / "backend/apps/demo"
+    app = root / "src/backend/apps/demo"
     (app / "src/main/resources/META-INF").mkdir(parents=True)
     (app / "src/main/resources/META-INF/beans.xml").write_text("")
     (app / "build.gradle.kts").write_text(
@@ -1499,10 +1499,10 @@ def _plant_demo_module(root: pathlib.Path, opt_in: bool) -> None:
     s.write_text(s.read_text() + '\ninclude(":apps:demo")\n')
     d = root / DOCKERFILE
     text = d.read_text()
-    if MEMORIES_BUILD_COPY not in text or "backend/apps/memories/src" not in text:
+    if MEMORIES_BUILD_COPY not in text or "src/backend/apps/memories/src" not in text:
         raise ForgeError(f"the Dockerfile no longer copies {MEMORIES_BUILD_COPY} and its src — re-anchor this forgery")
-    text = text.replace(MEMORIES_BUILD_COPY, f"{MEMORIES_BUILD_COPY} backend/apps/demo/build.gradle.kts", 1)
-    d.write_text(text.replace("backend/apps/memories/src", "backend/apps/memories/src backend/apps/demo/src", 1))
+    text = text.replace(MEMORIES_BUILD_COPY, f"{MEMORIES_BUILD_COPY} src/backend/apps/demo/build.gradle.kts", 1)
+    d.write_text(text.replace("src/backend/apps/memories/src", "src/backend/apps/memories/src src/backend/apps/demo/src", 1))
 
 
 def forge_spec_directory_without_module(root: pathlib.Path) -> str:

@@ -18,7 +18,7 @@ content, sharing) and explains why the layering is cut where it is.
 
 :::note[What this page does not restate]
 Byte formats are normative in the conformance-pinned suite
-[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts) and its
+[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts) and its
 vectors [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json).
 Every wrap and seal named below also binds its purpose **and the object it is stored as** (the scope, node,
 blob, share or member, plus the epoch or revision stored with it), so a ciphertext served for another object fails to
@@ -257,7 +257,7 @@ random, identical bytes become different ciphertexts. Dedup across a space is de
 so the server learns no content equality there. Inside one node, a cover or banner equal to a gallery item is a second
 blob row on that item's stored object, its `K_blob` wrapped again for the new row; the server sees which object it
 shares. Frame layout:
-`sealFrame` / `openFrame` in [`v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts),
+`sealFrame` / `openFrame` in [`v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts),
 vector `chunk_frame`.
 
 **Field keys.** Every text or icon field (a node's name and meta, a medium's metadata, a bucket's, a guest's or a
