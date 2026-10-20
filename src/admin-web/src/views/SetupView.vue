@@ -168,10 +168,3 @@ function finish() {
     </template>
   </Card>
 </template>
-
-<style scoped>
-/* The same gap EmergencyKitSave leaves below its confirm row, so both steps end alike. */
-.setup-create {
-  margin-top: 1.25rem;
-}
-</style>

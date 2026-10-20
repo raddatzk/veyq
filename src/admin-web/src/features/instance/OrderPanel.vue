@@ -127,7 +127,7 @@ async function copy() {
 
       <Message v-if="error" severity="error" :closable="false" class="order-error">{{ error }}</Message>
 
-      <form class="order-form" @submit.prevent="submit">
+      <form class="veyq-form order-form" @submit.prevent="submit">
         <label>
           <span>{{ t('orders.kind') }}</span>
           <Select v-model="kind" :options="kinds" option-label="label" option-value="value" class="order-kind" :disabled="pending" />
@@ -159,7 +159,7 @@ async function copy() {
         </div>
       </form>
 
-      <section v-if="result" class="order-result">
+      <section v-if="result" class="veyq-form order-result">
         <Message v-if="!result.found" severity="warn" :closable="false" class="order-not-found">{{ t('orders.notFound') }}</Message>
         <template v-else>
           <Message v-if="result.blockedAt" severity="success" :closable="false" class="order-blocked">

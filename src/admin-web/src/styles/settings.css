@@ -14,7 +14,13 @@
   color: var(--app-muted);
 }
 
+/* A section stacks its header, messages, copy, fields and action rows; `.settings-panel p` zeroes the paragraph
+   margins, so the gap is the only space between them. One shrinkable column: a wide table or code block must not
+   widen the section. */
 .settings-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
   padding-top: 1.2rem;
   border-top: 1px solid var(--app-line);
 }
@@ -41,7 +47,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.75rem;
 }
 
 .settings-section-header h2 {

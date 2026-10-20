@@ -158,7 +158,7 @@ async function resume() {
         {{ t('reconcile.inProgress', { at: at(state.passInProgress.startedAt), objects: state.passInProgress.objects }) }}
       </p>
 
-      <div v-if="candidates && candidates.storageKeys > 0" class="reconcile-candidates">
+      <div v-if="candidates && candidates.storageKeys > 0" class="veyq-form reconcile-candidates">
         <p>
           {{
             t('reconcile.candidates', {

@@ -16,6 +16,11 @@
   padding-top: 0.5rem;
 }
 
+/* Margins, not a grid: a grid would stretch the card's bare action buttons to its full width. */
+.login-card .p-card-content > * + * {
+  margin-top: 1rem;
+}
+
 .tenant-dialog {
   width: min(420px, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);

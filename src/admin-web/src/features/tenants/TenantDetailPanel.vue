@@ -377,7 +377,7 @@ async function copyInviteLink() {
       <!-- The availability lever (ADR 0066), offered only on a settled tenant: a PENDING one has nothing to take
            offline — it is withdrawn with revoke instead, which is why these two states share no controls. -->
       <template v-if="isActive">
-        <label class="tenant-over-content">
+        <label class="checkbox-row tenant-over-content">
           <input v-model="overContent" type="checkbox" class="tenant-over-content__toggle" />
           {{ t('tenant.suspendOverContent') }}
         </label>
@@ -515,7 +515,7 @@ async function copyInviteLink() {
           {{ t('tenant.deleteConfirmLabel', { domain: tenant.domain }) }}
           <InputText v-model="deleteTyped" autocomplete="off" spellcheck="false" />
         </label>
-        <label class="tenant-over-content">
+        <label class="checkbox-row tenant-over-content">
           <input v-model="deleteOverContent" type="checkbox" class="tenant-delete-over-content__toggle" />
           {{ t('tenant.suspendOverContent') }}
         </label>
