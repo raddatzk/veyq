@@ -1,5 +1,5 @@
 // Run AFTER `vite build`: fail unless the build emitted the listing opener Worker
-// (`src/features/memory/listingOpener.worker.ts`, ADR 0105 decision 3) as a chunk of its own and the app references it.
+// (`src/features/memories/listingOpener.worker.ts`, ADR 0105 decision 3) as a chunk of its own and the app references it.
 // The twin of `assert-media-worker-in-dist.mjs`, for the same reason: Vite recognises a Worker only when
 // `new Worker(new URL('…', import.meta.url))` is spelled as ONE expression (`listingOpener.ts`); split it and the build
 // stays green, emits no Worker chunk, and every gallery opens its listing on the page thread again — slower, and silent

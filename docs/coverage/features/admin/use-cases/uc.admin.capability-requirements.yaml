@@ -37,7 +37,7 @@ acceptanceCriteria:
         unit: [LinkRequirementsTest.aRequiredPasswordRefusesALinkWithoutOneAndNamesItBeforeTheEndDate]
         integration: [CapabilityRequirementsSliceTest.aRequiredPasswordRefusesANewLinkWithoutOneAndAcceptsOneWithIt, CapabilityRequirementsSliceTest.aRequiredPasswordStopsAnExistingLinkWithoutOneAtOnceAndAnEditThatGivesOneServesItAgain]
       web:
-        unit: [src/features/memory/components/ShareCreateDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
+        unit: [src/features/memories/components/ShareCreateDialog.test.ts, src/features/depot/components/DropBoxShareDialog.test.ts]
   - id: link-lifetime-limited
     text: While links must end within N days, a link with no end date or one more than N days after it was made is refused (422 link_expiry_required) and an existing one answers guests as an unknown link, in that tenant only; an edit that gives a younger link a fitting end date serves it again, and clearing the requirement serves every link it stopped; the pickers end on the last day allowed.
     coverage:
@@ -53,7 +53,7 @@ acceptanceCriteria:
         unit: [LinkRequirementsTest.missedNamesEveryRequirementALinkMissesThePasswordFirstAndTheRefusalIsItsFirst]
         integration: [ShareGuestStopsCoreSliceTest.aMemberGivesAStoppedLinkAPasswordAndItsGuestMeetsThePromptInsteadOfThe404, ShareGuestStopsCoreSliceTest.aWriteThatMeetsOneRequirementOfTwoIsRefusedAndOneThatMeetsBothServes, ShareGuestStopsCoreSliceTest.aMissedRequirementIsNamedWithTheLifetimeInEffect, ShareGuestStopsCoreSliceTest.theListAndTheGuestGateAgreeOverTheMatrix]
       web:
-        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memory/components/ShareDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts]
+        unit: [src/core/sharing/ShareGuestStops.test.ts, src/features/memories/components/ShareDialog.test.ts, src/core/sharing/FolderShareDialog.edit.test.ts]
   - id: group-add-consent-required
     text: While being added to a group needs a yes, the owner's resolve says consent is required and an add without a sealed name key is 400 consent_required, whatever the member's own setting, in that tenant only; members already added stay; the profile says the space asks anyway.
     coverage:

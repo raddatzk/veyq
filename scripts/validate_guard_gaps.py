@@ -114,7 +114,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      node-keyed entities from their `node_id` column and requires an eraser to reach each. None of those tables
      has a foreign key onto `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
      guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
-  39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
+  39 a core `shared/ui/` file importing `features/memories/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
      resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
      Memories application (ADR 0079). The same file importing `features/account/…` stays green by hand-run control —
      a different edge, not this guard's subject
@@ -199,7 +199,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      foreign key onto `veyq_node`), but only as a purge that rolls back on every tick; the guard does not lean on it
   69 core's attachment `ScopeEraser` no longer deleting its rows — rejected: `validate_scope_erasure_arity` finds
      `veyq_node_attachment` in the FK closure below `veyq_scope`, with no cascade
-  72 a `features/depot` file importing `features/memory` — rejected: `validate_web_core_imports_no_applications`'s
+  72 a `features/depot` file importing `features/memories` — rejected: `validate_web_core_imports_no_applications`'s
      application rule reads every application's files for an edge into another one (cr-files-application F0, the
      second application): an application depends on core only, as the backend's rule (b) holds for the modules
   73 a `features/depot` file importing Memories' generated `media` client — rejected: an application's clients are
@@ -1017,44 +1017,44 @@ WEB_GUARD = "validate_web_core_imports_no_applications.py"
 
 def _plant_web(root: pathlib.Path, rel: str, text: str) -> None:
     f = root / "web" / "src" / rel
-    if not (root / "web" / "src" / "features" / "memory").is_dir():
-        raise ForgeError("web/src/features/memory is gone — re-anchor this forgery on the application directory")
+    if not (root / "web" / "src" / "features" / "memories").is_dir():
+        raise ForgeError("web/src/features/memories is gone — re-anchor this forgery on the application directory")
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(text)
 
 
 def forge_web_core_imports_application(root: pathlib.Path) -> str:
     _plant_web(root, "shared/ui/GuardGapProbe.vue",
-               "<script setup lang=\"ts\">\nimport { loadTree } from '../../features/memory/memoryNodes'\n"
+               "<script setup lang=\"ts\">\nimport { loadTree } from '../../features/memories/memoryNodes'\n"
                "void loadTree\n</script>\n")
-    return "a shared/ui file importing features/memory/memoryNodes (must be REJECTED — core depends on no application)"
+    return "a shared/ui file importing features/memories/memoryNodes (must be REJECTED — core depends on no application)"
 
 
 def forge_web_core_reexports_application(root: pathlib.Path) -> str:
-    _plant_web(root, "shared/guardGapProbe.ts", "export * from '../features/memory/memoryNodes'\n")
+    _plant_web(root, "shared/guardGapProbe.ts", "export * from '../features/memories/memoryNodes'\n")
     return "a core file re-exporting the application with `export * from` (must be REJECTED)"
 
 
 def forge_web_core_dynamic_imports_application(root: pathlib.Path) -> str:
     _plant_web(root, "shared/guardGapProbe.ts",
-               "export const lazy = () => import('../features/memory/memoryNodes')\n")
+               "export const lazy = () => import('../features/memories/memoryNodes')\n")
     return "a core file importing the application with `import('…')` (must be REJECTED)"
 
 
 def forge_web_composition_root_sibling(root: pathlib.Path) -> str:
-    _plant_web(root, "applications2.ts", "import './features/memory/memoryNodes'\n")
+    _plant_web(root, "applications2.ts", "import './features/memories/memoryNodes'\n")
     return "a sibling of the composition root importing the application (the exemption is the exact path; REJECTED)"
 
 
 def forge_web_core_multiline_import(root: pathlib.Path) -> str:
     # The `} from '…'` line of a multi-line import does not start with `import`: the specifier regex must still see it.
     _plant_web(root, "shared/guardGapProbe.ts",
-               "import {\n  loadTree,\n  resetTree,\n} from '../features/memory/memoryNodes'\nvoid [loadTree, resetTree]\n")
+               "import {\n  loadTree,\n  resetTree,\n} from '../features/memories/memoryNodes'\nvoid [loadTree, resetTree]\n")
     return "a core file importing the application through a multi-line import (must be REJECTED)"
 
 
 def forge_web_core_side_effect_import(root: pathlib.Path) -> str:
-    _plant_web(root, "shared/guardGapProbe.ts", "import '../features/memory/memoryNodes'\n")
+    _plant_web(root, "shared/guardGapProbe.ts", "import '../features/memories/memoryNodes'\n")
     return "a core file importing the application for its side effects, `import '…'` (must be REJECTED)"
 
 
@@ -1077,8 +1077,8 @@ def _plant_depot(root: pathlib.Path, rel: str, text: str) -> None:
 
 def forge_web_application_imports_application(root: pathlib.Path) -> str:
     _plant_depot(root, "features/depot/guardGapProbe.ts",
-                 "import { MEMORY_KIND } from '../memory/kinds'\nexport const k = MEMORY_KIND\n")
-    return "a features/depot file importing features/memory/kinds (must be REJECTED — no application → application)"
+                 "import { MEMORY_KIND } from '../memories/kinds'\nexport const k = MEMORY_KIND\n")
+    return "a features/depot file importing features/memories/kinds (must be REJECTED — no application → application)"
 
 
 def forge_web_application_imports_application_client(root: pathlib.Path) -> str:

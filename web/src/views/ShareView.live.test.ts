@@ -18,7 +18,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/memories/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../features/depot/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()

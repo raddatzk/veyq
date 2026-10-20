@@ -8,7 +8,7 @@ two unrelated features drive:
   3. every `import … from '…/LocaleMarkdownEditor.vue'` anywhere in `web/src` **resolves to that one file** —
      which is how the guard notices a caller pointing at a copy rather than at the shared component.
 
-**The defect that bought it.** The component shipped inside `features/memory/components/`, driving the share
+**The defect that bought it.** The component shipped inside `features/memories/components/`, driving the share
 note, while the tenant-terms panel grew its own hand-written two-textarea editor beside it — a second per-locale
 editor in everything but name. cr-terms-editor-lists-the-languages-that-have-terms lifted the component out and
 rebuilt the terms panel on it. Nothing but this file stops the next reader from copying it back into whichever

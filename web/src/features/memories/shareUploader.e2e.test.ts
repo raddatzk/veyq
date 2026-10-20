@@ -13,7 +13,7 @@
 // name (ADR 0030 point 8). The unit layer (`shareUploader.test.ts`) proves the same chain against a
 // server it scripts itself; here the server's own storage and serving of the three new fields is in the loop.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/memory/shareUploader.e2e.test.ts
+//   python3 scripts/run_web_e2e.py web/src/features/memories/shareUploader.e2e.test.ts
 import { describe, it, expect } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'

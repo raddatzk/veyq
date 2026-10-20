@@ -15,46 +15,46 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/memoryParticipants.test.ts
-          - src/features/memory/components/MemoryParticipants.test.ts
+          - src/features/memories/memoryParticipants.test.ts
+          - src/features/memories/components/MemoryParticipants.test.ts
   - id: concurrent-edits-merge
     text: On `409 stale_revision` the writer re-reads the blob and MERGES instead of surfacing a same-field conflict - the union of the stored and the wanted list, a removal by the person editing winning for the id they removed - through its own edit function (`editParticipantsOf`), not `editField`.
     coverage:
       web:
         unit:
-          - src/features/memory/memoryParticipants.test.ts
+          - src/features/memories/memoryParticipants.test.ts
   - id: guest-sees-no-participants
     text: The interface shows a guest no participants in any share view - the `participants` right is false for every share role, so there is no section, avatar, header action or profile link, and the header reads and requests nothing for it - while the sealed meta a share serves still lists the opaque ids (the accepted residual, pinned by a test); no name snapshot is ever stored.
     coverage:
       web:
         unit:
-          - src/features/memory/rights.test.ts
-          - src/features/memory/components/MemoryDetail.guest.test.ts
+          - src/features/memories/rights.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
           - src/views/ShareView.memory.test.ts
-          - src/features/memory/components/MemoryParticipants.test.ts
-          - src/features/memory/components/MemoryDetail.rights.test.ts
+          - src/features/memories/components/MemoryParticipants.test.ts
+          - src/features/memories/components/MemoryDetail.rights.test.ts
   - id: header-chips-and-picker
     text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`pi-user-plus`) in the header's action bar that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
     coverage:
       web:
         unit:
-          - src/features/memory/components/MemoryParticipants.test.ts
-          - src/features/memory/components/MemoryDetail.rights.test.ts
+          - src/features/memories/components/MemoryParticipants.test.ts
+          - src/features/memories/components/MemoryDetail.rights.test.ts
           - src/core/people/directory.test.ts
   - id: participants-at-creation
     text: In a tenant or group scope a member's create dialog of a Memory offers "I was there", ticked by default and not remembered between creations; ticked, the Memory's first `wrappedMeta` - in the one create call, no second write - carries `participants` with the creator's own user id only; unticked it carries no `participants` key (absent, not an empty list). It is never offered in a personal scope, on a chapter, without the member's own id, or on a share guest's create (core's name dialog, which sends no meta).
     coverage:
       web:
         unit:
-          - src/features/memory/memoryNodes.test.ts
-          - src/features/memory/components/MemoryNodeDialog.test.ts
+          - src/features/memories/memoryNodes.test.ts
+          - src/features/memories/components/MemoryNodeDialog.test.ts
           - src/core/sharing/ShareTreePage.test.ts
   - id: former-member-greyed
     text: A participant who left the scope stays as an id and renders greyed as "Former member" without a link; nothing prunes it, and the picker keeps it ticked until the person unticks it.
     coverage:
       web:
         unit:
-          - src/features/memory/components/MemoryParticipants.test.ts
+          - src/features/memories/components/MemoryParticipants.test.ts
   - id: profile-route
     text: A member opens `#people/<userId>` (the reader also takes `#/people/<userId>`), token-less, in the tenant scope's shell; `people` is a reserved route segment (no application can claim it, a folder, file or drop box called "People" at a scope root is numbered `people-2`) and a foreign `~username` stays a personal-scope token.
     coverage:
@@ -68,32 +68,32 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/participantIndex.test.ts
-          - src/features/memory/components/PersonMemories.test.ts
+          - src/features/memories/participantIndex.test.ts
+          - src/features/memories/components/PersonMemories.test.ts
   - id: profile-list-is-the-level-list
     text: The profile's Memories list is drawn with the level view's own item component (a larger cover, the name, the kind, the Memory's date and place as details - the level's builder, a missing fact left out - and the group's name), as rows or as tiles through the same switch and the same per-user stored view-mode preference the folder view uses; the stored mode shows where the page offers it and is never rewritten.
     coverage:
       web:
         unit:
-          - src/features/memory/components/PersonMemories.test.ts
+          - src/features/memories/components/PersonMemories.test.ts
           - src/core/node/ViewModeToggle.test.ts
-          - src/features/memory/memoryRowDetails.test.ts
+          - src/features/memories/memoryRowDetails.test.ts
           - src/core/people/PersonProfile.test.ts
-          - src/features/memory/lifecycle.test.ts
+          - src/features/memories/lifecycle.test.ts
   - id: profile-map-is-the-level-map
     text: Where the person has Memories, the profile's switch offers what a level of Memories offers - tiles, rows and Memories' map (one list, `memoryViews.ts`) - also when none of them has a place; in map mode the level's own map component replaces the list and pins exactly the person's Memories that have a position (one without a place, or with a pending automatic place, is left out by the level's rule; none left shows the map's "No places yet"), behind the same map consent; a pin opens the Memory in its own scope as its row does; a stored map shows the map, and with nothing to list there is no switch and no map.
     coverage:
       web:
         unit:
-          - src/features/memory/components/PersonMemories.test.ts
-          - src/features/memory/participantIndex.test.ts
-          - src/features/memory/spaceMap.test.ts
+          - src/features/memories/components/PersonMemories.test.ts
+          - src/features/memories/participantIndex.test.ts
+          - src/features/memories/spaceMap.test.ts
   - id: uploader-name-in-lightbox
     text: The photo detail shows the uploader's name by the display rule, independent of the participant list; a `user:` owner links to the profile for members only, a `share:` owner and a former member are plain names - a `share:` owner's own name marked as a guest's, "Ben (guest)" (inbox #433), the member of the same name unmarked -, and a share guest's session resolves no uploader (it shows nothing, as before).
     coverage:
       web:
         unit:
-          - src/features/memory/useUploaderNames.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/useUploaderNames.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
 gaps:
   backend: "None: no backend or contract change (the sub-object rides the existing wrappedMeta write, ADR 0083); the NodesSliceTest wrappedMeta round trip is not claimed for participants."

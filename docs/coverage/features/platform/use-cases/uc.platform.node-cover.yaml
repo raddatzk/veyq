@@ -43,7 +43,7 @@ acceptanceCriteria:
     text: The client derives the cover size with the existing pipeline (one JPEG, long edge 2048) and seals it as the node's own blob - wrapped under the node's key, bound to blob, node and role COVER, blob meta the JPEG type - refusing an unreadable image on a folder or drop box, and states its 40 MB limit; the upload bodies are sealed (no plaintext, the cover meta opens only under that node's key) and byte for byte what Memories' covers sent.
     coverage:
       web:
-        unit: [src/core/node/cover/coverWrite.test.ts, src/core/node/cover/pickImage.test.ts, src/features/memory/uploadWire.characterisation.test.ts]
+        unit: [src/core/node/cover/coverWrite.test.ts, src/core/node/cover/pickImage.test.ts, src/features/memories/uploadWire.characterisation.test.ts]
   - id: stored-memory-covers-still-open
     text: Every cover a Memory already stored (the `cover` field of its sealed meta) opens through core's reader and is written with the same keys in the same order.
     coverage:
@@ -53,7 +53,7 @@ acceptanceCriteria:
     text: A node that takes a cover has ONE cover action (`Set cover` without one, `Change cover` with one, the image icon) in its header and ONE matching entry in its row menu, and no separate Remove; it opens core's dialog, which offers choosing an image, re-cropping the current cover, Remove (only where a cover exists) and Save/Cancel, and is the same dialog for a folder, a drop box and a Memory. Where the rights function says no (a file, a guest, a pending deletion, locked keys) there is no action and the dialog does not open.
     coverage:
       web:
-        unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetailHost.cover.test.ts]
+        unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts]
   - id: dialog-crops-and-saves-one-write
     text: The dialog frames the image in the shared 16:9 cropper and Save stores that crop in the cover meta in its existing format - a new image as one upload job + one setNodeCover write, a re-crop as a plain meta write that keeps the stored image, a removal as one write with no cover; a cover reopened restores its crop; a non-image, an empty file or one over 40 MB is refused inside the dialog before anything is read; a conflict or a stale slot re-opens the dialog on the current cover and says so.
     coverage:
@@ -63,9 +63,9 @@ acceptanceCriteria:
     text: A node's cover is the leading visual of its row and tile, its header and the sidebar's Favorites, the kind's icon the default; a cover that is missing or fails to open is the icon, silently; a replaced or removed cover drops its old image and object URL at once; a share guest sees the covers through the link's own gated reads and gets no action.
     coverage:
       web:
-        unit: [src/core/node/cover/coverStore.test.ts, src/core/node/cover/cover.dom.test.ts, src/core/node/cover/components/NodeCoverImage.test.ts, src/features/memory/components/MemoryCoverImage.test.ts, src/components/app/AppSidebar.test.ts, src/features/depot/components/DropBoxDetail.test.ts]
+        unit: [src/core/node/cover/coverStore.test.ts, src/core/node/cover/cover.dom.test.ts, src/core/node/cover/components/NodeCoverImage.test.ts, src/features/memories/components/MemoryCoverImage.test.ts, src/components/app/AppSidebar.test.ts, src/features/depot/components/DropBoxDetail.test.ts]
   - id: memory-opens-the-one-dialog-and-finds-stored-pictures
     text: The Memory page's header action and its cover tile open core's one dialog - the gallery lightbox offers no "Set as cover" and the dialog no other source; the Memory adds only `cover.findStored`, which names the PREVIEW of a gallery medium whose original equals the picked image, so core sends a shared row in place of an upload (a failure to look is no match; a kind without the seam never looks); a stored photo reference reads as no cover (the icon), kept untouched by every other writer; the Memory's rows draw the cover core resolved.
     coverage:
       web:
-        unit: [src/features/memory/components/MemoryDetailHost.cover.test.ts, src/features/memory/components/MemoryDetail.rights.test.ts, src/features/memory/useMemoryCover.test.ts, src/features/memory/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/coverStore.test.ts, src/features/memory/storedMatch.test.ts, src/features/memory/levelRows.test.ts, src/features/memory/levelRows.guest.test.ts]
+        unit: [src/features/memories/components/MemoryDetailHost.cover.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/features/memories/useMemoryCover.test.ts, src/features/memories/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/coverStore.test.ts, src/features/memories/storedMatch.test.ts, src/features/memories/levelRows.test.ts, src/features/memories/levelRows.guest.test.ts]

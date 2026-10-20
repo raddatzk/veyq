@@ -11,7 +11,7 @@ import { getTenantMailSettings } from '../tenant/tenantMailSettings'
 import { openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { listTree, nodeContentKey } from '../../core/node/tree'
-import { listMedia, openOriginal, unsealMeta } from '../memory/media'
+import { listMedia, openOriginal, unsealMeta } from '../memories/media'
 
 /**
  * Part B of the **restore rehearsal** — the sentence `docs/architecture/README.md` §10 sets as the durability

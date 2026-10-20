@@ -11,7 +11,7 @@ acceptanceCriteria:
       backend:
         integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.derivativesRoundTripWithOwnWraps, MediaSliceTest.mediaExifWithoutExifIsNull]
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memories/media.test.ts]
   - id: upload-seals-only-under-its-own-memory-key
     text: >-
       An upload into a Memory seals only under that Memory's own key; a server that serves another Memory's key
@@ -24,14 +24,14 @@ acceptanceCriteria:
       backend:
         integration: [ClientMintedIdSliceTest.createNodeRefusesAnIdTakenInAnotherScope]
       web:
-        unit: [src/features/memory/sealBinding.test.ts]
+        unit: [src/features/memories/sealBinding.test.ts]
   - id: global-uploads-tray
     text: A TopBar uploads button (active-count badge, counting files) opens a popup listing the files with status + progress and a cancel/retry control; the queue is a module singleton so uploads survive navigation.
     coverage:
       web:
         unit:
           - src/core/blob/UploadStatusMenu.test.ts
-          - src/features/memory/uploadQueue.test.ts
+          - src/features/memories/uploadQueue.test.ts
           - src/core/blob/queue.test.ts
   - id: one-list-per-destination
     text: >-
@@ -49,8 +49,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/uploadQueue.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/uploadQueue.test.ts
           - src/core/blob/queue.test.ts
   - id: abandoned-session-reclaimed
     text: >-
@@ -90,7 +90,7 @@ acceptanceCriteria:
           - UploadWindowSliceTest.aWindowFromOutsideTheBlobIsRangeInvalid
           - UploadWindowMemoriesSliceTest.aCompletedSessionHasNoWindow
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memories/media.test.ts]
     gaps:
       - surface: backend
         reason: >
@@ -124,9 +124,9 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/uploadQueue.test.ts
-          - src/features/memory/share.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/share.test.ts
   - id: store-responses-are-inert
     text: >-
       The store never serves an object as a renderable type, and refuses a PUT of any type but the pinned one
@@ -144,7 +144,7 @@ acceptanceCriteria:
           - S3BlobStorePresigningTest.everyPresignedPutSignsTheContentTypeHeader
         integration: [TenantIngressProjectorTest.everyBlobsRouterMarksStoreResponsesInert]
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memories/media.test.ts]
     gaps:
       - surface: backend
         reason: >
@@ -173,7 +173,7 @@ acceptanceCriteria:
           - MediaCoreSliceTest.aDeclarationWhoseShapeTheSizeDoesNotFixIsShapeInvalid
           - MediaBudgetBranchSliceTest.aChunkShortOfItsDerivedLengthFailsTheItemEvenWithTheTotalUnderTheDeclaration
       web:
-        unit: [src/features/memory/media.test.ts, src/sw/range.test.ts]
+        unit: [src/features/memories/media.test.ts, src/sw/range.test.ts]
     gaps:
       - surface: backend
         reason: >
@@ -200,19 +200,19 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/uploadQueue.test.ts
-          - src/features/memory/components/MemoryDetail.optimistic.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/components/MemoryDetail.optimistic.test.ts
           - src/views/ShareView.picker.test.ts
   - id: exif-tier-fits-its-bound
     text: The sealed EXIF tier always fits its contract bound (`wrappedExif.maxLength`, which the server enforces) — each free-text field is shortened to a byte cap without splitting a character, a tier that still overflows sheds free text before any number, and the upload never fails for its metadata.
     coverage:
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memories/media.test.ts]
   - id: best-effort-derivation
     text: Underivable media (a codec the browser can't decode, or an empty MIME type) uploads original-only instead of failing the whole upload.
     coverage:
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memories/media.test.ts]
   - id: pixel-stage-off-the-page-thread
     text: >-
       The image pixel stage runs in a Worker where the browser offers one; a Worker that cannot run finishes the
@@ -234,14 +234,14 @@ acceptanceCriteria:
     text: The original's filename is sealed into the lazy panel bundle at upload — for every media that has one (a video, an image without EXIF, a PDF too, not only a parsed EXIF bundle), since the lightbox downloads the original under it, and it is never shed to fit the tier's cap — and is NEVER sent in the clear — no request carries it, checked at fetch over every path, header, binary body and DECODED base64 field, for a member's and a guest's upload, so uc.memory.gallery's "no pixel, no filename" stays a true statement about the server's view now that the name exists at all. It never enters the 512-base64 listed tier. Both AddMediaSource construction sites (the upload queue and the cover upload) pass it.
     coverage:
       web:
-        unit: [src/features/memory/media.test.ts, src/features/memory/originalName.wire.test.ts]
+        unit: [src/features/memories/media.test.ts, src/features/memories/originalName.wire.test.ts]
   - id: original-carries-its-digest-and-may-share-the-banner
     text: An original's sealed `blob-meta` carries the SHA-256 of its bytes (base64url), read frame by frame before it is planned, so a later upload of the same file into the cover or banner dialog finds it (a medium without one is never matched). A member's upload of a file equal to the node's video banner (its sealed `sha256` and size) completes with `originalShared` - a new row on the `BANNER` object, its K_blob wrapped again bound to the medium's ORIGINAL, nothing uploaded for it - while its posters are derived and uploaded as always; the object goes only with the last row naming it. Neither form is open to a guest (the seam refuses a contributor's `originalShared`; ADR 0013 § 5).
     coverage:
       backend:
         integration: [SharedBlobSliceTest.aGalleryOriginalSharesTheVideoBannersObject, SharedBlobSliceTest.aSourceTheNodeDoesNotHoldIsRefusedAndNothingIsWritten]
       web:
-        unit: [src/features/memory/media.test.ts, src/features/memory/storedMatch.test.ts, src/core/blob/sharedBlob.test.ts]
+        unit: [src/features/memories/media.test.ts, src/features/memories/storedMatch.test.ts, src/core/blob/sharedBlob.test.ts]
   - id: original-decoded-once-per-upload
     text: Inside addMedia a picked original is decoded ONCE — the preview is derived from it, the thumbnail from the already-downscaled preview, and the intrinsic geometry the metadata tier seals rides back from that same decode instead of a separate probe. Both tiers still arrive at their pinned specs (4032 to 2048 to 512 traverses the same steps of at most 2x that two independent runs did), so the progressive-halving downscale rule is honoured rather than traded for the saving; the tier derivation is therefore ORDERED, preview before thumbnail. A video is unchanged — one poster decode, zero image decodes.
     # The count is bitten by a deriver that records each decode's SOURCE SIZE, so a decode of the original is
@@ -249,15 +249,15 @@ acceptanceCriteria:
     # bite, since the shared stub deliberately ships without one and the geometry decode ran in no test before.
     coverage:
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memories/media.test.ts]
   - id: optimistic-in-grid-tiles
     text: Picked files appear immediately as tiles in the Memory's gallery grid — an instant local object-URL preview (never uploaded in the clear) with a per-tile progress ring or failed+retry state, at the place the gallery's ONE ordering rule gives it (uc.memory.gallery#date-sorted-grid owns that rule; this criterion does not restate it) — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once. A tile names the stage its file is ACTUALLY in — queued, preparing or uploading are three different waits and in two of them no byte has left the device — visibly and in BOTH aria-labels (the container's and the progress zone's), which fail independently.
     coverage:
       web:
         unit:
-          - src/features/memory/optimisticUpload.test.ts
-          - src/features/memory/uploadQueue.test.ts
-          - src/features/memory/components/MemoryDetail.optimistic.test.ts
+          - src/features/memories/optimisticUpload.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/components/MemoryDetail.optimistic.test.ts
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`) drives `seal-and-upload-operator-blind`

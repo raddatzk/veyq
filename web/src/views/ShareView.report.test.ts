@@ -14,7 +14,7 @@ import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.unmock('../core/report/moderationKey')
 vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/memories/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../features/depot/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 const route = vi.hoisted(() => ({ params: { shareId: 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_3' }, hash: '', query: {} as Record<string, string> }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
@@ -28,7 +28,7 @@ import ReportDialog from '../core/report/ReportDialog.vue'
 import { resetReporting } from '../core/report/report'
 import { resolvePublicShare, fetchShareTerms, type PublicShareHead } from '../core/sharing/resolvePublicShare'
 import { FOLDER_KIND } from '../core/node/kind'
-import { MEMORY_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND } from '../features/memories/kinds'
 import { sealName, wrapContentKey } from '../core/node/tree'
 import { publicModerationApi, publicSharesApi } from '../api/client'
 import { ReportCategory, ResponseError } from '../api/generated/moderation'

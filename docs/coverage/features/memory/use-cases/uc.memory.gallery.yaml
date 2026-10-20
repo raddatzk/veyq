@@ -9,12 +9,12 @@ acceptanceCriteria:
     text: Opening a Memory lists its media and renders a thumbnail grid (each thumbnail fetched as ciphertext and decrypted on device under K_node). The grid is the Gallery tab of a tabbed detail view (Gallery / Chapters, cr-0061).
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
-      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MemoryDetail.test.ts] }
+      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MemoryDetail.test.ts] }
   - id: lightbox-preview
     text: Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order.
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
-      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts] }
+      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts] }
   - id: lightbox-zoom
     text: >
       A photo in the lightbox zooms - double-click / double-tap toggles 1x / 2x at the pointer, a two-pointer pinch and
@@ -29,8 +29,8 @@ acceptanceCriteria:
       web:
         unit:
           - src/shared/ui/usePanZoom.test.ts
-          - src/features/memory/lightboxZoom.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/lightboxZoom.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
     gaps:
       - surface: web
         reason: The gestures are driven by synthetic pointer, wheel and key events in happy-dom, which lays nothing out (each test sets the image's fitted and natural size by hand); a real browser (2026-10-14) zoomed by double-click, fetched the original once and panned by arrow keys, but has not run a pinch, ctrl+wheel or the 50 MB cap.
@@ -44,7 +44,7 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
     gaps:
       - surface: web
         reason: Proven on fake interval/timeout/Date clocks in happy-dom; a real browser (2026-10-14) ran it over three photos (5 s, stop at the end, EXIF only on arrival) but no video's poster interval yet.
@@ -52,7 +52,7 @@ acceptanceCriteria:
     text: An explicit download fetches the pristine, full-resolution original (the only byte-identical copy).
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip] }
-      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.test.ts, src/features/memory/download.stream.test.ts] }
+      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts, src/features/memories/download.test.ts, src/features/memories/download.stream.test.ts] }
     gaps:
       - surface: web
         reason: The download streams into a save target (a picked file, the Service Worker's download route, or a Blob up to 512 MiB), proven by unit tests with the real chunk provider over a fake store and fake sinks; no real browser has streamed a multi-gigabyte original, and no e2e drives the lightbox's download (inbox #371).
@@ -67,7 +67,7 @@ acceptanceCriteria:
   - id: download-stable-name
     text: The original downloads under its own file name, sealed into the EXIF tier at upload and loaded with the item's details, so the same item keeps its download name when newer uploads shift the gallery (the owner's repro — two photos, then a third — pinned). The download button enables once those details are in or known absent, so the save picker stays the click's first await and a quick click cannot save under the fallback; a named media opens the save target before any request and sniffs a missing type from chunk 0 as it streams. Only a media that never sealed a name falls back to the Memory name + its gallery position (inbox #395 F10).
     coverage:
-      web: { unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.stream.test.ts] }
+      web: { unit: [src/features/memories/components/MediaLightbox.test.ts, src/features/memories/download.stream.test.ts] }
   - id: favorite-toggle
     text: >
       The heart pins/unpins a node of ANY kind - in its row of a level and in its own header, one core action
@@ -102,7 +102,7 @@ acceptanceCriteria:
           - src/core/favorites/rights.test.ts
           - src/core/favorites/favoriteActions.test.ts
           - src/core/favorites/heart.test.ts
-          - src/features/memory/components/MemoryDetailHost.heart.test.ts
+          - src/features/memories/components/MemoryDetailHost.heart.test.ts
           - src/features/depot/components/FileDetail.test.ts
           - src/features/depot/components/DropBoxDetail.test.ts
           - src/components/app/AppSidebar.test.ts
@@ -111,24 +111,24 @@ acceptanceCriteria:
     text: Every tier (thumbnail/preview/original) is fetched as ciphertext via presigned GET and decrypted on device; the server sees no pixel, filename, or content key.
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps, MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers] }
-      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MemoryDetail.test.ts, src/features/memory/components/MediaLightbox.test.ts] }
+      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MemoryDetail.test.ts, src/features/memories/components/MediaLightbox.test.ts] }
   - id: justified-grid-sealed-dimensions
     text: The web grid is laid out justified (aspect-preserving rows that fill the width); each media's geometry (w,h) rides the always-listed metadata tier (wrappedMeta, cr-0068 consolidating cr-0064's wrappedLayout + cr-0066's wrappedCapturedAt) sealed under a field key derived from K_node at upload and unwrapped on device to drive the layout, so the blind server never sees pixel dimensions. Media without a sealed geometry fall back to a default aspect.
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers] }
       web:
         unit:
-          - src/features/memory/mediaGridLayout.test.ts
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/mediaGridLayout.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: lightbox-exif-detail
     text: Opening an item lazily fetches its sealed panel bundle (wrappedExif) via the exif endpoint (getMediaExif) — kept out of the list so it stays constant-small — and unwraps it on device with K_node to fill the detail panel. The bundle's contents are a versioned client-only shape and are deliberately NOT enumerated here (the fields themselves are covered by panel-shows-what-the-photo-knows); what this criterion pins is the tier mechanics. The capture date, coordinates and resolved place name come instantly from the always-listed metadata tier (wrappedMeta), not the lazy bundle. The blind server never sees any field; an item without a sealed bundle shows a no-detail message (cr-0064/0068).
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaExifWithoutExifIsNull, MediaSliceTest.mediaExifForUnknownMediaIs404] }
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: panel-shows-what-the-photo-knows
     text: The detail panel renders, from the two sealed tiers, the file (original name, plaintext size — byteSize minus 28 per chunk, never the raw ciphertext size — and format), the camera and lens, the exposure (focal length and its 35 mm equivalent, aperture, shutter, ISO, exposure compensation, and whether the flash fired — read as the EXIF BITFIELD, so 16 means it did not), the provenance an editor wrote in (software, author, copyright, rating, title, description), and the geo block (altitude, camera view direction, positioning accuracy). Every row appears only when the photo carries that value; none of it is ever sent, and the filename in particular is sealed and never leaves the device.
     # The tag NAMES and the parse options are pinned separately by readExif.fixture.test.ts, the one test that
@@ -137,17 +137,17 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/readExif.fixture.test.ts
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/readExif.fixture.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: panel-place-name-and-map
     text: Where the user has consented to maps, a photo that carries a coordinate shows a RESOLVED PLACE NAME above the coordinate (which stays visible) and a small map below it with a needle for the recorded view direction. The name is resolved client-direct from the bare coordinate, ONCE PER PLACE (the client cache is keyed on the coordinate rounded to ~110 m, and requests are serialised at >= 1 s — ADR 0016 Request discipline), then sealed into the listed tier and read from there forever. Without consent no coordinate and no tile leave the device and the rows stand alone; a read-only viewer never writes. Distinct from uc.memory.place's sealed-location-on-node, which is ONE named place per NODE, set deliberately by a user.
     coverage:
       web:
         unit:
-          - src/features/memory/placeName.test.ts
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/placeName.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: date-sorted-grid
     text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under a field key derived from K_node in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, and one surface — a share guest's gallery is the member's (inbox #401), and the drop page's own tiles sort through the same comparator.
     coverage:
@@ -164,46 +164,46 @@ acceptanceCriteria:
       # the tier seals, which is what makes the slot stable rather than coincidentally equal.
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
-          - src/features/memory/components/MemoryDetail.optimistic.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
+          - src/features/memories/components/MemoryDetail.optimistic.test.ts
   - id: lightbox-correct-capturedat
     text: From the lightbox a user can correct (or set) a media's capture time; the correction is sealed under a field key derived from K_node inside the listed metadata tier (wrappedMeta) as capturedAtOverride alongside the immutable extracted original (geometry + GPS ride along unchanged), re-sealed client-side and PUT verbatim (updateMediaMeta) — the blind server never sees the date. The panel shows the effective time (override ?? original) with a "corrected" indicator and can reset to the original; a media with no EXIF can have a date set (cr-0065/0068).
     coverage:
       backend: { integration: [MediaSliceTest.updateMetaOverwritesSealedTierAndLists, MediaSliceTest.updateMetaForUnknownMediaIs404] }
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: sealed-media-type
     text: A media's full MIME type is sealed under a field key derived from K_node inside the always-listed metadata tier (wrappedMeta) at upload — never a server-visible field (an application of ADR 0044 — a plaintext mediaType would leak photo-vs-video-vs-PDF per medium; ADR 0047). The blind server relays the same opaque blob it already does (its opaque relay is proven under justified-grid-sealed-dimensions); the client unseals it (isVideoMediaType) to drive the video signal. cr-inline-video-playback (#104/#105).
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
+          - src/features/memories/media.test.ts
   - id: lightbox-video-playback
     text: Opening a video (sealed mediaType video/*) shows its poster (the PREVIEW tier) with a play affordance; clicking play plays the pristine original in a <video> element from a synthetic /__media/<handle> URL that the controlling Service Worker answers range by range (sw-range-streaming, ADR 0047), and only where no usable Service Worker controls the page (none, a stale or mismatched one, a failed registration) fetches + decrypts the whole original on device into a typed blob URL (no size cap). An image shows no play affordance. Operator-blind — the original is fetched as ciphertext via presigned GET and decrypted under K_node. cr-inline-video-playback (#104).
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: video-play-badge
     text: A video tile draws a play badge over its poster in the gallery grid, the Beiträge (buckets) grid, and the Trash grid — driven by the sealed mediaType (isVideoMediaType), with no extra fetch. An uploading video shows a locally-derived first-frame poster + badge (not a bare icon) once settled, so the in-flight and persisted states agree. cr-inline-video-playback (#105).
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: media-type-lazy-backfill
     text: A pre-field media (uploaded before the sealed mediaType existed) carries no video signal; on the first download of its original the client sniffs the decrypted first chunk, read before the save target opens (magic bytes, incl. WebM/MKV via the EBML DocType) and re-seals the type into the tier (updateMediaMeta), so the next listing shows the badge + the <video> branch. Never in the read-only public viewer (no authed write path); a never-fetched pre-field video stays without a signal — the accepted boundary (ADR 0047). cr-inline-video-playback (#104/#105).
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
-          - src/features/memory/download.test.ts
-          - src/features/memory/download.stream.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/download.test.ts
+          - src/features/memories/download.stream.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: sw-range-streaming
     text: A playing video is streamed, not fetched whole — a Service Worker intercepts a synthetic in-origin URL, parses the demuxer's HTTP Range (first probe, closed, open-ended, suffix; no-Range → 200 + Accept-Ranges), maps the plaintext byte-range to the covering ciphertext chunk indices (plaintextTotal = byteSize − 28·chunkCount), assembles the window and answers 206 Partial Content with Content-Range. The range↔chunk math is pure + unit-tested; the SW's fetch/206 assembly is tested against a mocked page port. cr-inline-video-playback Slice 2 (ADR 0047).
     coverage:
@@ -216,28 +216,28 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
+          - src/features/memories/media.test.ts
           - src/sw/mediaSw.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: sw-presign-expiry
     text: The page-side chunk provider presigns the whole blob once and caches the URLs by issue time; on a stale-URL 403 (the backend's 600 s presign TTL elapsed) it re-presigns the whole blob and retries the chunk once, so a long playback never breaks on expiry. cr-inline-video-playback Slice 2 (ADR 0047).
     coverage:
       web:
         unit:
-          - src/features/memory/media.test.ts
+          - src/features/memories/media.test.ts
   - id: sw-share-viewer
     text: The anonymous public-share viewer streams video through the SAME SW path — the page passes a share-scoped chunk provider (per-item K_node + guest pwToken over the gated share-scoped presign, resolveShareBlob) that shares the authed provider's openFrame core, so the SW never learns which route served the bytes. cr-inline-video-playback Slice 2 (ADR 0047).
     coverage:
       web:
         unit:
-          - src/features/memory/share.test.ts
-          - src/features/memory/media.test.ts
+          - src/features/memories/share.test.ts
+          - src/features/memories/media.test.ts
   - id: sw-no-sw-fallback
     text: When no Service Worker controls the page (unsupported browser, a first load before activation, or a protocol-version handshake mismatch with a stale SW), playback falls back to the Slice-1 path — fetch + decrypt the whole original and play it from a typed blob URL — so video always plays. The switchover is per-play and revokes the SW playback on item switch / close / unmount. cr-inline-video-playback Slice 2 (ADR 0047).
     coverage:
       web:
         unit:
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: sw-inert-responses
     text: >-
       The playback shim serves only a single well-formed video type, refuses page loads, and marks every
@@ -250,7 +250,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/sw/mediaSw.test.ts
-          - src/features/memory/media.test.ts
+          - src/features/memories/media.test.ts
   - id: item-marks-are-shared-and-attributed-to-nobody
     text: >
       A member marks an individual medium inside a Memory; the mark is SHARED with the scope, sealed under
@@ -268,8 +268,8 @@ acceptanceCriteria:
           - ItemFavoritesSliceTest.nonMemberIs404
       web:
         unit:
-          - src/features/memory/itemFavoritesStore.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/itemFavoritesStore.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: my-marks-are-proven-mine
     text: >
       Which of a node's entries is the caller's own is proven by the caller's client, not told by the server: the
@@ -282,7 +282,7 @@ acceptanceCriteria:
       suite, which is not a coverage surface.)
     coverage:
       backend: { integration: [ItemFavoritesSliceTest.getReturnsEveryMembersBlobNotJustTheCallers] }
-      web: { unit: [src/features/memory/itemFavorites.test.ts] }
+      web: { unit: [src/features/memories/itemFavorites.test.ts] }
   - id: item-marks-are-partitioned-per-memory
     text: >
       Marks are stored per node, not per scope: the partition stops one toggle re-uploading the scope's whole
@@ -300,9 +300,9 @@ acceptanceCriteria:
           - ItemFavoritesSliceTest.theCapIsTheContractsAndNotOneCharacterMore
       web:
         unit:
-          - src/features/memory/itemFavoritesStore.test.ts
-          - src/features/memory/itemFavorites.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/itemFavoritesStore.test.ts
+          - src/features/memories/itemFavorites.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: gallery-filters-by-marks-and-shows-an-aggregate
     text: >
       The gallery header filters the grid to everyone's marks or only the caller's, and each tile's heart
@@ -313,15 +313,15 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/itemFavoritesStore.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/itemFavoritesStore.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: degenerate-filter-is-hidden-not-disabled
     text: >
       In a personal scope there is nobody to share a mark with, so the everyone/mine filter is ABSENT rather
       than rendered disabled, and no per-tile count is shown (E4); a filter that empties the grid names itself
       so it never reads as a broken Memory (E5). cr-favorites-two-objects (ADR 0068 §7).
     coverage:
-      web: { unit: [src/features/memory/components/MemoryDetail.test.ts] }
+      web: { unit: [src/features/memories/components/MemoryDetail.test.ts] }
   - id: marks-are-reclaimed-with-what-they-point-at
     text: >
       Item marks die with the things they describe: the scope purge erases them (enforced structurally — the
@@ -345,7 +345,7 @@ acceptanceCriteria:
       backend:
         integration: [ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationMemoriesSliceTest.aBlockedMediumIsDeletedButNeverRestored, ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
       web:
-        unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts, src/features/memory/useMediaTrash.test.ts, src/views/MemoryHomeView.registry.test.ts]
+        unit: [src/features/memories/components/MediaLightbox.test.ts, src/features/memories/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts, src/features/memories/useMediaTrash.test.ts, src/views/MemoryHomeView.registry.test.ts]
     gaps:
       - surface: web
         reason: >-
@@ -367,11 +367,11 @@ acceptanceCriteria:
         unit:
           - src/core/blob/readScheduler.test.ts
           - src/core/blob/transport.test.ts
-          - src/features/memory/useThumbnailPipeline.test.ts
+          - src/features/memories/useThumbnailPipeline.test.ts
           - src/shared/state/useObjectUrls.test.ts
-          - src/features/memory/useMediaGalleryLive.test.ts
-          - src/features/memory/components/MediaTile.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/useMediaGalleryLive.test.ts
+          - src/features/memories/components/MediaTile.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
     gaps:
       - surface: web
         reason: >-
@@ -387,8 +387,8 @@ acceptanceCriteria:
           - MediaListQueryCountSliceTest.aGuestsPageOfOnePhotoAndOfSixtyIssueTheSameStatements
       web:
         unit:
-          - src/features/memory/share.test.ts
-          - src/features/memory/source.test.ts
+          - src/features/memories/share.test.ts
+          - src/features/memories/source.test.ts
   - id: the-grid-mounts-only-the-window
     text: >-
       Every view over a list of media keeps the justified layout of the WHOLE list (the container's true height, the
@@ -398,7 +398,7 @@ acceptanceCriteria:
       anchored by id; at the top of the grid an insert is shown (ADR 0105 decision 1, decision 4).
     coverage:
       web:
-        unit: [src/features/memory/components/MediaGrid.test.ts]
+        unit: [src/features/memories/components/MediaGrid.test.ts]
     gaps:
       - surface: web
         reason: >-
@@ -416,9 +416,9 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/useThumbnailPipeline.test.ts
-          - src/features/memory/useMediaGalleryLive.test.ts
-          - src/features/memory/components/MediaGrid.test.ts
+          - src/features/memories/useThumbnailPipeline.test.ts
+          - src/features/memories/useMediaGalleryLive.test.ts
+          - src/features/memories/components/MediaGrid.test.ts
           - src/views/ShareView.memory.test.ts
           - src/shared/state/useObjectUrls.test.ts
     gaps:
@@ -437,8 +437,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/openedListing.test.ts
-          - src/features/memory/listingOpener.test.ts
+          - src/features/memories/openedListing.test.ts
+          - src/features/memories/listingOpener.test.ts
     gaps:
       - surface: web
         reason: >-
@@ -456,8 +456,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/components/MediaGrid.test.ts
-          - src/features/memory/components/MemoryBuckets.test.ts
+          - src/features/memories/components/MediaGrid.test.ts
+          - src/features/memories/components/MemoryBuckets.test.ts
     gaps:
       - surface: web
         reason: >-
@@ -472,8 +472,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/components/MemoryDetail.test.ts
-          - src/features/memory/components/MediaGrid.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
+          - src/features/memories/components/MediaGrid.test.ts
     gaps:
       - surface: web
         reason: >-
@@ -487,7 +487,7 @@ gaps:
     `item-marks-are-shared-and-attributed-to-nobody` that says the marks carry their OWN `item-favorites`
     context: the `seal.sym.item-favorites` vector, and its domain separation from `favorites` (the vector's blob
     does not open as any other purpose — without it a private pin blob opens in the shared slot). Until that
-    job runs, no admitted ref proves that clause: `src/features/memory/itemFavoritesStore.test.ts` mocks the sealing module,
+    job runs, no admitted ref proves that clause: `src/features/memories/itemFavoritesStore.test.ts` mocks the sealing module,
     and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
     executed, the suite goes back under that criterion and this gap goes.
   stack: >-

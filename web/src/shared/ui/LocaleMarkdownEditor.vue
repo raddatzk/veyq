@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// A per-locale markdown editor (cr-0116, lifted out of `features/memory/components` by
+// A per-locale markdown editor (cr-0116, lifted out of `features/memories/components` by
 // cr-terms-editor-lists-the-languages-that-have-terms). `v-model` a `LocaleMap`, and the whole point of the
 // component is that **the map's keys are the languages that exist**: a row per key, an explicit act to add a
 // language that has none, and an explicit act to remove one. It never renders a language the map does not
 // carry — that is the difference between "no German terms" and "an empty German box".
 //
-// Two callers shaped it: the share note (`features/memory/ShareCreateDialog`) and the tenant terms
+// Two callers shaped it: the share note (`features/memories/ShareCreateDialog`) and the tenant terms
 // (`features/tenant/TenantTermsPanel`). `docs/ai/README.md` § *Spike when the shape is unclear* wants five real
 // usages before a shared abstraction is trusted, so the props surface below is kept to what the SECOND caller
 // actually needed — a `:locales` universe, a placeholder, a vetoable remove and a row-actions slot — and not one

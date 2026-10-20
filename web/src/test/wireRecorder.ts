@@ -15,7 +15,7 @@
 // own `window.fetch` that the client uses instead. The e2e suites declare no `@vitest-environment`, so they
 // run under vitest's default **node**, where `fetch` is the global undici one and the generated client
 // resolves it at call time (`src/api/generated/*/runtime.ts`: `(this.configuration.fetchApi || fetch)(…)`).
-// Media's presigned store PUT/GET reach the same binding (`features/memory/media.ts`). For the same reason
+// Media's presigned store PUT/GET reach the same binding (`features/memories/media.ts`). For the same reason
 // the happy-dom `settings.fetch.interceptor` seam that `setup.ts` uses for unit tests is unavailable here —
 // `globalThis.happyDOM` is undefined in this process — and a sensor built on it would never run and report
 // green.

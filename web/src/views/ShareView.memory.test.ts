@@ -51,12 +51,12 @@ const recording = vi.hoisted(() => (prefix: string, mod: Record<string, unknown>
 
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/memories/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../features/depot/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../app/activeSpace', async (orig) => recording('activeSpace', await orig<Record<string, unknown>>()))
 vi.mock('../core/node/treeStore', async (orig) => recording('treeStore', await orig<Record<string, unknown>>()))
 vi.mock('../core/favorites/favoritesStore', async (orig) => recording('favoritesStore', await orig<Record<string, unknown>>()))
-vi.mock('../features/memory/itemFavoritesStore', async (orig) => recording('itemFavoritesStore', await orig<Record<string, unknown>>()))
+vi.mock('../features/memories/itemFavoritesStore', async (orig) => recording('itemFavoritesStore', await orig<Record<string, unknown>>()))
 // The people directory and the profile pictures' cache (ADR 0084): a guest holds no K_tenant and the share page has no people, so
 // no avatar is looked up, fetched or drawn - every export is recorded and the record must stay empty.
 vi.mock('../core/people/avatarCache', async (orig) => recording('avatarCache', await orig<Record<string, unknown>>()))
@@ -66,8 +66,8 @@ vi.mock('../core/node/cover/coverStore', async (orig) => {
   const { memberCoverStore, covers, declaredCovers, resetCovers } = mod
   return { ...mod, ...recording('coverStore', { memberCoverStore, covers, declaredCovers, resetCovers }) }
 })
-// The guest's upload is recorded at the share helper (its wire is `features/memory/source.wire.test.ts`'s).
-vi.mock('../features/memory/share', async (orig) => ({ ...(await orig<typeof import('../features/memory/share')>()), addSharePhoto: vi.fn() }))
+// The guest's upload is recorded at the share helper (its wire is `features/memories/source.wire.test.ts`'s).
+vi.mock('../features/memories/share', async (orig) => ({ ...(await orig<typeof import('../features/memories/share')>()), addSharePhoto: vi.fn() }))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
@@ -81,10 +81,10 @@ import { loadGuestSession, saveGuestSession, forgetGuestSession, type GuestIdent
 import { ShareRole, type PublicShare, type ShareNode } from '../api/generated/sharing'
 import type { ShareMedia } from '../api/generated/share-media'
 import { publicSharesApi } from '../api/client'
-import { publicShareMediaApi } from '../features/memory/api'
-import { addSharePhoto } from '../features/memory/share'
-import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
-import { clearUploads } from '../features/memory/uploadQueue'
+import { publicShareMediaApi } from '../features/memories/api'
+import { addSharePhoto } from '../features/memories/share'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
+import { clearUploads } from '../features/memories/uploadQueue'
 import { setViewMode } from '../shared/state/useViewMode'
 import { fakeApi, stubApi } from '../test/apiMock'
 import { apiResponse } from '../test/apiResponse'

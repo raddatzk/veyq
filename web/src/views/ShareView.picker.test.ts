@@ -23,7 +23,7 @@ const SESSION_KEY = `veyq:share-contributor:${SHARE_ID}`
 const UPLOADER_KEY = 'A'.repeat(43) + '='
 
 // The heavy media composable → an inert stub (no crypto, no object URLs, no timers of its own).
-vi.mock('../features/memory/useOptimisticTiles', () => ({
+vi.mock('../features/memories/useOptimisticTiles', () => ({
   useOptimisticTiles: () => ({ optimisticTiles: { value: [] }, donorPreviewFor: () => undefined }),
 }))
 
@@ -36,21 +36,21 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
 })
-vi.mock('../features/memory/share', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../features/memory/share')>()
+vi.mock('../features/memories/share', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../features/memories/share')>()
   return { ...actual, openSharedMemory: vi.fn(), listShareMedia: vi.fn() }
 })
 
-vi.mock('../features/memory/uploadQueue', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../features/memory/uploadQueue')>()
+vi.mock('../features/memories/uploadQueue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../features/memories/uploadQueue')>()
   return { ...actual, enqueueUploads: vi.fn(), retryFile: vi.fn(), removeFile: vi.fn() }
 })
 
 import { mount, flushPromises } from '@vue/test-utils'
 import ShareView from './ShareView.vue'
-import { enqueueUploads } from '../features/memory/uploadQueue'
+import { enqueueUploads } from '../features/memories/uploadQueue'
 import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
-import { openSharedMemory, listShareMedia, NO_SHARE_MEDIA, type ResolvedShare } from '../features/memory/share'
+import { openSharedMemory, listShareMedia, NO_SHARE_MEDIA, type ResolvedShare } from '../features/memories/share'
 import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'

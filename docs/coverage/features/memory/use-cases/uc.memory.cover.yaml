@@ -19,17 +19,17 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/memoryCover.test.ts
+          - src/features/memories/memoryCover.test.ts
         e2e:
-          - src/features/memory/memoryCover.e2e.test.ts
+          - src/features/memories/memoryCover.e2e.test.ts
   - id: deliberate-no-auto-cover
     text: A cover exists only by a deliberate upload in the cover dialog; there is no auto-cover. Unset ⇒ the placeholder (the soft-accent images tile) shows on every surface — the browse card, the detail header, the map pin and the sidebar's Favorites entry — and NO surface branches on it — they all render the one component whose own placeholder appears. A cover whose blob does not open falls back to the placeholder, never a broken card, pin or rail tile.
     coverage:
       web:
         unit:
-          - src/features/memory/memoryCover.test.ts
-          - src/features/memory/components/MemoryCoverImage.test.ts
-          - src/features/memory/components/MemoryCard.test.ts
+          - src/features/memories/memoryCover.test.ts
+          - src/features/memories/components/MemoryCoverImage.test.ts
+          - src/features/memories/components/MemoryCard.test.ts
           - src/components/app/AppSidebar.test.ts
   - id: covers-resolved-once-per-scope
     text: One store resolves a Memory's cover for EVERY surface that shows one — a thumbnail is decrypted once per Memory per scope, not once per surface — re-resolves it when the node's sealed meta changes (the cache is keyed on `wrappedMeta`, so a cover edited on one surface cannot leave a stale image on another), and releases every decrypted object URL when the active space is left, rotated or cleared. The store is core's (`core/node/cover/coverStore.ts`, a member's singleton and a guest page's own); the surfaces read the result and hold no key material — the epoch chain that opens a node's K_node stays out of the always-mounted rail.
@@ -45,10 +45,10 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/memoryCover.test.ts
-          - src/features/memory/components/MemoryCoverImage.test.ts
+          - src/features/memories/memoryCover.test.ts
+          - src/features/memories/components/MemoryCoverImage.test.ts
           - src/core/node/cover/components/NodeCoverImage.test.ts
-          - src/features/memory/components/MemoryCard.test.ts
+          - src/features/memories/components/MemoryCard.test.ts
           - src/components/app/AppSidebar.test.ts
   - id: set-cover-and-crop-editor
     text: The header's Cover action and the cover tile open core's cover dialog (the crop EDITOR), the only way a cover is set - the gallery lightbox offers no "Set as cover" (owner 2026-10-19). The dialog crops one source — an uploaded image OR the current cover re-framed — in a fixed 16:9 viewport with drag-to-pan + zoom (1–3×), hand-rolled (no crop library); Save normalizes the pan/zoom back to the 0..1 crop and seals it; Remove clears the cover; reopening an existing cover restores its pan/zoom.
@@ -56,15 +56,15 @@ acceptanceCriteria:
       web:
         unit:
           - src/core/node/cover/components/CoverDialog.test.ts
-          - src/features/memory/components/MemoryDetailHost.cover.test.ts
-          - src/features/memory/components/MediaLightbox.test.ts
+          - src/features/memories/components/MemoryDetailHost.cover.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: cover-from-standalone-upload
     text: The cover may be a brand-new uploaded image that is NOT registered as a Memory media — a standalone cover blob committed to the node (no `veyq_media` row), sealed under a K_blob wrapped by K_node, served + garbage-collected via the blob transport (a node DELETE no longer reclaims it — under the ADR 0061 soft-delete the cover has to outlive the trash window, so the reclaim moved to `NodeSubtreePurge`; an explicit delete names the blob it expects and is refused with `cover_replaced` when a peer's upload holds the slot, the compare being the clearing write's own predicate — inbox #308); operator-blind (the server holds ciphertext + an opaque blob id for retention/authz only). (cr-0073.)
     coverage:
       backend:
         integration: [NodeCoverMemoriesSliceTest.aMemoryAndAChapterTakeACoverWithoutTouchingTheGallery, NodeCoverMemoriesSliceTest.switchingToAPhotoCoverIsARemovalThatWritesTheNewMetaAndFreesTheUpload, NodeCoverMemoriesSliceTest.aShareGuestReadsTheSharedMemorysCoverOnlyAndNothingAfterItsRemoval, NodeCoverCoreSliceTest.setThenReplaceThenRemoveLeavesNoRowNoBlobNoSessionAndTheQuotaWhereItStarted, NodeCoverCoreSliceTest.aSlotAnotherWriterFilledIsCoverStaleAndTheLoserIsFreed, NodeCoverCoreSliceTest.aMetaThatMovedWritesNothingAndKeepsTheUploadOpenForTheRetry, NodeCoverCoreSliceTest.twoWritersRacingForAnEmptySlotLeaveExactlyOneCover, NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
       web:
-        unit: [src/core/node/cover/coverWrite.test.ts, src/features/memory/uploadWire.characterisation.test.ts, src/features/memory/memoryCover.test.ts, src/features/memory/useMemoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/components/CoverDialog.test.ts, src/features/memory/components/MemoryDetailHost.cover.test.ts]
+        unit: [src/core/node/cover/coverWrite.test.ts, src/features/memories/uploadWire.characterisation.test.ts, src/features/memories/memoryCover.test.ts, src/features/memories/useMemoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/components/CoverDialog.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts]
         # live smoke DONE (cr-0073, not scripted): re-seeded 127.0.0.1 instance + Garage --profile s3, browse origin
         # 127.0.0.1:8089 = store public endpoint. Uploaded a new image into a media-less Memory → blob-uploads-batch
         # → PUT /veyq → commitCoverBlob → downloaded back; cropped cover rendered on the detail header + browse card;
@@ -77,4 +77,4 @@ acceptanceCriteria:
       backend:
         integration: [SharedBlobSliceTest.theObjectSurvivesTheRowThatGoesFirstAndGoesWithTheLast, SharedBlobSliceTest.aCoverRemovedFirstLeavesTheMediumsBytes, SharedBlobSliceTest.aSourceTheNodeDoesNotHoldIsRefusedAndNothingIsWritten, SharedBlobSliceTest.aBlockOnTheMediumReachesTheCoverOnItsObject, SharedBlobSliceTest.quotaCountsAnObjectOnce]
       web:
-        unit: [src/core/node/cover/useNodeCover.test.ts, src/features/memory/components/MemoryDetailHost.cover.test.ts, src/core/blob/sharedBlob.test.ts, src/core/node/cover/coverWrite.test.ts]
+        unit: [src/core/node/cover/useNodeCover.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts, src/core/blob/sharedBlob.test.ts, src/core/node/cover/coverWrite.test.ts]

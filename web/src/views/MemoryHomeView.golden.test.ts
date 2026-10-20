@@ -53,7 +53,7 @@ vi.mock('../core/node/treeStore', async () => {
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
-import { memoryRows } from '../features/memory/levelRows'
+import { memoryRows } from '../features/memories/levelRows'
 import { depotRows } from '../features/depot/levelRows'
 import { DROPBOX_KIND, FILE_KIND } from '../features/depot/kinds'
 import { registry } from '../core/applications/registry'
@@ -62,7 +62,7 @@ import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
-import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { sealNodeMeta, type RawNodeMeta } from '../core/node/nodeMeta'
 import type { TreeNode } from '../core/node/tree'
 import { setViewMode, type ViewMode } from '../shared/state/useViewMode'

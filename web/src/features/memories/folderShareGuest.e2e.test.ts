@@ -14,7 +14,7 @@
 // new parent so the member still opens its chain and media; and that the server refuses what core's and Memories'
 // rules refuse, by code. The unit layer (`core/sharing/guestTree.wire.test.ts`) proves the requests at `fetch`.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/memory/folderShareGuest.e2e.test.ts
+//   python3 scripts/run_web_e2e.py web/src/features/memories/folderShareGuest.e2e.test.ts
 import { describe, it, expect } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'

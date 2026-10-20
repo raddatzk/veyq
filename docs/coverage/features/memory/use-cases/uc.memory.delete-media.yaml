@@ -35,22 +35,22 @@ acceptanceCriteria:
     text: In the gallery, delete is a lightbox-only affordance (the organizer's selection is E7) — a trash button in the lightbox top bar and a Delete/Backspace hotkey — with no confirmation dialog (recoverable); it emits a delete for the current photo (the parent trashes it, advances, and shows an undo toast). The hotkey + button respect the lightbox's suspend-keys (no delete while the cover modal is open, cr-0109) and are hidden in the read-only public-share viewer.
     coverage:
       web:
-        unit: [src/features/memory/components/MediaLightbox.test.ts]
+        unit: [src/features/memories/components/MediaLightbox.test.ts]
   - id: selection-delete-names-refusals
     text: The contributions organizer trashes a selection with one delete per medium and a refusal does not stop the rest (E7) — the undo toast counts only what went and its Restore restores exactly those, every refused medium is named with its reason (one error per reason), there is no undo toast when nothing went, and a selection where every delete succeeds shows only the count with its undo.
     coverage:
       web:
-        unit: [src/features/memory/components/MemoryBuckets.test.ts]
+        unit: [src/features/memories/components/MemoryBuckets.test.ts]
   - id: undo-restore-names-refusals
     text: An Undo's restore names its refusals as the selection's delete does (E7, inbox #429) — in the organizer (one restore per medium, a refusal does not stop the rest) and in the lightbox (its one photo) every medium whose restore is refused is named by the name it had when it went (its sealed file name, else its place in the grid) with its reason (404 gone, 409 scope_deleting, anything else try again), one error per reason; what was restored reappears without a word, and an Undo whose restores all succeed says nothing.
     coverage:
       web:
-        unit: [src/features/memory/components/MemoryBuckets.test.ts, src/features/memory/useMediaGalleryLive.test.ts]
+        unit: [src/features/memories/components/MemoryBuckets.test.ts, src/features/memories/useMediaGalleryLive.test.ts]
   - id: trash-restore-names-refusals
     text: The Trash tab's restore names its refusals as an Undo's does (E7, inbox #432) — a tile's Restore (its one medium, no unhandled rejection) and the toolbar's restore of the selection (one restore per medium, a refusal does not stop the rest) name every medium whose restore is refused by the name it had in the tab (its sealed file name, else its place in the trash grid) with its reason (404 gone, 409 scope_deleting, anything else try again), one error per reason, and re-list the tab; what was restored leaves the tab and reappears in the gallery without a word, and a restore where every medium went says nothing and does not re-list the tab.
     coverage:
       web:
-        unit: [src/features/memory/useMediaTrash.test.ts]
+        unit: [src/features/memories/useMediaTrash.test.ts]
   - id: trashed-media-leaves-the-share
     text: A trashed media leaves a public share on BOTH guest paths at once (E6) — the anonymous resolve stops listing it AND its blobs stop being authorized for a presign (a non-enumerable 404); a restore brings it back on both. Filtering only the listing would leave a medium invisible in the share yet fully downloadable by anyone holding its blobId, for the whole retention window. Two independent server-side predicates carry it (SharingStore.subtree and SharingStore.subtreeBlobIds), which is why each is proven separately rather than as one assertion.
     coverage:
@@ -63,7 +63,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareTrashedMediaSliceTest.trashedMediaLeavesTheAnonymousResolve, ShareTrashedMediaSliceTest.trashedMediaBlobIsNoLongerAuthorizedThroughTheShare, ShareTrashedMediaSliceTest.restoredMediaComesBackIntoTheShare]
       web:
-        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+        e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: scheduled-hard-purge
     text: A scheduled job hard-deletes each media trashed longer than the retention window (default 30 days, operator-configurable) — its derivative + media + blob rows in FK order, with their store objects written to the reclaim list in the SAME transaction and deleted by the reclaim sweep once no URL signed for them can still land (ADR 0062 Decision 1). The purge is irreversible and is not a member action.
     coverage:
@@ -92,7 +92,7 @@ acceptanceCriteria:
       (ADR 0105 decisions 1 and 2).
     coverage:
       web:
-        unit: [src/features/memory/useMediaTrash.test.ts]
+        unit: [src/features/memories/useMediaTrash.test.ts]
     gaps:
       - surface: web
         reason: >-
@@ -105,4 +105,4 @@ acceptanceCriteria:
       backend:
         integration: [MediaTrashSliceTest.trashHidesFromListBumpsBothCountersAndDropsFromIdSet]
       web:
-        unit: [src/features/memory/memoryCover.test.ts]
+        unit: [src/features/memories/memoryCover.test.ts]

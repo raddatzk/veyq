@@ -8,7 +8,7 @@ vi.mock('./favoritesStore', () => ({ isFavorite: vi.fn(), toggleFavorite: vi.fn(
 import { favoriteHeaderActions, favoriteRowActions } from './favoriteActions'
 import { isFavorite, toggleFavorite } from './favoritesStore'
 import { FOLDER_KIND } from '../node/kind'
-import { MEMORY_KIND } from '../../features/memory/kinds'
+import { MEMORY_KIND } from '../../features/memories/kinds'
 import { FILE_KIND, DROPBOX_KIND } from '../../features/depot/kinds'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
 

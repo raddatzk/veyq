@@ -50,21 +50,21 @@ focus returned from the lightbox. Measured with the volume harness at 1,000 / 3,
 
 | Fact the plan leans on | Locator | At refine |
 |---|---|---|
-| The grid mounts every positioned tile; the layout is absolute, justified, computed for all | `grep -n 'v-for' web/src/features/memory/components/MediaGrid.vue`; `grep -n 'export function calculateJustifiedMediaLayout' web/src/features/memory/mediaGridLayout.ts` | one loop over all |
+| The grid mounts every positioned tile; the layout is absolute, justified, computed for all | `grep -n 'v-for' web/src/features/memories/components/MediaGrid.vue`; `grep -n 'export function calculateJustifiedMediaLayout' web/src/features/memories/mediaGridLayout.ts` | one loop over all |
 | `MediaGrid`'s callers: the gallery, the trash, the contributors' view | `grep -rn '<MediaGrid' web/src` | `MemoryDetail.vue` (2), `MemoryBuckets.vue` |
-| Elements per tile: 5–6 in the gallery, 8 in trash/contributors with their selection overlay | `sed -n 43,66p web/src/features/memory/components/MediaTile.vue` | — |
-| No ARIA role on the grid; one native button per tile ("Open item {index}"); no arrow keys, no roving tabindex | `grep -n 'role=\|@keydown\|tabindex' web/src/features/memory/components/MediaGrid.vue web/src/features/memory/components/MediaTile.vue web/src/features/memory/components/MemoryDetail.vue` | `role="group"` on the mark filter only |
-| The lightbox: the whole sorted list as a prop, `±1` paging, a window `keydown`, no focus handling | `grep -n 'items:\|startIndex\|keydown' web/src/features/memory/components/MediaLightbox.vue`; `grep -c focus web/src/features/memory/components/MediaLightbox.vue` | 0 focus |
+| Elements per tile: 5–6 in the gallery, 8 in trash/contributors with their selection overlay | `sed -n 43,66p web/src/features/memories/components/MediaTile.vue` | — |
+| No ARIA role on the grid; one native button per tile ("Open item {index}"); no arrow keys, no roving tabindex | `grep -n 'role=\|@keydown\|tabindex' web/src/features/memories/components/MediaGrid.vue web/src/features/memories/components/MediaTile.vue web/src/features/memories/components/MemoryDetail.vue` | `role="group"` on the mark filter only |
+| The lightbox: the whole sorted list as a prop, `±1` paging, a window `keydown`, no focus handling | `grep -n 'items:\|startIndex\|keydown' web/src/features/memories/components/MediaLightbox.vue`; `grep -c focus web/src/features/memories/components/MediaLightbox.vue` | 0 focus |
 | Metas unsealed on the main thread at every recompute, no memo | `grep -rn 'unsealMeta(' web/src \| grep -v '\.test\.'` (sort, aspect, layout, GPS, date range, contributors' layout) | 14 sites |
-| The video test unwraps every original's blob key | `grep -n 'videoIdSet\|originalMediaType' web/src/features/memory/components/MemoryDetail.vue web/src/features/memory/media.ts` | per item |
-| Thumbnails: one unbounded `Promise.all`; the trash has its own | `grep -n 'Promise.all' web/src/features/memory/useThumbnailPipeline.ts web/src/features/memory/useMediaTrash.ts` | 2 (the first changes with #488) |
+| The video test unwraps every original's blob key | `grep -n 'videoIdSet\|originalMediaType' web/src/features/memories/components/MemoryDetail.vue web/src/features/memories/media.ts` | per item |
+| Thumbnails: one unbounded `Promise.all`; the trash has its own | `grep -n 'Promise.all' web/src/features/memories/useThumbnailPipeline.ts web/src/features/memories/useMediaTrash.ts` | 2 (the first changes with #488) |
 | Object URLs: never revoked on scroll; the store copies its map on every insert | `grep -n 'new Map' web/src/shared/state/useObjectUrls.ts` | 3 copies |
 | No virtualization anywhere, no list library; the one near-viewport pattern is the PDF pages' observer | `grep -rn 'IntersectionObserver\|VirtualScroller\|vue-virtual\|tanstack' web/src web/package.json` | `PdfPages.vue` only |
 | The one existing worker is upload-side (derive tiers), with a build check | `grep -rn 'new Worker' web/src`; `grep -n '"verify:' web/package.json` | `mediaDeriveWorker.ts`; `verify:media-worker` |
 | The guest's gallery is the same `MemoryDetail` over a guest source | `grep -n 'MemoryDetail' web/src/core/sharing/ShareTreePage.vue` | one mount |
 | The harness counts every tile in the DOM, and "last thumbnail" is all of them at once | `grep -n "querySelectorAll('.media-tile\|lastThumbnailMs\|domNodes" e2e/measure/volume.ts`; `grep -n 'lastThumbnailMs\|listMs' scripts/measure_volume.py` | breaks under windowing |
 | e2e specs reach the grid as "Open item 1" | `grep -rn "Open item\|media-tile" e2e/tests` | item 1 only |
-| The crypto per item, main thread (temporary bench) | `npx vitest bench src/features/memory/media.bench.ts` in `web/` | 0.47 ms a 40 KB frame; 5.1 s for 10,000 metas, keys and frames (refine's reading, M4 Pro) |
+| The crypto per item, main thread (temporary bench) | `npx vitest bench src/features/memories/media.bench.ts` in `web/` | 0.47 ms a 40 KB frame; 5.1 s for 10,000 metas, keys and frames (refine's reading, M4 Pro) |
 
 ## Decisions this CR takes
 

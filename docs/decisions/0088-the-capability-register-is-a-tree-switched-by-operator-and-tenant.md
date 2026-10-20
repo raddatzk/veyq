@@ -149,7 +149,7 @@ core/
 `places` and `map` are independent of each other. A place comes from the media's GPS or from a pin dropped by hand,
 and its name is geocoded or typed. The geocoder suggests names, and the tiles carry the pin and the map view. With
 both off a place still works, named by hand. The user's own consent to the two
-(`web/src/features/memory/useMemoryLocation.ts`) is a third, separate thing and stays.
+(`web/src/features/memories/useMemoryLocation.ts`) is a third, separate thing and stays.
 
 ### Requirements
 

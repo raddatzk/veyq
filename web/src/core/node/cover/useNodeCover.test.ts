@@ -14,7 +14,7 @@ import { b64std } from '@veyq/crypto/base64'
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('../../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }) }))
 vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
-vi.mock('../../../features/memory/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
+vi.mock('../../../features/memories/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
 vi.mock('./coverStore', async (orig) => ({
   ...(await orig<object>()),
   // The decrypted covers are `coverStore.test.ts`'s: here the store answers from a fixed map, the declared set from the sealed meta.
@@ -28,13 +28,13 @@ vi.mock('./coverStore', async (orig) => ({
 import { useNodeCover, type UseNodeCover } from './useNodeCover'
 import { uploadedCover, type CoverCrop, type LoadedCover } from './coverModel'
 import { uploadCoverImage, writeNodeCover, CoverStaleError } from './coverWrite'
-import { findStoredCover } from '../../../features/memory/storedMatch'
+import { findStoredCover } from '../../../features/memories/storedMatch'
 import { planBlob, unwrapBlobKey } from '../../blob/transport'
 import { MetaConflictError, MetaUnreadableError } from '../sealedMetaWrite'
 import { treeStore } from '../treeStore'
 import { clearUploads } from '../../blob/queue'
 import { FOLDER_KIND } from '../kind'
-import { MEMORY_KIND } from '../../../features/memory/kinds'
+import { MEMORY_KIND } from '../../../features/memories/kinds'
 import { FILE_KIND } from '../../../features/depot/kinds'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { Access } from '../../access'

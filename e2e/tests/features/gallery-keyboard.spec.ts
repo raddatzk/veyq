@@ -17,7 +17,7 @@ import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/dev
 
 test.describe.configure({ mode: 'serial' })
 
-const PHOTO = readFileSync(fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url)))
+const PHOTO = readFileSync(fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
 const COUNT = 120
 
 const stamp = randomBytes(3).toString('hex')

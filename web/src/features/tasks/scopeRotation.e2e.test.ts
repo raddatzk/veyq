@@ -26,14 +26,14 @@ import { rotateKeys } from '../account/rotation/rotateKeys'
 import { login } from '../account/login/login'
 import { createGroup, isStaleEpoch, listMyScopes, listScopeEpochs, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
 import { listTree } from '../../core/node/tree'
-import { createMemory } from '../memory/memoryNodes'
+import { createMemory } from '../memories/memoryNodes'
 import { become, birthInstance, mkActor, onboardMember } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
 import { runGrantDeliveryWorker } from './grantDeliveryWorker'
 import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION } from './capabilityTags'
 import { registry } from '../../core/applications/registry'
-import { memoriesLifecycle } from '../memory/lifecycle'
+import { memoriesLifecycle } from '../memories/lifecycle'
 
 // A node-environment file is given no registry (`src/test/setup.ts`), and `rotateKeys` fails closed without a registered
 // `onMasterKeyRotated`; register the real Memories lifecycle, as the other node suites that rotate do (inbox #340).

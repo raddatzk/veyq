@@ -10,7 +10,7 @@
 //   opened subtree (`core/sharing/guestAccess.ts`, over `walkSubtree`). Navigation always goes through `linkTo`, so a guest's link keeps its `#k=`
 //   fragment (web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
 //
-// **Rights are the applications'**, pure and FAIL-CLOSED: `memoryRights` (features/memory/rights.ts),
+// **Rights are the applications'**, pure and FAIL-CLOSED: `memoryRights` (features/memories/rights.ts),
 // `depotRights` (features/depot/rights.ts), and core's own `folderRights` here for the one kind core
 // owns. Every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one encodes is
 // written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A right is the matrix's half; the other

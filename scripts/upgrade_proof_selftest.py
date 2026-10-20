@@ -131,10 +131,10 @@ def flyway_cases() -> None:
 
 def seeder_cases() -> None:
     S = e2e.upgrade_seeder
-    tree = ["src/features/memory/media.e2e.test.ts", "src/features/instanceBackup/upgrade.b-read.e2e.test.ts",
+    tree = ["src/features/memories/media.e2e.test.ts", "src/features/instanceBackup/upgrade.b-read.e2e.test.ts",
             "src/features/instanceBackup/upgrade.a-seed.e2e.test.ts", "src/features/x/upgrades.e2e.test.ts"]
     check("the seeder is the upgrade group's first member", S(tree) == "src/features/instanceBackup/upgrade.a-seed.e2e.test.ts")
-    check("a tree without the group has no seeder", S(["src/features/memory/media.e2e.test.ts"]) is None)
+    check("a tree without the group has no seeder", S(["src/features/memories/media.e2e.test.ts"]) is None)
 
 
 def edited(record: dict, edit: dict) -> dict:

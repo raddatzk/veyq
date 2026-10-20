@@ -1,7 +1,7 @@
 // The core upload queue (cr-files-application B2) over a fake job runner: the six states, the sequential order, the
 // one automatic retry that `quota_exceeded` never gets, abort → `cancelled`, the `preparing` → `uploading` flip on the
 // first progress, and the cancel/retry/remove/acknowledge/clear controls. No application is imported: what a job
-// uploads is the runner's business, and Memories' own wiring is pinned in `features/memory/uploadQueue.test.ts`.
+// uploads is the runner's business, and Memories' own wiring is pinned in `features/memories/uploadQueue.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   enqueue,

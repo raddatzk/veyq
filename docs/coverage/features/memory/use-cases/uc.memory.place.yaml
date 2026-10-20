@@ -16,39 +16,39 @@ acceptanceCriteria:
       backend: { integration: [NodesSliceTest.wrappedMetaRoundTripsAndPartialUpdateLeavesItUnchanged] }
       web:
         unit:
-          - src/features/memory/memoryLocation.test.ts
-          - src/features/memory/memoryDate.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/memoryLocation.test.ts
+          - src/features/memories/memoryDate.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: deliberate-set-location
     text: A location is created only by a deliberate "set location" act (on Memory open, or pre-armed at Memory creation with a mandatory fallback name + derivedMode auto); there is no empty-name / unnamed-pin state (no name ⇒ no location). Setup never happens silently on upload.
     coverage:
       web:
         unit:
-          - src/features/memory/components/MemoryLocationEditor.test.ts
-          - src/features/memory/components/MemoryNodeDialog.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/components/MemoryLocationEditor.test.ts
+          - src/features/memories/components/MemoryNodeDialog.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: medoid-position
     text: The position `derived` is the MEDOID of the Memory's media GPS — the actual photo minimizing the summed Haversine distance to the others (robust to an outlier), never the arithmetic mean — so it never lands in the sea and barely moves as media are added. `derivedMode` defaults to auto on set-with-media (re-medoids as media are added) and flips to fixed when the user moves the MAP by hand (the centre crosshair becomes the position — "Karte verschieben"); fixed is a frozen snapshot. GPS is read from the always-listed capture tier (promoted alongside `capturedAt`, like cr-0066), so the medoid and every auto re-medoid are list-level — no per-item EXIF fetch; no backfill, so older media without the tier do not contribute.
     coverage:
       web:
         unit:
-          - src/features/memory/memoryLocation.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memories/memoryLocation.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: name-manual-or-reverse-geocoded
     text: The name is independent of the position — either typed by hand (nameSource manual, frozen) or picked from the reverse-geocoded ADDRESS HIERARCHY (road…country; the user chooses the granularity `level`, e.g. Straße › Viertel › Stadt › Land; nameSource geocoded, may refresh at the stored level when the auto medoid moves). Position (move the map) and granularity (pick the level) are separate levers; a pending auto place gets both from the first geotagged media; if geocoding stays off the name is typed, blind.
     coverage:
       web:
         unit:
-          - src/features/memory/geocode.test.ts
-          - src/features/memory/memoryLocation.test.ts
-          - src/features/memory/components/MemoryLocationEditor.test.ts
+          - src/features/memories/geocode.test.ts
+          - src/features/memories/memoryLocation.test.ts
+          - src/features/memories/components/MemoryLocationEditor.test.ts
   - id: name-bounded-to-fit-the-meta
     text: A place name is at most 200 code points - the name field's maxlength, and every read, every write and an import's restore cut a longer one without splitting a character - because the place is the one field of the Memory's sealed meta a member types without another bound, and the worst-case meta (100 participants, an uploaded cover, a range date, the name at its bound in 4-byte characters, a video banner with poster, type and digest) must seal under its 8192 characters.
     coverage:
       web:
         unit:
-          - src/features/memory/banner/bannerModel.test.ts
-          - src/features/memory/memoryLocation.test.ts
+          - src/features/memories/banner/bannerModel.test.ts
+          - src/features/memories/memoryLocation.test.ts
   - id: reverse-only-veyq-blind-geocoding
     text: Geocoding is reverse-only and opt-in; the request goes client-direct to the provider (never through the veyq backend), carries no veyq identity (a bare coordinate), and sits behind a provider-neutral seam reverse(lat,lng,lang)->level[] (the address hierarchy; reference Nominatim, operator-configurable, off-until-configured — ADR 0016). Opt-in is standing consent (may auto-resolve on the first geotagged media at a default level); it never fires without opt-in, and a member who declined sees a name another member resolved without any request. Every caller also obeys the provider's own usage policy (ADR 0016 Request discipline) — results are cached client-side per PLACE (the key is the coordinate rounded to ~110 m, so repeat photos of one spot are one query) and requests are serialised at >= 1 s rather than merely rate-counted; a failure resolves to nothing and is not retried into a ban.
     # The per-PHOTO resolved name that made this discipline necessary is covered under
@@ -58,28 +58,28 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/geocode.test.ts
-          - src/features/memory/placeName.test.ts
+          - src/features/memories/geocode.test.ts
+          - src/features/memories/placeName.test.ts
           - src/shared/state/useMapConfig.test.ts
-          - src/features/memory/components/MemoryLocationEditor.test.ts
+          - src/features/memories/components/MemoryLocationEditor.test.ts
   - id: place-without-a-map
     text: On a server that shows no map (`memories.map` off, by the instance or the tenant) a place is still set, named by hand (ADR 0088, inbox #458). The location chip opens the editor with no map and no consent dialog; the name is typed and no geocoder is asked even where `memories.places` is on, so no tile and no geocoding request leaves the device for a switched-off service. The position is the medoid of the photos' GPS (`auto`), a pin set earlier (kept), or none — a place that is a name only (`derivedMode` auto, no `derived`), valid in the sealed v1 shape, shown in the header, the profile's rows and an export/import, skipped by every map. With the map served the editor and its consent are unchanged.
     coverage:
       web:
         unit:
-          - src/features/memory/components/MemoryLocationEditor.test.ts
-          - src/features/memory/components/MemoryDetail.test.ts
-          - src/features/memory/memoryLocation.test.ts
-          - src/features/memory/spaceMap.test.ts
-          - src/features/memory/components/PersonMemories.test.ts
-          - src/features/memory/exportImport.test.ts
+          - src/features/memories/components/MemoryLocationEditor.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
+          - src/features/memories/memoryLocation.test.ts
+          - src/features/memories/spaceMap.test.ts
+          - src/features/memories/components/PersonMemories.test.ts
+          - src/features/memories/exportImport.test.ts
   - id: tenant-map-via-listnodes
     text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side with its own K_node, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place and a place that is a name only (no `derived`) are not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
     coverage:
       web:
         unit:
-          - src/features/memory/spaceMap.test.ts
-          - src/features/memory/memoryCover.test.ts
-          - src/features/memory/components/SpaceMap.test.ts
-          - src/features/memory/levelRows.test.ts
+          - src/features/memories/spaceMap.test.ts
+          - src/features/memories/memoryCover.test.ts
+          - src/features/memories/components/SpaceMap.test.ts
+          - src/features/memories/levelRows.test.ts
           - src/core/node/ViewModeToggle.test.ts

@@ -39,7 +39,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
   nodeContentKey: () => new Uint8Array(32).fill(9),
   parentContentKey: () => new Uint8Array(32).fill(9), // the key a Memory row opens its meta under
 }))
-vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
+vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
@@ -56,7 +56,7 @@ import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { deleteNode, moveNode, restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
-import { MEMORY_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND } from '../features/memories/kinds'
 import { DROPBOX_KIND, FILE_KIND } from '../features/depot/kinds'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'

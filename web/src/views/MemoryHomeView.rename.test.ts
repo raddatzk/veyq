@@ -45,7 +45,7 @@ vi.mock('../core/sharing/manageShares', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/sharing/manageShares')>()),
   resealShareNames: vi.fn(async () => ({ resealed: [], failed: [], skipped: [] })),
 }))
-vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
+vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
@@ -63,7 +63,7 @@ import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { renameNode, listTrash, restoreNode, type TreeNode, type TrashedNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
-import { MEMORY_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND } from '../features/memories/kinds'
 import { FILE_KIND } from '../features/depot/kinds'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'

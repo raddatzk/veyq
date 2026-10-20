@@ -4,7 +4,7 @@
 // the order is the registry's. Fail closed: no entry for a READ guest, a pending deletion or a guest's identity folder.
 import { describe, it, expect } from 'vitest'
 import { createRegistry, type LevelActionContext } from '../core/applications/registry'
-import { registerMemories } from '../features/memory/register'
+import { registerMemories } from '../features/memories/register'
 import { registerDepot } from '../features/depot/register'
 import { ShareRole } from '../api/generated/sharing'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../test/models'

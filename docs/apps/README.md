@@ -51,7 +51,7 @@ media tables. What is built and what is open: the ADR's Consequences.
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks, per-kind row factories and dialogs) but not by directory name. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
+| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
 | [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
@@ -113,7 +113,7 @@ inbox #407). Under the title sits **one meta line**: the kind's noun (`meta`: "M
    entry as well (`levelRowDetails`), so a hole cannot reach the line.
 3. **No application is named in core.** The ids are the application's own tokens and only a styling and testing hook
    (`data-detail`). Another surface that lists an application's nodes the same way (the profile page's Memories) builds the
-   same details with the application's one builder (`features/memory/memoryRowDetails.ts`), so the two cannot drift.
+   same details with the application's one builder (`features/memories/memoryRowDetails.ts`), so the two cannot drift.
 4. **A share view shows the same details** where the served data carries them (a guest holds the node's key and gets its
    sealed meta unchanged): rights remove functions, not facts, so no guest-only row exists.
 

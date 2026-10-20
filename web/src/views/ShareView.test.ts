@@ -16,7 +16,7 @@ const TENANT = 't-1'
 const ACCEPT_KEY = `veyq:terms-accepted:${TENANT}`
 
 // The drop page's tile composable → an inert stub (no crypto, no object URLs, no timers).
-vi.mock('../features/memory/useOptimisticTiles', () => ({
+vi.mock('../features/memories/useOptimisticTiles', () => ({
   useOptimisticTiles: () => ({ optimisticTiles: { value: [] }, donorPreviewFor: () => undefined }),
 }))
 
@@ -37,14 +37,14 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
 })
-vi.mock('../features/memory/share', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../features/memory/share')>()
+vi.mock('../features/memories/share', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../features/memories/share')>()
   return { ...actual, openSharedMemory: vi.fn(), listShareMedia: vi.fn(), createContributorIdentity: vi.fn() }
 })
 
 import ShareView from './ShareView.vue'
 import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
-import { openSharedMemory, listShareMedia, createContributorIdentity, NO_SHARE_MEDIA, type ContributorSession, type ResolvedShare, type ShareAccess } from '../features/memory/share'
+import { openSharedMemory, listShareMedia, createContributorIdentity, NO_SHARE_MEDIA, type ContributorSession, type ResolvedShare, type ShareAccess } from '../features/memories/share'
 import { loadGuestSession, saveGuestSession } from '../core/sharing/guestIdentity'
 import { mountConfirmDialog } from '../test/confirmDialog'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
@@ -52,7 +52,7 @@ import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n, t } from '../test/i18n'
 import type { NodeKind } from '../core/node/kind'
-import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { OPERATOR_SECTION } from '../test/models'
 
 function mountShareView() {

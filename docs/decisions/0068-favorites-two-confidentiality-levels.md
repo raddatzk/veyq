@@ -81,7 +81,7 @@ consumes item favorites outside a single gallery (§7), so nothing needs the sco
 caps the blob at **262 144** base64 characters (the column is `MEDIUMTEXT`), so one member's marks in one Memory stop at
 **12 284** — every photo of a 10 000-photo Memory, the size the gallery is built for
 ([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)). `measured` (inbox
-#500, `web/src/features/memory/itemFavorites.test.ts` through the real seal): 21⅓ base64 characters a mark; 1 258 and
+#500, `web/src/features/memories/itemFavorites.test.ts` through the real seal): 21⅓ base64 characters a mark; 1 258 and
 12 000 marks round-trip; 12 284 seal to 262 140 characters, and the 12 285th is refused by the client before any write,
 with a message at the heart. A toggle uploads about 27 KB at 1 258 marks and 256 KB at the ceiling. In the JSON form
 of the table above the ceiling was 1 257 — 12.6 % of such a Memory, reachable by one keen member, and the 1 258th

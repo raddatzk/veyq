@@ -25,7 +25,7 @@ import { stack } from '../../src/stack'
 
 test.describe.configure({ mode: 'serial' })
 
-const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Begründete Erinnerung ${stamp}`

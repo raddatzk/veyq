@@ -3,7 +3,7 @@ import { defineComponent } from 'vue'
 import { createRegistry, RESERVED_ROUTE_SEGMENTS, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { GRID_VIEW } from '../node/levelViews'
-import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
 
 const Stub = defineComponent({ template: '<div />' })

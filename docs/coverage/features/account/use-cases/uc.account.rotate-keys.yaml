@@ -63,7 +63,7 @@ acceptanceCriteria:
         integration:
           - ItemFavoritesSliceTest.listOwnReturnsTheCallersRowsAcrossScopesAndNeverACoMembers
           - ItemFavoritesSliceTest.listOwnLeavesOutEveryScopeTheGateRefuses
-      web: { unit: [src/features/memory/itemFavorites.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
+      web: { unit: [src/features/memories/itemFavorites.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: trust-documents-resealed-in-the-publish
     # ADR 0060 § Consequences, inbox #192. The live defect was red on the untouched client: the re-seal ran after
     # the publish in its own PUT, and a PUT that failed left the pin store under the retired key — refused by every

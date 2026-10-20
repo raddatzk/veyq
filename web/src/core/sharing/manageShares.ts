@@ -10,7 +10,7 @@
 // every share's root name after a member renamed the root (ADR 0080 decision 14). What is not:
 // a WRITE_ONLY link carries no wrap but the node's drop public key (ADR 0031 point 7), and the drop key is the
 // application's that registered the drop flow — so a WRITE_ONLY mint or re-issue is only reachable through a
-// [WriteOnlyMint] that application hands in (today Memories' `createShare` / `reissueShare` in features/memory/share.ts).
+// [WriteOnlyMint] that application hands in (today Memories' `createShare` / `reissueShare` in features/memories/share.ts).
 import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'

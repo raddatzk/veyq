@@ -22,7 +22,7 @@ import { instance, newDevice, passwordField, signInOwner, tenantOrigin, type Dev
 test.describe.configure({ mode: 'serial' })
 
 // The JPEG the round trip uploads (1×1, decodable); the repository is mounted read-only in the browser container.
-const PHOTO = fileURLToPath(new URL('../../../web/src/features/memory/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 const PHOTO_TEXT = ['Marienplatz at golden hour', '(c) 2021 A. Photographer']
 
 const stamp = randomBytes(3).toString('hex')

@@ -54,7 +54,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
 }))
 
 // Prop recorders: they render what they were handed, and expose the events the host and the level view listen to.
-vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
+vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
@@ -78,7 +78,7 @@ vi.mock('../core/node/FolderNameDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return { default: defineComponent({ props: ['mode', 'parentId', 'node'], setup: (p) => () => h('div', { class: 'name-stub' }, `${p.mode}|${p.parentId ?? '-'}|${p.node?.name ?? '-'}`) }) }
 })
-vi.mock('../features/memory/components/MemoryNodeDialog.vue', async () => {
+vi.mock('../features/memories/components/MemoryNodeDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
@@ -87,7 +87,7 @@ vi.mock('../features/memory/components/MemoryNodeDialog.vue', async () => {
     }),
   }
 })
-vi.mock('../features/memory/components/ShareDialog.vue', async () => {
+vi.mock('../features/memories/components/ShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
@@ -123,7 +123,7 @@ import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
 import { restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
-import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { FILE_KIND } from '../features/depot/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'

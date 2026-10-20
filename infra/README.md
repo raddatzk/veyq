@@ -23,7 +23,10 @@ holds no surface's build, and no task aggregates their checks — each still pro
 
 A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
 browse `veyq.localhost:8081`. `backend:run` does not start the infra on its own: a backend restart should not touch
-compose. A verb without a surface selects every surface's — `./gradlew bootstrap`, `./gradlew build`; a bare
+compose. Its hot reload reaches every module of the backend (ADR 0079): a change under `backend/core`,
+`backend/apps/memories` or `backend/apps/depot` is recompiled and restarts the app on the next HTTP request — measured
+2026-10-20 through this launcher from a worktree, one source edit per module, each answered by Quarkus' "Restarting
+quarkus due to changes in …" naming that module's classes. A verb without a surface selects every surface's — `./gradlew bootstrap`, `./gradlew build`; a bare
 `./gradlew run` selects all four `run`s, which run one after another and so block on the first unless `--parallel`
 is given (`backend:run web:run --parallel` ran both, measured).
 

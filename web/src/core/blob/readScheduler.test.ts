@@ -1,6 +1,6 @@
 // The read scheduler (inbox #488) on a fake clock: batches, caps, lanes, retries, expiry and cancellation. Each case
 // names the property it holds; the gallery-level proof (a Chapter's tiles through the real transport) is in
-// `features/memory/components/MemoryDetail.test.ts`.
+// `features/memories/components/MemoryDetail.test.ts`.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   BACKOFF_BASE_MS,
