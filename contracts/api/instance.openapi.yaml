@@ -1300,7 +1300,7 @@ paths:
       summary: Appoint an existing account as a moderator, by its address.
       description: >
         Records a pending appointment for the account with this address (ADR 0099 § 1); it becomes a moderator when the
-        appointee accepts it in web/'s moderation surface. `404 account_not_found` when no account has the address —
+        appointee accepts it in src/web/'s moderation surface. `404 account_not_found` when no account has the address —
         nothing is recorded. Appointing someone already on the roster changes nothing. Server-Owner only.
       security:
         - bearerAuth: []
@@ -2940,7 +2940,7 @@ components:
       properties:
         bundled:
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: Choose the store the deployment brings. Every other field must then be absent.
           example: false
@@ -3245,7 +3245,7 @@ components:
       properties:
         "off":
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: True switches the entry off, false switches it back on.
           example: true
@@ -3359,7 +3359,7 @@ components:
       properties:
         enabled:
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: True runs the daily check; false stops it, and the instance makes no request.
           example: true
@@ -3503,7 +3503,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
         tls:
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: Whether to use STARTTLS.
           example: true

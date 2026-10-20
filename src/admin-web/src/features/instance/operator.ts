@@ -1,6 +1,6 @@
 // uc.admin.operator-details — the operating mode (ADR 0093 § 14, ADR 0088 decision 14) and the values a host publishes
 // about itself (ADR 0093 § 11, ADR 0035 decisions 6–7), Server-Owner only. Every rule the setup step, the two panels and
-// `veyq-admin` share lives here, so none of them can hold a laxer one (admin-web/CLAUDE.md):
+// `veyq-admin` share lives here, so none of them can hold a laxer one (src/admin-web/CLAUDE.md):
 //   - *private* is set only with the notice accepted ([operatingModeRequest]); the server records no tick, so this is
 //     the one place it is asked;
 //   - which preset switches a mode would change ([presetChanges]) — from the server's own preset, never a copy;

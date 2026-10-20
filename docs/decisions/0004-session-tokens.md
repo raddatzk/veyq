@@ -9,7 +9,7 @@
   `SessionService.listActiveFamilies` / `revokeFamilyForUser` / `revokeOtherFamilies` behind `SessionResource`
   (`GET /api/sessions`, `DELETE /api/sessions/{id}`, `POST /api/sessions/revoke-others`, contract
   `auth.openapi.yaml`), covered by `SessionManagerSliceTest`; the web client is
-  `web/src/features/account/sessions/`. The **one-generation grace** below (refined 2026-09-21 from inbox
+  `src/web/src/features/account/sessions/`. The **one-generation grace** below (refined 2026-09-21 from inbox
   #123) is **built** in `SessionService.rotate`: a `SUPERSEDED` token exactly one generation behind `CURRENT`
   re-mints under the orphan's own generation, any other distance revokes the family — pinned by
   `LoginSliceTest` (the grace block, plus `replayedSupersededRefreshRevokesFamily` for distance two). The family

@@ -11,7 +11,7 @@
 //
 // It runs after moderation.spec.ts and instance-mail.spec.ts (the instance mail is set up there). What the Server Owner
 // found is deliberately NOT a canary: it travels in the clear to the server and in the mail by design (a `pii` field),
-// and the backend's ServerOwnerStatementSliceTest proves the database holds it only sealed. The labels are web/'s and
+// and the backend's ServerOwnerStatementSliceTest proves the database holds it only sealed. The labels are src/web/'s and
 // admin-web's own (each package's i18n, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'

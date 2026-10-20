@@ -1,4 +1,4 @@
-// Thin factory over the contracts-generated clients — `admin-web`'s own, narrower than `web/`'s: four specs
+// Thin factory over the contracts-generated clients — `admin-web`'s own, narrower than `src/web/`'s: four specs
 // (setup, auth, tenants, instance) and nothing else, because this surface does exactly four things (bootstrap
 // an instance, sign a Server Owner in, administer tenants, read the release). No content, media, sharing or
 // scopes client exists here, and that absence is the point: `admin-web` cannot reach user content even by

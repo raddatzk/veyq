@@ -67,7 +67,7 @@ A 16-byte random salt per write, and the 16 bytes of length it adds. Nothing abo
 ## Acceptance criteria
 
 An enabler carries no coverage file (`validate_coverage.py` reads use-cases only), so each criterion names the tests
-that verify it. The crypto ones run in `packages/crypto`'s check, the wire one in `web/`'s.
+that verify it. The crypto ones run in `packages/crypto`'s check, the wire one in `src/web/`'s.
 
 - **field-key-one-field** — the key handed over for node A's name opens A's name and neither sibling B's name, nor A's
   node key, nor A's meta: `fieldSeal.test.ts` "B1: the key handed over for node A's name opens A's name (the

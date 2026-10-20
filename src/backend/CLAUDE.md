@@ -4,9 +4,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 
 ## Prove your work
 - `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
-  `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
-  `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`),
-  `:apps:depot` (`backend/apps/depot`, the Depot application — the `FILE` and `DEPOT_DROPBOX` kinds, a file's blob for members and guests, the drop box; its tests boot core plus
+  `src/backend/`, it checks every project: `:core` (`src/backend/core`, the platform — its tests run as `:core:test`),
+  `:apps:memories` (`src/backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`),
+  `:apps:depot` (`src/backend/apps/depot`, the Depot application — the `FILE` and `DEPOT_DROPBOX` kinds, a file's blob for members and guests, the drop box; its tests boot core plus
   Depot and run as `:apps:depot:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
   and entity sweeps, `ModuleCompositionTest`). A new
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
@@ -55,7 +55,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   statement, in the same transaction and **under the scope lock it already holds** — that is what keeps the first-bump
   insert race-free and the revision row a leaf (a bump after a node row, with no scope lock, is the lock-order inversion
   `NodesStore.applyUpdate` documents). It is the listing's `ETag`, so a write that forgets is a live view that never
-  learns of a change, with no failing request to show it. `backend/src/test/.../TreeRevisionBumpsTest` reads the sources and
+  learns of a change, with no failing request to show it. `src/backend/src/test/.../TreeRevisionBumpsTest` reads the sources and
   is red on a writer of those rows that is neither listed nor exempt; `TreeRevisionCoreSliceTest` / `DepotTreeRevisionSliceTest`
   pin each path's one bump and a refusal's none. A guest's `resolveShare` tag is NOT this revision (it would leak the rest
   of the space's activity): `ShareETag` digests what the response serves.
@@ -125,14 +125,14 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   Quarkus (plugin and BOM), the OpenAPI generator — is declared once, in `gradle/libs.versions.toml`.
 
 ## Conventions (see [developer styleguide](../../docs/crosscutting/developer-styleguide.md))
-- **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, an application's in the
+- **API-first.** Edit the spec in `../../contracts/api/` — core's specs at its top level, an application's in the
   directory named for it (`memories/`), shared schemas in `_common.openapi.yaml` (core's); the Gradle build generates
   Kotlin models + JAX-RS interfaces per owner, in the module that owns them. **The owner is derived from the
   directory, never listed** (`buildSrc`'s `SpecSets`, inbox #344): the top level is `:core`'s
   (`:core:openApiGenerateCore` → `core/build/generated/openapi/core/`, package `me.raddatz.veyq.core.generated`),
   `contracts/api/<app>/` is `:apps:<app>`'s (`:apps:memories:openApiGenerateMemories` →
   `apps/memories/build/generated/openapi/memories/`, package `me.raddatz.veyq.memories.generated`); `openApiGenerateSpecs`
-  from `backend/` runs every owner's. A module opts in with `veyqOpenApi { generateOwnSpecs() }`, which reads its
+  from `src/backend/` runs every owner's. A module opts in with `veyqOpenApi { generateOwnSpecs() }`, which reads its
   owner from its project path — so a new application's specs need only their directory and the module. The build
   refuses, while it configures, a spec nested deeper than one directory, a directory that is no application name
   (lowercase letters and digits) and one with no included `:apps:<dir>`; and a module that is included but never
@@ -143,7 +143,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   an application model named like a core one fails the build; so does `x-veyq-channel` on an application's operation
   (the admin channel is core's). Never hand-write a DTO that
   duplicates a generated model.
-  **Nothing generated is tracked** (`backend/build/` is gitignored), and the generator emits no descriptions —
+  **Nothing generated is tracked** (`src/backend/build/` is gitignored), and the generator emits no descriptions —
   `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `buildSrc`'s `OpenApiGenerate`.
   So a spec edit that changes only `description:` / `summary:` text produces no backend delta beyond the models'
   KDoc (the Kotlin model generator copies a property's description into a comment; nothing else carries it) and
@@ -189,8 +189,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **Migrations:** Flyway; `schema-management.strategy=none` — Flyway owns the schema. **One global version
   scheme across modules:** `V<yyyymmddHHMM>__<module>_<slug>.sql` (the UTC minute you write it; `<module>` is
   `core` or an application's name — `memories` — as `settings.gradle.kts` includes it, `:apps:<name>`), each in its
-  owner's `src/main/resources/db/migration/` (`backend/core/…` for core,
-  `backend/apps/memories/…` for Memories; the guard holds the name to the directory) — one classpath path, `db/migration`, so Flyway reads them
+  owner's `src/main/resources/db/migration/` (`src/backend/core/…` for core,
+  `src/backend/apps/memories/…` for Memories; the guard holds the name to the directory) — one classpath path, `db/migration`, so Flyway reads them
   as one set and two files of one version fail startup. The schema starts from two baselines,
   `V202610041200__core_baseline.sql` and `V202610041201__memories_baseline.sql`; a Memories migration references
   core tables or its own, a core migration never names a Memories table (ADR 0079). A new migration sorts above

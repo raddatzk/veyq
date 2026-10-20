@@ -1,7 +1,7 @@
 useCase: uc.spaces.edit-profile
 feature: spaces
 title: Edit your profile in a space
-# The "Your profile" rubric of the settings hub (web/src/features/account/profile/ProfilePanel.vue). The panel's
+# The "Your profile" rubric of the settings hub (src/web/src/features/account/profile/ProfilePanel.vue). The panel's
 # mounted test mocks ./profile at its I/O functions and keeps the sealing real, so each name assertion unseals
 # what the panel sent at the member's own address.
 acceptanceCriteria:

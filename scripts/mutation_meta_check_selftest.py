@@ -182,7 +182,7 @@ def main() -> int:
 
     # The crypto project is a SECOND, independently-checked scope (cr-admin-web-extraction, ADR 0065) — the
     # gate had to split when the code did, because Stryker's runner is the project's own vitest. Its arm must
-    # be exercised on its own: a check that only ever read web/'s manifest would pass every case above while
+    # be exercised on its own: a check that only ever read src/web/'s manifest would pass every case above while
     # silently never looking at the crypto scope at all.
     CV1 = "src/v1.ts"
     expect("crypto: diff in the crypto scope + total 0 mutants FAILS",

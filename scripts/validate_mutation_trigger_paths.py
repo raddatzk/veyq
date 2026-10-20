@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every class the backend mutation gate mutates must also TRIGGER it.
 
-**What it asserts.** For each entry in `backend/core/pitest.scope.json` (`targetClasses` + `targetTests`), derive
+**What it asserts.** For each entry in `src/backend/core/pitest.scope.json` (`targetClasses` + `targetTests`), derive
 the `.kt` file it names — package → directory, class → filename, a trailing `*` stripped — and assert that
 file (a) exists on disk and (b) is listed in **both** `paths:` blocks of
 `.github/workflows/mutation-backend.yml`. The two blocks are checked **separately, not as a union**: Actions

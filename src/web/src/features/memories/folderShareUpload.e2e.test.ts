@@ -12,9 +12,9 @@
 // them; that the guest's NAME — sealed under the FOLDER's key, the link's root — is read by the member on the Memory
 // and on the chapter through the chain (`contentKeyChain` + `openBucketName`), and not under the node's key alone; that
 // the guest deletes only its own; that a READ link refuses an upload; and that what a guest is served names no other
-// guest's identity (asserted on the raw wire, web/CLAUDE.md).
+// guest's identity (asserted on the raw wire, src/web/CLAUDE.md).
 //
-//   python3 scripts/run_web_e2e.py web/src/features/memories/folderShareUpload.e2e.test.ts
+//   python3 scripts/run_web_e2e.py src/web/src/features/memories/folderShareUpload.e2e.test.ts
 import { describe, it, expect } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'

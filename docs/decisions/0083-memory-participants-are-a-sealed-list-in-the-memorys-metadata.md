@@ -66,7 +66,7 @@ names, snapshots or anything beyond opaque ids, this decision must be re-decided
 A per-share opt-in is a possible later decision, **not made now**.
 
 **5. A participant opens a member profile — members only.** Clicking a participant opens a profile page at the fragment
-**`#people/<userId>`** (the reader also accepts `#/people/<userId>`), never reachable from a share. It is routed in `web/src/core/node/location.ts` (`parseHash` /
+**`#people/<userId>`** (the reader also accepts `#/people/<userId>`), never reachable from a share. It is routed in `src/web/src/core/node/location.ts` (`parseHash` /
 `buildHash`, the one place `validate_web_fragment_paths_via_location.py` allows), and `people` is added to
 `RESERVED_ROUTE_SEGMENTS` in `core/applications/registry.ts` (no application can claim it as a route slug) and
 `segmentsOf` numbers a folder, file or drop box called "People" at a scope root `people-2`, so no node ever has the profile's path.

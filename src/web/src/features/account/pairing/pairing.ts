@@ -148,7 +148,7 @@ export const parsePairingPayload = (text: string): string | null => parseMarked(
 /**
  * The displayed code's whole payload in *sign in with a QR code* (D1): the second marker and the secret, and
  * still no key — a serialized transport bundle is 1256 bytes, which is a QR version 34 nobody scans off a
- * laptop screen and which sits past the decoder bound `web/CLAUDE.md`'s jsQR exception rests on.
+ * laptop screen and which sits past the decoder bound `src/web/CLAUDE.md`'s jsQR exception rests on.
  *
  * Nothing is lost by relaying the key instead: the relayed key is MACed under the channel key this payload's
  * secret derives, so the relay cannot swap it, and the transcribed code bound into the same MAC is what

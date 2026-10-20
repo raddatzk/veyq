@@ -3860,7 +3860,7 @@ export type ApplicationMessages = Record<SupportedLocale, Record<string, unknown
 /**
  * Add an application's catalog to the one instance (ADR 0079, inbox #513). The catalog above is core's alone; each
  * application keeps its namespaces in its own directory (`features/<owner>/i18n.ts`), and the composition root's
- * catalog half (`web/src/applicationMessages.ts`) hands them here, by static import — core never imports one.
+ * catalog half (`src/web/src/applicationMessages.ts`) hands them here, by static import — core never imports one.
  * **Write-once**, like the registry: a namespace someone already holds (core's, or another application's) THROWS and
  * nothing is added, so an application can neither overwrite `node.*` nor take over another's strings; and a catalog
  * whose locales carry different namespaces throws too (`typeof en` holds the keys below a namespace to EN's).

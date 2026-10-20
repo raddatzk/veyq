@@ -55,6 +55,6 @@ describe('login (uc.account.login)', () => {
     expect(v1.authVerify(wrongPub, NONCE, fromB64std(captured))).toBe(false)
     // Three production-params Argon2id derivations: `login` picks the params itself, so the two expected
     // keypairs must match it — the cost is inherent here, unlike the wraps whose params ride on the wire.
-    // Only this test gets the raised ceiling; the three below stay on the 5s default. See packages/crypto/src/testArgon.ts.
+    // Only this test gets the raised ceiling; the three below stay on the 5s default. See src/packages/crypto/src/testArgon.ts.
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 })

@@ -1,6 +1,6 @@
 # The OpenAPI generator JAR, pinned by SHA-256 and keyed by version (ADR 0057 §6).
 #
-# Read by scripts/verify_openapi_generator_jar.mjs, which `generate:api` in web/ and admin-web/ runs before the
+# Read by scripts/verify_openapi_generator_jar.mjs, which `generate:api` in src/web/ and src/admin-web/ runs before the
 # generator: it downloads a missing JAR from Maven Central and checks the file against the line below on EVERY
 # run, including when the file was already there. The npm wrapper (@openapitools/openapi-generator-cli) checks
 # nothing — it downloads without a checksum and then trusts whatever file sits at <storageDir>/<version>.jar.

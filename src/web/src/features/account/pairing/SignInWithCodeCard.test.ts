@@ -4,7 +4,7 @@
 //
 // Four properties live here and nowhere else:
 //   - **the displayed code carries the channel's secret under THIS direction's marker, and never the transport key**
-//     (D1) — the key is 1256 bytes and would put the code past the decoder bound `web/CLAUDE.md`'s jsQR
+//     (D1) — the key is 1256 bytes and would put the code past the decoder bound `src/web/CLAUDE.md`'s jsQR
 //     exception rests on, and it would buy nothing: in this direction the scan authenticates nothing;
 //   - **the answer carries key AND proof as one value** (D2), because `seal` takes no code and never may;
 //   - **there is exactly ONE send.** The server's answer slot is write-once, so a second post — including one

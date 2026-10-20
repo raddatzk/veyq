@@ -11,7 +11,7 @@
 //   5. the moderator lifts the measure: the photo is back for both.
 //
 // The reasons and names are canaries (`recordTyped`), so lane L1's sweep proves the report, and the photo the review
-// renders, reached the server sealed. The labels are web/'s own (web/src/i18n/index.ts, en).
+// renders, reached the server sealed. The labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'

@@ -5,7 +5,7 @@
 //
 // Written once, here, and imported by the three ESLint configs (packages/crypto, web, admin-web), so the five entry
 // points cannot drift between them. A rule of its own rather than `no-restricted-syntax` + `no-restricted-imports`:
-// flat config resolves a rule by NAME and the last matching block wins, and web/ already spends both core names (and
+// flat config resolves a rule by NAME and the last matching block wins, and src/web/ already spends both core names (and
 // `@typescript-eslint/no-restricted-imports`) on other doors — a second block setting them would silently replace
 // those doors' options for every file both blocks match.
 //

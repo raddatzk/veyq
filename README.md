@@ -58,7 +58,7 @@ encryption claim.
 docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
-Then the backend (`cd backend && ./gradlew quarkusDev`) and the web client (`cd web && npm run dev`). Each
+Then the backend (`cd src/backend && ./gradlew quarkusDev`) and the web client (`cd src/web && npm run dev`). Each
 surface documents its own checks: [`backend/CLAUDE.md`](src/backend/CLAUDE.md) (`./gradlew check`) and
 [`web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`).
 

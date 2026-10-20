@@ -14,8 +14,8 @@ decide WHICH predecessor and WHAT a red run means are plain functions. This asse
   4. the boot log read for Flyway's own refusal - a checksum mismatch, an applied migration the candidate no longer
      has, one below the restored history - and nothing named for a log without one;
   5. which suite of a tree is the seeder (the `upgrade` group's first member), and none for a tree without it;
-  6. the record both builds share: `web/src/test/upgradeRecord.fixture.json`'s record is accepted and every edit it
-     lists is refused with exactly one problem - the same fixture `web/src/test/upgradeRecord.test.ts` holds the
+  6. the record both builds share: `src/web/src/test/upgradeRecord.fixture.json`'s record is accepted and every edit it
+     lists is refused with exactly one problem - the same fixture `src/web/src/test/upgradeRecord.test.ts` holds the
      TypeScript reader to, so the two validators cannot drift apart unseen;
   7. the predecessor's surfaces in either layout (ADR 0106 decision 7): its web client in a fabricated tree of each,
      and its seeder found in the commit before the code surfaces moved under `src/` as well as in HEAD.

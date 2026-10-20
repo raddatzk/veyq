@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 /**
- * The server's half of the boundary `packages/crypto/src/report.test.ts` holds from the client's: a sealed moderation text
+ * The server's half of the boundary `src/packages/crypto/src/report.test.ts` holds from the client's: a sealed moderation text
  * at its largest plaintext — 8,000 UTF-8 bytes, what the client lets a moderator, a reporter or an objector write — is
  * accepted, and one character more is refused. The client measures the seal's length from a real seal and pins the
  * contract's `maxLength` to it; here each request field's validation (generated from the same contract) takes exactly

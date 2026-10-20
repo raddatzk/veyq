@@ -5,9 +5,9 @@
 // nothing is a gate that gets waved through.
 //
 // It lives here, beside `base64.ts`, because it is a property of what this package emits, and because the two
-// recorders that must agree on it are in two packages that share nothing else: web/'s `recordCanaries`
-// (`web/src/test/canaries.ts`, what an API-level suite unsealed) and tests/e2e/'s `recordTyped` (`tests/e2e/src/canaries.ts`,
-// what the browser suite typed — ADR 0090 decision 4 lets tests/e2e/ import this package and nothing of web/). Two copies
+// recorders that must agree on it are in two packages that share nothing else: src/web/'s `recordCanaries`
+// (`src/web/src/test/canaries.ts`, what an API-level suite unsealed) and tests/e2e/'s `recordTyped` (`tests/e2e/src/canaries.ts`,
+// what the browser suite typed — ADR 0090 decision 4 lets tests/e2e/ import this package and nothing of src/web/). Two copies
 // would let the two sweeps disagree about what is noise. A test affordance, like `testArgon.ts`: no product code
 // imports it, and it is out of the mutation scope for base64.ts's reason (`stryker.mutate.json`).
 

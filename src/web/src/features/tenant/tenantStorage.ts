@@ -1,5 +1,5 @@
 // A tenant's storage (uc.sharing.share-link-storage-limit, ADR 0073 §4) — a tenant-OWNER surface beside the mail
-// settings, in `web/` for the same reason: the backend gates both calls with `403 not_tenant_owner`, and the owner
+// settings, in `src/web/` for the same reason: the backend gates both calls with `403 not_tenant_owner`, and the owner
 // is an ordinary member of their own tenant, not the Server Owner.
 import { tenantsApi } from '../../api/client'
 import type { TenantStorage } from '../../api/generated/tenants'

@@ -399,7 +399,7 @@ def blob_index_cases() -> None:
           {"bb/0", "bb/1"} <= set(ib.expected_keys(index)), str(ib.expected_keys(index)))
 
 
-# The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
+# The vector `src/backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
 VECTOR_TOKEN = "veyq-dev-admin-token"
 VECTOR_ACCESS_KEY = "GKd14f469abb39c11f4f86a0e3"
 VECTOR_SECRET_KEY = "db5a958fff2b57263c0cb0f6963fb047ee2d21fc487250082d035ff35cb79b66"

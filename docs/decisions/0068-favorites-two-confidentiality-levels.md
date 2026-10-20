@@ -81,7 +81,7 @@ consumes item favorites outside a single gallery (§7), so nothing needs the sco
 caps the blob at **262 144** base64 characters (the column is `MEDIUMTEXT`), so one member's marks in one Memory stop at
 **12 284** — every photo of a 10 000-photo Memory, the size the gallery is built for
 ([ADR 0105](0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md)). `measured` (inbox
-#500, `web/src/features/memories/itemFavorites.test.ts` through the real seal): 21⅓ base64 characters a mark; 1 258 and
+#500, `src/web/src/features/memories/itemFavorites.test.ts` through the real seal): 21⅓ base64 characters a mark; 1 258 and
 12 000 marks round-trip; 12 284 seal to 262 140 characters, and the 12 285th is refused by the client before any write,
 with a message at the heart. A toggle uploads about 27 KB at 1 258 marks and 256 KB at the ceiling. In the JSON form
 of the table above the ceiling was 1 257 — 12.6 % of such a Memory, reachable by one keen member, and the 1 258th
@@ -254,7 +254,7 @@ object moved **out of the Memories module into the platform's**:
 
 - Supersedes nothing; it **discharges** [ADR 0014](0014-group-scopes-and-governance.md) §7, whose open question
   ("folded in when favorites reach group scopes") is answered by §1–§3 above.
-- Owner map: [docs/apps/memories.md](../apps/memories.md) (the marks) and [web/CLAUDE.md](../../src/web/CLAUDE.md) (the pin in core), [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) (core and applications)
+- Owner map: [docs/apps/memories.md](../apps/memories.md) (the marks) and [src/web/CLAUDE.md](../../src/web/CLAUDE.md) (the pin in core), [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) (core and applications)
 - Enabler: [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md) (both objects)
 - Use-case: [uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) (the filter + the aggregate)
 - Concepts: [Security Model](../crosscutting/security-model.md) § *What is encrypted vs. server-visible*

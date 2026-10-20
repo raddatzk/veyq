@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test
  */
 class PresignGetsHonourContentBlocksTest {
 
-    private val root: Path = Paths.get("").toAbsolutePath().normalize() // backend/
+    private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/
 
     private val call = Regex("""\bpresignGets\(""")
 

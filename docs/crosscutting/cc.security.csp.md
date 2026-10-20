@@ -1,8 +1,8 @@
 # Concern: Web Content-Security-Policy
 
 - **ID:** cc.security.csp
-- **Type:** **Cross-cutting concern.** It is a horizontal, browser-enforced security mechanism for the `web/`
-  surface and for the response headers of the app origin, and for the `admin-web/` console and its origin's headers (§ *admin-web*). It has no standalone end-user goal, so it is not a
+- **Type:** **Cross-cutting concern.** It is a horizontal, browser-enforced security mechanism for the `src/web/`
+  surface and for the response headers of the app origin, and for the `src/admin-web/` console and its origin's headers (§ *admin-web*). It has no standalone end-user goal, so it is not a
   use-case, and it is not a feature substrate, so it is not an enabler. It is recorded here so that its policy,
   rationale and verification are traceable from the threat model.
 - **Status:** built as described below: by the backend's app shell
@@ -31,7 +31,7 @@ talk to at all.
 ## Mechanism
 
 [`csp.ts`](../../src/web/src/shared/security/csp.ts) is the **one source** of the policy. It is generated from the
-app's own provider config ([`web/vite.config.ts`](../../src/web/vite.config.ts)) and delivered as a
+app's own provider config ([`src/web/vite.config.ts`](../../src/web/vite.config.ts)) and delivered as a
 **response header**, never as a `<meta>`. This follows [ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md):
 
 - **In production** the web build emits the policy as a file inside `dist`. The backend's app shell reads it at
@@ -144,12 +144,12 @@ through the compose path route, the rule that makes those responses inert is ADR
 ## admin-web
 
 The Server-Owner console ([ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)) is served by its own
-container's nginx ([`admin-web/nginx.conf.template`](../../src/admin-web/nginx.conf.template)), and that nginx sends
+container's nginx ([`src/admin-web/nginx.conf.template`](../../src/admin-web/nginx.conf.template)), and that nginx sends
 every header of the admin origin.
 
 - **The policy stays a `<meta>`.** Its one source is
-  [`admin-web/src/shared/security/csp.ts`](../../src/admin-web/src/shared/security/csp.ts), and
-  `admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
+  [`src/admin-web/src/shared/security/csp.ts`](../../src/admin-web/src/shared/security/csp.ts), and
+  `src/admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
   stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API's
   default origin in `connect-src`. A `<meta>` built into a static file cannot follow the Server Owner's setting, so
   the console's own first-run check reaches only that default origin: a mirror elsewhere reads there as "could not
@@ -183,20 +183,20 @@ every header of the admin origin.
 
 ## Verification
 
-- [`web/src/shared/security/csp.test.ts`](../../src/web/src/shared/security/csp.test.ts) pins the directives:
+- [`src/web/src/shared/security/csp.test.ts`](../../src/web/src/shared/security/csp.test.ts) pins the directives:
   - no `unsafe` on script;
   - `object-src 'none'`;
   - no third-party origin baked in when providers are unset;
   - `ws:` in dev only;
   - `frame-ancestors 'none'` in dev and production alike.
-- [`web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`npm run verify:pdf-worker`,
+- [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`npm run verify:pdf-worker`,
   in `npm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
   (§ *A dependency that parses untrusted bytes*). **Run in a real browser 2026-10-12** against a local server sending the
   built header: the worker started, pages drew, a standard font loaded from the same origin, no violation fired.
-- [`web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
+- [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`npm run verify:csp`, run by `npm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`.
-- The backend's app shell (`backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):
+- The backend's app shell (`src/backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):
   - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer
     produced in that mode, and pins the fail-closed refusals (no policy, a CSP `<meta>`);
   - `AppShellSliceTest` runs over a fixture shell. It covers the fallback, with a positive control for every
@@ -216,7 +216,7 @@ every header of the admin origin.
 - **Not verified:** video playback through the Service Worker under its policy. The worker registered on none of
   the screens reached, so only its script's response headers were checked. The Kubernetes path itself (a real
   Gateway and a store on its own host) is shown only through the jar in `store-origin` mode, never on a cluster.
-- [`admin-web/src/shared/security/csp.test.ts`](../../src/admin-web/src/shared/security/csp.test.ts) pins admin-web's
+- [`src/admin-web/src/shared/security/csp.test.ts`](../../src/admin-web/src/shared/security/csp.test.ts) pins admin-web's
   policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
   third-party origin anywhere, no `frame-ancestors`.
 - The admin origin's headers (§ *admin-web*) have no CI test: no workflow starts the admin container. Checked
@@ -228,7 +228,7 @@ every header of the admin origin.
     container alike, both ways;
   - nginx 1.30.0's headers module merges `add_header_inherit` into a location that does not set it, so the
     server-level `merge` reaches `= /index.html` (read in its source, `ngx_http_headers_merge_conf`).
-- **Served, measured 2026-09-28** (the built `admin-web/Dockerfile` image, run with no backend on
+- **Served, measured 2026-09-28** (the built `src/admin-web/Dockerfile` image, run with no backend on
   127.0.0.1:18081). The image builds and starts on the 1.30 base. **Switch unset:** `/`, `/setup`, a hashed
   asset and `/api/setup` (a 502) all carry `Strict-Transport-Security: max-age=15552000` plus
   `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and `X-Robots-Tag`; `/` and `/setup` also

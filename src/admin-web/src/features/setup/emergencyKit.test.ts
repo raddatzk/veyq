@@ -1,6 +1,6 @@
 // @vitest-environment node
-// The write half only — this package never reads a kit back; `web/` does, with `@veyq/crypto`'s `parseKit`. So
-// this test reads the PDF this package writes with exactly that parser, the way `web/`'s `importKitFromFile`
+// The write half only — this package never reads a kit back; `src/web/` does, with `@veyq/crypto`'s `parseKit`. So
+// this test reads the PDF this package writes with exactly that parser, the way `src/web/`'s `importKitFromFile`
 // does (`File.text()`). It is the test that would have gone red on the day the two codec copies diverged.
 import { describe, expect, it } from 'vitest'
 import { parseKit } from '@veyq/crypto/emergencyKit'

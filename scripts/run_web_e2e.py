@@ -41,7 +41,7 @@ directory ([prepare_predecessor]: its own `npm ci`, which generates its client, 
 predecessor's jar; the group's hook captures that instance, destroys it and restores it onto a target installed by THIS
 checkout's jar ([upgrade_hook]); the READER, this tree's last member of the group, boots on this jar — which migrates
 the predecessor's schema up — and must read `configSecretState: OK` before it asserts every item of the record the
-seeder wrote (`web/src/test/upgradeRecord.ts`). The predecessor defaults to the first parent of `HEAD` while the pin
+seeder wrote (`src/web/src/test/upgradeRecord.ts`). The predecessor defaults to the first parent of `HEAD` while the pin
 file says `release: none`, and to the newest `v<major>.<minor>` release tag once it names a release
 ([default_predecessor] — the one switch); a ref without the seeder is refused before anything is built. The run's
 summary ends with the proof's own lines ([upgrade_verdict]): the predecessor, both builds' highest migration, the
@@ -76,16 +76,16 @@ Usage:
     python3 scripts/run_web_e2e.py --upgrade         # the upgrade proof against the default predecessor
     python3 scripts/run_web_e2e.py --upgrade-from <git ref>
 
-With no arguments it runs every `web/src/**/*.e2e.test.ts` — that is how CI invokes it. Paths may be given
-relative to the repo root or to `web/`, which is a local debugging convenience only.
+With no arguments it runs every `src/web/src/**/*.e2e.test.ts` — that is how CI invokes it. Paths may be given
+relative to the repo root or to `src/web/`, which is a local debugging convenience only.
 
-Prerequisite: the fast-jar exists (`cd backend && ./gradlew quarkusBuild`). CI builds it once, before this runs.
+Prerequisite: the fast-jar exists (`cd src/backend && ./gradlew quarkusBuild`). CI builds it once, before this runs.
 **And a STALE jar fails as a wrong answer, not as an error** (cost one run in cr-account-recovery): this boots
 whatever jar is on disk, so backend changes made since the last build are simply absent — a new endpoint 404s, a
 new migration never applies. Both look like a broken suite. The tell is in the boot log: `Successfully applied N
 migrations, now at version vN` names the schema the jar carries, so compare it against the highest
 `V<yyyymmddHHMM>__*.sql` in the tree before believing a failure. Rebuild after ANY backend change; `./gradlew check` does
-not do it for you (it builds test classes, not the fast-jar). The web mirror of this trap is in `web/CLAUDE.md`
+not do it for you (it builds test classes, not the fast-jar). The web mirror of this trap is in `src/web/CLAUDE.md`
 — `npm run check` not regenerating the API client — and it is the same failure in both directions: a green or
 red that was measured against code the run never saw.
 
@@ -103,7 +103,7 @@ that is the one a reader must open to explain the hit), and a new run first prun
 `VEYQ_E2E_KEEP_RUNS` (default 2, counting the new one).
 
 Environment (all optional):
-    VEYQ_JAR              Backend fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
+    VEYQ_JAR              Backend fast-jar. Default: src/backend/build/quarkus-app/quarkus-run.jar
     VEYQ_PORT             Backend HTTP port. Default: 8080
     VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090
     VEYQ_INFRA_DIR        The directory holding the Compose files whose stack to use (a checkout's `DOCKER_DIR` in
@@ -270,7 +270,7 @@ def discover(root: Path = WEB) -> list[Path]:
 
 
 def normalize(arg: str) -> Path:
-    """Accept a path relative to the repo root or to web/ (or absolute)."""
+    """Accept a path relative to the repo root or to src/web/ (or absolute)."""
     p = Path(arg)
     for candidate in (p, REPO / p, WEB / p):
         if candidate.is_file():
@@ -697,7 +697,7 @@ CANDIDATE = Build("candidate", REPO, JAR)
 
 
 def member_name(path: Path, build: Build) -> str:
-    """A member as the summary names it: its path in its own `web/`, prefixed by the build when it is not this one."""
+    """A member as the summary names it: its path in its own `src/web/`, prefixed by the build when it is not this one."""
     rel = path.relative_to(build.web).as_posix()
     return rel if build is CANDIDATE else f"[{build.label}] {rel}"
 
@@ -1313,7 +1313,7 @@ def rehearse_production_project(workdir: Path) -> None:
 # The group the proof runs: its FIRST member is the seeder (run from the predecessor's tree), its LAST the reader (from
 # this one). Found by name in each tree ([upgrade_seeder]), never by a path, so either file may move.
 UPGRADE_GROUP = "upgrade"
-# The record the two members share, in the group directory (`web/src/test/upgradeRecord.ts` writes and reads it).
+# The record the two members share, in the group directory (`src/web/src/test/upgradeRecord.ts` writes and reads it).
 UPGRADE_RECORD_FILE = "upgrade-record.json"
 UPGRADE_READING_FILE = "upgrade-reading.json"
 # What the record's `version` may be — the versions the CANDIDATE's reader reads. Mirrors `UPGRADE_RECORD_VERSION` and
@@ -1443,8 +1443,8 @@ def upgrade_seeder(paths: Iterable[str]) -> str | None:
 def upgrade_record_problems(raw: object) -> list[str]:
     """Every problem with `raw` as the upgrade record, or none — the orchestrator's half of the record's contract.
 
-    The same shape `web/src/test/upgradeRecord.ts`'s `upgradeRecordProblems` checks, structural only: the reader then
-    asserts the content. Both are held to `web/src/test/upgradeRecord.fixture.json` (accepted, and every edit listed
+    The same shape `src/web/src/test/upgradeRecord.ts`'s `upgradeRecordProblems` checks, structural only: the reader then
+    asserts the content. Both are held to `src/web/src/test/upgradeRecord.fixture.json` (accepted, and every edit listed
     there refused with exactly one problem). Every list must be non-empty — a record without an item of one application
     would make the reader's "every item" vacuous for it.
     """
@@ -1707,7 +1707,7 @@ def upgrade_verdict(predecessor: Predecessor, failures: list[tuple[str, str]], g
     lines.append(f"outcome: RED — {cause or failures[0][1]}")
     if release == "none":
         lines.append("before the first release (`release: none`) a baseline may change, so this red INFORMS and gates "
-                     "nothing (backend/CLAUDE.md § Migrations)")
+                     "nothing (src/backend/CLAUDE.md § Migrations)")
     return lines
 
 
@@ -1789,7 +1789,7 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             "VEYQ_E2E": "1", "VEYQ_BASE": BASE, "VEYQ_ADMIN_BASE": ADMIN_BASE, "VEYQ_HOST": HOST, "VEYQ_STAMP": stamp,
             "VEYQ_MAILPIT": MAILPIT,
             # The wire-assertion seam (ADR 0053): the suite writes here what it recovered by unsealing; this
-            # side reads it back and sweeps. Absolute, because vitest runs with cwd=web/.
+            # side reads it back and sweeps. Absolute, because vitest runs with cwd=src/web/.
             "VEYQ_CANARY_FILE": str(canary_file),
             # The third needle set (ADR 0092 § 4): every address the suite signed up with, searched in the logs only.
             "VEYQ_PII_FILE": str(pii_file),

@@ -3,7 +3,8 @@
 - Status: Accepted 2026-10-20 (owner: the layout of stage 1, and stage 2's direction with its naming constraint);
   stage 1 built 2026-10-20 (cr-repo-layout-infra-and-tests): the script-side paths live once in
   `scripts/repo_layout.py`, except in what ships alone (`instance_backup.py`, which spells its own and is compared by
-  its selftest). Stage 2 decided by the owner the same day (decision 5), to be built by `cr-repo-layout-src`.
+  its selftest). Stage 2 decided by the owner the same day (decision 5) and built the same day (cr-repo-layout-src): the code
+  surfaces' paths live in `scripts/repo_layout.py` too, a predecessor's in either layout.
 - Date: 2026-10-20
 
 ## Context

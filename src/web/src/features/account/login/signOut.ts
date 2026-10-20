@@ -1,7 +1,7 @@
 // The one sign-out sequence (uc.account.sign-out § Main flow, ADR 0070 § Decision 2). All five sign-out entry
 // points call it — the profile menu, revoking your own session, declining the terms, the sign-in card and the
 // locked screen — and none carries its own copy: a screen with its own sequence is how a sign-out that skips half
-// of it ships. `web/eslint.config.js` keeps `.vue` files from importing the ending directly.
+// of it ships. `src/web/eslint.config.js` keeps `.vue` files from importing the ending directly.
 //
 // It does only what needs the session still working — delete the convenience wraps, revoke the family — and then
 // hands over to the ending (`app/sessionEnd.ts`), which loads the sign-in page as a new document. That document is

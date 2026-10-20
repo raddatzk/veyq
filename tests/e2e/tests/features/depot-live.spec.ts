@@ -15,7 +15,7 @@
 //
 // What it cannot show: a real phone or Safari/Firefox backgrounding a tab (Playwright keeps every page visible).
 //
-// It starts from the tenant whose owner the round trip activated (the `features` project). Labels are web/'s own.
+// It starts from the tenant whose owner the round trip activated (the `features` project). Labels are src/web/'s own.
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'

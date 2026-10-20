@@ -4,7 +4,7 @@
 // This file is what `npm run build:cli` hands to esbuild, so the flags it is built with belong here:
 //   --platform=node --format=esm  ESM because this file uses top-level await, and because `@veyq/crypto`'s
 //                                 worker module carries an `import.meta.url` that CJS cannot express. The
-//                                 output lands in `admin-web/dist-cli/`, whose nearest package.json is this
+//                                 output lands in `src/admin-web/dist-cli/`, whose nearest package.json is this
 //                                 package's `"type": "module"` — the container has to say so for itself.
 //   --bundle                      `@veyq/crypto` is consumed as TypeScript SOURCE with extensionless relative
 //                                 imports; nothing but a bundler resolves it. This is also what makes the

@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test
  */
 class GuestWriteRecordedTest {
 
-    private val root: Path = Paths.get("").toAbsolutePath().normalize() // backend/, the Gradle root every backend test runs in
+    private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/, the Gradle root every backend test runs in
 
     /** A guest's write credential, as a resource names it: the contributor token (header or body) or the write proof. */
     private val credential = Regex("""\b(xContributorToken|contributorToken|xShareWrite)\b""")

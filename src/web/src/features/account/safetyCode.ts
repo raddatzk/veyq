@@ -2,7 +2,7 @@
 // a QR of THEIR identity fingerprint; another member's device scans it and compares it with the key it would trust.
 //
 // **The payload is a marker, a version and the fingerprint digest - nothing else.** `veyqid:1:<base64 of the 32-byte
-// digest>`, 53 characters. It never carries the identity bundle: `web/CLAUDE.md`'s `jsqr` exception holds only while
+// digest>`, 53 characters. It never carries the identity bundle: `src/web/CLAUDE.md`'s `jsqr` exception holds only while
 // our own payloads stay small, and a bundle is >1 KiB (a version-28 code). The digest is `v1.fingerprintHash`, the one
 // the 6x5 digits are rendered from, so a scan and a read-aloud cannot disagree about a key.
 //

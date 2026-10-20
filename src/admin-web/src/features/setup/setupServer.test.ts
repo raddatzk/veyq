@@ -66,7 +66,7 @@ describe('setupServer — Model B request (uc.admin.setup-server)', () => {
 
 // Every derivation here is the test's own (nothing under test mints a wrap), so it runs at TEST_ARGON — the
 // properties asserted are determinism and separation, which hold at any cost params, and the production params
-// are pinned against the vectors by v1.conformance.test.ts. See packages/crypto/src/testArgon.ts.
+// are pinned against the vectors by v1.conformance.test.ts. See src/packages/crypto/src/testArgon.ts.
 describe('Model B auth derivation (ADR 0003)', () => {
   it('derives a deterministic salt + keypair from email+password', () => {
     const salt = v1.deriveAuthSalt(INSTANCE_SALT, 'user@example.com')
@@ -100,7 +100,7 @@ describe('prepareServerOwner / createServerOwner — mint first, send after the 
     expect(emergencyKit.secretKey).toBeTruthy()
     expect(create).not.toHaveBeenCalled()
     // prepareServerOwner mints the whole account, so it pays three production-params Argon2id derivations —
-    // inherent cost, not a hang. See packages/crypto/src/testArgon.ts.
+    // inherent cost, not a hang. See src/packages/crypto/src/testArgon.ts.
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('rejects when the server rejects the registration (drives the setup-failed UX)', async () => {

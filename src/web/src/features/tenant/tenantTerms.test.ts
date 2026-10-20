@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Web data-layer + gate-logic tests for tenant terms (uc.admin.tenant-terms + uc.account.accept-terms,
 // cr-0114): the facade request shaping over the generated tenants client — read, owner AUTHORING and member
-// accept, all three of which stay in `web/` because authoring is a tenant-owner action (see tenantTerms.ts)
+// accept, all three of which stay in `src/web/` because authoring is a tenant-owner action (see tenantTerms.ts)
 // — plus the member accept-gate condition (`termsStale()` / `markTermsAccepted()`) the router guard reads.
 // Operator-blind: terms are public operational content, acceptance is coarse metadata — no crypto here.
 import { describe, it, expect, vi, beforeEach } from 'vitest'

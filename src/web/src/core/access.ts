@@ -8,7 +8,7 @@
 //   rights function's answer for a node (below).
 // - `TreeSource` is the tree as that session reads it: the member's decrypted scope tree (`treeStore`) or the guest's
 //   opened subtree (`core/sharing/guestAccess.ts`, over `walkSubtree`). Navigation always goes through `linkTo`, so a guest's link keeps its `#k=`
-//   fragment (web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
+//   fragment (src/web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
 //
 // **Rights are the applications'**, pure and FAIL-CLOSED: `memoryRights` (features/memories/rights.ts),
 // `depotRights` (features/depot/rights.ts), and core's own `folderRights` here for the one kind core

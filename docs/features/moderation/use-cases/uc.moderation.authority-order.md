@@ -1,7 +1,7 @@
 # UC: Act on an authority's order
 
 - **ID:** uc.moderation.authority-order
-- **Primary actor:** A **moderator** in web/'s moderation surface, with the key proof — or the **Server Owner** in
+- **Primary actor:** A **moderator** in src/web/'s moderation surface, with the key proof — or the **Server Owner** in
   admin-web or `veyq-admin`, without a key
 - **Secondary actor:** the **authority** that issued the order (in Germany the BKA for a terrorist-content removal
   order), the **affected** members (told by the statement of reasons, unless the authority defers it)
@@ -53,7 +53,7 @@
    the guest's notice is held back exactly as the statement is.
 7. **What comes out.** For a removal order, the text for the feedback form (TCO Annex II): the reference, the action
    taken and the block time in UTC to the second. One template, `contracts/moderation/authority-order-forms.json`,
-   rendered by admin-web (and its CLI) and web/; a **draft** until a qualified legal review.
+   rendered by admin-web (and its CLI) and src/web/; a **draft** until a qualified legal review.
 8. **Information handed over** to an authority in answer to an order is an event in the case's log, its reference
    sealed (uc.moderation.report-to-an-authority); it changes no hold of an order's case, whose end the order sets.
 

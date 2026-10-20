@@ -7,7 +7,7 @@
 - **Status:** **built** — decided in [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
   § 2, built by cr-moderators-and-the-moderation-key (2026-10-17): `@veyq/crypto`'s `moderationBundle`,
   `moderationSign`/`moderationVerify` and `sealTo` purpose `moderation-grant`; the server's `ModerationProof` and
-  `ModerationProofGate` (`backend/core/.../moderation/`).
+  `ModerationProofGate` (`src/backend/core/.../moderation/`).
 - **Provides:** one key per epoch that every report seals to, held by every accepted moderator and by nobody else;
   a proof of that key every moderation call carries.
 - **Serves (use-cases):** [uc.moderation.appoint-moderators](../use-cases/uc.moderation.appoint-moderators.md),

@@ -75,11 +75,11 @@ acceptanceCriteria:
         unit: [src/core/sharing/OrderNotice.test.ts]
 gaps:
   admin-web: >-
-    The order form and `veyq-admin order …` are covered by admin-web/src/features/instance/orders.test.ts (a pasted
+    The order form and `veyq-admin order …` are covered by src/admin-web/src/features/instance/orders.test.ts (a pasted
     URL's fragment never leaves), orderForms.test.ts, OrderPanel.test.ts and src/cli/cli.test.ts, but admin-web's job has
     never executed (ADR 0040).
   crypto: >-
-    The moderation-order seal is pinned by its vector and packages/crypto/src/report.test.ts, but the crypto job has
+    The moderation-order seal is pinned by its vector and src/packages/crypto/src/report.test.ts, but the crypto job has
     never executed (ADR 0040).
   stack: >-
     tests/e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) times a removal order from each door to the guest's

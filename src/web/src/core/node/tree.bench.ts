@@ -38,7 +38,7 @@ function rows(specs: Spec[]): NodeSummary[] {
   })
 }
 
-/** The seeder's realistic shape, in its creation order, cut at `n` rows (`web/scripts/seed-volume.mts`). */
+/** The seeder's realistic shape, in its creation order, cut at `n` rows (`src/web/scripts/seed-volume.mts`). */
 function realistic(n: number): Spec[] {
   const out: Spec[] = []
   for (let f = 0; out.length < n; f++) {

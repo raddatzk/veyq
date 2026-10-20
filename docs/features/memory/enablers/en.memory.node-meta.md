@@ -7,7 +7,7 @@
   ([uc.memory.date](../use-cases/uc.memory.date.md)), then `location` ([uc.memory.place](../use-cases/uc.memory.place.md),
   cr-0069), `cover` ([uc.memory.cover](../use-cases/uc.memory.cover.md)) and `participants`
   ([uc.memory.participants](../use-cases/uc.memory.participants.md)). The envelope itself is core's since inbox #411
-  (`web/src/core/node/nodeMeta.ts`).
+  (`src/web/src/core/node/nodeMeta.ts`).
 - **Provides:** **one** optional, opaque, **client-versioned** metadata blob (`wrappedMeta`) on a content node
   (MEMORY/CHAPTER), sealed under a field key derived from that node's **`K_node`** — the single sealed home for a Memory's curated
   node-level metadata (its **date**, and next its **place**). Materialized so a browse card / a tenant map can

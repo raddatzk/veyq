@@ -7,7 +7,7 @@
 
 What a green run proves today stops short of what a Server Owner runs:
 
-- **`web/`'s `VEYQ_E2E` suites** (`scripts/run_web_e2e.py`) are real and strong — real crypto, a real MariaDB and
+- **`src/web/`'s `VEYQ_E2E` suites** (`scripts/run_web_e2e.py`) are real and strong — real crypto, a real MariaDB and
   Garage, the ADR 0053 sweeps — but they run in Node against the **fast-jar** on the **dev** compose stack. No
   browser, no image, no production recipe, no Traefik in front, no admin container.
 - **admin-web has no suite above unit level**, and its `npm run check` ran only in `container.yml`'s `test` (in `ci.yml`'s `frontend` since ADR 0091).
@@ -80,7 +80,7 @@ What a green run proves today stops short of what a Server Owner runs:
    Playwright's Chromium.
 
 4. **The driver is Playwright, in a workspace package `tests/e2e/`.** TypeScript like both surfaces, Apache-2.0, actively
-   maintained, its own `npm run check`. It sees web/ and admin-web/ only as a browser does and imports neither; it
+   maintained, its own `npm run check`. It sees src/web/ and src/admin-web/ only as a browser does and imports neither; it
    may import `@veyq/crypto` (the reason it joins the npm workspace, as ADR 0065 allows for that one package — it
    reads the Secret Key back out of the Emergency Kit with the shared `veyqkit:` codec). `@playwright/test` is pinned
    **exactly** to the Playwright image's version, since the browser is baked into the image and a library one patch
@@ -136,7 +136,7 @@ What a green run proves today stops short of what a Server Owner runs:
 - **A push gets slower** by a stack boot plus the suite, per architecture in parallel; ADR 0091 budgets the lane at 15
   min. Estimated at refine, not measured: ~6–10 min for the first scenarios. What it rests on: the image is
   built once by `build` and only pulled (dispatch) or rebuilt from its cache (dry run); one instance per run, not per
-  file; a cold birth is a few Argon2id derivations at `t=3, m=32 MiB` (`packages/crypto/src/v1.ts`); the fast-jar
+  file; a cold birth is a few Argon2id derivations at `t=3, m=32 MiB` (`src/packages/crypto/src/v1.ts`); the fast-jar
   started in 2–6 s in a local `run_web_e2e.py` run on 2026-10-15. Measured locally on 2026-10-16 (arm64 Mac, images
   from cache, load 4–6): the job's steps 91 s; the lane itself 48.5 s with ten tests and 73.6–91.3 s with fifteen,
   every stage timed in its summary — a runner's cold build and image pulls are not in those. The first CI run's
@@ -160,4 +160,4 @@ What a green run proves today stops short of what a Server Owner runs:
 4. **First run is driven through the UI, once per run, by the `setup` project** — it is the scenario, not a fixture.
    A scenario that needs more state than first run leaves (a second member, a populated space) builds it through the
    UI too while the suite is small; an API seeder is introduced only when a scenario's setup dominates its runtime, and
-   then it is `@veyq/crypto` plus the generated clients inside `tests/e2e/`, never an import from `web/src/test/`.
+   then it is `@veyq/crypto` plus the generated clients inside `tests/e2e/`, never an import from `src/web/src/test/`.

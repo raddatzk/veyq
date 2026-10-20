@@ -1,6 +1,6 @@
 // Memories' message catalog (ADR 0079, inbox #513): its own top-level namespaces, `memory` and `media`, in EN and DE.
 // Core never imports it (`scripts/validate_web_core_imports_no_applications.py`); the composition root's catalog half
-// (`web/src/applicationMessages.ts`) adds it, at build time, to the one vue-i18n instance core creates (`web/src/i18n`),
+// (`src/web/src/applicationMessages.ts`) adds it, at build time, to the one vue-i18n instance core creates (`src/web/src/i18n`),
 // which refuses a namespace someone already holds. This file names only its own namespaces (the same guard), and
 // `const de: typeof en` holds DE to EN's keys, as core's catalog does.
 const en = {

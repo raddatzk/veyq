@@ -4,8 +4,8 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Status:** **planned** — with the queue of client worker nodes (inbox #23, the operator-blind background jobs of
-  [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)), not V1. Nothing is built: no code in `web/` or
-  `backend/` transcodes. Until it exists a video banner plays its original
+  [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)), not V1. Nothing is built: no code in `src/web/` or
+  `src/backend/` transcodes. Until it exists a video banner plays its original
   ([uc.memory.banner](../use-cases/uc.memory.banner.md), [ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
   decision 4), as a gallery video plays its original ([ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md)).
 - **Provides:** from a video a key-holding device can read (a decrypted original), a **small MP4** — H.264, long edge at

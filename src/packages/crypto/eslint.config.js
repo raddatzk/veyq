@@ -1,4 +1,4 @@
-// Flat config (ESLint 10) for the shared crypto package. Deliberately narrower than `web/`'s: no Vue plugin
+// Flat config (ESLint 10) for the shared crypto package. Deliberately narrower than `src/web/`'s: no Vue plugin
 // (there are no components here), same two rules that matter — the unused-import guardrail and no-explicit-any
 // on production source, relaxed for test fixtures.
 import tseslint from 'typescript-eslint'

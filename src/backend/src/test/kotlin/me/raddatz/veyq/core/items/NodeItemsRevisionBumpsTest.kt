@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test
  */
 class NodeItemsRevisionBumpsTest {
 
-    private val root: Path = Paths.get("").toAbsolutePath().normalize() // backend/, the Gradle root every backend test runs in
+    private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/, the Gradle root every backend test runs in
 
     /** Rows of the gallery a list shows. */
     private val writes = Regex(
@@ -39,7 +39,7 @@ class NodeItemsRevisionBumpsTest {
 
     private val store = "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaStore.kt"
 
-    /** file (relative to `backend/`) -> the functions that write, each of which must bump. */
+    /** file (relative to `src/backend/`) -> the functions that write, each of which must bump. */
     private val bumping = mapOf(
         store to setOf("attach", "trashMedia", "restoreMedia", "setMeta", "deleteBucketReparent", "moveMedia"),
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaShareGuestWrites.kt" to setOf("deleteOwn"),

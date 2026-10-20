@@ -7,7 +7,7 @@
 //   - the member opens both folders through the drop box's key (core's tree: drop key → K_up → K_F), reads names,
 //     bytes and each file's blob meta (type, modified time — inbox #397); a member's create inside a guest's folder is refused;
 //   - revoking the link (switch off, then delete) keeps the folders and the files, which the member still opens.
-// Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/features/depot/depotDropBox.e2e.test.ts`.
+// Run against a FRESH instance: `python3 scripts/run_web_e2e.py src/web/src/features/depot/depotDropBox.e2e.test.ts`.
 //
 // The raw-wire check as in `depotShare.e2e.test.ts`: no file name, guest name or MIME type crosses `fetch` in the clear,
 // and the plaintexts are handed to `recordCanaries` (ADR 0053).

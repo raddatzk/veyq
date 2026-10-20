@@ -4,18 +4,18 @@
 // The Secret Key is sensitive — this is the user's recovery secret, so the kit must be stored safely.
 // jspdf + qrcode are heavy and only needed when actually writing a kit — they're imported lazily inside
 // renderKitPdf so the setup screen's first paint stays cheap. The `veyqkit:` codec is `@veyq/crypto/emergencyKit`,
-// shared with `web/`, which is the only package that ever reads a kit back.
+// shared with `src/web/`, which is the only package that ever reads a kit back.
 //
-// `admin-web`'s half is the WRITE half only. `web/`'s version also imports a kit — from the PDF's text or by
+// `admin-web`'s half is the WRITE half only. `src/web/`'s version also imports a kit — from the PDF's text or by
 // decoding a QR image with `jsqr` — because a returning member arrives with a kit in hand. This surface never
 // does: the only kit it ever meets is the one first-run setup just minted, one screen ago, for an account that
 // did not exist a moment before. Dropping the read half drops `jsqr` with it, which is worth naming rather
-// than trimming quietly: the root CLAUDE.md forbids unmaintained dependencies and `web/CLAUDE.md` grants jsQR
+// than trimming quietly: the root CLAUDE.md forbids unmaintained dependencies and `src/web/CLAUDE.md` grants jsQR
 // a single, argued exception (HEAD from 2021). An exception earned once is not a licence to spread it to a
 // second package for a code path that has no caller.
 //
 // Measured, not assumed: the local `npm run build` was GREEN with `jsqr` undeclared, because npm workspaces
-// hoisted `web/`'s copy into the root `node_modules`. Only the container build — which never sees `web/` —
+// hoisted `src/web/`'s copy into the root `node_modules`. Only the container build — which never sees `src/web/` —
 // failed to resolve it. A workspace hides an undeclared dependency from every check that runs in the repo.
 
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
@@ -32,7 +32,7 @@ export async function renderKitPdf(data: KitData, t: Translate): Promise<Uint8Ar
   const payload = kitPayload(data)
   const qr = await QRCode.toDataURL(payload, { margin: 1, width: 320 })
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  // Embed the machine-readable payload in the document metadata — uncompressed in the PDF bytes, so `web/`'s
+  // Embed the machine-readable payload in the document metadata — uncompressed in the PDF bytes, so `src/web/`'s
   // file import can recover it by scanning the file text without decoding the QR. This embedding is part of the
   // format (en.account.key-model § The Emergency Kit); emergencyKit.test.ts reads it back with the shared parser.
   doc.setProperties({ title: t('kit.pdfTitle'), keywords: payload })

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hold every stored time to `DATETIME`: no column the migrations leave behind is MariaDB's `TIMESTAMP` (inbox #509).
 
-**What it asserts.** It replays every Flyway migration under `backend/` (`backend_tree.migrations()`) in version order —
+**What it asserts.** It replays every Flyway migration under `src/backend/` (`backend_tree.migrations()`) in version order —
 `CREATE TABLE` bodies, `ALTER TABLE … ADD / MODIFY / CHANGE / DROP COLUMN / RENAME COLUMN / RENAME TO`, `RENAME TABLE`,
 `DROP TABLE` — into the schema they build, and asserts:
 
@@ -145,7 +145,7 @@ def replay(files: list[pathlib.Path]) -> dict[str, dict[str, tuple[str, str]]]:
 def main() -> int:
     files = backend_tree.migrations()
     if not files:
-        print("TIME COLUMNS VALIDATION FAILED:\n  - no migration found under backend/ — a moved tree must be re-pointed, "
+        print("TIME COLUMNS VALIDATION FAILED:\n  - no migration found under src/backend/ — a moved tree must be re-pointed, "
               "not silently skipped.")
         return 1
     schema = replay(files)

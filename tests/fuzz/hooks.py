@@ -25,7 +25,7 @@ Two rules a generic fuzzer does not know (ADR 0091 decision 9):
   (developer styleguide §7; `MalformedRequestSliceTest.assertRefused` holds the same rule for its cases).
 - **`peer_is_refused`** — the second identity (ADR 0091 decision 9, inbox #495): every positive request the OWNER made
   in its own scope (a group only it is a member of) and the server accepted (2xx) is sent again as the PEER — a member
-  of the same tenant, of none of the owner's scopes (`web/scripts/fuzz-seed.mts`) — and must be answered exactly as
+  of the same tenant, of none of the owner's scopes (`src/web/scripts/fuzz-seed.mts`) — and must be answered exactly as
   the same request against a scope nobody has: the same `404` and the same `code` (the membership boundary is the
   first guard, so a non-member and a bogus id are indistinguishable — `cc.security.authorization` § 2, ADR 0042), or,
   where the operation answers a bogus scope with a success (declining an invitation nobody sent is a no-op), the same

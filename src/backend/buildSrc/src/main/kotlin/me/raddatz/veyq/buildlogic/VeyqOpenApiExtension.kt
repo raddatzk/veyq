@@ -14,7 +14,7 @@ import javax.inject.Inject
  * `veyqOpenApi { generateOwnSpecs() }` — generates the spec set the project owns by its path (`SpecSets.ownerOf`:
  * `:core` → the specs at the top level of `contracts/api/`, `:apps:<app>` → those in `contracts/api/<app>/`) and
  * registers its tasks:
- * `openApiGenerate<Owner>`, the aggregate `openApiGenerateSpecs` (`./gradlew openApiGenerateSpecs` from `backend/` runs
+ * `openApiGenerate<Owner>`, the aggregate `openApiGenerateSpecs` (`./gradlew openApiGenerateSpecs` from `src/backend/` runs
  * every owner's) and, for core, `generateAdminChannelOperations`, `generateCapabilityRegister` (the capability ids and
  * their texts, from `contracts/platform/capabilities.json`) and `generatePlatformMajor` (the major `/api/setup` advertises,
  * from the repository's `VERSION`). A method, not a property: the task names depend on
@@ -34,7 +34,7 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
 
     private companion object {
         fun register(project: Project, ownerName: String) {
-            // `backend/../contracts/api`: every module resolves the specs from the Gradle root, as the tests read them.
+            // `src/backend/../contracts/api`: every module resolves the specs from the Gradle root, as the tests read them.
             val sets = SpecSets(
                 project.rootDir.resolve("../../contracts/api"),
                 SpecSets.applicationModules(project.rootProject.allprojects.map { it.path }),
@@ -89,7 +89,7 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
 
             project.tasks.register("openApiGenerateSpecs") {
                 group = "openapi tools"
-                description = "Generate this project's Kotlin models + JAX-RS interfaces from contracts/api (`./gradlew openApiGenerateSpecs` from backend/ runs every owner's)."
+                description = "Generate this project's Kotlin models + JAX-RS interfaces from contracts/api (`./gradlew openApiGenerateSpecs` from src/backend/ runs every owner's)."
                 dependsOn(generate)
             }
 

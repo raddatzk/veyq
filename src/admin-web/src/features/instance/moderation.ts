@@ -70,7 +70,7 @@ export function epochOneFor(identityPublicKey: string): { kemPublicKey: string; 
 }
 
 /**
- * Appoint an existing account, by its address. It stays pending until the appointee accepts in web/'s moderation
+ * Appoint an existing account, by its address. It stays pending until the appointee accepts in src/web/'s moderation
  * page (`/moderation`); a holder's client then delivers the key to it — admin-web cannot, it holds no `M`. Refusals:
  * 404 `account_not_found` (no account has this address), 409 `moderation_off`, 403 `not_server_owner`.
  */

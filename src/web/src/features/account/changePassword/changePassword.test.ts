@@ -8,7 +8,7 @@ import type { AccountApi, AccountPasswordApi, MasterKeyWrap } from '../../../api
 
 // The API, vault and account state are stubbed; the crypto is real (changePassword.ts hardcodes production
 // ARGON, so a cheap-params trick would derive a DIFFERENT keypair than the code under test — there is no
-// params argument to share a lighter cost through, unlike rotateKeys). See packages/crypto/src/testArgon.ts § "production
+// params argument to share a lighter cost through, unlike rotateKeys). See src/packages/crypto/src/testArgon.ts § "production
 // owns the derivation".
 const requestLoginChallenge = vi.fn<LoginApi['requestLoginChallenge']>()
 const changePasswordCall = vi.fn<AccountPasswordApi['changePassword']>().mockResolvedValue(undefined)

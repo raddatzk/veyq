@@ -13,7 +13,7 @@ Nothing durable dies with it, because nothing durable was ever *only* there:
 - **What was built** → the updated `docs/` state; **what was decided** → an ADR. If a CR holds a decision that
   is in neither, that is the bug — fix it there, then delete the CR.
 - **What was learned** moves to where it bites, not into an archive. A code trap becomes a comment on the line
-  that trips over it (cr-0089's post-rotation zeroed-key trap lives in `web/src/app/activeSpace.ts`, three
+  that trips over it (cr-0089's post-rotation zeroed-key trap lives in `src/web/src/app/activeSpace.ts`, three
   lines from the code that caused it); a working lesson becomes a rule in this file. Both already happened —
   the retrospectives were the ore, not the metal.
 - **Do not offload it to git.** The old pre-2026-06-25 rule said "the durable trace lives in git history",
@@ -63,7 +63,7 @@ avoids this and no reason to want one.
 **The clients are in the same position, and there the trigger is any request shape change.** A generated
 TypeScript client turns a new required field into a missing-property error and a removed one into an
 excess-property error at every call site that builds the request, so after `npm run generate:api` a contracts
-phase that reshapes a request is red in `web/` and `admin-web/` until the client phase lands.
+phase that reshapes a request is red in `src/web/` and `src/admin-web/` until the client phase lands.
 `cr-cold-credential-proves-the-secret-key` wrote "`npm run check` (web and admin-web) green" into exactly such a
 phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
 other way round: it reddens only code that reads it and fixtures typed against the model.** **An added *required*
@@ -228,8 +228,8 @@ Everything above assumes a command ran. Upstream of all of it is the claim that 
 statement of *where* or *how* something is built is a locatable claim even when it reads as settled fact, and
 the statements that read *most* as fact are the ones this repo's invariants invert. The world's default is
 `crypto → a JVM backend module, gated by a JVM mutation tool`; operator-blindness puts content crypto in the
-**client**, so #99's refine wrote "PIT against the Gradle/Quarkus setup" with `backend/CLAUDE.md`'s *"no content
-crypto"* loaded every turn and the repo map already naming `web/src/shared/crypto`. This is not a locator being
+**client**, so #99's refine wrote "PIT against the Gradle/Quarkus setup" with `src/backend/CLAUDE.md`'s *"no content
+crypto"* loaded every turn and the repo map already naming `src/web/src/shared/crypto`. This is not a locator being
 subtly wrong — it is no locator at all, because the claim did not feel like a claim. So: where a world-default
 (`crypto → backend`, `auth → server`, `storage → a path you name`) meets one of the hard invariants, the
 one-line `grep` goes **before** the sentence, not after the correction. The tell is the feeling of already
@@ -270,7 +270,7 @@ inventory naturally asks *"where is this added?"* and stops one question short o
 exception flow get here?"* — and a use-case that names a degraded-access flow (locked vault, offline, no
 capability, unauthorized) has already asked it. `cr-account-sessions-list-and-revoke`'s phase 3 required a panel
 that renders and revokes with the vault **locked**, and the panel does exactly that; the locator list found
-where a settings tab is registered and never touched `web/src/router.ts`, whose `/settings/:section?` route is
+where a settings tab is registered and never touched `src/web/src/router.ts`, whose `/settings/:section?` route is
 `requiresUnlock` — so the screen built for a lost device is reachable only with the vault open. Built, tested,
 and unreachable in the one state it was built for. **So: whenever a use-case carries a degraded-access
 exception flow, one locator line must find that surface's gate** — the route guard, the security annotation,
@@ -280,7 +280,7 @@ it is the difference between a feature that is implemented and a feature that is
 **And its mirror, when the CR MOVES code rather than adds it: cross-imports find who reaches IN, never who a
 file is scoped FOR.** The fourth tell asks whether the person in the exception flow can reach a new surface;
 this one asks who a file already belongs to before you move it somewhere they cannot go.
-`cr-admin-web-extraction`'s refine classified `web/src/features/admin/**` by directory plus a cross-import
+`cr-admin-web-extraction`'s refine classified `src/web/src/features/admin/**` by directory plus a cross-import
 grep, and correctly found the anonymous and ordinary-member callers reaching into it. It put
 `TenantTermsPanel` and `TenantMailSettingsPanel` on the "Server-Owner only, moves out" side — because nothing
 imports them from outside. Nothing does: they read `activeSpace.tenantId` and are mounted by the settings hub
@@ -339,7 +339,7 @@ different arrivals.
 demand a behaviour the client has no vocabulary for. `cr-pairing-add-a-device-web` required adoption's `400`
 (this browser already holds a session) to reach a *different* message than its `401` (the grant is gone) —
 their remedies differ, so folding them is the defect — over a `HttpStatus` map that carried no `400` at all;
-`rg -n badRequest web/src` returns empty and takes one second. It cost three additive lines there, which is
+`rg -n badRequest src/web/src` returns empty and takes one second. It cost three additive lines there, which is
 precisely why it is worth writing down: the same miss over something that **cannot** be added additively is
 the expensive version of it.
 
@@ -465,7 +465,7 @@ property or a residual — updates the site pages that speak for it **in the sam
 phase that makes the change, never as a follow-up. A page left behind tells its reader something the product no
 longer does, and nobody notices until a user follows it. The locator is the pages' `sources:`: every doc the CR
 edits under `docs/` is declared by the pages that restate it (`git grep -ln "<doc path>" -- site/src/content/docs`),
-and a Use page's steps use the UI's own words (`web/src/i18n/index.ts`), so a changed label is found by grepping the
+and a Use page's steps use the UI's own words (`src/web/src/i18n/index.ts`), so a changed label is found by grepping the
 site for the old one. A Use page changes in English and German together; a new user-facing capability gets its
 page, at the same depth as its neighbours. The CR says which pages it touched, or that it touched none and why.
 
@@ -566,7 +566,7 @@ that supersedes a claim reads its owning use-case or ADR **end to end**, includi
 section, and uses the sweep for everything outside it.
 
 **A listed invariant with no phase behind it reads as covered.** The same CR's front-matter named
-*"`web/CLAUDE.md`'s jsQR exception holds only while our own codes stay low-version"* and no phase touched that
+*"`src/web/CLAUDE.md`'s jsQR exception holds only while our own codes stay low-version"* and no phase touched that
 file. The stated invariant held — the new payload is QR version 4 — but the exception's prose **enumerates the
 markers**, so a third marker falsified it silently while the named bound stayed true. An invariant list is a
 list of things that can break; each entry owes either a phase or one sentence saying why nothing can reach it.
@@ -690,8 +690,8 @@ inbox #437 renamed `metaVersion` / `placementVersion` to `…Revision`, and the 
 on `removeNodeCover` (a write that only its counter makes a subject) and would have passed an undeclared `placementRevision`.
 A literal grep for the old names finds nothing in that guard, so only running it on the renamed tree shows the break.
 
-**The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `web/stryker.mutate.json`,
-`packages/crypto/stryker.mutate.json` and `backend/core/pitest.scope.json` admit a file only while it is pure.
+**The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `src/web/stryker.mutate.json`,
+`src/packages/crypto/stryker.mutate.json` and `src/backend/core/pitest.scope.json` admit a file only while it is pure.
 `cr-meta-writes-carry-the-version-they-read` put a PATCH into `nodeMeta.ts`, which is in the web scope; the gate
 (break 95) stayed green at 98.7 % while that file fell from 100 % to 96 %. So the inventory greps the three manifests for
 every file a CR edits, and a file in one keeps its I/O next door.
@@ -707,7 +707,7 @@ exact hole this order exists to close. The same order holds for the last step of
 first, and only then do the guards that judge its result change.
 
 **A directory move's locator resolves specifiers; a grep for the path finds only the readers that spell it.** Moving
-`web/src/features/memory` (inbox #324), `git grep features/memory` found 600 readers and missed 29: imports from a
+`src/web/src/features/memory` (inbox #324), `git grep features/memory` found 600 readers and missed 29: imports from a
 sibling feature (`'../memory/memoryNodes'`, `'../../memory/api'`) never spell the parent directory, and only `vue-tsc`
 named them. Resolve every relative specifier against its file and test where it lands — the way
 `validate_web_core_imports_no_applications.py` reads an edge — and a docs tree that shares the name
@@ -732,18 +732,18 @@ genuinely suffices, the CR says why.
 
 **A lint door names a rule, and in flat config a rule name is a slot, not a stack.** The last block that matches
 a file and sets a rule replaces every earlier block's options for it. cr-argon-worker-proven-in-the-build
-specified its door as `no-restricted-syntax` + `no-restricted-imports`, and `web/eslint.config.js` already spends
+specified its door as `no-restricted-syntax` + `no-restricted-imports`, and `src/web/eslint.config.js` already spends
 both names (and `@typescript-eslint/no-restricted-imports`) on three other doors over the same files: as
 written, adding it would have silently switched one of them off. Before a CR names the rule a door runs under,
 `grep -n "<rule-name>" */eslint.config.js`; when the name is taken, the door gets a rule of its own
-(`packages/crypto/eslint-argon-door.js` is the worked example).
+(`src/packages/crypto/eslint-argon-door.js` is the worked example).
 
 ### A proof about WHERE a thing lives cannot be a grep for WHAT it says
 
 **The corollary of the section above, one step earlier: before a one-shot proof is promoted, check that it
 measures its own subject.** `cr-terms-editor-lists-the-languages-that-have-terms` rested on *"one locale-markdown
 editor exists, and it lives in `shared/ui/`"* and handed over
-`grep -rln '<the component name>' web/src/features/ --include=*.vue` as the proof, with the comment *"imports
+`grep -rln '<the component name>' src/web/src/features/ --include=*.vue` as the proof, with the comment *"imports
 only, never a definition"*. Run against the untouched tree — the tree where the component **was** in a feature —
 it returned exactly one path: the **importer**. It never named the definition, and could not: a component file
 does not contain its own name, because the name is the filename. The proof was green on the defective tree and
@@ -1612,9 +1612,9 @@ baseline, and the proof waited on the owner's wipe. A browser pass planned on th
 of its `flyway_schema_history` with `main`'s newest migration.
 Where an agent may not copy `.run/.env` at all (the auto-mode classifier refused even a scratchpad snapshot on
 2026-10-15), the instance gets a principal of its own instead: the seeder's `ENV_FILE` is a constant, so a temporary
-copy of `web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
+copy of `src/web/scripts/bootstrap-user.mts` that reads an env file of generated test values outside the repo seeds it, the
 copy is deleted after, and the login goes through the form (`?devlogin` reads only `.run/.env`). Boot a COPY of the
-fast-jar, too: a neighbour's `./gradlew` rebuilds `backend/build/` under a running pass.
+fast-jar, too: a neighbour's `./gradlew` rebuilds `src/backend/build/` under a running pass.
 Two devices are two HOSTS, not two ports: cookies ignore the port, so `capx.localhost:8087` and `capx.localhost:8085`
 share one refresh cookie and the second "device" opens on the first one's session (inbox #447's pass). A second Vite with
 `VEYQ_SMOKE_HOST=<tenant domain>` serves the same tenant under another `*.localhost` name with cookies and storage of
@@ -1731,7 +1731,7 @@ decided at implement time. Adding a library for one assertion is a dependency de
 test detail, so the refine makes it or rules it out.
 
 **The same instinct, pointed at the CR itself: a phase can specify work a convention forbids.** The same CR's
-doc phase listed two applied Flyway migrations as "edited". `backend/CLAUDE.md` forbids that outright, and the
+doc phase listed two applied Flyway migrations as "edited". `src/backend/CLAUDE.md` forbids that outright, and the
 reason is not style — `migrate-at-start` validates each applied migration's checksum, so a one-word comment fix
 fails startup on every instance that already ran it, and `%dev`'s `repair-at-start` hides exactly that on the
 machine where you would test it. The live copy of the rule moved to the entity KDoc instead. **Read the target
@@ -1881,7 +1881,7 @@ write require an accepted **tenant** membership; every slice test's seed already
 (`VEYQ_S3_E2E=1`, run by hand) did not — so from that merge on its uploads were a `404`, found only when
 `cr-upload-windowed-presign` ran it two CRs later. The fix was one seed line; the cost was that the one proof of
 the real byte path was dead for a wave without anyone knowing. So a CR that tightens a gate greps the opt-in
-suites (`grep -rln 'EnabledIfEnvironmentVariable' backend/src/test`) for fixtures that seed through it, and runs
+suites (`grep -rln 'EnabledIfEnvironmentVariable' src/backend/src/test`) for fixtures that seed through it, and runs
 the ones it can.
 
 ### Giving a body-less operation an optional body changes what every caller must send
@@ -1897,10 +1897,10 @@ contract that the request is JSON either way.
 
 **Slice tests call the API by URL, so a grep for the Kotlin/TS symbol misses them.** `cr-removal-rotates-in-one-request`
 narrowed `DELETE /api/scopes/{scopeId}/members/{userId}` to pending proposals, and its test locator
-(`grep -rlE 'removeMember|rotateScope|/epochs' backend/src/test`) found three files. The fourth,
+(`grep -rlE 'removeMember|rotateScope|/epochs' src/backend/src/test`) found three files. The fourth,
 `ShareSharedScopeSliceTest`, removed a member with `.delete("/api/scopes/$group/members/$member")` and surfaced
 only as a red in the full `./gradlew check`. When a CR changes what an endpoint accepts, the locator also greps
-the route's path shape (`grep -rnE 'delete\("/api/scopes/\$[a-zA-Z]+/members/' backend/src/test`) — one angle per
+the route's path shape (`grep -rnE 'delete\("/api/scopes/\$[a-zA-Z]+/members/' src/backend/src/test`) — one angle per
 way a caller can name it.
 
 ### A done-when that names a gate records that gate's exit code on `main`, measured at refine
@@ -2005,7 +2005,7 @@ role, what that role can still do.
 
 ### A page that tells users what to click is walked in the client before it counts as written
 
-`cr-use-area-content` wrote two of its eight phases from `web/src/i18n/index.ts` and the components, and the later
+`cr-use-area-content` wrote two of its eight phases from `src/web/src/i18n/index.ts` and the components, and the later
 walk in the running web client still corrected each of them several times. Some controls exist only behind a
 switch: *Determine location automatically* appears only once maps are enabled. Some labels depend on state: a
 contributions group says *You* only until you have added something. A folder row's menu has no *Move to…* at all.

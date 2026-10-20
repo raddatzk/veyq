@@ -43,7 +43,7 @@ parts.
    with a dedicated AAD context **`share-note`** (the same field seal as the share's `sealedName`, a distinct purpose).
    It is **optional** (a share with no note shows no banner), set at `createShare`, and returned by the anonymous
    `resolveShare` (the share page unwraps it with the fragment `K_share`). It is **rendered as markdown** on the
-   share page — reusing the safe escape-first renderer added for tenant terms (`web/src/shared/markdown.ts`,
+   share page — reusing the safe escape-first renderer added for tenant terms (`src/web/src/shared/markdown.ts`,
    [ADR 0035](0035-server-terms-of-service.md) follow-up). For a WRITE_ONLY share (no gallery) it is the primary
    instruction above the name field; for READ/READ_WRITE it is a banner under the title. **The curator can ask the
    visitor to accept the note before anything else is shown** (a per-share switch, owner decision 2026-10-14): the

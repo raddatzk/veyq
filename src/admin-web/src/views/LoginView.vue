@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Server-Owner sign-in. Deliberately the plainest possible form: email + password, nothing else. `web/`'s
+// Server-Owner sign-in. Deliberately the plainest possible form: email + password, nothing else. `src/web/`'s
 // login card carries passkeys, "remember me", a Secret-Key field and a recovery link; none of that belongs on
 // a surface that holds no vault and unlocks nothing (ADR 0065 — this is a pure Admin-API client).
 //

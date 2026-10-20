@@ -1,4 +1,4 @@
-// The catalog's own guard. This package's messages were LIFTED from `web/`'s (ADR 0065), whole groups for
+// The catalog's own guard. This package's messages were LIFTED from `src/web/`'s (ADR 0065), whole groups for
 // some keys and cherry-picked keys for others — and a cherry-pick is exactly where a key goes missing without
 // anything failing: vue-i18n renders the key itself, so `password.strong` appears on screen as the literal
 // string "password.strong" and every check stays green.
@@ -19,7 +19,7 @@
 //  2. every key a TEMPLATE or script asks for by literal resolves — the `kit.*` case;
 //  3. EN and DE carry the identical key set — a lift that took one locale's group and not the other's;
 //  4. every key the catalog carries is used somewhere — the lift's other failure: whole groups copied from
-//     `web/` for flows ADR 0065 keeps there (43 of 146 keys when this assertion was written).
+//     `src/web/` for flows ADR 0065 keeps there (43 of 146 keys when this assertion was written).
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -61,7 +61,7 @@ function literalKeysInSources(dir: string): Map<string, string> {
 
 /** What the sources could be asking the catalog for: every dotted string they quote in any of the three
  *  quote styles, and the static head of every template literal that builds a key (`` `a.b.${x}` `` → `a.b.`,
- *  and mid-segment `` `a.bc${X}` `` → `a.bc`, which `web/` has). The same predicate as web's catalog test.
+ *  and mid-segment `` `a.bc${X}` `` → `a.bc`, which `src/web/` has). The same predicate as web's catalog test.
  *  Deliberately ANY quoted literal and not only `t('…')`'s argument: keys travel through variables here —
  *  `TenantDetailPanel`'s `successKey`, `StoreProvisioningPanel`'s `shown.key` and `passwordHintKey()`'s
  *  return value all reach `t()` one hop later. A key this cannot see is one it calls unused, so a new
@@ -139,7 +139,7 @@ describe('admin-web message catalog', () => {
 })
 
 // Every message must also compile under vue-i18n's own message compiler. One that does not still renders — vue-i18n
-// falls back to its source text — so none of the key checks above notice it: `web/` shipped "Invited by @{user}"
+// falls back to its source text — so none of the key checks above notice it: `src/web/` shipped "Invited by @{user}"
 // that way, since a bare `@` opens a linked message (`{'@'}` is the literal). The compiler's own `onError` is the
 // mechanism, deliberately not a spy on `console.warn`, which would pass the day vue-i18n changes how it reports.
 describe('admin-web message syntax', () => {

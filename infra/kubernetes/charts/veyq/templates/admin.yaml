@@ -20,7 +20,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
-        # nginx-unprivileged's user (admin-web/Dockerfile: `USER 101`, port 8080) — the reason that image is
+        # nginx-unprivileged's user (src/admin-web/Dockerfile: `USER 101`, port 8080) — the reason that image is
         # the unprivileged variant is precisely so this pod passes `restricted`.
         runAsUser: 101
         runAsGroup: 101

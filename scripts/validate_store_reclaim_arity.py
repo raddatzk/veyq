@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that exactly one place in the backend deletes store objects, and that it is the reclaim sweep (ADR 0062 Decision 3).
 
-**What it asserts.** Across `backend/src/main/kotlin`, with comments and string literals removed, there is
+**What it asserts.** Across `src/backend/src/main/kotlin`, with comments and string literals removed, there is
 **exactly one** call of `delete(...)` on a `BlobStore`, and it sits in
 `core/blobstore/StoreReclaimSweep.kt`. Every other path that drops a row carrying a `storage_key` writes the
 key to `veyq_store_reclaim` inside its own transaction and lets that sweep do the deleting.
@@ -37,13 +37,13 @@ predicate elsewhere gets no protection from this guard at all"*.
       `Instance<BlobStore>`, a reflective lookup, or a delete issued by a Kotlin extension function defined
       elsewhere — is invisible to both keys. There is no such site today and none of those shapes appears
       anywhere in this backend, which is what makes the receiver assumption safe rather than lucky.
-  (b) Its corpus is `backend/src/main/kotlin` only. Test scope is deliberately outside it: `RecordingBlobStore`
+  (b) Its corpus is `src/backend/src/main/kotlin` only. Test scope is deliberately outside it: `RecordingBlobStore`
       delegates a `delete` and must, and a test is entitled to drive the port directly. So this proves nothing
       about what tests do — and nothing about `web`, which cannot reach a store credential at all.
   (c) It proves the call site is **alone**, never that it is **correct**. That the sweep keeps a row whose keys
       the store refused is behaviour, and `StoreReclaimSweepSliceTest` is what pins it.
 
-Its own source is **not** in what it scans (the corpus is Kotlin under `backend/`), so the usual trap — a guard
+Its own source is **not** in what it scans (the corpus is Kotlin under `src/backend/`), so the usual trap — a guard
 matching the literal it forbids inside its own documentation — does not apply here and nothing is excluded to
 avoid it. Do not narrow the corpus to make that true; it already is.
 """

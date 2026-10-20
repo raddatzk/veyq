@@ -27,7 +27,7 @@
 // **Each negative carries a live control** (a second contributed medium that is NOT trashed), because a share
 // that 404s wholesale — revoked, wrong id, a stack that never came up — satisfies a lone negative perfectly.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/memories/shareContributor.e2e.test.ts
+//   python3 scripts/run_web_e2e.py src/web/src/features/memories/shareContributor.e2e.test.ts
 //
 // is the only supported way to run it: the orchestrator gives this file its own database and sweeps that database
 // for the plaintext recorded below. A hand run (`VEYQ_E2E=1 npx vitest run shareContributor.e2e` against a FRESH

@@ -6,7 +6,7 @@
 // bucket, a container log or a statement the database received (ADR 0053): the operator-blind invariant, end to end,
 // on the shipped image.
 //
-// The labels are web/'s own (web/src/i18n/index.ts, en), so a renamed button is a red run here. One browser context
+// The labels are src/web/'s own (src/web/src/i18n/index.ts, en), so a renamed button is a red run here. One browser context
 // per device, each confined to the instance (egress.ts); the tests run in order and hand state on in this file.
 import { test, expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
@@ -24,7 +24,7 @@ interface Instance {
   inviteLink: string
 }
 
-// A JPEG web/'s own tests read EXIF from (1×1, grayscale, decodable): the bytes the page seals carry readable text, so
+// A JPEG src/web/'s own tests read EXIF from (1×1, grayscale, decodable): the bytes the page seals carry readable text, so
 // a photo uploaded unsealed is a hit in the bucket. The repository is mounted read-only at /repo in the browser
 // container (tests/e2e/stack/docker-compose.e2e.yml).
 const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))

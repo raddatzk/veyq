@@ -11,7 +11,7 @@
   Key, or the Master Key ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)).
 - **Preconditions:** an authenticated, **unlocked** caller (the Master Key must already be open — this flow
   re-wraps it, it does not derive it from scratch). The actor holds the **Secret Key** — the vault does not
-  retain it past unlock, so it is typed in fresh for this flow (`web/src/app/vault.ts` holds
+  retain it past unlock, so it is typed in fresh for this flow (`src/web/src/app/vault.ts` holds
   `masterKey`/`identityPrivate`, never `secretKey`) — **and the current password**. The account has a
   `PASSWORD` floor to rewrite, and **that pair is proven against it before anything is derived or sent**
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 — this flow mints a cold

@@ -96,7 +96,7 @@ export default defineConfigWithVueTs(
   argonThroughTheWorker,
   {
     // A mocked API response is typed by the generated model at the seam (cr-api-callers-typed-by-the-contract,
-    // inbox #195), exactly as in web/: a hand-built `…Api` object behind a cast checks its payloads against nothing.
+    // inbox #195), exactly as in src/web/: a hand-built `…Api` object behind a cast checks its payloads against nothing.
     // Every such mock goes through src/test/apiMock.ts (this package's own copy), which holds the one cast.
     // LIMIT: a factory whose return is not an in-line object literal (a variable, a `...spread`) escapes S3, and a
     // helper-built payload held in a variable loses its excess-property check (styleguide §10: a fixture builder

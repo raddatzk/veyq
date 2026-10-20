@@ -15,7 +15,7 @@
 // The onboarded device stops short of `runOnboardTail`: its unlock tail needs IndexedDB, which this node process
 // does not have. What it does run is that tail's first step, adoption, exactly as `onboardTail.adopt` makes it.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/account/pairing/pairing.e2e.test.ts
+//   python3 scripts/run_web_e2e.py src/web/src/features/account/pairing/pairing.e2e.test.ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { birthInstance, stamp, type BirthedInstance } from '../../../test/e2eBootstrap'
 import { recordCanaries } from '../../../test/canaries'

@@ -457,7 +457,7 @@ class EmailConfirmationSliceTest {
         const val NEW_KDF = "bmV3LWtkZi1wYXJhbXM="
         const val NEW_AUTH_KEY = "bmV3LWF1dGgta2V5"
 
-        // One JVM for the whole suite ⇒ ports no other test holds (`grep -rhoE '139[0-9]{2}' backend/src/test`).
+        // One JVM for the whole suite ⇒ ports no other test holds (`grep -rhoE '139[0-9]{2}' src/backend/src/test`).
         const val SESSION_SMTP_PORT = 13960
         const val HASH_SMTP_PORT = 13961
         const val NO_MAIL_SMTP_PORT = 13962

@@ -8,7 +8,7 @@
 //     the guest replaces the member's file (compare-and-set), the new blob bringing its own meta; a stale replace is
 //     refused;
 //   - a file the member trashed is gone for the guest: not listed, its blob `404`, an upload into it `404`.
-// Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/features/depot/depotShare.e2e.test.ts`.
+// Run against a FRESH instance: `python3 scripts/run_web_e2e.py src/web/src/features/depot/depotShare.e2e.test.ts`.
 //
 // The raw-wire check as in `depot.e2e.test.ts`: this suite wraps `fetch` and asserts that no file name or MIME type
 // crossed it in the clear, and hands the plaintexts it sealed to `recordCanaries` (ADR 0053).

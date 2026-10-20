@@ -139,7 +139,7 @@ Five rules follow:
    afterwards `git reset -q -- <your paths>` re-syncs the shared index for your paths only.
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
-   whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`
+   whatever tree it is pointed at and cannot know which parts of it this session already moved. A `src/web/`
    mapping spawned just after an implementer's first `npm run generate:api` reported the work order's
    own — correct, when written — *"the generated client does not carry this verb"* as **stale**: which reads
    as a fault in the work order and is in fact the effect of the step above it. So **name in the subagent's
@@ -391,8 +391,8 @@ this section only points at it (rule 2) — assembling this picture by hand each
 - **Assertion strength** is the one edge no resolvability guard can reach — a test that asserts nothing still
   resolves. [ADR 0045](../decisions/0045-mutation-testing-trust-chain-unit-layer.md) closes it on the **unit
   layer only**, via mutation score (Stryker on `web`, PIT on `backend`), scoped by the two manifests
-  [`web/stryker.mutate.json`](../../src/web/stryker.mutate.json) +
-  [`backend/core/pitest.scope.json`](../../src/backend/core/pitest.scope.json) and self-checked by
+  [`src/web/stryker.mutate.json`](../../src/web/stryker.mutate.json) +
+  [`src/backend/core/pitest.scope.json`](../../src/backend/core/pitest.scope.json) and self-checked by
   `scripts/mutation_meta_check*.py` — which sit **outside** the `validate_*` glob on purpose (they need a
   built report).
 - **The skills layer** — [ADR 0046](../decisions/0046-operative-lore-in-skills-and-agents.md): conditional
@@ -440,7 +440,7 @@ this section only points at it (rule 2) — assembling this picture by hand each
   [ADR 0026](../decisions/0026-client-trust-tiers.md) is the worked example: it does not narrate which tiers it
   once listed; it says a stronger unlock method is **not** a client-integrity answer, and why — the wrong turn
   someone will otherwise take again. The date is noise; the trap is state. Where nothing binds, let it go.
-- **Reuse the existing UI — never invent new UI.** The built product is the design source: `web/` is whole, so
+- **Reuse the existing UI — never invent new UI.** The built product is the design source: `src/web/` is whole, so
   the nearest built screen answers almost every question. The rule and its details live once, in
   [`../crosscutting/ui-web-styleguide.md`](../crosscutting/ui-web-styleguide.md) § Reuse first — not here.
 - **Start light.** Heavier machinery — validators, hooks, the full `contracts/`

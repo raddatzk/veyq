@@ -10,7 +10,7 @@ the `veyq-tools` image only the chart runs (`infra/kubernetes/tools/`). An insta
 
 The repo root is a Gradle build whose only job is to **trigger** what this file and the surfaces' own docs
 describe — the compose lines below, the npm scripts, the backend's own `./gradlew` — from a terminal or from
-IntelliJ's Gradle tool window (link the root `settings.gradle.kts` as a Gradle project beside `backend/`, which
+IntelliJ's Gradle tool window (link the root `settings.gradle.kts` as a Gradle project beside `src/backend/`, which
 stays its own). It replaces the IntelliJ run configurations `.run/` used to carry. It is not an orchestrator: it
 holds no surface's build, and no task aggregates their checks — each still proves itself with its own
 `npm run check` / `./gradlew check` (the tasks live in `launcher/<surface>/build.gradle.kts`; no task is named
@@ -19,18 +19,18 @@ holds no surface's build, and no task aggregates their checks — each still pro
 | Task | Runs |
 |---|---|
 | `infra:up` · `infra:down` · `infra:wipe` | the compose lines below with `--profile s3 --profile mail` (`up -d`, then waiting on MariaDB's healthcheck) · `down` · `down -v` — **wipe deletes the dev database and every blob** |
-| `web:bootstrap` | `npm install` in `web/` — the workspace install, and its `prepare` regenerates web's API client |
-| `admin:bootstrap` | `npm run generate:api` in `admin-web/` |
+| `web:bootstrap` | `npm install` in `src/web/` — the workspace install, and its `prepare` regenerates web's API client |
+| `admin:bootstrap` | `npm run generate:api` in `src/admin-web/` |
 | `site:bootstrap` | `npm install` in `site/` (outside the workspace) |
 | `backend:run` · `web:run` · `admin:run` · `site:run` | `quarkusDev` · Vite on 8081 · Vite on 5174 · Astro on 4321 |
-| `backend:seed` | `npm run bootstrap:user` in `web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
+| `backend:seed` | `npm run bootstrap:user` in `src/web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
 | `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `npm run build` in each |
-| `backend:image` · `admin:image` | `docker build` of `infra/docker/Dockerfile` (the app image, web's SPA baked in) · of `admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
+| `backend:image` · `admin:image` | `docker build` of `infra/docker/Dockerfile` (the app image, web's SPA baked in) · of `src/admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
 
 A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
 browse `veyq.localhost:8081`. `backend:run` does not start the infra on its own: a backend restart should not touch
-compose. Its hot reload reaches every module of the backend (ADR 0079): a change under `backend/core`,
-`backend/apps/memories` or `backend/apps/depot` is recompiled and restarts the app on the next HTTP request — measured
+compose. Its hot reload reaches every module of the backend (ADR 0079): a change under `src/backend/core`,
+`src/backend/apps/memories` or `src/backend/apps/depot` is recompiled and restarts the app on the next HTTP request — measured
 2026-10-20 through this launcher from a worktree, one source edit per module, each answered by Quarkus' "Restarting
 quarkus due to changes in …" naming that module's classes. A verb without a surface selects every surface's — `./gradlew bootstrap`, `./gradlew build`; a bare
 `./gradlew run` selects all four `run`s, which run one after another and so block on the first unless `--parallel`
@@ -118,7 +118,7 @@ starts and looks healthy either way.
   compose network as `http://garage:3903`).
 - **Backend e2e** (`BlobBatchE2ETest`): bring the profile up **and start a backend once** so the bucket exists,
   then
-  `VEYQ_S3_E2E=1 ./gradlew :apps:memories:test --tests '*BlobBatchE2ETest'` from `backend/` (the test lives in the
+  `VEYQ_S3_E2E=1 ./gradlew :apps:memories:test --tests '*BlobBatchE2ETest'` from `src/backend/` (the test lives in the
   Memories module; defaults match the compose; override via
   `VEYQ_S3_ENDPOINT`/`VEYQ_S3_ADMIN_TOKEN`/`VEYQ_S3_BUCKET`/`VEYQ_S3_REGION`).
 - **Backend against the store** (`quarkusDev`): `application-dev.properties` already carries the hint for this Garage, so
@@ -204,7 +204,7 @@ gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<mino
   at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
 - **The first `1.x` release is one commit, then a release dispatch:** `VERSION` set to `1` **and** the `release:`
   line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
-  on a released migration is never edited ([backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
+  on a released migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 
 **No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
 held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
@@ -225,7 +225,7 @@ This file keeps the development stack and how a release is cut.
 
 `npm run bootstrap:user` (`./gradlew backend:seed`) births one user who is Server Owner **and** owner of a
 `*.localhost` tenant with a personal scope, over the real API, and writes its key material back into `.run/.env`
-([`web/CLAUDE.md`](../src/web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
+([`src/web/CLAUDE.md`](../src/web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
 
 ```sh
 ./gradlew infra:wipe infra:up

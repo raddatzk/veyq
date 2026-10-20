@@ -28,14 +28,14 @@ import org.junit.jupiter.api.Test
  */
 class TreeRevisionBumpsTest {
 
-    private val root: Path = Paths.get("").toAbsolutePath().normalize() // backend/, the Gradle root every backend test runs in
+    private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/, the Gradle root every backend test runs in
 
     /** Rows of the tree a level view shows: nodes and the attachments beside them. */
     private val writes = Regex(
         """NodeEntity\(\)|NodeEntity\.(update|delete|deleteById)\(|NodeAttachmentEntity\(\)|NodeAttachmentEntity\.(update|delete|deleteById)\(|\bn\.deletedAt = """,
     )
 
-    /** file (relative to `backend/`) → the functions that write, each of which must bump. */
+    /** file (relative to `src/backend/`) → the functions that write, each of which must bump. */
     private val bumping = mapOf(
         "core/src/main/kotlin/me/raddatz/veyq/core/content/NodesStore.kt" to
             setOf("create", "createIdentityFolder", "applyUpdate", "deleteSubtree", "restoreSubtree"),

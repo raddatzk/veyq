@@ -76,7 +76,7 @@ Three structural costs sit on top of those numbers:
 
 3. **Three stack lanes, one scenario suite.** The scenarios are split into a **write half** (put content into an
    instance) and a **read half** (open every item and assert it), with one record between them — the shape the
-   upgrade proof already has (`web/src/test/upgradeRecord.ts`):
+   upgrade proof already has (`src/web/src/test/upgradeRecord.ts`):
    Every lane drives the operator's own tool, `veyqctl` ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)), against the candidate's release assets served as a
    local source — so what is tested is what a Server Owner runs:
    - **L1 feature** — `veyqctl install` of the candidate, fresh: write, then read; plus the feature scenarios that

@@ -1,5 +1,5 @@
-/* The design system, carried over from `web/src/styles/` (which took it from the pre-E2EE source). Four of
-   web/'s eight sheets, and the four that are missing say what this surface is: `layout.css`, `memory.css` and
+/* The design system, carried over from `src/web/src/styles/` (which took it from the pre-E2EE source). Four of
+   src/web/'s eight sheets, and the four that are missing say what this surface is: `layout.css`, `memory.css` and
    `media.css` style the Memory shell, the gallery and the media viewer — none of which exists here. This app
    renders a sign-in card, a setup card and one console page.
 
@@ -13,13 +13,13 @@
 @import './styles/dark.css';
 
 /* The public shell — every card screen (first-run setup, sign-in, the unreachable notice) is centred in it.
-   A PORT of web's `.public-shell` (`web/src/styles/layout.css` § .public-shell) together with the
+   A PORT of web's `.public-shell` (`src/web/src/styles/layout.css` § .public-shell) together with the
    `.veyq-shell-inner` that web keeps scoped inside `components/app/AppShell.vue`; never an import, because
    ADR 0065 keeps the two packages' styling independent, and `layout.css` as a whole stays out — the rest of it
    is the Memory shell, sidebar and topbar this surface does not have.
 
    The two rules live side by side on purpose: web splits them across two files, and the half that ended up in
-   `web/src/style.css` went dead without anyone noticing.
+   `src/web/src/style.css` went dead without anyone noticing.
 
    The mobile override is not cosmetic. Under `place-items: center` a card taller than the viewport overflows
    UPWARD, out of reach — and setup's Emergency-Kit step is the tallest card in either app. */

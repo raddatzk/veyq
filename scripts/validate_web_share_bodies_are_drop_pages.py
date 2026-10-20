@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Guard that a web share body is a registered WRITE_ONLY drop page and nothing else (inbox #401).
 
-**What it asserts.** Over `web/src` (tests and the generated client excluded):
+**What it asserts.** Over `src/web/src` (tests and the generated client excluded):
   1. every `*ShareBody.vue` is claimed by an application — its `register.ts` imports it and passes it to
      `registry.claimShareBody(KIND, Component)`;
   2. every component an application claims that way is a `*ShareBody.vue`;
   3. `claimShareBody(` is called from an application's `register.ts` only.
 
 **Why.** A share view looks exactly like the member view; a link's role only removes functions (the owner principle
-of 2026-10-09, ADR 0079 Consequences, `web/CLAUDE.md`). The registry's share body is therefore the one page with no
+of 2026-10-09, ADR 0079 Consequences, `src/web/CLAUDE.md`). The registry's share body is therefore the one page with no
 member equivalent — a `WRITE_ONLY` link's drop, whose guest holds no key — and the shell (`views/ShareView.vue`)
 mounts it for that role alone. Memories' share body had grown into a second gallery beside the member's (grouped
 chapters, its own lightbox wiring, its own delete), and every such copy drifted (#356, #361, #363); the rebuild
@@ -17,7 +17,7 @@ name and mounted by hand, or a claim of something that is not one, is red.
 
 **Its limits.** It anchors on the file name and the claim call, so a guest-only UI under any other name is invisible
 to it — that the shell gives a `READ`/`READ_WRITE` link the member's views and never a claimed body is pinned by
-`web/src/views/ShareView.registry.test.ts`, which no text guard can replace. A claim spelled other than
+`src/web/src/views/ShareView.registry.test.ts`, which no text guard can replace. A claim spelled other than
 `claimShareBody(KIND, Identifier)` with a default import of a `.vue` file is reported as unresolved, never skipped.
 """
 from __future__ import annotations

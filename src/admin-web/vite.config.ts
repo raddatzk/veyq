@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { ADMIN_CSP } from './src/shared/security/csp'
 
-// The Server-Owner admin surface (ADR 0065). Deliberately much smaller than `web/`'s config: no map providers,
+// The Server-Owner admin surface (ADR 0065). Deliberately much smaller than `src/web/`'s config: no map providers,
 // no media Service Worker, no dev seed-credential endpoint — this app talks to exactly one origin (its own,
 // which nginx reverse-proxies to the backend) and renders no user content.
 //
@@ -39,7 +39,7 @@ export default defineConfig(({ command }) => ({
     setupFiles: ['./src/test/setup.ts'],
   },
   build: {
-    // The minifier drops the bundled dependencies' license comments; Vite writes their notices out instead (as web/ does).
+    // The minifier drops the bundled dependencies' license comments; Vite writes their notices out instead (as src/web/ does).
     license: { fileName: 'third-party-licenses.txt' },
     rollupOptions: {
       input: { main: fileURLToPath(new URL('./index.html', import.meta.url)) },

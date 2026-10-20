@@ -15,7 +15,7 @@ Three constraints shape it. **Operator-blind:** the server holds only ciphertext
 produced where the keys are — the web client, on decrypted data. **Applications stay apart** ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)):
 a Depot folder may contain a Memory, but Depot must not import `features/memories`; core reaches each kind through the
 registry (`KindDescriptor`, as `createEntry` already does). **No dependency, no memory wall:** a subtree can be gigabytes;
-the client already streams downloads through `saveStream` (`web/src/core/blob/stream.ts`) and reads big files by
+the client already streams downloads through `saveStream` (`src/web/src/core/blob/stream.ts`) and reads big files by
 `Blob.slice`, and the project takes no dependency it can avoid.
 
 Not this: a **tenant or instance** export that stays encrypted for moving a tenant between instances. That is a different

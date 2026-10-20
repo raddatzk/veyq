@@ -7,7 +7,7 @@ export { InstanceMailSettingsConfirmationEnum, InstanceMailSettingsConfigSecretS
 /**
  * The instance's own mail settings (uc.admin.learn-of-new-releases, ADR 0097 decisions 3 and 5) — Server-Owner only.
  * They send release notices, and only to the Server Owner's account address (`address`); they are never a tenant's
- * mail, which stays each tenant owner's in `web/`. The password is never returned, only `passwordSet` (ADR 0050).
+ * mail, which stays each tenant owner's in `src/web/`. The password is never returned, only `passwordSet` (ADR 0050).
  */
 export function getInstanceMail(): Promise<InstanceMailSettings> {
   return instanceApi().getInstanceMailSettings()

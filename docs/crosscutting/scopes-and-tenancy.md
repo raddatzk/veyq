@@ -4,7 +4,7 @@
 > organizational structures (tenant / group / personal), how access is granted *cryptographically*
 > (scope keys, grants, shares), how a new member is onboarded (admit, then deliver), and the unified
 > navigation contract. Engineering sibling to the [Security Model](security-model.md) and the
-> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
+> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the conformance-pinned suite ([`src/packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
 This is the **target model**; first-build scope is tracked via the inbox and change-requests. The general
 **scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
@@ -46,7 +46,7 @@ within the resolved context is still addressed by opaque scope/node IDs**. Tenan
 server-visible operational metadata, so this does not affect operator-blindness.
 
 **The backend resolves the tenant once per request, by one rule.** The header rule (the proxy's
-`X-Forwarded-Host`, else `Host`) and the domain lookup live in one place, `backend/core/…/core/tenant/`, and
+`X-Forwarded-Host`, else `Host`) and the domain lookup live in one place, `src/backend/core/…/core/tenant/`, and
 [`validate_lookup_single_home.py`](../../scripts/validate_lookup_single_home.py) keeps it the only one. An
 operation receives the **resolved tenant**, meaning its id and its *registered* domain, and never the header
 value. Both halves are security properties:

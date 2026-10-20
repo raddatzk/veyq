@@ -4,7 +4,7 @@
 # from the recovered original is commented below.
 
 # --- web -------------------------------------------------------------------------------------------------
-# Was `frontend/` — the surface is `web/` since the greenfield reset.
+# Was `frontend/` — the surface is `src/web/` since the greenfield reset.
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
 # The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
 # root and `src/web/` resolves `@veyq/crypto` through it, so the stage builds from /repo with src/web/ as a
@@ -12,13 +12,13 @@ FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddf
 # decision 6): `/repo/contracts` keeps generate:api's `../../contracts/api` resolving from /repo/src/web exactly as
 # it does in the checkout.
 WORKDIR /repo/src/web
-# The OpenAPI TypeScript client is GENERATED and deliberately never tracked (web/.gitignore:1-4, mirroring the
+# The OpenAPI TypeScript client is GENERATED and deliberately never tracked (src/web/.gitignore:1-4, mirroring the
 # backend), so a clean checkout has no src/api/generated. @openapitools/openapi-generator-cli is a Java tool,
 # which is why this stage needs a JRE — the recovered original never did, because back then it did not generate.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
-# The specs must land BEFORE `npm ci`: web/package.json has `"prepare": "npm run generate:api"`, which npm
+# The specs must land BEFORE `npm ci`: src/web/package.json has `"prepare": "npm run generate:api"`, which npm
 # runs as part of the install, and generate:api reads `../../contracts/api/*.openapi.yaml` relative to src/web/.
 # (Measured the hard way — with this COPY below the install, `npm ci` fails with "spec file is not found".)
 COPY contracts/api /repo/contracts/api
@@ -92,7 +92,7 @@ COPY src/backend/apps/depot/src ./apps/depot/src
 # The license texts buildSrc's ThirdPartyLicenses appends to the backend's notices; `quarkusBuild` runs it after itself.
 COPY src/backend/licenses ./licenses
 COPY --from=frontend-build /repo/src/web/dist ./src/main/resources/META-INF/resources
-# Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, backend/build.gradle.kts:26)
+# Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, src/backend/build.gradle.kts:26)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.
 RUN ./gradlew --no-daemon quarkusBuild -x test
 
@@ -113,7 +113,7 @@ WORKDIR /work/
 # previews are client-generated blobs), so no server-side media binary is ever invoked.
 # Dropped the original's /data/veyq-media dir + chown: media bytes go to an S3-compatible store, never to a
 # local path (ADR 0013 / cr-0105 — BlobStoreStartupCheck aborts startup without a store endpoint), and
-# `grep -rn veyq-media backend/src/main infra/ .github/` finds nothing that would mount it.
+# `grep -rn veyq-media src/backend/src/main infra/ .github/` finds nothing that would mount it.
 # /work MUST stay writable by the runtime user: veyq.security.config-secret-file defaults to
 # `config-secret.key` relative to the process CWD and the server GENERATES it 0600 on first start
 # (ADR 0050, the @WithDefault in VeyqConfig.kt's `Security` interface). A container without a persisted key

@@ -7,7 +7,7 @@
 // Which keys: those a component this package renders reads, measured against primevue 4.5.5 by grepping each
 // imported component's `config.locale.*` reads (2026-10-15): `aria.close` (Dialog, Toast, a closable Message) and
 // `passwordPrompt` (Password; every one has `:feedback="false"`, so `weak`/`medium`/`strong` never show). The app
-// surface has its own copy of this sync with its own, larger key set (`web/src/app/primeVueLocale.ts`) - no shared
+// surface has its own copy of this sync with its own, larger key set (`src/web/src/app/primeVueLocale.ts`) - no shared
 // UI between the packages (ADR 0065).
 import { watch, type App } from 'vue'
 import { i18n } from '../i18n'

@@ -6,7 +6,7 @@ here; the server is blind.
 ## Prove your work
 - `npm run check` (lint + typecheck + test + build).
 - API client is **generated** and **not tracked** (gitignored, mirrors the backend) — `npm run generate:api`
-  from the specs under `../contracts/api/` (core's at its top level, the Memories ones in `memories/`, one client
+  from the specs under `../../contracts/api/` (core's at its top level, the Memories ones in `memories/`, one client
   directory per spec) produces it (and runs automatically on install via `prepare`). Never
   hand-write the client.
 - **`npm run check` does NOT regenerate the client — so on its own it proves nothing about a contract change.**
@@ -44,7 +44,7 @@ here; the server is blind.
   (make the export throw): every suite that mocks it must stay green, and the module's own test must go red.
 - **Dev credentials come from the seeder — never hardcode or guess them.**
   - **`npm run bootstrap:user` (the local principal).** Inputs live in **`<repo-root>/.run/.env`**
-    (gitignored — note it is at the **repo root**, not `web/.run/`; template `<repo-root>/.run/.env.example`):
+    (gitignored — note it is at the **repo root**, not `src/web/.run/`; template `<repo-root>/.run/.env.example`):
     `VEYQ_EMAIL` / `VEYQ_PASSWORD` / `VEYQ_TENANT` / `VEYQ_TENANT_DOMAIN`, and the seeder writes back
     `VEYQ_SECRET_KEY` + `VEYQ_WRAPPED_MASTERKEY`. It creates ONE user that is Server Owner AND tenant owner
     (holds the **TENANT grant** + a personal scope). This is the current dev instance (`./gradlew backend:seed`
@@ -105,9 +105,9 @@ here; the server is blind.
   [web UI styleguide](../../docs/crosscutting/ui-web-styleguide.md) (raw colours → `--app-*`, dark-mode-aware
   values), so a ported component should *look* like the original but is not a byte-for-byte copy. If a ported
   view lacks a field the contract requires, add it **in-style** rather than hardcode a default.
-- **Crypto lives in `../packages/crypto` (`@veyq/crypto`), not here** — one copy, shared with `admin-web/`
+- **Crypto lives in `../packages/crypto` (`@veyq/crypto`), not here** — one copy, shared with `src/admin-web/`
   through the workspace ([ADR 0065](../../docs/decisions/0065-admin-ui-cli-separate-service.md)). `v1` is the
-  **conformance-pinned** suite (keep it byte-identical to `../contracts/crypto/vectors/v1.json`; the
+  **conformance-pinned** suite (keep it byte-identical to `../../contracts/crypto/vectors/v1.json`; the
   conformance test must stay green), the Model B auth derivation (`deriveAuthSalt` / `deriveAuthKeypair`,
   Ed25519 from Argon2id — ADR 0003) and the cold `accountBirth` live there too, so does the Emergency Kit's
   `veyqkit:` codec (`emergencyKit` — both packages write kits, and two copies drifted apart unseen; the PDF
@@ -115,17 +115,17 @@ here; the server is blind.
   transport encoding, but `accountBirth` needs it, and a second copy of the encoder is exactly the drift its
   own header warns about. Import via the package (`@veyq/crypto/v1`, `/accountBirth`, `/emergencyKit`,
   `/base64`, `/argonWorker`, `/testArgon`) — never by a relative path back into it. Its check is its own:
-  `cd ../packages/crypto && npm run check`, and `npm ci` runs from the **repo root**, not from `web/`.
+  `cd ../packages/crypto && npm run check`, and `npm ci` runs from the **repo root**, not from `src/web/`.
   **`npm run mutation`** is the assertion-strength gate over the curated crypto-logic scope (StrykerJS, [ADR 0045](../../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md))
   — a heavier PR-only crypto job, **not** part of `npm run check`; scope (the single source of truth, an explicit
   per-file list) + config in `stryker.mutate.json` + `stryker.config.mjs`, gated in CI by
   [`mutation.yml`](../../.github/workflows/mutation.yml). **There are TWO of those pairs since the package split**
-  — `web/`'s (the six crypto-logic files that stayed) and `packages/crypto/`'s (the shared suite);
+  — `src/web/`'s (the six crypto-logic files that stayed) and `src/packages/crypto/`'s (the shared suite);
   run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites.
-  With no remote, that CI job has never run, so **a commit that touches `packages/crypto/src` records the
+  With no remote, that CI job has never run, so **a commit that touches `src/packages/crypto/src` records the
   package gate's exit code** (`npm run mutation -- --force`) in its message. **Footgun: it mutates the real source files _in place_**
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
-  transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
+  transient `M` files + stray `stryker-setup-*.js` — never run other `src/web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
   **A change to the bytes a seal writes** (another envelope, a salt, one more random draw) also moves
   `features/memories/uploadWire.characterisation.test.ts`'s snapshots, whose randomness is ONE pinned stream: re-bless
@@ -431,4 +431,4 @@ here; the server is blind.
   test and `verify:pdf-worker`; check that its options still exist** (v6 dropped `isEvalSupported`). The member and the guest
   mount the same component.
 
-Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../docs/ai/README.md`](../../docs/ai/README.md).
+Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../../docs/ai/README.md`](../../docs/ai/README.md).

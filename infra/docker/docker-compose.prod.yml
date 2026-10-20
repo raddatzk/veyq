@@ -218,7 +218,7 @@ services:
   # The port is bound to 127.0.0.1 explicitly — the first `ports:` entry in this file besides Traefik's own.
   # A bare "${ADMIN_PORT}:8080" would publish on 0.0.0.0 and hand the whole internet the highest-privilege
   # surface this instance serves, which is the exact opposite of what extracting it was for. The container
-  # side is 8080, not 80: the admin image runs unprivileged (uid 101, admin-web/Dockerfile) and cannot bind 80.
+  # side is 8080, not 80: the admin image runs unprivileged (uid 101, src/admin-web/Dockerfile) and cannot bind 80.
   admin:
     image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
     restart: unless-stopped

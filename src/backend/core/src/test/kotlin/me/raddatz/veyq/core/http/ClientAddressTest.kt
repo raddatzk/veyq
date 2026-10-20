@@ -12,7 +12,7 @@ import java.net.Inet6Address
 import java.net.InetAddress
 
 /**
- * B4, the **mutation-scoped** unit test of ADR 0094's rule (`backend/core/pitest.scope.json`): every row of the ADR's
+ * B4, the **mutation-scoped** unit test of ADR 0094's rule (`src/backend/core/pitest.scope.json`): every row of the ADR's
  * topology table, with its "Arrives at the app" column as the input, and every boundary of the entry grammar, the
  * trust list and its CIDR match. The Quarkus-booted siblings ([me.raddatz.veyq.core.ratelimit.AuthRateLimitTest],
  * [me.raddatz.veyq.core.ratelimit.TrustedProxiesRateLimitTest]) prove the wiring; this proves the decision.

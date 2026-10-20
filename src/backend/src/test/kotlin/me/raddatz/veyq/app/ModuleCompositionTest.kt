@@ -63,7 +63,7 @@ import org.junit.jupiter.api.Test
  *    project ([MainOutputs], the posture sweeps' walk) — derived, so a third module's implementations are expected the
  *    day they compile, and an unindexed module's are missing by name. Anchored: the union holds core's own,
  *    Memories' and Depot's implementations, so a walk that read nothing cannot pass — and a root build that drops an
- *    application's module (`backend/build.gradle.kts`) is red here, not only in that module's own tests.
+ *    application's module (`src/backend/build.gradle.kts`) is red here, not only in that module's own tests.
  * 2. **Every module's routes are deployed.** Each generated JAX-RS interface (`@Path`) of every module has a deployed
  *    resource bean implementing it — the 404s of step 7's packaged jar, asked of the container. Anchored on every
  *    module's generated API package (core's, Memories', Depot's).

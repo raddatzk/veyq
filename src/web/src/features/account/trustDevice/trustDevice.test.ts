@@ -42,7 +42,7 @@ beforeEach(() => {
 // `trustThisDevice` derives the DEVICE-wrap KEK at production params inside the code under test, so this block
 // is the same inherent cost as login/share — it just measures ~1.2s here rather than ~3.7s and so has not yet
 // crossed the 5s default on this machine. It is the same defect, and a machine with fewer cores is where it
-// surfaces; the ceiling belongs on the class, not on the files that happened to fail first. See packages/crypto/src/testArgon.ts.
+// surfaces; the ceiling belongs on the class, not on the files that happened to fail first. See src/packages/crypto/src/testArgon.ts.
 describe('trustThisDevice / untrustThisDevice', () => {
   it('enrols a DEVICE wrap and saves the local trust record', async () => {
     vi.mocked(device.loadTrust).mockResolvedValue(null)

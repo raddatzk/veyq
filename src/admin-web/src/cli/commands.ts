@@ -19,7 +19,7 @@
 // facade's rule (`operatingModeRequest`), not one of this file's. The notification address's code is typed into the
 // console only, as instance mail's is.
 // Per-tenant mail settings, terms authoring and the per-link storage
-// limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
+// limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `src/web/` (src/admin-web/CLAUDE.md), so
 // they are not Server-Owner commands. The instance's OWN mail settings are the Server Owner's, but stay console-only
 // as tenant mail is: their save sends a code that is typed back into the same screen.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints

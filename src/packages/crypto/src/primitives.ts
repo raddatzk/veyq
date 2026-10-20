@@ -1,5 +1,5 @@
 // The raw AEAD and wrap primitives of the v1 suite. NOT a public entry point: `package.json` `exports` does not
-// list this module, so `web/` and `admin-web/` cannot import it — every seal they write goes through the typed
+// list this module, so `src/web/` and `src/admin-web/` cannot import it — every seal they write goes through the typed
 // `seal`/`open`/`sealTo`/`openAs` in ./seal.ts, which binds the object a ciphertext is stored as (ADR 0072
 // Decision 6: the structure is the guard). Only this package's own modules and its conformance test reach here.
 // X-Wing (draft-connolly-cfrg-xwing-kem-11, ADR 0017 decision 2). noble names it `ml_kem768_x25519` and keeps

@@ -720,7 +720,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         epoch:
           x-veyq-visibility: structure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0 (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0 (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: The epoch the seals bind (off the scope root; at or below the scope's current one, stored as sent).
           minimum: 0

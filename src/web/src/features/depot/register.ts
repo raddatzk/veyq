@@ -1,5 +1,5 @@
 // The Depot application's registration with the platform registry (ADR 0079). Called once, from the composition root
-// (`web/src/applications.ts`), which is the only core file allowed to import an application. The registry is a
+// (`src/web/src/applications.ts`), which is the only core file allowed to import an application. The registry is a
 // parameter, not an import of the singleton, so a test can register into a fresh one.
 //
 // The `FILE` kind with its ROWS in the unified level list (cr-files-application F1b, inbox #407): the files of a folder as

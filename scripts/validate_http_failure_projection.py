@@ -9,7 +9,7 @@ code single-sourced (on the variant / the `Failures` catalog) and makes drift st
 The enforceable invariant, promoted from cr-0161's one-shot proof grep to a permanent check:
   `ErrorResponse(` is CONSTRUCTED in exactly one file — the shared writer `core/http/HttpFailure.kt`.
 
-Any other `backend/src/main` file that constructs an `ErrorResponse` has bypassed the shared writer and can drift
+Any other `src/backend/src/main` file that constructs an `ErrorResponse` has bypassed the shared writer and can drift
 the status/code for a failure the rest of the codebase routes through `httpError` — so it fails this guard.
 """
 from __future__ import annotations

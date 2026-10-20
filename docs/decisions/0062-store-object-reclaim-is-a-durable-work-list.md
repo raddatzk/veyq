@@ -18,7 +18,7 @@ its session rows standing, so the keys are never lost).
 Three forces make this worth deciding now rather than measuring first:
 
 - **The failure is unobservable by construction, not by omission.** The backend has no metrics extension, no
-  health surface, and nine log statements in all of `backend/src/main` — none of the nine scheduled jobs
+  health surface, and nine log statements in all of `src/backend/src/main` — none of the nine scheduled jobs
   reports what it did. Adding a log line would make future failures visible in a file nobody tails; it would
   not make them *countable*, and it cannot see the bytes already lost.
 - **One path carries the mirror hazard instead.** `ScopePurge.eraseScope` deletes the objects **first, inside**

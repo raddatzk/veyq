@@ -1,6 +1,6 @@
 // ADR 0069 — the policy leaves the build as a FILE, never as a <meta>. Run AFTER `vite build`: fail if dist/ has
 // no emitted policy, or if dist/index.html carries a CSP <meta>. The backend's app shell refuses to boot on
-// either (AppShell in backend/…/shared/appshell), so this check exists to move that failure from a self-hoster's
+// either (AppShell in src/backend/…/shared/appshell), so this check exists to move that failure from a self-hoster's
 // boot to CI and the image build: a <meta> intersects with the header and blocks a store on its own origin again,
 // and a missing file means a shell with no policy at all.
 //

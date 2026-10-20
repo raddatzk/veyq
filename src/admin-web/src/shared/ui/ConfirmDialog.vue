@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The console's confirmation dialog for a destructive action (cr-admin-web-own-confirm-dialog) — mounted
 // **once** in App.vue beside the toasts, and driven by `shared/state/useConfirm`. A **copy** of
-// `web/src/shared/ui/ConfirmDialog.vue`, not an import: ADR 0065 gives this package no shared UI, and
+// `src/web/src/shared/ui/ConfirmDialog.vue`, not an import: ADR 0065 gives this package no shared UI, and
 // `shared/state/useToast.ts` beside it is the byte-identical precedent for exactly that.
 //
 // Its footer is the styleguide's shape (§ Buttons & dialog actions: one `.veyq-dialog-action-row` — already

@@ -16,8 +16,8 @@
 // turn this red, a lost rule does.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Every value typed is a canary
-// (recordTyped). Labels are web/'s own (web/src/i18n/index.ts and web/src/features/memories/i18n.ts, en). The photo is the
-// 1×1 fixture web/'s own tests read (`exif-sample.jpg`).
+// (recordTyped). Labels are src/web/'s own (src/web/src/i18n/index.ts and src/web/src/features/memories/i18n.ts, en). The photo is the
+// 1×1 fixture src/web/'s own tests read (`exif-sample.jpg`).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'

@@ -102,7 +102,7 @@ class ShareNodesCoreSliceTest {
         create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 3).statusCode(201) // control: the current one
     }
 
-    /** A required integer is a presence check, not a silent 0 (backend/CLAUDE.md). */
+    /** A required integer is a presence check, not a silent 0 (src/backend/CLAUDE.md). */
     @Test
     fun aCreateWithoutAnEpochIsMalformed() {
         val t = tree()

@@ -42,7 +42,7 @@ enum class StoreProvisioningState {
  * instance whose store is not yet usable still answers `/api/setup`.
  *
  * **A named seam rather than an anonymous thread**, for the reason this docstring is long: there was nothing in
- * the tree to copy — `grep -rn '@Startup' backend/src/main/kotlin` returns nothing and all three
+ * the tree to copy — `grep -rn '@Startup' src/backend/src/main/kotlin` returns nothing and all three
  * `@Observes StartupEvent` observers are synchronous — so the next person wanting background startup work
  * should find a shape here rather than improvise a second one.
  *

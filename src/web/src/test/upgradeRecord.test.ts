@@ -1,5 +1,5 @@
 // The upgrade record's validator against the fixture `scripts/upgrade_proof_selftest.py` holds the orchestrator's to:
-// both must accept the fixture's record and refuse every edit it lists (web/src/test/upgradeRecord.ts).
+// both must accept the fixture's record and refuse every edit it lists (src/web/src/test/upgradeRecord.ts).
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

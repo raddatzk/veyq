@@ -161,10 +161,10 @@ the trailing slash: Traefik's `PathPrefix` is a raw string prefix (`strings.HasP
 bucket's name. A browser only fetches object URLs, which always carry the slash.
 
 **The bundled bucket is `blobs`.** It shares the app's origin, whose pages are top-level paths
-(`web/src/router.ts`), so the name is a page the app can never have. `blobs` is the store's own vocabulary
+(`src/web/src/router.ts`), so the name is a page the app can never have. `blobs` is the store's own vocabulary
 (`BlobStore`, `veyq.blob-store.*`, the `veyq-blobs` router), never product language; a page-like word reserves a
 page — `storage` is the one file storage (inbox #52) would want. Nothing a user controls reaches that segment, since
-a Memory's location lives in the URL fragment (`web/src/features/memories/location.ts`), so there is no
+a Memory's location lives in the URL fragment (`src/web/src/features/memories/location.ts`), so there is no
 reserved-name list and none is needed. Once an instance is installed the name is fixed:
 [ADR 0067](0067-store-provisioning-from-a-declared-type.md) § Consequences.
 

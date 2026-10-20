@@ -9,7 +9,7 @@
 // the confirmation mail carries link, domain and expiry only (ADR 0074 Decision 6), so the mailbox sweep reading
 // that very mail is where a leak of the account's content would show.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/account/email/emailConfirmation.e2e.test.ts
+//   python3 scripts/run_web_e2e.py src/web/src/features/account/email/emailConfirmation.e2e.test.ts
 import { beforeAll, describe, expect, it } from 'vitest'
 import { birthInstance, HOST, stamp, type BirthedInstance } from '../../../test/e2eBootstrap'
 import { mailCursor, waitForMail } from '../../../test/mailpit'

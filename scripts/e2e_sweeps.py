@@ -981,7 +981,7 @@ def occurrences(text: str, needle: str) -> Iterator[int]:
     from the offset. No word boundary and no length floor HERE: a threshold added against false positives is where
     the false negatives hide (changes/README), so a collision is explained, never excluded. The floor that keeps
     random ciphertext from matching lives where the canaries are made, and it refuses rather than drops: the
-    recorder (`web/src/test/canaries.ts`, `MIN_CANARY_LENGTH`) throws on a short base64-alphabet canary, and leaves
+    recorder (`src/web/src/test/canaries.ts`, `MIN_CANARY_LENGTH`) throws on a short base64-alphabet canary, and leaves
     an envelope's closed enum values (`auto`, `range`, `city`) out of the set (inbox #323).
     """
     at = text.find(needle)
@@ -1656,7 +1656,7 @@ def sweep_mailbox(stack: Stack, workdir: Path, canary_files: Iterable[Path], sin
     through [canary_needles] — in each decoded header and text part ([mail_texts]) and in the raw source. Armed by
     a mail the run plants itself ([plant_mail_sentinel]) whose sentinel must be found in the DECODED text; that it
     is absent from the raw source is printed, because that absence is what makes the decoded read load-bearing.
-    Nothing in a run deletes mail (the suites take a cursor, `web/src/test/mailpit.ts`), so the read is complete.
+    Nothing in a run deletes mail (the suites take a cursor, `src/web/src/test/mailpit.ts`), so the read is complete.
 
     **The defect that bought it.** No incident. Mail is closed by construction — both kinds interpolate only
     `MailContext(link, domain, expiry)` (ADR 0049) — and the HTTP sweep already searches every mail a suite reads

@@ -3,7 +3,7 @@
 // which kind and which list items it adds.
 //
 // **Build-time only (ADR 0079 Decision 5, ADR 0026).** The registry is filled by plain function calls from ONE
-// composition root (`web/src/applications.ts`), which statically imports each application. There is no glob, no
+// composition root (`src/web/src/applications.ts`), which statically imports each application. There is no glob, no
 // computed `import()`, no plugin loading: what runs is what was reviewed. The guard
 // (`scripts/validate_web_core_imports_no_applications.py`) keeps core from importing an application and from
 // discovering one by glob.
@@ -363,7 +363,7 @@ export interface NodeDetailEmits {
 /** What a `share` emit hands the host for the dialog it mounts: the share rights beyond "may share at all" that the
  *  application's rights function answered for the node (`contribute`: offer the READ_WRITE role for a new link,
  *  `core.public-shares.contribute`). The host passes them on as `NodeShareDialogProps`, so a dialog never reads a
- *  capability itself (web/CLAUDE.md: never a `hasCapability` read inline). */
+ *  capability itself (src/web/CLAUDE.md: never a `hasCapability` read inline). */
 export interface NodeShareOffer {
   contribute: boolean
 }
@@ -730,6 +730,6 @@ function listJoin(
   }
 }
 
-/** The app's registry, filled once by `registerApplications()` (web/src/applications.ts) before the first route
+/** The app's registry, filled once by `registerApplications()` (src/web/src/applications.ts) before the first route
  *  resolves (`main.ts`) and, in tests, by `src/test/setup.ts`. */
 export const registry: Registry = createRegistry()

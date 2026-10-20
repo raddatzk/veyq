@@ -1,6 +1,6 @@
 // `:apps:depot` — the Depot application (ADR 0079; docs/apps/depot.md): every `me.raddatz.veyq.depot.*` class. It
 // depends on `:core`, and never the reverse (Gradle refuses the cycle); no application depends on another. The root
-// `backend/` composes it into the one fast-jar, where its jar is `lib/main/me.raddatz.veyq.depot.jar` — never deployed
+// `src/backend/` composes it into the one fast-jar, where its jar is `lib/main/me.raddatz.veyq.depot.jar` — never deployed
 // on its own.
 //
 // The node kind `FILE` and its placement rule (cr-files-application F0), a member's upload, replace and listing of a

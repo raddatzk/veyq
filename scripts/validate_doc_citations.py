@@ -23,9 +23,9 @@ The defects that bought it:
   The guard was called `validate_adr_citations.py` until the second shape joined.
 
 Scope — the surfaces where an id is *always a live citation*, so "must resolve" is unambiguous:
-  `contracts/`, every `.kt` under `backend/` (all Gradle modules), the `src/` of every npm workspace (read from the root `package.json`, so a new
-  package is scanned the day it is added — the hard-coded list this replaced named `web/src` alone and missed
-  `admin-web/src` and `packages/crypto/src` for as long as they existed), `docs/features/`,
+  `contracts/`, every `.kt` under `src/backend/` (all Gradle modules), the `src/` of every npm workspace (read from the root `package.json`, so a new
+  package is scanned the day it is added — the hard-coded list this replaced named `src/web/src` alone and missed
+  `src/admin-web/src` and `src/packages/crypto/src` for as long as they existed), `docs/features/`,
   `docs/crosscutting/`, and the ADR bodies `docs/decisions/*.md`.
 Deliberately NOT scanned — the narrative registers, where a *historical* mention of a retired id legitimately
 does not resolve (e.g. "the native drop deleted ADR 0009"): `docs/inbox.md`, `changes/`,
@@ -73,8 +73,8 @@ def workspace_srcs() -> list[pathlib.Path]:
 # Load-bearing surfaces: a directory root + the file suffixes to read under it.
 SCAN = [
     (ROOT / "contracts", {".yaml", ".yml", ".json", ".md"}),
-    # The whole backend, not `backend/src`: every Gradle module keeps its sources in its own `src` (`backend/core/src`,
-    # `backend/apps/memories/src`, …), and a root that names one project stops seeing the others.
+    # The whole backend, not `src/backend/src`: every Gradle module keeps its sources in its own `src` (`src/backend/core/src`,
+    # `src/backend/apps/memories/src`, …), and a root that names one project stops seeing the others.
     (repo_layout.BACKEND, {".kt"}),
     *[(src, CODE_SUFFIXES) for src in workspace_srcs()],
     (FEATURES, {".md"}),
@@ -82,7 +82,7 @@ SCAN = [
 ]
 
 # Path components that mark a generated / vendored tree — a citation there is derivation, not source
-# (web/src/api/generated is gitignored: it re-derives from contracts/ on the next codegen).
+# (src/web/src/api/generated is gitignored: it re-derives from contracts/ on the next codegen).
 EXCLUDE_PARTS = {"generated", "node_modules", "build", "dist", "target", ".gradle", "__pycache__"}
 
 live_adrs = {m.group(1) for p in DECISIONS.glob("*.md") if (m := re.match(r"(\d{4})-", p.name))}

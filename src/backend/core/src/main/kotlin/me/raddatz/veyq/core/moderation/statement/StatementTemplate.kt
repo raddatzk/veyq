@@ -42,7 +42,7 @@ data class StatementFields(
 
 /**
  * The statement of reasons' one template (ADR 0093 § 7, decision 1 of cr-statement-of-reasons-and-objection), pinned from
- * `contracts/moderation/statement-of-reasons.json` — web/ pins the same file (`features/moderation/statement/template.ts`)
+ * `contracts/moderation/statement-of-reasons.json` — src/web/ pins the same file (`features/moderation/statement/template.ts`)
  * and `StatementTemplateConformanceTest` holds these literals equal to it, so the mail and the placeholder cannot drift.
  * The server renders it for the mail ([renderMail]); a moderator's measure's facts never go into a mail: their passage
  * becomes "it is in veyq" (`mail.factsInVeyq`). A Server Owner's step's mail carries its facts after that passage. It

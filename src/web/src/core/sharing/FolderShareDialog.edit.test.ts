@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // inbox #364: a member edits an existing folder link in place — label, role, note, password, expiry — with
 // `updateShare` on the same link, offered on its own links only (the server lets only a link's owner edit it, ADR 0036
-// point 3). The real PrimeVue buttons, inputs and switches are mounted and clicked with real DOM clicks (web/CLAUDE.md:
+// point 3). The real PrimeVue buttons, inputs and switches are mounted and clicked with real DOM clicks (src/web/CLAUDE.md:
 // a test that asserts what a handler calls has not clicked anything); only the Dialog (it teleports), the date picker
 // and the note editor are stubbed. The data layer is stubbed as in `FolderShareDialog.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'

@@ -139,7 +139,7 @@ def project_filters(filters: list[str]) -> dict[str, list[str]]:
     before Docker starts — a filter that cannot be placed is never skipped."""
     for root in backend_tree.test_roots():
         if backend_tree.project_of(root) is None:
-            sys.exit(f"{root.relative_to(REPO)} is a test root no project in backend/settings.gradle.kts owns — "
+            sys.exit(f"{root.relative_to(REPO)} is a test root no project in src/backend/settings.gradle.kts owns — "
                      f"its race classes could not be run; include the module or move the tests")
     classes = _test_classes()
     by_project: dict[str, list[str]] = {}

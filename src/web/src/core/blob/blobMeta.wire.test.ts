@@ -1,6 +1,6 @@
 // A blob's sealed metadata on the wire (inbox #397): what core's upload declare sends when `planBlob` is handed a meta,
 // recorded at `fetch` — the JSON the real generated clients serialize (their `…ToJSON` drops a field the spec does not
-// name, so a body asserted anywhere above `fetch` proves nothing; web/CLAUDE.md). No module of ours is mocked:
+// name, so a body asserted anywhere above `fetch` proves nothing; src/web/CLAUDE.md). No module of ours is mocked:
 // `planBlob`, `reserveAndPump`, `authedReserve`/`authedWindow` (a member) and `guestReserve`/`guestWindow` (a guest on
 // a link) all run. What it pins, for both doors:
 //   - the declare item carries `wrappedBlobMeta`, standard base64, which opens under the blob's own K_blob (unwrapped

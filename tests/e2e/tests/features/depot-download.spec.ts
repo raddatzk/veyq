@@ -1,6 +1,6 @@
 // A Depot download streams in a real browser (inbox #371, #386, #396 — the pane could not show it). A file of 25 frames
 // (the transport's frame is 256 KiB, the pump keeps four in flight) is uploaded by the tenant owner and downloaded
-// through each save target `web/src/shared/saveStream.ts` picks, in its order:
+// through each save target `src/web/src/shared/saveStream.ts` picks, in its order:
 //
 //  1. **A picked file** (File System Access). Headless Chromium opens no native save dialog, so `showSaveFilePicker` is
 //     answered by a file of the origin-private file system — the page's own `FileSystemWritableFileStream`, the

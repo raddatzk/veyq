@@ -1,5 +1,5 @@
 // A password-protected share's guest credential (cr-0118, ADR 0037): the token is Argon2id(password, salt), the
-// server keeps only its SHA-256 as the verifier. `web/` calls both; the mutation gate only sees this package's suite.
+// server keeps only its SHA-256 as the verifier. `src/web/` calls both; the mutation gate only sees this package's suite.
 // Argon runs at TEST_ARGON — real Argon2id, ~1000× cheaper — because the test owns both sides (./testArgon.ts), and
 // at production params Stryker would pay ~1 s per mutant this case covers.
 import { describe, expect, it } from 'vitest'

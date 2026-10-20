@@ -4,7 +4,7 @@
 // app when a member clicks the node, and opened cold — typed into a new document, as a bookmark is — where the page has
 // nothing but the address to find the node by.
 //
-// One folder of its own holds the cases (web/src/core/node/location.ts is the grammar's one home):
+// One folder of its own holds the cases (src/web/src/core/node/location.ts is the grammar's one home):
 //   - a **folder** ends in a slash: `#adressbuch-…/`;
 //   - a **Memory** carries its application's route slug: `#adressbuch-…/memories/rom-im-mai-…`;
 //   - the route slug is **reserved**: a folder named "Memories ✦" (slug `memories`) is numbered `memories-2/`;
@@ -16,7 +16,7 @@
 //     space's root, the consequence the inbox row and ADR 0015 state.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Every value typed is a canary
-// (recordTyped). Labels are web/'s own (web/src/i18n/index.ts, en).
+// (recordTyped). Labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'

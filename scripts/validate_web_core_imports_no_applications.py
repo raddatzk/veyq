@@ -2,15 +2,15 @@
 """Guard that the web core does not import, nor name the kinds of, an application, and that no application imports
 another (ADR 0079, web phase).
 
-**What it asserts.** The applications are the directories of `APPLICATIONS` below (today `web/src/features/memories`,
-Memories', and `web/src/features/depot`, Depot's), each keyed by its owner name — the directory its specs live in under
+**What it asserts.** The applications are the directories of `APPLICATIONS` below (today `src/web/src/features/memories`,
+Memories', and `src/web/src/features/depot`, Depot's), each keyed by its owner name — the directory its specs live in under
 `contracts/api/<owner>/`, the owner rule `buildSrc`'s `SpecSets` builds by (inbox #344) — and named for it: the
-directory is `web/src/features/<owner>`, derived from `OWNERS`, never listed (inbox #324 moved `features/memory` there),
+directory is `src/web/src/features/<owner>`, derived from `OWNERS`, never listed (inbox #324 moved `features/memory` there),
 so a directory named otherwise is a missing one — **plus every generated API
 client whose `generate:api` run reads an application's spec**: an application owns the clients generated from its
-own `contracts/api/<owner>/`. Core is everything else under `web/src` — by exclusion, so a new directory is guarded
+own `contracts/api/<owner>/`. Core is everything else under `src/web/src` — by exclusion, so a new directory is guarded
 the day it appears. The client half is **derived**, never listed: each `openapi-generator-cli generate` step of
-`web/package.json`'s `generate:api` script is read for its `-i` (spec) and `-o` (output directory), and an output
+`src/web/package.json`'s `generate:api` script is read for its `-i` (spec) and `-o` (output directory), and an output
 whose spec lies in an application's directory is that application's (today `api/generated/item-favorites`,
 `api/generated/media` and `api/generated/share-media`, all Memories'; the node pins' `api/generated/favorites` is core's), so a new application client is covered the day
 its line lands. Core's own clients (`blob`, `content`, …) stay core's: importing them is the point of generating them.
@@ -43,22 +43,22 @@ Dependencies run application → core, never back, and never application → app
   `memory.deleteMemoryTitle` titled a Depot drop box "Delete Memory" (inbox #375). A kind's own noun reaches core
   through the registry (`KindDescriptor.deleteTitle`, a key the application names), never as a literal in core.
 - **catalog** (the catalogs' layout, inbox #513): each application owns its namespaces in its own catalog,
-  `web/src/features/<owner>/i18n.ts` (derived from the owner, never listed), whose `en` and `de` carry exactly that
+  `src/web/src/features/<owner>/i18n.ts` (derived from the owner, never listed), whose `en` and `de` carry exactly that
   application's `I18N_NAMESPACES` as top-level blocks — not another application's, not core's; and core's catalog
   (`i18n/index.ts`) carries none of them. A catalog that is missing, or whose `en`/`de` block does not parse, is red,
   and so is an `I18N_NAMESPACES` that does not name every application of `APPLICATIONS`: a namespace that moved or
   was renamed would otherwise leave the i18n rule matching nothing. The composition root's catalog half,
-  `web/src/applicationMessages.ts`, adds each application's catalog to core's instance (which refuses a namespace
+  `src/web/src/applicationMessages.ts`, adds each application's catalog to core's instance (which refuses a namespace
   already held, at runtime); it is held by exact path to importing an application's catalog and NOTHING else of it
   (the **catalog-root** reading of the import rule) — a component imported there would load the application where only
   its strings were meant to.
-Every rule reads the non-test `.ts`/`.vue` files. Exempt by exact path: `web/src/applications.ts`, the one
+Every rule reads the non-test `.ts`/`.vue` files. Exempt by exact path: `src/web/src/applications.ts`, the one
 composition root that may import the applications (a sibling file importing one is red; an absent root is not an
-error); `web/src/applicationMessages.ts` is not exempt but may reach an application's catalog, as above. Exempt by location: `web/src/test/**` and `*.test.ts` — and the generated API client, which is untracked and
+error); `src/web/src/applicationMessages.ts` is not exempt but may reach an application's catalog, as above. Exempt by location: `src/web/src/test/**` and `*.test.ts` — and the generated API client, which is untracked and
 spells the kinds by definition. `api/client.ts` is **not** exempt: core's factory file building a Memories client is
 the edge this guard exists for (the Memories factories live in the application).
 
-**Fail closed.** No `web/package.json`, no `generate:api` script, a generate step without its `-i`/`-o`, no generate
+**Fail closed.** No `src/web/package.json`, no `generate:api` script, a generate step without its `-i`/`-o`, no generate
 step at all, or no step reading an application's spec (while some application directory holds one) is red: a parse
 that found nothing would otherwise read as "no application owns a client". That is one check over all applications,
 not one per directory: an application whose specs land before its web client (the phase order is contracts → backend
@@ -112,13 +112,13 @@ GENERATE_SCRIPT = "generate:api"
 # Every application by its owner name — the directory of its specs (`contracts/api/<owner>/`) and its backend module
 # (`:apps:<owner>`). The one place to change when an application is added or renamed.
 OWNERS = ("memories", "depot")
-# Its directory relative to web/src is DERIVED from the owner name, never listed: `features/<owner>`, as the backend
+# Its directory relative to src/web/src is DERIVED from the owner name, never listed: `features/<owner>`, as the backend
 # derives `:apps:<owner>` (ADR 0079). A web directory named otherwise is a missing one, and a missing one is red.
 APPLICATIONS: dict[str, tuple[str, ...]] = {owner: ("features", owner) for owner in OWNERS}
 CONTRACTS_API = ("contracts", "api")  # relative to the repo root; a spec directly in a directory below it is an application's
-COMPOSITION_ROOT = "applications.ts"  # relative to web/src; exact path, never a directory
+COMPOSITION_ROOT = "applications.ts"  # relative to src/web/src; exact path, never a directory
 # The composition root's catalog half (inbox #513): may import an application's catalog, nothing else of it.
-CATALOG_ROOT = "applicationMessages.ts"  # relative to web/src; exact path
+CATALOG_ROOT = "applicationMessages.ts"  # relative to src/web/src; exact path
 APPLICATION_CATALOG = "i18n.ts"  # an application's own catalog: features/<owner>/i18n.ts, derived like the directory
 GENERATED = ("api", "generated")  # untracked client; defines the kinds, so it names them
 
@@ -137,7 +137,7 @@ I18N_NAMESPACES: dict[str, tuple[str, ...]] = {
     "memories": ("memory", "media"),
     "depot": ("depot",),
 }
-CATALOG = ("i18n", "index.ts")  # core's catalog, relative to web/src
+CATALOG = ("i18n", "index.ts")  # core's catalog, relative to src/web/src
 
 
 def i18n_key(namespaces) -> re.Pattern:
@@ -149,7 +149,7 @@ I18N_KEY = i18n_key(n for ns in I18N_NAMESPACES.values() for n in ns)
 
 
 def application_of(rel: pathlib.PurePosixPath) -> str | None:
-    """The owner of the application `rel` (relative to web/src) lies in, or None for core."""
+    """The owner of the application `rel` (relative to src/web/src) lies in, or None for core."""
     for owner, directory in APPLICATIONS.items():
         if rel.parts[:len(directory)] == directory:
             return owner
@@ -173,7 +173,7 @@ def generated_pairs(package_text: str) -> list[tuple[str, str]]:
     try:
         script = json.loads(package_text)["scripts"][GENERATE_SCRIPT]
     except (ValueError, KeyError, TypeError) as e:
-        raise ParseError(f"no `scripts.{GENERATE_SCRIPT}` in web/package.json ({e!r})")
+        raise ParseError(f"no `scripts.{GENERATE_SCRIPT}` in src/web/package.json ({e!r})")
     pairs: list[tuple[str, str]] = []
     for step in script.split("&&"):
         try:
@@ -198,7 +198,7 @@ def generated_pairs(package_text: str) -> list[tuple[str, str]]:
 
 def application_clients(pairs: list[tuple[str, str]], web: pathlib.Path,
                         root: pathlib.Path) -> dict[str, list[pathlib.PurePosixPath]]:
-    """The output directories (relative to web/src) of the steps that read an application's spec — one directly in a
+    """The output directories (relative to src/web/src) of the steps that read an application's spec — one directly in a
     directory below `CONTRACTS_API` (`contracts/api/<owner>/x.openapi.yaml`) — keyed by that owner."""
     api_dir = pathlib.Path(os.path.normpath(root.joinpath(*CONTRACTS_API)))
     src = pathlib.Path(os.path.normpath(web / "src"))
@@ -213,7 +213,7 @@ def application_clients(pairs: list[tuple[str, str]], web: pathlib.Path,
                              "APPLICATIONS does not name — add its web directory there")
         out_path = pathlib.Path(os.path.normpath(web / out))
         if out_path != src and src not in out_path.parents:
-            raise ParseError(f"the application's client from {spec} is generated outside web/src ({out}); "
+            raise ParseError(f"the application's client from {spec} is generated outside src/web/src ({out}); "
                              "this guard cannot tell its importers")
         owned.setdefault(owner, []).append(pathlib.PurePosixPath(out_path.relative_to(src).as_posix()))
     if not owned and any(api_dir.glob("*/*.openapi.yaml")):
@@ -227,7 +227,7 @@ def _inside(target: pathlib.PurePosixPath, anchor: tuple[str, ...]) -> bool:
 
 
 def anchors_of(owners, clients: dict[str, list[pathlib.PurePosixPath]]) -> list[tuple[str, ...]]:
-    """The directories and generated clients of the applications `owners`, as path-part tuples below web/src."""
+    """The directories and generated clients of the applications `owners`, as path-part tuples below src/web/src."""
     return [a for o in owners for a in [APPLICATIONS[o]] + [c.parts for c in clients.get(o, [])]]
 
 
@@ -335,7 +335,7 @@ def catalog_errors(src: pathlib.Path) -> list[str]:
             elif owner is not None and names != set(I18N_NAMESPACES[owner]):
                 errors.append(f"{SRC_REL}/{rel}: the `{locale}` of {who}'s catalog carries {', '.join(sorted(names))}"
                               f" — exactly its own namespaces ({', '.join(I18N_NAMESPACES[owner])}) belong there; "
-                              "core's go in web/src/i18n/index.ts, another application's in its own catalog")
+                              "core's go in src/web/src/i18n/index.ts, another application's in its own catalog")
     return errors
 
 
@@ -345,7 +345,7 @@ def main() -> int:
     if not (SRC.is_dir() and files) or missing:
         print(f"WEB-CORE-IMPORTS FAILED — no source under {SRC.relative_to(ROOT)}, or an application directory is "
               f"missing ({', '.join('/'.join(d) for d in missing) or 'none'}); the guard would check nothing there. "
-              "If web/ moved or an application was renamed, move this guard's OWNERS with it — an application's "
+              "If src/web/ moved or an application was renamed, move this guard's OWNERS with it — an application's "
               "web directory is features/<owner>.")
         return 1
     try:

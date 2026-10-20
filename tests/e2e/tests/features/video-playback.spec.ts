@@ -16,7 +16,7 @@
 // second so a seek lands where it is asked to; a constant bitrate so the bytes of the last second sit in the last chunk.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Every value typed is a canary
-// (recordTyped). Labels are web/'s own (web/src/i18n/index.ts, en).
+// (recordTyped). Labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page, type Response } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -27,7 +27,7 @@ import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/dev
 test.describe.configure({ mode: 'serial' })
 
 const VIDEO = readFileSync(fileURLToPath(new URL('../../fixtures/testsrc2-6s-vp8.webm', import.meta.url)))
-// The plaintext chunk the uploader seals and the Service Worker maps a range onto (ADR 0013 §3, web/src/sw/range.ts).
+// The plaintext chunk the uploader seals and the Service Worker maps a range onto (ADR 0013 §3, src/web/src/sw/range.ts).
 const CHUNK = 256 * 1024
 const SEEK_TO = 4.5
 
@@ -103,7 +103,7 @@ test(
     await page.goto(tenantOrigin())
     await page.getByRole('button', { name: memoryName, exact: true }).click({ timeout: 60_000 })
     await page.getByRole('button', { name: 'Open item 1' }).click({ timeout: 60_000 })
-    // The first play registers the media Service Worker (web/src/sw/register.ts, lazily) and waits for it to claim the page.
+    // The first play registers the media Service Worker (src/web/src/sw/register.ts, lazily) and waits for it to claim the page.
     await page.getByRole('button', { name: 'Play video', exact: true }).click({ timeout: 60_000 })
 
     await expect.poll(async () => (await state(page)).currentTime, { message: 'playback started', timeout: 60_000 })

@@ -95,5 +95,5 @@ gaps:
     `planned` stays after that flip (header, condition 2).
   web: >-
     Not a target. The release panel moved to `admin-web` with the rest of the Server-Owner administration
-    (ADR 0065, the gap above), and nothing in web reads the release (`grep -rn InstanceRelease web/src` finds
+    (ADR 0065, the gap above), and nothing in web reads the release (`grep -rn InstanceRelease src/web/src` finds
     nothing). The use-case is carried by `backend` and, once its job has run, `admin-web`; this gap stays.

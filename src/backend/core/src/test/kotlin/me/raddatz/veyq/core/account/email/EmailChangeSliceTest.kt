@@ -419,7 +419,7 @@ class EmailChangeSliceTest {
 
         val INVALID = 404 to "email_change_invalid"
 
-        // One JVM for the whole suite ⇒ ports no other test holds (`grep -rhoE '139[0-9]{2}' backend/`).
+        // One JVM for the whole suite ⇒ ports no other test holds (`grep -rhoE '139[0-9]{2}' src/backend/`).
         const val REQUEST_SMTP_PORT = 13980
         const val REPLACE_SMTP_PORT = 13981
         const val PROOF_SMTP_PORT = 13982

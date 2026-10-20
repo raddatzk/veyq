@@ -1,5 +1,5 @@
 // The Memories application's registration with the platform registry (ADR 0079). Called once, from the
-// composition root (`web/src/applications.ts`), which is the only core file allowed to import this application.
+// composition root (`src/web/src/applications.ts`), which is the only core file allowed to import this application.
 // The registry is a parameter, not an import of the singleton, so a test can register into a fresh one.
 //
 // Memories' rows of the folder level (`memoryRows`, inbox #407) ride on its two kinds' descriptors: core's level view calls

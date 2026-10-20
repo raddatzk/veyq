@@ -13,7 +13,7 @@ import jakarta.enterprise.event.Observes
 import org.jboss.logging.Logger
 
 /**
- * Reads the shell's two files from where the release image puts `web/dist` — the same classpath root Quarkus
+ * Reads the shell's two files from where the release image puts `src/web/dist` — the same classpath root Quarkus
  * serves static files from. A bean of its own only so a test can stand in a classpath with no shell on it.
  */
 @ApplicationScoped

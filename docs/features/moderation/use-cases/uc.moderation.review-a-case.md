@@ -1,7 +1,7 @@
 # UC: Review a case
 
 - **ID:** uc.moderation.review-a-case
-- **Primary actor:** A **moderator** holding the instance moderation key, in web/'s moderation surface (`/moderation`)
+- **Primary actor:** A **moderator** holding the instance moderation key, in src/web/'s moderation surface (`/moderation`)
   and in the share viewer's moderation mode on the reported tenant's host
 - **Secondary actor:** the reporters (their reports are what is reviewed); the Server Owner (sees the case's proposals)
 - **Goal:** See what was reported exactly as it was when it was reported, read why, and close the case or move it on —

@@ -1,6 +1,6 @@
 // Tenant-invite ACCEPT side (uc.admin.create-tenant Slice B / cr-0010) — the half of tenant administration an
-// **anonymous invitee or an ordinary signed-in user** reaches, not the Server Owner. It stays in `web/` while
-// the Server-Owner administration surface lives in `admin-web/` (ADR 0065): a person accepting an invite has no
+// **anonymous invitee or an ordinary signed-in user** reaches, not the Server Owner. It stays in `src/web/` while
+// the Server-Owner administration surface lives in `src/admin-web/` (ADR 0065): a person accepting an invite has no
 // business loading the admin app. Thin facade over the generated tenants client: views depend on this typed
 // surface, never on the generator runtime.
 import { tenantsApi } from '../../api/client'

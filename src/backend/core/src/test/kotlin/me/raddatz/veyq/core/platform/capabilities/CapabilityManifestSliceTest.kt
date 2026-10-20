@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * The repository's `VERSION` file, read from disk (tests run from `backend/`), never through the build's
+ * The repository's `VERSION` file, read from disk (tests run from `src/backend/`), never through the build's
  * `PlatformMajor`: the assertions below hold the served major to the file itself, so a derivation that stops
  * deriving — a hand-set number anywhere between the two — is red here (ADR 0085 decision 1).
  */

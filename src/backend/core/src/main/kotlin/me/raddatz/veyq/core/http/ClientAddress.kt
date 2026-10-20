@@ -16,7 +16,7 @@ import java.net.InetAddress
  * the guest-write record of ADR 0093 § 10; neither reads an address anywhere else
  * (`scripts/validate_lookup_single_home.py` rule D holds both headers' names to this file).
  *
- * This object is the pure decision, and the backend mutation gate's scope (`backend/core/pitest.scope.json`): no
+ * This object is the pure decision, and the backend mutation gate's scope (`src/backend/core/pitest.scope.json`): no
  * request, no clock, no config. The request accessor is [clientAddress], below it, and holds no decision.
  *
  * Nothing here logs, and nothing here resolves a name: an entry is a literal or it is nothing.

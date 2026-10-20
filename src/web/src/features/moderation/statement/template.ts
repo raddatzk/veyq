@@ -106,7 +106,7 @@ export type RenderedPassage = { id: string; text: string }
 
 /**
  * The statement as the placeholder shows it, in [lang]: every passage of the form whose condition holds, in the
- * template's order (ADR 0093 §§ 7, 14) — the reduced form leaves out what only the full form carries. web/ shows only a
+ * template's order (ADR 0093 §§ 7, 14) — the reduced form leaves out what only the full form carries. src/web/ shows only a
  * moderator's measure, whose objection is made in veyq (`inApp`); a Server Owner's step goes by mail alone (`byContact`).
  */
 export function renderStatement(lang: StatementLang, f: StatementFields): RenderedPassage[] {

@@ -32,7 +32,7 @@ is what keeps it complete.
   (c) It proves nothing about the *sink*. Whether the written file is what Traefik actually loads is a property
       of `infra/docker/docker-compose.prod.yml` and of Traefik, neither of which any deterministic check here executes.
 
-Its own source is not in what it scans (the corpus is two Kotlin files under `backend/`), so the usual trap — a
+Its own source is not in what it scans (the corpus is two Kotlin files under `src/backend/`), so the usual trap — a
 guard matching the literal it forbids inside its own documentation — does not apply.
 """
 from __future__ import annotations

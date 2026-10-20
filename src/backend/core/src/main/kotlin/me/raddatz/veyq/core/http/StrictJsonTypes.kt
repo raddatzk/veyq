@@ -103,7 +103,7 @@ class StrictJsonTypes : ObjectMapperCustomizer {
      * else is the `MismatchedInputException` of a malformed request: a fraction, a value past the type, a string or a
      * boolean (the coercions above refuse those for every other type; this deserializer stands in for Jackson's own
      * here, so it refuses them itself). A JSON `null` reads as Jackson's own does: absent for a boxed type, 0 for a
-     * primitive one (which `backend/CLAUDE.md`'s `[integer, "null"]` + `@NotNull` idiom keeps out of required fields).
+     * primitive one (which `src/backend/CLAUDE.md`'s `[integer, "null"]` + `@NotNull` idiom keeps out of required fields).
      */
     private class WholeNumber<T : Any>(
         type: Class<T>, private val min: Long, private val max: Long, private val of: (Long) -> T,

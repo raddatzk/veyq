@@ -1,4 +1,4 @@
-# Every Flyway migration, pinned by SHA-256 (backend/CLAUDE.md § Migrations). scripts/validate_migration_versions.py
+# Every Flyway migration, pinned by SHA-256 (src/backend/CLAUDE.md § Migrations). scripts/validate_migration_versions.py
 # holds each migration file to its line, so changing a migration's bytes needs a readable one-line diff here to go
 # green — in the same commit as the change.
 #

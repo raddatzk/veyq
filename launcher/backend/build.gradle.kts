@@ -1,6 +1,6 @@
 // `backend:*` — the backend is RUN through its own wrapper, never included in this build: an included build's
-// verification metadata is ignored in favour of the including build's, so `backend/gradle/verification-metadata.xml`
-// would stop applying (settings.gradle.kts). `backend/` stays a build of its own, exactly as the Dockerfile and CI
+// verification metadata is ignored in favour of the including build's, so `src/backend/gradle/verification-metadata.xml`
+// would stop applying (settings.gradle.kts). `src/backend/` stays a build of its own, exactly as the Dockerfile and CI
 // use it.
 @Suppress("UNCHECKED_CAST")
 val ports = gradle.extra["veyq.ports"] as Map<String, String>

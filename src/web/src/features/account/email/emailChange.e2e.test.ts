@@ -8,7 +8,7 @@
 // canary the mailbox sweep reads both mails for — the link to the new address and the notice to the old one carry
 // link, domain and expiry only.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/account/email/emailChange.e2e.test.ts
+//   python3 scripts/run_web_e2e.py src/web/src/features/account/email/emailChange.e2e.test.ts
 import { beforeAll, describe, expect, it } from 'vitest'
 import { birthInstance, HOST, stamp, type BirthedInstance } from '../../../test/e2eBootstrap'
 import { mailCursor, waitForMail } from '../../../test/mailpit'

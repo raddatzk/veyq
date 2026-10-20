@@ -1,5 +1,5 @@
-// The suite half of the wire assertion (ADR 0053, cc.security.wire-assertion) at browser level. web/'s API-level
-// suites record what they UNSEAL from the server's own responses (`web/src/test/canaries.ts`); this suite has no keys
+// The suite half of the wire assertion (ADR 0053, cc.security.wire-assertion) at browser level. src/web/'s API-level
+// suites record what they UNSEAL from the server's own responses (`src/web/src/test/canaries.ts`); this suite has no keys
 // in the test process — the keys live in the page — so it records what it TYPED, and what it handed the page to
 // upload: the same plaintext, known from the other end. After the browser stage `scripts/run_stack_e2e.py` sweeps the
 // stack with it — the database, the bucket, every container log, every statement the database received — and the run
@@ -10,7 +10,7 @@
 // name `public`, a tenant username `pii`) is not a canary — the sweep would find it, correctly, and the fix would be
 // to stop recording it, never to quieten the sweep.
 //
-// **One collision rule with web/'s recorder** (`@veyq/crypto/canaryRule`): a short value spelled only in the
+// **One collision rule with src/web/'s recorder** (`@veyq/crypto/canaryRule`): a short value spelled only in the
 // base64/hex alphabet is refused, because the sweep's plain substring match would find it inside random ciphertext.
 import { test } from '@playwright/test'
 import { collidesWithCiphertext, MIN_CANARY_LENGTH } from '@veyq/crypto/canaryRule'

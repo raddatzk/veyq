@@ -44,7 +44,7 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
      normative docs in `docs/` on GitHub. It claims nothing beyond
      [security-model § What holds today](../crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve).
      It **explains, and points exactly**: concepts, protocols and their rationale at whitepaper depth, while byte
-     formats stay normative in [`packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts) and the
+     formats stay normative in [`src/packages/crypto/src/v1.ts`](../../src/packages/crypto/src/v1.ts) and the
      [vectors](../../contracts/crypto/vectors/v1.json) and are linked, never restated — a second byte spec would
      be a second source nothing holds to the vectors. Its pages describe what is **built**; everything designed
      and not built (Key Transparency, strict verification mode, abuse-report intake, passkey unlock, post-quantum
@@ -89,7 +89,7 @@ copy (the drift `validate_wiki_sources.py` was built after, inbox #120), and it 
 ## Consequences
 
 - `wiki/`, `wiki-sync.yml` and the GitHub Wiki go away. In-app links to the wiki move to the site
-  (`web/src/views/ShareView.vue` links `is-my-data-safe` today), and the German one loses its translated slug.
+  (`src/web/src/views/ShareView.vue` links `is-my-data-safe` today), and the German one loses its translated slug.
 - The guards follow the content: `validate_wiki_sources.py` reads `sources:` from frontmatter and pairs by
   path; `validate_doc_links.py` covers the site's content; `validate_feature_format.py` checks `## User impact`;
   `validate_release_identity.py` reads the `cosign verify` commands from the Run page instead of

@@ -23,7 +23,7 @@ const PASSWORD = 'correct horse battery'
  *  over the Master Key, plus the identity private key wrapped under that Master Key. Mirrors setupServer.ts.
  *
  *  At production params, because the client refuses any served profile other than the one it writes (ADR 0017
- *  rule 5) — the cost is production's to choose, not this test's (packages/crypto/src/testArgon.ts). Built ONCE
+ *  rule 5) — the cost is production's to choose, not this test's (src/packages/crypto/src/testArgon.ts). Built ONCE
  *  for the file: nothing here mutates it, and each build is a full Argon2id. */
 function buildMaterial(password: string) {
   const id = v1.generateIdentity()

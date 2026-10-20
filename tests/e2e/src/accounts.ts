@@ -22,7 +22,7 @@ export function freshOwner(domain: string): Owner {
  * The email and Secret Key, read back out of the Emergency Kit PDF the browser produced. The kit is the only place
  * the Secret Key exists, so a scenario that unlocks on a new device needs it from there — which also proves the kit
  * a Server Owner downloads is readable. The PDF carries the `veyqkit:` token uncompressed in its metadata
- * (en.account.key-model § The Emergency Kit); `parseKit` is the shared codec web/ reads kits with, so this reads the
+ * (en.account.key-model § The Emergency Kit); `parseKit` is the shared codec src/web/ reads kits with, so this reads the
  * kit exactly as the app would.
  */
 export async function readKit(download: Download): Promise<KitData> {

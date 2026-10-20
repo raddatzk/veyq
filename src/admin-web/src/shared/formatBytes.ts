@@ -1,6 +1,6 @@
 /**
  * A byte count in the reader's locale, in binary steps (1024) — a tenant's storage usage and quota in the console.
- * `web/` carries the same seven lines (`web/src/shared/formatBytes.ts`): the two packages share crypto and nothing
+ * `src/web/` carries the same seven lines (`src/web/src/shared/formatBytes.ts`): the two packages share crypto and nothing
  * else (ADR 0065), and a formatter is not worth a shared package.
  */
 export function formatBytes(bytes: number, locale: string): string {

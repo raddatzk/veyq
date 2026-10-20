@@ -1,13 +1,13 @@
 // The ONE way a live e2e suite (`VEYQ_E2E=1`) gets a usable instance: cold-birth it over the real HTTP API.
 //
 // Before this existed there were two bootstrap contracts, and they were incompatible. `scopeRotation.e2e` asserted
-// `setupRequired === true` and birthed everything itself; the three memory suites read `web/scripts/.seed/
+// `setupRequired === true` and birthed everything itself; the three memory suites read `src/web/scripts/.seed/
 // dev-seed.json`, whose producer had to reach into the dev DB with `docker exec … UPDATE veyq_tenant` because
 // `POST /api/tenants` rejects a numeric domain. That DB poke is not executable from CI, so the seeded contract
 // could never run under `scripts/run_web_e2e.py` — which is why every suite now takes this path instead.
 //
 // The block is short but pulls eight symbols from five modules, so it is extracted rather than copied three
-// times. The local dev principal is born by `web/scripts/bootstrap-user.mts` on the same `*.localhost` footing.
+// times. The local dev principal is born by `src/web/scripts/bootstrap-user.mts` on the same `*.localhost` footing.
 //
 // One tenant domain serves every suite: `veyq.localhost` is a VALID dotted domain (so `POST /api/tenants` and the
 // invite mailer's hostname check both accept it) AND resolves to loopback per RFC 6761 (so it works as the fetch
@@ -45,9 +45,9 @@ export const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
 
 /**
  * The two Server-Owner calls this harness makes — first-run setup and a PENDING tenant with its owner invite —
- * through the admin listener. They are spelled against the generated clients rather than a facade because `web/`
+ * through the admin listener. They are spelled against the generated clients rather than a facade because `src/web/`
  * has none: that surface lives in `admin-web` (ADR 0065). A test harness birthing a whole instance legitimately
- * needs them; product code in `web/` does not, and a facade here would give it one to reach for.
+ * needs them; product code in `src/web/` does not, and a facade here would give it one to reach for.
  */
 function createServerOwner(m: BuiltAccount['material'], email: string) {
   return new SetupApi(new SetupConfiguration({ basePath: ADMIN_BASE })).createServerOwner({
@@ -70,7 +70,7 @@ function createTenant(tenantName: string, domain: string, ownerEmail: string) {
  * The object store is a Server-Owner setting that must have PASSED its check before the server creates a tenant (ADR 0089
  * decision 6; `409 store_not_ready`), and the environment only carries the bundled store's HINT — so a fresh instance
  * chooses the bundled store and checks it, which is the whole of what an operator does too. A hand-built call, not a
- * generated client: `web/` generates none for `/api/instance/store` (that surface is `admin-web`'s, ADR 0065) and a
+ * generated client: `src/web/` generates none for `/api/instance/store` (that surface is `admin-web`'s, ADR 0065) and a
  * client for one harness step would hand product code a Server-Owner door.
  */
 async function chooseBundledStore(): Promise<void> {

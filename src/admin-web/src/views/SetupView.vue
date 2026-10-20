@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // uc.admin.setup-server — first-run bootstrap, and the reason this whole surface can be reached before any
 // DNS exists (ADR 0065). It performs a real cold account birth (identity keypair, Master Key wraps, Emergency
-// Kit) through @veyq/crypto, the one module shared with `web/`: this is the most privileged single action an
+// Kit) through @veyq/crypto, the one module shared with `src/web/`: this is the most privileged single action an
 // instance ever takes, so it must not run against a second copy of that code.
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -90,7 +90,7 @@ async function proceed() {
 }
 
 function finish() {
-  // web/'s version cleared this browser's device-trust and device-key wraps here, because there the setup page
+  // src/web/'s version cleared this browser's device-trust and device-key wraps here, because there the setup page
   // shares an origin with an app a PREVIOUS account may have used. This origin serves nothing but the admin
   // surface and has never held a wrap of any kind — there is nothing stale to drop, so the clear is gone
   // rather than carried over as a no-op that reads like it does something.

@@ -1,6 +1,6 @@
 // @ts-check
 // Stryker mutation testing — the SHARED crypto assertion-strength gate (ADR 0045), the half that moved here
-// with the code when `@veyq/crypto` was extracted (cr-admin-web-extraction, ADR 0065). `web/` keeps its own
+// with the code when `@veyq/crypto` was extracted (cr-admin-web-extraction, ADR 0065). `src/web/` keeps its own
 // config for the six files that stayed there; the two run as two jobs because Stryker's test runner is the
 // project's own vitest and neither project collects the other's suites.
 //
@@ -12,7 +12,7 @@
 // ../../../../contracts/crypto/vectors/v1.json — OUTSIDE this package's root, so a copied sandbox can't see them
 // and the KAT dry-run fails before a single mutant runs. inPlace mutates the real tree and restores it after;
 // the files are git-tracked, so an interrupted run is recoverable with `git checkout`. And while it runs, the source
-// on disk IS a mutant: web/ and admin-web/ import @veyq/crypto from that source, so their suites go red for nothing
+// on disk IS a mutant: src/web/ and src/admin-web/ import @veyq/crypto from that source, so their suites go red for nothing
 // if they run alongside — run this gate on its own (measured in cr-item-marks-binary-ids).
 import { readFileSync } from 'node:fs'
 

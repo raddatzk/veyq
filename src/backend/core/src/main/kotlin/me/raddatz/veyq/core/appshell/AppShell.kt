@@ -2,7 +2,7 @@ package me.raddatz.veyq.core.appshell
 
 /**
  * What the backend found of the web client on its classpath, decided **once at boot** (ADR 0069). The release
- * image puts `web/dist` into `META-INF/resources`; dev (Vite serves the app) and the CI e2e jar put nothing
+ * image puts `src/web/dist` into `META-INF/resources`; dev (Vite serves the app) and the CI e2e jar put nothing
  * there, and are [Absent]: the backend then serves the API only, with the plain headers and no fallback.
  *
  * Pure on purpose — no classpath, no Vert.x — so the decision about *what* is served is unit-testable apart from
@@ -15,7 +15,7 @@ sealed interface AppShell {
     class Present(val indexHtml: ByteArray, val csp: String) : AppShell
 
     companion object {
-        /** The emitted policy's name inside `dist`, next to `index.html`. `web/vite.config.ts` writes it. */
+        /** The emitted policy's name inside `dist`, next to `index.html`. `src/web/vite.config.ts` writes it. */
         const val POLICY_FILE = "content-security-policy.txt"
         const val INDEX_FILE = "index.html"
 
@@ -75,7 +75,7 @@ sealed interface AppShell {
         private const val CONNECT_SRC = "connect-src"
         private const val IMG_SRC = "img-src"
 
-        /** The same shape `web/scripts/assert-csp-policy-in-dist.mjs` refuses. */
+        /** The same shape `src/web/scripts/assert-csp-policy-in-dist.mjs` refuses. */
         private val CSP_META = Regex("""<meta[^>]*http-equiv\s*=\s*["']?content-security-policy""", RegexOption.IGNORE_CASE)
     }
 }

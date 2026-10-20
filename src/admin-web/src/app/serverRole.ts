@@ -1,5 +1,5 @@
 // The Server-Owner gate — `admin-web`'s ROOT gate, and the artifact this package had to reconstruct rather
-// than lift (ADR 0065): in `web/` the same probe only decided whether to OFFER a settings entry, so a
+// than lift (ADR 0065): in `src/web/` the same probe only decided whether to OFFER a settings entry, so a
 // non-owner simply never saw the link and no refusal surface existed. Here the whole app IS the admin
 // surface, so the question "may this caller be here at all" has to be answered before the console renders,
 // and answered with something a person can read.
@@ -8,7 +8,7 @@
 // as before; this only decides which of three honest screens to show instead of a blank or crashing page:
 //
 //   401 / no session  -> sign in            (`unauthenticated`)
-//   403               -> refusal, by name   (`forbidden`)   <- the case web/ had no surface for
+//   403               -> refusal, by name   (`forbidden`)   <- the case src/web/ had no surface for
 //   200               -> the console        (`owner`)
 //
 // The probe is `listTenants()` because the backend never volunteers a role: a Server Owner gets the list,

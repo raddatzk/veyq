@@ -14,7 +14,7 @@ import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 // equally a network error. The positive control serves a readable copy to the same paths and sees the writes.
 //
 // Which paths: every importer of the two document modules outside the reset and the rotation, measured with
-//   grep -rn -E "from '[./]*(account/)?(identityPins|deviceRegister)'" web/src | grep -v '\.test\.'
+//   grep -rn -E "from '[./]*(account/)?(identityPins|deviceRegister)'" src/web/src | grep -v '\.test\.'
 // — the grant-delivery worker, the member directory (`trustStates`), the changed-key review (`getPin`,
 // `acceptKeyChange`), the group invite (`acceptKeyChange`), opening a scope (`scopes.ts` / `grantTrust.ts`, both
 // through `checkAndPin`), the sessions panel (`readRegisterView`, the reconcile, the rename), the unlock

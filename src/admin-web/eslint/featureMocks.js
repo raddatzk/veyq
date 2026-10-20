@@ -3,7 +3,7 @@
 // typed by the real function. The string form of `vi.mock` types its factory as nothing, so a payload written there
 // is checked against nothing.
 //
-// The same rule as web's `web/eslint/featureMocks.js`, kept as this package's own copy as S1–S7 are: the workspace
+// The same rule as web's `src/web/eslint/featureMocks.js`, kept as this package's own copy as S1–S7 are: the workspace
 // shares `@veyq/crypto` and nothing else (ADR 0065). A rule rather than an AST selector, because which module a mock
 // reaches depends on the FILE it is written in: `'./tenants'` from `src/features/tenants/` is a features module, the
 // same spelling from `src/cli/` is not. The selector form matched only a path that spells `features/`, so every test

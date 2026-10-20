@@ -1,5 +1,5 @@
 {
-  "about": "One upgrade record both validators must accept, and edits of it both must refuse: web/src/test/upgradeRecord.test.ts and scripts/upgrade_proof_selftest.py read this file, so the TypeScript reader and the orchestrator agree on the shape (web/src/test/upgradeRecord.ts).",
+  "about": "One upgrade record both validators must accept, and edits of it both must refuse: src/web/src/test/upgradeRecord.test.ts and scripts/upgrade_proof_selftest.py read this file, so the TypeScript reader and the orchestrator agree on the shape (src/web/src/test/upgradeRecord.ts).",
   "record": {
     "version": 1,
     "owner": { "email": "a-1@e2e.test", "password": "Pw-a-1-9xQ!", "secretKey": "c2VjcmV0", "tenantId": "11111111-1111-4111-8111-111111111111" },

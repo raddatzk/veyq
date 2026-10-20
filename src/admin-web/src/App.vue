@@ -41,7 +41,7 @@ const cardLayout = computed(() => serverState.unreachable || route.meta.layout !
 <style scoped>
 /* The console's page: it centres its own content (`.admin-shell`, max-width 68rem), so the root owes it only
    height and a background — the *subtle* pattern, which is what web's authenticated shell uses
-   (`web/src/styles/layout.css` § .app-shell) rather than the stronger one the card screens sit on. Text colour
+   (`src/web/src/styles/layout.css` § .app-shell) rather than the stronger one the card screens sit on. Text colour
    comes from `body` (`styles/base.css`), as it does in web's shells. */
 .admin-root {
   min-height: 100dvh;

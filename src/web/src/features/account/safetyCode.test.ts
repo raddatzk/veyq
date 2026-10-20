@@ -52,7 +52,7 @@ describe('the safety-number QR payload', () => {
     expect(compareScan(scanned!, fingerprintDigestB64(key))).toBe('match')
   })
 
-  it('stays far below the jsqr bound web/CLAUDE.md rests on: a short payload and a low QR version', () => {
+  it('stays far below the jsqr bound src/web/CLAUDE.md rests on: a short payload and a low QR version', () => {
     const payload = safetyCodePayload(bundle())
     expect(payload.length).toBe(53)
     // The exception is bounded at the known version-23 defect; our other markers sit at versions 3-4.

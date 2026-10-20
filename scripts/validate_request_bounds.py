@@ -25,7 +25,7 @@ beside the `$ref`, or else the target's own `x-field-extra-annotation`, which th
      does not descend without it, so every annotation below would be dead.
   4. **no string bound on a type-changing `format`.** `format: uuid` generates `java.util.UUID` (`date-time` an
      `OffsetDateTime`): a String validator there is an `UnexpectedTypeException` — a 500 on a well-formed request
-     — and a string bound in the schema is dead text, since the length is the type's (`backend/CLAUDE.md`).
+     — and a string bound in the schema is dead text, since the length is the type's (`src/backend/CLAUDE.md`).
   5. **a required primitive refuses its absence.** A required `integer`/`number`/`boolean` generates a Kotlin
      primitive, which Jackson fills with 0/false when the field is missing — so a missing field passes as that
      default unless something refuses it. Either its `minimum` already excludes the default (a missing

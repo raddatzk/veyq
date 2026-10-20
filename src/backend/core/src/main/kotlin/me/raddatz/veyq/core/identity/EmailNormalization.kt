@@ -1,7 +1,7 @@
 package me.raddatz.veyq.core.identity
 
 /**
- * The one email normalization: trimmed, lower-cased. It is the client's auth-salt rule (`packages/crypto/src/v1.ts`,
+ * The one email normalization: trimmed, lower-cased. It is the client's auth-salt rule (`src/packages/crypto/src/v1.ts`,
  * `email.trim().toLowerCase()`, ADR 0003), and it has to be, because the address an account was born under is the
  * address its login salt was derived from — a server that folded an address differently from the client would find
  * a different account, or none, for the same person.

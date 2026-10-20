@@ -86,7 +86,7 @@
   unchanged: a `null` a client sends still binds. The one property sent as an explicit `null` says so at its field
   (`InstanceRelease.release`, `@JsonInclude(ALWAYS)`).
 - **A dev seeder or script that calls the API is a client like any other**: it goes through the generated client
-  and is typechecked with the app (`web/scripts/`, `tsconfig.scripts.json`), and it never reaches past the API into
+  and is typechecked with the app (`src/web/scripts/`, `tsconfig.scripts.json`), and it never reaches past the API into
   the database. When `bootstrap:user` hand-wrote its bodies, login verify gained `nonce` and the seeder failed its
   own login with 400 at its next run instead of at `typecheck`.
 
@@ -211,7 +211,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 - **Migrations are portable + Flyway-owned.** Use only column types valid on **both H2 and MariaDB** (the
   common subset); Flyway is the single schema authority. Versions are one global timestamp scheme across modules,
   each file names its owning module, and every file is pinned — the scheme, the two baselines, the pin and the
-  pre-release caveat live in [`backend/CLAUDE.md`](../../src/backend/CLAUDE.md) § Migrations.
+  pre-release caveat live in [`src/backend/CLAUDE.md`](../../src/backend/CLAUDE.md) § Migrations.
 - **An applied migration is immutable — including its comments.** Fix a mistake with a *new* migration; never
   edit a file that has run anywhere. Flyway checksums the file's whole content, so a one-word comment edit is
   indistinguishable from a schema change: the next `migrate` fails validation and the instance does not start.
@@ -236,7 +236,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 - **Test data comes from one fixture per surface, not a local copy.** In the backend a single test-fixtures
   object seeds users, tenants, member scopes and nodes and mints the `Bearer` header; a test keeps a local helper
   only for data no other test needs. Measured cost of the copies it replaces: 50 `seedUser`s, so a new
-  `NOT NULL` column on `veyq_user` touched 60 files. In `web/` a test mounts with the **real** i18n catalog
+  `NOT NULL` column on `veyq_user` touched 60 files. In `src/web/` a test mounts with the **real** i18n catalog
   (`realI18n()` from `src/test/i18n.ts`), where a key the catalog lacks fails the test, and fakes an HTTP failure
   with the one shared `httpError` (`src/test/httpError.ts`; admin-web has its own copy), and stands in for the
   `sessionStorage` node lacks with `memoryStorage()` (`src/test/memoryStorage.ts`); a lint rule keeps stub
@@ -249,7 +249,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   never casts `as never` — a payload comes from a builder annotated with its model (`src/test/models.ts` for those
   several files serve), and a cast that must stay names its target, `as unknown as <T>`. The lint block
   `veyq/api-mocks-typed-by-the-contract` (admin-web: `veyq-admin/…`) keeps the three forms out. In web the
-  feature-mock half is its own rule, `veyq-web/feature-mocks-bare-fn` (`web/eslint/featureMocks.js`), because it
+  feature-mock half is its own rule, `veyq-web/feature-mocks-bare-fn` (`src/web/eslint/featureMocks.js`), because it
   resolves a RELATIVE mock path against the test's own location: as a selector it saw only a path that spells
   `features/`, so 77 mocks in 30 tests inside `features/` went unchecked, three of them serving a payload that was
   not the model. admin-web's selector still has that limit. What bought it:

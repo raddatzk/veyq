@@ -1,6 +1,6 @@
 import { createI18n } from 'vue-i18n'
 
-// `admin-web`'s own catalog (EN + DE). Lifted verbatim from `web/src/i18n/index.ts` for the strings that moved
+// `admin-web`'s own catalog (EN + DE). Lifted verbatim from `src/web/src/i18n/index.ts` for the strings that moved
 // with their views, so the moved components need no string changes and the two catalogs cannot disagree about
 // a shared sentence — they simply no longer share one. Keys the app surface still uses stayed there; keys only
 // this surface uses were deleted there. No shared i18n package: ADR 0065 keeps everything but the crypto

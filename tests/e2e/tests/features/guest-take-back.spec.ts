@@ -7,8 +7,8 @@
 // endpoint, same guest, same token — so the refusal is the rule's, never a broken call.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project); the per-link limit it
-// lowers is restored at its end (the next feature scenario uploads through a link). Labels are web/'s own
-// (web/src/i18n/index.ts, en).
+// lowers is restored at its end (the next feature scenario uploads through a link). Labels are src/web/'s own
+// (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page, type Request } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'

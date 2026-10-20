@@ -23,7 +23,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
   cover, banner), item favorites (the marks on media; the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), the live gallery list on core's item-list primitive (its counters are core's `veyq_node_items_revision`, bumped by every media writer through `NodeItemsRevisions.bump`; ADR 0033, inbox #410). The media tables key on
-  `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
+  `node_id` (measured: `grep -n "node_id" src/backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
   `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
   (`MemoryNodeKindRules.takesCover`) and adds one seam, `cover.findStored` (`storedMatch.ts`: an uploaded image equal to a gallery original shares that medium's PREVIEW, ADR 0013 § 5); a cover is set only by an upload in core's dialog; core's `veyq_node` carries no Memories column. Memories' configuration is its own
@@ -131,7 +131,7 @@ upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSlic
 ### What the web offers — the rights matrix
 
 One view per kind serves a member and a guest ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
-Consequences, inbox #401); what it shows is `memoryRights(access, target)` (`web/src/features/memories/rights.ts`,
+Consequences, inbox #401); what it shows is `memoryRights(access, target)` (`src/web/src/features/memories/rights.ts`,
 pinned row by row in `rights.test.ts`): pure, every right false unless a row grants it, an unknown role or kind
 grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 
@@ -158,7 +158,7 @@ the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unk
 `move` says yes and is deleted with it where `deleteNode` does (core's delete, as the Memory's own page asks the host for),
 so a guest's selection moves a Memory a folder holds and deletes none. These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
-most a guest page can ever offer. Memories' source is `web/src/features/memories/source.ts` (inbox #401 S4): the
+most a guest page can ever offer. Memories' source is `src/web/src/features/memories/source.ts` (inbox #401 S4): the
 member's wraps the scope's calls; the guest's reads the link's media listing (each node's own media from the subtree's),
 opens every tier through the share presign, and — for `READ_WRITE` only — uploads into the node on screen, naming it
 (the root names none) and sealing under that node's key from the chain, and purges what this device sent
@@ -170,7 +170,7 @@ decision 4, never the node's item revision), and a change answers the whole list
 told no order of the Memory's changes to continue a keyset from — so another uploader's photo appears, and one gone
 from the link drops, without a reload.
 
-**A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memories/levelRows.ts`), handed a guest's access and tree,
+**A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`src/web/src/features/memories/levelRows.ts`), handed a guest's access and tree,
 gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed with the node's key the link's
 chain opened, each cover through the link's own reads (core's cover store, `core/node/cover/coverStore.ts`: an uploaded cover blob through
 `resolveShareBlob`, which serves a node's cover blob below the share), the map over the opened subtree. A Memory or a chapter — below a shared
@@ -189,9 +189,9 @@ then forgets the device's session.
 
 ## How far it is separated
 
-Measured 2026-10-05 (`ls backend/core/src/main/kotlin/me/raddatz/veyq/core backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):
-**the backend is.** Memories is the Gradle module `:apps:memories` (`backend/apps/memories`), depending on `:core`
-and never the reverse; the root `backend/` composes both into the one fast-jar. Every class lives in its owner's
+Measured 2026-10-05 (`ls src/backend/core/src/main/kotlin/me/raddatz/veyq/core src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):
+**the backend is.** Memories is the Gradle module `:apps:memories` (`src/backend/apps/memories`), depending on `:core`
+and never the reverse; the root `src/backend/` composes both into the one fast-jar. Every class lives in its owner's
 package — the platform in `me.raddatz.veyq.core` (the node tree in `core.content`/`core.node`, sharing in `core.sharing`),
 Memories in `me.raddatz.veyq.memories` (`media`, `itemfavorites`, `node`) — and core reaches Memories only
 through the interfaces Memories implements: it attaches its media through `UploadCompletion`, measures a link's

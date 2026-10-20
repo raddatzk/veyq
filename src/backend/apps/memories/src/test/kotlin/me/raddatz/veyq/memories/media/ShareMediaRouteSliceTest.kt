@@ -31,7 +31,7 @@ import java.util.jar.JarFile
  * Every `/api/shares/…` route of both owners reaches **its own** handler. Core's `sharing` tag is one generated
  * interface rooted at `/api/shares`; Memories' `share-media` tag is another, rooted at `/api/shares/{shareId}/media`
  * (`memories/share-media.openapi.yaml`). RESTEasy resolves a request to the resource class with the most specific
- * root first and never falls back, so a root that widens (backend/CLAUDE.md, the `item-favorites` case) or a route
+ * root first and never falls back, so a root that widens (src/backend/CLAUDE.md, the `item-favorites` case) or a route
  * left behind answers 404/405 on exactly the routes no other suite looks at. A green suite for one tag proves
  * nothing about the other's routes, so every route is called here.
  *

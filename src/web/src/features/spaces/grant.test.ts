@@ -14,7 +14,7 @@ import {
 } from './grant'
 
 // The pure half of ADR 0020 move 6 and ADR 0028 Decision 6, one assertion per rule so a weakened branch fails by
-// name (web/stryker.mutate.json scopes this file). The byte formats themselves are pinned by the crypto vectors.
+// name (src/web/stryker.mutate.json scopes this file). The byte formats themselves are pinned by the crypto vectors.
 const S = '5c09e000-0000-4000-8000-0000000000c1'
 const OTHER = '5c09e000-0000-4000-8000-0000000000c2'
 const U = 'a0000000-0000-4000-8000-0000000000c3'

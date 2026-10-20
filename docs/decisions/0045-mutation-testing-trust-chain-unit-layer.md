@@ -24,7 +24,7 @@ the defect"*): here nothing notices, which is the whole point.
 | Surface | Finding |
 |---|---|
 | **web crypto** (`v1.ts`, 361 LOC) | Already pinned by a **known-answer battery** — `v1.conformance.test.ts` asserts ~20 exact output bytes against `contracts/crypto/vectors/v1.json`. An identity mutant (`aeadSeal=pt`, `symWrap(k,x)=x`) dies by construction: the pinned `sym_master_key.blob` begins `02‖nonce‖tag`, never the plaintext. The place #99 feared weakest is the counter-example. A KAT is strictly stronger than mutation for what it covers. |
-| **backend** | Performs **no content crypto** (hard invariant, [`backend/CLAUDE.md`](../../src/backend/CLAUDE.md)) — only SHA-256 token verifiers, Ed25519 verify, CSPRNG. The security-critical logic is authz/share/scope/session **decisions**, already covered by strong `@QuarkusTest` slices (44 slice classes vs. 4 boot-free unit files). The mutation cost driver there is the **Quarkus boot per covering test**, not the mutant count (the decision logic is ~85 LOC). |
+| **backend** | Performs **no content crypto** (hard invariant, [`src/backend/CLAUDE.md`](../../src/backend/CLAUDE.md)) — only SHA-256 token verifiers, Ed25519 verify, CSPRNG. The security-critical logic is authz/share/scope/session **decisions**, already covered by strong `@QuarkusTest` slices (44 slice classes vs. 4 boot-free unit files). The mutation cost driver there is the **Quarkus boot per covering test**, not the mutant count (the decision logic is ~85 LOC). |
 
 No mutation tooling exists (web = vitest; backend = Gradle/Quarkus/Kotlin). This is greenfield.
 
@@ -104,7 +104,7 @@ layer.**
    (inbox #241, 2026-10-01): there every equivalent mutant is disabled at its own line with its measured reason,
    so a margin buys no headroom for one — only blindness, and at 95 it was 23 mutants, enough to lose the identity
    codec's whole test file at exit 0. A margin stays right where equivalents are left in the score; the reasoning
-   and the bite live in `packages/crypto/stryker.config.mjs`. Backend: the incremental history file as the CI cache; git-diff
+   and the bite live in `src/packages/crypto/stryker.config.mjs`. Backend: the incremental history file as the CI cache; git-diff
    scoping is optional glue and largely moot, because the unit-layer target is small and boot-free. A **diff-aware
    meta-check** asserts *mutants > 0 over the intended glob* only when that glob has changed files — a run that
    mutates nothing and reports 100% is itself a claim nothing backs.
@@ -137,7 +137,7 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
     (crypto primitives vs. authz decisions) must keep the primitive score from masquerading as authz coverage;
     reporting them merged would be the same misleading-green it exists to prevent.
 - **Cost, split honestly by surface:**
-  - **Web is small** — a tool at an already-strong surface. tier1 `packages/crypto/src/**` ≈ 350–650 mutants, full run
+  - **Web is small** — a tool at an already-strong surface. tier1 `src/packages/crypto/src/**` ≈ 350–650 mutants, full run
     minutes (Argon2id KDF mutants dominate), PR diff ~1–3 min.
   - **Backend is the real work** — a **scoped security-core refactor** (disentangle the fusion points, write the
     pure-policy unit tests), *not* "wire up PIT". The mutatable logic is tiny once boot-free, so PIT itself is
@@ -176,7 +176,7 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   *"a dropped, reordered or appended frame fails to open"* comment **is** backed, indirectly, and needs no test
   of its own. Measured, not argued: the package gate's `--force` run leaves **zero** frame-, wrap- or
   AAD-survivors (the code now spans `v1.ts`, `primitives.ts` and `seal.ts`; the current mutant counts are stated
-  once, in `packages/crypto/stryker.config.mjs`, and not here, where a figure rotted from 134 to 186 unseen).
+  once, in `src/packages/crypto/stryker.config.mjs`, and not here, where a figure rotted from 134 to 186 unseen).
   The one rejection **veyq makes itself** — `decodeKdfParams`'s length guard, a plain `if` with no primitive
   behind it — was the gate's only gap, and its test is what took `v1.ts` to 100%. That test pins the error
   *message*, and must keep doing so: unguarded, a short blob still throws (the `DataView` `RangeError` the guard

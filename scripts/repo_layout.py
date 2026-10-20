@@ -22,7 +22,7 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The code surfaces (ADR 0106 decision 5), under `src/` since stage 2. Not to be confused with a surface's own `src/`
-# (`web/src`, a Gradle module's `src/main`), which is the surface's business.
+# (`src/web/src`, a Gradle module's `src/main`), which is the surface's business.
 SRC = ROOT / "src"
 BACKEND = SRC / "backend"
 WEB = SRC / "web"

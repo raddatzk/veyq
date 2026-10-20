@@ -1,9 +1,9 @@
 // Server-Owner sign-in for `admin-web` — operator-blind challenge-response on the Model B data layer, the
-// same endpoints and the same derivation `web/` uses (ADR 0003; ADR 0065: "the existing Server-Owner session,
+// same endpoints and the same derivation `src/web/` uses (ADR 0003; ADR 0065: "the existing Server-Owner session,
 // unchanged"). The password never leaves the device: the client derives the Ed25519 auth keypair from
 // @veyq/crypto — the shared package, so there is one derivation, not two that agree today.
 //
-// Deliberately NARROWER than web/'s login, and the omissions are the design: no passkey, no "remember me"
+// Deliberately NARROWER than src/web/'s login, and the omissions are the design: no passkey, no "remember me"
 // device-key wrap, no session vault, no password recovery. This surface holds no content key and no vault to
 // unlock — a session is all it ever needs — and every one of those features is another place that would touch
 // key material. The session's own upkeep is not here: the rotation and the retry-on-401 every authed call runs

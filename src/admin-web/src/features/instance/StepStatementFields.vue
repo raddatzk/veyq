@@ -3,7 +3,7 @@
 // uc.moderation.object-to-a-measure A7): the ground, the law or clause relied on, and what was found — the sign-in block on a proposal and the
 // tenant's suspension both show them. What the fields become is `stepStatement.ts`'s; what the mode requires is the
 // server's to refuse, so the hints say when each is required rather than the form guessing the mode. Native controls,
-// as web/'s decision panel has them (`CaseDetail.vue`'s statement).
+// as src/web/'s decision panel has them (`CaseDetail.vue`'s statement).
 import { useI18n } from 'vue-i18n'
 import { GROUNDS, type StepStatementDraft } from './stepStatement'
 

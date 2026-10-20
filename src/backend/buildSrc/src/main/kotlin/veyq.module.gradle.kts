@@ -1,4 +1,4 @@
-// `veyq.module` — what every backend module repeats (ADR 0079). A module is a subproject below `backend/` (`:core`,
+// `veyq.module` — what every backend module repeats (ADR 0079). A module is a subproject below `src/backend/` (`:core`,
 // `:apps:memories`) whose jar the root's `quarkusBuild` puts into `quarkus-app/lib/main` — it is never
 // built, published or deployed on its own: the one deliverable is the root's fast-jar.
 //
@@ -62,14 +62,14 @@ tasks.withType<Test>().configureEach {
     // heap space` at `TenantIngressProjectorTest`'s boot, reproduced with its new test classes moved out (2026-10-17);
     // the same suite had passed at 2g one commit before.
     maxHeapSize = "3g"
-    // Every backend test runs from `backend/`, as it did before the split: tests read `../../contracts/…` and write
+    // Every backend test runs from `src/backend/`, as it did before the split: tests read `../../contracts/…` and write
     // under `build/` relative to the working directory, and a module's test must not see a different tree.
     workingDir = rootProject.projectDir
 }
 
 // The Quarkus plugin is applied to a module only so its own `@QuarkusTest`s can boot (a library `@QuarkusTest`
 // fails without it). Its application tasks belong to the root alone: `./gradlew quarkusBuild` and `quarkusDev`,
-// run from `backend/` as the Dockerfile, CI and the root launcher's `backend:run` do, select the task in
+// run from `src/backend/` as the Dockerfile, CI and the root launcher's `backend:run` do, select the task in
 // every project that has it — so a module's would build a second `quarkus-app` or start a second dev server. A
 // disabled task's dependencies still run, so the chain below `quarkusBuild` is cut too (measured: the module's
 // `quarkusAppPartsBuild` ran, and failed, under a disabled `quarkusBuild`).

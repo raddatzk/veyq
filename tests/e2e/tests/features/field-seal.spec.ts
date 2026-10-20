@@ -10,7 +10,7 @@
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Every value typed is a
 // canary (recordTyped): the orchestrator's sweep proves none of it is readable in the database, the bucket, a log or a
-// statement. The labels are web/'s own (web/src/i18n/index.ts, en).
+// statement. The labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -26,7 +26,7 @@ const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/_
 const stamp = randomBytes(3).toString('hex')
 const folderBefore = `Ordner Alpha vom Dachboden ${stamp}`
 const folderAfter = `Ordner Gamma aus dem Keller ${stamp}`
-// Its fragment path in the tenant space (token-less, web/src/shared/naming.ts `slugify`): the stamp is lowercase hex.
+// Its fragment path in the tenant space (token-less, src/web/src/shared/naming.ts `slugify`): the stamp is lowercase hex.
 const folderAfterPath = `ordner-gamma-aus-dem-keller-${stamp}/`
 const destination = `Zielordner Beta im Flur ${stamp}`
 const memoryName = `Sommerfrische an der Mosel ${stamp}`

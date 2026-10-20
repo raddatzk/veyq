@@ -19,7 +19,7 @@ scored **56/58 = 97 %** and the build was **green** against the calibrated thres
 `TokenBucket` — the one class the change was about — was **23/25 = 92 %** on its own, with *both* survivors
 inside it. Nothing said so. Found only by running the gate; every structural check was green throughout.
 
-**Why a count and not a percentage.** [backend/build.gradle.kts] justifies `mutationThreshold.set(95)` as
+**Why a count and not a percentage.** [src/backend/build.gradle.kts] justifies `mutationThreshold.set(95)` as
 deliberate headroom for one *future* equivalent mutant (one PIT cannot prove equivalent, so it surfaces as
 SURVIVED). Applied per class that same 95 % is unreachable: at the scope's measured sizes — 3, 6, 9, 15 and
 25 mutants — a single survivor scores 66.7/83.3/88.9/93.3/96.0 %, so a per-glob 95 % floor would mean **100 %
@@ -43,7 +43,7 @@ code outside the manifest — the dumb stores and the `@QuarkusTest` slices are 
 
 Deliberately diff-free — a stale glob points at nothing regardless of what a given PR changed, so the
 invariant holds on every run, not only when the diff intersects the scope. It reads the SAME manifest the
-`pitest{}` build block consumes (backend/core/pitest.scope.json), so the mutator and this guard never disagree on
+`pitest{}` build block consumes (src/backend/core/pitest.scope.json), so the mutator and this guard never disagree on
 WHAT is in scope.
 
 Not a `validate_*.py`: the trust-chain job runs those on every push with no build, but this needs PIT's

@@ -1,6 +1,6 @@
 // `:apps:memories` — the Memories application (ADR 0079): every `me.raddatz.veyq.memories.*` class, the Memories specs'
 // generated API (`openApiGenerateMemories`, `contracts/api/memories/`) and its migrations. It depends on `:core`, and
-// never the reverse (Gradle refuses the cycle); no application depends on another. The root `backend/` composes it
+// never the reverse (Gradle refuses the cycle); no application depends on another. The root `src/backend/` composes it
 // into the one fast-jar, where its jar is `lib/main/me.raddatz.veyq.memories.jar` — never deployed on its own.
 //
 // Its tests (`./gradlew :apps:memories:test`) are the Memories application's own and the core behaviour that needs an

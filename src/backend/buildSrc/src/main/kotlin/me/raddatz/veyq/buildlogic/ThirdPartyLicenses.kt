@@ -36,8 +36,8 @@ fun interface PomResolver {
  * so a dependency Quarkus adds at packaging cannot slip past. Each module's license comes from its POM, or the nearest
  * parent POM that declares one. [KNOWN] maps every license NAME a POM may give to its SPDX id, and is the decision: a
  * name it does not hold fails the build, so a new license family is read by a person before it ships beside an
- * AGPL-3.0-only server — add it there, and its text under `backend/licenses/`, only once it is known to be compatible.
- * An MIT/BSD jar that carries no license file of its own needs the project's under `backend/licenses/notices/`, since
+ * AGPL-3.0-only server — add it there, and its text under `src/backend/licenses/`, only once it is known to be compatible.
+ * An MIT/BSD jar that carries no license file of its own needs the project's under `src/backend/licenses/notices/`, since
  * the SPDX template has no copyright holder; the task fails without one, and on one no shipped jar needs any more.
  */
 abstract class ThirdPartyLicenses : DefaultTask() {
@@ -104,22 +104,22 @@ abstract class ThirdPartyLicenses : DefaultTask() {
                 val name = "${id.group}.${id.module}.txt"
                 val file = supplied[name]
                 if (file == null) {
-                    problems += "${id.displayName}: ships no license file of its own; add the project's as backend/licenses/$NOTICES/$name"
+                    problems += "${id.displayName}: ships no license file of its own; add the project's as src/backend/licenses/$NOTICES/$name"
                 } else {
                     suppliedUsed += name
-                    notices = listOf("backend/licenses/$NOTICES/$name" to file.readText().trim())
+                    notices = listOf("src/backend/licenses/$NOTICES/$name" to file.readText().trim())
                 }
             }
             components += Component(id, "lib/$sub/${jar.name}", spdx, notices)
         }
         // A file no shipped jar needs is either a dependency that left or one that now carries its own: both stale.
-        for (name in supplied.keys - suppliedUsed) problems += "backend/licenses/$NOTICES/$name: no shipped jar needs it"
+        for (name in supplied.keys - suppliedUsed) problems += "src/backend/licenses/$NOTICES/$name: no shipped jar needs it"
 
         val used = components.flatMap { it.spdx }.filter { it != "?" }.flatMap { it.split(" WITH ") }.toSortedSet()
-        for (spdx in used) if (!texts.resolve("$spdx.txt").isFile) problems += "license text backend/licenses/$spdx.txt is missing"
+        for (spdx in used) if (!texts.resolve("$spdx.txt").isFile) problems += "license text src/backend/licenses/$spdx.txt is missing"
         // A text no shipped jar is under any more: its dependency left (MPL-2.0 went with H2), and so does its admission.
         val held = texts.listFiles { f -> f.name.endsWith(".txt") }.orEmpty().map { it.name.removeSuffix(".txt") }
-        for (spdx in held - used) problems += "license text backend/licenses/$spdx.txt: no shipped jar is under it"
+        for (spdx in held - used) problems += "license text src/backend/licenses/$spdx.txt: no shipped jar is under it"
         if (problems.isNotEmpty()) throw GradleException("Third-party licenses:\n  " + problems.joinToString("\n  "))
 
         val rendered = render(components, used, texts)

@@ -1,4 +1,4 @@
-// The root `backend/` — the composition (ADR 0079): the Quarkus application whose `quarkusBuild` produces the one
+// The root `src/backend/` — the composition (ADR 0079): the Quarkus application whose `quarkusBuild` produces the one
 // fast-jar the Dockerfile copies. The modules it depends on (`:core`, `:apps:memories`, `:apps:depot`, settings.gradle.kts) land in
 // that fast-jar's `quarkus-app/lib/main`, never deployed on their own. The root holds no main code of its own: its
 // `src/main/resources` carries the profile files beside their anchor, and its tests are the genuinely whole-app ones —

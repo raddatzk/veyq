@@ -7,13 +7,13 @@
 // PR-only job, run via `npm run mutation`.
 //
 // WHAT is mutated lives in stryker.mutate.json (the canonical scope, shared with the CI meta-check so the
-// two never drift): the pure crypto-logic files that stayed in web/. v1.ts and the rest of the primitive
-// tier moved to @veyq/crypto and are gated by packages/crypto/stryker.config.mjs. That file's _comment
+// two never drift): the pure crypto-logic files that stayed in src/web/. v1.ts and the rest of the primitive
+// tier moved to @veyq/crypto and are gated by src/packages/crypto/stryker.config.mjs. That file's _comment
 // carries the measured evidence for what is in and what is out (ADR 0045 §3).
 //
 // inPlace (not Stryker's default copy-to-sandbox): web suites (identityPins.test.ts,
 // argonParams.conformance.test.ts) read the shared crypto vectors at
-// ../../../../../contracts/crypto/vectors/v1.json — OUTSIDE the web/ sandbox root, so a copied sandbox can't
+// ../../../../../contracts/crypto/vectors/v1.json — OUTSIDE the src/web/ sandbox root, so a copied sandbox can't
 // see them and the dry-run fails before a single mutant runs. inPlace mutates the real tree and
 // restores it after; the files are git-tracked, so an interrupted run is recoverable with `git checkout`.
 import { readFileSync } from 'node:fs'

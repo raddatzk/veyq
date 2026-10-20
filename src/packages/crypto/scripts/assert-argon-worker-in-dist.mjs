@@ -1,6 +1,6 @@
 // Run AFTER a consumer's `vite build`, as `node ../packages/crypto/scripts/assert-argon-worker-in-dist.mjs dist`:
 // fail unless the build emitted the Argon2 worker (`src/argon.worker.ts`) as a chunk of its own and the app
-// references it. Both `web/` and `admin-web/` call it from their `check`; it lives here, once, because the property
+// references it. Both `src/web/` and `src/admin-web/` call it from their `check`; it lives here, once, because the property
 // belongs to the module that makes the `new Worker(new URL(…))` call (`src/argonWorker.ts`), not to either app.
 //
 // Why a build can lose the worker and still exit 0: Vite only recognises the worker when `new Worker(new URL('…',

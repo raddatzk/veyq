@@ -10,7 +10,7 @@
 // must not wipe the `date`, and vice-versa). And since any member writes it, the read it modifies must be the
 // server's current one: every write goes through `writeNodeMeta` (`nodeMetaWrite.ts`), which states the
 // `metaRevision` it was built from and re-runs the change on a `409 stale_revision` (ADR 0077). This module owns the
-// envelope and stays PURE — it is in the crypto mutation scope (`web/stryker.mutate.json`), which admits a file
+// envelope and stays PURE — it is in the crypto mutation scope (`src/web/stryker.mutate.json`), which admits a file
 // only when nothing in it does I/O, so the PATCH lives next door. The domain modules (`memoryDate`,
 // `memoryLocation`, `memoryCover`) own how each sub-object is validated + materialized.
 import * as v1 from '@veyq/crypto/v1'

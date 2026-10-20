@@ -1,4 +1,4 @@
-/* The design system is the pre-E2EE source's stylesheets (web/src/styles/, taken from
+/* The design system is the pre-E2EE source's stylesheets (src/web/src/styles/, taken from
    legacy/frontend-noe2ee/src/styles/). Components reuse the original class names + markup, so a ported view
    should look like the original; only the data layer underneath differs.
 

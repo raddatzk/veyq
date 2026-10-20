@@ -9,7 +9,7 @@ import java.io.File
  * and a removal announced).
  *
  * The contracts write `x-field-extra-annotation: '@field:jakarta.validation.Valid'` on a list property so the cascade
- * reaches each element (a nested list needs its own cascade — backend/CLAUDE.md), and `validate_request_bounds.py`
+ * reaches each element (a nested list needs its own cascade — src/backend/CLAUDE.md), and `validate_request_bounds.py`
  * reads exactly that text. The `kotlin` generator, however, writes the field's type itself (`kotlin.collections.List<…>`,
  * its `data_class_req_var` / `data_class_opt_var` templates) and an extension annotates only the field, so
  * `List<@Valid Item>` cannot be said in the spec. This post-pass says it on the generated source:

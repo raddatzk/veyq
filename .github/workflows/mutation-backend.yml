@@ -4,7 +4,7 @@ name: Mutation (backend)
 # validate_coverage.py proves a test REF resolves; this proves the test's ASSERTIONS pin the decision (a rotate
 # that re-grants a pendingConsent proposal, a cascade that soft-deletes shared content, a token-bucket refill that
 # discards its sub-token remainder — each dies here). PIT mutates only the curated pure policies
-# (backend/core/pitest.scope.json), never the dumb stores nor the @QuarkusTest slices (ADR 0045 §2). The build's `mutationThreshold` is the gate; the meta-check is
+# (src/backend/core/pitest.scope.json), never the dumb stores nor the @QuarkusTest slices (ADR 0045 §2). The build's `mutationThreshold` is the gate; the meta-check is
 # its per-glob sibling.
 #
 # Cost control is PIT's INCREMENTAL history file (ADR 0045 §4), cached below: PIT re-tests only mutants whose code
@@ -19,7 +19,7 @@ on:
     branches: [main]
     # Source AND tests: a change to either can move the score (a weakened assertion lives in a *Test.kt), so either
     # must re-run the gate. The manifest/build/meta-check/workflow gate themselves. This list mirrors
-    # backend/core/pitest.scope.json one-for-one, in the same order, and `scripts/validate_mutation_trigger_paths.py`
+    # src/backend/core/pitest.scope.json one-for-one, in the same order, and `scripts/validate_mutation_trigger_paths.py`
     # KEEPS it there — because editing the manifest alone does not: `b15807a7` added ShareAccessPolicy and
     # MembershipPolicy to the scope and left this filter behind, so a PR touching only those never ran the gate
     # (inbox #114). Adding a policy means editing both, and the guard is what says so.

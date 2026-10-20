@@ -49,7 +49,7 @@ class SmtpTenantInviteMailer(
         val settings = sender.settings(tenantId)
         if (!sender.sendable(settings)) return fallback.sendInvite(tenantId, domain, ownerEmail, token, expiresAt)
         val s = settings!!
-        // The accept link mirrors web/src/shared/inviteLink.ts: the secret rides the URL fragment (ADR 0020). The
+        // The accept link mirrors src/web/src/shared/inviteLink.ts: the secret rides the URL fragment (ADR 0020). The
         // domain is a bare hostname validated at tenant creation (CreateTenantRequest pattern), so it is safe here.
         val ctx = MailContext(
             link = "https://$domain/tenant/accept#$token",

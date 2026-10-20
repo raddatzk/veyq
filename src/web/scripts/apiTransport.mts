@@ -80,7 +80,7 @@ export async function describeFailure(e: unknown): Promise<string> {
 }
 
 // --- the volume harness's transport (cr-volume-measurement-local) ------------------------------------------------------
-// The harness drives the app's OWN client code (`web/src`: login, unlock, `addCopiedMedia`, the tree creators) against
+// The harness drives the app's OWN client code (`src/web/src`: login, unlock, `addCopiedMedia`, the tree creators) against
 // a throwaway production-recipe instance, which answers only on its domain over TLS (Traefik on :443, a Pebble
 // certificate). That domain does not resolve on this host and its CA is no system one, and the client code calls the
 // global `fetch`, so the harness replaces the global for that domain alone: every request to it is sent over

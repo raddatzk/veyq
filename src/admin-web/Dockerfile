@@ -30,7 +30,7 @@ COPY src/admin-web/package.json src/admin-web/openapitools.json ./
 # Plain `npm ci`, and NOT `--omit=optional`: rolldown (Vite 8's bundler) ships its native binding as an
 # optional platform dependency, so omitting optionals produces an install that resolves and then dies with
 # "Cannot find native binding" at the first `vite build`. Measured here, on the first build of this file.
-# web/'s manifest is deliberately absent from the context — npm skips the workspace it cannot see, and this
+# src/web/'s manifest is deliberately absent from the context — npm skips the workspace it cannot see, and this
 # image has no business carrying the app's dependencies.
 # Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
 # ci.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
@@ -65,7 +65,7 @@ RUN npm run build && npm run build:cli
 #
 # The minor is nginx's current STABLE branch (even minor), and it moves when nginx cuts the next one. Not the
 # mainline branch (odd minor): the tag of a mainline minor stops receiving builds once the next mainline opens
-# (1.29-alpine was last pushed 2026-05-11). admin-web/nginx.conf.template needs
+# (1.29-alpine was last pushed 2026-05-11). src/admin-web/nginx.conf.template needs
 # `add_header_inherit` (nginx 1.29.3+), so the floor is 1.30. The digest is the tag's multi-arch index (ADR 0057 §6).
 FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:4714e0b1b2577eaa1a6131d07c958b67f0eb68e6d0521e90c6e5287db8cf0bc5 AS runtime-nginx
 # The base ends on `USER 101`, and `apk add` as 101 fails (measured) — so root for the build steps, and back
@@ -108,7 +108,7 @@ LABEL org.opencontainers.image.title="veyq-admin" \
 ENV VEYQ_VERSION=${VEYQ_VERSION}
 
 # Back to the base image's unprivileged user — the LAST instruction that changes who runs, on purpose (see the
-# `USER root` above). 8080 is what the unprivileged base listens on and what admin-web/nginx.conf.template
+# `USER root` above). 8080 is what the unprivileged base listens on and what src/admin-web/nginx.conf.template
 # binds; the compose file maps it to the host's 127.0.0.1:${ADMIN_PORT}.
 USER 101
 EXPOSE 8080

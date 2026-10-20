@@ -17,7 +17,7 @@ import org.gradle.api.tasks.TaskAction
  * client gates on before login, so it is derived here rather than set by hand or by configuration: a config key is
  * settable per instance (`VEYQ_VERSION_MAJOR`), and an instance must not advertise a major its code does not speak. The
  * jar carries it, so neither runtime target (compose, Helm) needs a value, and every build has it — unlike the release
- * stamp `VEYQ_VERSION`, which only a publish sets. The web client reads the same file (`web/vite.config.ts`).
+ * stamp `VEYQ_VERSION`, which only a publish sets. The web client reads the same file (`src/web/vite.config.ts`).
  *
  * The build refuses a `VERSION` that is not a bare non-negative integer, as `container.yml` and
  * `scripts/validate_release_identity.py` do, rather than compile a major nobody wrote.

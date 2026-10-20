@@ -631,7 +631,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
 // The share-password gate runs Argon2id at production params inside the code under test — `createShare(…,
 // password)` and `derivePasswordToken` take no params argument, and giving them one for a test's benefit is
 // exactly the affordance we don't add. So the cost is inherent and the ceiling is stated here, on this block
-// only. See packages/crypto/src/testArgon.ts.
+// only. See src/packages/crypto/src/testArgon.ts.
 describe('password protection (cr-0118)', () => {
   it('createShare with a password sends the gate fields; the verifier = SHA-256(Argon2id(pw, salt))', async () => {
     const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-p1' })

@@ -23,7 +23,7 @@ acceptanceCriteria:
     coverage:
       # signOut.test.ts owns the sequence, its order and E4's notice; each entry point's own test asserts it calls
       # `signOut` rather than a copy — SessionsPanel's is uc.account.sessions E2, which has no criterion of its own.
-      # The ESLint rule in web/eslint.config.js keeps a `.vue` file from importing the ending at all.
+      # The ESLint rule in src/web/eslint.config.js keeps a `.vue` file from importing the ending at all.
       web:
         unit:
           - src/features/account/login/signOut.test.ts

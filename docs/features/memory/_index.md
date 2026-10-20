@@ -44,7 +44,7 @@ seals its name under a field key derived from the folder's key instead of from `
   `wrappedMeta` blob on a content node — one opaque envelope for a Memory's node-level metadata, sealed under
   a field key derived from `K_node`, threaded through `createNode` / partial `updateNode` / `listNodes`, materialized so a card/map reads
   it without loading media. The envelope + `date` shipped with cr-0067, then `location` (cr-0069), `cover` (cr-0072) and
-  `participants` (ADR 0083); the envelope itself now lives in core, `web/src/core/node/nodeMeta.ts`, inbox #411)
+  `participants` (ADR 0083); the envelope itself now lives in core, `src/web/src/core/node/nodeMeta.ts`, inbox #411)
 - ★ [en.memory.buckets](enablers/en.memory.buckets.md) — **built (web + backend)** (the bucket data layer: a per-uploader
   container within a Memory, a real `owner_key`-keyed `veyq_bucket` table — `user:{id}` / `share:{id}` — with a
   lazy virtual primary + one-level sub-buckets, names sealed under a field key derived from `K_node`, media linked via a nullable `bucket_id`

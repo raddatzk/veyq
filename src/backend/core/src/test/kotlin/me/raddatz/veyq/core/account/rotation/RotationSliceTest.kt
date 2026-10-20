@@ -53,7 +53,7 @@ import java.util.UUID
  * The cold-credential gate (Decision 2) is asserted here for its **server** half: a session is not enough, the
  * request must carry a signature under the account's Secret-Key proof key, and the bite is a caller who holds a
  * valid session and signs with a key of their own — exactly what a device-link holder can do. Its password half
- * (re-opening the `PASSWORD` wrap) is client-side and `web/` owns that proof.
+ * (re-opening the `PASSWORD` wrap) is client-side and `src/web/` owns that proof.
  *
  * Seeds use UUID-unique ids: the H2 mem DB lives for the whole JVM and is shared across test classes.
  */

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { renderStatement, TEMPLATE, type StatementFields } from './template'
 
-// Conformance pin: the template web/ renders equals contracts/moderation/statement-of-reasons.json, every text of it —
+// Conformance pin: the template src/web/ renders equals contracts/moderation/statement-of-reasons.json, every text of it —
 // the backend's StatementTemplateConformanceTest holds its copy to the same file (drift-proofing, as the crypto vectors).
 const contract = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../../../../contracts/moderation/statement-of-reasons.json', import.meta.url)), 'utf8'),

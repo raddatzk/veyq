@@ -10,10 +10,10 @@
 // What only this layer can prove: that the server roots what it serves a chapter link at the chapter — the resolve's
 // nodes, the media read, the uploads (the server sets `nodeId = rootNodeId`) and the drop key — and that what a guest
 // adds through it is opened by the chapter's members through the real read paths. The absences are asserted on the
-// raw wire (`…Raw(…).raw.json()`), because the generated client drops a field the spec does not name (web/CLAUDE.md).
+// raw wire (`…Raw(…).raw.json()`), because the generated client drops a field the spec does not name (src/web/CLAUDE.md).
 // The unit layer (`share.test.ts` § a chapter share) proves the same chain against a server it scripts itself.
 //
-//   python3 scripts/run_web_e2e.py web/src/features/memories/chapterShare.e2e.test.ts
+//   python3 scripts/run_web_e2e.py src/web/src/features/memories/chapterShare.e2e.test.ts
 import { describe, it, expect } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'

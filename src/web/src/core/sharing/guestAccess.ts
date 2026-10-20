@@ -16,7 +16,7 @@
 // (`compareById`, `location.ts`; the numbers a guest sees may differ from a member's, documented there).
 //
 // **Links keep `#k=`.** `linkTo` is the route `?node=<id>` (no query at the root) with the CURRENT route's hash, which
-// carries the share key the shell re-resolves with — a push without it leaves the next reload keyless (web/CLAUDE.md,
+// carries the share key the shell re-resolves with — a push without it leaves the next reload keyless (src/web/CLAUDE.md,
 // the breadcrumb trap).
 import type { RouteLocationRaw } from 'vue-router'
 import type { GuestAccess, TreeSource } from '../access'

@@ -16,7 +16,7 @@ its address is configured).
 
 And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
     - root  — every id's first segment is in `ROOTS`: `core`, and every application the backend composes, derived
-              from its module directories (`backend/apps/<name>` with a `build.gradle.kts`), never typed here. The
+              from its module directories (`src/backend/apps/<name>` with a `build.gradle.kts`), never typed here. The
               first application entries (`memories.places`, `memories.map`) came with cr-external-services-as-settings.
     - parent — every id of three or more segments has its parent (the id minus its last segment) as a catalog
               entry. The server's effective state is an AND along the path, and an entry whose parent is missing

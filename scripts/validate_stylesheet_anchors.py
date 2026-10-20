@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Guard that every stylesheet rule is written for an element the markup can actually produce.
 
-**What it asserts.** For every package that has a `src/styles/` directory (today `web/` and `admin-web/`,
+**What it asserts.** For every package that has a `src/styles/` directory (today `src/web/` and `src/admin-web/`,
 found by walking the directory the code surfaces live in — a third one is in scope the day it lands), every
 **anchor compound** in those sheets plus the package's `src/style.css` — and every other `.css` file under its `src/`, which is where an
-application's own sheet lives (`web/src/features/memories/memories.css`, inbox #513; a sheet that moves out of
+application's own sheet lives (`src/web/src/features/memories/memories.css`, inbox #513; a sheet that moves out of
 `src/styles/` must not move out of this guard) — names at least one class that the package's own markup
 applies. The anchor compound is a selector's first compound, the part before any descendant/child/sibling
 combinator: in `.memory-card .p-card-body` it is `.memory-card`, in `.veyq-danger-action.p-button` it is
@@ -32,7 +32,7 @@ styling for the sidebar's Favorites section fully written and never wired: `layo
 `.sidebar-favorite-cover …` plus three `.mobile-nav-favorite` rules with **zero** markup users. The code
 compiled, every test passed, and the only signal that a shipped feature was missing a surface was CSS
 nobody had ever matched. That row deliberately shipped **no** guard, and the reason was not the exception
-list — it was the base rate: `web/src/styles/` was then 71 % dead (461 of 648 classes), so any such
+list — it was the base rate: `src/web/src/styles/` was then 71 % dead (461 of 648 classes), so any such
 predicate was red on the day it was born, which `changes/README.md` § *Run a new guard's predicate against
 the UNTOUCHED tree before you write it down* forbids outright. inbox #146 deleted that corpus (11209 → 3676
 lines across both packages), which is what made this guard green on arrival and therefore writable.

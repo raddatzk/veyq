@@ -1,6 +1,6 @@
 // The answers to an authority's removal order (ADR 0093 § 12, TCO Regulation (EU) 2021/784 Annex II and III;
 // uc.moderation.authority-order) — admin-web's and veyq-admin's copy of `contracts/moderation/authority-order-forms.json`,
-// which `orderForms.test.ts` holds text for text to that file, as web/'s copy is held to it. A DRAFT until a qualified
+// which `orderForms.test.ts` holds text for text to that file, as src/web/'s copy is held to it. A DRAFT until a qualified
 // legal review: while the template says so, every rendering starts with its banner.
 
 export const ORDER_FORMS = {

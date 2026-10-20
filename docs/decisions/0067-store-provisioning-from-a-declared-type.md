@@ -213,7 +213,7 @@ customer's infrastructure, never their data.
   keeps a second component that needs the store credentials, and it cannot be idempotent about state the
   backend is already the authority on.
 - **Rejected — a `veyq-admin store init` command.** Measured: the CLI signs in as Server Owner on every
-  invocation (`admin-web/src/cli/adminSession.ts`), and no Server Owner exists before first-run setup — so the
+  invocation (`src/admin-web/src/cli/adminSession.ts`), and no Server Owner exists before first-run setup — so the
   earliest it could run is *after* setup, leaving a window in which an instance boots healthy and fails at the
   first upload. It would also put a Garage-specific verb in a tool whose whole premise
   ([ADR 0065](0065-admin-ui-cli-separate-service.md)) is being a thin client of a vendor-neutral backend.

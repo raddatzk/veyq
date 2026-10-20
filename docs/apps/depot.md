@@ -3,7 +3,7 @@
 > **Built.** The platform's second application: a file tree on the platform's node tree
 > ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)) — the Gradle module
 > `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), its contract `contracts/api/depot/`, and
-> `web/src/features/depot`. What a person does with it, and the tests that hold it, are its use-cases:
+> `src/web/src/features/depot`. What a person does with it, and the tests that hold it, are its use-cases:
 > [uc.depot.member-files](../features/depot/use-cases/uc.depot.member-files.md),
 > [uc.depot.share-folder-files](../features/depot/use-cases/uc.depot.share-folder-files.md),
 > [uc.depot.share-file](../features/depot/use-cases/uc.depot.share-file.md),
@@ -88,7 +88,7 @@ dispatcher to `DepotUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
 `AttachmentStore.attach` — the whole write, nothing beside it), `DepotUploadAdmission`, `FilesStore` (the listing's
 reads).
 
-## The web (`web/src/features/depot`)
+## The web (`src/web/src/features/depot`)
 
 - **Depot's rows** in core's ONE level list (`levelRows.ts`, the row factory both kinds name as `list.rows`; inbox #407 —
   there is no Depot section any more, core draws the list): a FILE is a row or a tile with the leading file icon, the
@@ -212,7 +212,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   collected chunk by chunk (four frames in flight) into one `Blob`/string.
 - **A PDF is drawn inline by pdf.js, not by the browser's viewer** (owner decision 2026-10-12). The browser's own viewer
   needs an `<iframe>`/`<object>` on a `blob:` URL, and the app's policy is `object-src 'none'; frame-src 'none'`
-  (`web/src/shared/security/csp.ts`, [cc.security.csp](../crosscutting/cc.security.csp.md)); a viewer frame would also
+  (`src/web/src/shared/security/csp.ts`, [cc.security.csp](../crosscutting/cc.security.csp.md)); a viewer frame would also
   be a same-origin `blob:` document next to the keys. So the file is decrypted whole (cap 64 MiB, one buffer allocated
   at its size) and handed to **`pdfjs-dist`** (Mozilla, Apache-2.0, the *legacy* build) as `{data: Uint8Array}` — never
   a URL, so pdf.js opens no connection for the document. **The policy is unchanged** (the built header is pinned by
@@ -325,7 +325,7 @@ root). The role matrix (ADR 0080 decision 6):
 | any | **not** delete a file that holds content (whether a guest may delete content of its own is inbox #467), **not** upload into a `FOLDER`, **not** create a drop box (owner decision 2026-10-14: Depot declares only `FILE`, so a `DEPOT_DROPBOX` is `422 illegal_scope`, `ShareFilesSliceTest.aContributorCreatesFoldersAndFilesButNoDropBox`) |
 
 **What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
-shows is `depotRights(access, target)` (`web/src/features/depot/rights.ts`, pinned row by row in
+shows is `depotRights(access, target)` (`src/web/src/features/depot/rights.ts`, pinned row by row in
 `rights.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing:
 
 | Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
@@ -343,7 +343,7 @@ shows is `depotRights(access, target)` (`web/src/features/depot/rights.ts`, pinn
 | a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
-(`web/src/features/depot/source.ts`, `sourceRights`: the guest's source has no delete and no rename, and no upload
+(`src/web/src/features/depot/source.ts`, `sourceRights`: the guest's source has no delete and no rename, and no upload
 or move unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer. A move is
 core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks the host through the row factory's
 (or the detail's) `move` event, and the dialog's folder browser (`MoveBrowser.vue`, one place at a time with "Move

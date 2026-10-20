@@ -9,7 +9,7 @@
 //
 // The split has a measured cost behind it, not a taste argument. While `createShare` built the link eagerly,
 // `share.ts` could not be imported outside a DOM at all — and every `*.e2e.test.ts` runs under Vitest's default
-// **node** environment (there is no `test.environment` in `web/vite.config.ts`; the DOM-needing unit suites opt
+// **node** environment (there is no `test.environment` in `src/web/vite.config.ts`; the DOM-needing unit suites opt
 // in per file with `// @vitest-environment happy-dom`). So a sharing e2e suite died on
 // `window is not defined` before its first assertion, and the fix was mistaken for a test affordance —
 // a shim in the bootstrap — when it was a layering fault the whole time.

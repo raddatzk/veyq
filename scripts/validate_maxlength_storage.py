@@ -25,7 +25,7 @@ exactly why "just lower the cap to 65 535" is the wrong fix). For every `compone
      match a real field, so a removed field leaves a loud stale entry, not silent rot.
 
 **Scope — read this before quoting a green run.** This checks the *contract cap* against the repo's storage
-convention (`TEXT` for opaque base64, per `backend/CLAUDE.md`), not the *actual* field→column wiring. It does
+convention (`TEXT` for opaque base64, per `src/backend/CLAUDE.md`), not the *actual* field→column wiring. It does
 **not** see: free-text (non-base64) fields, whose byte width is `chars × up-to-4` under utf8mb4 and whose
 serialized form may co-locate several capped fields in one column — the `terms_markdown_by_locale` class, where
 no single `maxLength` exceeds `TEXT` yet the column can (that field is kept safe by *widening the column* in the

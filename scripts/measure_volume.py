@@ -2,8 +2,8 @@
 """The volume harness's driver: does a small host carry a veyq instance, and up to what volume (cr-volume-measurement-local).
 
 TEMPORARY. `cr-volume-measurement-cax` runs it once more against a real CAX11, writes the sizing recommendation into the
-Run area and deletes it with the rest of the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
-`web/scripts/volumeHarness.mts`, `web/scripts/volumePrelude.mts`, `tests/e2e/measure/`, the bench files).
+Run area and deletes it with the rest of the harness (`src/web/scripts/seed-volume.mts`, `src/web/scripts/measure-volume.mts`,
+`src/web/scripts/volumeHarness.mts`, `src/web/scripts/volumePrelude.mts`, `tests/e2e/measure/`, the bench files).
 
 **What it measures on.** A throwaway instance of the PRODUCTION recipe, never the dev stack: `boot` installs the
 candidate images the way lane L1 does — `scripts/run_stack_e2e.py`'s own stages (assets, release mirror, Pebble,
@@ -18,7 +18,7 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
 
     measure_volume.py --instance DIR fixtures                      the JPEG/WebP fixtures the seeders upload
     measure_volume.py --instance DIR boot --app IMG --admin IMG    a fresh instance (ports 80/443 must be free)
-    measure_volume.py --instance DIR seed <seed-volume args>       web/scripts/seed-volume.mts against it
+    measure_volume.py --instance DIR seed <seed-volume args>       src/web/scripts/seed-volume.mts against it
     measure_volume.py --instance DIR invite-limit <N|default>      the per-tenant invite limit while seeding members, app recreated
     measure_volume.py --instance DIR server <axis>                 the server leg, with the sampler
     measure_volume.py --instance DIR browser <axis> [...]          the browser leg, tests/e2e/measure/volume.ts
@@ -151,7 +151,7 @@ class Instance:
         return {s: pairs[s] for s in services if s in pairs}
 
     def env(self) -> dict[str, str]:
-        """What web/scripts/volumeHarness.mts reads (seed-volume.mts' header lists it)."""
+        """What src/web/scripts/volumeHarness.mts reads (seed-volume.mts' header lists it)."""
         return {
             **os.environ,
             "VEYQ_HOST": DOMAIN,
@@ -549,7 +549,7 @@ def readings_dir(label: str) -> Path:
 
 
 class Client:
-    """web/scripts/measure-volume.mts as a child: signed in once, one call per command (its header says the protocol)."""
+    """src/web/scripts/measure-volume.mts as a child: signed in once, one call per command (its header says the protocol)."""
 
     def __init__(self, inst: Instance, axis: str):
         self.proc = subprocess.Popen(["npx", "tsx", "scripts/measure-volume.mts", axis], cwd=WEB, env=inst.env(),

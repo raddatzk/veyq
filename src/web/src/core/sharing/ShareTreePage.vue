@@ -16,7 +16,7 @@
 // badge. A kind without a detail is a local empty state here, never the page's.
 //
 // **Navigation** is the tree's `linkTo`: `?node=<id>` with the `#k=` fragment KEPT (the shell re-reads the share key
-// from it on every re-resolve), and every breadcrumb a real link (web/CLAUDE.md, the breadcrumb trap). An id the walk
+// from it on every re-resolve), and every breadcrumb a real link (src/web/CLAUDE.md, the breadcrumb trap). An id the walk
 // did not open falls back to the root.
 //
 // **Writes (READ_WRITE only)** are what the rights grant on screen: at a folder a new folder, created as the guest

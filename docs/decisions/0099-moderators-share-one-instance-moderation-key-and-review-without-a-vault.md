@@ -33,11 +33,11 @@ each as a gap (inbox #463):
 What exists to build on (measured in this worktree):
 
 - **Roles.** `veyq_user.server_role` holds one value, `SERVER_OWNER` or `MEMBER`
-  (`backend/core/.../identity/ServerRoles.kt`), surfaced as a `SecurityIdentity` role by `SessionTokenIdentityProvider`
+  (`src/backend/core/.../identity/ServerRoles.kt`), surfaced as a `SecurityIdentity` role by `SessionTokenIdentityProvider`
   (line 47); the Server-Owner gate answers only on the admin channel ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
   A tenant owner is a `veyq_membership.role` of `OWNER` in the tenant scope. There is no third account role.
 - **A key wrapped to many accounts, with epochs and rotation, already exists** — the scope key: one grant per member
-  (`sealTo` purpose `scope-grant` [scopeId, epoch], `packages/crypto/src/seal.ts`), delivered by a key-holder to a
+  (`sealTo` purpose `scope-grant` [scopeId, epoch], `src/packages/crypto/src/seal.ts`), delivered by a key-holder to a
   grant-less member ([ADR 0020](0020-grant-distribution-invite-wrap.md)), checked against the recipient's pinned
   identity ([ADR 0028](0028-identity-authenticity-tofu-verification.md)), and rotated forward into a new epoch on a
   removal ([ADR 0024](0024-scope-key-rotation.md)). A moderation key is the same problem with fewer holders.
@@ -57,7 +57,7 @@ What exists to build on (measured in this worktree):
 - **An existing account.** The Server Owner names one by its address in admin-web or `veyq-admin moderator appoint`.
   An account comes into being only through a tenant invite or setup, so a deputy without one is first invited into a
   tenant; a moderator invite that births an account with no tenant is not built.
-- **The appointee accepts.** An appointment is pending until the appointee accepts it in web/'s moderation surface
+- **The appointee accepts.** An appointment is pending until the appointee accepts it in src/web/'s moderation surface
   (decision 6), after a text that says what they will see (child sexual abuse material included) and that every
   opening is logged. Accepting is also what the first key delivery waits for (decision 3).
 - **Removal** is the Server Owner's (admin-web, CLI) or the moderator's own (they step down in the moderation
@@ -90,7 +90,7 @@ What exists to build on (measured in this worktree):
   key opened a report, in both designs: against an honest server they are equal, against a malicious one neither
   holds.
 
-### 3. The Server Owner mints in admin-web; a holder delivers in web/
+### 3. The Server Owner mints in admin-web; a holder delivers in src/web/
 
 - **Minting needs no vault.** admin-web draws `M_n`, seals it to every current moderator's identity public key,
   uploads the public half and the grants, and forgets it — the same class of work as the account birth it already
@@ -144,7 +144,7 @@ What exists to build on (measured in this worktree):
 - **Against the operator this is accountability, not a control.** The Server Owner owns the server and the roster;
   the rule binds a team, not the host.
 
-### 6. Review and decisions move to a moderation surface in web/
+### 6. Review and decisions move to a moderation surface in src/web/
 
 - **Review** stays the share viewer's moderation mode (0093 § 3), opened from the queue. The moderation surface
   signs the moderator in on the tenant host, unlocks the vault **only to open the moderation grants** — no member
@@ -153,9 +153,9 @@ What exists to build on (measured in this worktree):
 - **Deciding** — the queue in clear fields, dismissing, the steps of 0093 § 6 within the moderator's reach, the
   statement of reasons and its deferral, objection decisions, hold extensions, the CSAM flow and the BKA export —
   is a moderator operation in the same surface, gated by `MODERATOR` plus the key proof, on the public listener.
-- **Why web/ and not admin-web.** A deputy cannot reach admin-web: it is localhost-only, and its own-domain mode puts
+- **Why src/web/ and not admin-web.** A deputy cannot reach admin-web: it is localhost-only, and its own-domain mode puts
   the whole Server-Owner API on the internet (ADR 0065 residual iv), which is worse than a narrow role on the public
-  one. 0093 rejected moderation in web/ because it would put **Server-Owner** operations on the public listener; the
+  one. 0093 rejected moderation in src/web/ because it would put **Server-Owner** operations on the public listener; the
   moderator role carries none of them. What a stolen moderator session could do is bounded: nothing without the key
   (the proof); with it, read what was reported and take a reversible, logged step that another moderator reviews on
   objection.
@@ -167,7 +167,7 @@ What exists to build on (measured in this worktree):
 - **An authority's order** (0093 § 12) is entered in either surface: by a moderator with the key proof, or by the
   Server Owner in admin-web or `veyq-admin` without a key, as 0093 decided. Two operations on one service, because
   the admin-channel marker names a door per operation (ADR 0065).
-- **Where the queue is served:** the moderation surface is a route of web/ on every tenant host, reachable only with
+- **Where the queue is served:** the moderation surface is a route of src/web/ on every tenant host, reachable only with
   the `MODERATOR` role and the key proof; its queue spans the instance, and a review opens on the reported tenant's
   host (§ Decided with the owner, 3).
 - **Limits, stated:** the surface is operator-served web, passive-operator-safe only (ADR 0026), which is moot
@@ -194,7 +194,7 @@ What exists to build on (measured in this worktree):
   `packages/crypto`: the derivation of the bundle from `M_n`, `sealTo` `moderation-grant`, the statement
   `moderation-proof`. Backend: a moderator table, an epoch table (public bundle), a grant table, the `MODERATOR`
   role in `SessionTokenIdentityProvider`, the separation-of-duties refusal, the instance events in the log and their
-  retention reader. web/: the moderation surface (accept, confirm the address, unlock, queue, decide, deliver, step
+  retention reader. src/web/: the moderation surface (accept, confirm the address, unlock, queue, decide, deliver, step
   down), the moderation mode bound to it. admin-web: roster, mint, rotate, the Server-Owner-only steps. `veyq-admin`:
   `moderator appoint|remove|list`, `moderation rotate`. Instance mail to more than one address.
 - **0093's costs move.** "admin-web's queue" becomes the moderation surface; admin-web keeps less of moderation than
@@ -208,7 +208,7 @@ What exists to build on (measured in this worktree):
 - **§ 1**, the report share's last bullet: served against the key proof **and** the `MODERATOR` role (0099 § 2).
 - **§ 2**, first bullet: the moderation key is the instance moderation key's current epoch (0099), not the Server
   Owner's identity key; third bullet: every moderator is notified (0099 § 7), not "the Server Owner".
-- **§ 3**, title and body: review and decisions in web/'s moderation surface for the moderator role, the viewer
+- **§ 3**, title and body: review and decisions in src/web/'s moderation surface for the moderator role, the viewer
   holding only the moderation key; admin-web keeps roster, key, contact, the Server-Owner-only steps and the order
   path; the "only flow where a Server Owner signs in on a tenant host" becomes the moderator's.
 - **§ 6**: which steps a moderator takes, which stay the Server Owner's (0099 § 6).
@@ -217,13 +217,13 @@ What exists to build on (measured in this worktree):
 - **§ 12**: the order path in both surfaces (0099 § 6). **§ 13**: the CSAM warning and the BKA export in the
   moderation surface.
 - **Consequences**: the "single operator reviews their own measure" bullet goes; the cost list names the moderation
-  surface. **Rejected alternatives**: "Moderation actions in web/" is narrowed to Server-Owner operations, with a
+  surface. **Rejected alternatives**: "Moderation actions in src/web/" is narrowed to Server-Owner operations, with a
   pointer here.
 
 Also edited: [ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decisions 3, 5 and 6
 (moderation notices to moderators; their address confirmed in the moderation surface);
 [ADR 0065](0065-admin-ui-cli-separate-service.md)'s split rule gains the moderator as a fifth audience, whose gate is
-not the Server-Owner gate and so stays in web/; the [security model](../crosscutting/security-model.md)'s T&S section;
+not the Server-Owner gate and so stays in src/web/; the [security model](../crosscutting/security-model.md)'s T&S section;
 the Run docs' [moderation page](../../site/src/content/docs/run/moderation.md), which states the design as decided and
 not built.
 
@@ -264,7 +264,7 @@ The owner answered each question as recommended (2026-10-17); the options stay a
    0093 § 6. **Decided: (a)** (decision 6). Those two steps reach content and people nobody reported; blocking the
    share and the content already stops what was reported from being served, so a deputy can keep the TCO hour
    without them.
-3. **Where is the instance-wide queue served?** (a) A route of web/ on every tenant host, reachable only with the
+3. **Where is the instance-wide queue served?** (a) A route of src/web/ on every tenant host, reachable only with the
    `MODERATOR` role and a moderation-key signature, the review opening on the reported tenant's host. (b) A moderation
    host the Server Owner sets, its own route on both targets. **Decided: (a)** (decision 6) — no new host, route or
    certificate on Compose or Helm; a moderator signs in where they already do, and a tenant host serving the

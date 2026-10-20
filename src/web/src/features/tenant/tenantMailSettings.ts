@@ -1,7 +1,7 @@
 // Per-tenant mail settings (uc.admin.tenant-mail-settings, cr-email-tenant-mail-settings-web, ADR 0048/0049/0050).
-// A **tenant-OWNER** surface, so it stays in `web/` with the tenant's own app: the backend gates both calls with
+// A **tenant-OWNER** surface, so it stays in `src/web/` with the tenant's own app: the backend gates both calls with
 // `403 not_tenant_owner`, and the panel reads `activeSpace.tenantId`. ADR 0065 listed it among what moves to
-// `admin-web/`; that was measured wrong at refine time (see `tenantTerms.ts`) and moving it would have taken
+// `src/admin-web/`; that was measured wrong at refine time (see `tenantTerms.ts`) and moving it would have taken
 // SMTP configuration away from every tenant owner who is not also the Server Owner.
 import { tenantsApi } from '../../api/client'
 import type { TenantMailSettings, TenantMailSettingsUpdate } from '../../api/generated/tenants'

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Which shell the root picks, and for which route. Ported from `web/`'s AppShell shape (ADR 0065 — a port,
+// Which shell the root picks, and for which route. Ported from `src/web/`'s AppShell shape (ADR 0065 — a port,
 // not an import): a card route renders centred inside `.veyq-shell` > `.veyq-shell-inner`, the console renders
 // full-width in `.admin-root` and centres itself.
 //

@@ -72,7 +72,7 @@ class PrivacyNoticeRendererTest {
     @Test
     fun theAnchorsTheClientsLinkExistAndAreStable() {
         // The invite acceptance links `account`, the report dialog `reporter-contact`, a guest's first write
-        // `guest-write-record` (web/src/core/privacy/privacyNotice.ts) — renaming one breaks a link nobody sees.
+        // `guest-write-record` (src/web/src/core/privacy/privacyNotice.ts) — renaming one breaks a link nobody sees.
         val ids = text.passages.map { it.id }
         for (anchor in listOf("account", "reporter-contact", "guest-write-record")) assertTrue(anchor in ids, anchor)
     }

@@ -15,7 +15,7 @@ const hex = (u: Uint8Array) => Buffer.from(u).toString('hex')
 const compareHex = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 const here = dirname(fileURLToPath(import.meta.url))
-// repo contracts/crypto/vectors/v1.json (3 levels up from packages/crypto/src/)
+// repo contracts/crypto/vectors/v1.json (3 levels up from src/packages/crypto/src/)
 const vectors = JSON.parse(
   readFileSync(resolve(here, '../../../../contracts/crypto/vectors/v1.json'), 'utf8'),
 )

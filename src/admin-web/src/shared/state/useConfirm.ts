@@ -1,5 +1,5 @@
 // Destructive-confirmation channel (admin-web) — the console's own dialog in place of `window.confirm`
-// (cr-admin-web-own-confirm-dialog). A **copy** of `web/src/shared/state/useConfirm.ts`, not an import: ADR
+// (cr-admin-web-own-confirm-dialog). A **copy** of `src/web/src/shared/state/useConfirm.ts`, not an import: ADR
 // 0065 gives this package no shared UI, and `useToast.ts` beside it is the byte-identical precedent for
 // exactly that. Shaped after that `useToast.ts`, the house precedent for "a thin wrapper that fixes the app
 // conventions so call sites pass only i18n strings": the state lives here, its surface is mounted once in

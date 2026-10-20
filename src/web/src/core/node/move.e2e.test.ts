@@ -8,7 +8,7 @@
 //   - a drop box: a guest names itself, gets its folder and uploads a file; the member moves the guest's folder out into
 //     a normal folder — the folder lists there as an ordinary one (no identity), its file still decrypts, and the guest
 //     can no longer add to it with its old token (the server answers 403, the guest tree client reports `share_not_contributable`).
-// Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/core/node/move.e2e.test.ts`.
+// Run against a FRESH instance: `python3 scripts/run_web_e2e.py src/web/src/core/node/move.e2e.test.ts`.
 //
 // The raw-wire check as in the neighbouring suites: no folder, file or guest name crosses `fetch` in the clear, and the
 // plaintexts are handed to `recordCanaries` (ADR 0053).

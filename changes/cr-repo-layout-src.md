@@ -88,7 +88,7 @@ new shape.
   .`) — `buildx --check` cannot see a COPY source that is missing or a relative path that broke inside the build; if
   the Docker credential helper stalls a pull, report it rather than wait; remove the two tags afterwards;
   `upgrade_proof_selftest.py`.
-- [ ] **3 docs and prose** — `CLAUDE.md` § Repository shape, each surface's `CLAUDE.md` (their `../` links gain one
+- [x] **3 docs and prose** — `CLAUDE.md` § Repository shape, each surface's `CLAUDE.md` (their `../` links gain one
   level), root `README.md`, `CONTRIBUTING.md`, `infra/README.md`, the site's GitHub `blob/main/…` URLs and prose,
   ADR text that describes where code lives (not the ledgers — ADR 0106 decision 4), `docs/crosscutting`,
   `docs/features`, `docs/coverage` prose (the structured refs are surface-relative and survive), `docs/inbox.md`,
@@ -136,3 +136,32 @@ configurations' working directories.
 
 ## Retrospective
 
+
+- **Planning — the new guard's predicate was measured narrower than it was written.** Decision 3 said
+  `validate_workflow_paths.py` is red on two filters; its first run was red on seven: the two named, `codeql.yml`'s
+  second `docs/api/**`, and in both of `ci.yml`'s `paths-ignore:` blocks a dead `!docs/api/**` re-include and a
+  `.github` that names a file, never the directory (all removed; each matched nothing, so no run changes) — plus
+  `codeql.yml`'s `**/*.cjs` and `**/*.tsx`, a language's catch-all that matches nothing *yet*, which the guard now
+  exempts as location-free. Root cause: the refine measured the filters it already suspected, not the predicate as
+  the guard would run it. Two owner questions follow from the removals: whether CodeQL should re-trigger on
+  `contracts/api/**` (what `docs/api/**` meant), and whether `ci.yml` meant to skip `.github/**`-only changes.
+- **Planning — the locators had two blind spots.** Locator 1's `grep -v 'src/(backend|web|…)/'` also drops every
+  line whose *file* lives under `src/`, so after the move it cannot see the surfaces' own `CLAUDE.md` and comments;
+  phase 3 ran a second pass over `src/` with the path prefix out of the match. And decision 1 called
+  `validate_backend_module_graph.py`'s Dockerfile check a substring check that passes either way — it is set
+  membership and would have gone red; only `validate_build_input_pins.py`'s `find()` was (HEAD's guard stayed green
+  on a verifier path one `../` too deep, measured).
+- **Execution — a relative path whose miss creates instead of failing.** Phase 2's mechanical `+../` pass excluded
+  `node_modules` (to spare `../packages/crypto`-style workspace paths) and so missed `openapitools.json`'s
+  `storageDir: ../node_modules/.openapi-generator`: every check stayed green while `generate:api` downloaded the JAR
+  into a new, ignored `src/node_modules/`. Locator 3 found it after the phase-2 commit; fixed in its own commit, both
+  images rebuilt. Also: `npm install --package-lock-only` left the three old workspace entries as `extraneous`
+  (stage 1's trap again) — removed by hand and the lockfile proven equal to the old one modulo the workspace paths;
+  the widened doc-link scan's only hit on the untouched tree was a false positive (a regex in an inline code span,
+  `infra/README.md:156`), answered by stripping code spans, not by editing the doc.
+- **Process.** The live sibling CR `cr-volume-measurement-cax.md` still names `web/…`, `admin-web/Dockerfile` (and
+  stage 1's `-f Dockerfile`); per `changes/README.md` § a rename in a wave it was left unedited for the owner to
+  repoint. ADR measurement ledgers (grep commands, `file:line` results, `M<n>` source lists) were left as measured.
+- **Next time:** after a `git mv` of a tree, diff `git status --short --ignored` against the same listing taken
+  before the move — a new ignored directory (here `src/node_modules/`) is the signature of a relative path that
+  missed silently, and no green check shows it.

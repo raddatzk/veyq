@@ -1,5 +1,5 @@
 // The tenant level of the capability register (uc.admin.tenant-switch-capabilities, ADR 0088 decisions 2, 3, 12) — a
-// tenant-OWNER surface beside the mail settings and terms, in `web/` for the same reason: the switches are gated with
+// tenant-OWNER surface beside the mail settings and terms, in `src/web/` for the same reason: the switches are gated with
 // `403 not_tenant_owner`, and the owner is an ordinary member of their own tenant (ADR 0065). The effective set is
 // every member's.
 import { tenantsApi } from '../../api/client'

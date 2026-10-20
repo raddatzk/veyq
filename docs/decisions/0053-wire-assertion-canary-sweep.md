@@ -46,7 +46,7 @@ server's own responses**, not an instrumented crypto primitive. Whatever the cli
 unseal; so the canary set is every string leaf recovered by opening the sealed fields the server returned, using
 the keys the suite already holds. Nothing is registered, so nothing can be forgotten.
 
-A hook in the AEAD primitive was the obvious alternative and is rejected twice over. `packages/crypto/src/v1.ts`
+A hook in the AEAD primitive was the obvious alternative and is rejected twice over. `src/packages/crypto/src/v1.ts`
 is **conformance-pinned** to `contracts/crypto/vectors/v1.json` and sits in the Stryker mutation scope — it is
 the last file in the repo that should grow a test affordance. And it is the wrong altitude regardless: `aeadSeal`
 is reached by `symWrap`/`asymWrap` as well, so it would record **key material** as canaries, and searching a
@@ -83,7 +83,7 @@ well as bytes.
   a canary can still be removed, and that removal is a visible diff, exactly like widening an allowlist would be.
   What the external oracle buys is that *passing* cannot be arranged from inside the client.
 - **The residual gap is coverage, not correctness.** The sweep only sees flows some suite drives (the
-  `web/src/**/*.e2e.test.ts` files), so much of the product is unobserved — which is why e2e breadth is
+  `src/web/src/**/*.e2e.test.ts` files), so much of the product is unobserved — which is why e2e breadth is
   tracked as debt in [architecture §11](../architecture/README.md), and why this sensor gets stronger for free as suites are added
   rather than needing to be revisited.
 - **Derivation moves the residual risk rather than removing it.** A value the client never seals is not a canary,

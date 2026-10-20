@@ -11,7 +11,7 @@
 - **Postconditions (success):** the tenant's **`terms_markdown_by_locale`** + **`terms_revision`** are updated;
   a *normalized* change bumps `terms_revision` (idempotent edits don't); the higher revision re-gates every member,
   and every guest who opens one of the space's shares (a guest's acceptance is client-only and per space,
-  `recordTermsAccepted` in `web/src/core/sharing/resolvePublicShare.ts`).
+  `recordTermsAccepted` in `src/web/src/core/sharing/resolvePublicShare.ts`).
 
 ## What the terms are here
 

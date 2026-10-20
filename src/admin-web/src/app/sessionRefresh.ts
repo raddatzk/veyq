@@ -15,7 +15,7 @@ import { clearTokens, session, setTokens } from './session'
 /**
  * The rotation this tab already has outstanding, or null. Calls that 401 together — the console's first load
  * fans out — join it instead of each presenting the same refresh token. Cleared the moment it settles: a settled
- * promise kept around would hand back a token pair one rotation out of date. (`web/src/app/sessionRefresh.ts`
+ * promise kept around would hand back a token pair one rotation out of date. (`src/web/src/app/sessionRefresh.ts`
  * holds the same idiom and its reasoning; this is admin-web's own copy, ADR 0065.)
  */
 let inFlight: Promise<void> | null = null

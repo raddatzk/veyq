@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The console — and the root Server-Owner gate (ADR 0065). This is the artifact the extraction had to
-// RECONSTRUCT: in `web/` the same probe only decided whether to show a link, so a non-owner never met a
+// RECONSTRUCT: in `src/web/` the same probe only decided whether to show a link, so a non-owner never met a
 // refusal at all. Here `/` is the admin surface, so it answers first and answers in words:
 //
 //   forbidden      -> the backend's own 403, restated for a person. Not a redirect: a Server Owner who

@@ -2,7 +2,7 @@ useCase: uc.memory.live-updates
 feature: memory
 title: Live media updates — others' adds/removes surface into the open gallery
 # Built (web) — cr-0107, ADR 0033; the mechanism is core's since inbox #410 (veyq_node_items_revision, NodeItemsRevisions,
-# web/src/core/items), Memories' media its first user. A per-node revision counter (bumped on attach/meta-edit/delete, NOT a
+# src/web/src/core/items), Memories' media its first user. A per-node revision counter (bumped on attach/meta-edit/delete, NOT a
 # cover change) → an ETag conditional GET on listNodeMedia (304 when unchanged); on a change a keyset delta (media
 # past the client's (position,id) cursor, in pages, so an active upload streams new items, never a full re-list) + the
 # current mediaId set for delete-reconcile, gated by a second delete_revision counter (present only when a delete

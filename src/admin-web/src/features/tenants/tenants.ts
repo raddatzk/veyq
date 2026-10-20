@@ -1,6 +1,6 @@
 // uc.admin.create-tenant (admin-web, Slice A / cr-0009) — Server-Owner tenant administration on the
 // operator-blind data layer. Everything here is operational metadata + a hashed invite; there is NO content
-// key. The cold TENANT-scope birth that ACTIVATES a tenant is Slice B and stays in `web/`
+// key. The cold TENANT-scope birth that ACTIVATES a tenant is Slice B and stays in `src/web/`
 // (`features/tenant/tenantInvite.ts`): an invitee accepting an invite is an anonymous or ordinary user and
 // has no business loading the admin app (ADR 0065). Thin facade over the generated tenants client: views
 // depend on this typed surface, never on the generator runtime.
@@ -141,7 +141,7 @@ export function setTenantStorageQuota(tenantId: string, quotaBytes: number | nul
 /**
  * Decode a failed tenant call into `{ status, code }` for UI mapping (401 → re-login, 403 → not owner,
  * 409 → domain_taken / tenant_not_pending). Thin domain-named alias over the shared {@link decodeHttpError}.
- * `web/` carries its own equivalent: the `ResponseError` a client throws is that client's own type, so this
+ * `src/web/` carries its own equivalent: the `ResponseError` a client throws is that client's own type, so this
  * is a structural duplicate, not a shareable one.
  */
 export function tenantError(e: unknown): Promise<{ status: number; code: string | null }> {

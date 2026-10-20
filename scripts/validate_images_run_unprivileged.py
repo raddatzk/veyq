@@ -15,11 +15,11 @@ passes (a) and fails (b) ships a container that starts and then dies binding its
 **The defect that bought it — a live one, and the same rule failing to travel for the second time.** The app
 image's runtime stage has run as uid 10001 since the `Dockerfile` was recovered, and
 `validate_app_volume_ownership.py` leans on that `USER` line. The admin image (ADR 0065) was added later from a
-stock `nginx:<pinned>-alpine`, which runs its master as root and binds port 80 — `grep -rn '^USER ' admin-web/Dockerfile`
+stock `nginx:<pinned>-alpine`, which runs its master as root and binds port 80 — `grep -rn '^USER ' src/admin-web/Dockerfile`
 returned nothing on 2026-09-14. Under compose that is invisible; under ADR 0064's chart it is an instance whose
 admin surface — the one where first-run setup happens — cannot be scheduled into a `restricted` namespace at all,
 so nobody can set it up. The first version of this predicate, run against the untouched tree, was green on both
-app stages of the time and red on exactly `admin-web/Dockerfile runtime-nginx` (`USER=None`, `EXPOSE 80`), which
+app stages of the time and red on exactly `src/admin-web/Dockerfile runtime-nginx` (`USER=None`, `EXPOSE 80`), which
 is the whole argument for a guard over prose: the rule was written in the `Dockerfile` and in a sibling guard's
 docstring, and the second image did not inherit it, because prose is not enumerated.
 
@@ -71,7 +71,7 @@ ANY_FROM = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*(?:\s+AS\s+(\S+))?\s*$", re.I
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 USER = re.compile(r"^\s*USER\s+(\S+)\s*$", re.IGNORECASE)
 EXPOSE = re.compile(r"^\s*EXPOSE\s+(.+?)\s*$", re.IGNORECASE)
-# A tracked file whose basename contains `dockerfile` in any case — `Dockerfile`, `admin-web/Dockerfile`, and a
+# A tracked file whose basename contains `dockerfile` in any case — `Dockerfile`, `src/admin-web/Dockerfile`, and a
 # `something.Dockerfile` a future image might use. Derived from the index, so a third image enrols itself.
 DOCKERFILE_NAME = re.compile(r"(^|/)[^/]*dockerfile[^/]*$", re.IGNORECASE)
 UNPRIVILEGED_PORT = 1024

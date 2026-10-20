@@ -2589,7 +2589,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         admissionEpoch:
           x-veyq-visibility: structure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
             The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
@@ -2909,14 +2909,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
         tls:
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: Whether to use STARTTLS.
           example: true
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         enabled:
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: >
             Whether email sending is enabled. Off means member invites and password recovery are refused on this
@@ -2978,7 +2978,7 @@ components:
       properties:
         shareLinkLimitBytes:
           x-veyq-visibility: measure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           minimum: 0
@@ -2993,7 +2993,7 @@ components:
       properties:
         bytes:
           x-veyq-visibility: measure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           minimum: 0
@@ -3024,7 +3024,7 @@ components:
       properties:
         quotaBytes:
           x-veyq-visibility: measure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           minimum: 0
@@ -3175,7 +3175,7 @@ components:
       properties:
         "off":
           x-veyq-visibility: flag
-          # nullable type + @NotNull: a required primitive binds a missing field to false (backend/CLAUDE.md)
+          # nullable type + @NotNull: a required primitive binds a missing field to false (src/backend/CLAUDE.md)
           type: [boolean, "null"]
           description: True switches the entry off for this tenant, false switches it back on.
           example: true

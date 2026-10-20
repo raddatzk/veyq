@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The ROOT Server-Owner gate (ADR 0065) — the artifact this package had to reconstruct rather than lift.
 //
-// In `web/` there was nothing to lift: `probeServerRole()` ran at data-fetch time and decided whether to OFFER
+// In `src/web/` there was nothing to lift: `probeServerRole()` ran at data-fetch time and decided whether to OFFER
 // a settings entry, so a non-owner simply never saw a link and there was no refusal surface to test. Here `/`
 // IS the admin surface, so it has to answer the question, and the answer has to be readable. That is what
 // these cases pin — one per verdict the backend can hand back:

@@ -29,7 +29,7 @@
 0. **Show mine.** On their own profile page (`#people/<own id>`) every member sees **their own** safety number
    (6×5 digits, `safetyNumber`, the vector-pinned `fingerprint`) and a QR of it. The QR is `veyqid:1:` plus the
    base64 of the 32-byte fingerprint digest the digits are rendered from (`v1.fingerprintHash`) — never the identity
-   bundle, which would void the `jsqr` exception in `web/CLAUDE.md` (53 characters, QR version 4). The number comes
+   bundle, which would void the `jsqr` exception in `src/web/CLAUDE.md` (53 characters, QR version 4). The number comes
    from the caller's own vault, not from the directory.
 1. **Open their profile.** The caller opens a member's profile → the app shows the safety number of the key it
    would **trust** — the pin's, or the directory's when there is no pin — the state (*Not verified*, *Verified*,

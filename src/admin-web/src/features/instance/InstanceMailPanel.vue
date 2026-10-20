@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // uc.admin.learn-of-new-releases (admin-web, ADR 0097 decisions 3 and 5) — the "Mail" rubric of the server settings:
 // the instance's own SMTP settings, which send release notices to the Server Owner and nothing else. A copy of web's
-// tenant mail panel's transport half (admin-web/CLAUDE.md: copies, not a shared UI package), without what only a
+// tenant mail panel's transport half (src/admin-web/CLAUDE.md: copies, not a shared UI package), without what only a
 // tenant has (the switch, the invite template), and with the confirmation step a tenant's settings do not have.
 // What it keeps honest:
 //   - the password is write-only: the read carries `passwordSet`, a blank field keeps the stored one, a typed one is

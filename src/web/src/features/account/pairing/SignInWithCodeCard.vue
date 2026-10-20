@@ -11,7 +11,7 @@
 // (`scripts/validate_shell_route_gate.py`). Nothing is added to `router.ts` by this screen.
 //
 // **The displayed code carries the channel's secret, never the transport key** (D1). A serialized bundle is 1256
-// bytes — a QR version 34 nobody scans off a laptop screen, past the decoder bound `web/CLAUDE.md`'s jsQR
+// bytes — a QR version 34 nobody scans off a laptop screen, past the decoder bound `src/web/CLAUDE.md`'s jsQR
 // exception rests on. Nothing is lost: the key crosses the relay MACed under the channel key the secret derives,
 // bound to the transcribed code, so neither the relay nor a phisher who authored the QR can swap it
 // (ADR 0059 §5, §11).

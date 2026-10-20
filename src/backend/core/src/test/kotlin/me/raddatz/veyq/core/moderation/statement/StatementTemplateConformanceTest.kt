@@ -10,7 +10,7 @@ import java.io.File
 
 /**
  * Conformance pin (decision 1 of cr-statement-of-reasons-and-objection): the statement's texts the backend renders for the
- * mail equal `contracts/moderation/statement-of-reasons.json`, every one of them — web/'s `template.test.ts` holds its own
+ * mail equal `contracts/moderation/statement-of-reasons.json`, every one of them — src/web/'s `template.test.ts` holds its own
  * copy to the same file, so the mail and the placeholder render one template. And the form: the reduced one leaves out
  * exactly the passages the file marks `full`.
  */

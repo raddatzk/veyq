@@ -14,7 +14,7 @@ Re-run after changing which tags the client reads:
 
     python3 scripts/make_exif_fixture.py
 
-Output: web/src/features/memories/__fixtures__/exif-sample.jpg
+Output: src/web/src/features/memories/__fixtures__/exif-sample.jpg
 """
 from __future__ import annotations
 

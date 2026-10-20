@@ -12,7 +12,7 @@
 //   5. a file the owner uploads after the decision is not blocked.
 //
 // The name, the reasons and the facts are canaries (`recordTyped`), so lane L1's sweep proves they reached the server
-// sealed. The labels are web/'s own (web/src/i18n/index.ts, en).
+// sealed. The labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'

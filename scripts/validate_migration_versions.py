@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Guard the Flyway migrations: one global version scheme across modules, every file pinned, and the module
-direction of ADR 0079 held in the schema (backend/CLAUDE.md § Migrations).
+direction of ADR 0079 held in the schema (src/backend/CLAUDE.md § Migrations).
 
-**What it asserts.** Over every `*.sql` in a `src/main/resources/db/migration` directory anywhere under `backend/`
+**What it asserts.** Over every `*.sql` in a `src/main/resources/db/migration` directory anywhere under `src/backend/`
 (build output excluded), and the pin file `scripts/applied_migrations.sha256`:
 
   1. *Name shape.* `V<yyyymmddHHMM>__<module>_<slug>.sql`, the module one of `MODULES` — derived from
@@ -82,7 +82,7 @@ LINE_COMMENT = re.compile(r"--[^\n]*")
 
 
 def migration_dirs() -> list[pathlib.Path]:
-    """Every `src/main/resources/db/migration` under backend/, build output excluded — found, never listed, so a
+    """Every `src/main/resources/db/migration` under src/backend/, build output excluded — found, never listed, so a
     second module's directory is read the day it exists (`backend_tree.migration_roots`)."""
     return backend_tree.migration_roots()
 

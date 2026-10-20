@@ -52,7 +52,7 @@ export function isHttpStatus(e: unknown, status: number): boolean {
 /**
  * Whether a failure is a 401 (session lapsed / re-auth needed). The detection half of the session end the
  * component layer performs (`shared/handle401.ts`). A 401 that reaches a caller has already survived the one
- * rotation every authed call gets (`app/sessionRefresh.ts`, a fetch middleware rather than `web/`'s `withRefresh`).
+ * rotation every authed call gets (`app/sessionRefresh.ts`, a fetch middleware rather than `src/web/`'s `withRefresh`).
  */
 export function isUnauthorized(e: unknown): boolean {
   return httpStatus(e) === HttpStatus.unauthorized

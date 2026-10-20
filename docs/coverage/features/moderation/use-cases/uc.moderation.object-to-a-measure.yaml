@@ -120,13 +120,13 @@ gaps:
   admin-web: >-
     The Server Owner's statement — the fields on a proposal's block and on the tenant's suspension, `veyq-admin account
     block` and `tenant suspend` with --over-content, --ground, --provision and --facts, the facts sealed for the log —
-    is covered by admin-web/src/features/instance/stepStatement.test.ts (the real crypto opens what was sealed),
+    is covered by src/admin-web/src/features/instance/stepStatement.test.ts (the real crypto opens what was sealed),
     ModerationPanel.test.ts, src/features/tenants/TenantDetailPanel.test.ts and src/cli/cli.test.ts, but admin-web's
     refs wait until its job is admitted (ADR 0040).
   crypto: >-
     The moderation-statement-facts, moderation-facts-key and moderation-objection seals are pinned by their vectors and
     the purposes' tests
-    (packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).
+    (src/packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).
   stack: >-
     tests/e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,
     the affected member's reading and objection, and the other moderator's decision; stack refs are admitted only once a

@@ -51,10 +51,10 @@ media tables. What is built and what is open: the ADR's Consequences.
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
+| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`src/web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
-| [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
+| [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `src/web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
 
 ## How an application publishes a revisioned list
 
@@ -99,7 +99,7 @@ The scope's *node list* is not this: it has its own revision ([ADR 0081](../deci
 ## How an application shows facts in a level's rows and tiles
 
 Core draws every row (a list item) and tile of a folder level, and of the profile page's Memories list, from the
-`LevelRow` its application's `list.rows` factory answers per node (`web/src/core/node/levelRow.ts`; ADR 0079 Decision 5,
+`LevelRow` its application's `list.rows` factory answers per node (`src/web/src/core/node/levelRow.ts`; ADR 0079 Decision 5,
 inbox #407). Under the title sits **one meta line**: the kind's noun (`meta`: "Memory", "File") followed by the node's
 **details** (`details`, inbox #418) - the facts only the application can read: Memories' **date and place**, Depot's
 **size and modified time**, a drop box's people count. The hook:

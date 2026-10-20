@@ -9,12 +9,12 @@ import ToastService from 'primevue/toastservice'
 config.global.plugins.push(ToastService)
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-// The network net (inbox #149) — carried over from `web/src/test/setup.ts`, deliberately, not by accident.
+// The network net (inbox #149) — carried over from `src/web/src/test/setup.ts`, deliberately, not by accident.
 //
 // **What it does.** Every outbound request a unit test makes is blocked before a socket opens, recorded, and
 // then fails that test by URL. An unmocked API call becomes a named failure instead of a silent one.
 //
-// **The defect that bought it happened in `web/`, not here** — `AppSidebar.test.ts` stubbed the tenant list
+// **The defect that bought it happened in `src/web/`, not here** — `AppSidebar.test.ts` stubbed the tenant list
 // its component fetches `onMounted` and missed the profile call beside it, so 14 real requests left that
 // suite per run for as long as nobody looked; the suite stayed green because the component catches its own
 // failure. **This package is clean today** (measured: `npx vitest run` → 18 files, 104 tests, zero connection

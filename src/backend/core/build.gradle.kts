@@ -1,5 +1,5 @@
 // `:core` — the platform (ADR 0079): every `me.raddatz.veyq.core.*` class, core's generated API (`openApiGenerateCore`),
-// core's migrations and the base `application.properties`. The root `backend/` composes it into the one fast-jar.
+// core's migrations and the base `application.properties`. The root `src/backend/` composes it into the one fast-jar.
 plugins {
     id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats
     id("veyq.openapi")
@@ -75,7 +75,7 @@ dependencies {
 }
 
 // The mutate scope is read from pitest.scope.json — the SAME manifest a scripts/ meta-check consumes, so the mutator
-// and its "something was mutated" guard never drift (ADR 0045 §4; mirrors web/stryker.config.mjs reading
+// and its "something was mutated" guard never drift (ADR 0045 §4; mirrors src/web/stryker.config.mjs reading
 // stryker.mutate.json). PIT class globs, curated to the pure decision tier (never the dumb stores or the slices).
 @Suppress("UNCHECKED_CAST")
 val pitScope = groovy.json.JsonSlurper().parse(file("pitest.scope.json")) as Map<String, Any>

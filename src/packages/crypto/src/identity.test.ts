@@ -1,5 +1,5 @@
-// The identity codec and the KEM halves re-derived from a stored private bundle. `web/` and `admin-web/` call
-// all of them, but the mutation gate runs this package's own suite, which no `web/` test can reach — so these are
+// The identity codec and the KEM halves re-derived from a stored private bundle. `src/web/` and `src/admin-web/` call
+// all of them, but the mutation gate runs this package's own suite, which no `src/web/` test can reach — so these are
 // pinned here, against `generateIdentity()`, or the gate cannot see them at all.
 import { describe, expect, it } from 'vitest'
 import * as v1 from './v1'

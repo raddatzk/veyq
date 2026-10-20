@@ -10,7 +10,7 @@
 // where it takes every one of them, and each of them is listed blocked - with the reason - and cannot be opened.
 //
 // Keyboard and screen reader: every place and every crumb is a real `<button>` (a crumb is never a link: nothing here
-// navigates the page, so a guest's `#k=` fragment is never touched - web/CLAUDE.md, the breadcrumb trap), and focus goes
+// navigates the page, so a guest's `#k=` fragment is never touched - src/web/CLAUDE.md, the breadcrumb trap), and focus goes
 // to the list after a place was opened, so the next Tab reaches its first place.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

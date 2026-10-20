@@ -8,12 +8,12 @@ the log that keeps them accountable. A **core** feature
 - **Cross-cutting:** [Security Model](../../crosscutting/security-model.md) (share-boundary Trust & Safety: the server
   stores the roster, the published key and sealed grants, never a moderation private key).
 - **Decisions:** [ADR 0099](../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
-  (moderators the Server Owner appoints share one instance moderation key, in epochs; review in web/'s moderation
+  (moderators the Server Owner appoints share one instance moderation key, in epochs; review in src/web/'s moderation
   surface without a vault), [ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   (reports, holds, measures, the moderation log), [ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)
   decisions 3, 5 and 6 (instance mail to moderators, their address confirmed by a code).
 - **Actors:** the **Server Owner** (appoints, removes, mints the key, in admin-web or `veyq-admin`), a **moderator**
-  (an existing account the Server Owner appointed, in web/'s moderation surface), a **reporter** (a member or a guest of
+  (an existing account the Server Owner appointed, in src/web/'s moderation surface), a **reporter** (a member or a guest of
   a link, in the share they reported from).
 
 ## Use-cases

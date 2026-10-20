@@ -164,7 +164,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # One install for the whole workspace (`npm ci` from the root links `@veyq/crypto` into web/), then each
+      # One install for the whole workspace (`npm ci` from the root links `@veyq/crypto` into src/web/), then each
       # package proves ITSELF. The shared crypto package is checked first and separately on purpose: it is the
       # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
       # web failure.
@@ -367,7 +367,7 @@ jobs:
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
-        # The seeder (web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
+        # The seeder (src/web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
         run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
 
       - name: Fuzz the API against a live backend
@@ -850,7 +850,7 @@ jobs:
   # `v<major>.<minor>` tag from then on — hence the full history and the tags.
   #
   # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
-  # (backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
+  # (src/backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
   # of scripts/applied_migrations.sha256 enables it, in the same commit: it deletes `if: false` below AND the
   # `"skipped"` that `publish` tolerates for this job. A disabled job claims no coverage (ADR 0040).
   upgrade-proof:

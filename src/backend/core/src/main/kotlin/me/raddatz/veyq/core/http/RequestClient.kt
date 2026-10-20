@@ -44,7 +44,7 @@ class RequestClient(
 /**
  * `veyq.http.client-port.*` as [RequestClient] reads it. A bean of its own only so a slice can state the `header` source
  * for one test (`QuarkusMock`) instead of a `@TestProfile`: one more profile is one more boot in `:core`'s test JVM,
- * whose heap is near its ceiling (backend/CLAUDE.md), and the mapping itself is proven by ADR 0094 M13.
+ * whose heap is near its ceiling (src/backend/CLAUDE.md), and the mapping itself is proven by ADR 0094 M13.
  */
 @ApplicationScoped
 class ClientPortSetting(private val config: VeyqConfig) {

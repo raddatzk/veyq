@@ -1,5 +1,5 @@
 // Tenant terms (uc.admin.tenant-terms + uc.account.accept-terms, cr-0114, ADR 0035) — all three of them, and
-// all three stay in `web/`. Authoring is a **tenant-OWNER** action, not a Server-Owner one: the backend gates
+// all three stay in `src/web/`. Authoring is a **tenant-OWNER** action, not a Server-Owner one: the backend gates
 // `updateTenantTerms` with `403 not_tenant_owner`, and a tenant owner is an ordinary user who accepted an
 // invite (uc.admin.create-tenant is two-party). ADR 0065's "what moves" list named terms authoring for
 // `admin-web`; measured against the code that was wrong — `TenantTermsPanel` hangs off `activeSpace.tenantId`

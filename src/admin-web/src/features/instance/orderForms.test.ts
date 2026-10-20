@@ -1,5 +1,5 @@
 // The Annex texts (uc.moderation.authority-order `the-forms-come-out-to-copy`, admin-web): admin-web's copy equals the
-// contract text for text — web/'s copy is held to the same file — and a rendering names the block to the second in UTC,
+// contract text for text — src/web/'s copy is held to the same file — and a rendering names the block to the second in UTC,
 // leaves a line out whose value is missing, and leads with the draft banner while the template is a draft.
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'

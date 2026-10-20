@@ -7,7 +7,7 @@
 //     the blob it read, the new blob bringing its own meta), the member reads the new bytes; a stale replace is refused;
 //     the guest creates nothing under the file and places nothing beside it (`illegal_scope`);
 //   - the member trashes the file: the guest lists nothing, its blob is `404`, an upload into it is refused.
-// Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/features/depot/fileSingleShare.e2e.test.ts`.
+// Run against a FRESH instance: `python3 scripts/run_web_e2e.py src/web/src/features/depot/fileSingleShare.e2e.test.ts`.
 //
 // The raw-wire check as in `depotShare.e2e.test.ts`: no file name or MIME type crossed the wire in the clear; the
 // plaintexts it sealed go to `recordCanaries` (ADR 0053).

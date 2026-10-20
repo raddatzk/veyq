@@ -50,7 +50,7 @@ The one carve-out is an envelope's **closed enum values** (`auto`, `range`, `cit
 like the object keys that are never canaries either), and it is paired with a refusal rather than a drop: a leaf
 shorter than 10 characters and spelled only in the base64/hex alphabet matches random ciphertext by chance (`city`
 and `auto` did, inside sealed bytes, twice in a week), so the recorder throws on one and the suite's test data
-changes (`web/src/test/canaries.ts`, inbox #323). The sweep itself stays a plain substring match.
+changes (`src/web/src/test/canaries.ts`, inbox #323). The sweep itself stays a plain substring match.
 
 **Two sensors, disjoint surfaces, one seam.** The e2e *suite* makes the calls, so only it sees path params,
 query strings, capability headers, presigned URLs and error bodies. The *orchestrator*
@@ -69,9 +69,9 @@ in CI.
 | **Database** — every column of every table of that file's own `veyq_e2e_<n>` | canary absence, swept by the orchestrator | **live** — `scripts/e2e_sweeps.py` `sweep()`, a data-only `mariadb-dump` searched for each suite's dump-escaped canaries; every e2e suite feeds `src/test/canaries.ts`, pinned buildless by `scripts/validate_e2e_canaries.py` |
 | **Object store** — object keys and stored bytes | canary absence | **live** — `scripts/e2e_sweeps.py` `sweep_store()`, the suite's bucket mirrored out with the operator tool's own rclone plumbing (`instance_backup.Store.mirror_out`) and both the object **keys** and the object **bytes** searched for that suite's canaries. A suite that stored nothing is skipped **out loud**, and the discriminator is its own `veyq_blob` count rather than a list of which suites upload |
 | **Server log** — every boot log the run retains, and the log of every container of the stack, where an error `message`, a stack trace or a request URI would carry plaintext | canary absence, run-level, after every group, against the **union** of the run's canary files | **live** — `scripts/e2e_sweeps.py` `sweep_logs()` over each `backend-*.log` (derived by a recursive glob), and `sweep_containers()` over every service `docker compose ps` reports, read from the run's start (MariaDB, Garage, Traefik, Mailpit). One needle set for every text surface, `canary_needles()`: raw, JSON-escaped (both `ensure_ascii` forms) and percent-encoded (`%20` and `+`), a plain case-sensitive substring with no word boundary. **Armed by positive controls on the same matcher**, never by a count of zero: each boot log must be non-empty, name the database its boot used (Flyway's JDBC line) and carry Quarkus' shutdown line; the store's log must carry a key the run plants at its start — an unsigned, refused request with a space and a non-ASCII character, which Garage logs percent-encoded and the sweep must find through the `pct` needle. The boot pins the JVM's output to UTF-8 (`-Dstdout.encoding`), because under a `C` locale it writes a non-ASCII character as `?` (measured). The no-Docker half is `scripts/validate_wire_log_matcher.py` |
-| **HTTP bodies** — the `contentEncoding: base64` fields | opacity **and** canary absence: a declared-opaque field must not decode to readable text *and* must not be implausibly short; no canary may appear in a URL, a request or response header or a body, in any spelling `canary_needles()` models — the recorder keeps a URL as the client built it, percent-encoded, and records every response header (`Set-Cookie` as the array `getSetCookie()` returns) | **live** — `scripts/e2e_sweeps.py` `sweep_http()`, over a recording `web/src/test/wireRecorder.ts` makes in the suite process (a recording without response headers fails). This is the only surface where path params, query strings, capability headers and presigned URLs exist at all (ADR 0053 §3), and the one the token needles are derived from (§ Capability tokens) |
+| **HTTP bodies** — the `contentEncoding: base64` fields | opacity **and** canary absence: a declared-opaque field must not decode to readable text *and* must not be implausibly short; no canary may appear in a URL, a request or response header or a body, in any spelling `canary_needles()` models — the recorder keeps a URL as the client built it, percent-encoded, and records every response header (`Set-Cookie` as the array `getSetCookie()` returns) | **live** — `scripts/e2e_sweeps.py` `sweep_http()`, over a recording `src/web/src/test/wireRecorder.ts` makes in the suite process (a recording without response headers fails). This is the only surface where path params, query strings, capability headers and presigned URLs exist at all (ADR 0053 §3), and the one the token needles are derived from (§ Capability tokens) |
 | **Statement log** — every SQL statement the database received during the run, reads and since-undone writes included, so a plaintext the end-state dump cannot see (written, then overwritten or deleted inside a suite) | canary absence, run-level, against the **union** of the run's canary files | **live** — `scripts/e2e_sweeps.py` `StatementLog` switches MariaDB's general query log on for exactly the run's window (three dynamic `SET GLOBAL`s, no compose or chart change), restores the prior globals from a `finally` (SIGTERM/SIGHUP included; a killed run's leftover is healed by the next run), retains the file as `.e2e-out/<stamp>/mariadb-general.log` and deletes it in the container; `sweep_statements()` searches **only the SQL string literals** — the backend's driver (Connector/J) prepares client-side, so every bound value is an inline literal, and outside them `set autocommit=0` and the migrations' comments would collide with real canaries (`auto`, `range`) — with `canary_needles()` plus `sql-literal`, the driver's own escaping (a backslash before `\`, `'`, `"`, NUL; measured from the driver). **Armed** by a sentinel statement at each end of the window, carrying an apostrophe so only `sql-literal` can find it (the log was on throughout, and literals are still escaped as modelled), and by a `Connect` entry for every database a boot of the run used (derived from the boot logs), so the backend's traffic was captured |
-| **Mailbox** — every mail the run sent, the one surface a third party (the tenant's SMTP provider) reads | canary absence, run-level, against the **union** of the run's canary files | **live** — `scripts/e2e_sweeps.py` `sweep_mailbox()` reads every message Mailpit received since the run's start through its API (paged explicitly, fetched raw, retained under `.e2e-out/<stamp>/mailbox/`), parses it with Python's `email` package and searches each **decoded** header and text part and the raw source with `canary_needles()`. Decoding is load-bearing: the product's mail travels as a `Q` encoded-word subject and a quoted-printable body whose soft line breaks split even an ASCII token (measured). **Armed** by a mail the run plants over SMTP whose sentinel (a space, a non-ASCII character) must be found decoded — and is printed as absent from the raw source. No suite deletes mail: `web/src/test/mailpit.ts` waits behind a cursor (`mailCursor` + `waitForMail(to, { after })`) |
+| **Mailbox** — every mail the run sent, the one surface a third party (the tenant's SMTP provider) reads | canary absence, run-level, against the **union** of the run's canary files | **live** — `scripts/e2e_sweeps.py` `sweep_mailbox()` reads every message Mailpit received since the run's start through its API (paged explicitly, fetched raw, retained under `.e2e-out/<stamp>/mailbox/`), parses it with Python's `email` package and searches each **decoded** header and text part and the raw source with `canary_needles()`. Decoding is load-bearing: the product's mail travels as a `Q` encoded-word subject and a quoted-printable body whose soft line breaks split even an ASCII token (measured). **Armed** by a mail the run plants over SMTP whose sentinel (a space, a non-ASCII character) must be found decoded — and is printed as absent from the raw source. No suite deletes mail: `src/web/src/test/mailpit.ts` waits behind a cursor (`mailCursor` + `waitForMail(to, { after })`) |
 | **S3 object key** | the separate guard ADR 0044 promised it | planned, outside this concern's sweep |
 
 ## Lane L1 — the same sensors on the shipped stack
@@ -109,7 +109,7 @@ the HTTP recording and the mailbox hold it by design. It is a third needle set i
 nowhere else** — every boot log (`sweep_logs()`) and every container log (`sweep_containers()`), with no exemption.
 
 - **Recorded where an account is signed up**, by `recordPii` — `birthInstance` and `onboardMember` in
-  `web/src/test/e2eBootstrap.ts` (`VEYQ_PII_FILE`, one `pii-<tag>.json` per suite), `freshOwner` in
+  `src/web/src/test/e2eBootstrap.ts` (`VEYQ_PII_FILE`, one `pii-<tag>.json` per suite), `freshOwner` in
   `tests/e2e/src/accounts.ts` (`pii-<spec>.json`) — in the canary files' format, in files of their own, so no other surface
   ever reads them. A hit is reported led by `pii`.
 - **Its control, `pii_control()`:** zero addresses is a failure, as zero logs is, and each address must be one the
@@ -166,7 +166,7 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   therefore invisible. That case belongs to the opacity check and to
   [`scripts/validate_field_visibility.py`](../../scripts/validate_field_visibility.py), not here.
 - **The residual gap is coverage, not correctness.** The sweep sees only flows some suite drives
-  (`web/src/**/*.e2e.test.ts`) — tracked as debt in [architecture §11](../architecture/README.md). The sensor gets
+  (`src/web/src/**/*.e2e.test.ts`) — tracked as debt in [architecture §11](../architecture/README.md). The sensor gets
   stronger for free as suites are added; it does not need revisiting for that.
 - **The opacity oracle is two tests, and it needs both.** Readability alone has a hole that biting it found:
   it needs a length floor, because short random strings do decode to printable UTF-8 now and then (measured:
@@ -185,7 +185,7 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   store directly, so the reverse proxy carries no e2e traffic, and the dev stack has no admin container at all.
   Neither compose file nor the chart enables a Traefik access log, so that one is empty by default. **The admin
   nginx logs every request, and nothing here reads it** — so its format is trimmed instead of swept
-  (`admin-web/nginx.conf.template`, one image for both deployment targets): method, path *without* the query
+  (`src/admin-web/nginx.conf.template`, one image for both deployment targets): method, path *without* the query
   string, status, size, user agent, forwarded-for; no Referer. No admin flow carries a token in a URI (the SPA's
   routes take no query, the Admin API's path parameters are opaque ids), so the trim removes nothing legitimate.
   What remains: nginx's *error* log names the whole request line, query included, on a failed upstream (measured
@@ -221,7 +221,7 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   oracle's case.
 - **The token sweep sees the tokens some suite handled, through the calls some suite made.** Every web sign-in
   yields a refresh token through its `Set-Cookie`. Rotation and pairing are driven by one suite,
-  `web/src/features/account/pairing/pairing.e2e.test.ts`, which carries the refresh cookie by hand (node's `fetch`
+  `src/web/src/features/account/pairing/pairing.e2e.test.ts`, which carries the refresh cookie by hand (node's `fetch`
   keeps no cookie jar) through the product's own refresh and through a paired device's adoption — so rotated
   refresh tokens, the pairing `handle` and the delegated grant token are needles, with their hashes in the dump as
   the control (bitten: logging the rotated tokens and the handle turned the log sweep red on each by kind). A flow
@@ -260,7 +260,7 @@ statement log is searched in its literals, in the driver's spelling, with its co
 mailbox is read decoded; and that the token needles are derived by marker from every place the contract puts one,
 searched raw and armed by their hashes ([`scripts/validate_wire_log_matcher.py`](../../scripts/validate_wire_log_matcher.py)).
 The recorder's own half — every `Set-Cookie` recorded, the token cookie not masked by the clearing one sent after
-it — is a web unit test, `web/src/test/wireRecorder.test.ts`.
+it — is a web unit test, `src/web/src/test/wireRecorder.test.ts`.
 
 Explained for security researchers on the docs site: [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md).
 
