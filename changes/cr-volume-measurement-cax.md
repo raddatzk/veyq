@@ -100,12 +100,12 @@ member list's one query per member and missing ETag (458 SELECTs, 42 ms at 445);
 while a phone uploads — the CAX run should watch the app there first.
 
 **For this CR's run.**
-- *Phase 2's member axis* runs to 1,000 as planned: `cr-identity-pins-per-entry` (built 2026-10-19, #491) stores a pin
+- *Phase 2's member axis* runs to 1,000 as planned: the identity-pin store (built 2026-10-19, #491, ADR 0104) keeps a pin
   per entry, and its live proof seeded this harness's member stage to 1,000 on a local production-recipe instance (999
   members granted; the profile stage was stopped at 722 on the owner's word).
-- *The gallery's browser leg changes shape* once `cr-gallery-virtualization` (planned) lands: its harness metric is
+- *The gallery's browser leg changes shape* now that the windowed grid is built ([ADR 0105](../docs/decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md), #489): its harness metric is
   *viewport complete* and *end complete*, not "last thumbnail of all", and its targets replace the 15 s clause for a
-  windowed grid. Until then the rule above reads as written.
+  windowed grid.
 - *#488 is fixed* (2026-10-19): the 3,000 Chapter loaded completely, its last thumbnail after 20.7 s desktop and 120 s at 4x,
   1,000 after 4.7 s and 23 s (this Mac at load 7–17, so indicative); the client rows of the table above predate it.
 - *The five-at-once scenario* ran five Chromiums in one container on this Mac, which drove the Mac's load to 30: its
@@ -181,8 +181,7 @@ owner's to give with the server.
 - [ ] **4 record**: decision 4's three places; the verdict compared with the local pre-check in one sentence in the
   retrospective (how far the local run was off is worth knowing for the next one). · Done when: the site check and
   the trust-chain guards green.
-- [ ] **5 remove** (not before `cr-gallery-list-paging` and `cr-gallery-virtualization` have run their measurement
-  phases — both measure with this harness): delete the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
+- [ ] **5 remove** (not before #489's reading at the V1 heavy stage — it measures with this harness): delete the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
   `scripts/measure_volume.py`, `e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
   the owner deletes the server and the DNS record. · Done when: `git ls-files` shows none of the harness files;
   `npm run check` in `web/` green; the owner confirms the server is gone.

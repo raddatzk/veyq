@@ -68,8 +68,8 @@ The judge that applies them is `scripts/measure_volume.py judge` while the harne
 
 ## Consequences
 
-- The DOM size no longer grows with the Chapter, and the main thread no longer pays for crypto it does not show; the CR
-  measures both against targets (Q2).
+- The DOM size no longer grows with the Chapter, and the main thread no longer pays for crypto it does not show; the volume
+  harness measures both against § Targets at the V1 heavy stage (inbox #489).
 - Every view over the list — the gallery, the trash, the contributors' view, a guest's share — goes through the same
   windowing and the same opened listing; a new view over media that renders every item, or opens a meta on the page,
   is a defect against this record.

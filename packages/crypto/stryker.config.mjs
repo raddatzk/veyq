@@ -11,7 +11,9 @@
 // inPlace (not Stryker's default copy-to-sandbox): v1.conformance.test.ts reads the shared crypto vectors at
 // ../../../contracts/crypto/vectors/v1.json — OUTSIDE this package's root, so a copied sandbox can't see them
 // and the KAT dry-run fails before a single mutant runs. inPlace mutates the real tree and restores it after;
-// the files are git-tracked, so an interrupted run is recoverable with `git checkout`.
+// the files are git-tracked, so an interrupted run is recoverable with `git checkout`. And while it runs, the source
+// on disk IS a mutant: web/ and admin-web/ import @veyq/crypto from that source, so their suites go red for nothing
+// if they run alongside — run this gate on its own (measured in cr-item-marks-binary-ids).
 import { readFileSync } from 'node:fs'
 
 const manifest = JSON.parse(readFileSync(new URL('./stryker.mutate.json', import.meta.url), 'utf8'))
