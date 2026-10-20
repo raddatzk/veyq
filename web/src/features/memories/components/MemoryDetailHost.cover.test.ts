@@ -79,7 +79,7 @@ const action = (w: Host, id: string) => w.find(`.veyq-node-header-actions button
 const writer = () => memberAccessOf({ scopeId: SCOPE, epochs: {} as EpochKeys })
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
 const dialogButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.trim() === label)
-const cropperImg = () => document.body.querySelector<HTMLImageElement>('[role="dialog"] .memory-cover-cropper img')
+const cropperImg = () => document.body.querySelector<HTMLImageElement>('[role="dialog"] .veyq-cropper-frame img')
 async function frame(natW = 3200, natH = 1800) {
   const img = cropperImg()!
   Object.defineProperty(img, 'naturalWidth', { configurable: true, value: natW })

@@ -1,0 +1,20 @@
+/* Rendered Markdown (core): the terms, the privacy notice, the operator section and a share's note.
+   Moved from `memory.css` (inbox #513), which also held it although core renders most of it; it keeps that sheet's place
+   in `style.css` (after `forms.css`), so its cascade is unchanged. */
+.markdown-body {
+  overflow-wrap: anywhere;
+  color: var(--app-text);
+  line-height: 1.6;
+}
+
+.markdown-body a {
+  color: var(--app-success);
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}

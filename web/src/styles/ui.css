@@ -491,9 +491,10 @@
    declarations). Nothing in `layout.css`/`forms.css` matches these elements, so the end of `ui.css` is the same
    cascade position. `.veyq-create-card` is also Memories' New Memory / Add chapter card (inbox #375 merged its
    `memory.css` twin, the same declarations in the same order): Memories adds only `.memory-create-card-memory` and
-   its list variant in `memory.css`, which come after these and win where they differ — the one place the twin's later
-   position had decided anything, `white-space: nowrap` on the label beating the modifier's `normal`, is kept by the
-   modifier no longer saying `normal`. The dark counterparts are in `dark.css`. */
+   its list variant in its own `features/memories/memories.css`, which compound with `.veyq-create-card` and win where
+   they differ by specificity, not by position (that sheet loads before this one since inbox #513 — its header) — the one
+   place the twin's later position had decided anything, `white-space: nowrap` on the label beating the modifier's
+   `normal`, is kept by the modifier no longer saying `normal`. The dark counterparts are in `dark.css`. */
 
 .veyq-level-view {
   display: grid;

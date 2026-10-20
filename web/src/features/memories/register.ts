@@ -26,6 +26,9 @@ import { memoriesLifecycle } from './lifecycle'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_SCHEMA } from './exportImport'
+// Memories' global stylesheet (inbox #513) — LAST, after the components above, as `memory.css` came after their scoped
+// styles; what its place before core's `style.css` means for its rules is that sheet's header.
+import './memories.css'
 
 /** Memories' URL route slug (inbox #328): the segment before the name of a Memory in the fragment path. */
 export const MEMORIES_ROUTE_SLUG = 'memories'

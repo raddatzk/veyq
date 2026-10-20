@@ -8,8 +8,9 @@ export type CropRect = { x: number; y: number; width: number; height: number }
 // Frames ONE source image into a `aspect`-shaped rectangle and reports the normalized `0..1` crop against the
 // source — the Memory cover stores that crop (aspect 16/9) and re-renders; the space icon bakes it (aspect 1).
 // Presentation only: no crypto, no network. The crop math (base-scale fill, clamp-so-no-empty-corners, normalize
-// to 0..1) is the legacy math, moved verbatim. Class names keep the `memory-cover-*` prefix so the cover's styles
-// + tests carry over unchanged.
+// to 0..1) is the legacy math, moved verbatim. Its classes are core's `veyq-cropper*` (inbox #513: they were `memory-cover-*`,
+// and a global copy of this block in Memories' `memory.css` that every declaration here shadowed); the block below is
+// the whole of their light style, and the zoom label's dark twin is in `styles/dark.css`.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -197,11 +198,11 @@ defineExpose({
 </script>
 
 <template>
-  <div class="memory-cover-editor">
+  <div class="veyq-cropper">
     <div
       ref="cropperEl"
-      class="memory-cover-cropper"
-      :class="{ 'memory-cover-cropper-dragging': dragging }"
+      class="veyq-cropper-frame"
+      :class="{ 'veyq-cropper-dragging': dragging }"
       :style="{ aspectRatio: String(aspect) }"
       @pointerdown="startDrag"
       @pointermove="drag"
@@ -210,7 +211,7 @@ defineExpose({
     >
       <img ref="imageElement" :src="src" :style="displayedImageStyle" draggable="false" alt="" @load="loadImage" @error="emit('error')" />
     </div>
-    <label class="memory-cover-zoom">
+    <label class="veyq-cropper-zoom">
       <span>{{ t('common.zoom') }}</span>
       <input type="range" min="1" max="3" step="0.01" :value="zoom" :disabled="!imageLoaded" @input="updateZoom" />
     </label>
@@ -218,12 +219,12 @@ defineExpose({
 </template>
 
 <style scoped>
-.memory-cover-editor {
+.veyq-cropper {
   display: grid;
   justify-items: stretch;
   gap: 0.85rem;
 }
-.memory-cover-cropper {
+.veyq-cropper-frame {
   position: relative;
   width: 100%;
   overflow: hidden;
@@ -233,7 +234,7 @@ defineExpose({
   cursor: grab;
   touch-action: none;
 }
-.memory-cover-cropper::after {
+.veyq-cropper-frame::after {
   position: absolute;
   inset: 0;
   border: 2px solid rgb(255 255 255 / 82%);
@@ -241,10 +242,10 @@ defineExpose({
   content: '';
   pointer-events: none;
 }
-.memory-cover-cropper-dragging {
+.veyq-cropper-dragging {
   cursor: grabbing;
 }
-.memory-cover-cropper img {
+.veyq-cropper-frame img {
   position: absolute;
   top: 0;
   left: 0;
@@ -252,7 +253,7 @@ defineExpose({
   user-select: none;
   will-change: transform;
 }
-.memory-cover-zoom {
+.veyq-cropper-zoom {
   display: grid;
   grid-template-columns: auto minmax(180px, 1fr);
   align-items: center;
@@ -261,7 +262,7 @@ defineExpose({
   color: var(--app-control-text);
   font-size: 0.9rem;
 }
-.memory-cover-zoom input {
+.veyq-cropper-zoom input {
   width: 100%;
 }
 </style>

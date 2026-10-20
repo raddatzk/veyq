@@ -86,7 +86,7 @@ const png = () => new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'im
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
 const dialogButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.trim() === label)
 const openedDialog = async () => { await vi.waitFor(() => expect(dialog(), 'the cover dialog is open').not.toBeNull()) }
-const cropperImg = () => document.body.querySelector<HTMLImageElement>('[role="dialog"] .memory-cover-cropper img')
+const cropperImg = () => document.body.querySelector<HTMLImageElement>('[role="dialog"] .veyq-cropper-frame img')
 async function pickInDialog(file: File) {
   const input = document.body.querySelector<HTMLInputElement>('[role="dialog"] input[type="file"]')!
   Object.defineProperty(input, 'files', { configurable: true, value: [file] })

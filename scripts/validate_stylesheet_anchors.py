@@ -3,7 +3,9 @@
 
 **What it asserts.** For every package that has a `src/styles/` directory (today `web/` and `admin-web/`,
 found by walking the repo root — a third one is in scope the day it lands), every **anchor compound** in
-those sheets plus the package's `src/style.css` names at least one class that the package's own markup
+those sheets plus the package's `src/style.css` — and every other `.css` file under its `src/`, which is where an
+application's own sheet lives (`web/src/features/memories/memories.css`, inbox #513; a sheet that moves out of
+`src/styles/` must not move out of this guard) — names at least one class that the package's own markup
 applies. The anchor compound is a selector's first compound, the part before any descendant/child/sibling
 combinator: in `.memory-card .p-card-body` it is `.memory-card`, in `.veyq-danger-action.p-button` it is
 both classes together. It is the element the rule is *written for*. A rule whose anchor names only classes
@@ -130,14 +132,19 @@ def packages() -> list[pathlib.Path]:
 
 
 def sheets(pkg: pathlib.Path) -> tuple[list[pathlib.Path], list[pathlib.Path]]:
-    """(the sheets under src/styles/, the barrel src/style.css if present) — kept apart on purpose.
+    """(the sheets under src/styles/, the barrel src/style.css if present + every other `.css` under src/) — the
+    first kept apart on purpose.
 
     Merging them hides an emptied `src/styles/`: the barrel alone keeps the combined list non-empty, the
     guard validates one file instead of nine and still reports green. Its own bite test caught exactly that.
+    The others are found by walking `src/`, never listed: an application's sheet (inbox #513) is judged the day it
+    lands, wherever under `src/` it sits.
     """
-    inner = sorted((pkg / "src" / "styles").glob("*.css"))
+    styles = pkg / "src" / "styles"
+    inner = sorted(styles.glob("*.css"))
     barrel = pkg / "src" / "style.css"
-    return inner, ([barrel] if barrel.exists() else [])
+    others = sorted(p for p in (pkg / "src").rglob("*.css") if p.parent != styles and p != barrel)
+    return inner, ([barrel] if barrel.exists() else []) + others
 
 
 def rule_heads(css: str):

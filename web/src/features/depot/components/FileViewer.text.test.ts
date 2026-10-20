@@ -68,11 +68,11 @@ describe('the text stays selectable page text', () => {
     const rules = userSelectNoneRules()
     expect(rules.length).toBeGreaterThan(0) // the cropper image and the slide-to-confirm handle do set it
     const probe = document.createElement('img')
-    probe.className = 'memory-cover-cropper-image'
+    probe.className = 'veyq-cropper-image'
     const holder = document.createElement('div')
-    holder.className = 'memory-cover-cropper'
+    holder.className = 'veyq-cropper-frame'
     holder.append(probe)
-    expect(unselectableBy(probe).map((r) => r.file)).toContain('styles/memory.css')
+    expect(unselectableBy(probe).map((r) => r.file)).toContain('shared/ui/ImageCropper.vue')
     const fine = document.createElement('pre')
     fine.className = 'file-viewer-text'
     expect(unselectableBy(fine)).toEqual([])

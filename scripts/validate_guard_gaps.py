@@ -241,6 +241,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      there would load an application's code into every test file and around the registry's composition root
   88 a `features/depot` file reading Memories' `'media.…'` key — rejected: the application rule reads another
      application's i18n namespace as the edge it is; the merged instance resolves it, so no test would notice
+  89 a dead rule in an application's own stylesheet (`web/src/features/memories/memories.css`) — rejected:
+     `validate_stylesheet_anchors` reads every `.css` under a package's `src/`, not only `src/styles/`. Until inbox
+     #513 moved Memories' rules out of `styles/memory.css`, that guard read `src/styles/` and the barrel alone, so the
+     move would have taken its 87 anchor compounds out of its sight with nothing turning red (and
+     `shared/ui/shareGate.css`'s 10 had never been in it)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1285,6 +1290,16 @@ def forge_class_anchored_only_by_a_test(root: pathlib.Path) -> str:
     return "a CSS rule whose class only a test file spells (must be REJECTED — a test is not markup)"
 
 
+def forge_dead_rule_in_application_sheet(root: pathlib.Path) -> str:
+    # inbox #513: an application's sheet lives in its own directory, outside src/styles/. Found, not named: any .css
+    # under features/memories, so a renamed sheet re-anchors itself.
+    sheets = sorted((root / "web" / "src" / "features" / "memories").rglob("*.css"))
+    if not sheets:
+        raise ForgeError("no .css under web/src/features/memories — re-anchor this forgery on an application's sheet")
+    sheets[0].write_text(sheets[0].read_text() + "\n.guard-gap-no-markup-applies-this {\n  color: red;\n}\n")
+    return "a dead rule in Memories' own stylesheet outside src/styles/ (must be REJECTED — every sheet under src/ is read)"
+
+
 def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
     # The defect that bought the guard, put back on the copy it did not read at first: admin-web's light primary
     # set to Aura's emerald-500 under white text (2.54:1). The token's current value is matched, not spelled, so
@@ -1594,6 +1609,7 @@ CASES = [
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),
     ("88", WEB_GUARD, forge_web_application_reads_another_namespace, False),
+    ("89", "validate_stylesheet_anchors.py", forge_dead_rule_in_application_sheet, False),
     ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
     ("84", "validate_api_fuzz_baseline.py", forge_fuzz_baseline_5xx_under_another_check, True),
 ]

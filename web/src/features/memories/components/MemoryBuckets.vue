@@ -597,7 +597,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
 .bucket-select-option { width: 100%; }
 .bucket-select-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bucket-select-branch { color: var(--app-muted); }
-/* .bucket-action-button + -label/-danger live in global memory.css — shared with the Papierkorb bar (cr-0152). */
+/* .bucket-action-button + -label/-danger live in Memories' global memories.css — shared with the Papierkorb bar (cr-0152). */
 .bucket-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .bucket-selection-count { color: var(--app-muted); font-size: 0.85rem; }
 .bucket-dropzone {

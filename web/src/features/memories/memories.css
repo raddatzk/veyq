@@ -1,4 +1,20 @@
+/* Memories' stylesheet (ADR 0079, inbox #513): the global classes of the Memories application's own markup — the media
+   grid's tiles and their overlay controls, the batch-action buttons, the chapter cards and their grid, the Memory
+   detail's tabs and the photo drop's gallery header — with their dark twins at the end. It moved here from the global
+   `styles/memory.css`, rule for rule in the same order; that sheet's core part went to core (the rendered Markdown to
+   `styles/markdown.css`; the image cropper's rules were a shadowed copy of `shared/ui/ImageCropper.vue`'s scoped block and
+   went, its classes renamed `veyq-cropper*`, the zoom label's dark twin staying in `dark.css`).
 
+   **Imported by the application, not by core's barrel.** `features/memories/register.ts` imports it last, so it loads
+   with the application through the composition root — in the module graph BEFORE `style.css` (`main.ts` imports
+   `./applications` first), where `memory.css` sat AFTER `ui.css`, `layout.css` and `forms.css`. So nothing here may tie
+   with a core rule on specificity and win by source order: where a Memories class modifies a core one on the same
+   element, its rule compounds with that class (`.veyq-card.memory-card`, `.veyq-create-card.memory-create-card-memory`)
+   and wins by specificity. Measured at the move: those two were the only ties (`.memory-card` against `.veyq-card`'s
+   border, radius, background, shadow and min-width; `.memory-create-card-memory` and its icon against
+   `.veyq-create-card`'s columns, gap, height, padding and alignment); every other rule here styles an element no core
+   sheet's rule of equal specificity reaches. The sheets after it (`media`, `pdf`, `settings`, `dark`) were after it
+   before too. Keep it so: a new rule here that styles a core class's element compounds with that class. */
 
 .media-grid {
   position: relative;
@@ -133,7 +149,7 @@
   height: 100%;
 }
 
-.memory-card {
+.veyq-card.memory-card {
   min-width: 0;
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--app-line) 78%, transparent);
@@ -319,28 +335,7 @@
   color: var(--app-accent);
   font-size: 1.6rem;
 }
-
-.memory-cover-image {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.memory-cover-image img {
-  position: absolute;
-  display: block;
-  max-width: none;
-}
-
-.memory-card-cover > img,
-.memory-card-cover .memory-cover-image {
-  width: 100%;
-  height: 100%;
-}
-
-.memory-create-card-memory {
+.veyq-create-card.memory-create-card-memory {
   grid-template-columns: 1fr;
   justify-items: center;
   align-content: center;
@@ -351,7 +346,7 @@
   text-align: center;
 }
 
-.memory-create-card-memory .pi {
+.veyq-create-card.memory-create-card-memory .pi {
   width: 42px;
   height: 42px;
   aspect-ratio: auto;
@@ -446,79 +441,6 @@
   background: transparent;
 }
 
-.memory-cover-editor {
-  display: grid;
-  justify-items: center;
-  gap: 0.85rem;
-}
-
-.memory-cover-cropper {
-  position: relative;
-  width: 280px;
-  max-width: 100%;
-  aspect-ratio: 1;
-  overflow: hidden;
-  border: 1px solid var(--app-line);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-backdrop-strong);
-  cursor: grab;
-  touch-action: none;
-}
-
-.memory-cover-cropper::after {
-  position: absolute;
-  inset: 0;
-  border: 2px solid rgb(255 255 255 / 82%);
-  box-shadow: inset 0 0 0 999px rgb(15 23 42 / 8%);
-  content: '';
-  pointer-events: none;
-}
-
-.memory-cover-cropper-dragging {
-  cursor: grabbing;
-}
-
-.memory-cover-cropper img {
-  position: absolute;
-  top: 0;
-  left: 0;
-  max-width: none;
-  user-select: none;
-  will-change: transform;
-}
-
-.memory-cover-zoom {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 1fr);
-  align-items: center;
-  gap: 0.75rem;
-  width: min(280px, 100%);
-  color: var(--app-control-text);
-  font-size: 0.9rem;
-}
-
-.memory-cover-zoom input {
-  width: 100%;
-}
-
-.markdown-body {
-  overflow-wrap: anywhere;
-  color: var(--app-text);
-  line-height: 1.6;
-}
-
-.markdown-body a {
-  color: var(--app-success);
-}
-
-.markdown-body > :first-child {
-  margin-top: 0;
-}
-
-.markdown-body > :last-child {
-  margin-bottom: 0;
-}
-
 @media (max-width: 520px) {
   .memory-card-grid {
     grid-template-columns: 1fr;
@@ -544,7 +466,7 @@
     padding: 0.7rem 0.8rem;
   }
 
-  .memory-create-card-memory {
+  .veyq-create-card.memory-create-card-memory {
     grid-template-columns: 42px minmax(0, 1fr);
     justify-items: start;
     align-content: center;
@@ -592,4 +514,38 @@
   font-size: 2rem;
   line-height: 1.1;
   overflow-wrap: anywhere;
+}
+
+/* Memories' dark twins, moved from `dark.css` with the light rules above (the same declarations; nested like that sheet,
+   so each is `.veyq-dark .x`). They come after every light rule of this sheet, which a twin of equal specificity
+   (`.veyq-dark .memory-card` against `.veyq-card.memory-card`) needs. */
+.veyq-dark {
+  .memory-card-main {
+    color: var(--app-text);
+  }
+
+  .memory-card {
+    background: var(--app-surface);
+    color: var(--app-text);
+  }
+
+  .memory-card-cover,
+  .memory-card-icon {
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .memory-card-main small {
+    color: var(--app-muted);
+  }
+
+  .media-grid-tile-placeholder {
+    background:
+      linear-gradient(110deg, transparent 0%, rgb(255 255 255 / 8%) 45%, transparent 70%),
+      var(--app-surface-muted);
+  }
+
+  .memory-card:hover {
+    border-color: var(--app-line);
+  }
 }
