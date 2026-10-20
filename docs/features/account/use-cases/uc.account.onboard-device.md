@@ -78,7 +78,7 @@ flowchart TB
    scanned into the other. The key
    itself does **not** travel in the code: a post-quantum transport bundle serialises to 1256 bytes, which is a
    153-module QR (version 34) nobody scans reliably and which sits past the decoder defect
-   [`web/CLAUDE.md`](../../../../web/CLAUDE.md) grants its QR reader an exception around. Nothing is lost by
+   [`web/CLAUDE.md`](../../../../src/web/CLAUDE.md) grants its QR reader an exception around. Nothing is lost by
    relaying it instead, because the relayed key is MACed under the channel key the secret derives, and the code
    is bound into the same MAC (§5, §11). It sends **no account identifier** — which account this becomes is decided by
    whoever scans.

@@ -158,7 +158,7 @@ download with the SW (an opaque one-shot handle, the plaintext size, the file na
 the tab to `/__download/<handle>`; the SW answers that navigation with an attachment whose body pulls the page's
 decrypted chunks over the port, one credit per chunk the browser consumed. The browser writes the file itself, so the
 tab holds a few chunks, not the file. The SW still holds no key and no token; the page presigns and opens every frame,
-as for playback. It is the second of three save targets (`web/src/shared/saveStream.ts`): a file picked through the
+as for playback. It is the second of three save targets (`src/web/src/shared/saveStream.ts`): a file picked through the
 File System Access API comes first where the browser has it, an in-memory `Blob` capped at 512 MiB last. Above the cap,
 with neither streaming target, the download is refused with a message. Rejected: a "stream saver" library, because its
 man-in-the-middle iframe is served from another origin by default (a self-hostability regression) and the app's CSP

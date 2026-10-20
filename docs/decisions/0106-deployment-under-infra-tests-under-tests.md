@@ -1,9 +1,10 @@
-# ADR 0106 — Deployment lives under `infra/`, the test harnesses under `tests/`
+# ADR 0106 — Deployment lives under `infra/`, the test harnesses under `tests/`, the code under `src/`
 
 - Status: Accepted 2026-10-20 (owner: the layout of stage 1, and stage 2's direction with its naming constraint);
   stage 1 built 2026-10-20 (cr-repo-layout-infra-and-tests): the script-side paths live once in
   `scripts/repo_layout.py`, except in what ships alone (`instance_backup.py`, which spells its own and is compared by
-  its selftest). Stage 2 is not decided to happen, only what it may not be called.
+  its selftest). Stage 2 decided by the owner the same day (decision 5) and built the same day (cr-repo-layout-src): the code
+  surfaces' paths live in `scripts/repo_layout.py` too, a predecessor's in either layout.
 - Date: 2026-10-20
 
 ## Context
@@ -45,21 +46,31 @@ every open worktree branch conflicts with a move of the files it touches.
 4. **Records stay as they were measured.** A grep command and its `file:line` results in an ADR's measurement ledger
    describe the tree they were taken on; they are not rewritten. Instructions, links and the repository-shape
    descriptions are.
-5. **Stage 2 — the code surfaces under one directory — is a direction, not a commitment.** If it is built, the
-   directory is `src/` (or another neutral word), **never `application/`**: an *application* is Memories or Depot
-   ([ADR 0086](0086-one-word-per-meaning.md)), and `application/backend/` would hold core and every application
-   at once. `web/` keeps its name in either stage: `admin-web/` is just as much a frontend, so `frontend/` would name
-   one of two by what both are. Stage 2 is decided on its own, when no branch is in flight, against its cost above.
+5. **Stage 2 — the code surfaces under `src/`.** Decided by the owner on 2026-10-20, with no branch in flight:
+   `src/backend/`, `src/web/`, `src/admin-web/`, `src/packages/crypto/`. The directory is `src/`, **never
+   `application/`**: an *application* is Memories or Depot ([ADR 0086](0086-one-word-per-meaning.md)), and
+   `application/backend/` would hold core and every application at once. `web/` keeps its name: `admin-web/` is just
+   as much a frontend, so `frontend/` would name one of two by what both are. `contracts/` stays at the root (decision
+   1), and so does the launcher (`launcher/` beside `settings.gradle.kts`: dev tooling, not a surface).
+6. **An image mirrors the checkout.** A surface's build reaches its neighbours by relative path (the backend's
+   `../contracts`, the web's `../contracts/api`), so a build stage lays the sources out under `/repo` exactly as the
+   checkout does (`/repo/src/backend`, `/repo/contracts`, `/repo/VERSION`), and a relative path that holds in the
+   checkout holds in the image.
+7. **A reader that compares two trees finds a surface in either layout** (decision 3's rule, for the code): the
+   upgrade proof builds a predecessor from before stage 2, where the surfaces are at the root.
 
 ## Consequences
 
-- The root lists `admin-web/ backend/ changes/ contracts/ docs/ infra/ launcher/ packages/ scripts/ site/ tests/ web/`
-  and the launcher's files.
+- After stage 2 the root lists `changes/ contracts/ docs/ infra/ launcher/ scripts/ site/ src/ tests/` and the
+  launcher's files.
+- IntelliJ links the backend's own Gradle build per checkout; after stage 2 it is re-linked at `src/backend/`. Ignored
+  build output (`build/`, `node_modules/`, generated clients) and a surface's local `.env` stay at the old paths in an
+  existing checkout until moved or deleted by hand.
 - A bare `docker build .` no longer finds the app image's Dockerfile; every build names it
   (`docker build -f infra/docker/Dockerfile .`), as the workflows and the launcher already did.
 - An operator's local `.env` moves from `infra/.env` to `infra/docker/.env`; release assets are flat
   (`releases/<r>/docker-compose.prod.yml`), so an installed instance is unaffected.
 - The OCI registry path `ghcr.io/<owner>/charts/veyq` is a name, not a repository path, and does not change.
-- Rejected: moving the code surfaces in the same step (the larger cost for the smaller gain, and it would conflict with
+- Rejected: moving the code surfaces in stage 1's step (the larger cost for the smaller gain, and it would conflict with
   every branch that touches code); `tests/stack/` for L1's overlay (the coverage surface `stack` already means the
   browser suite itself).

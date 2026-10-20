@@ -354,7 +354,7 @@ on Kubernetes it closes only with a NetworkPolicy the cluster enforces
 - **One seal implementation.** The conformance vectors in
   [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json)
   define the suite's bytes, and
-  [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts) is pinned to
+  [`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts) is pinned to
   them by its conformance test. That TypeScript test is the only stack asserting the file's seals, so it is a
   single-implementation **regression pin** — it stops a refactor from silently moving the bytes — not a
   cross-implementation parity proof. The backend performs no content crypto; it asserts the vectors only for the

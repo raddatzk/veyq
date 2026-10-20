@@ -72,7 +72,7 @@ acceptanceCriteria:
       backend:
         integration: [ModerationSliceTest.aMemberIsNotTheServerOwnerOnTheRoster, AdminChannelGateSliceTest.everyRoleGatedMarkedOperationIsAnUnknownRouteOnThePublicPortAndAnswersOnTheAdminListener]
 gaps:
-  web: "No part here: the Server Owner's side lives on admin-web; web/ carries the moderator's side (uc.moderation.serve-as-moderator)."
+  web: "No part here: the Server Owner's side lives on admin-web; src/web/ carries the moderator's side (uc.moderation.serve-as-moderator)."
   admin-web: >-
     Built and tested (features/instance/moderation.test.ts, moderation.noOpen.test.ts — the admin-web-never-opens-a-grant
     criterion —, ModerationPanel.test.ts, cli/cli.test.ts), but admin-web's job has never executed (ADR 0040).

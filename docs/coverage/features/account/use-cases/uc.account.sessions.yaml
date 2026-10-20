@@ -357,7 +357,7 @@ acceptanceCriteria:
   - id: a-refused-register-is-started-over-only-by-the-user
     text: A refused device register can be started over only by the user, on a device, after a confirmation that names the cost (every device unnamed until it next signs in, removing another device's saved key not offered until then); no server response reaches it. It writes the empty register one revision above the served one, never over a copy that opens, and sets this device's mark to the revision it wrote.
     # ADR 0028 Decision 7's way back (inbox #192). The reset's import is pinned to its one dialog by
-    # `veyq/trust-reset-one-door` in web/eslint.config.js — not a coverage surface (ADR 0040), so it is named here
+    # `veyq/trust-reset-one-door` in src/web/eslint.config.js — not a coverage surface (ADR 0040), so it is named here
     # rather than listed. The negative ("no server response reaches it") anchors on the recorded PUTs across every
     # importer of the register module, with a readable-register control on the same paths.
     coverage:

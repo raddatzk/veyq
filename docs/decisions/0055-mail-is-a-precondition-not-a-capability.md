@@ -110,7 +110,7 @@ the contract does not list two outcomes a client will never see.
 - **The dev and test loops need a mailer to exercise member invites.** `LoggingTenantInviteMailer`'s copy-link
   path no longer serves them. Backend slice tests use the in-JVM GreenMail server already wired for
   `SmtpInviteMailSendTest`; the web e2e harness moves to Mailpit (`--profile mail`), which
-  `web/src/features/account/recovery/recovery.e2e.test.ts` already reads. The ServerOwner bootstrap keeps its
+  `src/web/src/features/account/recovery/recovery.e2e.test.ts` already reads. The ServerOwner bootstrap keeps its
   dev-invite file, so the local seed loop is untouched.
 - **Rejected — a `mail` capability on the setup manifest.** It was the first cut of inbox #118 and it is wrong
   for the reason in Context 2: a capability is an off-switch for an optional feature, so shipping one would

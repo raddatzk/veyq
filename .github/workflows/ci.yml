@@ -28,9 +28,7 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
-      - "!docs/api/**"
       - "site/**"
-      - ".github"
   pull_request:
     branches:
       - main
@@ -38,9 +36,7 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
-      - "!docs/api/**"
       - "site/**"
-      - ".github"
   workflow_dispatch:
     inputs:
       release:
@@ -125,7 +121,7 @@ jobs:
         uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Run backend checks
-        working-directory: backend
+        working-directory: src/backend
         run: ./gradlew --no-daemon check
 
   backend-races:
@@ -168,7 +164,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # One install for the whole workspace (`npm ci` from the root links `@veyq/crypto` into web/), then each
+      # One install for the whole workspace (`npm ci` from the root links `@veyq/crypto` into src/web/), then each
       # package proves ITSELF. The shared crypto package is checked first and separately on purpose: it is the
       # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
       # web failure.
@@ -180,17 +176,17 @@ jobs:
         run: python3 scripts/npm_ci_no_deprecated.py
 
       - name: Run shared crypto checks
-        working-directory: packages/crypto
+        working-directory: src/packages/crypto
         run: npm run check
 
       - name: Run frontend checks
-        working-directory: web
+        working-directory: src/web
         run: npm run check
 
       # Gated for the same reason the app is: the image build compiles but runs no tests, so without this a broken
       # admin surface could still be published beside a green app image (ADR 0065 — one release, its images).
       - name: Run admin surface checks
-        working-directory: admin-web
+        working-directory: src/admin-web
         run: npm run check
 
       # Lane L1's browser suite runs only in `stack-e2e`, so its lint, its types, its spec list and its specs'
@@ -292,7 +288,7 @@ jobs:
       # H2 URL. `CREATE DATABASE veyq_e2e_<n>` is a fresh instance in the only sense the suites care about, and
       # it keeps this build-once step intact instead of needing a second, differently-configured jar.
       - name: Build backend fast-jar
-        working-directory: backend
+        working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
@@ -367,11 +363,11 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Build backend fast-jar
-        working-directory: backend
+        working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
-        # The seeder (web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
+        # The seeder (src/web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
         run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
 
       - name: Fuzz the API against a live backend
@@ -509,7 +505,7 @@ jobs:
             dockerfile: infra/docker/Dockerfile
             target: runtime-jvm
           - image: veyq-admin
-            dockerfile: admin-web/Dockerfile
+            dockerfile: src/admin-web/Dockerfile
             target: runtime-nginx
           - image: veyq-tools
             dockerfile: infra/kubernetes/tools/Dockerfile
@@ -762,7 +758,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: admin-web/Dockerfile
+          file: src/admin-web/Dockerfile
           target: runtime-nginx
           platforms: ${{ matrix.platform }}
           push: false
@@ -788,7 +784,7 @@ jobs:
           docker build --file infra/docker/Dockerfile --target runtime-jvm --platform "$PLATFORM" \
             --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
             --tag "veyq:candidate-${ARCH}" .
-          docker build --file admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \
+          docker build --file src/admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \
             --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
             --tag "veyq-admin:candidate-${ARCH}" .
 
@@ -854,7 +850,7 @@ jobs:
   # `v<major>.<minor>` tag from then on — hence the full history and the tags.
   #
   # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
-  # (backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
+  # (src/backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
   # of scripts/applied_migrations.sha256 enables it, in the same commit: it deletes `if: false` below AND the
   # `"skipped"` that `publish` tolerates for this job. A disabled job claims no coverage (ADR 0040).
   upgrade-proof:
@@ -884,7 +880,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Build the candidate's fast-jar
-        working-directory: backend
+        working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
       - name: Install the candidate's dependencies
         # The registry half is asked once per commit, by this workflow's `frontend`.

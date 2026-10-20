@@ -59,7 +59,7 @@ role.
    fully configurable in that hub section (the canonical home; the menu's pickers are shortcuts). The **top
    bar carries no preferences and no second entry into the hub** — it is left to what is genuinely contextual
    (breadcrumb, invitations badge, upload tray). That matters most below the compact threshold, where
-   `web/src/styles/layout.css` gives the bar 3rem inside a sticky header it shares with a 72px sidebar row,
+   `src/web/src/styles/layout.css` gives the bar 3rem inside a sticky header it shares with a 72px sidebar row,
    and at ≤720px drops it to auto height around a 2.35rem breadcrumb — so what a control there costs is
    **width taken from the breadcrumb**, which is the one thing on that bar the user cannot do without.
 

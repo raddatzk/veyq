@@ -62,7 +62,7 @@ notices nothing. Its first run, before the resolver held the header's name, was 
       And one home for Host resolution does not say which tenant a handler then acts on — whether recovery mails
       only a member of that tenant is behaviour, pinned by `RecoverySliceTest`.
 
-Its own source is not in what it scans (the corpus is Kotlin under `backend/src/main`), so the usual trap — a guard
+Its own source is not in what it scans (the corpus is Kotlin under `src/backend/src/main`), so the usual trap — a guard
 matching the literal it forbids in its own documentation — does not apply.
 """
 from __future__ import annotations

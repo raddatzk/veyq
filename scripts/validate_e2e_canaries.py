@@ -37,9 +37,11 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ORCHESTRATOR = ROOT / "scripts" / "run_web_e2e.py"
-RECORDER = ROOT / "web" / "src" / "test" / "canaries.ts"
+RECORDER = repo_layout.WEB / "src" / "test" / "canaries.ts"
 
 # The import may be `import { recordCanaries }` or list siblings; the path is relative, so anchor on the module
 # stem rather than on a fixed number of `../`.

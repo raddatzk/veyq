@@ -3,7 +3,7 @@ info:
   title: veyq Moderation API
   version: 0.1.0
   description: >
-    The **moderator's** operations, on the public listener: web/'s moderation surface calls them from any tenant host
+    The **moderator's** operations, on the public listener: src/web/'s moderation surface calls them from any tenant host
     the moderator signs in on ([ADR 0099](../../docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
     § 6, uc.moderation.serve-as-moderator). A moderator is an existing account the Server Owner appointed on the
     admin channel (`instance.openapi.yaml`, tag `instance-moderation`); this spec carries none of the Server Owner's

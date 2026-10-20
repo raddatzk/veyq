@@ -2,7 +2,7 @@
 
 - **ID:** uc.moderation.object-to-a-measure
 - **Primary actor:** A **member affected** by a measure — the creator of a blocked link (or of the link a blocked guest
-  came through), an uploader of blocked content, an owner of the space blocked content lies in — in web/
+  came through), an uploader of blocked content, an owner of the space blocked content lies in — in src/web/
 - **Secondary actor:** the **moderators** (another one decides the objection), a **reporter** (told the decision on their
   report)
 - **Goal:** Learn why something of yours was blocked, and contest it once, with someone other than the moderator who
@@ -34,7 +34,7 @@
    rows name (a blocked guest: that guest); and, on a content block, every owner of the space. A guest is told nothing
    in veyq and has no address: a guest uploader counts as *nobody can be told*.
 3. **What it says** — one template in `contracts/moderation/statement-of-reasons.json`, rendered by the server for the
-   mail and by web/ on the placeholder: the measure and its reach, why the reader gets it, the facts, whether a report
+   mail and by src/web/ on the placeholder: the measure and its reach, why the reader gets it, the facts, whether a report
    or an order led to it, that no automated means decided, the ground and the provision or clause it relies on, that
    the measure applies wherever the instance is reached and lasts until it is lifted (DSA Art. 17(3)(a)), the
    objection, the contact address and the courts. It names the host, never the moderator.

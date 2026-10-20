@@ -23,7 +23,7 @@
 2. **Appoint.** The Server Owner enters an account's address (or runs `veyq-admin moderator appoint <address>`). The
    server finds the account and records a pending appointment (appointed by, appointed at); the roster shows it
    *pending*.
-3. The appointee accepts and confirms their address in web/; a holder's client delivers every live epoch to them
+3. The appointee accepts and confirms their address in src/web/; a holder's client delivers every live epoch to them
    ([uc.moderation.serve-as-moderator](uc.moderation.serve-as-moderator.md)). The roster shows them *accepted*, then
    *holds the key*.
 4. **Remove.** The Server Owner removes a moderator (or `veyq-admin moderator remove <address>`). One client step does

@@ -39,7 +39,7 @@ need not be: a tile far from the viewport is never seen until the user scrolls t
    meta (the media type), and the thumbnail frames — memoised per seal (a listed tier by its `wrappedMeta`, a blob meta
    by its blob and its `wrappedBlobMeta`, so a meta edit at a new `metaRevision` is opened anew and a share guest's
    rows, which carry no revision, are kept as well), so a sort, a filter or a resize never opens anything twice
-   (`web/src/features/memories/openedListing.ts`). The worker receives the open Memory's content keys (`K_node`, and the keys of its
+   (`src/web/src/features/memories/openedListing.ts`). The worker receives the open Memory's content keys (`K_node`, and the keys of its
    uploaders' buckets, derived on the page as today) and forgets them when the Memory closes. It is the page's own
    origin and the page's own code, so it is the page's trust tier ([ADR 0026](0026-client-trust-tiers.md)) — no key
    leaves the browser, and no new party sees one.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Puts the OpenAPI generator JAR in place and proves it is the pinned one — before the generator runs.
 //
-// Run by `generate:api` in web/ and admin-web/ (one copy, reached as ../scripts/ from both, and COPY'd into both
+// Run by `generate:api` in src/web/ and src/admin-web/ (one copy, reached as ../scripts/ from both, and COPY'd into both
 // image builders before their `npm ci`). @openapitools/openapi-generator-cli downloads its JAR with no checksum
 // and treats any file already at <storageDir>/<version>.jar as installed, so a poisoned download — or a file
 // planted in the storage dir — would run as our code generator, and its output (the untracked generated client)
@@ -67,7 +67,7 @@ async function sha256Of(stream) {
 if (!existsSync(jar)) {
   const url = `${CENTRAL}/${version}/openapi-generator-cli-${version}.jar`;
   mkdirSync(storage, { recursive: true });
-  // A per-process partial file renamed into place only after it matched: web/ and admin-web/ can run this at the
+  // A per-process partial file renamed into place only after it matched: src/web/ and src/admin-web/ can run this at the
   // same time during one `npm ci`, and neither may ever see a half-written or unverified <version>.jar.
   const partial = path.join(storage, `.${version}.jar.${process.pid}.partial`);
   let response;

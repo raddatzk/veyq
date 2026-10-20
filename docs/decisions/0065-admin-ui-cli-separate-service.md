@@ -6,8 +6,8 @@
 ## Context
 
 Server-Owner administration (instance setup, tenant creation, member management) is built today as routes
-inside the main SPA — `web/src/features/admin/**`, gated per-route with server-side authz on each call
-(`web/src/router.ts` — "is the Server-Owner instance-administration page (cr-0050; tenant administration
+inside the main SPA — `src/web/src/features/admin/**`, gated per-route with server-side authz on each call
+(`src/web/src/router.ts` — "is the Server-Owner instance-administration page (cr-0050; tenant administration
 lives there, cr-0009)... each surface enforces its own authz server-side (403)"). It is reachable at the same
 origin, over the same public Traefik entrypoint, as every ordinary user-facing page.
 
@@ -55,21 +55,21 @@ Forces:
 **The admin surface becomes its own container (`admin`), and stays a pure client of the backend Admin API — no
 direct DB or KEK access. The backend answers that API only through it (the *admin channel*, below).**
 
-- **Web UI — a new package, sharing only crypto with `web/` via a minimal npm workspace.** `admin-web/` gets
+- **Web UI — a new package, sharing only crypto with `src/web/` via a minimal npm workspace.** `src/admin-web/` gets
   its own `package.json` + Vite build + `index.html`, its own narrow generated API client (from
   `contracts/api/tenants.openapi.yaml` + `contracts/api/instance.openapi.yaml` + `contracts/api/auth.openapi.yaml`,
   mirroring `scopes.openapi.yaml`'s
   `ScopeKind` if the moved code still needs it), and its own router/state/UI — none of that is shared with
-  `web/`. The **one** thing that is: `v1` + `accountBirth` + the Emergency Kit codec that carries the birth's
-  Secret Key are extracted into a small internal workspace package, `@veyq/crypto` (`packages/crypto/`), both
-  `web/` and `admin-web/` depend on — the only genuinely shared surface, and the one
+  `src/web/`. The **one** thing that is: `v1` + `accountBirth` + the Emergency Kit codec that carries the birth's
+  Secret Key are extracted into a small internal workspace package, `@veyq/crypto` (`src/packages/crypto/`), both
+  `src/web/` and `src/admin-web/` depend on — the only genuinely shared surface, and the one
   place duplication would be a security defect rather than a maintenance nuisance, per this ADR's own
   Context finding. Everything else stays independent per package on purpose (no shared UI-component library,
   no shared router) — the point of the workspace is that one crypto module, not general code-sharing.
   - **What moves**: the genuinely Server-Owner-only, ongoing-administration surface — tenant CRUD (create,
     list, resend, reassign, revoke, change-domain, suspend, reactivate) and release info — **and** first-run
     setup (`setupServer.ts`/`SetupView.vue`, Context above).
-  - **What stays in `web/`**: the tenant-invite **accept** side (`previewInvite`, `acceptInvite`,
+  - **What stays in `src/web/`**: the tenant-invite **accept** side (`previewInvite`, `acceptInvite`,
     `registerAndAccept`, `bornTenantScope`, `tenantError` — reachable by an anonymous invitee, not a Server
     Owner), the terms **accept** side and `getTenantTerms` (any member, not an admin action), the four
     backup/restore E2E rehearsals (unrelated to this feature, parked under `features/admin/` only
@@ -80,7 +80,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     (uc.admin.create-tenant is two-party). Moving them would take a tenant's own email and terms
     configuration away from every owner who is not also the Server Owner — a product change, which this
     decision is not. Everything in this list is relocated out of `features/admin/**` into an accurate home
-    inside `web/`; the exact destination is the CR's inventory, not this ADR's.
+    inside `src/web/`; the exact destination is the CR's inventory, not this ADR's.
 
     **The rule the split follows, and the one to apply to anything moved later: ask which gate the BACKEND
     applies — the Server-Owner gate, or another (`not_tenant_owner`, the moderator's) — never which directory
@@ -92,9 +92,9 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6, built):
     an account the Server Owner appoints, whose review and decisions the backend gates by a `MODERATOR` role and a
     moderation-key signature on the public listener, not by the Server-Owner gate — so the moderation surface
-    stays in `web/`, while the roster and minting and rotating the moderation key are Server-Owner operations
+    stays in `src/web/`, while the roster and minting and rotating the moderation key are Server-Owner operations
     and live here.
-  - **`web/` carries no "is this caller a Server Owner" probe.** It used to (`serverRole.ts`, calling
+  - **`src/web/` carries no "is this caller a Server Owner" probe.** It used to (`serverRole.ts`, calling
     `listTenants` to show Server Owners a settings note that administration lives elsewhere); under the admin
     channel that call can only ever 404, so the probe and the note are deleted rather than re-pointed — the
     Server Owner is by construction the person who ran setup in the admin container. `admin-web` keeps its own
@@ -112,12 +112,12 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
   when listing what it generates: without `auth.openapi.yaml` nothing here can obtain a bearer token and every
   tenant call is a 401. So `admin-web` carries its own **minimal** Model B sign-in — the same
   challenge/verify endpoints and the same `deriveAuthKeypair` from the shared crypto package, and
-  deliberately none of `web/`'s passkeys, "remember me" device-key wrap, session vault or password recovery.
+  deliberately none of `src/web/`'s passkeys, "remember me" device-key wrap, session vault or password recovery.
   This surface holds no vault to unlock, and each of those would be another place touching key material.
 - **CLI — Node.js, in the same package, added in a follow-up CR.** The same container's build ships a CLI
   entry point that is **also** an HTTP client of the backend Admin API (using a Server-Owner credential
   supplied to the container) — written in Node.js specifically so it can import the **same generated API
-  client** `admin-web/`'s UI uses, rather than a second implementation in another language: "no duplicated
+  client** `src/admin-web/`'s UI uses, rather than a second implementation in another language: "no duplicated
   business logic" (Forces) means the same code, not merely the same wire contract. This is real code reuse,
   not just parity — worth stating because the repo's general convention is Python for scripts/tooling, which
   this deliberately departs from as a shipped product feature, not dev tooling. A break-glass, direct-DB/file
@@ -154,12 +154,12 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     second one.
   - **Argument parsing: `node:util.parseArgs`, not a third-party CLI framework.** Node-core, zero
     dependencies, actively maintained by definition — the command surface (tenant CRUD and release info;
-    mirrors whatever `admin-web/src/api/client.ts`'s factories are actually called for, located at CR time) is
+    mirrors whatever `src/admin-web/src/api/client.ts`'s factories are actually called for, located at CR time) is
     small enough that a framework like commander/yargs buys nothing here. It started as nine operations (eight
     tenant verbs plus `release`) and grows with what admin-web holds — since then the tenant storage quota, the
     config-secret state, the object store (`store show|set|check|discard`) and the capability switches; the command
-    table in `admin-web/src/cli/commands.ts` is the list, so no count is kept here. **Mail settings and terms
-    authoring are not among them** for the same reason they never left `web/`: they are **tenant-owner**
+    table in `src/admin-web/src/cli/commands.ts` is the list, so no count is kept here. **Mail settings and terms
+    authoring are not among them** for the same reason they never left `src/web/`: they are **tenant-owner**
     actions (`403 not_tenant_owner`), so they were never `admin-web`'s to wrap. **Setup is excluded too**, and that one is a decision rather than a consequence: it
     is an interactive ceremony that mints key material and force-confirms a saved Emergency Kit, which a
     script cannot meaningfully do.
@@ -237,7 +237,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
 - **A new deployable, and a new release artifact** (`ghcr.io/<owner>/veyq-admin`), versioned and signed the
   same way as the app image ([ADR 0057](0057-release-identity-and-deployment-recipe.md)) — named as a
   consequence here; the exact CI wiring is a future CR's inventory, not this ADR's.
-- **Migration cost.** `web/src/features/admin/**`, its router entries and its tests move to a new frontend
+- **Migration cost.** `src/web/src/features/admin/**`, its router entries and its tests move to a new frontend
   package — scoped and grepped at CR time, not estimated here (`docs/ai/README.md`'s "decisions over
   keystrokes").
 - **Two CRs, not one — the UI move is independently shippable.** The web extraction (new package, container,

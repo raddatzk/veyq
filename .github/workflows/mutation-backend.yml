@@ -4,7 +4,7 @@ name: Mutation (backend)
 # validate_coverage.py proves a test REF resolves; this proves the test's ASSERTIONS pin the decision (a rotate
 # that re-grants a pendingConsent proposal, a cascade that soft-deletes shared content, a token-bucket refill that
 # discards its sub-token remainder — each dies here). PIT mutates only the curated pure policies
-# (backend/core/pitest.scope.json), never the dumb stores nor the @QuarkusTest slices (ADR 0045 §2). The build's `mutationThreshold` is the gate; the meta-check is
+# (src/backend/core/pitest.scope.json), never the dumb stores nor the @QuarkusTest slices (ADR 0045 §2). The build's `mutationThreshold` is the gate; the meta-check is
 # its per-glob sibling.
 #
 # Cost control is PIT's INCREMENTAL history file (ADR 0045 §4), cached below: PIT re-tests only mutants whose code
@@ -19,29 +19,29 @@ on:
     branches: [main]
     # Source AND tests: a change to either can move the score (a weakened assertion lives in a *Test.kt), so either
     # must re-run the gate. The manifest/build/meta-check/workflow gate themselves. This list mirrors
-    # backend/core/pitest.scope.json one-for-one, in the same order, and `scripts/validate_mutation_trigger_paths.py`
+    # src/backend/core/pitest.scope.json one-for-one, in the same order, and `scripts/validate_mutation_trigger_paths.py`
     # KEEPS it there — because editing the manifest alone does not: `b15807a7` added ShareAccessPolicy and
     # MembershipPolicy to the scope and left this filter behind, so a PR touching only those never ran the gate
     # (inbox #114). Adding a policy means editing both, and the guard is what says so.
     paths:
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucket.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/http/ClientAddress.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucketTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/http/ClientAddressTest.kt"
-      - "backend/core/pitest.scope.json"
-      - "backend/core/build.gradle.kts"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucket.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/http/ClientAddress.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucketTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/http/ClientAddressTest.kt"
+      - "src/backend/core/pitest.scope.json"
+      - "src/backend/core/build.gradle.kts"
       - "scripts/mutation_meta_check_backend.py"
       - "scripts/mutation_meta_check_selftest.py"
       - ".github/workflows/mutation-backend.yml"
@@ -53,24 +53,24 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucket.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicy.kt"
-      - "backend/core/src/main/kotlin/me/raddatz/veyq/core/http/ClientAddress.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucketTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicyTest.kt"
-      - "backend/core/src/test/kotlin/me/raddatz/veyq/core/http/ClientAddressTest.kt"
-      - "backend/core/pitest.scope.json"
-      - "backend/core/build.gradle.kts"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucket.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicy.kt"
+      - "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/http/ClientAddress.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/RotationPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/admin/tenant/RemovalPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/ratelimit/TokenBucketTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ShareAccessPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/sharing/ReissuePolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/tasks/CompromiseRotationPolicyTest.kt"
+      - "src/backend/core/src/test/kotlin/me/raddatz/veyq/core/http/ClientAddressTest.kt"
+      - "src/backend/core/pitest.scope.json"
+      - "src/backend/core/build.gradle.kts"
       - "scripts/mutation_meta_check_backend.py"
       - "scripts/mutation_meta_check_selftest.py"
       - ".github/workflows/mutation-backend.yml"
@@ -111,13 +111,13 @@ jobs:
         with:
           # :core owns PIT (cr-platform-gradle-modules step 6), so the history lives in its build directory; a stale
           # path here is no error — PIT would silently run cold every time.
-          path: backend/core/build/pitest/history.bin
+          path: src/backend/core/build/pitest/history.bin
           key: pit-incremental-${{ github.sha }}
           restore-keys: |
             pit-incremental-
 
       - name: Run backend mutation gate
-        working-directory: backend
+        working-directory: src/backend
         # core/build.gradle.kts breaks the build below the calibrated mutationThreshold (95) — that is the gate.
         run: ./gradlew --no-daemon pitest
 

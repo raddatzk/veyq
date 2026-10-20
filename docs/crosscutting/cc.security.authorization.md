@@ -33,7 +33,7 @@ Every request passes **layer 1**; scope-addressed requests also pass **layer 2**
 **Layer 1 — the coarse HTTP gate, declared at the resource boundary.** A standard annotation on the `…Resource`:
 `@PermitAll` · `@Authenticated` · `@RolesAllowed(SERVER_OWNER)`. It answers only *is there a valid session, and
 which **server** role does it carry* — never anything scope-specific. It is **provably complete**:
-`quarkus.security.jaxrs.deny-unannotated-endpoints=true` (`backend/core/src/main/resources/application.properties`)
+`quarkus.security.jaxrs.deny-unannotated-endpoints=true` (`src/backend/core/src/main/resources/application.properties`)
 denies any endpoint without an annotation, so a new endpoint **fails closed**, and `DefaultDenyTest` pins that
 with a deliberately unannotated probe. This layer has never been the site of a defect.
 
@@ -85,7 +85,7 @@ Six rules decide it, and they compose. Applied to a new endpoint they give the a
 have given — and unlike a table they cannot go stale.
 
 1. **Every operation carries a layer-1 annotation.** Not a convention — default-deny makes it mandatory. For the
-   exact set: `grep -rn '@PermitAll\|@Authenticated\|@RolesAllowed' backend/core/src/main/kotlin backend/apps/memories/src/main/kotlin`.
+   exact set: `grep -rn '@PermitAll\|@Authenticated\|@RolesAllowed' src/backend/core/src/main/kotlin src/backend/apps/memories/src/main/kotlin`.
 
 2. **Scope-addressed → membership first, always.** Wherever the caller names a `scopeId` they could have guessed:
 
@@ -194,6 +194,6 @@ product judgement, recorded in the ADRs — not something a test asserts.
   [ADR 0029](../decisions/0029-public-viewer-share.md) ·
   [ADR 0030](../decisions/0030-contributor-public-share.md) ·
   [ADR 0031](../decisions/0031-uploader-public-share.md) (the three share roles)
-- Code: `backend/core/…/core/membership/MembershipStore.kt` (guards #3–#5),
-  `backend/core/…/core/identity/ServerRoles.kt` (#2), `backend/core/…/core/auth/` (the authentication front door),
-  `backend/core/…/core/sharing/SharingHandler.kt` (#6/#7)
+- Code: `src/backend/core/…/core/membership/MembershipStore.kt` (guards #3–#5),
+  `src/backend/core/…/core/identity/ServerRoles.kt` (#2), `src/backend/core/…/core/auth/` (the authentication front door),
+  `src/backend/core/…/core/sharing/SharingHandler.kt` (#6/#7)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that a content path in the URL fragment is built and read by `core/node/location.ts` only (inbox #328).
 
-**What it asserts.** Over `web/src` (tests and the generated client excluded), no file but `core/node/location.ts`
+**What it asserts.** Over `src/web/src` (tests and the generated client excluded), no file but `core/node/location.ts`
   1. splits a fragment/hash on `/` (a line that has `hash` in it and `.split('/')` — the parse),
   2. joins path segments behind a `#` (a line with `'#'`/`` `# `` and `.join('/')` — the build), or
   3. writes a literal fragment path: a string or template literal that starts with `#`, interpolates something and
@@ -16,7 +16,7 @@ door is `parseHash` / `buildHash` / `hashForNode` / `resolveSlugPath`.
 
 **Its limits.** It is a text guard over the three spellings above; a path assembled some other way (a `reduce`, a
 `concat` in two statements) is invisible to it. That a built path resolves back to its node, for every kind, scope and
-list order, is pinned by `web/src/core/node/location.test.ts`, which no text guard can replace.
+list order, is pinned by `src/web/src/core/node/location.test.ts`, which no text guard can replace.
 """
 from __future__ import annotations
 
@@ -24,8 +24,10 @@ import re
 import sys
 from pathlib import Path
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
-WEB_SRC = ROOT / "web" / "src"
+WEB_SRC = repo_layout.WEB / "src"
 LOCATION = Path("core") / "node" / "location.ts"
 
 SPLIT = re.compile(r"hash.*\.split\(\s*['\"]/['\"]\s*\)|\.split\(\s*['\"]/['\"]\s*\).*hash", re.IGNORECASE)
@@ -64,6 +66,11 @@ def check(root: Path) -> list[str]:
 
 
 def main() -> int:
+    # A missing or empty source root is a web client that moved: `check` would read nothing and say OK.
+    if not WEB_SRC.is_dir() or not sources(WEB_SRC):
+        print(f"FRAGMENT-PATH VALIDATION FAILED: no source under {WEB_SRC.relative_to(ROOT)} - the web client moved? "
+              "This guard would check nothing there; point it at the client's `src/` (scripts/repo_layout.py).")
+        return 1
     errors = check(WEB_SRC)
     if errors:
         print("FRAGMENT-PATH VALIDATION FAILED:")

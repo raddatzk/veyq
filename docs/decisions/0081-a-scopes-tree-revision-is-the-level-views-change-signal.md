@@ -120,4 +120,4 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
   `UPDATE` that `applyUpdate` is, so the guard would be blind where it matters most.
 - **Push (SSE/WebSocket):** as in ADR 0033 — a held per-viewer connection is a stronger presence signal than a coarse poll.
 
-**Cadence.** With the conditional read an idle tick costs one revision compare and a `304`, so the poll runs about every 5 s (jittered ±20 %, `LIVE_POLL` in `web/src/core/node/useLevelLive.ts`), down from the 15 s the whole-list re-read had to keep. A push or long-poll (ADR 0033's deferred upgrade) is the only way below that.
+**Cadence.** With the conditional read an idle tick costs one revision compare and a `304`, so the poll runs about every 5 s (jittered ±20 %, `LIVE_POLL` in `src/web/src/core/node/useLevelLive.ts`), down from the 15 s the whole-list re-read had to keep. A push or long-poll (ADR 0033's deferred upgrade) is the only way below that.

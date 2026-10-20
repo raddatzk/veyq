@@ -18,7 +18,7 @@
 - **Out of scope (by design):** **scope, content & share keys** + the invite/onboarding key transfer live in
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md); exact **byte formats** (suite layouts, the X-Wing
   KEM's encodings, seal encodings) in the conformance-pinned suite
-  ([`packages/crypto/src/v1.ts`](../../../../packages/crypto/src/v1.ts)) and its vectors
+  ([`packages/crypto/src/v1.ts`](../../../../src/packages/crypto/src/v1.ts)) and its vectors
   ([`contracts/crypto/vectors/v1.json`](../../../../contracts/crypto/vectors/v1.json)), and what every seal binds is
   [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md). Whole-system security concern: the sibling
   [Security Model](../../../crosscutting/security-model.md).
@@ -105,7 +105,7 @@ its signature would authenticate and its **PRF** secret would derive an unlock K
 | **Passwordless device (`DEVICE_KEY`)** | a device-held **random** key `K` (`wrap = symWrap(K, masterKey)`) | **No password** — the device holds `K` ungated, so a stolen *unlocked* device opens content. Explicit opt-in, never a default: [remember-this-device](../use-cases/uc.account.remember-this-device.md). |
 
 The factor comes first and every input is length-prefixed: `lp(x) = u32be(len(x)) ‖ x`, the password as its NFC
-UTF-8 bytes. The functions are in [`v1.ts`](../../../../packages/crypto/src/v1.ts), pinned by the `kek` vectors in
+UTF-8 bytes. The functions are in [`v1.ts`](../../../../src/packages/crypto/src/v1.ts), pinned by the `kek` vectors in
 [`v1.json`](../../../../contracts/crypto/vectors/v1.json).
 
 Each KEK is derived **fresh on the device** with a stored salt (so it reproduces identically), used to

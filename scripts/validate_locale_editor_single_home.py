@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Guard that the per-locale markdown editor exists ONCE, in `web/src/shared/ui/`, and that every caller uses it.
+"""Guard that the per-locale markdown editor exists ONCE, in `src/web/src/shared/ui/`, and that every caller uses it.
 
-**What it asserts.** Three things about `LocaleMarkdownEditor.vue`, which is the only component in `web/src`
+**What it asserts.** Three things about `LocaleMarkdownEditor.vue`, which is the only component in `src/web/src`
 two unrelated features drive:
-  1. exactly one file under `web/src` carries that name — no second copy anywhere;
-  2. it sits directly in `web/src/shared/ui/`, next to its colocated test;
-  3. every `import … from '…/LocaleMarkdownEditor.vue'` anywhere in `web/src` **resolves to that one file** —
+  1. exactly one file under `src/web/src` carries that name — no second copy anywhere;
+  2. it sits directly in `src/web/src/shared/ui/`, next to its colocated test;
+  3. every `import … from '…/LocaleMarkdownEditor.vue'` anywhere in `src/web/src` **resolves to that one file** —
      which is how the guard notices a caller pointing at a copy rather than at the shared component.
 
 **The defect that bought it.** The component shipped inside `features/memories/components/`, driving the share
@@ -22,7 +22,7 @@ dialog and the terms panel; a third is found by the same walk, with no edit here
 **Its limits, and both wrong shapes are recorded because each is what the next reader reaches for first.**
 
   - *The one-shot proof this guard replaces does not work.* The CR specified it as
-    `grep -rln '<the component name>' web/src/features/ --include=*.vue`, and run against the untouched tree it
+    `grep -rln '<the component name>' src/web/src/features/ --include=*.vue`, and run against the untouched tree it
     returned exactly one path: `ShareCreateDialog.vue`, the **importer**. It never named the definition, because
     a component file does not contain its own name — the name is the filename. So a content grep is green
     whether the component lives in a feature or not, and the very reason this guard is filename-anchored.
@@ -36,7 +36,7 @@ dialog and the terms panel; a third is found by the same walk, with no edit here
 
   - *What it does not see.* A **second** per-locale editor under a **different** name is invisible — the anchor
     is this component's identity, not the concept. So is a dynamic `import()`, a re-export through a barrel, and
-    anything outside `web/src`: `admin-web/` is a separate package with its own tree, and when it grows a
+    anything outside `src/web/src`: `src/admin-web/` is a separate package with its own tree, and when it grows a
     locale editor the answer is `packages/`, which is a different guard's subject. Green means exactly: **one
     file by that name, in `shared/ui/`, and every import of it lands there.**
 """
@@ -46,8 +46,10 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WEB_SRC = ROOT / "web" / "src"
+WEB_SRC = repo_layout.WEB / "src"
 COMPONENT = "LocaleMarkdownEditor.vue"
 HOME = WEB_SRC / "shared" / "ui"
 

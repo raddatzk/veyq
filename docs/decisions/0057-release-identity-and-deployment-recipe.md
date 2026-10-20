@@ -88,7 +88,7 @@ architecture, runs every stage on those digests, and only when all are green pub
 **Major `0` is pre-release.** A `0.<minor>` release exercises the publish path end to end — signature, git ref,
 the refusal to republish — and promises no upgrade path. The migration set is frozen by the first release of a
 major ≥ 1, which the owner declares on the `release:` line of `scripts/applied_migrations.sha256`
-([backend/CLAUDE.md](../../backend/CLAUDE.md) § Migrations); a `0.x` release does not move that line.
+([backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations); a `0.x` release does not move that line.
 
 **2. A release has exactly one git ref, `v<major>.<minor>`,** created by the promotion. One release, one name,
 one tree. A snapshot has none: it names a build, not a release.
@@ -231,7 +231,7 @@ push; the jar-level proof below retires when they gate (ADR 0091 decision 7). Un
   verification metadata, so a Gradle bump regenerates it by hand. The metadata holds checksums only, trusted
   on first write, which is the same trust the generator JAR's pin has.
 - **Before the first release an upgrade proof gates nothing.** A baseline migration may still change then
-  ([backend/CLAUDE.md](../../backend/CLAUDE.md) § Migrations), so a red proof is information — it names its cause, a
+  ([backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations), so a red proof is information — it names its cause, a
   changed baseline's checksum above all — and the CI job stays off (Decision 7).
 - **Rejected — deriving the version from the registry.** It makes the released artifact the authority on its own
   name, which is circular; it cannot be checked without the network; and its error path republishes silently

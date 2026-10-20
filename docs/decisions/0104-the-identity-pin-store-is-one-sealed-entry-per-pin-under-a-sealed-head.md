@@ -45,7 +45,7 @@ use — or serve an older copy of one row, reinstating a retired key as a match,
    identity bundle that the safety number and its QR already are ([ADR 0028](0028-identity-authenticity-tofu-verification.md)
    Decision 3) — with `state` and `firstSeenAt`, not the bundle itself (Q1). **This keeps the security claim:** every
    reader of a pin compares it for equality with a key the directory serves or shows its safety number (M: five reads of a
-   pin's key in `web/` — three equality comparisons, and two safety numbers, one of them also the input of the QR
+   pin's key in `src/web/` — three equality comparisons, and two safety numbers, one of them also the input of the QR
    compare), and both are functions of the hash; nothing wraps to,
    or verifies a signature with, the pinned bytes — the served key is what is used once it matches. Equality of the
    hash is equality of the bundle up to a SHA-256 second preimage, and a collision helps only a member against their

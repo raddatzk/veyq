@@ -162,8 +162,8 @@ Every built stage runs from a checkout with the repository's own commands. The p
 `python3 scripts/run_pipeline.py` (`--dry-run` prints what it would run and what not; `--skip-job web-e2e` leaves out
 the job that needs the local compose stack and reports it as not run). Stage by stage: the guards with
 `for f in scripts/validate_*.py; do python3 "$f"; done`, the guard gaps with
-`python3 scripts/validate_guard_gaps.py --force`, each part's tests with `./gradlew check` in `backend/` and
-`npm run check` in `web/`, `admin-web/` and `packages/crypto/`, the end-to-end suites with
+`python3 scripts/validate_guard_gaps.py --force`, each part's tests with `./gradlew check` in `src/backend/` and
+`npm run check` in `src/web/`, `src/admin-web/` and `src/packages/crypto/`, the end-to-end suites with
 `python3 scripts/run_web_e2e.py` (Docker required), and lane L1 with
 `python3 scripts/run_stack_e2e.py --app <app image> --admin <admin image>` (Docker, the repository's `npm ci`, and
 ports 80 and 443 free). How to reproduce the security-specific checks, and what each pins,

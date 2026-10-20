@@ -44,7 +44,7 @@ root on the host, and its own Helm chart drops it for that reason, losing update
 
 **1. Management is one host-side tool, `veyqctl`, separate from administration.** Administration is what the Server
 Owner does *inside* a running instance through the Admin API — [admin-web](0065-admin-ui-cli-separate-service.md) and
-its Node CLI (`admin-web/src/cli/`). Management is the instance's lifecycle *on the host*. The two never merge:
+its Node CLI (`src/admin-web/src/cli/`). Management is the instance's lifecycle *on the host*. The two never merge:
 `veyqctl` holds no Admin API credential, and admin-web gains no host access.
 
 | Command | Does |

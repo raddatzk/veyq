@@ -37,7 +37,7 @@ strategy; they do not choose it.
    there is no harvest-now-decrypt-later for a one-time verification — so PQ urgency is deliberately asymmetric:
    **high for encryption (now)**, **low for signatures (Ed25519 now → hybrid ML-DSA later)**.
 3. **Crypto-agility is non-negotiable.** A suite is named by a **versioned suite id**, and its seals are bound to
-   it: `wrapAad` (`packages/crypto/src/primitives.ts`) puts `v1` into the authenticated data of every seal and
+   it: `wrapAad` (`src/packages/crypto/src/primitives.ts`) puts `v1` into the authenticated data of every seal and
    wrap, and every derivation label reads `veyq/v1/…`, so a seal written under one suite never opens as another's.
    A media frame (`sealFrame`) binds only its index and count — it is reached through a content key that is
    itself sealed under `v1`.
@@ -50,11 +50,11 @@ strategy; they do not choose it.
 4. **The conformance vectors are a suite's byte definition, and they come first.**
    `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire, and every
    seal purpose has exactly one vector ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 6).
-   `packages/crypto/src/v1.ts` is pinned to it by `packages/crypto/src/v1.conformance.test.ts`. Since the
+   `src/packages/crypto/src/v1.ts` is pinned to it by `src/packages/crypto/src/v1.conformance.test.ts`. Since the
    native surfaces were dropped (commit `7a1c4e9f`), that TypeScript test is the **only** stack asserting the file's
    seals, so for them it is a single-implementation **regression pin** — it stops a refactor from silently
    moving a suite's bytes, not a cross-stack parity proof. The backend performs no content crypto
-   (`backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
+   (`src/backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
    this file. The statements it asserts too are the **Secret-Key proof** over a cold-credential request
    ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2) and the change-email **auth attestation**
    (`auth_attestation`, ADR 0074 Decision 8): both stacks build their signed bytes, so a vector pins them. Pinning a new primitive still means **adding a vector first, then making the
@@ -68,7 +68,7 @@ strategy; they do not choose it.
    (gigabytes, billions of passes). A downgrade is not open — the password-derived auth key uses no served
    parameters, and every served KEK mixes in the Secret Key or a device factor — so a ceiling alone would do; an
    exact profile is simpler and closes both. The check is the one decode every served profile passes through,
-   `decodeKdfParams` in `packages/crypto/src/v1.ts`, and its refusal is not a wrong password: a screen says the
+   `decodeKdfParams` in `src/packages/crypto/src/v1.ts`, and its refusal is not a wrong password: a screen says the
    unlock failed without blaming the credential.
 
 ## Consequences

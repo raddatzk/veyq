@@ -2,7 +2,7 @@
 <!-- The root launcher build resolves nothing: no plugin, no dependency (settings.gradle.kts). This
      file is empty ON PURPOSE, with verification on — so the first plugin or dependency added to the root fails the
      build until someone writes metadata for it, and that is the moment to ask whether the launcher is turning into
-     an orchestrator. The backend's components are verified by backend/gradle/verification-metadata.xml, in its own
+     an orchestrator. The backend's components are verified by src/backend/gradle/verification-metadata.xml, in its own
      build; the root never includes it (an included build's metadata would be ignored in favour of this file). -->
 <verification-metadata xmlns="https://schema.gradle.org/dependency-verification" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://schema.gradle.org/dependency-verification https://schema.gradle.org/dependency-verification/dependency-verification-1.3.xsd">
    <configuration>

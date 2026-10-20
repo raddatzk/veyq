@@ -6,8 +6,8 @@
   A **model** enabler: it states what is sealed under what, not a flow.
 - **Status:** **built** — decided in [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 9, built by cr-text-fields-seal-under-their-own-key (2026-10-17). The one implementation is `@veyq/crypto`'s
-  field seal ([`seal.ts`](../../../../packages/crypto/src/seal.ts) `FIELD_PURPOSES`, `sealField`, `openField`,
-  `fieldKeyOf`, `openFieldWith`; the envelope in [`primitives.ts`](../../../../packages/crypto/src/primitives.ts)),
+  field seal ([`seal.ts`](../../../../src/packages/crypto/src/seal.ts) `FIELD_PURPOSES`, `sealField`, `openField`,
+  `fieldKeyOf`, `openFieldWith`; the envelope in [`primitives.ts`](../../../../src/packages/crypto/src/primitives.ts)),
   pinned by `field_seal` in [`v1.json`](../../../../contracts/crypto/vectors/v1.json).
 - **Provides:** for every text or icon field, a key that opens **one revision of that one field** and nothing else:
   the key a report of a field will hand over to the moderator, and the moderator's open with it.
@@ -67,7 +67,7 @@ A 16-byte random salt per write, and the 16 bytes of length it adds. Nothing abo
 ## Acceptance criteria
 
 An enabler carries no coverage file (`validate_coverage.py` reads use-cases only), so each criterion names the tests
-that verify it. The crypto ones run in `packages/crypto`'s check, the wire one in `web/`'s.
+that verify it. The crypto ones run in `packages/crypto`'s check, the wire one in `src/web/`'s.
 
 - **field-key-one-field** — the key handed over for node A's name opens A's name and neither sibling B's name, nor A's
   node key, nor A's meta: `fieldSeal.test.ts` "B1: the key handed over for node A's name opens A's name (the

@@ -65,7 +65,7 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
 
 REPO = Path(__file__).resolve().parent.parent
-BACKEND = REPO / "backend"
+BACKEND = repo_layout.BACKEND
 COMPOSE_FILE = repo_layout.DEV_COMPOSE
 NAME = f"veyq-race-mariadb-{os.getpid()}"
 PASSWORD = "race"  # a throwaway container's credential, not a secret
@@ -139,7 +139,7 @@ def project_filters(filters: list[str]) -> dict[str, list[str]]:
     before Docker starts — a filter that cannot be placed is never skipped."""
     for root in backend_tree.test_roots():
         if backend_tree.project_of(root) is None:
-            sys.exit(f"{root.relative_to(REPO)} is a test root no project in backend/settings.gradle.kts owns — "
+            sys.exit(f"{root.relative_to(REPO)} is a test root no project in src/backend/settings.gradle.kts owns — "
                      f"its race classes could not be run; include the module or move the tests")
     classes = _test_classes()
     by_project: dict[str, list[str]] = {}

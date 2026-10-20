@@ -4,7 +4,7 @@
 # `blob.openapi.yaml` included — the generic blob upload and download); an application's specs sit in a directory
 # of their own (`memories/`). This file is core's. An application spec may $ref it (`../_common.openapi.yaml#…`);
 # a core spec never references an application's spec. Every schema defined here is ONE generated type, core's:
-# the backend maps each of them into the application's generation (`schemaMappings`, backend/buildSrc's `OpenApiGenerate`),
+# the backend maps each of them into the application's generation (`schemaMappings`, src/backend/buildSrc's `OpenApiGenerate`),
 # so a schema two owners share lives here and is aliased by name in each spec that uses it.
 #
 # This is NOT a generated spec — it has no paths and is never fed to a generator on its own: the backend

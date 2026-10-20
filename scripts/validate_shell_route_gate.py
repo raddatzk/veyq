@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that no app-shell route is session-gated but not unlock-gated (uc.account.sessions §E3, ADR 0004).
 
-**What it asserts.** Every route object declared inline in `web/src/router.ts` that carries `layout: 'app'`
+**What it asserts.** Every route object declared inline in `src/web/src/router.ts` that carries `layout: 'app'`
 also carries `requiresUnlock: true`. The shell is where content lives, and content is only readable through an
 unlocked vault, so a shell route reachable on a session alone is a route rendering panels whose data cannot
 exist — or worse, one that exposes a surface designed for an unlocked caller to a locked one. `requiresUnlock`
@@ -25,7 +25,7 @@ blanked `'app'` itself: it reported *zero* shell routes and passed every forgery
 characters inside a string are blanked now (see `_STRING_HAZARDS`), and both facts came out of the guard's
 bite, not out of review.
 
-It sees only routes **declared inline in the `routes: [...]` array of `web/src/router.ts`**. A
+It sees only routes **declared inline in the `routes: [...]` array of `src/web/src/router.ts`**. A
 route added later via `router.addRoute`, imported from another module, or spread in from a variable is
 invisible to it, and so is any second router. It also reasons about the **declaration**, never the behaviour:
 `beforeEach` could stop honouring `requiresUnlock` entirely and this guard would stay green — that direction is
@@ -39,8 +39,10 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ROUTER = ROOT / "web" / "src" / "router.ts"
+ROUTER = repo_layout.WEB / "src" / "router.ts"
 
 SHELL_LAYOUT = re.compile(r"layout\s*:\s*'app'")
 UNLOCK_GATE = re.compile(r"requiresUnlock\s*:\s*true")
@@ -143,7 +145,7 @@ def main() -> int:
     if spans is None:
         print(
             "SHELL ROUTE GATE VALIDATION FAILED:\n"
-            "  - no `routes: [` array found in web/src/router.ts. If the route table moved or was built from a "
+            "  - no `routes: [` array found in src/web/src/router.ts. If the route table moved or was built from a "
             "variable, point this guard at the new shape — do not delete the guard."
         )
         return 1
@@ -175,7 +177,7 @@ def main() -> int:
             print(f"  - {e}")
         return 1
 
-    print(f"OK: all {shell_routes} `layout: 'app'` routes in web/src/router.ts declare `requiresUnlock: true`.")
+    print(f"OK: all {shell_routes} `layout: 'app'` routes in src/web/src/router.ts declare `requiresUnlock: true`.")
     return 0
 
 

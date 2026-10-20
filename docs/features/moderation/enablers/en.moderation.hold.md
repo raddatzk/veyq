@@ -28,7 +28,7 @@ No `## User impact`: an enabler has no standalone end-user story.
 
 A report share holds, sealed under the report's `K_report` and addressed by its item (`report-share` [itemKind, itemId],
 `report-link` [shareId]), a list of keys, each tagged with its role
-([`report.ts`](../../../../packages/crypto/src/report.ts)):
+([`report.ts`](../../../../src/packages/crypto/src/report.ts)):
 
 | Item | Keys | Role tags |
 |---|---|---|

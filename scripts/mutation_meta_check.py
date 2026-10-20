@@ -18,8 +18,9 @@ cr-admin-web-extraction (ADR 0065) split the suite: `packages/crypto` (the share
 (the six crypto-logic files that stayed). They are checked **per project, not as a union**: Stryker's test
 runner is the project's own vitest, so each project produces its own report, and a diff touching only one
 project's scope must be answered by THAT project's report — a union would let a healthy web report excuse a
-crypto run that measured nothing. A project whose manifest is absent is skipped, so this stays runnable
-against a tree that has only one of them (which is what the selftest fabricates). Runnable locally too:
+crypto run that measured nothing. A project whose manifest is absent FAILS, each on its own: skipping it let
+a moved project leave this check reading the other one and saying OK (cr-repo-layout-src) — so the selftest
+fabricates both. Runnable locally too:
 
     python3 scripts/mutation_meta_check.py --base origin/main
 """
@@ -30,11 +31,13 @@ import pathlib
 import subprocess
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # (repo-relative project dir) — the manifest is <dir>/stryker.mutate.json and the report
 # <dir>/reports/mutation/mutation.json, mirroring each project's own stryker.config.mjs.
-PROJECTS = ("web", "packages/crypto")
+PROJECTS = (repo_layout.rel(repo_layout.WEB), repo_layout.rel(repo_layout.CRYPTO))
 
 
 def changed_files(base: str) -> list[str]:
@@ -74,7 +77,10 @@ def main() -> int:
 
     for project in PROJECTS:
         if not (ROOT / project / "stryker.mutate.json").exists():
-            continue  # this tree does not carry that project (the selftest fabricates one at a time)
+            print(f"::error::meta-check[{project}]: no {project}/stryker.mutate.json — the scope this check reads "
+                  f"has moved or been deleted, so this project's run would be judged by nothing.")
+            failed = True
+            continue
         checked += 1
         scope = mutate_scope(project)
         touched = sorted(f for f in changed if in_scope(f, scope))

@@ -2,7 +2,7 @@
 
 - **ID:** uc.admin.privacy-notice
 - **Primary actor:** **Anyone who reaches the instance** — a person about to accept an invite, a member, a reporter, a
-  guest — in web/, with or without signing in
+  guest — in src/web/, with or without signing in
 - **Secondary actor:** the **Server Owner**, who sets the values it renders in admin-web or `veyq-admin` — the
   provider identification, the contact, the supervisory authority, the recipients and a data-protection officer
   ([uc.admin.operator-details](uc.admin.operator-details.md))
@@ -16,7 +16,7 @@
 
 1. The reader follows the privacy link: from the login page, the share page, the signed-in app's footer, the invite
    acceptance, the report dialog, or a guest's first-write notice.
-2. web/ fetches the rendered notice without a session and shows it on its own page (`/privacy`), the passage the link
+2. src/web/ fetches the rendered notice without a session and shows it on its own page (`/privacy`), the passage the link
    named in view: the controller and contact, any data-protection officer, then one passage per processing — what,
    why, on which basis, for how long, who receives it — then the recipients the Server Owner named, each with what they
    do and where in the page's own language (an *other* one with the Server Owner's description as typed; the country

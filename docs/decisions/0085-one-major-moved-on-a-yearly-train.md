@@ -93,8 +93,8 @@ database migrations. They answer other questions and stay independent of the maj
 - **Built: one major (decision 1).** buildSrc's `GeneratePlatformMajor` compiles `VERSION` into `:core`'s
   `PlatformMajor.MAJOR`, which `GET /api/setup` advertises; there is no `veyq.version.major` setting any more, so no
   instance can be configured to advertise a major its code does not speak, and neither runtime target needs a value.
-  The web client's `EXPECTED_MAJOR` is read from the same file at build time (`web/vite.config.ts`); its gate still
-  compares for equality (decision 6). `CapabilityManifestSliceTest` and `web/src/shared/state/capabilities.test.ts`
+  The web client's `EXPECTED_MAJOR` is read from the same file at build time (`src/web/vite.config.ts`); its gate still
+  compares for equality (decision 6). `CapabilityManifestSliceTest` and `src/web/src/shared/state/capabilities.test.ts`
   each read `VERSION` from disk and hold the served and the compiled major to it. The `setup.openapi.yaml`
   `Version.major` text names the train and the window.
 - **Not built.** Each is open work tracked in the inbox (#436):

@@ -2,9 +2,9 @@
 """Guard that the bucket reconcile's claim set is every table that keeps a storage key alive (ADR 0062 § Consequences).
 
 **What it asserts.** The set of tables the migrations give a `storage_key` column — read from every migration under
-`backend/` in version order: a `CREATE TABLE` whose column list names `storage_key`, an `ALTER TABLE … ADD [COLUMN]
+`src/backend/` in version order: a `CREATE TABLE` whose column list names `storage_key`, an `ALTER TABLE … ADD [COLUMN]
 storage_key`, and a later `DROP TABLE` or `DROP COLUMN storage_key` taking one away — minus the reconcile's own
-`veyq_store_orphan`, equals the `CLAIM_TABLES` list of the one Kotlin file in `backend/**/src/main/kotlin` that
+`veyq_store_orphan`, equals the `CLAIM_TABLES` list of the one Kotlin file in `src/backend/**/src/main/kotlin` that
 declares it (`StoreReconcileStore`). Both ways: a table missing from the list is red, and so is a listed table that
 no migration gives a `storage_key` (the claim query would fail at run time, on MariaDB first). The exemption must
 itself be a table a migration creates with that column, or the guard is red on a stale exemption.

@@ -8,9 +8,9 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
                must exist, declare method, AND that method must have a non-empty body — an empty `{}`
                block is rejected; a Kotlin expression body `= expr` counts, it delegates to real code)
                — and some CI run must actually execute it (below)
-    web     -> a file path (relative to web/) that both exists AND is a test file (*.test|*.spec)
-    crypto  -> the same rule, rooted at packages/crypto/ (the shared crypto workspace package, ADR 0065)
-    admin-web -> the same rule, rooted at admin-web/ (the Server-Owner administration surface, ADR 0065)
+    web     -> a file path (relative to src/web/) that both exists AND is a test file (*.test|*.spec)
+    crypto  -> the same rule, rooted at src/packages/crypto/ (the shared crypto workspace package, ADR 0065)
+    admin-web -> the same rule, rooted at src/admin-web/ (the Server-Owner administration surface, ADR 0065)
     stack   -> the same rule, rooted at tests/e2e/ (lane L1's browser suite against the candidate image, ADR 0090), where a
                Playwright setup file (*.setup.ts) is a test file too; which criterion its test carries is
                `validate_stack_criterion_tags.py`'s
@@ -64,7 +64,7 @@ A backend ref must name a test some CI run EXECUTES (ADR 0040: a test no CI run 
   Its limit. It reads annotations and workflow files, not runtime behaviour: an `Assumptions.assume…` in a
   body or a `@BeforeAll` skips at runtime and still passes (pinned open in `validate_guard_gaps.py`); so do a
   custom `ExecutionCondition` behind `@ExtendWith`, a gate inherited from a superclass declared in another
-  file, and a test-task `exclude`/`filter`/`excludeTags` in a backend build file (`backend/build.gradle.kts`, a
+  file, and a test-task `exclude`/`filter`/`excludeTags` in a backend build file (`src/backend/build.gradle.kts`, a
   module's, `buildSrc`'s `veyq.module`; none exists today). A
   variable a script exports, or one written to `$GITHUB_ENV`, is invisible — fail-closed, so such a ref is
   rejected until the variable moves into a workflow `env:`. Green means the workflows DECLARE a run that
@@ -142,14 +142,14 @@ except ImportError:
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
-import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+import repo_layout  # noqa: E402 - where the code surfaces, the deployment files and the test harnesses live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
-WEB = ROOT / "web"
-CRYPTO = ROOT / "packages" / "crypto"
-ADMIN_WEB = ROOT / "admin-web"
+WEB = repo_layout.WEB
+CRYPTO = repo_layout.CRYPTO
+ADMIN_WEB = repo_layout.ADMIN_WEB
 E2E = repo_layout.E2E_DIR
 WORKFLOWS = ROOT / ".github" / "workflows"
 
@@ -187,6 +187,10 @@ USECASE_KEYS = {"useCase", "feature", "title", "status", "acceptanceCriteria", "
 CRITERION_KEYS = {"id", "text", "coverage", "gaps"}
 
 errors: list[str] = []
+# Every surface root exists. A root is otherwise read only when a ref names it, and `crypto` and `admin-web` carry few
+# or none: a surface that moved would leave its roots unread and the run green (cr-repo-layout-src).
+errors += [f"the {area} surface's root {root.relative_to(ROOT)} does not exist - did it move? Its refs resolve against "
+           f"it (scripts/repo_layout.py)" for area, root in FILE_ROOTS.items() if not root.is_dir()]
 
 
 # ---- Kotlin: a lexer (not a parser) that makes comments and literals unable to pose as structure ----

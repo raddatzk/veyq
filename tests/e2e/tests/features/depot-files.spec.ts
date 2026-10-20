@@ -9,8 +9,8 @@
 // takes, never an operating-system drag (no drag source exists in a headless browser). Downloads go through the Service
 // Worker's route (the picker removed), which depot-download.spec.ts proves streams.
 //
-// It starts from the tenant whose owner the round trip activated (the `features` project). Labels are web/'s own
-// (web/src/i18n/index.ts, en).
+// It starts from the tenant whose owner the round trip activated (the `features` project). Labels are src/web/'s own
+// (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'

@@ -42,7 +42,7 @@ silently do nothing on four of six keys.
 
 **The authoritative set is the annotation in the source, never a copy here** — a hand-kept matrix drifts (as it
 did: cr-0044 deleted a phantom `POST /api/token` row). When you need the exact set:
-`grep -rn '@RateLimit(key' backend/src/main --include="*.kt"`.
+`grep -rn '@RateLimit(key' src/backend/src/main --include="*.kt"`.
 
 ## Mechanism
 
@@ -50,7 +50,7 @@ Every bound is a **token bucket** over the pure, mutation-verified `TokenBucket`
 ([ADR 0052](../decisions/0052-token-bucket-rate-limit-core.md),
 [ADR 0045](../decisions/0045-mutation-testing-trust-chain-unit-layer.md) §2) — no limiter re-implements it, and
 that is **enforced**, not asserted: `scripts/validate_ratelimit_core.py` fails the build the moment rate-limit
-state appears outside `backend/core/…/core/ratelimit/`. `TokenBucketCounter` is the shared imperative shell
+state appears outside `src/backend/core/…/core/ratelimit/`. `TokenBucketCounter` is the shared imperative shell
 (concurrent map + clock + a bounded key set); the filters and the handler-side limiters drive it. With no token
 left the request is rejected with **`429` + `rate_limited`** and a `Retry-After` — the wait for *one* token, not
 for a slot edge.
@@ -228,7 +228,7 @@ from online password guessing. It is **not** per-IP: a share's anonymous guests 
 behind one proxy address, so a per-IP counter would collapse to a global cap on the share (throttling honest
 visitors) while an IP-rotating attacker evades it. The attack targets one `shareId`, so the counter keys on that.
 
-- **Mechanism:** `backend/core/…/core/sharing/SharePasswordAttemptLimiter.kt` — a per-`shareId` bucket on the
+- **Mechanism:** `src/backend/core/…/core/sharing/SharePasswordAttemptLimiter.kt` — a per-`shareId` bucket on the
   shared core, in-memory and per-instance like every other bound. It is consumed **only on a wrong attempt**,
   inside `ShareGuestGate.passwordCheck`: a correct password is admitted *before* the bucket is touched (a
   legitimate guest is never locked out), and a tokenless challenge-fetch never spends budget. Over the cap the
@@ -277,9 +277,9 @@ exhausted share does not spend another's budget; and the identity budget is sepa
   mechanism + verification)
 - Decision: [ADR 0051](../decisions/0051-declarative-rate-limit-posture.md) (the posture vocabulary + the guard)
 - Decision: [ADR 0052](../decisions/0052-token-bucket-rate-limit-core.md) (the one token-bucket core behind it)
-- Code: `backend/core/…/core/ratelimit/` (the vocabulary, the two boundary filters, the shared bucket core),
-  `backend/core/…/core/sharing/{ShareRateLimiter,SharePasswordAttemptLimiter}.kt`,
-  `backend/core/…/core/admin/tenant/InviteMailRateLimiter.kt`,
-  `backend/core/…/core/account/{recovery/RecoveryRateLimiter,email/EmailConfirmationRateLimiter}.kt`
+- Code: `src/backend/core/…/core/ratelimit/` (the vocabulary, the two boundary filters, the shared bucket core),
+  `src/backend/core/…/core/sharing/{ShareRateLimiter,SharePasswordAttemptLimiter}.kt`,
+  `src/backend/core/…/core/admin/tenant/InviteMailRateLimiter.kt`,
+  `src/backend/core/…/core/account/{recovery/RecoveryRateLimiter,email/EmailConfirmationRateLimiter}.kt`
 - Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)
 - Run area of the docs site: [Networking and TLS](../../site/src/content/docs/run/networking.md)

@@ -96,5 +96,5 @@ gaps:
     No web part. The lockout is the backend's pre-matching `TenantSuspensionFilter`, refusing every request on
     the tenant's own domain before authentication, and the suspend/reactivate controls are the Server Owner's
     on `admin-web` (ADR 0065), the gap above. A tab already open meets `403 tenant_suspended` on its next call,
-    and web has no code that names that refusal (`grep -rli suspend web/src` finds only the lightbox's
+    and web has no code that names that refusal (`grep -rli suspend src/web/src` finds only the lightbox's
     unrelated `suspendKeys` prop and the view passing it), so there is nothing web-side to test.

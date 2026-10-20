@@ -27,10 +27,10 @@ product shape is decided:
 Five things make this a decision rather than a field:
 
 1. **The word "header" is taken.** The row with a node's title, cover tile and actions is core's `NodeHeader`
-   (`web/src/core/node/components/NodeHeader.vue`), and [uc.memory.cover](../features/memory/use-cases/uc.memory.cover.md)
+   (`src/web/src/core/node/components/NodeHeader.vue`), and [uc.memory.cover](../features/memory/use-cases/uc.memory.cover.md)
    says the cover shows in the Memory's "detail header". [ADR 0086](0086-one-word-per-meaning.md) gives a meaning one word.
 2. **The cover's crop does not carry over.** A cover is one image and a 16:9 **crop**
-   (`web/src/core/node/cover/components/CoverDialog.vue` `:aspect="16 / 9"`). This frame changes its aspect with the
+   (`src/web/src/core/node/cover/components/CoverDialog.vue` `:aspect="16 / 9"`). This frame changes its aspect with the
    viewport, so a stored rectangle is wrong in one of them; what survives an aspect change is a **point** kept in view.
 3. **There is no small video.** A gallery video has one derivative, a JPEG first-frame poster serving as thumbnail and
    preview, and playback streams the **original** ([en.memory.derivatives](../features/memory/enablers/en.memory.derivatives.md)
@@ -80,7 +80,7 @@ medium whose original has that digest is the banner's picture (decision 7). A st
 older client's) are read by nobody and kept by every other writer. The meta's size is bounded (`maxLength: 8192`, shared
 with the cover, the place and 100 participants): the worst case — those, a range date, the place's name at its bound of
 200 code points in 4-byte characters (`MAX_PLACE_NAME`, held by the editor, every read and every write), and a video
-banner with its poster, a type and the digest — is sealed under the cap by `web/src/features/memories/banner/bannerModel.test.ts`
+banner with its poster, a type and the digest — is sealed under the cap by `src/web/src/features/memories/banner/bannerModel.test.ts`
 ("the meta budget"). A **focal point**, not a crop: the display
 sets `object-fit: cover` with an `object-position` derived from it, so one point frames the medium in 3:1 and 16:9 alike.
 `frame` is decided once in the editor — `fill` for a landscape or square medium, `fit` for a portrait one (height >
@@ -226,7 +226,7 @@ Published for readers outside the project in [What the server sees](../../site/s
   slots as they are, and a copy moves the blobs by frame. Neither keeps a shared object shared: each blob becomes its
   own. A banner whose bytes do not read is left out, never a failed export or import.
 - **No new dependency**: nothing transcodes; the poster of a picked video is the gallery's existing first-frame derive.
-- **The sticky row** is the Memory's tab row; the shell's top bar is sticky already (`web/src/styles/layout.css`), so the
+- **The sticky row** is the Memory's tab row; the shell's top bar is sticky already (`src/web/src/styles/layout.css`), so the
   row's offset is the shell's `--app-sticky-top` (the top bar, the compact header below 1020 px, 0 on a share page,
   which has no top bar). The page scrolls the window, and so does the gallery's windowing (ADR 0105), which keeps a tile
   the keyboard moves to below the sticky stack (`--media-grid-occluded-top`).

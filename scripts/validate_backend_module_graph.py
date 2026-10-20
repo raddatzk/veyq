@@ -3,7 +3,7 @@
 cr-platform-gradle-modules). Buildless: it reads the build files, the config files and the Dockerfile, never a build.
 
 **What it asserts.** The rules carry the letters they were built under (a–g). The modules are the projects
-`settings.gradle.kts` includes (`:apps:x` is `backend/apps/x`). The project edges are read from the build files
+`settings.gradle.kts` includes (`:apps:x` is `src/backend/apps/x`). The project edges are read from the build files
 (`<configuration>(project(":x"))`): `implementation`/`api`/`runtimeOnly` are runtime edges,
 `testImplementation`/`testRuntimeOnly` test edges, `compileOnly` neither (it is still an edge for rule (b)); a
 `testFixtures(project(":x"))` inside any of them is an edge to `:x` as well. A module the root reaches over runtime
@@ -11,7 +11,7 @@ edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`). The test 
 module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s and `:apps:memories`'), test code that ships nothing.
 
 - **(a) The settings name every module, and only the two kinds there are.** The included projects equal the
-  directories below `backend/` holding a `build.gradle.kts` (build output excluded). A module directory the settings
+  directories below `src/backend/` holding a `build.gradle.kts` (build output excluded). A module directory the settings
   do not include is compiled by nothing — its classes, migrations and tests silently never run — and an include
   without a build file configures an empty project. Every included project is `:core` (the platform) or
   `:apps:<name>` (an application, ADR 0079 Decision 1): rule (b)'s direction is defined for exactly those, so a third
@@ -59,7 +59,7 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s an
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
-  copies the `src` of every module that ships. The same stage copies `backend/buildSrc`: Gradle builds it before it
+  copies the `src` of every module that ships. The same stage copies `src/backend/buildSrc`: Gradle builds it before it
   configures any project, and without it every module's `id("veyq.module")` is a plugin no repository has. Nothing in
   `./gradlew check` would show any of these gaps; only the release build would.
 - **(f) Every module jar is named by its group, and never renamed.** The convention plugin `veyq.module`
@@ -71,7 +71,7 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s an
   Quarkus cannot map a renamed project's `java-test-fixtures` jar, so `testImplementation(testFixtures(project(…)))`
   drops out of a `@QuarkusTest`'s application model with no error (measured 2026-10-05, Quarkus 3.36.0).
 - **(g) One home per config key, per classpath.** The config files are every `application*.properties` in a
-  `src/{main,testFixtures,test}/resources` under `backend/` (found by `backend_tree`, build output excluded). They
+  `src/{main,testFixtures,test}/resources` under `src/backend/` (found by `backend_tree`, build output excluded). They
   are judged per **classpath**, the way SmallRye Config meets them: the *main* classpath is the main resources of the
   root and every module that ships (what the fast-jar reads); each project with tests has a *test* classpath of its
   own — the main resources of itself and of everything it reaches (runtime edges, and its test edges' runtime
@@ -139,7 +139,7 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 import contract_specs  # where the specs live and which directories hold an application's — derived, never listed
 from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + literals blanked, offsets kept
 
-import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+import repo_layout  # noqa: E402 - where the code surfaces, the deployment files and the test harnesses live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = backend_tree.BACKEND
@@ -186,7 +186,7 @@ REQUIRED_TEST_KEYS_WHY = {
     "quarkus.scheduler.start-mode": (
         "unless it is halted, every @Scheduled job (the purges, the reclaim sweep) fires about a second after each of the "
         "module's app starts and races its tests' fixtures on the shared H2 (inbox #182, #331); the reasons are in "
-        "backend/src/test/resources/application-test.properties, ScheduledJobsHaltedInTestTest pins the effect in "
+        "src/backend/src/test/resources/application-test.properties, ScheduledJobsHaltedInTestTest pins the effect in "
         ":core"),
 }
 RUNTIME_CONFIGS = {"implementation", "api", "runtimeOnly"}
@@ -340,7 +340,7 @@ def rule_g(files: list[pathlib.Path]) -> list[str]:
 
 
 def modules() -> list[str]:
-    """The projects `settings.gradle.kts` includes, as directories below `backend/` (`:apps:x` → `apps/x`)."""
+    """The projects `settings.gradle.kts` includes, as directories below `src/backend/` (`:apps:x` → `apps/x`)."""
     return [d.relative_to(BACKEND).as_posix() for p, d in backend_tree.gradle_projects().items() if p != ":"]
 
 
@@ -350,7 +350,7 @@ def shipped_modules() -> set[str]:
 
 
 def build_file_dirs() -> dict[str, pathlib.Path]:
-    """`{project path: directory}` for every directory below `backend/` that holds a `build.gradle.kts`."""
+    """`{project path: directory}` for every directory below `src/backend/` that holds a `build.gradle.kts`."""
     found = {}
     for f in BACKEND.glob("**/build.gradle.kts"):
         rel_parts = f.parent.relative_to(BACKEND).parts
@@ -365,7 +365,7 @@ def rule_a() -> list[str]:
     included = {p for p in backend_tree.gradle_projects() if p != ":"}
     on_disk = {p for p in build_file_dirs() if p != ":"}
     for p in sorted(on_disk - included):
-        errors.append(f"(a) backend/{p.strip(':').replace(':', '/')}/build.gradle.kts belongs to no project "
+        errors.append(f"(a) src/backend/{p.strip(':').replace(':', '/')}/build.gradle.kts belongs to no project "
                       f"{rel(SETTINGS)} includes: Gradle compiles nothing there — its classes, migrations and tests "
                       f"silently never run. Include it, or delete the directory.")
     for p in sorted(included - on_disk):
@@ -375,7 +375,7 @@ def rule_a() -> list[str]:
         if p not in shipped:
             errors.append(f"(a) {p} is included but the root reaches it over no runtime edge, so it is not in the "
                           f"fast-jar: its own tests run green while the deliverable has none of its code. Add "
-                          f"`implementation(project(\"{p}\"))` to backend/build.gradle.kts.")
+                          f"`implementation(project(\"{p}\"))` to src/backend/build.gradle.kts.")
     for p in sorted(included):
         if p != CORE and not APPLICATION.match(p):
             errors.append(f"(a) {p} is neither {CORE} (the platform) nor :apps:<name> (an application, ADR 0079) — "
@@ -528,7 +528,7 @@ def rule_d() -> list[str]:
 
 
 def rule_c(mods: list[str]) -> list[str]:
-    errors = [f"(c) backend/{mod}/src/main/resources/META-INF/beans.xml is missing: Quarkus does not index the module, "
+    errors = [f"(c) src/backend/{mod}/src/main/resources/META-INF/beans.xml is missing: Quarkus does not index the module, "
               f"so its injected beans fail the build and — silently — an @All list loses its implementations and its "
               f"@Path interfaces answer 404."
               for mod in mods if not (BACKEND / mod / "src" / "main" / "resources" / "META-INF" / "beans.xml").is_file()]
@@ -561,15 +561,18 @@ def rule_e(mods: list[str]) -> list[str]:
     shipped = shipped_modules()
     if not base:
         errors.append(f"(e) the Dockerfile has no `{BUILD_BASE_STAGE}` stage copying a file — the module check reads nothing")
-    if BUILD_SRC.is_dir() and "backend/buildSrc" not in base:
-        errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/buildSrc: its warm-up "
+    # A COPY source is matched whole, as the checkout spells it from the build context (the repository root), so a
+    # Dockerfile still naming a surface's old place is red, never matched by a suffix.
+    backend = repo_layout.rel(BACKEND)
+    if BUILD_SRC.is_dir() and f"{backend}/buildSrc" not in base:
+        errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy {backend}/buildSrc: its warm-up "
                       f"`gradlew help` finds no `veyq.module` plugin for any module.")
     for mod in mods:
-        if f"backend/{mod}/build.gradle.kts" not in base:
-            errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/{mod}/build.gradle.kts: "
+        if f"{backend}/{mod}/build.gradle.kts" not in base:
+            errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy {backend}/{mod}/build.gradle.kts: "
                           f"its warm-up `gradlew help` fails configuring an included project with no directory.")
-        if mod in shipped and f"backend/{mod}/src" not in every:
-            errors.append(f"(e) the Dockerfile copies no backend/{mod}/src: the image's build would compile the "
+        if mod in shipped and f"{backend}/{mod}/src" not in every:
+            errors.append(f"(e) the Dockerfile copies no {backend}/{mod}/src: the image's build would compile the "
                           f"module without its sources.")
     return errors
 
@@ -588,16 +591,16 @@ def rule_f(mods: list[str]) -> list[str]:
         build = BACKEND / mod / "build.gradle.kts"
         text = build.read_text(encoding="utf-8") if build.is_file() else ""
         if not text:
-            errors.append(f"(f) backend/{mod}/build.gradle.kts is missing for an included project")
+            errors.append(f"(f) src/backend/{mod}/build.gradle.kts is missing for an included project")
             continue
         if not APPLIES_MODULE_PLUGIN.search(re.sub(r"//[^\n]*", "", text)):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts does not apply `id(\"veyq.module\")` — its jar is "
+            errors.append(f"(f) src/backend/{mod}/build.gradle.kts does not apply `id(\"veyq.module\")` — its jar is "
                           f"unnamed, and none of the module convention (toolchain, BOM, test JVM, disabled application "
                           f"tasks) holds for it")
         if re.search(r"^\s*group\s*=", text, re.MULTILINE):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts overrides the group the convention sets")
+            errors.append(f"(f) src/backend/{mod}/build.gradle.kts overrides the group the convention sets")
         if ARCHIVES_NAME.search(mask(text)):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts sets an `archivesName` — {ARCHIVES_NAME_WHY}")
+            errors.append(f"(f) src/backend/{mod}/build.gradle.kts sets an `archivesName` — {ARCHIVES_NAME_WHY}")
     return errors
 
 

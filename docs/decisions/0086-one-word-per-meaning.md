@@ -50,7 +50,7 @@ Where the name *Files* sits today decides what moves, and the test is Memories' 
 names its directories, module, package, i18n namespace and app-prefixed seams (`MemoriesNodeKinds`), while its API
 is named by **resource** (`media`, `/api/scopes/{scopeId}/media`). So for Depot:
 - **Moves to `depot`:** `contracts/api/files/` and the Gradle module `:apps:files` with its package
-  `me.raddatz.veyq.files` (one commit — the build derives each from the other), `web/src/features/files`, the
+  `me.raddatz.veyq.files` (one commit — the build derives each from the other), `src/web/src/features/files`, the
   i18n namespace, every `Files…` seam that names the application, the stored node kind `FILES_DROPBOX` →
   `DEPOT_DROPBOX` (it carries the application's prefix and the operator reads it in `veyq_node.kind`), and the
   export ids (`files.file` / `files.drop-box` → `depot.file` / `depot.drop-box`, application id `files` → `depot`),

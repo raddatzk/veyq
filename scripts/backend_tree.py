@@ -1,9 +1,9 @@
 """Where the backend's sources live — the one place a script learns it (cr-platform-gradle-modules, step 2).
 
 Every guard that reads Kotlin, a test or a migration asks this module instead of spelling
-`backend/src/main/kotlin/me/raddatz/veyq/…` itself. The roots are **found by glob** over
-`backend/**/src/{main,test,testFixtures}/…`, never listed: the root's `backend/src`, `backend/core/src` and, when
-the module split adds it, `backend/apps/memories/src` — every guard sees a new module without an edit. Build output,
+`src/backend/src/main/kotlin/me/raddatz/veyq/…` itself. The roots are **found by glob** over
+`src/backend/**/src/{main,test,testFixtures}/…`, never listed: the root's `src/backend/src`, `src/backend/core/src` and, when
+the module split adds it, `src/backend/apps/memories/src` — every guard sees a new module without an edit. Build output,
 Gradle caches, `node_modules` and `buildSrc` (the build's convention plugins) are not sources and are skipped by path
 segment.
 
@@ -25,8 +25,10 @@ from __future__ import annotations
 import pathlib
 import re
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
+BACKEND = repo_layout.BACKEND
 # Path segments that mark generated or cached trees, never sources — and `buildSrc`, the build's own convention
 # plugins: Kotlin, but build logic, never a project's main or test code.
 _SKIP = {"build", ".gradle", "node_modules", "out", "bin", "buildSrc"}
@@ -41,12 +43,12 @@ def _roots(source_set: str, tail: str) -> list[pathlib.Path]:
 
 
 def main_roots() -> list[pathlib.Path]:
-    """Every `src/main/kotlin` under `backend/` — production code."""
+    """Every `src/main/kotlin` under `src/backend/` — production code."""
     return _roots("main", "kotlin")
 
 
 def test_roots() -> list[pathlib.Path]:
-    """Every `src/test/kotlin` under `backend/`."""
+    """Every `src/test/kotlin` under `src/backend/`."""
     return _roots("test", "kotlin")
 
 
@@ -56,18 +58,18 @@ def fixture_roots() -> list[pathlib.Path]:
 
 
 def resource_roots() -> list[pathlib.Path]:
-    """Every `src/{main,testFixtures,test}/resources` under `backend/` — where the config files sit."""
+    """Every `src/{main,testFixtures,test}/resources` under `src/backend/` — where the config files sit."""
     return sorted(r for s in ("main", "testFixtures", "test") for r in _roots(s, "resources"))
 
 
 def migration_roots() -> list[pathlib.Path]:
-    """Every `src/main/resources/db/migration` under `backend/`."""
+    """Every `src/main/resources/db/migration` under `src/backend/`."""
     return _roots("main", "resources/db/migration")
 
 
 def gradle_projects() -> dict[str, pathlib.Path]:
-    """`{Gradle project path: directory}` — the root `:` (`backend/`) and every project `settings.gradle.kts`
-    includes, `:apps:x` living in `backend/apps/x` (Gradle's default; a re-pointed `projectDir` is not modelled)."""
+    """`{Gradle project path: directory}` — the root `:` (`src/backend/`) and every project `settings.gradle.kts`
+    includes, `:apps:x` living in `src/backend/apps/x` (Gradle's default; a re-pointed `projectDir` is not modelled)."""
     text = re.sub(r"//[^\n]*", "", (BACKEND / "settings.gradle.kts").read_text(encoding="utf-8"))
     paths = [p for args in re.findall(r"\binclude\s*\(([^)]*)\)", text) for p in re.findall(r'"([^"]+)"', args)]
     projects = {":": BACKEND}
@@ -79,7 +81,7 @@ def gradle_projects() -> dict[str, pathlib.Path]:
 
 def project_of(path: pathlib.Path) -> str | None:
     """The Gradle project whose directory holds `path` — the deepest one — or None when `path` sits in a directory
-    below `backend/` that no included project owns (a module directory the settings do not include)."""
+    below `src/backend/` that no included project owns (a module directory the settings do not include)."""
     path = path.resolve()
     best: tuple[int, str] | None = None
     for name, d in gradle_projects().items():
@@ -88,7 +90,7 @@ def project_of(path: pathlib.Path) -> str | None:
         except ValueError:
             continue
         # A path in a nested project directory belongs to that project, never to an enclosing one: so a file
-        # under `backend/<x>/src/...` belongs to the root only when `<x>` is `src` itself.
+        # under `src/backend/<x>/src/...` belongs to the root only when `<x>` is `src` itself.
         if name == ":" and rel.parts and rel.parts[0] != "src":
             continue
         depth = len(d.resolve().parts)

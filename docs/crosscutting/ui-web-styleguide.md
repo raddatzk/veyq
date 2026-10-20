@@ -6,10 +6,10 @@ gallery or social network.
 
 ## Source of truth
 
-**`web/src/styles/`** — core's stylesheets (`base` tokens, `ui`, `layout`, `forms`, `markdown`, `settings`,
-**`dark`**); `web/src/style.css` is the import barrel. **An application's own global classes are its own
-sheet in its directory** (`web/src/features/memories/memories.css`, inbox #513 — the media lightbox too since #517;
-`web/src/features/depot/depot.css`, the PDF text layer, #517), imported by the application, never by
+**`src/web/src/styles/`** — core's stylesheets (`base` tokens, `ui`, `layout`, `forms`, `markdown`, `settings`,
+**`dark`**); `src/web/src/style.css` is the import barrel. **An application's own global classes are its own
+sheet in its directory** (`src/web/src/features/memories/memories.css`, inbox #513 — the media lightbox too since #517;
+`src/web/src/features/depot/depot.css`, the PDF text layer, #517), imported by the application, never by
 the barrel: it loads with the application, *before* `style.css`, so a rule of it that styles an element a core class
 also styles compounds with that class (`.veyq-card.memory-card`) and wins by specificity, never by source order — and
 its dark twins sit at its end, not in `dark.css`. Which rules tie is measured in the built bundle, not read off the
@@ -18,9 +18,9 @@ sheets: #517's move compounded eleven lightbox rules (`.veyq-icon-button.lightbo
 lightbox element was compared before and after. Individual edits carry a comment with their
 reason where the reason isn't obvious. It read *~175 KB* until 2026-09-21, when the 67 % of it that no markup
 had ever matched was deleted (#146) — the sheets had come across from the pre-E2EE source with the design
-system of views this repo never had. Re-measure before quoting the size; `du -ch web/src/styles/*.css`.
+system of views this repo never had. Re-measure before quoting the size; `du -ch src/web/src/styles/*.css`.
 
-**`admin-web/src/styles/`** is a five-sheet **copy** of it — everything but `layout` and `markdown`, which style a
+**`src/admin-web/src/styles/`** is a five-sheet **copy** of it — everything but `layout` and `markdown`, which style a
 Memory shell and rendered Markdown that surface does not have — and the rules on this page
 govern it too. The copy is deliberate, not drift: [ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)
 keeps the two packages independent in everything but `@veyq/crypto`, so a redesign of one is never a regression
@@ -34,20 +34,20 @@ how to extend it.
 
 ## Reuse first — this is the load-bearing rule
 
-**The existing implementation is the styleguide.** `web/` is a whole product now, so the nearest built screen
+**The existing implementation is the styleguide.** `src/web/` is a whole product now, so the nearest built screen
 answers almost every question this page could: use an existing `.veyq-*` shared class and `--app-*` token before
 writing anything local. Add a local class only when no shared class can express the behaviour without leaking
 styles elsewhere. Wrap a shared primitive in a feature component rather than copying markup.
 
 **This gets stronger as web grows, and that is the design.** A rule that enumerates values goes stale the moment
 the code moves; a rule that says *"match your neighbour"* cannot. It is also the one rule here that is
-demonstrably obeyed — `.veyq-dialog-action-row`: **23 uses across 18 components** in `web/`, plus 6 across 3 in
-`admin-web/`, and **zero** per-component copies [M: 2026-09-20]. Uses are markup uses, not occurrences, so the
+demonstrably obeyed — `.veyq-dialog-action-row`: **23 uses across 18 components** in `src/web/`, plus 6 across 3 in
+`src/admin-web/`, and **zero** per-component copies [M: 2026-09-20]. Uses are markup uses, not occurrences, so the
 number is re-measurable rather than remembered:
 
 ```
-grep -rn 'class="[^"]*veyq-dialog-action-row' web/src | wc -l   # uses
-grep -rln 'class="[^"]*veyq-dialog-action-row' web/src | wc -l  # components
+grep -rn 'class="[^"]*veyq-dialog-action-row' src/web/src | wc -l   # uses
+grep -rln 'class="[^"]*veyq-dialog-action-row' src/web/src | wc -l  # components
 ```
 
 This sentence said *15* until 2026-09-20, having been written when that was true — which is the paragraph's own
@@ -58,11 +58,11 @@ counts are colour, and colour is what goes stale. Re-measure before quoting them
 
 Use `--app-*` role tokens before raw colors. **Both values live in `styles/base.css`**: the light one under
 `:root`, the dark one under `:root.veyq-dark` (45 tokens there [M: 2026-10-08, `awk '/^:root.veyq-dark/{f=1;next}
-f&&/^}/{f=0} f' web/src/styles/base.css | grep -cE '^\s*--'`]). A new one must define both.
+f&&/^}/{f=0} f' src/web/src/styles/base.css | grep -cE '^\s*--'`]). A new one must define both.
 
 **`styles/dark.css` is not where the values are, and this page said it was until 2026-09-21.** That sheet
 defines no custom property at all — it is one `.veyq-dark { … }` of *component* overrides that read the tokens.
-Checked with `grep -nE '^\s*--' web/src/styles/dark.css`, which returns nothing, and returned nothing on the
+Checked with `grep -nE '^\s*--' src/web/src/styles/dark.css`, which returns nothing, and returned nothing on the
 pre-#146 file too: the sentence was wrong when written, not made wrong by a deletion.
 
 - **accent / brand** — brand marks, selected states, focus accents, navigation highlights.
@@ -99,7 +99,7 @@ pair from `base.css` in both modes and is red below the floor, or when a pair re
 longer sets. **A new pairing — a role's text on a fill no row names — gets a row in its `PAIRS`**; nothing else
 will notice it.
 
-**`admin-web/` follows the same rule on its own copy** (inbox #390): its `src/styles/base.css` carries the same three
+**`src/admin-web/` follows the same rule on its own copy** (inbox #390): its `src/styles/base.css` carries the same three
 tokens with both twins and the same `--p-*` block — ported, not imported (ADR 0065) — and the guard reads that
 sheet against the same `PAIRS` (its `SHEETS`), so a lightened admin primary is red there too. Before the port the
 copy was still on Aura's defaults: 34 pairs below AA (23 light, 11 dark), measured on a throwaway harness of the
@@ -115,7 +115,7 @@ neighbour**: the same row, the same panel, the same screen. Settings, management
 or a one-off `1rem` label sitting in them.
 
 > **There is no `--app-font-size-*` token family, and this section used to mandate one.** Zero existed; none ever
-> did (`grep -r 'font-size: var(--app-' web/src` → 0). That was not an oversight to correct — **it was the rule
+> did (`grep -r 'font-size: var(--app-' src/web/src` → 0). That was not an oversight to correct — **it was the rule
 > that was wrong**, and this is worth stating so nobody "completes" the token system later:
 >
 > **Tokens exist here where theming forces them, not where tidiness suggests them.** Colour is 91% tokenised,
@@ -158,7 +158,7 @@ or a one-off `1rem` label sitting in them.
   `components/app/` or `views/`; what is Memories' (media, gallery, covers, its level rows, its dialogs and share
   body) lives under `features/memories/`. Core renders an application's component only through the registry (a kind's
   detail or level section, a slot) and never imports it
-  ([web/CLAUDE.md](../../web/CLAUDE.md) says what an application registers; the guard enforces the direction).
+  ([src/web/CLAUDE.md](../../src/web/CLAUDE.md) says what an application registers; the guard enforces the direction).
 
 ## Buttons & dialog actions
 
@@ -193,7 +193,7 @@ or a one-off `1rem` label sitting in them.
   `kit.backupDownloadConfirm`, …). Deliberate and unchanged: the low-ceremony, in-row form.
 - **A dedicated dialog** where the dialog does more than ask — it owns the mutation, its busy state and/or its
   inline error. The shared dialog resolves and closes; it never runs the action, so anything that needs a
-  `:loading` confirm button stays its own component. There are **five** in `web/` [M: 2026-09-20]:
+  `:loading` confirm button stays its own component. There are **five** in `src/web/` [M: 2026-09-20]:
 
   | Dialog | What it owns beyond asking |
   |---|---|
@@ -224,8 +224,8 @@ So: match the voice to the mechanism you picked, and do not "fix" one to look li
 counterexample is `DeleteNodeDialog` ("Delete folder", or the kind's own title such as "Delete Memory") — a dedicated dialog wearing the
 imperative voice. It is the mechanism axis it crosses, not the voice one: both its headers are imperative.
 
-**`window.confirm` is retired, and `no-alert` is what keeps it retired** — in `web/eslint.config.js` and in
-`admin-web/eslint.config.js`, including in test files, which are deliberately not exempted.
+**`window.confirm` is retired, and `no-alert` is what keeps it retired** — in `src/web/eslint.config.js` and in
+`src/admin-web/eslint.config.js`, including in test files, which are deliberately not exempted.
 **Know exactly how far that reaches** [M: 2026-09-20, bite-tested]: `no-alert` flags a native *call*, in `src`
 and in tests alike. It does **not** flag the `window.confirm = () => …` *stub assignment* — which is the shape
 a test fixture actually uses, and the shape seven lines of `TenantDetailPanel.test.ts` used. Those were found
@@ -251,12 +251,12 @@ bootstrap dialogs rendering nothing; the sweep that caught it was a grep, not a 
 list every key a template actually reads and check it against **both** locale blocks:
 
 ```bash
-grep -rho "t('members\.\w*'" web/src --include="*.vue" --include="*.ts" | sort -u
+grep -rho "t('members\.\w*'" src/web/src --include="*.vue" --include="*.ts" | sort -u
 ```
 
 **PrimeVue's own texts come from the catalog too, set in one place.** A PrimeVue component reads some strings from
 its config's `locale` - a Dialog's close button, every `<Password>`'s hidden "Enter a password", the DatePicker's
-month names - and `src/app/primeVueLocale.ts` (one per package, `web/` and `admin-web/`) writes them from the
+month names - and `src/app/primeVueLocale.ts` (one per package, `src/web/` and `src/admin-web/`) writes them from the
 catalog's `primevue` block at start and on every language change; no component sets PrimeVue's locale itself, and
 a newly used PrimeVue component or prop brings the keys it reads into that file and both locale blocks (inbox #434).
 

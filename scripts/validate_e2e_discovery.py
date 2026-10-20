@@ -2,7 +2,7 @@
 """Guard that `scripts/run_web_e2e.py` cannot report success having run zero e2e files.
 
 **What it asserts.** Three things, all about the orchestrator's discovery step:
-  1. `discover()` finds at least one `*.e2e.test.ts` in the real `web/` tree, and everything it returns really is
+  1. `discover()` finds at least one `*.e2e.test.ts` in the real `src/web/` tree, and everything it returns really is
      an e2e file. This half exists so the guard cannot pass by pointing at nothing — the same failure it guards.
   2. `discover()` on a tree with no e2e files **raises** `NoE2eFilesError` rather than returning `[]`. An empty
      list would flow through `main()` as "0 files, 0 failures, exit 0".
@@ -63,10 +63,10 @@ found: list = []
 try:
     found = orchestrator.discover()
 except Exception as e:  # noqa: BLE001 — any failure here is a finding, not a crash
-    errors.append(f"discover() failed on the real web/ tree: {e!r}")
+    errors.append(f"discover() failed on the real src/web/ tree: {e!r}")
 else:
     if not found:
-        errors.append("discover() returned an empty list for the real web/ tree")
+        errors.append("discover() returned an empty list for the real src/web/ tree")
     for path in found:
         if not path.name.endswith(".e2e.test.ts"):
             errors.append(f"discover() returned a non-e2e file: {path}")

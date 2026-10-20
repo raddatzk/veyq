@@ -114,7 +114,7 @@ together with whom.
 
 ## Where it is built (web)
 
-- Model and write: `web/src/features/memories/memoryParticipants.ts` (`participants: { userIds }`, cap 100, the merging edit);
+- Model and write: `src/web/src/features/memories/memoryParticipants.ts` (`participants: { userIds }`, cap 100, the merging edit);
   `editParticipantsOf` in `core/node/nodeMeta.ts`; the right `participants` in `features/memories/rights.ts`; the door
   `NodeMetaDoor.setParticipants` in `source.ts`.
 - At creation: "I was there" in Memories' create dialog `components/MemoryNodeDialog.vue`, sealed at birth by `createMemory`'s

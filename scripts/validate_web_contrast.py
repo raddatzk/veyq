@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that the browser surfaces' key colour pairs meet WCAG AA, in light and in dark, computed from the tokens.
 
-**What it asserts.** Each sheet in `SHEETS` — `web/src/styles/base.css` and `admin-web/src/styles/base.css`, the
+**What it asserts.** Each sheet in `SHEETS` — `src/web/src/styles/base.css` and `src/admin-web/src/styles/base.css`, the
 deliberate copy ADR 0065 keeps (inbox #390) — is read the way the browser cascades it: every `:root { … }` block
 gives the light values, `:root.veyq-dark { … }` overrides them for dark, and the `--p-*` declarations in `:root`
 (the block that routes PrimeVue's colours onto our role tokens) are resolved per mode through those tokens —
@@ -35,7 +35,7 @@ button, the date picker's selected day: 1.9–2.8:1). Nothing failed a build: co
       `opacity: .6`, and no pair here measures that.
   (e) **Two sheets, one list — not one palette.** The copies may drift apart (that is the point of ADR 0065), and
       each is held to the floor on its own values; nothing here says they must agree. A third browser surface is
-      a row in `SHEETS`, and nothing forces one. (Before inbox #390 `admin-web/` was not covered and failed the
+      a row in `SHEETS`, and nothing forces one. (Before inbox #390 `src/admin-web/` was not covered and failed the
       same pairs on Aura's defaults: 23 light, 11 dark, measured on the rendered harness.)
 """
 from __future__ import annotations
@@ -44,8 +44,10 @@ import re
 import sys
 from pathlib import Path
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
-SHEETS = [ROOT / "web" / "src" / "styles" / "base.css", ROOT / "admin-web" / "src" / "styles" / "base.css"]
+SHEETS = [repo_layout.WEB / "src" / "styles" / "base.css", repo_layout.ADMIN_WEB / "src" / "styles" / "base.css"]
 
 TEXT, UI = 4.5, 3.0
 # (label, foreground, background, floor). Expressions are CSS as the stylesheets write them.

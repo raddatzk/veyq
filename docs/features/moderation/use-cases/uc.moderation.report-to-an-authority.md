@@ -1,7 +1,7 @@
 # UC: Report to an authority
 
 - **ID:** uc.moderation.report-to-an-authority
-- **Primary actor:** A **moderator** in web/'s moderation surface, with the key proof
+- **Primary actor:** A **moderator** in src/web/'s moderation surface, with the key proof
 - **Secondary actor:** the **authority** — in Germany the BKA as the central office for Art. 18 DSA reports, the police
 - **Goal:** Report a suspected offence against life or safety, child sexual abuse included, with the clear fields the
   authority asks for and never a copy of the content; and handle child sexual abuse material without making it

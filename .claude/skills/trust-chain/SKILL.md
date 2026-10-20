@@ -31,7 +31,7 @@ the command that proves it. A "measured" claim with no command is `remembered` w
 This is the bite-proof idea ([`changes/README.md`](../../../changes/README.md) § bite-proof a guard) applied
 to prose instead of tests: a claim you cannot re-run is a claim nobody can bite.
 
-- **measured** — `measured (grep -rc '@Test' backend/…/FooTest.kt → 3): the slice has three cases`. The
+- **measured** — `measured (grep -rc '@Test' src/backend/…/FooTest.kt → 3): the slice has three cases`. The
   reader re-runs, not re-trusts. The command is the part that stays true while the code drifts; the number
   is spent the moment the go/no-go call is made ([`changes/README.md`](../../../changes/README.md) § the CR
   carries the locator).
@@ -105,7 +105,7 @@ Four documented gaps sit **outside** that guard, on purpose:
   beside the code.
 - the **rate-limit posture sweep's declaration ≠ enforcement** boundary
   ([ADR 0051](../../../docs/decisions/0051-declarative-rate-limit-posture.md)):
-  `backend/src/test/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitPostureSweepTest.kt` asserts every JAX-RS
+  `src/backend/src/test/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitPostureSweepTest.kt` asserts every JAX-RS
   endpoint **declares** `@RateLimit(key)` or `@RateLimitExempt(reason)` — it does **not** assert the
   domain-keyed limiters (`SHARE`/`RECIPIENT`/`OWNER`/`TENANT`) actually **fire**; only the per-endpoint runtime
   `429` tests do (`ShareIdentityBoundTest`, `SharePasswordAttemptBoundTest`, `InviteMailRateLimiterTest`). It is
@@ -159,7 +159,7 @@ each has a canonical home — point there, don't try to build past it:
   `mutation_meta_check*.py` sit **outside** that glob (filename prefix) and run only from the mutation jobs.
   Run every guard locally the same way: `for f in scripts/validate_*.py; do python3 "$f"; done`.
 - **The one coupling that bites differently per surface:** **web coverage refs are path-bound, backend refs
-  are symbol-bound** (`validate_coverage.py`: web/crypto/admin-web `(root / ref).exists()` :666-673; backend
+  are symbol-bound** (`validate_coverage.py`: web, crypto, admin-web `(root / ref).exists()` :666-673; backend
   `ClassName.method` via the `KOTLIN_FUN` regex over masked source + stem map :223, :443-468). The same move
   hits them differently — relocating a file breaks web refs; renaming a symbol breaks backend refs. This is
   what broke in cr-0175; carry it into any relocation's blast-radius grep.

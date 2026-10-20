@@ -9,13 +9,16 @@ decide WHICH predecessor and WHAT a red run means are plain functions. This asse
      is set the newest `v<major>.<minor>` tag the caller found - by version order, where string order disagrees
      (`v1.10` after `v1.9`); a set release with no such tag is refused, never guessed;
   3. the pin file read both ways: the `release:` line, the highest migration, and the migrations that differ between
-     two builds (a changed checksum, a removed file) - the cause a red proof names before the first release;
+     two builds (a changed checksum, a removed file, matched by file name so a moved one is neither) - the cause a red
+     proof names before the first release;
   4. the boot log read for Flyway's own refusal - a checksum mismatch, an applied migration the candidate no longer
      has, one below the restored history - and nothing named for a log without one;
   5. which suite of a tree is the seeder (the `upgrade` group's first member), and none for a tree without it;
-  6. the record both builds share: `web/src/test/upgradeRecord.fixture.json`'s record is accepted and every edit it
-     lists is refused with exactly one problem - the same fixture `web/src/test/upgradeRecord.test.ts` holds the
-     TypeScript reader to, so the two validators cannot drift apart unseen.
+  6. the record both builds share: `src/web/src/test/upgradeRecord.fixture.json`'s record is accepted and every edit it
+     lists is refused with exactly one problem - the same fixture `src/web/src/test/upgradeRecord.test.ts` holds the
+     TypeScript reader to, so the two validators cannot drift apart unseen;
+  7. the predecessor's surfaces in either layout (ADR 0106 decision 7): its web client in a fabricated tree of each,
+     and its seeder found in the commit before the code surfaces moved under `src/` as well as in HEAD.
 
 What it cannot show: that the proof runs - the worktree, the two builds, the restore and the two suites need Docker
 and a jar, and the run itself is the proof (its summary is recorded in the criterion's comment). Not a
@@ -29,13 +32,16 @@ from __future__ import annotations  # the repo's scripts run on Python 3.9
 import copy
 import json
 import pathlib
+import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import repo_layout  # noqa: E402 - where the code surfaces live (ADR 0106)
 import run_web_e2e as e2e  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FIXTURE = ROOT / "web" / "src" / "test" / "upgradeRecord.fixture.json"
+FIXTURE = repo_layout.WEB / "src" / "test" / "upgradeRecord.fixture.json"
 
 failures: list[str] = []
 
@@ -107,6 +113,16 @@ def pin_cases() -> None:
         "removed: backend/core/src/main/resources/db/migration/V202610101200__core_gone.sql",
     ], repr(changed))
     check("identical pins name nothing", e2e.changed_migrations(before, before) == [])
+    # ADR 0106 stage 2 moved the backend under `src/`: the pin file's paths change prefix, Flyway's record does not.
+    moved = {f"src/{path}": sha for path, sha in before.items()}
+    check("a migration that only moved is neither changed nor removed", e2e.changed_migrations(before, moved) == [],
+          repr(e2e.changed_migrations(before, moved)))
+    moved_and_edited = dict(moved, **{
+        "src/backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql": "a2a2"})
+    check("a moved migration whose checksum changed is named by its new path",
+          e2e.changed_migrations(before, moved_and_edited) == [
+              "changed: src/backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql"],
+          repr(e2e.changed_migrations(before, moved_and_edited)))
 
 
 def flyway_cases() -> None:
@@ -135,6 +151,36 @@ def seeder_cases() -> None:
             "src/features/instanceBackup/upgrade.a-seed.e2e.test.ts", "src/features/x/upgrades.e2e.test.ts"]
     check("the seeder is the upgrade group's first member", S(tree) == "src/features/instanceBackup/upgrade.a-seed.e2e.test.ts")
     check("a tree without the group has no seeder", S(["src/features/memories/media.e2e.test.ts"]) is None)
+
+
+def layout_cases() -> None:
+    """The predecessor's surfaces are found in either layout (ADR 0106 decision 7): a worktree of a commit from before
+    stage 2 carries them at the root. Both on fabricated trees and against this repository's own history."""
+    with tempfile.TemporaryDirectory() as d:
+        for layout, path in (("this layout", repo_layout.rel(repo_layout.WEB)),
+                             ("the layout before stage 2", repo_layout.LEGACY_SURFACES[repo_layout.WEB])):
+            tree = pathlib.Path(d) / layout.replace(" ", "-")
+            (tree / path).mkdir(parents=True)
+            found = e2e.Build("predecessor", tree, tree / "x.jar").web
+            check(f"a predecessor tree in {layout} has its web client found", found == tree / path, str(found))
+    # The commit before stage 2's move: HEAD while it still carries the legacy layout, else the first parent of the
+    # commit that took the web client's manifest away from its legacy place. ci.yml's web-e2e job checks out the
+    # whole history (fetch-depth: 0), so it is always reachable there.
+    legacy_manifest = f"{repo_layout.LEGACY_SURFACES[repo_layout.WEB]}/package.json"
+    on_head = subprocess.run(["git", "cat-file", "-e", f"HEAD:{legacy_manifest}"], cwd=ROOT, capture_output=True)
+    if on_head.returncode == 0:
+        legacy = "HEAD"
+    else:
+        moved = subprocess.run(["git", "log", "-1", "--format=%H", "--diff-filter=D", "HEAD", "--", legacy_manifest],
+                               cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        legacy = f"{moved}^1" if moved else ""
+    check("the commit before the code surfaces moved is found in this repository's history", bool(legacy),
+          f"no commit carries {legacy_manifest}")
+    for label, commit in (("the commit before the move", legacy), ("HEAD", "HEAD")):
+        if commit:
+            seeder = e2e.upgrade_seeder(e2e.predecessor_web_sources(commit))
+            check(f"{label} ({commit}) has its seeder found", seeder is not None and seeder.endswith(".e2e.test.ts"),
+                  str(seeder))
 
 
 def edited(record: dict, edit: dict) -> dict:
@@ -166,6 +212,7 @@ def main() -> int:
     pin_cases()
     flyway_cases()
     seeder_cases()
+    layout_cases()
     record_cases()
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)

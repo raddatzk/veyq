@@ -4,7 +4,7 @@
 **What it does.** Boots one fresh fast-jar under `%e2e` — the profile whose rate limits do not refuse a run's volume —
 with `run_web_e2e.py`'s own primitives (the shared compose stack's MariaDB and store, a database and a bucket named
 by the run's stamp and dropped when it ends [run_names] — two worktrees' runs never share one, inbox #501 — its own
-ports), births an instance on it with the real client crypto (`web/scripts/fuzz-seed.mts`: an owner with a Memory, a
+ports), births an instance on it with the real client crypto (`src/web/scripts/fuzz-seed.mts`: an owner with a Memory, a
 medium, a bucket and a link in a group of its own, and a PEER, a second member of the tenant), and runs the pinned
 Schemathesis image over every spec file `contract_specs.specs()` finds — never a list here — in [INVOCATIONS], in order:
 
@@ -91,11 +91,11 @@ Usage:
     python3 scripts/run_api_fuzz.py --baseline-update    # also merge this run's failures into tests/fuzz/baseline.json
     python3 scripts/run_api_fuzz.py --only <spec-key>    # one spec file (a local debugging convenience)
 
-Prerequisite: the fast-jar (`cd backend && ./gradlew quarkusBuild`) and web's dependencies (`npm ci` at the root, which
+Prerequisite: the fast-jar (`cd src/backend && ./gradlew quarkusBuild`) and web's dependencies (`npm ci` at the root, which
 generates web's API client). A stale jar answers for code the run never saw (`run_web_e2e.py`'s docstring).
 
 Environment (all optional):
-    VEYQ_JAR                The fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
+    VEYQ_JAR                The fast-jar. Default: src/backend/build/quarkus-app/quarkus-run.jar
     VEYQ_INFRA_DIR          The directory holding the Compose files whose stack to use (`DOCKER_DIR` in
                             `scripts/repo_layout.py`; see above).
     VEYQ_FUZZ_PORT          The backend's public port. Default: 18480
@@ -135,7 +135,7 @@ import run_web_e2e as e2e  # noqa: E402
 import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
 
 REPO = Path(__file__).resolve().parent.parent
-WEB = REPO / "web"
+WEB = repo_layout.WEB
 FUZZ = repo_layout.FUZZ_DIR
 CONFIG = FUZZ / "schemathesis.toml"
 BASELINE = FUZZ / "baseline.json"
@@ -696,7 +696,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     if not e2e.JAR.is_file():
-        raise SystemExit(f"[fuzz] no fast-jar at {e2e.JAR} — `cd backend && ./gradlew quarkusBuild` first")
+        raise SystemExit(f"[fuzz] no fast-jar at {e2e.JAR} — "
+                         f"`cd {repo_layout.rel(repo_layout.BACKEND)} && ./gradlew quarkusBuild` first")
     if e2e.port_is_taken():
         raise SystemExit(f"[fuzz] something already answers on {e2e.READY_URL} — not ours to fuzz")
     stale = unknown_negative_only()

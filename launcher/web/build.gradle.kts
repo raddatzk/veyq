@@ -1,12 +1,12 @@
-// `web:*` — the member client (web/), through its own npm scripts.
+// `web:*` — the member client (src/web/), through its own npm scripts.
 @Suppress("UNCHECKED_CAST")
 val ports = gradle.extra["veyq.ports"] as Map<String, String>
-val webDir = rootDir.resolve("web")
+val webDir = rootDir.resolve("src/web")
 
 tasks.register<Exec>("bootstrap") {
     group = "veyq"
     description = "Installs the npm workspace and (re)generates web's API client from the contracts (npm install in " +
-        "web/; its prepare hook runs generate:api). Re-run after any contracts change."
+        "src/web/; its prepare hook runs generate:api). Re-run after any contracts change."
     workingDir = webDir
     commandLine("npm", "install")
 }
@@ -22,7 +22,7 @@ tasks.register<Exec>("run") {
 
 tasks.register<Exec>("build") {
     group = "veyq"
-    description = "Builds web's production bundle into web/dist (npm run build)."
+    description = "Builds web's production bundle into src/web/dist (npm run build)."
     workingDir = webDir
     commandLine("npm", "run", "build")
 }

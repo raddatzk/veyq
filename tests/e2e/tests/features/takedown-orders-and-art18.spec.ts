@@ -13,7 +13,7 @@
 //
 // It runs after moderation.spec.ts (the deputy, `deputy.json`) — files run in name order. The references, the pasted
 // links (their fragment is the share's key, which must never reach the server) and every name are canaries
-// (`recordTyped`): lane L1's sweep proves they reached the server sealed or not at all. The labels are web/'s and
+// (`recordTyped`): lane L1's sweep proves they reached the server sealed or not at all. The labels are src/web/'s and
 // admin-web's own (each package's i18n, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
@@ -31,7 +31,7 @@ const moderatorReference = `BKA TCO-${stamp}-1`
 const ownerReference = `BKA TCO-${stamp}-2`
 const handoverReference = `BKA Vorgang ${stamp}`
 const guestName = `Gast der Anordnung ${stamp}`
-const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 const ORDER_NOTICE = /Something you uploaded through this link was removed on an order of an authority, received on /
 
 let owner: Device

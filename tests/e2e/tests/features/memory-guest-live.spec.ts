@@ -7,7 +7,7 @@
 // What it cannot show: a real phone or Safari/Firefox backgrounding a tab (Playwright keeps every page visible), and
 // that a change elsewhere in the space stays a `304` — the slice suite pins that (`ShareMediaLivePollSliceTest`).
 //
-// It starts from the tenant whose owner the round trip activated (the `features` project). Labels are web/'s own.
+// It starts from the tenant whose owner the round trip activated (the `features` project). Labels are src/web/'s own.
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -17,7 +17,7 @@ import { newDevice, signInOwner, type Device } from '../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
-const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Wanderung über den Rennsteig ${stamp}`
 const shareLabel = `Für die Wandergruppe ${stamp}`

@@ -58,7 +58,7 @@ deleted: switched back on, everything works as before.
   (the settings beside it).
 - **Decisions:** [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md),
-  [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) (why this lives in `web/`).
+  [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) (why this lives in `src/web/`).
 - **On the docs site:** [What your space offers](../../../../site/src/content/docs/space-owners/capabilities.mdx) (the
   tenant owner's steps, EN and DE) and [Capabilities](../../../../site/src/content/docs/run/capabilities.mdx) (both
   levels, for the Server Owner).

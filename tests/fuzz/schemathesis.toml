@@ -16,7 +16,7 @@ database = "none"
 # would hold it a second time, against the 400/404 a malformed request owes.
 with-security-parameters = false
 
-# The bearer token the seeder (`web/scripts/fuzz-seed.mts`) signed in for, handed to the container in the
+# The bearer token the seeder (`src/web/scripts/fuzz-seed.mts`) signed in for, handed to the container in the
 # environment: never on a command line, never in a file the image reads.
 [auth.openapi.bearerAuth]
 bearer = "${VEYQ_FUZZ_TOKEN}"

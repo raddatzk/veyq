@@ -11,7 +11,7 @@
 //
 // The PDF is built here, one page with one line of Helvetica, so no fixture file stands behind it. It starts from the tenant
 // whose owner the round trip activated (the `features` project). Every value typed is a canary (recordTyped). Labels are
-// web/'s own (web/src/i18n/index.ts and web/src/features/depot/i18n.ts, en).
+// src/web/'s own (src/web/src/i18n/index.ts and src/web/src/features/depot/i18n.ts, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { createFolder, pickFiles } from '../../src/depot'

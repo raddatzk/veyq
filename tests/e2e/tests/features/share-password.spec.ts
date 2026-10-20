@@ -10,11 +10,11 @@
 // posts to the Argon2 worker chunk (`assets/argon.worker-*.js`, the name packages/crypto's `verify:argon-worker` pins in
 // the build) and every answer the worker sends back, and the console for that warning. The proof is the round trip
 // (the request posted, the worker's own answer, the unlock that used it), not the worker's construction alone. This
-// instruments the test's browser, not the product: nothing here is a hook web/ carries.
+// instruments the test's browser, not the product: nothing here is a hook src/web/ carries.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Every value typed is a canary
-// (recordTyped) — the password above all, which the page never sends (it sends Argon2id of it). Labels are web/'s own
-// (web/src/i18n/index.ts, en).
+// (recordTyped) — the password above all, which the page never sends (it sends Argon2id of it). Labels are src/web/'s own
+// (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -25,7 +25,7 @@ import { newDevice, signInOwner, type Device } from '../../src/devices'
 test.describe.configure({ mode: 'serial' })
 
 // The round trip's photo (1×1 JPEG with EXIF): something for the guest to decrypt once the password let it in.
-const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Hochzeit im Gartenhaus ${stamp}`

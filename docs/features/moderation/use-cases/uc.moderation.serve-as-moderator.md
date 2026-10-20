@@ -1,7 +1,7 @@
 # UC: Serve as a moderator
 
 - **ID:** uc.moderation.serve-as-moderator
-- **Primary actor:** A **moderator** — an account the Server Owner appointed — in web/'s moderation surface
+- **Primary actor:** A **moderator** — an account the Server Owner appointed — in src/web/'s moderation surface
   (`/moderation` on any tenant host they can sign in on)
 - **Secondary actor:** another moderator holding the key (whose client delivers it)
 - **Goal:** Take up the appointment, receive the instance moderation key, hand it on to the next newcomer, and open the

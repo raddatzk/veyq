@@ -1,6 +1,6 @@
 // Depot through a member's and a guest's screens, the steps several feature scenarios share: a folder made, a file
 // uploaded into the open level, a folder link made, and what a download leaves behind measured from inside the page.
-// The labels are web/'s own (web/src/i18n/index.ts, en), so a renamed button is red in every scenario that uses them.
+// The labels are src/web/'s own (src/web/src/i18n/index.ts, en), so a renamed button is red in every scenario that uses them.
 import { expect, type BrowserContext, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { recordTyped } from './canaries'

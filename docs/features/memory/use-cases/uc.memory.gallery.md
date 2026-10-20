@@ -126,7 +126,7 @@
 - **E7 — a Memory or Chapter of thousands of photos** (inbox #488, #489): the client asks only for the thumbnails of
   the tiles near the viewport, nearest first, drops the ones that scrolled away while they still wait, and never asks
   for all at once — their presigns travel in batches of up to the contract's 256 blobs per request, at most two
-  requests in flight, and at most sixteen store reads in flight across the page (`web/src/core/blob/readScheduler.ts`
+  requests in flight, and at most sixteen store reads in flight across the page (`src/web/src/core/blob/readScheduler.ts`
   holds the limits and why). What the user opens — a preview, a video, a download, a cover — goes before the grid's
   thumbnails, and leaving the Memory drops the reads still waiting. Thumbnails that arrive within 100 ms of each other
   appear together, so the grid is not redrawn once per photo. A read without an answer, or answered `5xx`, `408` or

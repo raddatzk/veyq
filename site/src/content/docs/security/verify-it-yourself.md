@@ -45,7 +45,7 @@ that a test no CI run executes makes no coverage claim.
 
 [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/blob/main/contracts/crypto/vectors/v1.json)
 is the single source of truth for what suite v1 *is* on the wire. The implementation,
-[`packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/src/v1.ts), is held to it,
+[`src/packages/crypto/src/v1.ts`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/src/v1.ts), is held to it,
 and every seal purpose has exactly one vector
 ([ADR 0017](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
 rule 4, [ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)
@@ -89,17 +89,17 @@ check (lint, typecheck, tests):
 # from the repository root
 npm ci
 
-cd packages/crypto
+cd src/packages/crypto
 npm run check
 ```
 
-The web client's conformance tests run in its own check, from `web/`:
+The web client's conformance tests run in its own check, from `src/web/`:
 
 ```sh
 npm run check
 ```
 
-The backend's tests run from `backend/`, on in-memory H2:
+The backend's tests run from `src/backend/`, on in-memory H2:
 
 ```sh
 ./gradlew check
@@ -118,8 +118,8 @@ layer: StrykerJS for the TypeScript crypto, and PIT for the backend's policy log
 ([ADR 0045](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md)).
 In `packages/crypto` the break threshold is **100, with no margin**: every equivalent mutant is disabled at its
 own line with its measured reason, so a margin would buy only blindness. The reasoning lives in
-[`stryker.config.mjs`](https://github.com/raddatzk/veyq/blob/main/packages/crypto/stryker.config.mjs).
-From `packages/crypto/` (and again from `web/`, which has its own scope):
+[`stryker.config.mjs`](https://github.com/raddatzk/veyq/blob/main/src/packages/crypto/stryker.config.mjs).
+From `src/packages/crypto/` (and again from `src/web/`, which has its own scope):
 
 ```sh
 npm run mutation
@@ -183,7 +183,7 @@ each one. With the
 workspace installed (`npm ci` above), build the jar first:
 
 ```sh
-cd backend && ./gradlew quarkusBuild
+cd src/backend && ./gradlew quarkusBuild
 ```
 
 A stale jar fails as a wrong answer, not as an error, so rebuild it after any backend change. Then, from the
@@ -193,7 +193,7 @@ repository root:
 python3 scripts/run_web_e2e.py
 ```
 
-With no arguments the orchestrator runs every `web/src/**/*.e2e.test.ts`. The run directory
+With no arguments the orchestrator runs every `src/web/src/**/*.e2e.test.ts`. The run directory
 `.e2e-out/<stamp>/` survives the run. It holds each boot log, each HTTP recording, each database dump the sweep
 read, the statement log and every mail. These are throwaway credentials of throwaway instances, but they are raw
 tokens all the same.
@@ -227,7 +227,7 @@ it, and this repository has run none since its import.
 
 ## The scope-access probe
 
-[`OperatorBlindProbeTest`](https://github.com/raddatzk/veyq/blob/main/backend/src/test/kotlin/me/raddatz/veyq/core/http/OperatorBlindProbeTest.kt)
+[`OperatorBlindProbeTest`](https://github.com/raddatzk/veyq/blob/main/src/backend/src/test/kotlin/me/raddatz/veyq/core/http/OperatorBlindProbeTest.kt)
 is, despite its name, **an authorization probe, not a blindness test**. It is the enforcement guard for the
 scope-access gate
 ([uc.spaces.scope-access](https://github.com/raddatzk/veyq/blob/main/docs/features/spaces/use-cases/uc.spaces.scope-access.md),
@@ -256,7 +256,7 @@ the server, can skip. It protects one user from another against an honest server
 operator can read: that is the client's job, enforced with keys the server never holds
 ([security-model § The one guarantee](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#the-one-guarantee)).
 It closes no row of § What holds today. It runs in the backend's root project, as part of `./gradlew check`
-from `backend/`.
+from `src/backend/`.
 
 ## Doc ↔ code guards
 

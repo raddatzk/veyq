@@ -56,7 +56,7 @@ routes stay history-mode.**
   [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md): a file folds by its own
   kind's function (a file `a.b` and a folder `a-b` coexist with one URL segment), and two drop-box guests' identity
   folders sit under different guest keys, so two guests named "Anna" both slugify to `anna`. So the client
-  disambiguates, by one rule for building and resolving a path (`web/src/core/node/location.ts` `segmentsOf`):
+  disambiguates, by one rule for building and resolving a path (`src/web/src/core/node/location.ts` `segmentsOf`):
   among siblings of one plain segment **and one class** (amended 2026-10-11, below) the first in **creation order** keeps it, the others get `-2`, `-3`, …
   skipping a number whose segment a sibling holds as its own name. Creation order is the server-observed
   `NodeSummary.createdAt` (to the millisecond, `veyq_node.created_at DATETIME(3)`), then the node id for two born

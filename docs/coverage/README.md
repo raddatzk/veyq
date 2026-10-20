@@ -12,7 +12,7 @@ Each file lists acceptance criteria; every criterion's tests are keyed by **area
 ref or is declared under `gaps` with a reason — never left silent. `crypto`, `admin-web` and `stack` are opt-in.
 
 > **A surface that no CI job runs makes no coverage claim** ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
-> The surfaces are **`backend`**, **`web`**, **`crypto`** (`packages/crypto/`), **`admin-web`** and **`stack`**
+> The surfaces are **`backend`**, **`web`**, **`crypto`** (`src/packages/crypto/`), **`admin-web`** and **`stack`**
 > (`tests/e2e/`, lane L1's browser suite against the release candidate, [ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md)),
 > each run by a CI job. `http/` was hand-fired IDE tooling and has been deleted — real
 > requests that proved nothing, because nobody fired them. A surface enters this model when its CI job is
@@ -50,7 +50,7 @@ acceptanceCriteria:
     text: <one sentence>
     coverage:
       <area>:
-        <level>: [<ref>, ...]   # backend ref: "ClassName.testMethod"; web ref: a path under web/
+        <level>: [<ref>, ...]   # backend ref: "ClassName.testMethod"; web ref: a path under src/web/
     gaps:                       # optional: where this criterion's refs on a surface it covers stop short
       - surface: <area>         # must carry a ref on THIS criterion
         reason: <text>          # the part of the sentence those refs do not prove, and why

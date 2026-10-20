@@ -101,7 +101,7 @@ LOCKFILE_INSTALLS = {"ci", "clean-install", "ic", "install-clean", "isntall-clea
 # The resolving half: `install` and its aliases, and `install-test` (`install` then `test`).
 RESOLVING_INSTALLS = {"install", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isnta", "isntal",
                       "isntall", "add", "install-test", "it"}
-# Global options that take their value as the NEXT token (`npm --prefix web ci`); everything else starting with `-`
+# Global options that take their value as the NEXT token (`npm --prefix src/web ci`); everything else starting with `-`
 # is a flag or carries its value after `=`.
 VALUE_OPTIONS = {"--prefix", "-C", "--workspace", "-w", "--userconfig", "--cache", "--registry", "--loglevel"}
 

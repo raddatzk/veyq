@@ -1,0 +1,88 @@
+/* The design system is the pre-E2EE source's stylesheets (src/web/src/styles/, taken from
+   legacy/frontend-noe2ee/src/styles/). Components reuse the original class names + markup, so a ported view
+   should look like the original; only the data layer underneath differs.
+
+   This comment used to say "vendored VERBATIM ... render byte-identically". It is neither, and should not be:
+   base/ui are additive, and the others carry deliberate edits — raw colours lifted to --app-* role tokens, and
+   hardcoded light values (background: rgba(255,255,255,.92)) replaced by theme-aware ones, without which dark.css
+   could not work. Those are the ui-web-styleguide's own rules applied backwards to the inherited code; each edit
+   carries its reason in place. Diff a sheet against legacy/frontend-noe2ee/src/styles/ before assuming a
+   difference is drift. An application's sheets are not imported here: the old memory.css and media.css are
+   Memories' `features/memories/memories.css`, pdf.css is Depot's `features/depot/depot.css`, each imported by its
+   application and so loading before this barrel (inbox #513, #517).
+
+   Below: the few E2EE-specific additions the pre-E2EE source never had (the centered public-shell wrapper +
+   the Secret-Key unlock field). */
+@import './styles/base.css';
+@import './styles/ui.css';
+@import './styles/layout.css';
+@import './styles/forms.css';
+@import './styles/markdown.css';
+@import './styles/settings.css';
+@import './styles/dark.css';
+
+.veyq-banner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-danger-soft);
+  color: var(--app-danger);
+  border: 1px solid var(--app-danger-line);
+}
+
+.field-hint {
+  display: block;
+  color: var(--app-muted);
+  font-size: 0.85em;
+}
+
+/* Secret-Key unlock field: upload / scan / show-hide as in-field trailing icons (E2EE-specific). */
+.secret-field {
+  position: relative;
+  min-width: 0;
+}
+.secret-field .p-inputtext {
+  width: 100%;
+  padding-right: calc(var(--secret-icons, 2) * 2.25rem + 0.25rem);
+}
+.secret-icons {
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+.secret-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--app-muted);
+  cursor: pointer;
+}
+.secret-icon:hover {
+  color: var(--app-text);
+  background: var(--app-hover);
+}
+.secret-icon:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: -2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

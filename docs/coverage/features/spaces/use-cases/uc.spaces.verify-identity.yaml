@@ -82,7 +82,7 @@ acceptanceCriteria:
     # ADR 0028 Decision 7's way back (inbox #192). Bitten: swapping the mark's set for a raise reddened the
     # rolled-back case (the reset's own write was refused); an injected write on the refusal path reddened the
     # no-server-reaches-it negative, whose control serves a readable store to the same paths and sees the writes.
-    # The import restriction (`veyq/trust-reset-one-door`, web/eslint.config.js) is not a coverage surface.
+    # The import restriction (`veyq/trust-reset-one-door`, src/web/eslint.config.js) is not a coverage surface.
     coverage:
       web:
         unit:

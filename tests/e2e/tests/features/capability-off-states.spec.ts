@@ -6,9 +6,9 @@
 //
 // It starts from the instance the round trip left: the tenant's owner is active (memory-roundtrip.spec.ts accepts the
 // invitation), so this file is the `features` project, after `scenarios`. One browser context per device, each
-// confined to the instance (egress.ts). web/ reads the capability manifest once per document (`GET /api/setup` at
+// confined to the instance (egress.ts). src/web/ reads the capability manifest once per document (`GET /api/setup` at
 // boot), so every check after a switch opens a new document — a reload, or a new page, which a device needs anyway to
-// show its sign-in screen (a reload of a signed-in tab restores the tab's session vault). The labels are web/'s and
+// show its sign-in screen (a reload of a signed-in tab restores the tab's session vault). The labels are src/web/'s and
 // admin-web's own (their `src/i18n/index.ts`, en); the entries' words are the catalog's
 // (`contracts/platform/capabilities.json`, which the image serves).
 import { test, expect, type Browser, type BrowserContext, type Page, type Request } from '@playwright/test'

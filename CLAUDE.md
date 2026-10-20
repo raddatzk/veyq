@@ -24,20 +24,22 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 ## Repository shape
 - `contracts/` — OpenAPI + crypto vectors, and the fixed texts the server renders (moderation templates, the
   operator section of the terms): the source of truth code is generated from or pinned to.
-- `backend/` + `web/` — the two user-facing surfaces. A CR's phase order is
+- `src/` — the code surfaces, one directory each ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md)
+  stage 2): the four below. Not to be confused with a surface's own `src/` (`src/web/src`, a Gradle module's `src/main`).
+- `src/backend/` + `src/web/` — the two user-facing surfaces. A CR's phase order is
   **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
   loading; an application may use core, never the reverse, never another application). **The backend is split** —
-  Gradle modules `:core` (`backend/core`, `me.raddatz.veyq.core`) and `:apps:memories` (`backend/apps/memories`,
-  `me.raddatz.veyq.memories`), composed by the root `backend/` into one fast-jar; the direction is the build's and
-  `validate_backend_module_graph.py`'s. **The web is split by import direction only** — `web/src/features/memories` is
+  Gradle modules `:core` (`src/backend/core`, `me.raddatz.veyq.core`) and `:apps:memories` (`src/backend/apps/memories`,
+  `me.raddatz.veyq.memories`), composed by the root `src/backend/` into one fast-jar; the direction is the build's and
+  `validate_backend_module_graph.py`'s. **The web is split by import direction only** — `src/web/src/features/memories` is
   the application (each application's directory is `features/<owner>`, derived by the web guard), reached through a build-time registry. ADR 0079's
   Consequences say what is still open, and [`docs/apps/`](docs/apps/README.md) maps what belongs where.
-- `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
+- `src/admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
   localhost-only by default ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). A pure client
   of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,
   release info and **first-run setup**; what looks admin-ish but is reachable by an ordinary member — accepting
-  a tenant invite, accepting terms, and a tenant owner's own terms/mail settings — deliberately stays in `web/`.
+  a tenant invite, accepting terms, and a tenant owner's own terms/mail settings — deliberately stays in `src/web/`.
 - `infra/` — the two deployment targets, one directory each ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md)):
   `infra/docker/` — the app image's `Dockerfile` (built from the repo root), the dev and the production compose file
   (the production one a release asset, [ADR 0057](docs/decisions/0057-release-identity-and-deployment-recipe.md)) and
@@ -52,12 +54,12 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 - `settings.gradle.kts` + `launcher/` — the **dev launcher**: `./gradlew <surface>:<verb>` (`infra:up`,
   `backend:run`, `web:bootstrap`, `admin:image`, …) triggers the commands the surfaces already have, from a terminal
   or IntelliJ's Gradle tool window; it replaced the `.run/*.xml` configurations. A launcher, never an
-  orchestrator: it includes no surface's build (`backend/` is run through its own wrapper, never `includeBuild` —
+  orchestrator: it includes no surface's build (`src/backend/` is run through its own wrapper, never `includeBuild` —
   its verification metadata would be ignored) and aggregates no check. `infra/README.md` § The launcher holds the
   task list and the per-worktree ports.
-- `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
+- `src/packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
-  shared by `web/` and `admin-web/` (and read by `tests/e2e/`, with the wire assertion's canary collision rule, ADR 0090)
+  shared by `src/web/` and `src/admin-web/` (and read by `tests/e2e/`, with the wire assertion's canary collision rule, ADR 0090)
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
   package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
   else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves
@@ -99,6 +101,6 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   rule. Never to git: a reason only a `git log` holds is one the next reader will not find.
 
 ## Prove your work
-Each surface's own `CLAUDE.md` names its check: [`backend/CLAUDE.md`](backend/CLAUDE.md) (`./gradlew check`),
-[`web/CLAUDE.md`](web/CLAUDE.md) (`npm run check`). The doc trust chain is the `trust-chain` CI job
+Each surface's own `CLAUDE.md` names its check: [`src/backend/CLAUDE.md`](src/backend/CLAUDE.md) (`./gradlew check`),
+[`src/web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`). The doc trust chain is the `trust-chain` CI job
 (`scripts/validate_*.py`); run it before claiming a doc change is sound.

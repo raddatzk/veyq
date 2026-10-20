@@ -198,7 +198,7 @@ because veyq dropped it.
 ## For the moderation CR
 
 The resolver, its setting, the rate limiter on it and forwarding off on both targets are built
-(`backend/core/.../http/ClientAddress.kt`, its accessor `clientAddress()`, `cc.security.rate-limit` § Verified by).
+(`src/backend/core/.../http/ClientAddress.kt`, its accessor `clientAddress()`, `cc.security.rate-limit` § Verified by).
 The guest-write record is the moderation CR's, and it reads the same accessor. Its slice sends
 `198.51.100.66, 203.0.113.77` and asserts that `203.0.113.77` is recorded (the control) and that `198.51.100.66` is in
 no record and no log. A stop entry `203.0.113.77:51234` records port `51234`; `198.51.100.66:4711, 203.0.113.77`

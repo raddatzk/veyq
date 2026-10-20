@@ -5,7 +5,7 @@
 
 ## Context
 
-The release image carries the web client inside the backend. The `Dockerfile` copies `web/dist` into
+The release image carries the web client inside the backend. The `Dockerfile` copies `src/web/dist` into
 `META-INF/resources`, and Quarkus serves those files as plain static resources. Nothing else takes part: no
 route, no filter and no header of veyq's own. Every deployment target inherits that, because compose's Traefik,
 the Helm chart's Gateway and a self-hoster's own proxy all sit in front of the same image. Measured on 2026-09-23
@@ -32,7 +32,7 @@ against a fast-jar built with `dist` in that layout:
 
 ## Decision
 
-**A small backend component, the app shell, serves `web/dist` on every target.** It lives in the backend
+**A small backend component, the app shell, serves `src/web/dist` on every target.** It lives in the backend
 because the backend is the one component every deployment has in common. The rule that store responses are
 inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md) §6).
 
@@ -47,7 +47,7 @@ inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-pres
    own catch-all already sends an unknown path to sign-in. The `#fragment` never reaches the server, so the
    secrets in `/recover#…` and `/tenant/accept#…` stay in the browser, which is what ADR 0015 relies on.
 2. **The CSP is a response header, with no `<meta>` in production.**
-   [`csp.ts`](../../web/src/shared/security/csp.ts) remains the one source of the policy:
+   [`csp.ts`](../../src/web/src/shared/security/csp.ts) remains the one source of the policy:
    - The web build emits the policy as a file inside `dist`.
    - The backend reads that file at startup and appends, per response, the origin a browser fetches store objects
      from to `connect-src`. That origin comes from the signer's own endpoint resolution, so the policy cannot
@@ -90,7 +90,7 @@ inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-pres
 - **`dist` served by anything else has no CSP.** Every deployment target serves it through the backend, and
   that is the point of this decision. `vite preview` and a hand-rolled static server are not deployment
   targets.
-- **The backend gains a build input from `web/`,** namely the emitted policy file. When it is missing, the
+- **The backend gains a build input from `src/web/`,** namely the emitted policy file. When it is missing, the
   backend fails to boot (Decision 3); it never downgrades silently.
 - **HSTS stays moderate.** There is no `includeSubDomains` and no `preload`, for two reasons:
   - tenant domains are arbitrary hosts, and a self-hoster's sibling hosts may still be HTTP-only;

@@ -2,7 +2,7 @@
 """Guard that backend main spells no Master Key wrap method outside the one classification (cr-wrap-methods-survivor-whitelist).
 
 **What it asserts.** No string literal whose whole content is a wrap method name appears in
-`backend/src/main/kotlin` outside `core/identity/WrapMethods.kt`. "String literal" covers both a Kotlin
+`src/backend/src/main/kotlin` outside `core/identity/WrapMethods.kt`. "String literal" covers both a Kotlin
 double-quoted literal and a single-quoted SQL/JPQL literal inside a query string (Kotlin has no multi-character
 char literal, so a single-quoted method name in a `.kt` file can only be query text). The method set is read
 from the `MasterKeyWrap.method.enum` that `contracts/api/account.openapi.yaml` uses (single-sourced in

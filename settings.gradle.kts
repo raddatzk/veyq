@@ -4,9 +4,9 @@
 // itself with its own `npm run check` / `./gradlew check`).
 //
 // A Gradle task name cannot contain `:`, so `web:run` is task `run` of project `:web`. The five projects live under
-// `launcher/`, never in the surfaces' own directories: `backend/` is a Gradle build of its own (it is RUN, never
+// `launcher/`, never in the surfaces' own directories: `src/backend/` is a Gradle build of its own (it is RUN, never
 // included — an included build's verification metadata is ignored in favour of this build's), a Gradle file inside
-// an npm package lands in its Docker build context, and an IntelliJ module rooted at `web/` or `backend/` would
+// an npm package lands in its Docker build context, and an IntelliJ module rooted at `src/web/` or `src/backend/` would
 // compete with the one IntelliJ already has there.
 rootProject.name = "veyq"
 

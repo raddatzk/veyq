@@ -82,7 +82,7 @@ instance and tenant layers.
       linking: it needs no network and no confirmation. Each app enrols its own wrap, and that wrap is governed by
       `remember-device`.
 12. **Where each level switches** (owner, 2026-10-15).
-    - **A tenant owner** switches in the tenant settings in `web/`, beside terms and mail. The tenant owner is an
+    - **A tenant owner** switches in the tenant settings in `src/web/`, beside terms and mail. The tenant owner is an
       ordinary member, and ADR 0065 keeps what a member can reach out of `admin-web`.
     - **An entry a client offers before sign-in is the Server Owner's alone** (`*`, never `+`): `remember-device`,
       `passwordless` and `device-linking`. The sign-in screen offers "stay signed in" and "sign in with code" from the
@@ -96,7 +96,7 @@ instance and tenant layers.
     - **Configuration as code** (switches declared in compose or Helm values) is a later topic (inbox #444).
 13. **The register describes itself.** Every switchable entry carries, in English and German, *what it is for* and
     *what switching it off does*, both to new and to existing data (decision 5). The catalog holds that text and
-    the API serves it. `admin-web`, the CLI and `web/`'s tenant settings render it from there, and none of them
+    the API serves it. `admin-web`, the CLI and `src/web/`'s tenant settings render it from there, and none of them
     keeps its own copy.
 14. **An operating mode is a preset, not a level** (owner, 2026-10-17;
     [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 14). The Server
@@ -149,7 +149,7 @@ core/
 `places` and `map` are independent of each other. A place comes from the media's GPS or from a pin dropped by hand,
 and its name is geocoded or typed. The geocoder suggests names, and the tiles carry the pin and the map view. With
 both off a place still works, named by hand. The user's own consent to the two
-(`web/src/features/memories/useMemoryLocation.ts`) is a third, separate thing and stays.
+(`src/web/src/features/memories/useMemoryLocation.ts`) is a third, separate thing and stays.
 
 ### Requirements
 
@@ -181,7 +181,7 @@ both off a place still works, named by hand. The user's own consent to the two
   with `.contribute` and `.drop-box`, `core.group-space`, `core.remember-device` with `.passwordless`, and
   `core.device-linking`. The server computes the AND along the path (`CapabilityRegistry`); each client reads one leaf.
 - **The instance-wide switch is built** (decision 12, measured: `InstanceResource.listInstanceCapabilities` /
-  `setInstanceCapability`, `StoredCapabilitySwitches`, `admin-web/src/cli/commands.ts`). The Server Owner switches an
+  `setInstanceCapability`, `StoredCapabilitySwitches`, `src/admin-web/src/cli/commands.ts`). The Server Owner switches an
   entry in admin-web's Server → Capabilities panel or with `veyq-admin capabilities list | off <id> | on <id>`,
   through the Admin API (`GET /api/instance/capabilities`, `PUT /api/instance/capabilities/{capabilityId}`). The state
   is one row per switched-off entry in `veyq_capability_switch`, read through an in-process cache that the write
@@ -202,7 +202,7 @@ both off a place still works, named by hand. The user's own consent to the two
   written onto the link, so switching back on serves it again. Presigned URLs already handed out run to their TTL, as
   after a revoke. Changing a READ link into a READ_WRITE one (`updateShare`) is refused like creating one.
 - **The tenant level is built** (decisions 2, 3 and 12, measured: `TenantCapabilitySwitchHandler`,
-  `StoredTenantCapabilitySwitches`, `web/src/features/tenant/TenantCapabilitiesPanel.vue`). The catalog's `levels` names
+  `StoredTenantCapabilitySwitches`, `src/web/src/features/tenant/TenantCapabilitiesPanel.vue`). The catalog's `levels` names
   who may switch an entry (`instance`, and `tenant` for `core.public-shares` with its two children and
   `core.group-space`), generated into `CapabilityIds.TENANT_SWITCHABLE`. A tenant owner switches in the web client's
   tenant settings (`GET /api/tenants/{tenantId}/capability-switches`, `PUT …/{capabilityId}`), one row per entry in
@@ -226,7 +226,7 @@ both off a place still works, named by hand. The user's own consent to the two
   a link has a password verifier, its dates, a session family's start. Not built: the verified-identities requirement
   and `offline-cache` (above).
 - **A member's share list says why a link serves no guest** (decisions 5 and 8, inbox #457, measured:
-  `ShareGuestGate.guestStops`, `ShareSummary.guestStops`, `web/src/core/sharing/ShareGuestStops.vue`). The guest gate's
+  `ShareGuestGate.guestStops`, `ShareSummary.guestStops`, `src/web/src/core/sharing/ShareGuestStops.vue`). The guest gate's
   one predicate now returns its reasons, and `activeShare` is that list being empty: revoked, expired, a space paused or
   being deleted, each switch along the role's path at each level (`CapabilityRegistry.offSwitches`, whose emptiness is
   `isActive`), each requirement missed (`LinkRequirements.missed`, whose first is the refusal a write meets). The share

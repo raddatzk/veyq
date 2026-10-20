@@ -4,10 +4,10 @@
 // from the accessibility attributes the grid carries (`role="grid"`, the whole list's row count, each row's index);
 // the reading itself by VoiceOver or NVDA is a hand pass and not part of this suite.
 //
-// The photos are the 1×1 fixture web/'s own tests read (`exif-sample.jpg`), uploaded under 120 names, so the tiles lay
+// The photos are the 1×1 fixture src/web/'s own tests read (`exif-sample.jpg`), uploaded under 120 names, so the tiles lay
 // out square and the viewport is made small enough that 120 of them are several screens. It starts from the tenant whose
 // owner the round trip activated (the `features` project). Every value typed is a canary (recordTyped). Labels are
-// web/'s own (web/src/i18n/index.ts, en).
+// src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -17,7 +17,7 @@ import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/dev
 
 test.describe.configure({ mode: 'serial' })
 
-const PHOTO = readFileSync(fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
+const PHOTO = readFileSync(fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
 const COUNT = 120
 
 const stamp = randomBytes(3).toString('hex')

@@ -2,7 +2,7 @@
 """Guard what the module boundary cannot: inside core, the kernel names no feature slice; and no platform file
 names a node kind an application owns (developer-styleguide § 1, ADR 0007's shape, ADR 0079).
 
-**What it asserts.** Over every hand-written main Kotlin file (every `src/main/kotlin` under `backend/`, found by
+**What it asserts.** Over every hand-written main Kotlin file (every `src/main/kotlin` under `src/backend/`, found by
 `backend_tree`), read through the Kotlin lexer so comments and string contents do not count:
 
 - **Kernel rule.** `KERNEL` below is the declared list of the platform's kernel packages — what every feature slice

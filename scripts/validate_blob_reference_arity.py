@@ -43,7 +43,7 @@ precondition any such sweep needs — this guard — and it protects a **live** 
 
   (a) It counts **declaration sites**. A reference column not named `*blob_id` escapes the entity and schema
       keys entirely, as does a `@Column(` whose name literal sits on a later line — no such site exists today
-      (`grep -rn --include='*.kt' '@Column($' backend/src/main/kotlin` → 0), which is what makes the
+      (`grep -rn --include='*.kt' '@Column($' src/backend/src/main/kotlin` → 0), which is what makes the
       one-line-per-annotation assumption safe rather than lucky.
   (b) The live-twin key reads **text in one named function**. It therefore sees neither a *second* consumer
       written later — a new reclaim predicate elsewhere gets no protection from this guard at all — nor an arm

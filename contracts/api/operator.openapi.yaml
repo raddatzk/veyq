@@ -28,7 +28,7 @@ paths:
       summary: Read who runs this instance — the contact, the provider identification and the supervisory authority.
       description: >
         The values the Server Owner published, each null where none is set — in either operating mode a value that is
-        set is shown, one left empty is simply absent (ADR 0035 decision 6). web/ shows the identification on the
+        set is shown, one left empty is simply absent (ADR 0035 decision 6). src/web/ shows the identification on the
         login and the share pages (ADR 0035 decision 7). Host-independent: the values are the instance's, not a
         tenant's. Unauthenticated; rate-limited per client address.
       security: []
@@ -64,7 +64,7 @@ paths:
         decision 6) as every space's terms carry it, rendered in the operating mode's variant with the values the
         Server Owner set, and with the pointer to the guest-write record's information (`getPrivacyNotice`) while that
         record is on for the instance. DSA Art. 14(1) asks for the terms to be publicly available and easily
-        accessible, so this read needs no account: web/ shows it at a page of its own, linked from the login page, the
+        accessible, so this read needs no account: src/web/ shows it at a page of its own, linked from the login page, the
         share page and the signed-in shell. The same
         section rides each space's terms (`getTenantTerms`, `getShareTerms`) after the space's own text; only there is
         it accepted. Host-independent: instance-wide like `getOperatorDetails`. Unauthenticated; rate-limited per
@@ -102,7 +102,7 @@ paths:
         processing the instance runs: a passage bound to a capability switch is present exactly while that switch is
         active for the space this host serves (the bootstrap domain and an unknown host read the instance level), and
         a service's passage names the address the instance actually calls. Art. 13 applies at collection, so the read
-        needs no account: web/ shows it at `/privacy` on every tenant host, linked from the login page, the share
+        needs no account: src/web/ shows it at `/privacy` on every tenant host, linked from the login page, the share
         page, the signed-in shell, the invite acceptance, the report dialog and a guest's first-write notice, each at
         the passage that concerns it. Information, not consent: nothing accepts it and reading it records nothing.
         Unauthenticated; rate-limited per client address. Every text is a draft until a qualified legal review and

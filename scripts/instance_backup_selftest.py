@@ -290,20 +290,32 @@ def version_cases() -> None:
           "ROLLBACK" in notice and "release 0.3" in notice and "A7" in notice, notice)
 
 
+def checkout_backend() -> pathlib.Path | None:
+    """The backend of the repository checkout this file sits in (`scripts/repo_layout.py`'s), or None outside one.
+
+    The veyq-tools image ships the tool and this self-test, not the backend: there no migration is beside it, and the
+    repository's run (ci.yml's web-e2e job) is the one that reads them. Only there - no `.git` beside `scripts/` - is
+    a case that reads the backend skipped. Inside a checkout the backend is `repo_layout`'s, and one that is not where
+    that says fails the case instead of skipping it: a skip keyed on the directory itself went quiet when the backend
+    moved (cr-repo-layout-src)."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    if not (root / ".git").exists():
+        return None
+    import repo_layout
+    return repo_layout.BACKEND
+
+
 def not_data_cases() -> None:
     """The restore's emptiness gate (A5) must not read a table a fresh install holds rows in as data — and must not
     name a table that no longer exists, which would be a gate with a hole nobody sees. Both halves are read from the
     migrations, not recalled (ADR 0089: the object-store setting is one row once a Server Owner has chosen a store)."""
-    root = pathlib.Path(__file__).resolve().parent.parent
     created, seeded = set(), set()
-    migrations = list(root.glob("backend/**/src/main/resources/db/migration/*.sql"))
-    if not (root / "backend").is_dir():
-        # The veyq-tools image ships the tool and this self-test, not the backend: there no migration is beside it,
-        # and the repository's run (ci.yml's web-e2e job) is the one that reads them. A checkout always has backend/,
-        # so a migration set that vanished from one is a failure below, never this skip.
-        print(f"skip not-data: no {root / 'backend'} — this copy of the tool ships without the backend")
+    backend = checkout_backend()
+    if backend is None:
+        print("skip not-data: not in a repository checkout — this copy of the tool ships without the backend")
         return
-    check("the migrations are found", bool(migrations), str(root / "backend"))
+    migrations = list(backend.glob("**/src/main/resources/db/migration/*.sql"))
+    check("the migrations are found", bool(migrations), str(backend))
     for sql in migrations:
         text = sql.read_text()
         created.update(re.findall(r"CREATE TABLE (\w+)", text))
@@ -351,12 +363,14 @@ def schema_only_cases(tmp: pathlib.Path) -> None:
         check(f"the dump leaves the rows of {table} out and keeps its schema",
               argv.count(f"--ignore-table-data=veyq.{table}") == 1 and not any(a.startswith("--ignore-table=") for a in argv),
               str(argv))
-    root = pathlib.Path(__file__).resolve().parent.parent
-    if not (root / "backend").is_dir():
-        print(f"skip schema-only: no {root / 'backend'} — this copy of the tool ships without the backend")
+    backend = checkout_backend()
+    if backend is None:
+        print("skip schema-only: not in a repository checkout — this copy of the tool ships without the backend")
         return
     created = set()
-    for sql in root.glob("backend/**/src/main/resources/db/migration/*.sql"):
+    migrations = list(backend.glob("**/src/main/resources/db/migration/*.sql"))
+    check("schema-only: the migrations are found", bool(migrations), str(backend))
+    for sql in migrations:
         created.update(re.findall(r"CREATE TABLE (\w+)", sql.read_text()))
     check("every schema-only table is one a migration creates",
           all(t in created for t in ib.DUMP_SCHEMA_ONLY), str(sorted(set(ib.DUMP_SCHEMA_ONLY) - created)))
@@ -385,7 +399,7 @@ def blob_index_cases() -> None:
           {"bb/0", "bb/1"} <= set(ib.expected_keys(index)), str(ib.expected_keys(index)))
 
 
-# The vector `backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
+# The vector `src/backend/core/.../BundledStoreCredentialsTest` pins from the other side: both halves must move together.
 VECTOR_TOKEN = "veyq-dev-admin-token"
 VECTOR_ACCESS_KEY = "GKd14f469abb39c11f4f86a0e3"
 VECTOR_SECRET_KEY = "db5a958fff2b57263c0cb0f6963fb047ee2d21fc487250082d035ff35cb79b66"
@@ -1182,12 +1196,12 @@ def full_pool() -> dict:
 @guarded
 def p7_restore_from_a_pool(tmp: pathlib.Path) -> None:
     """B2 — objects are copied only into an empty store; the store check's probe is not data."""
-    root = pathlib.Path(__file__).resolve().parent.parent
-    check_kt = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/blobstore/StoreCheck.kt"
-    # The tools image ships no backend (as for not_data_cases): there only the tool's constant is checked.
+    backend = checkout_backend()
+    check_kt = backend / "core/src/main/kotlin/me/raddatz/veyq/core/blobstore/StoreCheck.kt" if backend else None
+    # Outside a checkout (the tools image ships no backend, as for not_data_cases) only the tool's constant is checked.
     check("P7 the probe the empty-store gate spares is the store check's own key",
-          ib.PROBE_KEY == PROBE and (not (root / "backend").is_dir() or f'"{PROBE}"' in check_kt.read_text()),
-          ib.PROBE_KEY)
+          ib.PROBE_KEY == PROBE and (check_kt is None or (check_kt.is_file() and f'"{PROBE}"' in check_kt.read_text())),
+          f"{ib.PROBE_KEY} ({check_kt})")
     outcome, _, calls, _, _ = pool_restore(tmp, "p7-held", {"someone/0": obj(b"x")}, full_pool())
     check("P7 restore --objects-from onto a store holding one object is refused before load, naming the count",
           outcome.startswith("refused:") and "already holds 1 object" in outcome and "load" not in calls
@@ -1514,11 +1528,10 @@ def layout_cases() -> None:
     """The tool's repository defaults are `repo_layout.py`'s (ADR 0106). The tool ships alone and cannot import that
     module, so it spells the two paths; here, in the repository, they are held to it. In the tools image, where the
     module is not beside this file, there is no repository to default into and the case is skipped, said so."""
-    try:
-        import repo_layout
-    except ImportError:
+    if checkout_backend() is None:
         print("skip the tool's repository defaults against scripts/repo_layout.py — not in a repository checkout")
         return
+    import repo_layout
     check("the default compose file is repo_layout's dev Compose file",
           ib.DEFAULT_COMPOSE == repo_layout.DEV_COMPOSE, f"{ib.DEFAULT_COMPOSE} != {repo_layout.DEV_COMPOSE}")
     check("the default backup root is repo_layout's",

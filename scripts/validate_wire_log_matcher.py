@@ -56,7 +56,7 @@ otherwise rest on whichever suites happen to exercise them, and the cookie trap 
 nothing at all.
 
 **Its limit.** For tokens it proves the derivation over a synthetic recording against the real contracts — not that
-a real recording carries what the recorder should write (`web/src/test/wireRecorder.test.ts` pins that), not that the
+a real recording carries what the recorder should write (`src/web/src/test/wireRecorder.test.ts` pins that), not that the
 server stores a hash where the hash control looks, and not the mailbox or store-log exemptions, which need a live
 Mailpit and store. It proves the matcher and the controls over synthetic text. It does not prove that a real run reads
 the right logs, that the JVM writes them as UTF-8 (`boot()` pins that; the e2e run is its only proof), that the

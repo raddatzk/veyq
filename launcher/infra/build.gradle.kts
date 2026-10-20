@@ -34,7 +34,7 @@ tasks.register<Exec>("down") {
 tasks.register<Exec>("wipe") {
     group = "veyq"
     description = "DESTRUCTIVE: stops the dev infra AND deletes its volumes — the dev database and every stored blob. " +
-        "Afterwards .run/.env's key material is stale: backend:run, then backend:seed (web/CLAUDE.md, cold start)."
+        "Afterwards .run/.env's key material is stale: backend:run, then backend:seed (src/web/CLAUDE.md, cold start)."
     workingDir = mainCheckout
     commandLine("sh", "-c", "$compose down -v")
 }

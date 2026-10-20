@@ -65,7 +65,7 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
      `fingerprint` vector — no pairwise number, no new crypto) and a QR of it on their own profile page; on another
      member's profile they see that member's number, can **scan** the other's QR or compare the digits read aloud,
      and **mark verified**. The QR carries a veyq marker plus the fingerprint hash, never the identity bundle (the
-     `jsqr` exception in `web/CLAUDE.md` is bounded by what our own payloads carry).
+     `jsqr` exception in `src/web/CLAUDE.md` is bounded by what our own payloads carry).
    - **Verifying pins.** A member with no pin yet is pinned **at** verification, with the key the human compare
      just confirmed; nothing else pins more than Decision 1 does (no pin on a directory read or a profile view).
    - **A verified contact's key change is louder.** The changed-key review names it as a **verified** contact's
@@ -204,7 +204,7 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 Decisions 1–3 are built: the sealed pin store and its sync
 ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)), the TOFU gate at
 all three foreign-wrap surfaces, the grant-delivery **decline** seam, the changed-key review, and the compare on a
-member's profile (`web/src/core/people/`) with the member lists' "verified" mark. Decision 5 is
+member's profile (`src/web/src/core/people/`) with the member lists' "verified" mark. Decision 5 is
 settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is built: every grant producer signs,
 each grant row stores the signature beside a copy of the granter's identity public bundle **as it was when the
 server wrote the grant**, the reads serve that copy, and the one unwrap path and the switcher's icon read verify
@@ -224,7 +224,7 @@ scope to perform the very rotation that replaces it. Two limits stay:
   time, which did not sign it. It stays refused until a rotation or a delivery replaces it. No history of retired
   keys exists to do better.
 
-Decision 7 is built for the pin store and the device register (`web/src/features/account/trustMarks.ts`): each
+Decision 7 is built for the pin store and the device register (`src/web/src/features/account/trustMarks.ts`): each
 refusal is named (`trust_state_rolled_back`, `trust_state_unreadable`), the grant-delivery worker pauses on one
 rather than declining, and the nearest existing notice names it and links to the settings hub's one reset.
 Accepting a changed key clears the accepting account's own grant-delivery declines against that contact, so

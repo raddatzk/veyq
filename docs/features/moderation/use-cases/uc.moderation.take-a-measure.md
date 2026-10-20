@@ -1,7 +1,7 @@
 # UC: Take a measure
 
 - **ID:** uc.moderation.take-a-measure
-- **Primary actor:** A **moderator** in web/'s moderation surface; for the steps beyond what was reported, the **Server
+- **Primary actor:** A **moderator** in src/web/'s moderation surface; for the steps beyond what was reported, the **Server
   Owner** in admin-web or `veyq-admin`
 - **Secondary actor:** the share's creator, the uploader, every member and guest who reaches the item (they see the
   effect)

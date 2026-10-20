@@ -13,7 +13,7 @@
 // (inbox #464, option (a)): tests/e2e/stack/docker-compose.e2e.yml's `release-mirror` and `app`, the files written by the
 // publish's own producer (scripts/run_stack_e2e.py, stage `release mirror`), named for the suite in `stack.json`.
 //
-// The labels and the mail's words are admin-web's own (admin-web/src/i18n/index.ts, en) and the backend's
+// The labels and the mail's words are admin-web's own (src/admin-web/src/i18n/index.ts, en) and the backend's
 // (InstanceMailCopy). It starts from the instance the setup project left (the Server Owner exists); the first test
 // restores what it switches, and the last leaves the check switched off, as an offline run's must be (ADR 0097).
 import { test, expect, type Page } from '@playwright/test'

@@ -13,7 +13,7 @@
 //
 // It runs after moderation.spec.ts (the deputy, `deputy.json`) and instance-mail.spec.ts (the instance mail). The facts,
 // the objection and every name are canaries (`recordTyped`): lane L1's sweep proves they reached the server sealed. The
-// labels are web/'s own (web/src/i18n/index.ts, en).
+// labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -25,7 +25,7 @@ import { stack } from '../../src/stack'
 
 test.describe.configure({ mode: 'serial' })
 
-const PHOTO = fileURLToPath(new URL('../../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
+const PHOTO = fileURLToPath(new URL('../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url))
 
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Begründete Erinnerung ${stamp}`

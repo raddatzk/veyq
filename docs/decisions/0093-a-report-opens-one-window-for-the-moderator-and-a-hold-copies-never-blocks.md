@@ -98,7 +98,7 @@ Five facts shape the design:
   folder (`veyq_node.share_identity_id`) and a share's creator (`veyq_share.owner_account`). It records nobody for
   a node's name or meta, a share's note or name, a bucket's name, or a space's name and icon (M, both baselines).
 - **A seal opens with its object's key, and that key opens more.** Before § 9 a field was sealed with AES-GCM
-  directly under its object's key ([`seal.ts`](../../packages/crypto/src/seal.ts), M): a node's name with its
+  directly under its object's key ([`seal.ts`](../../src/packages/crypto/src/seal.ts), M): a node's name with its
   parent's key, a node's meta and a bucket's name with `K_node`, a share's note and names with `K_share`. Only a
   group's name and a space's icon used keys derived for that field alone (`group-name-key`, `K_icon`), and those per
   epoch. A media is not a node: its `K_blob`s are
@@ -173,12 +173,12 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
 
 ### 3. Review is a share view in moderation mode; deciding is the moderation surface's
 
-- **web/'s moderation surface**, a route on every tenant host reachable only with the `MODERATOR` role and the key
+- **src/web/'s moderation surface**, a route on every tenant host reachable only with the `MODERATOR` role and the key
   proof ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6), shows the
   instance-wide queue (clear fields only) and opens `https://<tenant domain>/s/<case id>#moderation` on the reported
   tenant's host (as built: the fragment names the mode and carries no key; the case's reports and report shares come
   sealed through the key-proved review reads, uc.moderation.review-a-case).
-- **web/'s share viewer in moderation mode** signs the moderator in and unlocks their vault **only to open their
+- **src/web/'s share viewer in moderation mode** signs the moderator in and unlocks their vault **only to open their
   moderation grants** — no member shell, no scope grant fetched — keeps the moderation key and drops the Master Key
   and the identity private key before any reported content opens. It then opens the report, proves the moderation
   key to fetch the report share, and shows it **with the guest viewer** plus the report's details, read-only. It
@@ -542,7 +542,7 @@ responsibility, and switching back to the second mode turns it on again.
 - The operator can act on one share, one item or one uploader instead of a whole tenant, and reads only what was
   reported. Unreported content stays unreadable; the T&S target in the security model becomes buildable as written.
 - Costs: a new share kind (medium-scoped and field-scoped), hold tables and the sweep's skip, a moderation mode in
-  the share viewer, web/'s moderation surface with the queue, admin-web's and the CLI's Server-Owner steps, the
+  the share viewer, src/web/'s moderation surface with the queue, admin-web's and the CLI's Server-Owner steps, the
   moderator role and key ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)),
   an editor column per field group (built), per-field keys in the crypto suite with new vectors (built), the
   guest-write record, the moderation log. `EveryStoredTimeHasAReaderTest` needs a reader for each new time: the purge
@@ -595,11 +595,11 @@ responsibility, and switching back to the second mode turns it on again.
 - **Moderating by mail**, information in the mail and the decision as a reply. Puts keys at a mail provider, makes a
   spoofable mailbox a Server-Owner channel past the admin channel, needs inbound mail, and mail scanners pre-open
   links. Mail notifies only.
-- **Server-Owner operations in web/.** They would put them back on the public listener, in the surface that renders
+- **Server-Owner operations in src/web/.** They would put them back on the public listener, in the surface that renders
   untrusted content. A moderator's operations are there, because the moderator role carries none of them and its
   gate is the role plus the key proof
   ([ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 6). **A vault in
-  admin-web**, to avoid web/: contradicts admin-web's "no vault, no content key, ever".
+  admin-web**, to avoid src/web/: contradicts admin-web's "no vault, no content key, ever".
 - **A review mode that presents a password token** to the original share. Superseded by the report share, which has
   no password and does not depend on the original.
 - **Handing over `K_share` or a parent key for a text field.** Opens the whole subtree or the siblings.

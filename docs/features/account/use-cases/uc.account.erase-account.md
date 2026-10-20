@@ -1,7 +1,7 @@
 # UC: Erase an account
 
 - **ID:** uc.account.erase-account
-- **Primary actor:** A **member**, erasing their own account in web/; or the **Server Owner**, erasing one on a request
+- **Primary actor:** A **member**, erasing their own account in src/web/; or the **Server Owner**, erasing one on a request
   that reached them another way, in admin-web or `veyq-admin`
 - **Secondary actor:** the other members of the person's scopes and tenants (they keep what is the scope's)
 - **Goal:** Have an account and everything kept about it erased, apart from what the law keeps

@@ -39,7 +39,7 @@ naming `glob@10.5.0`. The lockfile half was bought by #306: the gating jobs run 
 bindings had never been looked at.
 
 **Its limits — what a green run does NOT prove.** Only what the registry marks `deprecated`: a package that is
-archived, abandoned or unmaintained without that mark passes (the root CLAUDE.md rule is wider; `web/CLAUDE.md`
+archived, abandoned or unmaintained without that mark passes (the root CLAUDE.md rule is wider; `src/web/CLAUDE.md`
 § jsqr is the standing example — neither archived nor deprecated, and stale). Only the npm tree: Gradle has no
 such mark. Not inside the images: the Dockerfiles' own `npm ci` does not call it, and is covered because it
 installs the lockfile this run scanned, in a build job that `needs:` this one (`validate_npm_installs_gated.py`

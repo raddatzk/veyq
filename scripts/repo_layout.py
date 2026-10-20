@@ -1,9 +1,11 @@
-"""Where the deployment files and the test harnesses live — the one place a script learns it (ADR 0106).
+"""Where the code surfaces, the deployment files and the test harnesses live — the one place a script learns it
+(ADR 0106).
 
-Every script that reads the app image's Dockerfile, a Compose file, the `.env` template, the Helm chart, the tools
-image's Dockerfile, the browser suite, lane L1's overlay or the API fuzzer asks this module instead of spelling the
-path itself. A path split over `/` (`ROOT / "infra" / "fuzz"`) is exactly what a grep for the joined path misses,
-which is why none is spelled outside this file (cr-repo-layout-infra-and-tests).
+Every script that reads a code surface (the backend, the web client, the admin surface, the crypto package), the app
+image's Dockerfile, a Compose file, the `.env` template, the Helm chart, the tools image's Dockerfile, the browser
+suite, lane L1's overlay or the API fuzzer asks this module instead of spelling the path itself. A path split over
+`/` (`ROOT / "infra" / "fuzz"`) is exactly what a grep for the joined path misses, which is why none is spelled
+outside this file (cr-repo-layout-infra-and-tests).
 
 Two kinds of reader keep their own literal on purpose, each saying so where it does:
 - `instance_backup.py` (and its selftest) ship alone — into the tools image's `/opt/veyq/` and as a release asset —
@@ -18,6 +20,19 @@ from __future__ import annotations
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# The code surfaces (ADR 0106 decision 5), under `src/` since stage 2. Not to be confused with a surface's own `src/`
+# (`src/web/src`, a Gradle module's `src/main`), which is the surface's business.
+SRC = ROOT / "src"
+BACKEND = SRC / "backend"
+WEB = SRC / "web"
+ADMIN_WEB = SRC / "admin-web"
+CRYPTO = SRC / "packages/crypto"
+# Every surface, for the guards that iterate them.
+SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
+# Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor
+# that may be of either layout (ADR 0106 decision 7). Never read for this checkout - only for another tree.
+LEGACY_SURFACES = {BACKEND: "backend", WEB: "web", ADMIN_WEB: "admin-web", CRYPTO: "packages/crypto"}
 
 INFRA_DIR = ROOT / "infra"
 # What Docker builds and Compose runs. The dev file declares its project name (`infra`), so the directory's name is
@@ -56,3 +71,16 @@ def rel(path: pathlib.Path) -> str:
 
 
 CHART_PATH = rel(CHART_DIR)
+
+
+def surface_paths(surface: pathlib.Path) -> tuple[str, str]:
+    """(`surface` in this layout, in the layout before stage 2) - repository-relative, the forms `git ls-tree` takes."""
+    return rel(surface), LEGACY_SURFACES[surface]
+
+
+def surface_in(tree: pathlib.Path, surface: pathlib.Path) -> pathlib.Path:
+    """`surface` in another checkout `tree` - a predecessor's worktree - in this layout where that tree has it, else
+    where a tree from before stage 2 carries it (ADR 0106 decision 7). A tree with neither gets the legacy path, which
+    then fails loudly where it is read (no jar, no `package.json`)."""
+    current, legacy = surface_paths(surface)
+    return tree / current if (tree / current).is_dir() else tree / legacy

@@ -7,7 +7,7 @@
 ## Context
 
 Every AEAD seal in veyq authenticates a **purpose** and nothing else. `symWrap`/`asymWrap` take a free context
-string and put `type ‖ "v1" ‖ context` into the AAD (`packages/crypto/src/v1.ts`, `wrapAad`); every call site
+string and put `type ‖ "v1" ‖ context` into the AAD (`src/packages/crypto/src/v1.ts`, `wrapAad`); every call site
 passes a static literal such as `'node-name'`, `'content-key'`, `'blob-key'` or `'scope-grant'`. So two
 ciphertexts sealed for the same purpose under the same key are interchangeable, and the operator-blind server
 decides which one a client receives for which object. Measured 2026-09-23 against the whole `web/src` tree,
@@ -84,7 +84,7 @@ compares against nothing trustworthy unless the label is authenticated.
 purpose) whose context is a **typed union**: each purpose is a variant
 carrying exactly its binding fields, encoded canonically (length-prefixed, fixed field order). The helper draws
 its own nonce. The raw `symWrap`/`asymWrap`/`aeadSeal` leave the package's public exports, so an unbound seal
-cannot be written from `web/` or `admin-web/` at all — the structure is the guard. `contracts/crypto/vectors/v1.json`
+cannot be written from `src/web/` or `src/admin-web/` at all — the structure is the guard. `contracts/crypto/vectors/v1.json`
 carries one vector per purpose, and a conformance test compares the union's purposes with the vector set **in
 both directions**. That settles inbox #32's question of what earns a vector: a live seal purpose earns one, and
 a vector with no live purpose is deleted. `journalSeal` (empty AAD, no caller) is deleted with it.

@@ -81,7 +81,7 @@ the blob row. It is the platform's, carried by every application's blobs alike (
 Memories' original file name and the media type its gallery badges a video by), so it is no exception to the rule below that an application needs no purpose of its
 own. For a **new** application, its keys are derived from the scope
 key by HKDF with the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations
-use in `packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated
+use in `src/packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated
 data binds the application id or kind, the object id and the revision, by the ADR 0072 mechanism. **Measured with
 Depot (cr-files-application P3-S1/P5), a new kind meets both rules with no new seal purpose and no HKDF context:**
 its node key is random and wrapped under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
@@ -196,9 +196,9 @@ on their own.
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
   object, not its neighbours). Each such application states that gap; it is not a platform property.
 - **The backend is split as decided; core still knows Memories in named places.** Core and each application are
-  Gradle modules below `backend/`: `:core` (`backend/core`) and `:apps:<name>` (`:apps:memories` in
-  `backend/apps/memories`); the test helpers they share are `:core`'s `java-test-fixtures` source set, on no
-  runtime classpath. The root `backend/`
+  Gradle modules below `src/backend/`: `:core` (`src/backend/core`) and `:apps:<name>` (`:apps:memories` in
+  `src/backend/apps/memories`); the test helpers they share are `:core`'s `java-test-fixtures` source set, on no
+  runtime classpath. The root `src/backend/`
   holds no main code; it composes the modules into the one fast-jar, where each module's jar is
   `lib/main/me.raddatz.veyq.<module>.jar`. The direction is the build's: `:core` has no edge to an application (Gradle
   refuses it as a cycle, so a core file importing Memories does not compile), and `validate_backend_module_graph.py`
@@ -214,7 +214,7 @@ on their own.
   no such module, or nested deeper, fails the build while it configures. The package root `me.raddatz.veyq` — also the Gradle `group`, so
   the module jars' prefix — is the owner's domain `raddatz.me` reversed; it was `com.veyq` until
   2026-10-05, and the rename moved no class between packages. Each module owns its migrations under one global version scheme
-  (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)
+  (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [src/backend/CLAUDE.md](../../src/backend/CLAUDE.md)
   § Migrations): a core migration names no application table, an application's references only core's and its own.
   Core reaches application code through fourteen interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `ShareRoots` (which roles a node of the kind may
@@ -257,7 +257,7 @@ on their own.
   core's `veyq_node_items_revision` (a foreign key onto `veyq_node`, not cascading, erased by core's node-subtree
   eraser at phase 300 and the scope's node eraser; the node's first item change births it under the node row's lock),
   written through core's `NodeItemsRevisions.bump`, read through its `read` (the `304` / delta / delete-gated id set),
-  with the shared wire pieces in `_common.openapi.yaml` and the client half in `web/src/core/items/` - the platform's way
+  with the shared wire pieces in `_common.openapi.yaml` and the client half in `src/web/src/core/items/` - the platform's way
   for **any** application to publish a list of records inside a node, Memories' media its first user (Expenses' entries
   and Inventory's items the next); and the never-read `cover_byte_size` is gone (a blob's size is its row's). Core's upload-session keys are
   `veyq.blob.upload.*`; Memories' trash keys keep `veyq.media.trash.*` under its own `@ConfigMapping`
@@ -288,12 +288,12 @@ on their own.
   the photo source Memories once added is gone; a stored photo reference reads as no cover. **Residual, accepted** (inbox #505):
   a shared cover row names the medium's PREVIEW blob, so the operator can tell which medium is the cover. A guest sees the
   cover through the share's gated blob route and gets no action in this step.
-  **The web side is separated by import direction, not by kind:** `web/src/features/memories` is the
-  application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
-  build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
+  **The web side is separated by import direction, not by kind:** `src/web/src/features/memories` is the
+  application, and no core file imports it except the composition root `src/web/src/applications.ts`; the shell asks a
+  build-time registry (`src/web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
   application fills, which body renders a public share, and what runs when a scope is entered or reset and when the
   Master Key rotates (that hook is required: a rotation refuses to start without it). An application's directory is
-  named for its owner, `web/src/features/<owner>` (Memories' moved from `features/memory`, inbox #324), and the web
+  named for its owner, `src/web/src/features/<owner>` (Memories' moved from `features/memory`, inbox #324), and the web
   guard derives it from the owner name instead of listing it, so a directory named otherwise is a missing one and red.
   The folder level view is core's (`core/node/LevelView.vue`) and each
   application contributes ROW DATA per kind through the registry (inbox #407: the sections are retired, core draws ONE
@@ -306,7 +306,7 @@ on their own.
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
   core's own, listing every application's uploads, so no application adds it). **Strings and styles follow the
   directories (inbox #513, #517):** each application's i18n namespaces (`memory`/`media`, `depot`) are its own catalog,
-  `features/<owner>/i18n.ts`, which the composition root's catalog half (`web/src/applicationMessages.ts`, data only, so
+  `features/<owner>/i18n.ts`, which the composition root's catalog half (`src/web/src/applicationMessages.ts`, data only, so
   every test file gets it) adds at build time to core's one vue-i18n instance — write-once, a namespace already held
   throws; core's catalog (`i18n/index.ts`) holds core's alone. Each application's global classes are its own
   stylesheet, imported by the application with their dark twins: Memories' `features/memories/memories.css` (the old
@@ -345,7 +345,7 @@ on their own.
 
   Rejected: a rights object that defaults to allowed, with the operations as optional props that fall back to the
   member's calls — the legacy plaintext client's design; a forgotten prop there calls the member API from a share page.
-  **Built** (inbox #401, five steps, 2026-10-09 to 2026-10-11). Core: `web/src/core/access.ts` (`Access`, `TreeSource`,
+  **Built** (inbox #401, five steps, 2026-10-09 to 2026-10-11). Core: `src/web/src/core/access.ts` (`Access`, `TreeSource`,
   the member's factories, `targetOf`, `folderRights`) and the guest's half, `core/sharing/guestAccess.ts`
   (`guestAccess`, `guestTreeSource` over the opened subtree — a served `ShareNode` as a `TreeNode`, `createdAt` 0 so equal
   names number by node id, `metaRevision` 0, `wrappedMeta` as served, every `linkTo` keeping `#k=`). The shell

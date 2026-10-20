@@ -13,7 +13,7 @@
   ([cc.security.wire-assertion](../crosscutting/cc.security.wire-assertion.md)); § 5 whole — the size bound on every
   Compose service and `garage=warn` on both targets (`validate_compose_posture.py` assertion 6,
   `chart_meta_check.py` (xxvii)), Traefik at `ERROR` with no access log, the admin console's access log without the
-  reader (`admin-web/src/shared/security/accessLog.test.ts`), the rate limiters' pass by time
+  reader (`src/admin-web/src/shared/security/accessLog.test.ts`), the rate limiters' pass by time
   (`TokenBucketCounterTest`); and the Run and Security pages:
   [Operations § Logs](../../site/src/content/docs/run/operations.md#logs),
   [Troubleshooting](../../site/src/content/docs/run/troubleshooting.md),
