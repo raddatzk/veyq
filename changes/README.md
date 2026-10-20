@@ -249,6 +249,12 @@ flow that governs it and quote it in the question.** A question that quotes the 
 overrule the doc knowingly, which is a decision; one that paraphrases it from memory takes that choice away
 from them without either of you noticing.
 
+The same holds one step earlier still, in the inbox row the brief is cut from. `cr-item-marks-binary-ids`' first
+brief prescribed #491's per-entry shape for item marks, because #491's row was the one that lifted a similar cap —
+and ADR 0068 § 4 rejects exactly that shape for marks (a stable row per mark that the server can label by timing).
+**A row or a brief that borrows a sibling's design names the ADR that governs its own object**, and quotes the line
+that allows or forbids it.
+
 **A third tell, and the cheapest to act on: the claim is about a PATH.** A mount point, a `WORKDIR`, a restore
 target, a file a plan writes into — a location reads as a coordinate rather than as a claim, so nobody asks what
 already lives there. cr-instance-backup-and-restore made that mistake three times in one document: it put the
@@ -1975,7 +1981,9 @@ of red still came only at implement time. The composable's own oracle password w
 10, so it would never be sent again. And every dialog test that submits now passed through the lookup, so a bare
 `vi.fn()` resolving `undefined` blocked unrelated cases. So when a CR adds a precondition to a call, or puts a call
 on a path that used to skip it, grep the values that feed it in the tests and the mocks that stand in for it. Name
-them in the inventory as affected.
+them in the inventory as affected. The quiet case of it: a call site that starts using a returned promise
+(`void f()` becoming `f().catch(…)`) reddens every `vi.fn()` mock of `f` that returns `undefined` — four component
+tests in `cr-item-marks-binary-ids`.
 
 ### A refine that removes a control lists every role and share root that reaches it
 

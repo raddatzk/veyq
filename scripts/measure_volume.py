@@ -847,7 +847,7 @@ def oom_bite(inst: Instance) -> bool:
 # ---------------------------------------------------------------- judging (Q1)
 
 
-# The windowed gallery's targets (`cr-gallery-virtualization` Q2, owner 2026-10-19), on the local recipe, Chromium.
+# The windowed gallery's targets ([ADR 0105](docs/decisions/0105-a-gallery-renders-what-is-near-the-viewport-and-opens-its-listing-in-a-worker.md) § Targets, owner 2026-10-19), on the local recipe, Chromium.
 # Desktop, per Chapter size: the grid shown (its order final) after the list, viewport complete after navigation, end
 # complete after the jump — in ms. Under the 4x throttle at 1,000 and 3,000: viewport complete, the longest task after
 # it, the long tasks of the scroll-through; 10,000 under the throttle is reported, not judged. Every stage: the live DOM
@@ -889,7 +889,7 @@ def judge(directory: Path) -> dict:
     """Q1, as the owner decided it: a host carries a stage when no container is OOM-killed or restarted, the peak memory
     stays at or below 80 % of the host's RAM, no request fails, and on a desktop browser a 3,000-photo Chapter's list
     arrives within 2 s. Its "last thumbnail within 15 s" was a promise about an unwindowed grid; a windowed one is held
-    to `cr-gallery-virtualization`'s Q2 instead ([gallery_findings]). Reads every sampler.json, server-*.json and
+    to ADR 0105 § Targets instead ([gallery_findings]). Reads every sampler.json, server-*.json and
     browser-*.json."""
     findings, notes = [], []
     for sampler in directory.glob("**/sampler.json"):
