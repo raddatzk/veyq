@@ -148,7 +148,7 @@ here; the server is blind.
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
   `'CHAPTER'` / `'FILE'` / `'DEPOT_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application),
   or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'depot.…'` (the guard's `I18N_NAMESPACES`;
-  core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
+  core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The catalogs sit where they belong: core's names no application namespace, an application's exactly its own, and no application reads another's keys. `src/applicationMessages.ts` (the composition root's catalog half) may import an application's catalog and nothing else of it; `main.ts` calls `registerApplicationMessages()` then `registerApplications()`, and `src/test/setup.ts` calls the first statically for every test file, node environment included. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **People and participants (ADR 0083, `uc.memory.participants`).** A Memory lists who was there as OPAQUE USER IDS in its sealed meta
@@ -371,8 +371,8 @@ here; the server is blind.
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memories/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the
-  kinds — the registry's `{ supported: false }` answer and its tests do; the i18n catalog
-  is one file and `styles/memory.css` is global (inbox #513).
+  kinds — the registry's `{ supported: false }` answer and its tests do; each application's strings are
+  its own catalog (`features/<owner>/i18n.ts`, added at build time by `src/applicationMessages.ts`; core's `src/i18n/index.ts` holds core's alone), and Memories' global classes its own `features/memories/memories.css`, imported last by its `register.ts` (inbox #513). An application's global classes are its own sheet in its directory, imported by the application: it loads BEFORE `style.css`, so a rule styling an element a core class also styles compounds with that class (`.veyq-card.memory-card`) and wins by specificity, never by order; its dark twins sit at its end. `validate_stylesheet_anchors.py` reads every `.css` under `src/`.
   **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one
   evaluates the application before the test file's `vi.mock`s and disarms them — 119 files went red). A
   node-environment suite gets no registry, so one that exercises a hook registers the real `memoriesLifecycle`
