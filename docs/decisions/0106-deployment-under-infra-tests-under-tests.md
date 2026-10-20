@@ -1,8 +1,9 @@
 # ADR 0106 — Deployment lives under `infra/`, the test harnesses under `tests/`
 
 - Status: Accepted 2026-10-20 (owner: the layout of stage 1, and stage 2's direction with its naming constraint);
-  stage 1 to be built by `cr-repo-layout-infra-and-tests`. Stage 2 is not decided to happen, only what it may not be
-  called.
+  stage 1 built 2026-10-20 (cr-repo-layout-infra-and-tests): the script-side paths live once in
+  `scripts/repo_layout.py`, except in what ships alone (`instance_backup.py`, which spells its own and is compared by
+  its selftest). Stage 2 is not decided to happen, only what it may not be called.
 - Date: 2026-10-20
 
 ## Context
