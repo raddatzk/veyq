@@ -13,6 +13,10 @@ export const TEMPLATE = {
       en: { measure: 'content was blocked', reach: 'It is no longer shown to anyone, members included, and appears as "Blocked by the operator"; nothing was deleted. It can still be deleted, but not replaced or restored.' },
       de: { measure: 'Inhalte wurden gesperrt', reach: 'Sie werden niemandem mehr angezeigt, auch Mitgliedern nicht, und erscheinen als „Von der Moderation gesperrt“; gelöscht wurde nichts. Sie können weiterhin gelöscht, aber nicht ersetzt oder wiederhergestellt werden.' },
     },
+    UPLOADER_CONTENT: {
+      en: { measure: 'everything one person had uploaded to a space was blocked', reach: 'None of it is shown to anyone any more, members included, and each item appears as "Blocked by the operator"; nothing was deleted. What the person adds later is not affected. It can still be deleted, but not replaced or restored.' },
+      de: { measure: 'alles, was eine Person in einen Bereich hochgeladen hatte, wurde gesperrt', reach: 'Nichts davon wird jemandem mehr angezeigt, auch Mitgliedern nicht, und jedes Element erscheint als „Von der Moderation gesperrt“; gelöscht wurde nichts. Was die Person später hinzufügt, ist nicht betroffen. Es kann weiterhin gelöscht, aber nicht ersetzt oder wiederhergestellt werden.' },
+    },
     GUEST_IDENTITY: {
       en: { measure: 'a guest who uploaded through your link was blocked, together with the link', reach: 'The guest can no longer add anything, and the link answers as if it did not exist; nothing was deleted. You can issue a new link.' },
       de: { measure: 'ein Gast, der über deinen Link hochgeladen hat, wurde gesperrt, zusammen mit dem Link', reach: 'Der Gast kann nichts mehr hinzufügen, und der Link antwortet, als gäbe es ihn nicht; gelöscht wurde nichts. Du kannst einen neuen Link ausstellen.' },

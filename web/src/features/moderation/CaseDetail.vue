@@ -142,9 +142,12 @@ const inForce = computed(() => (current.value?.measures ?? []).filter((m) => m.l
 const linksToBlock = computed(() => (current.value?.targets.links ?? []).filter((l) => !l.blocked))
 const contentBlockable = computed(() => {
   const c = current.value
-  if (!c || (c.itemKind !== 'NODE' && c.itemKind !== 'ITEM')) return false
+  // A reported name blocks its node (the server serves no node without its name).
+  if (!c || (c.itemKind !== 'NODE' && c.itemKind !== 'ITEM' && c.itemKind !== 'NAME')) return false
   return !inForce.value.some((m) => m.kind === 'CONTENT' && m.targetId === c.itemId)
 })
+/** Everything from one uploader (ADR 0093 § 6, `UPLOADER_CONTENT`): each uploader the case names, with what they uploaded. */
+const uploaders = computed(() => current.value?.targets.uploaders ?? [])
 const guestsToBlock = computed(() => (current.value?.targets.uploaders ?? []).filter((u) => u.kind === 'GUEST_IDENTITY' && !u.blocked))
 const proposalOpen = (step: ModerationProposalStep, targetId: string | null) =>
   (current.value?.proposals ?? []).some((p) => p.step === step && p.targetId === targetId && p.outcome === 'OPEN')
@@ -237,6 +240,14 @@ const blockLink = (l: ModerationTargetLink) =>
 
 const blockContent = () =>
   block(t('moderation.decide.blockContent'), t('moderation.decide.blockContentReach'), 'CONTENT', { targetId: current.value!.itemId })
+
+const blockEverything = (u: ModerationTargetUploader) =>
+  block(
+    t('moderation.decide.blockEverything', { count: u.items }),
+    t('moderation.decide.blockEverythingReach', { count: u.items }),
+    'UPLOADER_CONTENT',
+    { targetId: u.id },
+  )
 
 const blockGuest = (u: ModerationTargetUploader) =>
   block(t('moderation.decide.blockUploader', { id: short(u.id) }), t('moderation.decide.blockUploaderReach'), 'GUEST_IDENTITY', { targetId: u.id })
@@ -381,7 +392,7 @@ onMounted(load)
         <div v-for="m in current.measures" :key="m.id" class="veyq-list-row moderation-measure">
           <div class="veyq-row-main">
             <strong class="veyq-row-title">{{ t(`moderation.case.measureKinds.${m.kind}`) }}</strong>
-            <span class="veyq-row-subtitle" :title="m.targetId">{{ t('moderation.case.target', { id: short(m.targetId) }) }} · {{ t('moderation.case.takenAt', { time: when(m.takenAt) }) }}</span>
+            <span class="veyq-row-subtitle" :title="m.targetId">{{ t('moderation.case.target', { id: short(m.targetId) }) }}<template v-if="m.items != null"> · {{ t('moderation.case.measureItems', { count: m.items }, m.items) }}</template> · {{ t('moderation.case.takenAt', { time: when(m.takenAt) }) }}</span>
             <div class="veyq-row-meta">
               <!-- Lifted by no one: it ended with its erased target (ADR 0093 § 6, `MeasureTargets.erased`). -->
               <span v-if="m.liftedAt && !m.liftedBy" class="veyq-badge muted moderation-measure-ended">{{ t('moderation.case.endedWithTarget', { time: when(m.liftedAt) }) }}</span>
@@ -546,6 +557,30 @@ onMounted(load)
             </div>
             <Button severity="danger" class="moderation-block-content" icon="pi pi-ban" :label="t('moderation.decide.blockContent')" :disabled="busy" @click="blockContent" />
           </div>
+
+          <template v-if="uploaders.length > 0 && !closed">
+            <strong>{{ t('moderation.decide.uploaders') }}</strong>
+            <p class="veyq-form-copy">{{ t('moderation.decide.uploadersCopy') }}</p>
+            <div v-for="u in uploaders" :key="`all-${u.id}`" class="veyq-list-row moderation-uploader">
+              <div class="veyq-row-main">
+                <strong class="veyq-row-title" :title="u.id">
+                  {{ t(u.kind === 'GUEST_IDENTITY' ? 'moderation.decide.uploaderGuest' : 'moderation.decide.uploaderMember', { id: short(u.id) }) }}
+                </strong>
+                <span class="veyq-row-subtitle moderation-uploader-items">{{ t('moderation.decide.uploaderItems', { count: u.items }, u.items) }}</span>
+                <p v-if="u.contentBlocked" class="veyq-form-copy">{{ t('moderation.decide.everythingBlocked') }}</p>
+                <p v-else-if="u.items > 0" class="veyq-form-copy">{{ t('moderation.decide.blockEverythingReach', { count: u.items }) }}</p>
+              </div>
+              <Button
+                v-if="!u.contentBlocked && u.items > 0"
+                severity="danger"
+                class="moderation-block-everything"
+                icon="pi pi-ban"
+                :label="t('moderation.decide.blockEverything', { count: u.items })"
+                :disabled="busy"
+                @click="blockEverything(u)"
+              />
+            </div>
+          </template>
 
           <div v-for="u in guestsToBlock" :key="u.id" class="veyq-list-row">
             <div class="veyq-row-main">

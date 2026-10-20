@@ -72,6 +72,11 @@ describe('the statements of an affected member', () => {
     expect(statementFor({ targetId: 'node-2' })).toBeUndefined()
     statements.list = [statement({ measureKind: 'SHARE', targetId: 'link-1', shareId: 'link-1' })]
     expect(statementFor({ shareId: 'link-1' })?.measureKind).toBe('SHARE')
+    // Everything from one uploader: found on each item it covers, not on one it does not.
+    statements.list = [statement({ measureKind: 'UPLOADER_CONTENT', targetId: 'uploader-1', covers: ['medium-1', 'file-1'] })]
+    expect(statementFor({ targetId: 'medium-1' })?.measureKind).toBe('UPLOADER_CONTENT')
+    expect(statementFor({ targetId: 'file-1' })?.measureKind).toBe('UPLOADER_CONTENT')
+    expect(statementFor({ targetId: 'medium-2' })).toBeUndefined()
   })
 
   it('unwraps the facts’ key with this member’s identity key and opens the one sealed copy, at the statement it names', () => {

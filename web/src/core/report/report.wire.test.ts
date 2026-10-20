@@ -127,6 +127,19 @@ describe('a report on the wire', () => {
     expect(v1.openReportShare(opened.reportKey, { kind: 'LINK', shareId: SHARE_ID }, fromB64std(body.items[0].sealedShare))[0].key).toEqual(K_SHARE)
   })
 
+  it('a name reported on its own goes as NAME of its node, its share holding that name\'s key alone', async () => {
+    const K_NAME = v1.randomBytes(32)
+    const name: ReportTarget = { kind: 'NAME', id: NODE, keys: () => [{ role: 'NODE_NAME', ref: null, key: K_NAME }] }
+    await submitReport(request(member, [nodeTarget]), [name], { category: ReportCategory.TermsBreach, reason: REASON, contact: '' })
+    const body = JSON.parse(posts()[0].body!) as { items: { kind: string; id?: string; sealedShare: string }[]; sealedReport: string }
+    expect(body.items.map(({ kind, id }) => ({ kind, id }))).toEqual([{ kind: 'NAME', id: NODE }])
+    const opened = v1.openReport(1, v1.moderationKemSecret(M), fromB64std(body.sealedReport))
+    const sealed = fromB64std(body.items[0].sealedShare)
+    expect(v1.openReportShare(opened.reportKey, { kind: 'NAME', id: NODE }, sealed)).toEqual([{ role: 'NODE_NAME', ref: null, key: K_NAME }])
+    // Addressed by the name, not the node: the moderator's review of the node's case would not open it.
+    expect(() => v1.openReportShare(opened.reportKey, { kind: 'NODE', id: NODE }, sealed)).toThrow(v1.OpenRefused)
+  })
+
   it('a key that changed in between is read again and the report sealed anew, once', async () => {
     refuseFirstPost = true
     await submitReport(request(member), [nodeTarget], { category: ReportCategory.TermsBreach, reason: REASON, contact: '' })

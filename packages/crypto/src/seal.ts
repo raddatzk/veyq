@@ -98,8 +98,8 @@ export const SEAL_PURPOSES = {
   'master-key': [],
   'identity-priv': [],
   // A report share (ADR 0093 § 1, ./report.ts): the keys that open one reported item, sealed under the report's fresh
-  // K_report. Addressed by the item the server stores it for — a node or an application's item inside one (`NODE` or
-  // `ITEM`, as the report's wire names the kind) — so a share served for another item does not open.
+  // K_report. Addressed by the item the server stores it for — a node, a node's name, or an application's item inside one
+  // (`NODE`, `NAME` or `ITEM`, as the report's wire names the kind) — so a share served for another item does not open.
   'report-share': [['itemKind', 'role'], ['itemId', 'id']],
   // The same for an upload link a WRITE_ONLY guest reports: addressed by the link's share id.
   'report-link': [['shareId', 'shareId']],
