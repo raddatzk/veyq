@@ -13,7 +13,9 @@ import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.moderation.ModerationEpochEntity
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationLog
+import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
 import me.raddatz.veyq.core.moderation.report.CaseState
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
@@ -135,6 +137,8 @@ class Statements(
                 else -> null
             },
             scopeId = m.scopeId?.let(UUID::fromString),
+            // Everything from one uploader: the ids it blocks, so each one's placeholder finds this statement.
+            covers = if (m.blockKind == BlockKind.CONTENT_UPLOADER) ModerationBlockReachEntity.list("blockId", m.id).map { it.targetId } else emptyList(),
             ground = ModerationGround.valueOf(s.ground),
             provision = s.provision,
             basis = WireBasis.valueOf(s.basis),

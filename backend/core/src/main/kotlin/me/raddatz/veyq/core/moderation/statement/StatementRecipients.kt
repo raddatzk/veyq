@@ -16,7 +16,8 @@ data class Recipient(val kind: RecipientKind, val id: String, val roles: Set<Sta
 /**
  * Who a measure's statement of reasons reaches (ADR 0093 § 7, uc.moderation.object-to-a-measure step 2), from clear
  * metadata only: the creator of a blocked link or of the link a blocked guest came through, the uploaders the case's held
- * rows name (a blocked guest: that guest alone), and on a content block every owner of the space. A member whose account
+ * rows name (a blocked guest: that guest alone; everything from one uploader: that uploader alone), and on a content block
+ * every owner of the space. A member whose account
  * is gone has nobody to tell and is left out; a guest is listed, though veyq tells it nothing — it has no account.
  */
 @ApplicationScoped
@@ -37,6 +38,12 @@ class StatementRecipients {
             }
             BlockKind.CONTENT_NODE, BlockKind.CONTENT_ITEM -> {
                 uploaders()
+                MembershipEntity.list("scopeId = ?1 and role = ?2", case.scopeId, MembershipEntity.OWNER)
+                    .forEach { add(RecipientKind.ACCOUNT, it.userId, StatementRole.SCOPE_OWNER) }
+            }
+            // Everything from one uploader: that uploader (a guest is told nothing in veyq), and every owner of the space.
+            BlockKind.CONTENT_UPLOADER -> {
+                add(if (step.shareId != null) RecipientKind.GUEST else RecipientKind.ACCOUNT, step.targetId, StatementRole.UPLOADER)
                 MembershipEntity.list("scopeId = ?1 and role = ?2", case.scopeId, MembershipEntity.OWNER)
                     .forEach { add(RecipientKind.ACCOUNT, it.userId, StatementRole.SCOPE_OWNER) }
             }

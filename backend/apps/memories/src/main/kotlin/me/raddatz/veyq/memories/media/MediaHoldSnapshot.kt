@@ -7,7 +7,8 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * Memories' rows of a hold (en.moderation.hold): the media of a held subtree — trashed ones too, they are still the
- * Memory's until purged — or the one reported medium, each with its derivatives and the bucket it sits in. Every blob
+ * Memory's until purged — or the one reported medium, or an uploader's media (a moderator's `UPLOADER_CONTENT` step),
+ * each with its derivatives and the bucket it sits in. A reported name holds none. Every blob
  * they name (an original, each derivative) is pinned by core; every guest identity they name is copied by core.
  */
 @ApplicationScoped
@@ -18,7 +19,8 @@ class MediaHoldSnapshot : HoldSnapshotContributor {
         val media = when (target) {
             is HoldTarget.Subtree -> snapshot.copy("veyq_media", "node_id", target.nodeIds)
             is HoldTarget.Item -> snapshot.copy("veyq_media", "id", listOf(target.itemId))
-            is HoldTarget.Link -> return
+            is HoldTarget.Uploads -> snapshot.copy("veyq_media", "id", target.itemIds)
+            is HoldTarget.Link, is HoldTarget.Name -> return
         }
         media.forEach { m ->
             snapshot.blob(m["blob_id"])

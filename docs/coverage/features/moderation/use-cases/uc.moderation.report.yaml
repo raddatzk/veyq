@@ -99,6 +99,17 @@ acceptanceCriteria:
         reason: >-
           The per-address (IP) and per-account (USER) bounds are the boundary filters' and held by RateLimitPostureSweepTest
           for every endpoint; the per-link report budget (ReportRateLimiter.allowShare) has no test of its own exhausting it.
+  - id: a-name-is-reported-on-its-own
+    text: >-
+      For one node the dialog offers its name on its own: the report then goes as a NAME of that node, its report share
+      holding that name's field key alone — never the node's key, its meta's or a sibling's — and it is a case of its own
+      whose hold is the node's one row, nothing below it and nothing pinned. A guest reports no name at the link's root,
+      which is the link's.
+    coverage:
+      backend:
+        integration: [ReportNameSliceTest.aNameReportIsACaseOfItsOwnAndItsHoldIsTheNodesOneRow, ReportNameSliceTest.aGuestReportsAChildsNameButNotTheLinkRootsWhichIsTheLinks]
+      web:
+        unit: [src/core/report/reportKeys.test.ts, src/core/report/ReportDialog.test.ts, src/core/report/report.wire.test.ts]
 gaps:
   crypto: >-
     The report bundle's layouts and seals are pinned by packages/crypto's src/report.test.ts and src/v1.conformance.test.ts

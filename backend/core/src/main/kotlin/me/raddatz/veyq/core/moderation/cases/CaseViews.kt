@@ -28,6 +28,7 @@ import me.raddatz.veyq.core.generated.model.ModerationTargets
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.block.BlockKind
+import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
@@ -181,6 +182,7 @@ class CaseViews(
                     targetId = m.targetId,
                     takenBy = UUID.fromString(m.takenBy),
                     takenAt = m.takenAt.utc(),
+                    items = if (m.blockKind == BlockKind.CONTENT_UPLOADER) ModerationBlockReachEntity.count("blockId", m.id).toInt() else null,
                     liftedAt = m.liftedAt?.utc(),
                     liftedBy = m.liftedBy?.let(UUID::fromString),
                     statement = st?.let {
@@ -225,6 +227,8 @@ class CaseViews(
                         id = UUID.fromString(it.id),
                         shareId = it.guestShareId,
                         blocked = it.blocked,
+                        items = it.items.size,
+                        contentBlocked = it.contentBlocked,
                     )
                 },
             ),

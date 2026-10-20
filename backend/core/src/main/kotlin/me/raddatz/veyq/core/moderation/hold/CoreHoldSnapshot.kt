@@ -29,6 +29,18 @@ class CoreHoldSnapshot : HoldSnapshotContributor {
             }
             is HoldTarget.Link -> snapshot.copy("veyq_share", "id", listOf(target.shareId))
             is HoldTarget.Item -> {} // an application's item: its owner copies it
+            // A name: the node's row (its name, placement and the name's editor), nothing below it, no blob.
+            is HoldTarget.Name -> snapshot.copy("veyq_node", "id", listOf(target.nodeId)).forEach { node ->
+                snapshot.identity(node["name_editor_identity_id"])
+            }
+            // An uploader's files: each file node's row and its attachments (the content the uploader put there).
+            is HoldTarget.Uploads -> {
+                snapshot.copy("veyq_node", "id", target.nodeIds).forEach { node -> snapshot.identity(node["share_identity_id"]) }
+                snapshot.copy("veyq_node_attachment", "node_id", target.nodeIds).forEach { attachment ->
+                    snapshot.blob(attachment["blob_id"])
+                    snapshot.identity(attachment["share_identity_id"])
+                }
+            }
         }
     }
 }

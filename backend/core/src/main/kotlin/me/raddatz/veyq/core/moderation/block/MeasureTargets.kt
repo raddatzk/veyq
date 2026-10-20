@@ -57,6 +57,11 @@ class MeasureTargets(
                 ?.also { ShareEntity.getEntityManager().refresh(it) }?.deleted == false
         BlockKind.CONTENT_NODE -> NodeEntity.find("id", targetId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
         BlockKind.CONTENT_ITEM -> items.any { it.lockExisting(targetId) }
+        // Everything from one uploader stands on the uploader: a guest identity, or a member's account. (Its items each
+        // leave its reach when erased — [erased] — and it ends with the last of them too.)
+        BlockKind.CONTENT_UPLOADER ->
+            ShareIdentityEntity.find("id", targetId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null ||
+                VeyqUser.find("id", targetId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
         BlockKind.GUEST_IDENTITY ->
             ShareIdentityEntity.find("id", targetId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
         BlockKind.MEMBER_SIGN_IN, BlockKind.REPORTER_ACCOUNT ->
@@ -103,6 +108,7 @@ class MeasureTargets(
     ) {
         if (kinds.isEmpty() || targetIds.isEmpty()) return
         ModerationBlockEntity.getEntityManager().flush()
+        leaveReach(kinds, targetIds, now, holding)
         targetIds.distinct().chunked(CHUNK).forEach { chunk ->
             ModerationBlockEntity.list("targetId in ?1 and kind in ?2 and activeKey is not null", chunk, kinds.map { it.name })
                 .forEach { row ->
@@ -130,10 +136,44 @@ class MeasureTargets(
                 val left = row.heldKeys - gone
                 if (left.size == row.heldKeys.size) return@forEach // the key matched only as a substring of another
                 row.heldObjects = left.sorted().joinToString(" ").ifEmpty { null }
-                if (left.isEmpty()) end(row, now)
+                // An uploader's block still standing on items of its reach keeps standing on them.
+                if (left.isEmpty() && (row.blockKind != BlockKind.CONTENT_UPLOADER || reachOf(row.id) == 0L)) end(row, now)
             }
         }
     }
+
+    /**
+     * Items of an uploader's block were erased ([kinds] naming a node's or an item's content measure): their rows leave
+     * every such block's reach, an erased item whose stored object another row keeps hangs the block on that object
+     * ([holding], as a content block's does), and a block left with neither an item nor an object ends — it stands on
+     * nothing it could block (ADR 0093 § 6).
+     */
+    private fun leaveReach(kinds: Collection<BlockKind>, targetIds: Collection<String>, now: Instant, holding: Map<String, Set<String>>) {
+        val itemKinds = kinds.mapNotNull {
+            when (it) {
+                BlockKind.CONTENT_NODE -> ModerationBlockReachEntity.NODE
+                BlockKind.CONTENT_ITEM -> ModerationBlockReachEntity.ITEM
+                else -> null
+            }
+        }
+        if (itemKinds.isEmpty()) return
+        val touched = LinkedHashMap<String, MutableSet<String>>()
+        targetIds.distinct().chunked(CHUNK).forEach { chunk ->
+            ModerationBlockReachEntity.list("targetId in ?1 and itemKind in ?2", chunk, itemKinds).forEach { reach ->
+                touched.getOrPut(reach.blockId) { linkedSetOf() } += holding[reach.targetId].orEmpty()
+                reach.delete()
+            }
+        }
+        if (touched.isEmpty()) return
+        ModerationBlockReachEntity.getEntityManager().flush()
+        ModerationBlockEntity.list("id in ?1 and activeKey is not null", touched.keys.toList()).forEach { row ->
+            val kept = row.heldKeys + touched.getValue(row.id)
+            if (kept.size != row.heldKeys.size) row.heldObjects = kept.sorted().joinToString(" ")
+            if (kept.isEmpty() && reachOf(row.id) == 0L) end(row, now)
+        }
+    }
+
+    private fun reachOf(blockId: String): Long = ModerationBlockReachEntity.count("blockId", blockId)
 
     /** End [row] with its target: lifted by no one, logged so, its lift in the erasure ledger. */
     private fun end(row: ModerationBlockEntity, now: Instant) {

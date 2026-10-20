@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.moderation.cases
 
 import me.raddatz.veyq.core.moderation.ModerationTestKit
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.hold.HoldEntity
 import me.raddatz.veyq.core.moderation.hold.HoldPinEntity
@@ -45,6 +46,7 @@ object CaseTestKit {
             StatementRecipientEntity.deleteAll()
             ModerationStatementEntity.deleteAll()
             ModerationProposalEntity.deleteAll()
+            ModerationBlockReachEntity.deleteAll()
             ModerationBlockEntity.deleteAll()
             HoldPinEntity.deleteAll()
             HoldRowEntity.deleteAll()

@@ -4,7 +4,7 @@
 // call — never to the link's own presign (`shareChunkUrls` while a review is active).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 vi.mock('../../../api/client', async (orig) => ({ ...(await orig<object>()), caseReviewApi: vi.fn(), publicSharesApi: vi.fn() }))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: <T>(f: () => Promise<T>) => f() }))
@@ -20,7 +20,7 @@ import { beginReview } from '../../../core/sharing/review'
 import { shareChunkUrls } from '../../../core/sharing/guestBlob'
 import { clearModerationKeys, holdModerationKeys } from '../moderationKeys'
 import { proofFor } from '../proof'
-import { keyOf, openReview, reviewHead, reviewSource } from './openReview'
+import { keyOf, openReview, reviewHead, reviewSource, rootNameOf } from './openReview'
 
 const CASE_ID = '7c000000-0000-4000-8000-000000000002'
 const SCOPE_ID = '88888888-8888-4888-8888-888888888888'
@@ -38,12 +38,12 @@ beforeEach(() => {
 })
 afterEach(() => clearModerationKeys())
 
-function report(reportId: string, epoch: number, keys: v1.ReportKey[], itemId = ROOT) {
+function report(reportId: string, epoch: number, keys: v1.ReportKey[], itemId = ROOT, kind: 'NODE' | 'NAME' = 'NODE') {
   const reportKey = v1.randomBytes(32)
   return {
     reportId, epoch, receivedAt: new Date('2026-10-01T10:00:00Z'),
     sealedReport: b64std(v1.sealReport(epoch, v1.moderationBundle(moderationKey).kem, { reportKey, reason: `reason ${reportId}`, context: '' })),
-    sealedShare: b64std(v1.sealReportShare(reportKey, { kind: 'NODE', id: itemId }, keys)),
+    sealedShare: b64std(v1.sealReportShare(reportKey, { kind, id: itemId }, keys)),
   }
 }
 function caseReview(reports: CaseReview['reports']): CaseReview {
@@ -77,6 +77,32 @@ describe('openReview', () => {
     const opened = openReview(caseReview([report('r-1', EPOCH, [{ role: 'NODE', ref: null, key: v1.randomBytes(32) }], '6e5a0000-0000-4000-8000-000000000899')]))
     expect(opened.keys).toEqual([])
     expect(reviewHead(CASE_ID, opened, 'Unnamed')).toBeNull()
+  })
+})
+
+describe('a name reported on its own (ADR 0093 § 9)', () => {
+  const ctx = { purpose: 'node-name', scopeId: SCOPE_ID, nodeId: ROOT, epoch: 0, placementRevision: 3 } as const
+  const parentKey = v1.randomBytes(32)
+  const encryptedName = b64std(v1.sealField(ctx, parentKey, v1.utf8('Ein beleidigender Name')))
+  const nameKey = v1.fieldKeyOf(ctx, parentKey, fromB64std(encryptedName))
+  const review = (keys: v1.ReportKey[]): CaseReview => ({
+    caseId: CASE_ID, itemKind: 'NAME', itemId: ROOT, reports: [report('r-1', EPOCH, keys, ROOT, 'NAME')], heldLinks: [],
+    share: {
+      role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, rootKind: 'FOLDER',
+      nodes: [{ id: ROOT, kind: 'FOLDER', epoch: 0, blockedByOperator: false, placementRevision: 3, encryptedName }],
+    },
+  })
+
+  it('opens the held name with the report\'s NODE_NAME key, and renders no node: there is no node key', () => {
+    const opened = openReview(review([{ role: 'NODE_NAME', ref: null, key: nameKey }]))
+    expect(rootNameOf(opened)).toBe('Ein beleidigender Name')
+    expect(keyOf(opened, 'NODE')).toBeNull()
+    expect(reviewHead(CASE_ID, opened, 'Unnamed'), 'nothing below the name to render').toBeNull()
+  })
+
+  it('another revision\'s key opens nothing — the control on the same name', () => {
+    const other = v1.fieldKeyOf(ctx, parentKey, v1.sealField(ctx, parentKey, v1.utf8('Ein beleidigender Name')))
+    expect(rootNameOf(openReview(review([{ role: 'NODE_NAME', ref: null, key: other }])))).toBeNull()
   })
 })
 

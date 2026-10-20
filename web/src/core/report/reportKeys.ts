@@ -39,6 +39,23 @@ function entryKeyOf(access: Access, tree: TreeSource, scopeId: string, node: Tre
   }
 }
 
+/** The `K_field` of the revision of `node`'s name this session reads, or null. */
+function nameKeyOf(access: Access, tree: TreeSource, scopeId: string, node: TreeNode): Uint8Array | null {
+  const address = { scopeId, nodeId: node.id, epoch: node.epoch, placementRevision: node.placementRevision }
+  return fieldKey({ purpose: 'node-name', ...address }, entryKeyOf(access, tree, scopeId, node), node.encryptedName)
+}
+
+/**
+ * The keys a report of `node`'s NAME on its own hands over (ADR 0093 § 9, item kind `NAME`): that name's `K_field` and
+ * nothing else — never `K_node`, the meta's key or a sibling's. Null where this session cannot open the name, and at a
+ * guest's link root, whose name is the link's (the server refuses `NAME` there too).
+ */
+export function nameReportKeys(access: Access, tree: TreeSource, scopeId: string, node: TreeNode): v1.ReportKey[] | null {
+  if (access.mode === 'guest' && node.id === tree.rootId) return null
+  const name = nameKeyOf(access, tree, scopeId, node)
+  return name ? [{ role: 'NODE_NAME', ref: null, key: name }] : null
+}
+
 /**
  * The keys a report of `node` hands over: `NODE` (its `K_node`, required — null when this session holds none), its name's
  * `K_field` (`NODE_NAME`, or `LINK_NAME` for a guest's link root: the link's `share-memory-name`) and its meta's
@@ -52,8 +69,7 @@ export function nodeReportKeys(access: Access, tree: TreeSource, scopeId: string
     const name = fieldKey(SHARE_MEMORY_NAME, access.head.kShare, access.head.share.sealedName)
     if (name) keys.push({ role: 'LINK_NAME', ref: null, key: name })
   } else {
-    const address = { scopeId, nodeId: node.id, epoch: node.epoch, placementRevision: node.placementRevision }
-    const name = fieldKey({ purpose: 'node-name', ...address }, entryKeyOf(access, tree, scopeId, node), node.encryptedName)
+    const name = nameKeyOf(access, tree, scopeId, node)
     if (name) keys.push({ role: 'NODE_NAME', ref: null, key: name })
   }
   const meta = fieldKey({ purpose: 'node-meta', scopeId, nodeId: node.id }, key, node.wrappedMeta)

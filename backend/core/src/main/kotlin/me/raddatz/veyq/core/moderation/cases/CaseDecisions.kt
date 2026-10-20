@@ -17,10 +17,13 @@ import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
+import me.raddatz.veyq.core.moderation.block.UploadedItems
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.block.ProposalOutcome
 import me.raddatz.veyq.core.moderation.block.ProposalStep
 import me.raddatz.veyq.core.moderation.hold.CaseSnapshots
+import me.raddatz.veyq.core.moderation.hold.HoldTarget
 import me.raddatz.veyq.core.moderation.hold.HoldTrigger
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseState
@@ -57,10 +60,13 @@ import java.util.UUID
 data class SealedNote(val epoch: Int, val sealed: String)
 
 /** A moderator's step as the wire names it (`ModerationMeasureRequest.kind`). */
-enum class MeasureStep { SHARE, CONTENT, GUEST_IDENTITY }
+enum class MeasureStep { SHARE, CONTENT, UPLOADER_CONTENT, GUEST_IDENTITY }
 
-/** A step resolved against what its case knows: the block's kind, its target, and (a blocked guest's) link. */
-data class ResolvedStep(val kind: BlockKind, val targetId: String, val shareId: String?)
+/**
+ * A step resolved against what its case knows: the block's kind, its target, (a blocked guest's) link, and — everything
+ * from one uploader — the items it covers, counted now.
+ */
+data class ResolvedStep(val kind: BlockKind, val targetId: String, val shareId: String?, val reach: UploadedItems? = null)
 
 /**
  * A measure's statement of reasons as the moderator gives it (ADR 0093 § 7): its client-minted [statementId], the
@@ -182,13 +188,19 @@ class CaseDecisions(
      * item's application's list (an item block). Kept out of the decision's transaction so a decision holds the case row
      * alone, and the report's order (space, then case) and a decision's never cross.
      */
-    private fun announce(kind: BlockKind, targetId: String, scopeId: String) {
-        when (kind) {
-            BlockKind.CONTENT_NODE -> QuarkusTransaction.requiringNew().run {
-                nodes.lockScope(scopeId)
-                nodes.bumpTree(scopeId)
+    private fun announce(row: ModerationBlockEntity) {
+        val scopeId = row.scopeId ?: return
+        val bumpTree = { QuarkusTransaction.requiringNew().run { nodes.lockScope(scopeId); nodes.bumpTree(scopeId) } }
+        val itemsChanged = { ids: List<String> -> QuarkusTransaction.requiringNew().run { ids.forEach { id -> items.forEach { it.blockChanged(id) } } } }
+        when (row.blockKind) {
+            BlockKind.CONTENT_NODE -> bumpTree()
+            BlockKind.CONTENT_ITEM -> itemsChanged(listOf(row.targetId))
+            // Everything from one uploader: its nodes change the level view, its items their lists.
+            BlockKind.CONTENT_UPLOADER -> {
+                val reach = QuarkusTransaction.requiringNew().call { ModerationBlockReachEntity.list("blockId", row.id) }
+                if (reach.any { it.itemKind == ModerationBlockReachEntity.NODE }) bumpTree()
+                reach.filter { it.itemKind == ModerationBlockReachEntity.ITEM }.map { it.targetId }.takeIf { it.isNotEmpty() }?.let(itemsChanged)
             }
-            BlockKind.CONTENT_ITEM -> QuarkusTransaction.requiringNew().run { items.forEach { it.blockChanged(targetId) } }
             else -> {}
         }
     }
@@ -223,7 +235,8 @@ class CaseDecisions(
             }
             MeasureStep.CONTENT -> {
                 val kind = when (case.itemKind) {
-                    ReportItemKind.NODE.name -> BlockKind.CONTENT_NODE
+                    // A reported name blocks its node: the server serves no node without its name.
+                    ReportItemKind.NODE.name, ReportItemKind.NAME.name -> BlockKind.CONTENT_NODE
                     ReportItemKind.ITEM.name -> BlockKind.CONTENT_ITEM
                     else -> null
                 }
@@ -231,6 +244,15 @@ class CaseDecisions(
                     targetId == null || shareId != null -> null to CaseFailures.invalid
                     kind == null || targetId != case.itemId -> null to CaseFailures.targetUnknown
                     else -> ResolvedStep(kind, targetId, null) to null
+                }
+            }
+            MeasureStep.UPLOADER_CONTENT -> {
+                val uploader = known.uploaders.firstOrNull { it.id == targetId }
+                when {
+                    targetId == null || shareId != null -> null to CaseFailures.invalid
+                    // An uploader the case does not name, or one with nothing in the space to block: no step to take.
+                    uploader == null || uploader.items.size == 0 -> null to CaseFailures.targetUnknown
+                    else -> ResolvedStep(BlockKind.CONTENT_UPLOADER, targetId, uploader.guestShareId, uploader.items) to null
                 }
             }
             MeasureStep.GUEST_IDENTITY -> {
@@ -271,7 +293,7 @@ class CaseDecisions(
         }
         // A measure that ended at once (its target was gone) changed no live view; one hung on a surviving object
         // announces an item no list holds any more — a no-op.
-        taken.changed?.takeIf { it.activeKey != null }?.let { row -> row.scopeId?.let { announce(row.blockKind, row.targetId, it) } }
+        taken.changed?.takeIf { it.activeKey != null }?.let { announce(it) }
         taken.statementId?.let { id ->
             mail.statementSent(id)
             mail.tellReporters(caseId, reporters, StatementMail.Decision.DECIDED, moderatorId)
@@ -320,8 +342,9 @@ class CaseDecisions(
         if (statement.facts != null && members.size > StatementRecipients.MAX_SEALED) return Taken(refused(CaseFailures.recipientsTooMany))
         if (statement.facts != null && statement.factsKeyFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
         val row = block(resolved.kind, resolved.targetId, case, moderatorId, now).apply {
-            if (resolved.kind == BlockKind.CONTENT_NODE || resolved.kind == BlockKind.CONTENT_ITEM) scopeId = case.scopeId
-            if (resolved.kind == BlockKind.GUEST_IDENTITY) this.shareId = resolved.shareId
+            if (resolved.kind.isContent) scopeId = case.scopeId
+            if (resolved.kind == BlockKind.GUEST_IDENTITY || resolved.kind == BlockKind.CONTENT_UPLOADER) this.shareId = resolved.shareId
+            activeKey = ownActiveKey()
         }
         if (ModerationBlockEntity.count("activeKey", row.activeKey!!) > 0) return Taken(refused(CaseFailures.measureExists))
         // The target's row lock, the one its eraser takes: an erasure either committed before (gone, ended below) or waits.
@@ -330,6 +353,7 @@ class CaseDecisions(
         // that object, as it would had the item been erased after it (ADR 0093 § 6) — read from the case's hold.
         val surviving = if (standing) emptySet() else measureTargets.survivingObjects(row.blockKind, row.targetId, held)
         row.persist()
+        resolved.reach?.let { reach -> reachOf(row, reach, case, now) }
         ledger.blockTaken(row, BlockBasis.MEASURE)
         log.appendCase(
             ModerationEvent.MEASURE_TAKEN, now, case.id, moderatorId = moderatorId, reason = row.kind, targetId = row.targetId,
@@ -394,7 +418,7 @@ class CaseDecisions(
             changed = row
             DecisionOutcome.Done
         }
-        changed?.let { row -> row.scopeId?.let { announce(row.blockKind, row.targetId, it) } }
+        changed?.let { announce(it) }
         return outcome
     }
 
@@ -435,7 +459,7 @@ class CaseDecisions(
         val outcome = QuarkusTransaction.requiringNew().call {
             decideObjectionIn(moderatorId, caseId, objectionId, lift, note, now) { changed = it }
         }
-        changed?.let { row -> row.scopeId?.let { announce(row.blockKind, row.targetId, it) } }
+        changed?.let { announce(it) }
         if (outcome == DecisionOutcome.Done) mail.objectionAnswered(objectionId)
         return outcome
     }
@@ -632,6 +656,29 @@ class CaseDecisions(
         val current = ModerationEpochEntity.find("order by epoch desc").firstResult()?.epoch
         return if (current != note.epoch) CaseFailures.epochChanged else null
     }
+
+    /**
+     * An uploader's block: the items it covers — exactly those counted now, never what the uploader adds later — and the
+     * case's hold widened to them, by the hold's own rules (ADR 0093 § 4: its end, its pins; a new hold where none is
+     * alive, ended as a measure's is, by [decide]).
+     */
+    private fun reachOf(row: ModerationBlockEntity, reach: UploadedItems, case: ModerationCaseEntity, now: Instant) {
+        reach.nodeIds.forEach { reachRow(row.id, ModerationBlockReachEntity.NODE, it) }
+        reach.itemIds.forEach { reachRow(row.id, ModerationBlockReachEntity.ITEM, it) }
+        val target = HoldTarget.Uploads(case.scopeId, reach.nodeIds.toList(), reach.itemIds.toList())
+        val alive = holds.aliveOf(case.id, now)
+        if (alive != null) {
+            holds.widen(alive, target)
+        } else {
+            holds.take(case.id, target, HoldTrigger.MEASURE, now.plus(Holds.SIX_MONTHS))
+        }
+    }
+
+    private fun reachRow(blockId: String, itemKind: String, targetId: String) = ModerationBlockReachEntity().apply {
+        this.blockId = blockId
+        this.itemKind = itemKind
+        this.targetId = targetId
+    }.persist()
 
     private fun block(kind: BlockKind, target: String, case: ModerationCaseEntity, moderatorId: String, now: Instant) =
         ModerationBlockEntity().apply {

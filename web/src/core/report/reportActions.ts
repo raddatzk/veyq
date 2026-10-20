@@ -9,7 +9,7 @@ import type { CoreHeaderAction } from '../node/nodeHeader'
 import type { CoreRowAction } from '../node/levelRow'
 import type { TreeNode } from '../node/tree'
 import { ShareRole } from '../../api/generated/sharing'
-import { nodeReportKeys } from './reportKeys'
+import { nameReportKeys, nodeReportKeys } from './reportKeys'
 import { openReport, type ReportTarget } from './report'
 import { activeReview } from '../sharing/review'
 
@@ -31,13 +31,27 @@ export function nodeTarget(access: Access, tree: TreeSource, node: TreeNode): Re
   return { kind: 'NODE', id: node.id, keys: () => nodeReportKeys(access, tree, reportScope(access), node) }
 }
 
-/** Open the report dialog for `nodes`, with `enclosing` (the folder on screen) offered above the cap. */
+/**
+ * A node's name as a report target of its own — offered for one node, never at a guest's link root, whose name is the
+ * link's (`nameReportKeys`).
+ */
+export function nameTarget(access: Access, tree: TreeSource, node: TreeNode): ReportTarget | null {
+  if (access.mode === 'guest' && node.id === tree.rootId) return null
+  return { kind: 'NAME', id: node.id, keys: () => nameReportKeys(access, tree, reportScope(access), node) }
+}
+
+/**
+ * Open the report dialog for `nodes`, with `enclosing` (the folder on screen) offered above the cap, and — one node —
+ * its name on its own as the other choice.
+ */
 export function reportNodes(access: Access, tree: TreeSource, nodes: readonly TreeNode[], enclosing: TreeNode | null): void {
+  const name = nodes.length === 1 ? nameTarget(access, tree, nodes[0]!) : null
   openReport({
     access,
     scopeId: reportScope(access),
     targets: nodes.map((n) => nodeTarget(access, tree, n)),
     ...(enclosing ? { enclosing: nodeTarget(access, tree, enclosing) } : {}),
+    ...(name ? { nameOnly: name } : {}),
   })
 }
 

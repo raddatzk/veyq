@@ -20,14 +20,16 @@
 
 1. The reporter selects up to 100 items and chooses **Report**: in a level's selection bar, in a row's or the header's
    actions, in Memories' lightbox for one medium, or — a guest of an upload link — on the link's page. The client
-   reads the published key (`getModerationKey`, unauthenticated); while no epoch exists the action is not shown.
+   reads the published key (`getModerationKey`, unauthenticated); while no epoch exists the action is not shown. For
+   one node the dialog asks **what is reported**: *it and everything in it*, or *only its name* (A8).
 2. The dialog asks for a **category** (child sexual abuse material, terrorist content, a threat to life or safety, other
    illegal content, a breach of the terms), a **reason** (required), a **confirmation** that the statements are accurate
    and complete in good faith (required), and an **e-mail address** for the receipt and the decision (optional). On
    the first category it says that a report without a name is expected.
 3. The client draws a fresh `K_report` and, per item, seals the keys that open it under `K_report` (a **report share**,
    [en.moderation.hold](../enablers/en.moderation.hold.md) § What a report hands over): a node's `K_node` with its
-   name's and meta's `K_field`; a medium's `K_blob`s with its `media-meta` and `media-exif` `K_field`s; an upload link's
+   name's and meta's `K_field`; a name on its own, that name's `K_field` alone (A8); a medium's `K_blob`s with its
+   `media-meta` and `media-exif` `K_field`s; an upload link's
    `K_share` with its name's and note's `K_field`s. It seals `K_report`, the reason and the context to the epoch's
    public half (`moderation-report` [epoch]), and the address apart (`moderation-report-contact` [epoch]), so that it
    can go alone (ADR 0093 § 11).
@@ -65,6 +67,17 @@
 - **A7 — Nothing is blocked.** The item stays visible, editable and deletable by everyone who had it; a delete, an
   overwrite or a revoke after the report changes nothing a moderator will see
   ([en.moderation.hold](../enablers/en.moderation.hold.md)).
+- **A8 — Only its name** (ADR 0093 §§ 1, 9; cr-report-a-name-and-an-uploader). A node's name is the one free text every
+  kind has and every viewer reads — a folder, a Memory or a file whose name is the offence while what it holds is not.
+  The report goes as the item `NAME` of that node: its report share holds the `K_field` of the revision of the name the
+  reporter reads (`NODE_NAME`), never `K_node`, the meta's key or a sibling's, so the moderators open that name and
+  nothing else. It is a case of its own (one case per item: the node reported whole is another), and its hold is the
+  node's one row — the name, its placement and its editor — and the guest-write records of that name, nothing below it
+  and nothing pinned. A member and a guest of a `READ` or `READ_WRITE` link alike; not at a guest's link root, whose name
+  is the link's (`share-memory-name`, which the guest's report of the node already hands over): the server refuses `NAME`
+  there (`404 report_item_not_found`). No other field is offered on its own: a Memory has no description — its meta is a
+  date, a place, a cover and participant ids, whose one typed text, the place, goes with a report of the Memory — and a
+  medium's metadata goes with the medium.
 
 ## Quality notes
 
@@ -78,9 +91,11 @@
 - **The receipt address** reaches the server once, in the clear, for one send (owner decision Q6), as every recipient of
   every mail does; it is bounded per address, and only its sealed copy is stored — which goes six months after the
   decision was told to the reporter (ADR 0093 § 11).
-- **What is not built here:** a field reported on its own (a bucket's name): none of step 1's entry points reports a
-  field without its object; and "everything by this uploader" (a guest's identity key): no entry point offers it. A
-  guest's upload is reported as a medium, by its `K_blob`s; the drop key never leaves the client.
+- **What is not built here:** a field on its own other than a node's name (a bucket's name, a medium's metadata, a
+  link's note to a viewing guest); and the reporter's handover of a guest's identity key for "everything by this
+  uploader" — the moderators take that step from the case, by the clear attribution and a count
+  ([uc.moderation.take-a-measure](uc.moderation.take-a-measure.md) A8), and review what the case's keys open. A guest's
+  upload is reported as a medium, by its `K_blob`s; the drop key never leaves the client.
 
 ## User impact
 

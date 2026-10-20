@@ -655,9 +655,12 @@ paths:
         ADR 0093 § 6, ADR 0099 § 6 (uc.moderation.take-a-measure). A measure is a row naming its kind, its target id,
         this case, who took it and when; it deletes nothing. `SHARE` blocks a link (every guest path answers as an unknown
         link; neither a reactivation nor a re-issue passes while it stands); `CONTENT` blocks the reported node or medium
-        (every byte read answers `451 blocked_by_operator`, every listing marks it); `GUEST_IDENTITY` blocks a guest
-        uploader's identity and the link it came through. The target must be one the case knows (`getModerationCase`'s
-        `targets`, the reported item for `CONTENT`) — else `404 moderation_target_unknown`. A step already in force on
+        (every byte read answers `451 blocked_by_operator`, every listing marks it; for a reported name, its node);
+        `UPLOADER_CONTENT` blocks, in the same way, every item one uploader of `targets.uploaders` uploaded to the case's
+        space — the set counted when it is taken (`items`), never what they add later — and widens the case's hold to
+        those items; `GUEST_IDENTITY` blocks a guest uploader's identity and the link it came through. The target must
+        be one the case knows (`getModerationCase`'s `targets`, the reported item for `CONTENT`) — else `404
+        moderation_target_unknown`. A step already in force on
         the target is refused (`409 moderation_measure_exists`).
 
         **Its statement of reasons is sent with it** (ADR 0093 § 7, uc.moderation.object-to-a-measure): the ground, and
@@ -872,14 +875,14 @@ paths:
           allowEmptyValue: true
           required: true
           description: The step, as `takeModerationMeasure` names it.
-          schema: { type: string, enum: [SHARE, CONTENT, GUEST_IDENTITY] }
+          schema: { type: string, enum: [SHARE, CONTENT, UPLOADER_CONTENT, GUEST_IDENTITY] }
         - name: targetId
           in: query
           # An empty value (`?targetId=`) is this parameter's absence: Quarkus REST
           # never converts it (cr-api-fuzzing).
           allowEmptyValue: true
           required: false
-          description: For `CONTENT` and `GUEST_IDENTITY`, the target's id.
+          description: For `CONTENT`, `UPLOADER_CONTENT` and `GUEST_IDENTITY`, the target's id.
           schema: { type: string, format: uuid }
         - name: shareId
           in: query
@@ -1585,8 +1588,8 @@ components:
     ModerationItemKind:
       x-veyq-visibility: enum
       type: string
-      description: What was reported — a node, an application's item on a node (a Memories medium), or an upload link.
-      enum: [NODE, ITEM, LINK]
+      description: What was reported — a node, an application's item on a node (a Memories medium), a node's name on its own, or an upload link.
+      enum: [NODE, ITEM, NAME, LINK]
       example: NODE
 
     ModerationQueue:
@@ -1807,9 +1810,10 @@ components:
       x-veyq-visibility: enum
       type: string
       description: >
-        `SHARE` = a link blocked; `CONTENT` = a node or medium blocked; `GUEST_IDENTITY` = a guest uploader blocked with
-        the link it came through; `REPORTER` = a reporter barred (ADR 0093 § 5).
-      enum: [SHARE, CONTENT, GUEST_IDENTITY, REPORTER]
+        `SHARE` = a link blocked; `CONTENT` = a node or medium blocked (for a reported name: its node); `UPLOADER_CONTENT`
+        = everything one uploader uploaded to the case's space, as counted when it was taken; `GUEST_IDENTITY` = a guest
+        uploader blocked with the link it came through; `REPORTER` = a reporter barred (ADR 0093 § 5).
+      enum: [SHARE, CONTENT, UPLOADER_CONTENT, GUEST_IDENTITY, REPORTER]
       example: CONTENT
 
     ModerationMeasure:
@@ -1824,7 +1828,7 @@ components:
         targetId:
           x-veyq-visibility: id
           type: string
-          description: The blocked id — a share id, a node's or item's id, a guest identity's id, or the barred account or link.
+          description: The blocked id — a share id, a node's or item's id, an uploader's account or guest identity id, a guest identity's id, or the barred account or link.
           maxLength: 64
           example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
         takenBy:
@@ -1839,6 +1843,12 @@ components:
           format: date-time
           description: When it was taken.
           example: 2026-10-17T12:00:00Z
+        items:
+          x-veyq-visibility: measure
+          type: [integer, "null"]
+          format: int32
+          description: For `UPLOADER_CONTENT`, how many items it blocks — the set counted when it was taken, less what was erased since; null for every other kind.
+          example: null
         liftedAt:
           x-veyq-visibility: time
           type: string
@@ -1943,7 +1953,7 @@ components:
 
     ModerationTargetUploader:
       type: object
-      required: [kind, id, blocked]
+      required: [kind, id, blocked, items, contentBlocked]
       properties:
         kind:
           x-veyq-visibility: enum
@@ -1967,6 +1977,21 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: Whether a measure in force blocks this guest identity (always false for a member — their block is the Server Owner's).
+          example: false
+        items:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          minimum: 0
+          description: >
+            How many items this uploader uploaded to the case's space, live and trashed — a Memories medium, a file's
+            content (a cover or a banner is a node's look, not counted): what `UPLOADER_CONTENT` would block now. A count
+            of clear attribution, never content.
+          example: 12
+        contentBlocked:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether an `UPLOADER_CONTENT` measure of the case's space is in force on this uploader.
           example: false
 
     ModerationCaseEvent:
@@ -2061,8 +2086,8 @@ components:
         kind:
           x-veyq-visibility: enum
           type: string
-          description: "`SHARE`, `CONTENT` or `GUEST_IDENTITY`; a reporter is barred by `barModerationReporter`."
-          enum: [SHARE, CONTENT, GUEST_IDENTITY]
+          description: "`SHARE`, `CONTENT`, `UPLOADER_CONTENT` or `GUEST_IDENTITY`; a reporter is barred by `barModerationReporter`."
+          enum: [SHARE, CONTENT, UPLOADER_CONTENT, GUEST_IDENTITY]
           example: CONTENT
         shareId:
           x-veyq-visibility: id
@@ -2076,7 +2101,7 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: For `CONTENT`, the reported node's or item's id; for `GUEST_IDENTITY`, the guest identity's; null for `SHARE`.
+          description: For `CONTENT`, the reported node's or item's id (a reported name's node); for `UPLOADER_CONTENT`, an uploader of `targets.uploaders` (an account or a guest identity); for `GUEST_IDENTITY`, the guest identity's; null for `SHARE`.
           example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
         note:
           oneOf:
@@ -2469,13 +2494,13 @@ components:
         measureKind:
           x-veyq-visibility: enum
           type: string
-          description: "`SHARE` = a link blocked; `CONTENT` = a node or an item blocked; `GUEST_IDENTITY` = a guest uploader blocked with the link it came through."
-          enum: [SHARE, CONTENT, GUEST_IDENTITY]
+          description: "`SHARE` = a link blocked; `CONTENT` = a node or an item blocked; `UPLOADER_CONTENT` = everything one uploader uploaded to the space, as counted when it was taken; `GUEST_IDENTITY` = a guest uploader blocked with the link it came through."
+          enum: [SHARE, CONTENT, UPLOADER_CONTENT, GUEST_IDENTITY]
           example: CONTENT
         targetId:
           x-veyq-visibility: id
           type: string
-          description: The blocked id — a share id, a node's or item's id, a guest identity's id.
+          description: The blocked id — a share id, a node's or item's id, an uploader's account or guest identity id, a guest identity's id.
           maxLength: 64
           example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
         shareId:
@@ -2488,8 +2513,21 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The space a `CONTENT` measure's target lies in; null otherwise.
+          description: The space a `CONTENT` or `UPLOADER_CONTENT` measure's targets lie in; null otherwise.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        covers:
+          x-veyq-visibility: id
+          type: array
+          description: >
+            For `UPLOADER_CONTENT`, the ids of the nodes and items it blocks, so the reader finds it on each one's
+            placeholder — ids of the reader's own space, which a member already reads; empty for every other kind. No
+            `maxItems`: nothing bounds how many items one person uploads to a space, and a cut list would leave a blocked
+            item without its statement.
+          items:
+            x-veyq-visibility: id
+            type: string
+            maxLength: 64
+          example: []
         ground: { $ref: "#/components/schemas/ModerationGround" }
         provision: { $ref: "#/components/schemas/StatementProvision" }
         basis: { $ref: "#/components/schemas/StatementBasis" }

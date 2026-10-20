@@ -31,7 +31,8 @@
    shows it again ([uc.memory.live-updates](../../memory/use-cases/uc.memory.live-updates.md) E8). A page open on a
    blocked node — a Memory, a file, a drop box, the node or a folder above it — turns to the placeholder on the next poll
    of the space's tree, which runs on every opened node's page, unmounting what it showed and revoking what it had
-   decrypted; a lift brings it back (uc.memory.live-updates E9, inbox #503). Members and guests alike.
+   decrypted; a lift brings it back (uc.memory.live-updates E9, inbox #503). Members and guests alike. On a case of a
+   name reported on its own the step blocks the node that name belongs to: the server serves no node without its name.
 4. **Block a guest uploader.** The moderator blocks a guest identity the held rows name as an uploader: its token is
    refused on every write, and the link it came through is blocked with it (a guest could mint a new identity on the same
    link). The link's creator may re-issue the link: the new link is a member's new decision.
@@ -73,6 +74,20 @@
   and the hold stay. Wherever a lifted measure is shown — the case, the affected's statement, the Art. 18 export — such
   a one reads "ended when the content was erased" (de: „endete mit dem Löschen“), not "lifted". A trashed node or
   medium still stands: only its purge erases it.
+- **A8 — Everything from one uploader** (ADR 0093 §§ 1, 4, 6; cr-report-a-name-and-an-uploader). The decision panel lists
+  each uploader the case names — a member or a guest identity — with how many items they uploaded to the case's space,
+  live and trashed (Memories' media by their owner key, Depot's files by their content's uploader; a cover or a banner is
+  a node's look and is not counted): a count of the clear attribution the server already holds, never content. **Block
+  everything from this uploader** (`UPLOADER_CONTENT`) blocks exactly those items as content — each refused and marked
+  as in step 3 — and lists them with the measure, so what the uploader adds after the decision is not blocked: a person
+  decided on what existed. It widens the case's hold to the same items by the hold's own rules (its end, its pins; a row
+  the hold already holds is not copied twice; a new hold where none is alive). Its statement says that everything one
+  person had uploaded to a space was blocked, goes to that uploader where they are a member and to every owner of the
+  space, and is found on each item it covers. It ends with its uploader (a guest identity dropped, an account erased)
+  and when its last item is erased; an item whose stored object another row keeps hangs it on that object, as in A7. An
+  uploader the case does not name, or one with nothing in the space, is refused (`moderation_target_unknown`). The
+  moderator reviews what the case's keys open — a guest's other uploads only where the reported node holds them: the
+  reporter's handover of a guest's identity key (ADR 0093 § 1) is not built.
 
 ## Quality notes
 

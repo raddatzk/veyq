@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.moderation
 
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
 import me.raddatz.veyq.core.moderation.block.ModerationProposalEntity
 import me.raddatz.veyq.core.moderation.block.ProposalOutcome
 import me.raddatz.veyq.core.moderation.hold.HoldEntity
@@ -118,6 +119,9 @@ class ModerationRecordsPurge {
         if (statementIds.isNotEmpty()) StatementRecipientEntity.delete("statementId in ?1", statementIds)
         ModerationStatementEntity.delete("caseId", caseId)
         ModerationProposalEntity.delete("caseId", caseId)
+        val blockIds = ModerationBlockEntity.list("caseId", caseId).map { it.id }
+        // An uploader's block's reach goes first: its foreign key refuses the other order.
+        if (blockIds.isNotEmpty()) ModerationBlockReachEntity.delete("blockId in ?1", blockIds)
         ModerationBlockEntity.delete("caseId", caseId)
         AuthorityOrderEntity.delete("caseId", caseId)
         val reportIds = ReportShareEntity.list("caseId", caseId).map { it.reportId }.distinct()

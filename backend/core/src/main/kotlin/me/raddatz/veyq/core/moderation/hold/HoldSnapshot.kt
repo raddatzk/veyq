@@ -21,6 +21,16 @@ sealed interface HoldTarget {
 
     /** A reported upload link, by its share id. */
     data class Link(override val scopeId: String, val shareId: String) : HoldTarget
+
+    /** A reported name (ADR 0093 § 9): its node's one row — the name and its editor — and nothing below it. */
+    data class Name(override val scopeId: String, val nodeId: String) : HoldTarget
+
+    /**
+     * Everything one uploader uploaded to the space, as a moderator's `UPLOADER_CONTENT` step names it
+     * ([me.raddatz.veyq.core.moderation.block.UploaderContent]): core's file nodes ([nodeIds], each with its
+     * attachments) and an application's items ([itemIds], a Memories medium with its derivatives and bucket).
+     */
+    data class Uploads(override val scopeId: String, val nodeIds: List<String>, val itemIds: List<String>) : HoldTarget
 }
 
 /**
@@ -41,7 +51,12 @@ interface HoldSnapshotContributor {
  * every contributor has run. Table and column names are the contributors' own constants, checked to be plain
  * identifiers before they reach a statement; values are bound parameters.
  */
-class HoldSnapshot internal constructor(private val holdId: String, private val em: EntityManager) {
+class HoldSnapshot internal constructor(
+    private val holdId: String,
+    private val em: EntityManager,
+    /** Rows the hold already holds, as `table:id` — a widened hold ([Holds.widen]) copies none of them twice. */
+    private val already: Set<String> = emptySet(),
+) {
     internal val blobIds = LinkedHashSet<String>()
     internal val identityIds = LinkedHashSet<String>()
 
@@ -68,11 +83,13 @@ class HoldSnapshot internal constructor(private val holdId: String, private val 
         if (values.isEmpty()) return emptyList()
         val rows = values.distinct().chunked(BATCH).flatMap { batch -> select(table, column, batch) }
         rows.forEach { row ->
+            val sourceId = row["id"] ?: row[column] ?: ""
+            if ("$table:$sourceId" in already) return@forEach
             HoldRowEntity().apply {
                 id = UUID.randomUUID().toString()
                 this.holdId = this@HoldSnapshot.holdId
                 sourceTable = table
-                sourceId = row["id"] ?: row[column] ?: ""
+                this.sourceId = sourceId
                 payload = json.writeValueAsString(row)
             }.persist()
             row["id"]?.let { copiedIds += it }

@@ -158,7 +158,8 @@ class ErasureLedger : ReclaimedKeys {
     @Transactional(Transactional.TxType.MANDATORY)
     fun blockLifted(row: ModerationBlockEntity) {
         write(
-            ErasureKind.LIFT.name, row.id, linkedMapOf("item" to row.kind, "target" to row.targetId, "by" to row.liftedBy),
+            ErasureKind.LIFT.name, row.id,
+            linkedMapOf("item" to row.kind, "target" to row.targetId, "scope" to row.scopeId, "by" to row.liftedBy),
             at = row.liftedAt,
         )
     }

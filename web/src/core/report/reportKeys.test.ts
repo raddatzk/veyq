@@ -10,7 +10,7 @@ import { sealName, wrapContentKey, type TreeNode } from '../node/tree'
 import { sealNodeMeta } from '../node/nodeMeta'
 import { FOLDER_KIND } from '../node/kind'
 import { ShareRole } from '../../api/generated/sharing'
-import { linkReportKeys, nodeReportKeys } from './reportKeys'
+import { linkReportKeys, nameReportKeys, nodeReportKeys } from './reportKeys'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000f3'
 const ROOT = '5c09e000-0000-4000-8000-0000000000a0'
@@ -72,6 +72,33 @@ describe('nodeReportKeys', () => {
     expect(keys.map((k) => k.role)).toEqual(['NODE', 'LINK_NAME'])
     expect(() => v1.encodeReportKeys(keys), 'every role is a token the sealer takes (16 characters at most)').not.toThrow()
     expect(new TextDecoder().decode(v1.openFieldWith({ purpose: 'share-memory-name' }, keys[1].key, fromB64std(sealedName)))).toBe('Familie')
+  })
+})
+
+describe('nameReportKeys (a name reported on its own, ADR 0093 § 9)', () => {
+  const sibling = node('5c09e000-0000-4000-8000-0000000000c0', ROOT, K_ROOT, v1.randomBytes(32), 'Winter')
+  const withSibling: TreeSource = memberTreeSource({ nodes: () => [...nodes, sibling], scopeId: () => SCOPE, epochs: () => epochs, scope: () => '' })
+
+  it('hands over that name\'s K_field and nothing else', () => {
+    const keys = nameReportKeys(access, withSibling, SCOPE, nodes[1])!
+    expect(keys.map((k) => k.role)).toEqual(['NODE_NAME'])
+    expect(() => v1.encodeReportKeys(keys)).not.toThrow()
+    expect(nameOf(nodes[1], keys[0].key), 'the control: it opens the reported name').toBe('Sommer')
+  })
+
+  it('the key opens neither the node, nor its meta, nor a sibling\'s name', () => {
+    const [{ key }] = nameReportKeys(access, withSibling, SCOPE, nodes[1])!
+    expect(key).not.toEqual(K_CHILD)
+    expect(() => v1.openFieldWith({ purpose: 'node-meta', scopeId: SCOPE, nodeId: CHILD }, key, fromB64std(nodes[1].wrappedMeta!)), 'not the meta').toThrow()
+    expect(() => nameOf(sibling, key), 'not a sibling\'s name').toThrow()
+    expect(nameOf(sibling, nameReportKeys(access, withSibling, SCOPE, sibling)![0].key), 'the sibling\'s own key does').toBe('Winter')
+  })
+
+  it('a guest\'s link root has no name of its own to report: the link names it', () => {
+    const guest = { mode: 'guest', role: ShareRole.Read, shareId: 'x', fragmentKey: '', head: { kShare: v1.randomBytes(32), share: {}, scopeId: SCOPE } } as unknown as GuestAccess
+    expect(nameReportKeys(guest, { ...tree, rootId: ROOT }, SCOPE, nodes[0])).toBeNull()
+    // The control: below the root the guest reads the name under the root's key, and reports it.
+    expect(nameReportKeys(guest, { ...tree, rootId: ROOT }, SCOPE, nodes[1])!.map((k) => k.role)).toEqual(['NODE_NAME'])
   })
 })
 
