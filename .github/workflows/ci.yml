@@ -28,9 +28,7 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
-      - "!docs/api/**"
       - "site/**"
-      - ".github"
   pull_request:
     branches:
       - main
@@ -38,9 +36,7 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
-      - "!docs/api/**"
       - "site/**"
-      - ".github"
   workflow_dispatch:
     inputs:
       release:

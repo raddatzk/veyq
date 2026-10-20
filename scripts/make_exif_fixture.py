@@ -19,9 +19,10 @@ Output: web/src/features/memories/__fixtures__/exif-sample.jpg
 from __future__ import annotations
 
 import struct
-from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "web/src/features/memories/__fixtures__/exif-sample.jpg"
+import repo_layout  # where the code surfaces live (ADR 0106)
+
+OUT = repo_layout.WEB / "src/features/memories/__fixtures__/exif-sample.jpg"
 
 # A 1x1 greyscale baseline JPEG (SOI … EOI). Produced once with Pillow
 # (`Image.new('L', (1, 1), 128).save(buf, 'JPEG', quality=25)`) and frozen here so this script needs nothing

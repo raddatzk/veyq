@@ -54,9 +54,10 @@ import re
 import sys
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+import repo_layout  # where the code surfaces live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
+BACKEND = repo_layout.BACKEND
 PIN_FILE = ROOT / "scripts" / "applied_migrations.sha256"
 CORE = "core"
 

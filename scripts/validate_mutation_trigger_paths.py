@@ -41,6 +41,7 @@ import pathlib
 import sys
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+import repo_layout  # where the code surfaces live (ADR 0106)
 
 try:
     import yaml
@@ -49,7 +50,7 @@ except ImportError:
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MANIFEST = ROOT / "backend" / "core" / "pitest.scope.json"  # :core owns PIT (it mutates core classes only)
+MANIFEST = repo_layout.BACKEND / "core" / "pitest.scope.json"  # :core owns PIT (it mutates core classes only)
 WORKFLOW = ROOT / ".github" / "workflows" / "mutation-backend.yml"
 
 SOURCE_ROOTS = {"targetClasses": backend_tree.main_roots,

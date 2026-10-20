@@ -25,8 +25,10 @@ from __future__ import annotations
 import pathlib
 import re
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
+BACKEND = repo_layout.BACKEND
 # Path segments that mark generated or cached trees, never sources — and `buildSrc`, the build's own convention
 # plugins: Kotlin, but build logic, never a project's main or test code.
 _SKIP = {"build", ".gradle", "node_modules", "out", "bin", "buildSrc"}

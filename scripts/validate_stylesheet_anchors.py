@@ -2,8 +2,8 @@
 """Guard that every stylesheet rule is written for an element the markup can actually produce.
 
 **What it asserts.** For every package that has a `src/styles/` directory (today `web/` and `admin-web/`,
-found by walking the repo root — a third one is in scope the day it lands), every **anchor compound** in
-those sheets plus the package's `src/style.css` — and every other `.css` file under its `src/`, which is where an
+found by walking the directory the code surfaces live in — a third one is in scope the day it lands), every
+**anchor compound** in those sheets plus the package's `src/style.css` — and every other `.css` file under its `src/`, which is where an
 application's own sheet lives (`web/src/features/memories/memories.css`, inbox #513; a sheet that moves out of
 `src/styles/` must not move out of this guard) — names at least one class that the package's own markup
 applies. The anchor compound is a selector's first compound, the part before any descendant/child/sibling
@@ -79,6 +79,8 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # A CSS class token, and the combinators that end a selector's first compound.
@@ -127,8 +129,9 @@ def rel(path: pathlib.Path) -> str:
 
 
 def packages() -> list[pathlib.Path]:
-    """Every package that has a `src/styles/` directory — derived, never listed."""
-    return sorted(p for p in ROOT.iterdir() if (p / "src" / "styles").is_dir())
+    """Every package that has a `src/styles/` directory — derived, never listed: the directories where the code
+    surfaces live (`repo_layout.SRC`)."""
+    return sorted(p for p in repo_layout.SRC.iterdir() if (p / "src" / "styles").is_dir())
 
 
 def sheets(pkg: pathlib.Path) -> tuple[list[pathlib.Path], list[pathlib.Path]]:

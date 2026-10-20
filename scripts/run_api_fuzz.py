@@ -135,7 +135,7 @@ import run_web_e2e as e2e  # noqa: E402
 import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
 
 REPO = Path(__file__).resolve().parent.parent
-WEB = REPO / "web"
+WEB = repo_layout.WEB
 FUZZ = repo_layout.FUZZ_DIR
 CONFIG = FUZZ / "schemathesis.toml"
 BASELINE = FUZZ / "baseline.json"
@@ -696,7 +696,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     if not e2e.JAR.is_file():
-        raise SystemExit(f"[fuzz] no fast-jar at {e2e.JAR} — `cd backend && ./gradlew quarkusBuild` first")
+        raise SystemExit(f"[fuzz] no fast-jar at {e2e.JAR} — "
+                         f"`cd {repo_layout.rel(repo_layout.BACKEND)} && ./gradlew quarkusBuild` first")
     if e2e.port_is_taken():
         raise SystemExit(f"[fuzz] something already answers on {e2e.READY_URL} — not ours to fuzz")
     stale = unknown_negative_only()

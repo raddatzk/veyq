@@ -59,8 +59,10 @@ import pathlib
 import sys
 import xml.etree.ElementTree as ET
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
+BACKEND = repo_layout.BACKEND
 MANIFEST = BACKEND / "core" / "pitest.scope.json"  # :core owns PIT (it mutates core classes only)
 REPORT = BACKEND / "core" / "build" / "reports" / "pitest" / "mutations.xml"
 
@@ -97,7 +99,7 @@ def main() -> int:
             failed = True
             print(f"::error::meta-check: scope glob '{glob}' matched 0 mutations — it points at nothing (a renamed "
                   f"class, or a typo) while its siblings carry the run, so failWhenNoMutations stayed green. Fix "
-                  f"backend/core/pitest.scope.json or the class name (ADR 0045 §4).")
+                  f"{MANIFEST.relative_to(ROOT)} or the class name (ADR 0045 §4).")
             continue
 
         if undetected > SURVIVOR_BUDGET:

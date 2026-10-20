@@ -101,9 +101,12 @@ import re
 import shlex
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WEB = ROOT / "web"
+WEB = repo_layout.WEB
 SRC = WEB / "src"
+SRC_REL = repo_layout.rel(SRC)  # how a message names a file under SRC
 PACKAGE = WEB / "package.json"
 GENERATE_SCRIPT = "generate:api"
 # Every application by its owner name — the directory of its specs (`contracts/api/<owner>/`) and its backend module
@@ -279,14 +282,14 @@ MESSAGES = {
     RULE_APPLICATION: "it imports another application or one of its generated clients; an application depends on "
                       "core only — move what both need into core (ADR 0079 Decision 4)",
     RULE_GLOB: "`import.meta.glob` hides edges from this guard; register applications by a static import in "
-               "web/src/applications.ts",
+               f"{SRC_REL}/applications.ts",
     RULE_KIND: "it names an application's node kind; ask the registry what to render for a kind",
     RULE_I18N: "it reads an application's i18n namespace (core), or another application's (an application); core's "
                "strings name no application — use a core key (e.g. `node.*`), or let the kind bring its wording "
                "through the registry; an application's strings are its own or core's",
     RULE_CATALOG_ROOT: "the composition root's catalog half imports an application's catalog "
                        f"(`features/<owner>/{APPLICATION_CATALOG}`) and nothing else of it — register code in "
-                       f"web/src/{COMPOSITION_ROOT}",
+                       f"{SRC_REL}/{COMPOSITION_ROOT}",
 }
 
 
@@ -317,20 +320,20 @@ def catalog_errors(src: pathlib.Path) -> list[str]:
         path = src / rel
         who = "core" if owner is None else f"the application `{owner}`"
         if not path.is_file():
-            errors.append(f"web/src/{rel}: {who} has no catalog there")
+            errors.append(f"{SRC_REL}/{rel}: {who} has no catalog there")
             continue
         try:
             per_locale = catalog_namespaces(path.read_text(encoding="utf-8"))
         except ParseError as e:
-            errors.append(f"web/src/{rel}: {e}")
+            errors.append(f"{SRC_REL}/{rel}: {e}")
             continue
         for locale, names in sorted(per_locale.items()):
             if owner is None and names & owned:
-                errors.append(f"web/src/{rel}: core's `{locale}` carries an application's namespace "
+                errors.append(f"{SRC_REL}/{rel}: core's `{locale}` carries an application's namespace "
                               f"({', '.join(sorted(names & owned))}) — it belongs in that application's "
                               f"features/<owner>/{APPLICATION_CATALOG}")
             elif owner is not None and names != set(I18N_NAMESPACES[owner]):
-                errors.append(f"web/src/{rel}: the `{locale}` of {who}'s catalog carries {', '.join(sorted(names))}"
+                errors.append(f"{SRC_REL}/{rel}: the `{locale}` of {who}'s catalog carries {', '.join(sorted(names))}"
                               f" — exactly its own namespaces ({', '.join(I18N_NAMESPACES[owner])}) belong there; "
                               "core's go in web/src/i18n/index.ts, another application's in its own catalog")
     return errors
@@ -347,7 +350,7 @@ def main() -> int:
         return 1
     try:
         if not PACKAGE.is_file():
-            raise ParseError("web/package.json is missing")
+            raise ParseError(f"{repo_layout.rel(PACKAGE)} is missing")
         clients = application_clients(generated_pairs(PACKAGE.read_text(encoding="utf-8")), WEB, ROOT)
     except ParseError as e:
         print(f"WEB-CORE-IMPORTS FAILED — cannot derive the applications' generated clients: {e}. Fix the "
@@ -364,7 +367,7 @@ def main() -> int:
         read[owner or "core"] += 1
         for rule in sorted(violations(rel, path.read_text(encoding="utf-8"), clients)):
             who = f"the application `{owner}`" if owner else "core"
-            errors.append(f"web/src/{rel}: {who} breaks the `{rule}` rule — {MESSAGES[rule]}")
+            errors.append(f"{SRC_REL}/{rel}: {who} breaks the `{rule}` rule — {MESSAGES[rule]}")
     if errors:
         print("WEB-CORE-IMPORTS FAILED:")
         for e in errors:

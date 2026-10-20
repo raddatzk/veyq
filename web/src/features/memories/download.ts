@@ -19,7 +19,7 @@ import { plaintextTotal } from '../../sw/range'
 /**
  * Sniff the **full MIME type** of a decrypted original from its leading magic bytes — a small known set, else
  * `undefined`. Operator-blind: the bytes are plaintext the client already holds, and the type is derived on
- * device; the server never saw a filename or a media type ([ADR 0044](../../../docs/decisions/0044-field-visibility-declared-at-the-field.md)).
+ * device; the server never saw a filename or a media type ([ADR 0044](../../../../docs/decisions/0044-field-visibility-declared-at-the-field.md)).
  * It is the upload's fallback when the picked file names no type (`media.ts` `resolveMediaType`, an empty `File.type`
  * from Safari's Photos import): the result is sealed as the original's blob meta type, and a `video/*` one is what
  * tells the lightbox to render a `<video>` and the tile to draw a play badge (#104/#105), so **do not** trust `ftyp` alone: WebM/MKV carry no `ftyp` box and are handled

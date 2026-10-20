@@ -62,7 +62,7 @@ new shape.
 
 ## Phases
 
-- [ ] **1 readers on both layouts, guards fail closed, the two new guards** — on the untouched tree, one or more
+- [x] **1 readers on both layouts, guards fail closed, the two new guards** — on the untouched tree, one or more
   commits of their own: decisions 1, 2, 3, 6 (the layout-aware half; the paths still resolve to the root ones), the
   `vite.config.ts` lookup of decision 5 (it works at either depth). · Done when: every `scripts/validate_*.py` green
   including `validate_guard_gaps.py --force`; every `scripts/*_selftest.py` green; each decision-2 bite and each new

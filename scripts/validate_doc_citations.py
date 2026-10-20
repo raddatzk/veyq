@@ -54,6 +54,8 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DECISIONS = ROOT / "docs" / "decisions"
 FEATURES = ROOT / "docs" / "features"
@@ -73,7 +75,7 @@ SCAN = [
     (ROOT / "contracts", {".yaml", ".yml", ".json", ".md"}),
     # The whole backend, not `backend/src`: every Gradle module keeps its sources in its own `src` (`backend/core/src`,
     # `backend/apps/memories/src`, …), and a root that names one project stops seeing the others.
-    (ROOT / "backend", {".kt"}),
+    (repo_layout.BACKEND, {".kt"}),
     *[(src, CODE_SUFFIXES) for src in workspace_srcs()],
     (FEATURES, {".md"}),
     (CROSSCUTTING, {".md"}),
@@ -107,8 +109,6 @@ def scanned_files():
         if p.name != "README.md":
             yield p
     for root, suffixes in SCAN:
-        if not root.exists():
-            continue
         for p in sorted(root.rglob("*")):
             if p.suffix not in suffixes:
                 continue
@@ -137,6 +137,13 @@ def dangling(line: str):
 
 
 errors: list[str] = []
+# A configured root that does not exist is a surface that moved: skipping it scans the others and says OK about the
+# one it no longer reads (cr-repo-layout-src).
+missing = [root for root, _ in SCAN if not root.is_dir()]
+if missing:
+    print("DOC-CITATION VALIDATION FAILED: a scan root does not exist - a surface moved? "
+          + ", ".join(str(r.relative_to(ROOT)) for r in missing))
+    sys.exit(1)
 count = 0
 for p in scanned_files():
     count += 1

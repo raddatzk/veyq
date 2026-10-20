@@ -146,7 +146,7 @@ from e2e_sweeps import (  # noqa: F401 - re-exported for scripts/validate_wire_l
 )
 
 REPO = Path(__file__).resolve().parent.parent
-WEB = REPO / "web"
+WEB = repo_layout.WEB
 # `VEYQ_INFRA_DIR` names the directory holding the Compose files (ADR 0106: `infra/docker/` of a checkout), and pins
 # the stack to another checkout's — see the worktree note in [compose_up].
 INFRA = Path(os.environ.get("VEYQ_INFRA_DIR", repo_layout.DOCKER_DIR))
@@ -191,7 +191,9 @@ BASE = f"http://{HOST}:{PORT}"
 # Server-Owner call is tenant-independent, and the listener's peer rule admits a loopback caller.
 ADMIN_PORT = int(os.environ.get("VEYQ_ADMIN_PORT", "8090"))
 ADMIN_BASE = f"http://127.0.0.1:{ADMIN_PORT}"
-JAR = Path(os.environ.get("VEYQ_JAR", REPO / "backend/build/quarkus-app/quarkus-run.jar"))
+# The backend's fast-jar, relative to a backend directory: this checkout's, or a predecessor's ([prepare_predecessor]).
+JAR_IN_BACKEND = "build/quarkus-app/quarkus-run.jar"
+JAR = Path(os.environ.get("VEYQ_JAR", repo_layout.BACKEND / JAR_IN_BACKEND))
 BOOT_SECS = int(os.environ.get("VEYQ_BOOT_SECS", "120"))
 TEST_MS = os.environ.get("VEYQ_TEST_MS", "120000")
 
@@ -687,7 +689,8 @@ class Build(NamedTuple):
 
     @property
     def web(self) -> Path:
-        return self.root / "web"
+        """The tree's web client, in this layout or - a predecessor from before ADR 0106 stage 2 - at the root."""
+        return repo_layout.surface_in(self.root, repo_layout.WEB)
 
 
 CANDIDATE = Build("candidate", REPO, JAR)
@@ -1388,9 +1391,20 @@ def highest_migration(pins: dict[str, str]) -> str | None:
 
 def changed_migrations(before: dict[str, str], after: dict[str, str]) -> list[str]:
     """The migrations a restored database would refuse to start on: one the candidate CHANGED (its checksum differs from
-    the one the predecessor applied) or REMOVED (applied, and no longer there). An added one is the upgrade itself."""
-    changed = [f"changed: {path}" for path in sorted(before) if path in after and after[path] != before[path]]
-    return changed + [f"removed: {path}" for path in sorted(before) if path not in after]
+    the one the predecessor applied) or REMOVED (applied, and no longer there). An added one is the upgrade itself.
+
+    Compared by FILE NAME, never by repository path: Flyway knows a migration by its version and checksum, not by where
+    the file sat, so a migration that only moved (ADR 0106 stage 2 put the backend under `src/`) is neither changed nor
+    removed. Each is named by the candidate's path where it has one, else by the predecessor's."""
+    after_by_name = {Path(path).name: (path, sha) for path, sha in after.items()}
+    changed, removed = [], []
+    for path in sorted(before):
+        now = after_by_name.get(Path(path).name)
+        if now is None:
+            removed.append(f"removed: {path}")
+        elif now[1] != before[path]:
+            changed.append(f"changed: {now[0]}")
+    return changed + removed
 
 
 # Flyway's own words for refusing a restored schema at the candidate's start (`migrate-at-start` validates first). The
@@ -1584,14 +1598,21 @@ def resolve_predecessor(ref: str | None) -> tuple[str, str]:
     if found.returncode != 0:
         raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor {asked} names no commit of this repository")
     commit = found.stdout.strip()
-    seeder = upgrade_seeder(git("ls-tree", "-r", "--name-only", commit, "--", "web/src").splitlines())
+    seeder = upgrade_seeder(predecessor_web_sources(commit))
     if seeder is None:
         raise SystemExit(
             f"[e2e] UPGRADE PROOF: the predecessor {asked} = {commit[:12]} carries no seeder (no `{UPGRADE_GROUP}.*` "
-            f"e2e group under web/src), so it cannot seed an instance to upgrade. A predecessor must be a commit at or "
+            f"e2e group under the web client's src/), so it cannot seed an instance to upgrade. A predecessor must be a commit at or "
             f"after the one that added the seeder; name one with --upgrade-from <ref>."
         )
     return asked, commit
+
+
+def predecessor_web_sources(commit: str) -> list[str]:
+    """Every path under a commit's web `src/`, in either layout (ADR 0106 decision 7): the predecessor may be a commit
+    from before the code surfaces moved under `src/`, so both places are listed and the one that exists answers."""
+    return git("ls-tree", "-r", "--name-only", commit, "--",
+               *(f"{path}/src" for path in repo_layout.surface_paths(repo_layout.WEB))).splitlines()
 
 
 def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
@@ -1610,8 +1631,10 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
     # Removed however the run ends — a failed build, a `SystemExit` of a hook, a SIGTERM (which `main` turns into one) —
     # so no stray worktree stays registered; [remove_predecessor] removes it earlier on the ordinary path.
     atexit.register(remove_worktree, tree)
+    # The predecessor's surfaces where ITS layout puts them, which may be the one before ADR 0106 stage 2.
+    backend, web = repo_layout.surface_in(tree, repo_layout.BACKEND), repo_layout.surface_in(tree, repo_layout.WEB)
     for label, cmd, cwd in (("npm", ["npm", "ci", "--no-audit", "--no-fund"], tree),
-                            ("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], tree / "backend")):
+                            ("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], backend)):
         out = workdir / f"predecessor-{label}.log"
         log(f"upgrade proof: building the predecessor ({' '.join(cmd)}) -> {shown(out)}")
         with out.open("w") as handle:
@@ -1619,8 +1642,8 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
         if result.returncode != 0:
             tail(out)
             raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor's {label} step failed (exit {result.returncode})")
-    jar = tree / "backend" / "build" / "quarkus-app" / "quarkus-run.jar"
-    if not jar.is_file() or not (tree / "web" / "src" / "api" / "generated").is_dir():
+    jar = backend / JAR_IN_BACKEND
+    if not jar.is_file() or not (web / "src" / "api" / "generated").is_dir():
         raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor built no jar at {shown(jar)} or generated no client")
     return Predecessor(asked, commit, git("show", f"{commit}:{PIN_FILE}"),
                        Build(f"predecessor {commit[:12]}", tree, jar))
@@ -1849,7 +1872,8 @@ def main(argv: list[str]) -> int:
     if not shutil.which("docker"):
         raise SystemExit("[e2e] docker is required (the bundled stack supplies the DB + object store)")
     if not JAR.is_file():
-        raise SystemExit(f"[e2e] backend jar missing: {JAR}\nBuild it first: (cd backend && ./gradlew quarkusBuild)")
+        raise SystemExit(f"[e2e] backend jar missing: {JAR}\nBuild it first: "
+                         f"(cd {repo_layout.rel(repo_layout.BACKEND)} && ./gradlew quarkusBuild)")
 
     files = [normalize(a) for a in argv] if argv else discover()
     groups = into_groups(files)

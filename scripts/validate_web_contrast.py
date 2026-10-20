@@ -44,8 +44,10 @@ import re
 import sys
 from pathlib import Path
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
-SHEETS = [ROOT / "web" / "src" / "styles" / "base.css", ROOT / "admin-web" / "src" / "styles" / "base.css"]
+SHEETS = [repo_layout.WEB / "src" / "styles" / "base.css", repo_layout.ADMIN_WEB / "src" / "styles" / "base.css"]
 
 TEXT, UI = 4.5, 3.0
 # (label, foreground, background, floor). Expressions are CSS as the stylesheets write them.

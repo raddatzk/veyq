@@ -164,10 +164,16 @@ def check_generator(files: list[str]) -> None:
             continue
         if "openapi-generator-cli" not in script:
             continue
-        verify_at, generate_at = script.find(VERIFIER), script.find("openapi-generator-cli")
+        # The verifier is anchored on the file its path names from the package's own directory, never on a suffix:
+        # a `../scripts/…` left one level short after a move still contains the name and would run nothing.
+        verifier = (ROOT / VERIFIER).resolve()
+        runs = [m.start() for m in re.finditer(r"\S*" + re.escape(pathlib.PurePosixPath(VERIFIER).name), script)
+                if ((ROOT / rel).parent / m.group(0)).resolve() == verifier]
+        verify_at, generate_at = (runs[0] if runs else -1), script.find("openapi-generator-cli")
         if verify_at < 0 or verify_at > generate_at:
-            fail(f"{rel}: generate:api runs openapi-generator-cli without running {VERIFIER} before it — "
-                 f"the wrapper would run an unchecked JAR")
+            fail(f"{rel}: generate:api runs openapi-generator-cli without running {VERIFIER} before it (by a path "
+                 f"that resolves to that file from {pathlib.PurePosixPath(rel).parent}) — the wrapper would run an "
+                 f"unchecked JAR")
 
 
 def check_wrapper(files: list[str]) -> None:

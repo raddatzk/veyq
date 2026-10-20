@@ -139,7 +139,7 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 import contract_specs  # where the specs live and which directories hold an application's — derived, never listed
 from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + literals blanked, offsets kept
 
-import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+import repo_layout  # noqa: E402 - where the code surfaces, the deployment files and the test harnesses live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = backend_tree.BACKEND
@@ -561,15 +561,18 @@ def rule_e(mods: list[str]) -> list[str]:
     shipped = shipped_modules()
     if not base:
         errors.append(f"(e) the Dockerfile has no `{BUILD_BASE_STAGE}` stage copying a file — the module check reads nothing")
-    if BUILD_SRC.is_dir() and "backend/buildSrc" not in base:
-        errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/buildSrc: its warm-up "
+    # A COPY source is matched whole, as the checkout spells it from the build context (the repository root), so a
+    # Dockerfile still naming a surface's old place is red, never matched by a suffix.
+    backend = repo_layout.rel(BACKEND)
+    if BUILD_SRC.is_dir() and f"{backend}/buildSrc" not in base:
+        errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy {backend}/buildSrc: its warm-up "
                       f"`gradlew help` finds no `veyq.module` plugin for any module.")
     for mod in mods:
-        if f"backend/{mod}/build.gradle.kts" not in base:
-            errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/{mod}/build.gradle.kts: "
+        if f"{backend}/{mod}/build.gradle.kts" not in base:
+            errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy {backend}/{mod}/build.gradle.kts: "
                           f"its warm-up `gradlew help` fails configuring an included project with no directory.")
-        if mod in shipped and f"backend/{mod}/src" not in every:
-            errors.append(f"(e) the Dockerfile copies no backend/{mod}/src: the image's build would compile the "
+        if mod in shipped and f"{backend}/{mod}/src" not in every:
+            errors.append(f"(e) the Dockerfile copies no {backend}/{mod}/src: the image's build would compile the "
                           f"module without its sources.")
     return errors
 

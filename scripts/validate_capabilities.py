@@ -88,6 +88,8 @@ import sys
 
 import yaml
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "contracts" / "platform" / "capabilities.json"
 FEATURES = ROOT / "docs" / "features"
@@ -103,8 +105,8 @@ REQUIREMENT_KINDS = {"flag": "boolean", "days": "integer"}
 REQUIREMENT_TEXTS = ("title", "whenSet")
 COMMON = ROOT / "contracts" / "api" / "_common.openapi.yaml"
 # The roots an id may hang from (ADR 0088 decision 1): `core`, and every application the backend composes, derived from
-# its module directories (`backend/apps/<name>`, the `:apps:<name>` projects) rather than typed here.
-APPS = ROOT / "backend" / "apps"
+# its module directories (`<backend>/apps/<name>`, the `:apps:<name>` projects) rather than typed here.
+APPS = repo_layout.BACKEND / "apps"
 ROOTS = {"core"} | {d.name for d in APPS.iterdir() if d.is_dir() and (d / "build.gradle.kts").exists()}
 # The operating modes a preset gives a value for (ADR 0088 decision 14, ADR 0093 § 14).
 MODES = ("private", "organisation")

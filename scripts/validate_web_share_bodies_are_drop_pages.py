@@ -26,8 +26,10 @@ import re
 import sys
 from pathlib import Path
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = Path(__file__).resolve().parent.parent
-WEB_SRC = ROOT / "web" / "src"
+WEB_SRC = repo_layout.WEB / "src"
 CLAIM = re.compile(r"claimShareBody\(\s*[\w.]+\s*,\s*(\w+)\s*[,)]")
 IMPORT = re.compile(r"^import\s+(\w+)\s+from\s+'([^']+\.vue)'", re.MULTILINE)
 
@@ -76,6 +78,11 @@ def check(root: Path) -> list[str]:
 
 
 def main() -> int:
+    # A missing or empty source root is a web client that moved: `check` would read nothing and say OK.
+    if not WEB_SRC.is_dir() or not sources(WEB_SRC):
+        print(f"SHARE-BODY VALIDATION FAILED: no source under {WEB_SRC.relative_to(ROOT)} - the web client moved? "
+              "This guard would check nothing there; point it at the client's `src/` (scripts/repo_layout.py).")
+        return 1
     errors = check(WEB_SRC)
     if errors:
         print("SHARE-BODY VALIDATION FAILED:")

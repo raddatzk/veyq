@@ -65,7 +65,7 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
 
 REPO = Path(__file__).resolve().parent.parent
-BACKEND = REPO / "backend"
+BACKEND = repo_layout.BACKEND
 COMPOSE_FILE = repo_layout.DEV_COMPOSE
 NAME = f"veyq-race-mariadb-{os.getpid()}"
 PASSWORD = "race"  # a throwaway container's credential, not a secret

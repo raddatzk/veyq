@@ -142,14 +142,14 @@ except ImportError:
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
-import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
+import repo_layout  # noqa: E402 - where the code surfaces, the deployment files and the test harnesses live (ADR 0106)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
-WEB = ROOT / "web"
-CRYPTO = ROOT / "packages" / "crypto"
-ADMIN_WEB = ROOT / "admin-web"
+WEB = repo_layout.WEB
+CRYPTO = repo_layout.CRYPTO
+ADMIN_WEB = repo_layout.ADMIN_WEB
 E2E = repo_layout.E2E_DIR
 WORKFLOWS = ROOT / ".github" / "workflows"
 
@@ -187,6 +187,10 @@ USECASE_KEYS = {"useCase", "feature", "title", "status", "acceptanceCriteria", "
 CRITERION_KEYS = {"id", "text", "coverage", "gaps"}
 
 errors: list[str] = []
+# Every surface root exists. A root is otherwise read only when a ref names it, and `crypto` and `admin-web` carry few
+# or none: a surface that moved would leave its roots unread and the run green (cr-repo-layout-src).
+errors += [f"the {area} surface's root {root.relative_to(ROOT)} does not exist - did it move? Its refs resolve against "
+           f"it (scripts/repo_layout.py)" for area, root in FILE_ROOTS.items() if not root.is_dir()]
 
 
 # ---- Kotlin: a lexer (not a parser) that makes comments and literals unable to pose as structure ----

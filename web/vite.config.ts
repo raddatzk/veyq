@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -131,11 +131,13 @@ function devSeedCredentialsPlugin(): Plugin {
     name: 'veyq-dev-seed-credentials',
     apply: 'serve',
     configureServer(server) {
+      // Resolved here, outside the handler's catch: a root that is not found must fail the dev server, not answer 404.
+      const envFile = join(repoRoot(), '.run', '.env')
       server.middlewares.use((req, res, next) => {
         if ((req.url ?? '').split('?')[0] !== '/__dev/seed-credentials') return next()
         try {
-          // `.run/.env` lives at the repo root (one level up from web/), written by `npm run bootstrap:user`.
-          const raw = readFileSync(fileURLToPath(new URL('../.run/.env', import.meta.url)), 'utf8')
+          // `.run/.env` lives at the repo root, written by `npm run bootstrap:user`.
+          const raw = readFileSync(envFile, 'utf8')
           const val = (key: string) => {
             const line = raw.split('\n').find((l) => l.startsWith(key + '='))
             return line ? line.slice(key.length + 1).trim() : ''
@@ -160,9 +162,23 @@ function devSeedCredentialsPlugin(): Plugin {
   }
 }
 
+// The repository root: the nearest directory above this file that holds `VERSION`. Walked up to rather than counted in
+// `../`, because how deep the client sits in the checkout is the layout's to decide (ADR 0106), and a count gone stale
+// in the dev-credentials endpoint would be swallowed by its catch and answer 404 in silence. Not found, it throws.
+function repoRoot(): string {
+  const start = dirname(fileURLToPath(import.meta.url))
+  let dir = start
+  while (!existsSync(join(dir, 'VERSION'))) {
+    const parent = dirname(dir)
+    if (parent === dir) throw new Error(`no VERSION in ${start} or above it: not inside a veyq checkout`)
+    dir = parent
+  }
+  return dir
+}
+
 // `VERSION` holds the major alone (ADR 0057 §1); anything else fails the build rather than compile a client against NaN.
 function platformMajor(): number {
-  const text = readFileSync(fileURLToPath(new URL('../VERSION', import.meta.url)), 'utf8').trim()
+  const text = readFileSync(join(repoRoot(), 'VERSION'), 'utf8').trim()
   if (!/^[0-9]+$/.test(text)) throw new Error(`VERSION must hold the major alone, got: ${text}`)
   return Number(text)
 }

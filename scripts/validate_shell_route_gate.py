@@ -39,8 +39,10 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ROUTER = ROOT / "web" / "src" / "router.ts"
+ROUTER = repo_layout.WEB / "src" / "router.ts"
 
 SHELL_LAYOUT = re.compile(r"layout\s*:\s*'app'")
 UNLOCK_GATE = re.compile(r"requiresUnlock\s*:\s*true")

@@ -46,8 +46,10 @@ import pathlib
 import re
 import sys
 
+import repo_layout  # where the code surfaces live (ADR 0106)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WEB_SRC = ROOT / "web" / "src"
+WEB_SRC = repo_layout.WEB / "src"
 COMPONENT = "LocaleMarkdownEditor.vue"
 HOME = WEB_SRC / "shared" / "ui"
 
