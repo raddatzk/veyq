@@ -213,8 +213,8 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_backend_module_graph` rule (a) requires every included module to ship. Before F0 this passed every
      guard; the module compiled and its tests ran green while the fast-jar held none of it
   78 a `core/node/` dialog reading Memories' message key `'memory.deleteMemoryTitle'` — rejected:
-     `validate_web_core_imports_no_applications`' i18n rule. The catalog is one file, so the key resolves and every test
-     is green; core's delete dialog did exactly this and titled a Depot drop box "Delete Memory" (inbox #375)
+     `validate_web_core_imports_no_applications`' i18n rule. Every catalog merges into one vue-i18n instance, so the
+     key resolves and every test is green; core's delete dialog did exactly this and titled a Depot drop box "Delete Memory" (inbox #375)
   79 admin-web's light `--app-primary` set back to Aura's emerald-500 (`#10b981`, white label 2.54:1) — rejected:
      `validate_web_contrast` reads `admin-web/src/styles/base.css` as well as web's (inbox #390). Until then that
      guard's limit (e) said admin-web was not covered, and the copy ADR 0065 keeps failed 34 pairs unseen
@@ -229,6 +229,18 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_write_concurrency` refuses a declared revision field with a version-shaped name (ADR 0086). Until
      inbox #452 the pins, the register and the terms carried a bare `version`, and the guard read it as a counter
      without asking what it was called
+  85 core's catalog (`web/src/i18n/index.ts`) carrying a `memory` block again — rejected:
+     `validate_web_core_imports_no_applications`' catalog rule: an application's namespaces live in its own
+     `features/<owner>/i18n.ts` (inbox #513). The runtime would refuse it only when Memories registers its own
+     `memory` next to it; a catalog that moved back whole would pass every test
+  86 Depot's catalog carrying a `media` block — rejected: an application's catalog names exactly its own namespaces,
+     so one cannot take over another's strings by declaring them (the runtime's write-once merge refuses the clash
+     too, but only for a namespace someone else already registered)
+  87 the composition root's catalog half (`web/src/applicationMessages.ts`) importing Memories' `register` — rejected:
+     that file is held to an application's catalog by exact path (the catalog-root rule); anything else imported
+     there would load an application's code into every test file and around the registry's composition root
+  88 a `features/depot` file reading Memories' `'media.…'` key — rejected: the application rule reads another
+     application's i18n namespace as the edge it is; the merged instance resolves it, so no test would notice
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1104,6 +1116,35 @@ def forge_web_core_reads_application_i18n(root: pathlib.Path) -> str:
     return "a core/node file reading Memories' i18n key 'memory.deleteMemoryTitle' (must be REJECTED — core names no application)"
 
 
+def _insert_after(root: pathlib.Path, rel: str, anchor: str, text: str) -> None:
+    f = root / "web" / "src" / rel
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError(f"web/src/{rel} or its anchor {anchor!r} is gone — re-anchor this forgery on the catalog layout")
+    f.write_text(f.read_text().replace(anchor, anchor + text, 1))
+
+
+def forge_web_core_catalog_carries_application_namespace(root: pathlib.Path) -> str:
+    _insert_after(root, "i18n/index.ts", "const en = {\n", "  memory: { guardGapProbe: 'x' },\n")
+    return "core's catalog carrying a `memory` block (must be REJECTED — Memories' namespaces live in its own catalog)"
+
+
+def forge_web_application_catalog_carries_another_namespace(root: pathlib.Path) -> str:
+    _insert_after(root, "features/depot/i18n.ts", "const en = {\n", "  media: { guardGapProbe: 'x' },\n")
+    return "Depot's catalog carrying Memories' `media` block (must be REJECTED — an application's catalog is its own)"
+
+
+def forge_web_catalog_root_imports_application_code(root: pathlib.Path) -> str:
+    _insert_after(root, "applicationMessages.ts", "import { addApplicationMessages } from './i18n'\n",
+                  "import { registerMemories } from './features/memories/register'\nvoid registerMemories\n")
+    return "the composition root's catalog half importing Memories' register (must be REJECTED — catalogs only)"
+
+
+def forge_web_application_reads_another_namespace(root: pathlib.Path) -> str:
+    _plant_depot(root, "features/depot/guardGapProbe.ts",
+                 "export const title = (t: (k: string) => string) => t('media.title')\n")
+    return "a features/depot file reading Memories' i18n key 'media.title' (must be REJECTED — no application → application)"
+
+
 DEPOT_BUILD = "backend/apps/depot/build.gradle.kts"
 
 
@@ -1549,6 +1590,10 @@ CASES = [
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
+    ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
+    ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),
+    ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),
+    ("88", WEB_GUARD, forge_web_application_reads_another_namespace, False),
     ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
     ("84", "validate_api_fuzz_baseline.py", forge_fuzz_baseline_5xx_under_another_check, True),
 ]
