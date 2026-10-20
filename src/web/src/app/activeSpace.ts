@@ -72,6 +72,8 @@ export function markTermsAccepted(): void {
 // reactivity. `scopeKey` is the **write key** (E_current); `epochKeys` carries the full peeled chain for reads.
 let scopeKey: Uint8Array | null = null
 let epochKeys: EpochKeys | null = null
+// Counts scope entries; `clearActiveSpace` bumps it too. Only the latest entry may install what it opened.
+let entry = 0
 
 /** The active scope's **write key** `E_current` (seals new content), or null when no space is open. Don't mutate. */
 export function activeScopeKey(): Uint8Array | null {
@@ -103,16 +105,17 @@ export function activeEpochKeys(): EpochKeys | null {
  * cr-0032/0120); an unresolvable one falls back to Personal too. Only Personal auto-births.
  */
 export async function enterScope(token: string): Promise<void> {
+  const mine = ++entry
   activeSpace.status = 'loading'
   activeSpace.trustRefusal = null
   try {
     let opened: OpenedScope | null = null
+    let tenantUnavailable = false
     if (token === TENANT_SCOPE) {
       opened = await openScope(ScopeKind.Tenant) // open-only — never mint the shared root
-      activeSpace.tenantUnavailable = opened === null
-    } else {
-      activeSpace.tenantUnavailable = false
-      if (token.startsWith('@')) opened = await openGroupByToken(token.slice(1)) // `@<slug|id>` → open that group
+      tenantUnavailable = opened === null
+    } else if (token.startsWith('@')) {
+      opened = await openGroupByToken(token.slice(1)) // `@<slug|id>` → open that group
     }
     if (!opened) {
       // Personal — the explicit `~me`, an unresolved/unopenable `@group`, or the no-grant tenant fallback.
@@ -120,6 +123,13 @@ export async function enterScope(token: string): Promise<void> {
       await ensurePersonalScope()
       opened = await openScope(ScopeKind.Personal)
     }
+    // A later entry (the shell's and the home's can overlap) or a clear (logout / re-lock) superseded this one while
+    // it was opening: its keys are dropped, never installed over the newer state.
+    if (mine !== entry) {
+      if (opened) zeroEpochKeys(opened.epochs)
+      return
+    }
+    activeSpace.tenantUnavailable = tenantUnavailable
     if (!opened) {
       activeSpace.status = 'error'
       return
@@ -159,6 +169,7 @@ export async function enterScope(token: string): Promise<void> {
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
   } catch (err) {
+    if (mine !== entry) return // superseded: the newer entry (or the clear) owns the status
     // A suspended tenant (uc.spaces.scope-access A7): on this domain's own tenant the router takes over with the
     // offline notice; for another tenant the home view leaves for this domain's home. Either way not a plain error.
     if (await handleTenantSuspended(err)) {
@@ -200,6 +211,7 @@ export async function refreshActiveScope(): Promise<void> {
 
 /** Drop the active space + zero the held key (logout / re-lock). */
 export function clearActiveSpace(): void {
+  entry++ // an entry still opening must not install its keys after the clear
   stopGrantDeliveryPolling()
   stopScopeRotationPolling()
   clearMyInvitations()

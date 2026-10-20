@@ -3,14 +3,19 @@
 // .app-shell grid: .app-compact-header places the sidebar + topbar, .app-workspace > main.content holds the
 // route) so layout.css styles it identically. Ours only differs in the gate: routes flagged
 // `meta.layout === 'app'` render the workspace shell; everything else keeps the centered .public-shell. The
-// router already gates app routes on session + unlocked, so this only decides layout. Below the workspace sits the
+// router already gates app routes on session + unlocked, so this decides layout — and opens a scope for an app route
+// that is not the home (below). Below the workspace sits the
 // operator footer (uc.admin.operator-details): who runs the instance and its terms, reachable from every page of the
 // signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms.
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerState } from '../../shared/state/useServerState'
 import { useCapabilities } from '../../shared/state/useCapabilities'
+import { activeSpace, enterScope } from '../../app/activeSpace'
+import { session } from '../../app/session'
+import { vaultState } from '../../app/vault'
+import { TENANT_SCOPE } from '../../core/node/location'
 import AppSidebar from './AppSidebar.vue'
 import AppTopbar from './AppTopbar.vue'
 import IncompatibleScreen from './IncompatibleScreen.vue'
@@ -28,6 +33,21 @@ const appLayout = computed(() => route.meta.layout === 'app')
 // The anonymous public share viewer (cr-0100) wants the full viewport width for its gallery, not the narrow
 // centered card the login/setup public shell uses.
 const plainLayout = computed(() => route.meta.layout === 'plain')
+
+// Only the home enters a scope (from its #fragment), so an app page loaded straight — a reload on /settings — would run
+// with none: no tenant sections, no terms gate, no tenant capabilities. Such a page gets the token-less tenant home,
+// what `/` opens without a fragment. The home is left to itself (its fragment names the scope), and a suspended tenant
+// to the offline notice.
+const needsScope = computed(
+  () =>
+    appLayout.value &&
+    route.name !== 'home' &&
+    session.accessToken !== null &&
+    vaultState.unlocked &&
+    !serverState.suspended &&
+    activeSpace.status === 'idle',
+)
+watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { immediate: true })
 </script>
 
 <template>
