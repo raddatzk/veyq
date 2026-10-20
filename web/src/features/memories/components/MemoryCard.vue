@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// A chapter tile (cr-0030). Template + classes are the design source's MemoryCard verbatim (so memory.css
-// styles it identically); only the data is ours — a decrypted TreeNode. The sealed date range (cr-0067) shows
+// A chapter tile (cr-0030). Template + classes are the design source's MemoryCard verbatim (so Memories'
+// memories.css styles it identically); only the data is ours — a decrypted TreeNode. The sealed date range (cr-0067) shows
 // under the title, unsealed by the parent from the node's `wrappedMeta` (no media load). The card is open-only: the
 // favorite heart is core's action (inbox #409) and a chapter's lives in its own header.
 import { computed } from 'vue'

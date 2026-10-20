@@ -92,7 +92,7 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
 
 <style scoped>
 /* The tile container geometry (position/size/skin) is the design-source gallery tile; the parent positions it
-   via inherited style. The inner classes (.media-grid-tile-media / -icon) are global (styles/memory.css). */
+   via inherited style. The inner classes (.media-grid-tile-media / -icon) are global (Memories' `memories.css`). */
 .gallery-tile {
   position: absolute;
   top: 0;

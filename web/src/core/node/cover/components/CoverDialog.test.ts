@@ -27,7 +27,7 @@ async function mountDialog(p: Partial<Props> = {}) {
 const body = () => document.body
 const dialog = () => body().querySelector<HTMLElement>('[role="dialog"]')
 const button = (label: string) => [...body().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label)
-const cropperImg = () => body().querySelector<HTMLImageElement>('.memory-cover-cropper img')
+const cropperImg = () => body().querySelector<HTMLImageElement>('.veyq-cropper-frame img')
 
 /** Pick a file through the dialog's hidden input, as the browser's file dialog would hand it over. */
 async function pickFile(file: File) {

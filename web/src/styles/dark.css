@@ -23,8 +23,7 @@
   .sidebar-tenant-link,
   .sidebar-nav-link,
   .sidebar-scope-link,
-  .profile-button,
-  .memory-card-main {
+  .profile-button {
     color: var(--app-text);
   }
 
@@ -44,7 +43,6 @@
   }
 
   .login-card,
-  .memory-card,
   .lightbox-nav,
   .media-lightbox-date-form input {
     background: var(--app-surface);
@@ -58,8 +56,6 @@
   .sidebar-tenant-avatar,
   .sidebar-nav-link > .pi,
   .sidebar-scope-icon,
-  .memory-card-cover,
-  .memory-card-icon,
   .veyq-create-card .pi {
     background: var(--app-accent-soft);
     color: var(--app-accent);
@@ -90,15 +86,8 @@
     color: var(--app-info-text);
   }
 
-  .memory-card-main small,
-  .memory-cover-zoom {
+  .veyq-cropper-zoom {
     color: var(--app-muted);
-  }
-
-  .media-grid-tile-placeholder {
-    background:
-      linear-gradient(110deg, transparent 0%, rgb(255 255 255 / 8%) 45%, transparent 70%),
-      var(--app-surface-muted);
   }
 
   .media-lightbox {
@@ -132,7 +121,6 @@
     color: var(--app-warning-text);
   }
 
-  .memory-card:hover,
   .veyq-create-card:hover {
     border-color: var(--app-line);
   }

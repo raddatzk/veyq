@@ -1178,8 +1178,8 @@ watch(
   position: relative;
   width: 100%;
 }
-/* Gallery tiles are the shared MediaTile (cr-0125) — its wrapper/fit/icon styles live in the component + global
-   memory.css. The optimistic upload tile's own styles live in the shared OptimisticTile component (cr-0074). */
+/* Gallery tiles are the shared MediaTile (cr-0125) — its wrapper/fit/icon styles live in the component + Memories'
+   global memories.css. The optimistic upload tile's own styles live in the shared OptimisticTile component (cr-0074). */
 
 /* --- Trash tab (cr-0110/0111): the same gallery grid, dimmed tiles + select-check + 3-dot menu --- */
 .memory-trash-toolbar {
@@ -1195,7 +1195,7 @@ watch(
   font-size: 0.85rem;
 }
 /* The selection bar mirrors the Beiträge .bucket-selection-bar exactly (cr-0152): muted un-bolded count,
-   the stock .veyq-text-button select-all toggle, and the shared .bucket-action-button actions (memory.css). */
+   the stock .veyq-text-button select-all toggle, and the shared .bucket-action-button actions (memories.css). */
 .memory-trash-batch {
   display: inline-flex;
   align-items: center;

@@ -6,7 +6,8 @@ import { readdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { i18n, SUPPORTED_LOCALES } from './index'
+import { addApplicationMessages, i18n, SUPPORTED_LOCALES } from './index'
+import { memoriesMessages } from '../features/memories/i18n'
 
 // A list (`primevue.monthNames`, inbox #434) is ONE key: the source reads it whole through `tm`, never by index.
 function flatten(o: Record<string, unknown>, prefix = ''): string[] {
@@ -24,13 +25,13 @@ function flatten(o: Record<string, unknown>, prefix = ''): string[] {
  *  taught here, never allowlisted. Its limit: a template head counts every key under it as used — web builds
  *  `tenant.join.*`, `media.uploadStatus.*`, `media.marks.filter.*`, `rotation.status.*`,
  *  `rotation.statusHint.*` and `shell.theme*` dynamically, so a dead key inside those is invisible. */
-async function quotedKeysInSources(dir: string, catalog: string): Promise<{ literals: Set<string>; heads: Set<string> }> {
+async function quotedKeysInSources(dir: string, isCatalog: (path: string) => boolean): Promise<{ literals: Set<string>; heads: Set<string> }> {
   const literals = new Set<string>()
   const heads = new Set<string>()
   // inbox #311: the scan's cost is opening ~230 files, not matching them (≤ 3 ms) — one blocking read after
   // another took up to 4.6 s while the rest of the suite loaded the machine. Listing is cheap; the reads are
   // issued together so their waits overlap.
-  const reads = sourceFiles(dir, catalog).map((path) => readFile(path, 'utf8'))
+  const reads = sourceFiles(dir, isCatalog).map((path) => readFile(path, 'utf8'))
   for (const text of await Promise.all(reads)) {
     for (const m of text.matchAll(/(['"`])([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)\1/g)) literals.add(m[2])
     for (const m of text.matchAll(/`((?:[a-zA-Z0-9_]+\.)+[a-zA-Z0-9_]*)\$\{/g)) heads.add(m[1])
@@ -38,27 +39,52 @@ async function quotedKeysInSources(dir: string, catalog: string): Promise<{ lite
   return { literals, heads }
 }
 
-function sourceFiles(dir: string, catalog: string): string[] {
+function sourceFiles(dir: string, isCatalog: (path: string) => boolean): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
-    if (entry.isDirectory()) return entry.name === 'generated' ? [] : sourceFiles(path, catalog) // the API client, not ours to translate
+    if (entry.isDirectory()) return entry.name === 'generated' ? [] : sourceFiles(path, isCatalog) // the API client, not ours to translate
     if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.vue')) return []
-    return entry.name.endsWith('.test.ts') || path === catalog ? [] : [path] // tests build their own catalogs
+    return entry.name.endsWith('.test.ts') || isCatalog(path) ? [] : [path] // tests build their own catalogs
   })
 }
 
 describe('web message catalog', () => {
   it('uses every key it carries', async () => {
     const src = new URL('..', import.meta.url).pathname
-    const { literals, heads } = await quotedKeysInSources(src, join(src, 'i18n', 'index.ts'))
+    // The catalogs themselves are no use of a key: core's, and each application's own (inbox #513).
+    const isCatalog = (path: string) => path === join(src, 'i18n', 'index.ts') || /\/features\/[^/]+\/i18n\.ts$/.test(path)
+    const { literals, heads } = await quotedKeysInSources(src, isCatalog)
     expect(literals.size).toBeGreaterThan(100) // a scan that found almost nothing proves nothing
 
-    // EN is enough: `const de: typeof en` makes the typecheck hold DE to EN's key set.
+    // EN is enough: the test below holds DE to EN's key set.
     const messages = (i18n.global as unknown as { getLocaleMessage(l: string): Record<string, unknown> })
       .getLocaleMessage(SUPPORTED_LOCALES[0])
     const headList = [...heads]
     const unused = flatten(messages).filter((k) => !literals.has(k) && !headList.some((h) => k.startsWith(h)))
     expect(unused, 'catalog keys no source uses').toEqual([])
+  })
+})
+
+// EN and DE carry the same keys — over the WHOLE catalog as it runs, core's and every application's (inbox #513). Each
+// catalog file's `const de: typeof en` holds its own half at the typecheck; this holds what the composition root merged:
+// an application that registered one locale's namespaces and not the other's is red here, not a raw key on screen.
+describe('web message catalog — the two languages', () => {
+  const flat = (locale: string) =>
+    flatten((i18n.global as unknown as { getLocaleMessage(l: string): Record<string, unknown> }).getLocaleMessage(locale)).sort()
+
+  it('EN and DE carry the same keys, the applications\' included', () => {
+    const [en, ...others] = SUPPORTED_LOCALES.map(flat)
+    expect(en.length).toBeGreaterThan(1000) // the whole catalog, not core's half alone
+    for (const keys of others) expect(keys).toEqual(en)
+    for (const ns of ['memory', 'media', 'depot']) expect(en.some((k) => k.startsWith(`${ns}.`)), ns).toBe(true)
+  })
+
+  it('refuses an application catalog that names a namespace someone already holds, and adds nothing', () => {
+    const before = flat('en').length
+    expect(() => addApplicationMessages('forged', { en: { node: { x: 'x' } }, de: { node: { x: 'x' } } })).toThrow(/node/)
+    expect(() => addApplicationMessages('forged', memoriesMessages)).toThrow(/memory, media/)
+    expect(() => addApplicationMessages('forged', { en: { forged: { x: 'x' } }, de: {} })).toThrow(/different namespaces/)
+    expect(flat('en')).toHaveLength(before)
   })
 })
 

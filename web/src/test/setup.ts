@@ -6,8 +6,17 @@ import { config, enableAutoUnmount } from '@vue/test-utils'
 import { beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
 import ToastService from 'primevue/toastservice'
+import { registerApplicationMessages } from '../applicationMessages'
 
 config.global.plugins.push(ToastService)
+
+// The applications' strings (inbox #513): core's catalog holds core's namespaces only, and each application's arrive
+// through the composition root's catalog half, as in `main.ts` — for EVERY test file, the node-environment suites too
+// (they translate `memory.*` keys without rendering). A static import, unlike the registry's below: the catalog half
+// loads data, vue and vue-i18n, which no test mocks, so it cannot defeat a test file's `vi.mock`, and the strings are
+// there before a test file's collection runs. Once per file: the module graph is per file, so the write-once catalog
+// starts with core's alone each time.
+registerApplicationMessages()
 
 // The shell asks the application registry what to render (ADR 0079); fill it as `main.ts` does, once per test file
 // (the module graph is per file, so the write-once registry starts empty each time).
