@@ -20,7 +20,7 @@ holds no surface's build, and no task aggregates their checks — each still pro
 |---|---|
 | `infra:up` · `infra:down` · `infra:wipe` | the compose lines below with `--profile s3 --profile mail` (`up -d`, then waiting on MariaDB's healthcheck) · `down` · `down -v` — **wipe deletes the dev database and every blob** |
 | `web:bootstrap` | `npm install` in `src/web/` — the workspace install, and its `prepare` regenerates web's API client |
-| `admin:bootstrap` | `npm run generate:api` in `src/admin-web/` |
+| `admin:bootstrap` | `npm install` in `src/admin-web/` — the same workspace install, and its `prepare` regenerates admin-web's API client |
 | `site:bootstrap` | `npm install` in `site/` (outside the workspace) |
 | `backend:run` · `web:run` · `admin:run` · `site:run` | `quarkusDev` · Vite on 8081 · Vite on 5174 · Astro on 4321 |
 | `backend:seed` | `npm run bootstrap:user` in `src/web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
@@ -38,8 +38,14 @@ is given (`backend:run web:run --parallel` ran both, measured).
 
 `./gradlew tasks --all --group veyq` lists every task with its description; without `--all`, Gradle folds the
 same verb across projects into one row (`run`, `build`, … with one surface's description), so it is no task list.
-Each npm task runs the `node` on the Gradle daemon's `PATH` — IntelliJ's project-interpreter setting, which the run
-configurations used, no longer applies.
+A task finds `npm`, `node` and `docker` in `veyq.toolPath` (`local.properties` or `-P`, a PATH-style list), then the
+Gradle daemon's `PATH`, then `/opt/homebrew/bin` and `/usr/local/bin`, and hands the process that list as its `PATH`: a
+daemon IntelliJ starts has only macOS' minimal `PATH`, not the shell environment IntelliJ loads (`settings.gradle.kts`
+says why). A command found nowhere fails naming the list it searched. IntelliJ's project-interpreter setting, which the
+run configurations used, no longer applies.
+
+**A fresh checkout** needs one install before anything else: `web:bootstrap` or `admin:bootstrap` — either installs the
+whole workspace (one lockfile, one root `node_modules`) and generates its own client; the other generates the second.
 
 **`infra:*` always runs the main checkout's compose file**, also from a worktree. The containers are named
 (`veyq-mariadb`, …) and the file declares its project (`name: infra`), so a worktree's copy is the same project

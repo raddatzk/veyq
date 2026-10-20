@@ -31,3 +31,33 @@ val ports: Map<String, String> = portNames.mapNotNull { name ->
     name to value.trim()
 }.toMap()
 gradle.extra["veyq.ports"] = ports
+
+// Where a task finds `npm`, `node`, `docker`. A bare command name is looked up by the Gradle daemon's own PATH, and a
+// daemon IntelliJ starts inherits what macOS gave IntelliJ (`/usr/bin:/bin:/usr/sbin:/sbin`), not the shell environment
+// IntelliJ loads — measured 2026-10-20: `admin:bootstrap` could not start `npm` from IntelliJ, nor from a terminal that
+// reused that daemon. So every Exec task resolves its command against, in order: `veyq.toolPath` (`-P` or
+// `local.properties`, a PATH-style list), the daemon's PATH, then Homebrew's two prefixes; and the process it starts
+// gets the same list as its PATH, so `npm`'s own `#!/usr/bin/env node` finds `node` too. A command found nowhere fails
+// the task with the list it searched, never with Gradle's bare "A problem occurred starting process".
+val toolDirs: List<String> = listOfNotNull(
+    providers.gradleProperty("veyq.toolPath").orNull ?: local.getProperty("veyq.toolPath"),
+    System.getenv("PATH"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+).flatMap { it.split(File.pathSeparator) }.map { it.trim() }.filter { it.isNotEmpty() && File(it).isDirectory }.distinct()
+val toolPath = toolDirs.joinToString(File.pathSeparator)
+gradle.beforeProject {
+    tasks.withType(Exec::class.java).configureEach {
+        environment("PATH", toolPath)
+        doFirst {
+            val exec = this as Exec
+            val command = exec.executable ?: return@doFirst
+            if ('/' in command) return@doFirst // `./gradlew`, an absolute path: nothing to look up
+            exec.executable = toolDirs.map { File(it, command) }.firstOrNull { it.isFile && it.canExecute() }?.absolutePath
+                ?: throw GradleException(
+                    "`$command` is in none of: $toolPath. Set veyq.toolPath=<the directory holding it> in local.properties " +
+                        "(or -Pveyq.toolPath=…).",
+                )
+        }
+    }
+}
