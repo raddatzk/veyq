@@ -32,6 +32,9 @@ import { canUploadFolder, depotRights } from './rights'
 import { depotRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
 import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_CONTENT_SCHEMA } from './exportImport'
+// Depot's global stylesheet (inbox #517) — LAST, after the components above, as `styles/pdf.css` came after their scoped
+// styles; what its place before core's `style.css` means for its rules is that sheet's header.
+import './depot.css'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */

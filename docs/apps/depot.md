@@ -259,7 +259,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     page's text leaves an empty layer and the page drawn; a scan without a text layer is simply empty. The host is sized
     in px as the raw (unrotated) page at the current zoom (`viewport.rawDims`, the plain-px stand-in for the CSS `round()`
     pdf.js writes) and a page with `/Rotate` is turned into place by `[data-main-rotation]` rules - found wrong by a real
-    browser on the first try. The few rules it needs are in `styles/pdf.css` (tokens, two-class selectors: the spans get
+    browser on the first try. The few rules it needs are in Depot's own `features/depot/depot.css` (tokens, two-class selectors: the spans get
     `color: transparent`, `user-select: text`, `font-size`/`transform` from the custom properties pdf.js sets, the selection
     colour from `--app-accent`; the stylesheet pdf.js ships is not imported, so no `new` CSS file and no origin). The
     `.pdf-text-end` element pdf.js' own viewer appends keeps a drag from selecting the whole page (`.pdf-text-selecting`,

@@ -36,15 +36,12 @@
   .sidebar-scope-link.router-link-active,
   .profile-button:hover,
   .veyq-icon-button:hover,
-  .lightbox-nav:not(:disabled):hover,
   .veyq-text-button:hover:not(:disabled) {
     background: var(--app-hover);
     color: var(--app-text);
   }
 
-  .login-card,
-  .lightbox-nav,
-  .media-lightbox-date-form input {
+  .login-card {
     background: var(--app-surface);
     color: var(--app-text);
   }
@@ -90,24 +87,6 @@
     color: var(--app-muted);
   }
 
-  .media-lightbox {
-    background: var(--app-backdrop-strong);
-    color: var(--app-text);
-  }
-
-  .media-lightbox-topbar {
-    background: var(--app-overlay);
-  }
-
-  .media-lightbox-viewer {
-    background: var(--app-backdrop-strong);
-  }
-
-  .media-lightbox-metadata a,
-  .media-lightbox-stage a {
-    color: var(--app-success);
-  }
-
   .veyq-badge.success {
     border-color: var(--app-success-line);
     background: var(--app-success-soft);
@@ -127,9 +106,5 @@
 
   .tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
     outline-color: var(--app-focus);
-  }
-
-  .media-lightbox-error {
-    color: var(--app-danger) !important;
   }
 }
