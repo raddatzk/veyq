@@ -95,6 +95,16 @@ acceptanceCriteria:
         integration: [ModerationCasesSliceTest.aBarredMemberReportsNothingUntilTheBarIsLifted, ModerationCasesSliceTest.aBarredLinkTakesNoGuestReportsUntilLifted]
       web:
         unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
+  - id: a-reported-name-is-reviewed-alone
+    text: >-
+      A name reported on its own is reviewed as that name: the review serves its node's one held row with the name and
+      its placement and nothing else of the node, and the moderator's browser opens it with the report's key; another
+      revision's key opens nothing.
+    coverage:
+      backend:
+        integration: [ReportNameSliceTest.theReviewServesTheHeldNameAloneAndContentBlocksTheNodeItNames]
+      web:
+        unit: [src/features/moderation/review/openReview.test.ts]
 gaps:
   crypto: >-
     The `moderation-note` seal a dismissal's note and an extension's reason use (bound to its epoch and case) is pinned

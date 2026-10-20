@@ -73,6 +73,10 @@ read it — and choose a step. Each says what it reaches before you confirm it.
 - **Block the content** — nobody can open it any more, members included. Everyone sees **Blocked by the operator** in
   its place. Nothing is deleted.
 - **Block guest uploader** — the guest can add nothing more, and the link they came through is blocked with them.
+- **Block everything from this uploader** — under **Everything from one uploader**, each person the held copy names as
+  an uploader is listed with how many items they uploaded to this space. The step blocks all of those items as content,
+  as **Block the content** does, and keeps them for the case; what the person adds later is not blocked. Each person
+  affected who is a member of the space, and every owner of the space, is told why on each blocked item.
 - **Bar this reporter** — further reports from that member, or through that link, are refused. The reports already
   made stay.
 - **Propose** blocking a member's sign-in, or taking everything on the reported address offline. Only the person who runs the

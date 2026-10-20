@@ -5,7 +5,11 @@
   hold (cr-report-and-hold, 2026-10-17; [uc.moderation.report](../features/moderation/use-cases/uc.moderation.report.md),
   [en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)): the report share and its sealed part,
   one case per item, the new-case mail and the reporter's receipt, the snapshot and the pin, and a case-open hold's
-  90-day end; a field reported on its own and "everything by this uploader" are not. §§ 3 and 6 are built — the queue,
+  90-day end. A field on its own is built for a node's name (item `NAME`, its name's `K_field` alone; a hold of the
+  node's one row), and "everything by this uploader" as a moderator's step (`UPLOADER_CONTENT`: the items the uploader
+  had uploaded to the space, counted from the clear attribution, blocked and held), both by
+  cr-report-a-name-and-an-uploader (2026-10-20; uc.moderation.report A8, uc.moderation.take-a-measure A8); the other
+  fields on their own and the reporter's handover of a guest's identity key (§ 1) are not. §§ 3 and 6 are built — the queue,
   the review in moderation mode, and every step and its lift, the Server Owner's taken on the admin channel — with § 4's
   other ends of a case and § 5's bar of a reporter (cr-moderation-review-and-measures, 2026-10-18;
   [uc.moderation.review-a-case](../features/moderation/use-cases/uc.moderation.review-a-case.md),
