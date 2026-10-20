@@ -246,6 +246,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      #513 moved Memories' rules out of `styles/memory.css`, that guard read `src/styles/` and the barrel alone, so the
      move would have taken its 87 anchor compounds out of its sight with nothing turning red (and
      `shared/ui/shareGate.css`'s 10 had never been in it)
+  90 a dead rule in Depot's own stylesheet (`web/src/features/depot/depot.css`) — rejected: the second application's
+     sheet (inbox #517 moved `styles/pdf.css` there) is read as well; 89 alone would stay green if the guard's walk
+     narrowed to Memories' directory, which is where the first application sheet happened to sit
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1300,6 +1303,15 @@ def forge_dead_rule_in_application_sheet(root: pathlib.Path) -> str:
     return "a dead rule in Memories' own stylesheet outside src/styles/ (must be REJECTED — every sheet under src/ is read)"
 
 
+def forge_dead_rule_in_depot_sheet(root: pathlib.Path) -> str:
+    # inbox #517: Depot's sheet, the second application's. Found, not named, as in 89.
+    sheets = sorted((root / "web" / "src" / "features" / "depot").rglob("*.css"))
+    if not sheets:
+        raise ForgeError("no .css under web/src/features/depot — re-anchor this forgery on Depot's sheet")
+    sheets[0].write_text(sheets[0].read_text() + "\n.guard-gap-no-depot-markup-applies-this {\n  color: red;\n}\n")
+    return "a dead rule in Depot's own stylesheet (must be REJECTED — every application's sheet is read, not only Memories')"
+
+
 def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
     # The defect that bought the guard, put back on the copy it did not read at first: admin-web's light primary
     # set to Aura's emerald-500 under white text (2.54:1). The token's current value is matched, not spelled, so
@@ -1610,6 +1622,7 @@ CASES = [
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),
     ("88", WEB_GUARD, forge_web_application_reads_another_namespace, False),
     ("89", "validate_stylesheet_anchors.py", forge_dead_rule_in_application_sheet, False),
+    ("90", "validate_stylesheet_anchors.py", forge_dead_rule_in_depot_sheet, False),
     ("83", "validate_lookup_single_home.py", forge_forwarded_for_read_through_an_assembled_name, True),
     ("84", "validate_api_fuzz_baseline.py", forge_fuzz_baseline_5xx_under_another_check, True),
 ]

@@ -535,7 +535,7 @@ describe('the text layer (select and copy)', () => {
     const end = document.createElement('div')
     end.className = 'pdf-text-end'
     hostOf(w, 1).element.append(end)
-    expect(unselectableBy(end).map((r) => r.file)).toEqual(['styles/pdf.css'])
+    expect(unselectableBy(end).map((r) => r.file)).toEqual(['features/depot/depot.css'])
   })
 
   it('a drag that starts in a page marks that layer as selecting until the pointer is released anywhere', async () => {

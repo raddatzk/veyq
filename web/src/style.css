@@ -3,11 +3,13 @@
    should look like the original; only the data layer underneath differs.
 
    This comment used to say "vendored VERBATIM ... render byte-identically". It is neither, and should not be:
-   only media.css is byte-identical, base/ui are additive, and the other five carry deliberate edits — raw
-   colours lifted to --app-* role tokens, and hardcoded light values (background: rgba(255,255,255,.92))
-   replaced by theme-aware ones, without which dark.css could not work. Those are the ui-web-styleguide's own
-   rules applied backwards to the inherited code; each edit carries its reason in place. Diff a sheet against
-   legacy/frontend-noe2ee/src/styles/ before assuming a difference is drift.
+   base/ui are additive, and the others carry deliberate edits — raw colours lifted to --app-* role tokens, and
+   hardcoded light values (background: rgba(255,255,255,.92)) replaced by theme-aware ones, without which dark.css
+   could not work. Those are the ui-web-styleguide's own rules applied backwards to the inherited code; each edit
+   carries its reason in place. Diff a sheet against legacy/frontend-noe2ee/src/styles/ before assuming a
+   difference is drift. An application's sheets are not imported here: the old memory.css and media.css are
+   Memories' `features/memories/memories.css`, pdf.css is Depot's `features/depot/depot.css`, each imported by its
+   application and so loading before this barrel (inbox #513, #517).
 
    Below: the few E2EE-specific additions the pre-E2EE source never had (the centered public-shell wrapper +
    the Secret-Key unlock field). */
@@ -16,8 +18,6 @@
 @import './styles/layout.css';
 @import './styles/forms.css';
 @import './styles/markdown.css';
-@import './styles/media.css';
-@import './styles/pdf.css';
 @import './styles/settings.css';
 @import './styles/dark.css';
 

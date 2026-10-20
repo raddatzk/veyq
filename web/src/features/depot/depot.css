@@ -1,4 +1,14 @@
-/* The text layer of a PDF page (features/depot/components/PdfPages.vue, inbox #412): pdf.js builds transparent, absolutely
+/* Depot's stylesheet (ADR 0079, inbox #517): the global classes of the Depot application's own markup, with their dark
+   twins at the end (none today: a PDF page is paper in every theme). It moved here from core's `styles/pdf.css`, rule for
+   rule; `features/depot/register.ts` imports it last, so it loads with the application through the composition root —
+   after the application's components' scoped styles, as `pdf.css` did, and BEFORE core's `style.css`, where `pdf.css` sat
+   after `ui.css`, `layout.css`, `forms.css` and `markdown.css`. So nothing here may tie with a core rule on specificity
+   and win by source order: a rule styling an element a core class also styles compounds with that class and wins by
+   specificity. Measured at the move: none tied — every rule here is anchored on `.pdf-text-layer` or `.pdf-page`, whose
+   elements no core rule reaches (the computed style of the layer, its spans, its end marker and its rotations was the
+   same before and after). `markedContent` is pdf.js' own class, applied at runtime.
+
+   The text layer of a PDF page (`components/PdfPages.vue`, inbox #412): pdf.js builds transparent, absolutely
    positioned <span>s over the page's canvas so its text can be selected and copied. These are the rules of pdf.js' own
    `pdf_viewer.css` (`.textLayer`, 6.4.x) that the layer needs, kept to those and rewritten with our tokens; the annotation
    layer, highlights and editors are not used and not styled (a PDF's link is never a live element). The spans carry no class

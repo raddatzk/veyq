@@ -8,14 +8,20 @@
 // the zoom label's dark twin in `dark.css`). What a unit test cannot see is the cascade: happy-dom applies no stylesheet.
 // So this reads computed styles of the moved rules on the real pages, light and dark — above all the two places where a
 // Memories rule used to win against a core rule of equal specificity by coming later and now wins by compounding with
-// it (`.veyq-card.memory-card`, `.veyq-create-card.memory-create-card-memory`). A token's value is never spelled here:
+// it (`.veyq-card.memory-card`, `.veyq-create-card.memory-create-card-memory`). The media lightbox's rules joined that
+// sheet with inbox #517 (from core's `styles/media.css`); eleven of them compound with the core class of the element they
+// style (`.veyq-icon-button`, `.veyq-text-button`, `.veyq-surface`) for the same reason, and the last test reads those.
+// A token's value is never spelled here:
 // a probe element is given the same declaration and its computed value is the expected one, so a retuned token cannot
 // turn this red, a lost rule does.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project). Every value typed is a canary
-// (recordTyped). Labels are web/'s own (web/src/i18n/index.ts and web/src/features/memories/i18n.ts, en).
+// (recordTyped). Labels are web/'s own (web/src/i18n/index.ts and web/src/features/memories/i18n.ts, en). The photo is the
+// 1×1 fixture web/'s own tests read (`exif-sample.jpg`).
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 
@@ -24,6 +30,8 @@ test.describe.configure({ mode: 'serial' })
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Stilprobe ${stamp}`
 const chapterName = `Erstes Kapitel ${stamp}`
+const photoName = `Leuchtturm bei Ebbe ${stamp}.jpg`
+const PHOTO = readFileSync(fileURLToPath(new URL('../../../web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
 
 let member: Device
 const consoleErrors: string[] = []
@@ -176,6 +184,101 @@ test(
       await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
       await expect(dialog).toBeHidden()
     }
+    await page.emulateMedia({ colorScheme: 'light' })
+  },
+)
+
+test(
+  "the media lightbox wears Memories' own sheet over core's classes: its buttons, its details pane, wide and narrow, light and dark",
+  { tag: ['@uc.memory.gallery:lightbox-preview'] },
+  async () => {
+    const { page } = member
+    await scheme(page, 'light')
+    await page.getByRole('tab', { name: 'Gallery', exact: true }).click()
+    const chooser = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: 'Upload', exact: true }).click()
+    await (await chooser).setFiles({ name: recordTyped(photoName), mimeType: 'image/jpeg', buffer: PHOTO })
+    await expect(page.getByText('1 item', { exact: true })).toBeVisible({ timeout: 60_000 })
+
+    const lightbox = page.getByRole('dialog', { name: memoryName })
+    const close = lightbox.getByRole('button', { name: 'Close', exact: true })
+    const previous = lightbox.getByRole('button', { name: 'Previous', exact: true })
+    const details = lightbox.locator('.veyq-surface.media-lightbox-details')
+    const open = async () => {
+      await page.getByRole('button', { name: 'Open item 1', exact: true }).click({ timeout: 60_000 })
+      await expect(lightbox).toBeVisible()
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await open()
+    expect(await styleOf(lightbox, ['position', 'background-color'])).toEqual({
+      position: 'fixed',
+      'background-color': await probe(page, 'background-color: var(--app-backdrop-strong)', 'background-color'),
+    })
+    // The top bar's button: 44 px against core's `.veyq-icon-button` 2.55rem, an 8 px corner against its 999px.
+    expect(await styleOf(close, ['width', 'height', 'border-top-left-radius'])).toEqual({
+      width: '44px', height: '44px', 'border-top-left-radius': '8px',
+    })
+    // The paging button: 44 px too, but round (its 8 px never won over core's `:not(.p-button)`); disabled on the only
+    // photo, where its own `default` cursor and 0.28 opacity win over core's pointer.
+    await expect(previous).toBeDisabled()
+    expect(await styleOf(previous, ['width', 'border-top-left-radius', 'cursor', 'opacity'])).toEqual({
+      width: '44px', 'border-top-left-radius': '999px', cursor: 'default', opacity: '0.28',
+    })
+    // The details pane: Memories' 1.25rem padding, no border but its left line, no shadow — not core's `.veyq-surface`.
+    expect(await styleOf(details, ['padding-top', 'border-top-width', 'border-left-width', 'box-shadow', 'border-top-left-radius'])).toEqual({
+      'padding-top': await probe(page, 'padding-top: 1.25rem', 'padding-top'),
+      'border-top-width': '0px',
+      'border-left-width': '1px',
+      'box-shadow': 'none',
+      'border-top-left-radius': '0px',
+    })
+    // The capture-time form's text buttons: Memories' smaller type and padding, not core's `.veyq-text-button`.
+    await lightbox.getByRole('button', { name: 'Edit capture time', exact: true }).click()
+    const save = lightbox.getByRole('button', { name: 'Save', exact: true })
+    expect(await styleOf(save, ['font-size', 'padding-top', 'line-height'])).toEqual({
+      'font-size': await probe(page, 'font-size: 0.86rem', 'font-size'),
+      'padding-top': await probe(page, 'padding-top: 0.35rem', 'padding-top'),
+      'line-height': await probe(page, 'font-size: 0.86rem; line-height: 1.15', 'line-height'),
+    })
+    await lightbox.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await close.click()
+    await expect(lightbox).toBeHidden()
+
+    // Narrow: the buttons 40 px high (core's 2.55rem min-width keeps them that wide), the details a bottom sheet (rounded
+    // top, no left line) that the handle opens.
+    await page.setViewportSize({ width: 800, height: 900 })
+    await open()
+    expect(await styleOf(close, ['min-width', 'height'])).toEqual({ 'min-width': await probe(page, 'min-width: 2.55rem', 'min-width'), height: '40px' })
+    expect(await styleOf(details, ['border-top-left-radius', 'border-left-width', 'border-top-width'])).toEqual({
+      'border-top-left-radius': '14px', 'border-left-width': '0px', 'border-top-width': '1px',
+    })
+    const closedSheet = (await styleOf(details, ['transform'])).transform
+    expect(closedSheet, 'the closed sheet is moved down').not.toBe(await probe(page, 'transform: translateY(0)', 'transform'))
+    await lightbox.getByRole('button', { name: 'Toggle details', exact: true }).click()
+    await expect(details).toHaveClass(/\bmedia-lightbox-details-open\b/)
+    await expect.poll(async () => (await styleOf(details, ['transform'])).transform)
+      .toBe(await probe(page, 'transform: translateY(0)', 'transform'))
+    await close.click()
+    await page.setViewportSize({ width: 1280, height: 900 })
+
+    // Dark: the twins moved with the light rules and win over them; the paging button's over core's as well.
+    await scheme(page, 'dark')
+    await page.getByRole('tab', { name: 'Gallery', exact: true }).click()
+    await open()
+    expect(await styleOf(lightbox, ['background-color', 'color'])).toEqual({
+      'background-color': await probe(page, 'background-color: var(--app-backdrop-strong)', 'background-color'),
+      color: await probe(page, 'color: var(--app-text)', 'color'),
+    })
+    expect(await styleOf(previous, ['background-color', 'width'])).toEqual({
+      'background-color': await probe(page, 'background-color: var(--app-surface)', 'background-color'),
+      width: '44px',
+    })
+    expect(await styleOf(details, ['padding-top', 'box-shadow'])).toEqual({
+      'padding-top': await probe(page, 'padding-top: 1.25rem', 'padding-top'),
+      'box-shadow': 'none',
+    })
+    await close.click()
     await page.emulateMedia({ colorScheme: 'light' })
   },
 )
