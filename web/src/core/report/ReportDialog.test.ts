@@ -7,16 +7,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PrimeVue from 'primevue/config'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
+import SelectButton from 'primevue/selectbutton'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('./report', async (orig) => ({ ...(await orig<typeof import('./report')>()), submitReport: vi.fn() }))
 
 import ReportDialog from './ReportDialog.vue'
-import { openReport, resetReporting, submitReport, type ReportTarget } from './report'
-import { canReport, reportRowActions } from './reportActions'
+import { openReport, reportRequest, resetReporting, submitReport, type ReportTarget } from './report'
+import { canReport, reportNodes, reportRowActions } from './reportActions'
 import { ReportCategory } from '../../api/generated/moderation'
 import { ShareRole } from '../../api/generated/sharing'
-import type { Access } from '../access'
+import type { Access, TreeSource } from '../access'
 import { realI18n, t } from '../../test/i18n'
 import { FOLDER_KIND } from '../node/kind'
 import type { TreeNode } from '../node/tree'
@@ -99,6 +100,74 @@ describe('ReportDialog', () => {
   })
 })
 
+describe('a name reported on its own (ADR 0093 § 9)', () => {
+  /** Fill the form so that only the choice decides what is sent. */
+  async function fill(w: ReturnType<typeof mountDialog>) {
+    w.findComponent(Select).vm.$emit('update:modelValue', ReportCategory.TermsBreach)
+    const reason = document.body.querySelector<HTMLTextAreaElement>('#veyq-report-reason')!
+    reason.value = 'the name'
+    reason.dispatchEvent(new Event('input'))
+    w.findComponent(Checkbox).vm.$emit('update:modelValue', true)
+    await flushPromises()
+  }
+  const name: ReportTarget = { kind: 'NAME', id: '5c09e000-0000-4000-8000-000000000001', keys: () => null }
+
+  it('one node: the dialog asks what is reported, and "only its name" sends its NAME alone', async () => {
+    vi.mocked(submitReport).mockResolvedValue({ reportId: '0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', receivedAt: new Date() })
+    const w = mountDialog()
+    openReport({ access: member, scopeId: 's', targets: [target(1)], nameOnly: name })
+    await flushPromises()
+    expect(document.body.querySelector('.veyq-report-scope')!.textContent).toContain(t('report.scopeName'))
+    await fill(w)
+    w.findComponent(SelectButton).vm.$emit('update:modelValue', 'name')
+    await flushPromises()
+    expect(document.body.textContent).toContain(t('report.scopeNameHint'))
+    send()!.click()
+    await flushPromises()
+    expect(submitReport).toHaveBeenCalledWith(expect.anything(), [name], expect.anything())
+    w.unmount()
+  })
+
+  it('by default the node goes whole — the control on the same choice', async () => {
+    vi.mocked(submitReport).mockResolvedValue({ reportId: '0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', receivedAt: new Date() })
+    const w = mountDialog()
+    const whole = target(1)
+    openReport({ access: member, scopeId: 's', targets: [whole], nameOnly: name })
+    await flushPromises()
+    await fill(w)
+    send()!.click()
+    await flushPromises()
+    expect(submitReport).toHaveBeenCalledWith(expect.anything(), [whole], expect.anything())
+    w.unmount()
+  })
+
+  it('several nodes, or a request without a name, ask nothing', async () => {
+    const w = mountDialog()
+    openReport({ access: member, scopeId: 's', targets: [target(1), target(2)], nameOnly: name })
+    await flushPromises()
+    expect(document.body.querySelector('.veyq-report-scope')).toBeNull()
+    w.unmount()
+  })
+
+  it('reportNodes offers the name for one node, never at a guest\'s link root', () => {
+    const one = { id: 'n1', kind: FOLDER_KIND, parentId: 'root' } as unknown as TreeNode
+    const root = { id: 'root', kind: FOLDER_KIND, parentId: null } as unknown as TreeNode
+    const tree = { rootId: 'root', keyOf: () => null, node: () => null } as unknown as TreeSource
+    const guestAccess = { mode: 'guest', role: ShareRole.Read, head: { scopeId: 's' } } as unknown as Access
+    reportNodes(member, tree, [one], null)
+    expect(reportRequest.value!.nameOnly).toMatchObject({ kind: 'NAME', id: 'n1' })
+    resetReporting()
+    reportNodes(member, tree, [one, root], null)
+    expect(reportRequest.value!.nameOnly, 'two nodes: no name').toBeUndefined()
+    resetReporting()
+    reportNodes(guestAccess, tree, [root], null)
+    expect(reportRequest.value!.nameOnly, 'the link root is named by the link').toBeUndefined()
+    resetReporting()
+    reportNodes(guestAccess, tree, [one], null)
+    expect(reportRequest.value!.nameOnly, 'the control: below the root').toMatchObject({ kind: 'NAME', id: 'n1' })
+  })
+})
+
 describe('the Report action', () => {
   const node = { id: 'n', kind: FOLDER_KIND } as TreeNode
   const guest = (role: ShareRole) => ({ mode: 'guest', role }) as unknown as Access
@@ -109,6 +178,9 @@ describe('the Report action', () => {
     expect(canReport(guest(ShareRole.Read))).toBe(true)
     expect(canReport(guest(ShareRole.ReadWrite))).toBe(true)
     expect(canReport(guest(ShareRole.WriteOnly))).toBe(false)
+    // So an upload link's guest has no row or header action — and with it no "only its name" either.
+    expect(reportRowActions(t, true, guest(ShareRole.WriteOnly), node, () => {})).toEqual([])
+    expect(reportRowActions(t, true, guest(ShareRole.Read), node, () => {}).map((a) => a.id), 'the control').toEqual(['report'])
   })
 
   it('is not shown while the instance publishes no moderation key (ADR 0099 § 3)', () => {

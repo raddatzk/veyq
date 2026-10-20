@@ -91,6 +91,12 @@ moderators can read it ([uc.moderation.take-a-measure](https://github.com/raddat
   every listing keeps it as **Blocked by the operator**, with no reason, and every byte of it, and of everything below
   it, is refused with `451`. Whoever could delete it still can; it cannot be restored from the trash, and a file's
   content cannot be replaced, while the block stands. An upload link has no content to block.
+- **Block everything from this uploader** — a member or a guest the held copy names as an uploader, listed with how
+  many items they uploaded to the case's space (Memories' media, Depot's files; a cover or a banner is not counted) — a
+  count of the attribution the server already holds, never content. Every one of those items is blocked as **Block the
+  content** blocks, and the case's hold widens to them, by its own end; what the uploader adds after the decision is
+  not blocked. It ends with the uploader, or when its last item is erased. The moderator decides on what the case's keys
+  open: a reporter cannot hand over a guest's other uploads.
 - **Block a guest uploader** — a guest the held copy names as an uploader. It can add nothing more, and the link it came
   through is blocked with it, since a guest could otherwise name itself anew on the same link. The link's creator may
   renew it, under a new address: that is a member's new decision.

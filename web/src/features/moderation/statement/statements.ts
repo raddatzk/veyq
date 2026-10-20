@@ -35,10 +35,14 @@ export function loadStatements(fresh = false): Promise<void> {
   return reading
 }
 
-/** The newest statement about [target]: a node or an item by its id, or a link by its share id. */
+/**
+ * The newest statement about [target]: a node or an item by its id — its own, or one an uploader's block covers
+ * (`UPLOADER_CONTENT`'s `covers`) — or a link by its share id.
+ */
 export function statementFor(target: { targetId?: string | null; shareId?: string | null }): ModerationStatement | undefined {
+  const id = target.targetId
   return statements.list.find(
-    (s) => (target.targetId != null && s.targetId === target.targetId) || (target.shareId != null && s.shareId === target.shareId),
+    (s) => (id != null && (s.targetId === id || (s.covers ?? []).includes(id))) || (target.shareId != null && s.shareId === target.shareId),
   )
 }
 

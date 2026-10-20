@@ -240,13 +240,18 @@ describe('report shares', () => {
   })
 
   it('round-trips each kind, and a share does not open as another item, kind or report', () => {
-    for (const item of [{ kind: 'NODE', id: ID }, { kind: 'ITEM', id: ID }, { kind: 'LINK', shareId: SHARE }] as const) {
+    for (const item of [{ kind: 'NODE', id: ID }, { kind: 'ITEM', id: ID }, { kind: 'NAME', id: ID }, { kind: 'LINK', shareId: SHARE }] as const) {
       const sealed = v1.sealReportShare(rk, item, entries(0))
       expect(v1.openReportShare(rk, item, sealed)).toEqual(entries(0))
       expect(() => v1.openReportShare(key(9), item, sealed)).toThrow(v1.OpenRefused)
     }
     const sealed = v1.sealReportShare(rk, { kind: 'NODE', id: ID }, entries(0))
     expect(() => v1.openReportShare(rk, { kind: 'ITEM', id: ID }, sealed)).toThrow(new v1.OpenRefused('report-share'))
+    // A node's name reported on its own is another item than the node: its share opens as neither the other way round.
+    expect(() => v1.openReportShare(rk, { kind: 'NAME', id: ID }, sealed)).toThrow(new v1.OpenRefused('report-share'))
+    expect(() => v1.openReportShare(rk, { kind: 'NODE', id: ID }, v1.sealReportShare(rk, { kind: 'NAME', id: ID }, entries(0)))).toThrow(
+      new v1.OpenRefused('report-share'),
+    )
     expect(() => v1.openReportShare(rk, { kind: 'NODE', id: ID.replace(/1$/, '2') }, sealed)).toThrow(
       new v1.OpenRefused('report-share'),
     )

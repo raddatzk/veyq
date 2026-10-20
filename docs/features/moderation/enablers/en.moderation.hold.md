@@ -33,6 +33,7 @@ A report share holds, sealed under the report's `K_report` and addressed by its 
 | Item | Keys | Role tags |
 |---|---|---|
 | a node (folder, Memory, chapter, Depot file) | `K_node`, the `K_field` of its name (the name is sealed under the **parent's** key, so `K_node` does not open it), the `K_field` of its meta | `NODE`, `NODE_NAME`, `NODE_META` |
+| a node's name on its own (item `NAME`, its node's id) | the `K_field` of that revision of the name, nothing else | `NODE_NAME` |
 | a link's root node, reported by its guest | as a node, but the root's name is the link's: the `share-memory-name` `K_field` instead of `NODE_NAME` | `NODE`, `LINK_NAME`, `NODE_META` |
 | an application's item on a node — a Memories medium | the `K_blob` of every blob it has (original and derivatives, each with its blob id), its `media-meta` and `media-exif` `K_field`s (a guest's lightbox has no EXIF to hand over) | `BLOB`, `MEDIA_META`, `MEDIA_EXIF` |
 | an upload (`WRITE_ONLY`) link | its `K_share` (it opens no content) and its name's and note's `K_field`s | `SHARE`, `LINK_NAME`, `LINK_NOTE` |
@@ -62,13 +63,22 @@ the table below; the report, the case and the report share go with the case's lo
 Taken in the report's own transaction, through the seam `HoldSnapshotContributor` (phase-ordered, as
 `NodeSubtreeEraser` is; core names no application table, ADR 0079):
 
-1. Core resolves the item: a node to its live subtree; an application's item through `ReportableItems`, which the
-   owning application implements (Memories: a medium to its node); a link to its share row.
+1. Core resolves the item: a node to its live subtree; a name to its node's one row (`HoldTarget.Name`: the name, its
+   placement and its editor, and the guest-write records of that name — nothing below it, no blob, no pin); an
+   application's item through `ReportableItems`, which the owning application implements (Memories: a medium to its
+   node); a link to its share row.
 2. Each contributor copies its rows and names the blobs and guest identities they refer to: core the subtree's node
    and attachment rows (phase 200); Memories the subtree's or the item's media, derivative and bucket rows (phase 100).
 3. Core copies the named blob rows and pins their storage keys, the named share-identity rows (a guest identity is
    deleted once nothing names it), the space's epoch rows (the wraps a held key chain needs), and for a link its share
    row.
+
+**A hold widens** (`Holds.widen`) when a moderator blocks everything from one uploader
+([uc.moderation.take-a-measure](../use-cases/uc.moderation.take-a-measure.md) A8): the same contributors copy the
+uploader's items of the space (`HoldTarget.Uploads`: Depot's files with their attachments, Memories' media with their
+derivatives and buckets, as the seam `UploaderContent` lists them) into the case's hold alive, and their objects are
+pinned to its end — "later-held" by the hold's own rules, so they move, extend and end with it. A row or a pin the hold
+already holds is not taken twice; where no hold is alive a new one is taken, ended as a measure's.
 
 ## The pin and the sweep
 

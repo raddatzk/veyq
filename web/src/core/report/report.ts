@@ -23,8 +23,8 @@ export const MAX_REPORT_ITEMS = 100
 /** Keys computed when the report is sent, never before; null when this session cannot reach them. */
 export type KeysOf = () => Promise<v1.ReportKey[] | null> | v1.ReportKey[] | null
 
-/** One thing to report: what the wire calls it, and a way to its keys. */
-export type ReportTarget = { kind: 'NODE' | 'ITEM'; id: string; keys: KeysOf } | { kind: 'LINK'; keys: KeysOf }
+/** One thing to report: what the wire calls it (a `NAME`'s id is its node's), and a way to its keys. */
+export type ReportTarget = { kind: 'NODE' | 'ITEM' | 'NAME'; id: string; keys: KeysOf } | { kind: 'LINK'; keys: KeysOf }
 
 /** What a call site opens the dialog with. */
 export interface ReportRequest {
@@ -35,6 +35,11 @@ export interface ReportRequest {
   readonly targets: readonly ReportTarget[]
   /** Above {@link MAX_REPORT_ITEMS}: the node that holds them all, offered instead (none at a scope's top level). */
   readonly enclosing?: ReportTarget
+  /**
+   * One node reported: its name on its own (`NAME`), offered as the dialog's other choice — a name that is the offence
+   * while what the node holds is not (ADR 0093 § 9). Absent where the name is no field this session can hand over.
+   */
+  readonly nameOnly?: ReportTarget
 }
 
 /** The categories the dialog offers, in the contract's order (most urgent first). */

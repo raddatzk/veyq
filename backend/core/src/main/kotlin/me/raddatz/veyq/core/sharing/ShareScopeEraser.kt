@@ -26,6 +26,6 @@ class ShareScopeEraser(private val measures: MeasureTargets) : ScopeEraser {
         ShareEntity.delete("scopeId", scopeId)
         // A measure on a link or a guest uploader ends with it (ADR 0093 § 6): after the deletes, which hold the rows' locks.
         measures.erased(MeasureTargets.ON_LINK, shareIds)
-        measures.erased(listOf(BlockKind.GUEST_IDENTITY), identityIds)
+        measures.erased(listOf(BlockKind.GUEST_IDENTITY, BlockKind.CONTENT_UPLOADER), identityIds)
     }
 }

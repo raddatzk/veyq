@@ -266,8 +266,9 @@ components:
     ReportItemSubmission:
       type: object
       description: >
-        One reported item, and the keys that open it sealed under the report's `K_report`. A NODE or an ITEM names its
-        `id`, a LINK none (else `400 invalid_request`) — the schema's own rule (inbox #507).
+        One reported item, and the keys that open it sealed under the report's `K_report`. A NODE, an ITEM or a NAME
+        names its `id` (a NAME: its node's), a LINK none (else `400 invalid_request`) — the schema's own rule (inbox
+        #507).
       required: [kind, sealedShare]
       # ReportHandler.malformed. Under `dependentSchemas` (on the required `kind`), never at the top, where an `if` turns
       # a sibling-annotated `$ref` to this schema into `Any`; there both generators ignore it (measured on
@@ -287,17 +288,18 @@ components:
           type: string
           description: >
             What the item is: a NODE (any kind — a folder, a Memory, a chapter, a file), an application's ITEM on
-            a node (a Memories medium), or the LINK itself (a guest of an upload link reports nothing else, ADR
-            0093 § 1).
-          enum: [NODE, ITEM, LINK]
+            a node (a Memories medium), a node's NAME on its own (ADR 0093 § 9: its report share holds that name's
+            field key alone; never a guest's link root, whose name is the link's), or the LINK itself (a guest of an
+            upload link reports nothing else, ADR 0093 § 1).
+          enum: [NODE, ITEM, NAME, LINK]
           example: NODE
         id:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
           description: >
-            The node's or the item's id; absent for a LINK, which is the link the request is made through. The
-            hold and the reach check need it in the clear.
+            The node's or the item's id (a NAME's: its node's); absent for a LINK, which is the link the request is
+            made through. The hold and the reach check need it in the clear.
           example: 4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b
         sealedShare:
           type: string

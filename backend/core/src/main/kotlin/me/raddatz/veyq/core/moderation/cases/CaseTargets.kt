@@ -1,6 +1,9 @@
 package me.raddatz.veyq.core.moderation.cases
 
 import me.raddatz.veyq.core.moderation.block.ModerationBlocks
+import me.raddatz.veyq.core.moderation.block.UploadedItems
+import me.raddatz.veyq.core.moderation.block.Uploader
+import me.raddatz.veyq.core.moderation.block.UploaderContent
 import me.raddatz.veyq.core.moderation.hold.CaseSnapshots
 import me.raddatz.veyq.core.moderation.hold.HeldRow
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
@@ -19,9 +22,20 @@ enum class LinkRelation { REPORTED, REPORTED_THROUGH, REACHES }
 
 data class TargetLink(val shareId: String, val role: String, val relation: LinkRelation, val blocked: Boolean)
 
-/** An uploader the held rows name: a member's account ([guestShareId] null) or a guest identity of a link. */
-data class TargetUploader(val id: String, val guestShareId: String?, val blocked: Boolean) {
+/**
+ * An uploader the held rows name: a member's account ([guestShareId] null) or a guest identity of a link — with how many
+ * items they uploaded to the case's space ([items], what an `UPLOADER_CONTENT` step would block now) and whether one is in
+ * force on them ([contentBlocked]).
+ */
+data class TargetUploader(
+    val id: String,
+    val guestShareId: String?,
+    val blocked: Boolean,
+    val items: UploadedItems = UploadedItems.NONE,
+    val contentBlocked: Boolean = false,
+) {
     val isGuest: Boolean get() = guestShareId != null
+    val uploader: Uploader get() = Uploader(id, isGuest)
 }
 
 data class Targets(val links: List<TargetLink>, val uploaders: List<TargetUploader>)
@@ -37,8 +51,14 @@ class CaseTargets(
     private val blocks: ModerationBlocks,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All items: MutableList<ReportableItems>,
+    @All uploaded: MutableList<UploaderContent>,
 ) {
     private val items: List<ReportableItems> = items
+    private val uploaded: List<UploaderContent> = uploaded
+
+    /** Everything [uploader] uploaded to [scopeId], every application asked (`UPLOADER_CONTENT`'s reach). */
+    fun uploadsOf(scopeId: String, uploader: Uploader): UploadedItems =
+        uploaded.fold(UploadedItems.NONE) { all, app -> all + app.of(scopeId, uploader) }
 
     // No default argument reading a field: a client proxy runs a Kotlin `$default` bridge with its own (empty) fields.
     fun of(case: ModerationCaseEntity, now: Instant): Targets = of(case, snapshots.rowsOf(case.id, now))
@@ -63,14 +83,24 @@ class CaseTargets(
             TargetLink(id, role, relation, blocks.shareBlocked(id))
         }
         val rows = held.orEmpty()
-        val members = snapshots.membersAmong(rows).map { TargetUploader(it, null, false) }
+        // A reported name's uploader is who last wrote it (ADR 0093 § 8): a guest's identity is copied with the row, a
+        // member's account is the row's own column.
+        val nameEditor = if (case.itemKind == ReportItemKind.NAME.name) {
+            rows.firstOrNull { it.table == "veyq_node" && it.sourceId == case.itemId }?.get("name_editor_user_id")
+        } else {
+            null
+        }
+        val members = (snapshots.membersAmong(rows) + listOfNotNull(nameEditor)).distinct().map { TargetUploader(it, null, false) }
         val guests = snapshots.guestsAmong(rows).map { (identity, share) -> TargetUploader(identity, share, blocks.identityBlocked(identity)) }
-        return Targets(linkTargets, members + guests)
+        val counted = (members + guests).map { u ->
+            u.copy(items = uploadsOf(case.scopeId, u.uploader), contentBlocked = blocks.uploaderContentBlocked(case.scopeId, u.id))
+        }
+        return Targets(linkTargets, counted)
     }
 
     /** The node the reported item sits on: a node itself; an item's node, live or held; none for a link. */
     private fun nodeOf(case: ModerationCaseEntity, held: List<HeldRow>?): String? = when (case.itemKind) {
-        ReportItemKind.NODE.name -> case.itemId
+        ReportItemKind.NODE.name, ReportItemKind.NAME.name -> case.itemId
         ReportItemKind.ITEM.name -> items.firstNotNullOfOrNull { it.locate(case.itemId) }?.nodeId
             ?: held.orEmpty().firstOrNull { it.sourceId == case.itemId }?.get("node_id")
         else -> null

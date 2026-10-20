@@ -164,6 +164,29 @@ class CaseReviewResource(
                 rootKind = root?.get("kind"),
             )
         }
+        // A reported name: its one held node with the name and the placement its field key is bound to — nothing else of
+        // the node (no key wrap, no meta, no drop key), since the report handed over that name's key alone.
+        ReportItemKind.NAME.name -> {
+            val node = held.firstOrNull { it.table == NODE && it.sourceId == case.itemId }
+            PublicShare(
+                role = ShareRole.READ,
+                nodes = listOfNotNull(
+                    node?.let { n ->
+                        ShareNode(
+                            id = UUID.fromString(n.sourceId),
+                            kind = n["kind"]!!,
+                            epoch = n["epoch"]!!.toInt(),
+                            blockedByOperator = false,
+                            placementRevision = n["placement_revision"]?.toLong(),
+                            encryptedName = n["encrypted_name"],
+                        )
+                    },
+                ),
+                scopeId = UUID.fromString(case.scopeId),
+                nodeId = UUID.fromString(case.itemId),
+                rootKind = node?.get("kind"),
+            )
+        }
         else -> PublicShare(role = ShareRole.READ, nodes = emptyList(), scopeId = UUID.fromString(case.scopeId))
     }
 

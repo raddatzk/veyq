@@ -79,6 +79,11 @@ ihn bestätigst.
   Moderation gesperrt**. Gelöscht wird nichts.
 - **Hochladenden Gast sperren** — der Gast kann nichts mehr hinzufügen, und der Link, über den er kam, wird mit ihm
   gesperrt.
+- **Alles von dieser Person sperren** — unter **Alles von einer hochladenden Person** steht jede Person, die die
+  gesicherte Kopie als hochladend nennt, mit der Zahl dessen, was sie in diesen Bereich hochgeladen hat. Der Schritt
+  sperrt all das als Inhalt, wie **Inhalt sperren** es tut, und bewahrt es für den Fall auf; was die Person später
+  hinzufügt, wird nicht gesperrt. Wer davon betroffen und Mitglied des Bereichs ist, und jede Person, der der Bereich
+  gehört, erfährt an jedem gesperrten Element, warum.
 - **Meldende Person sperren** — weitere Meldungen dieses Mitglieds oder über diesen Link werden abgelehnt. Die schon
   abgegebenen Meldungen bleiben.
 - **Vorschlagen**, die Anmeldung eines Mitglieds zu sperren oder alles unter der gemeldeten Adresse offline zu nehmen.

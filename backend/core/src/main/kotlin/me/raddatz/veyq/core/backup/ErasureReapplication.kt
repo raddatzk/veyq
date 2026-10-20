@@ -13,6 +13,10 @@ import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.block.ModerationBlockReachEntity
+import me.raddatz.veyq.core.moderation.block.UploadedItems
+import me.raddatz.veyq.core.moderation.block.Uploader
+import me.raddatz.veyq.core.moderation.block.UploaderContent
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.moderation.report.CaseOrigin
 import me.raddatz.veyq.core.moderation.report.CaseState
@@ -71,7 +75,9 @@ class ErasureReapplication(
     private val config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin.collections.List with @All (ScopePurge says why).
     @All applications: MutableList<ApplicationErasures>,
+    @All uploaderContent: MutableList<UploaderContent>,
 ) {
+    private val uploaderContent: List<UploaderContent> = uploaderContent
     private val byKind: Map<String, ApplicationErasures> = applications.flatMap { app -> app.kinds.map { it to app } }.toMap()
 
     fun apply(lines: List<LedgerLine>, now: Instant = Instant.now()): Reapplied {
@@ -203,7 +209,7 @@ class ErasureReapplication(
     private fun reblock(line: LedgerLine): Boolean {
         val kind = line["item"]?.let { k -> BlockKind.entries.firstOrNull { it.name == k } } ?: return false
         val target = line["target"] ?: return false
-        val key = ModerationBlockEntity.activeKeyOf(kind, target)
+        val key = ModerationBlockEntity.activeKeyOf(kind, target, line["scope"])
         if (ModerationBlockEntity.count("activeKey", key) > 0) return false
         // The row it stands on, locked as every measure-taker locks it (`MeasureTargets.lockStanding`, an application's
         // item through its own `ReportableItems`): one created after the capture, or erased, is not there to block.
@@ -228,6 +234,15 @@ class ErasureReapplication(
             BlockKind.MEMBER_SIGN_IN -> sessions.revokeAllForUser(target)
             BlockKind.TENANT_OFFLINE -> tenantStore.suspend(target)
             BlockKind.TENANT_DELETED -> tenantStore.markForDeletion(target, takenAt.plus(config.scope().delete().retention()))
+            // An uploader's block covers what they had uploaded to the space: the ledger keeps no item list, so its reach
+            // is read again from the restored rows — the capture holds no upload from after the block, and an item erased
+            // since is erased again by its own line.
+            BlockKind.CONTENT_UPLOADER -> line["scope"]?.let { scope ->
+                val uploader = Uploader(target, guest = line["share"] != null)
+                val items = uploaderContent.fold(UploadedItems.NONE) { all, app -> all + app.of(scope, uploader) }
+                items.nodeIds.forEach { reach(row.id, ModerationBlockReachEntity.NODE, it) }
+                items.itemIds.forEach { reach(row.id, ModerationBlockReachEntity.ITEM, it) }
+            }
             BlockKind.SHARE, BlockKind.CONTENT_NODE, BlockKind.CONTENT_ITEM, BlockKind.GUEST_IDENTITY,
             BlockKind.REPORTER_ACCOUNT, BlockKind.REPORTER_LINK -> Unit
         }
@@ -241,7 +256,8 @@ class ErasureReapplication(
     private fun relift(line: LedgerLine): Boolean {
         val kind = line["item"]?.let { k -> BlockKind.entries.firstOrNull { it.name == k } } ?: return false
         val target = line["target"] ?: return false
-        val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, target)).firstResult() ?: return false
+        val row = ModerationBlockEntity.find("activeKey", ModerationBlockEntity.activeKeyOf(kind, target, line["scope"])).firstResult()
+            ?: return false
         row.liftedAt = line.at
         // Who lifted it, as the line says — none when it ended with its erased target, which is how it reads then.
         row.liftedBy = line["by"]
@@ -251,6 +267,12 @@ class ErasureReapplication(
         }
         return true
     }
+
+    private fun reach(blockId: String, itemKind: String, targetId: String) = ModerationBlockReachEntity().apply {
+        this.blockId = blockId
+        this.itemKind = itemKind
+        this.targetId = targetId
+    }.persist()
 
     private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)
 }

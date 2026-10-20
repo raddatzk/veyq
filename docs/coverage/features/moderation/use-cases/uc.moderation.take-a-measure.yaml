@@ -92,6 +92,26 @@ acceptanceCriteria:
         unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/orders/art18Export.test.ts]
       backend:
         integration: [MeasureOnErasedTargetSliceTest.aMeasureEndedWithItsTargetReadsSoWhereOneAModeratorLiftedReadsLifted, MeasureOnErasedTargetSliceTest.theTrashPurgeEndsTheMeasuresOnWhatItErasesAndTheCaseThenGoesAtItsDate, MeasureOnErasedTargetSliceTest.deletingALinkEndsItsBlockAndItsReportersBarAndTheUploadersBlockEndsWithItsIdentity, MeasureOnErasedTargetSliceTest.aSpacesPurgeEndsEveryMeasureOnItsNodesLinksAndGuests, MeasureOnErasedTargetSliceTest.aMeasureTakenOnATargetAlreadyErasedEndsAtOnce, ModerationMemoriesSliceTest.aContentBlockOnAMediumEndsWhenTheMediumIsPurged, ModerationMemoriesSliceTest.aContentBlockOnAMediumEndsWithItsSpacesPurge, ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate, MeasureTargetErasureRacesSliceTest.aPurgeInsideAnUncommittedContentBlockEndsIt, MeasureTargetErasureRacesSliceTest.aContentBlockInsideAnUncommittedPurgeEndsAtOnce, MeasureTargetErasureRacesSliceTest.aLinkBlockInsideAnUncommittedDeleteOfTheLinkEndsAtOnce]
+  - id: everything-from-one-uploader
+    text: >-
+      A case names each uploader with how many items they uploaded to its space. Blocking everything from one blocks
+      exactly those items — not another uploader's in the same Memory, not one the uploader adds after the decision —
+      widens the case's hold to them without copying a row twice, and ends when its last item is erased; its statement
+      reaches the space's owners and is found on each item it covers. An uploader the case does not name is refused.
+    coverage:
+      backend:
+        integration: [UploaderContentMemoriesSliceTest.theStepBlocksExactlyThatUploadersMediaAndTheHoldNowHoldsThem, UploaderContentMemoriesSliceTest.aMembersUploadsAreCountedByTheirAccountAndAnUploaderWithNothingInTheSpaceIsNoTarget, UploaderContentMemoriesSliceTest.theBlockEndsWhenItsLastItemIsPurgedAndNotBefore, ModerationDepotSliceTest.everythingFromOneUploaderBlocksTheFilesTheyUploadedAndNotOneAddedAfter]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts, src/features/moderation/statement/statements.test.ts]
+  - id: a-reported-name-blocks-its-node
+    text: >-
+      Blocking the content of a reported name blocks the node it names, and the name's last editor is the case's
+      uploader.
+    coverage:
+      backend:
+        integration: [ReportNameSliceTest.theReviewServesTheHeldNameAloneAndContentBlocksTheNodeItNames]
+      web:
+        unit: [src/features/moderation/CaseDetail.test.ts]
 gaps:
   admin-web: >-
     Built and tested (features/instance/ModerationPanel.test.ts — the proposals, a sign-in block and its lift, a decline

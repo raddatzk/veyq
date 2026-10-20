@@ -395,7 +395,7 @@ class SharingStore(
             ShareIdentityEntity.deleteById(id)
             dropped += id
         }
-        measures.erased(listOf(BlockKind.GUEST_IDENTITY), dropped)
+        measures.erased(listOf(BlockKind.GUEST_IDENTITY, BlockKind.CONTENT_UPLOADER), dropped)
     }
 
     /** Soft-revoke every enabled share a removed member created in a scope (cr-0104) — their links then 404 on

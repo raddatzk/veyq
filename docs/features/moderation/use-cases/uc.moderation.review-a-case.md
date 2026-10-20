@@ -34,8 +34,8 @@
    only the moderation keys.
 4. With a proof it fetches the case's report shares and the held snapshot's core rows (the server logs *opened*), opens
    each report with its epoch's key, opens each report share with that report's `K_report`, and takes the keys it
-   holds: a node's `K_node` and its name's and meta's `K_field`, a medium's `K_blob`s and field keys, a link's
-   `K_share` and its name's and note's field keys.
+   holds: a node's `K_node` and its name's and meta's `K_field`, a name's `K_field` alone (A8), a medium's `K_blob`s and
+   field keys, a link's `K_share` and its name's and note's field keys.
 5. It renders the snapshot **with the guest viewer, read-only**, over moderation reads that answer the guest viewer's own
    shapes — the subtree, an application's rows under it (Memories' media, Depot's files), the bytes of a held blob — and
    never a guest endpoint or a scope client: a node as the level view or the Memory view, a medium in the lightbox, an
@@ -65,6 +65,10 @@
 - **A6 — An upload link.** The review shows the link's name and note; its guests' uploads were not reported.
 - **A7 — Not a moderator, or no key.** Every read and decision above is refused without the `MODERATOR` role and a
   fresh proof over that operation and that case.
+- **A8 — A name on its own** ([uc.moderation.report](uc.moderation.report.md) A8). The review serves the node's one held
+  row with its name and placement and nothing else of it — no key wrap, no meta — and shows that name, opened with the
+  report's `NODE_NAME` key; there is nothing below it to render. Its `CONTENT` step blocks the node the name belongs to
+  ([uc.moderation.take-a-measure](uc.moderation.take-a-measure.md) step 3).
 
 ## Quality notes
 

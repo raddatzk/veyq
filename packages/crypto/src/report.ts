@@ -2,7 +2,7 @@
 //
 //   - A fresh 32-byte `K_report` per report.
 //   - Per reported item, a **report share**: the keys that open that item, sealed under `K_report` — purpose
-//     `report-share` [itemKind, itemId] for a node or an application's item, `report-link` [shareId] for an upload
+//     `report-share` [itemKind, itemId] for a node, a node's name or an application's item, `report-link` [shareId] for an upload
 //     link. Its plaintext is the list of keys (`encodeReportKeys`), each tagged with the role it plays (a node's own
 //     key, its name's field key, a blob's key with the blob's id, …), so the server learns how many keys a share holds
 //     at most by its length, never which.
@@ -37,8 +37,11 @@ export type ReportKey = { role: string; ref: string | null; key: Uint8Array }
 /** What the reporter wrote, sealed with `K_report` to the moderation key. `context` may be ''. The contact is sealed apart. */
 export type ReportBody = { reportKey: Uint8Array; reason: string; context: string }
 
-/** An item a report share is addressed by: a node, an application's item inside one, or an upload link. */
-export type ReportItemAddress = { kind: 'NODE' | 'ITEM'; id: string } | { kind: 'LINK'; shareId: string }
+/**
+ * An item a report share is addressed by: a node, an application's item inside one, a node's name on its own (`NAME`, its
+ * node's id: the share holds that name's `K_field` alone, ADR 0093 § 9), or an upload link.
+ */
+export type ReportItemAddress = { kind: 'NODE' | 'ITEM' | 'NAME'; id: string } | { kind: 'LINK'; shareId: string }
 
 /** An authentic plaintext that is not a report body or key list, or input the layout refuses to write. */
 export class ReportInvalid extends Error {

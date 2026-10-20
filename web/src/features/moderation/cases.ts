@@ -123,7 +123,7 @@ export async function dismissCase(caseId: string, note: string, reporterNotices:
   return withRefresh(() => moderationApi().dismissModerationCase({ caseId, moderationDismissal: body, ...proof }))
 }
 
-export type MeasureKind = 'SHARE' | 'CONTENT' | 'GUEST_IDENTITY'
+export type MeasureKind = 'SHARE' | 'CONTENT' | 'UPLOADER_CONTENT' | 'GUEST_IDENTITY'
 
 /**
  * What a step's statement carries: the ground, the provision of the law or the clause of the terms it relies on (in the

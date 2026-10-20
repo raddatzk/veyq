@@ -111,8 +111,8 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
       { shareId: OPEN_LINK, role: 'READ_WRITE', relation: 'REACHES', blocked: false },
     ],
     uploaders: [
-      { kind: 'GUEST_IDENTITY', id: GUEST, shareId: OPEN_LINK, blocked: false },
-      { kind: 'ACCOUNT', id: MEMBER, shareId: undefined, blocked: false },
+      { kind: 'GUEST_IDENTITY', id: GUEST, shareId: OPEN_LINK, blocked: false, items: 7, contentBlocked: false },
+      { kind: 'ACCOUNT', id: MEMBER, shareId: undefined, blocked: false, items: 0, contentBlocked: false },
     ],
   },
   events: [
@@ -182,11 +182,31 @@ describe('CaseDetail', () => {
     expect(w.find('.moderation-propose-offline').exists()).toBe(true)
   })
 
+  it('shows each uploader with what they uploaded to the space, and offers everything from one only where there is something', async () => {
+    const w = await mountCase()
+    const rows = w.findAll('.moderation-uploader')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].find('.moderation-uploader-items').text()).toBe(t('moderation.decide.uploaderItems', { count: 7 }, 7))
+    expect(rows[0].find('.moderation-block-everything').text()).toContain(t('moderation.decide.blockEverything', { count: 7 }))
+    expect(rows[1].find('.moderation-uploader-items').text()).toBe(t('moderation.decide.uploaderItems', { count: 0 }, 0))
+    expect(rows[1].find('.moderation-block-everything').exists(), 'nothing in the space: nothing to block').toBe(false)
+  })
+
+  it('an uploader whose everything is blocked says so and offers it no more', async () => {
+    const base = caseOf()
+    const w = await mountCase(caseOf({
+      targets: { ...base.targets, uploaders: [{ kind: 'GUEST_IDENTITY', id: GUEST, shareId: OPEN_LINK, blocked: false, items: 7, contentBlocked: true }] },
+    }))
+    expect(w.find('.moderation-block-everything').exists()).toBe(false)
+    expect(w.find('.moderation-uploader').text()).toContain(t('moderation.decide.everythingBlocked'))
+  })
+
   const decisions: [string, () => unknown, unknown[]][] = [
     ['.moderation-dismiss', () => dismissCase, [CASE, 'a sealed note', []]],
     ['.moderation-block-link', () => takeMeasure, [CASE, 'SHARE', { shareId: OPEN_LINK }, 'a sealed note', FACTS, []]],
     ['.moderation-block-content', () => takeMeasure, [CASE, 'CONTENT', { targetId: ITEM }, 'a sealed note', FACTS, []]],
     ['.moderation-block-guest', () => takeMeasure, [CASE, 'GUEST_IDENTITY', { targetId: GUEST }, 'a sealed note', FACTS, []]],
+    ['.moderation-block-everything', () => takeMeasure, [CASE, 'UPLOADER_CONTENT', { targetId: GUEST }, 'a sealed note', FACTS, []]],
     ['.moderation-propose-sign-in', () => proposeStep, [CASE, 'MEMBER_SIGN_IN', MEMBER, 'a sealed note']],
     ['.moderation-propose-offline', () => proposeStep, [CASE, 'TENANT_OFFLINE', null, 'a sealed note']],
     ['.moderation-lift', () => liftMeasure, [CASE, MEASURE, 'a sealed note']],

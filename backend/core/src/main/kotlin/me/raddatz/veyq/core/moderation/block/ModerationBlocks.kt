@@ -10,8 +10,8 @@ import jakarta.enterprise.inject.Instance
 
 /**
  * What the content blocks of one space reach (uc.moderation.take-a-measure step 3): every node a `CONTENT_NODE` block
- * names **and every node below it** (trashed ones included, so a restore can be refused), and every item a
- * `CONTENT_ITEM` block names. [NONE] for a space with no block — the case every listing meets.
+ * names **and every node below it** (trashed ones included, so a restore can be refused), every item a
+ * `CONTENT_ITEM` block names, and every node and item a `CONTENT_UPLOADER` block listed when it was taken. [NONE] for a space with no block — the case every listing meets.
  */
 class ContentView internal constructor(
     val nodeIds: Set<String>,
@@ -83,14 +83,23 @@ class ModerationBlocks(
     fun contentView(scopeId: String): ContentView {
         val rows = ModerationBlockEntity.list(
             "scopeId = ?1 and kind in ?2 and activeKey is not null",
-            scopeId, listOf(BlockKind.CONTENT_NODE.name, BlockKind.CONTENT_ITEM.name),
+            scopeId, listOf(BlockKind.CONTENT_NODE.name, BlockKind.CONTENT_ITEM.name, BlockKind.CONTENT_UPLOADER.name),
         )
         if (rows.isEmpty()) return ContentView.NONE
-        val roots = rows.filter { it.blockKind == BlockKind.CONTENT_NODE }.map { it.targetId }
-        val itemIds = rows.filter { it.blockKind == BlockKind.CONTENT_ITEM }.map { it.targetId }.toSet()
+        // An uploader's block reaches exactly the items it listed when it was taken (`veyq_moderation_block_reach`).
+        val reach = rows.filter { it.blockKind == BlockKind.CONTENT_UPLOADER }.map { it.id }.takeIf { it.isNotEmpty() }
+            ?.let { ids -> ModerationBlockReachEntity.list("blockId in ?1", ids) }.orEmpty()
+        val roots = rows.filter { it.blockKind == BlockKind.CONTENT_NODE }.map { it.targetId } +
+            reach.filter { it.itemKind == ModerationBlockReachEntity.NODE }.map { it.targetId }
+        val itemIds = rows.filter { it.blockKind == BlockKind.CONTENT_ITEM }.map { it.targetId }.toSet() +
+            reach.filter { it.itemKind == ModerationBlockReachEntity.ITEM }.map { it.targetId }
         val held = rows.flatMap { it.heldKeys }.toSet()
         return ContentView(if (roots.isEmpty()) emptySet() else below(scopeId, roots), itemIds, held)
     }
+
+    /** Whether an `UPLOADER_CONTENT` measure of [scopeId] is in force on [uploaderId] (an account or a guest identity). */
+    fun uploaderContentBlocked(scopeId: String, uploaderId: String): Boolean =
+        ModerationBlockEntity.count("activeKey", ModerationBlockEntity.activeKeyOf(BlockKind.CONTENT_UPLOADER, uploaderId, scopeId)) > 0
 
     /**
      * Whether a byte read of [blobId] in [scopeId] is refused: it, or another row on the same stored object, hangs under a

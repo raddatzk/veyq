@@ -47,21 +47,39 @@ class Holds(
             this.ceilingUntil = ceilingUntil
         }
         hold.persist()
-        val snapshot = HoldSnapshot(hold.id, em)
+        fill(hold, target, HoldSnapshot(hold.id, em), pinned = emptySet())
+        return hold.id
+    }
+
+    /**
+     * Widen [hold] to [target], **in the caller's transaction** (a decision's, under the case's row lock): the rows the
+     * target names are copied into the same hold and their objects pinned to its end — "later-held" by the hold's own
+     * rules (ADR 0093 § 4), so they end with it, move with it and are extended with it. A row or a pin the hold already
+     * holds is not taken twice (a moderator's `UPLOADER_CONTENT` step over items the report's subtree already held).
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    fun widen(hold: HoldEntity, target: HoldTarget) {
+        val already = HoldRowEntity.list("holdId", hold.id).mapTo(HashSet()) { "${it.sourceTable}:${it.sourceId}" }
+        val pinned = HoldPinEntity.list("holdId", hold.id).mapTo(HashSet()) { it.storageKey }
+        fill(hold, target, HoldSnapshot(hold.id, em, already), pinned)
+    }
+
+    private fun fill(hold: HoldEntity, target: HoldTarget, snapshot: HoldSnapshot, pinned: Set<String>) {
         contributors.forEach { it.contribute(target, snapshot) }
         // One pin per stored object: two held rows may name one (a cover sharing a medium's, ADR 0013 § 5).
-        snapshot.copy("veyq_blob", "id", snapshot.blobIds).distinctBy { it.getValue("storage_key") }.forEach { blob ->
-            HoldPinEntity().apply {
-                id = UUID.randomUUID().toString()
-                holdId = hold.id
-                storageKey = blob.getValue("storage_key")!!
-                chunkCount = blob.getValue("chunk_count")!!.toInt()
-                this.expiresAt = expiresAt
-            }.persist()
-        }
+        snapshot.copy("veyq_blob", "id", snapshot.blobIds).distinctBy { it.getValue("storage_key") }
+            .filter { it.getValue("storage_key") !in pinned }
+            .forEach { blob ->
+                HoldPinEntity().apply {
+                    id = UUID.randomUUID().toString()
+                    holdId = hold.id
+                    storageKey = blob.getValue("storage_key")!!
+                    chunkCount = blob.getValue("chunk_count")!!.toInt()
+                    this.expiresAt = hold.expiresAt
+                }.persist()
+            }
         snapshot.copy("veyq_share_identity", "id", snapshot.identityIds)
         snapshot.copy("veyq_scope_epoch", "scope_id", listOf(target.scopeId))
-        return hold.id
     }
 
     /** [caseId]'s hold alive at [now], or null. */

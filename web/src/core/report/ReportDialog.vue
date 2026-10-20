@@ -2,8 +2,10 @@
 // The report dialog (uc.moderation.report, ADR 0093 § 1): mounted once in App.vue and driven by `reportRequest`
 // (`./report.ts`), for a member and a guest alike. It asks for what DSA Art. 16(2) names — a category, a reason
 // (required), a confirmation of good faith (required), an address (optional) — says on the first category that no name
-// is needed, and above 100 items offers the enclosing node instead. Sending seals everything the reporter wrote on this
-// device; the receipt it shows (a reference and the time) is the on-screen half of owner decision Q6.
+// is needed, and above 100 items offers the enclosing node instead. For one node it asks what is reported: the node and
+// everything in it, or only its name (ADR 0093 § 9, `NAME` — the report then hands over that name's key alone). Sending
+// seals everything the reporter wrote on this device; the receipt it shows (a reference and the time) is the on-screen
+// half of owner decision Q6.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
@@ -12,6 +14,7 @@ import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import SelectButton from 'primevue/selectbutton'
 import { ReportCategory, type ReportReceipt } from '../../api/generated/moderation'
 import { PRIVACY_ANCHOR, privacyLink } from '../privacy/privacyNotice'
 import {
@@ -27,8 +30,10 @@ const contact = ref('')
 const loading = ref(false)
 const error = ref('')
 const receipt = ref<ReportReceipt | null>(null)
-/** The items reported: the request's, or the enclosing node once the reporter chose it above the cap. */
+/** The items reported: the request's, the enclosing node once the reporter chose it above the cap, or the one node's name. */
 const chosen = ref<readonly ReportTarget[]>([])
+/** For one node: whether the whole node is reported, or only its name. */
+const scope = ref<'whole' | 'name'>('whole')
 
 watch(reportRequest, (r) => {
   category.value = null
@@ -37,8 +42,17 @@ watch(reportRequest, (r) => {
   contact.value = ''
   error.value = ''
   receipt.value = null
+  scope.value = 'whole'
   chosen.value = r ? r.targets : []
 })
+
+const nameOnly = computed(() => (chosen.value.length === 1 ? reportRequest.value?.nameOnly ?? null : null))
+const scopeOptions = computed(() => [
+  { value: 'whole', label: t('report.scopeWhole') },
+  { value: 'name', label: t('report.scopeName') },
+])
+/** What is sent: the node's name alone where the reporter chose it, else the items as chosen. */
+const sent = computed<readonly ReportTarget[]>(() => (scope.value === 'name' && nameOnly.value ? [nameOnly.value] : chosen.value))
 
 const open = computed(() => reportRequest.value !== null)
 const tooMany = computed(() => chosen.value.length > MAX_REPORT_ITEMS)
@@ -74,7 +88,7 @@ async function send(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    receipt.value = await submitReport(request, chosen.value, { category: category.value, reason: reason.value, contact: contact.value })
+    receipt.value = await submitReport(request, sent.value, { category: category.value, reason: reason.value, contact: contact.value })
   } catch (e) {
     const code = e instanceof ReportRefused ? e.code : null
     error.value = t(REFUSALS[code ?? ''] ?? 'report.failed')
@@ -104,6 +118,18 @@ async function send(): Promise<void> {
     <form v-else class="veyq-form" @submit.prevent="send">
       <p class="veyq-report-intro">{{ t('report.intro') }}</p>
       <p class="veyq-report-count">{{ t('report.items', { count: chosen.length }, chosen.length) }}</p>
+      <div v-if="nameOnly" class="veyq-form-field veyq-report-scope">
+        <label>{{ t('report.scope') }}</label>
+        <SelectButton
+          v-model="scope"
+          :options="scopeOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          :disabled="loading"
+        />
+        <span class="veyq-report-hint">{{ t(scope === 'name' ? 'report.scopeNameHint' : 'report.scopeWholeHint') }}</span>
+      </div>
 
       <template v-if="tooMany">
         <Message severity="warn" :closable="false">{{ t('report.tooMany', { count: chosen.length }) }}</Message>

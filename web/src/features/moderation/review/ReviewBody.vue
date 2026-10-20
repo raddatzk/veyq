@@ -2,8 +2,9 @@
 // The share viewer's moderation mode, behind the gate (uc.moderation.review-a-case steps 4-5; ADR 0093 § 3): the case's
 // report shares opened with the moderation keys this page alone holds, and the held snapshot rendered with the GUEST
 // viewer, read-only, over the review's own data source (`core/sharing/review.ts`) — a reported node as core's share page
-// (`ShareTreePage`, the member's views), a reported item by the application that owns it (`registry.itemReviews`), an
-// upload link as its name and note — with every report's reason, contact and context beside it.
+// (`ShareTreePage`, the member's views), a reported item by the application that owns it (`registry.itemReviews`), a
+// name reported on its own as that name, an upload link as its name and note — with every report's reason, contact and
+// context beside it.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Message from 'primevue/message'
@@ -108,6 +109,12 @@ const when = (d: Date) => d.toLocaleString(locale.value)
             :keys="opened.keys"
           />
         </template>
+        <!-- A name reported on its own: the report handed over that name's key and nothing else, so its text is all
+             there is to show (`rootNameOf`, the held node's name with the report's `NODE_NAME` key). -->
+        <div v-else-if="opened.review.itemKind === 'NAME'" class="veyq-section moderation-review-name">
+          <span class="veyq-row-subtitle">{{ t('moderationReview.reportedName') }}</span>
+          <strong>{{ linkName ?? t('moderationReview.nameUnopened') }}</strong>
+        </div>
         <div v-else-if="opened.review.itemKind === 'LINK'" class="veyq-section moderation-review-link">
           <strong>{{ linkName ?? t('moderationReview.unnamed') }}</strong>
           <p v-if="linkNote" class="veyq-form-copy">{{ linkNote }}</p>

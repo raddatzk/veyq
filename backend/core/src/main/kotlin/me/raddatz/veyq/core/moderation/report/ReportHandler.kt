@@ -123,7 +123,7 @@ class ReportHandler(
         nodes.lockScope(m.scopeId)
         val placed = r.items.map { item ->
             val inReach = when (item.kind) {
-                ReportItemKind.NODE -> nodes.findInScope(m.scopeId, item.id!!) != null
+                ReportItemKind.NODE, ReportItemKind.NAME -> nodes.findInScope(m.scopeId, item.id!!) != null
                 ReportItemKind.ITEM -> locate(item.id!!)?.let { it.scopeId == m.scopeId && nodes.findInScope(m.scopeId, it.nodeId) != null } == true
                 ReportItemKind.LINK -> false
             }
@@ -163,6 +163,9 @@ class ReportHandler(
             r.items.map { item ->
                 val inReach = when (item.kind) {
                     ReportItemKind.NODE -> item.id in reach
+                    // The name a guest reads at the link's root is the link's (`share-memory-name`), and the root's own
+                    // name is sealed under a parent key the guest never holds: a name report of it is no name they saw.
+                    ReportItemKind.NAME -> item.id in reach && item.id != share.nodeId
                     ReportItemKind.ITEM -> locate(item.id!!)?.let { it.scopeId == share.scopeId && it.nodeId in reach } == true
                     ReportItemKind.LINK -> false
                 }
@@ -178,8 +181,8 @@ class ReportHandler(
         if (sharing.findNode(share.nodeId)?.deletedAt != null) emptySet() else sharing.liveSubtreeIds(share.scopeId, share.nodeId).toSet()
 
     /**
-     * The request's shape (`400`) and its items each named once (`422`), or null. A NODE or an ITEM names its id, a
-     * LINK none — `ReportItemSubmission`'s own `if`/`then`/`else`, so a body the contract admits never fails here. Whether
+     * The request's shape (`400`) and its items each named once (`422`), or null. A NODE, an ITEM or a NAME names its
+     * id, a LINK none — `ReportItemSubmission`'s own `if`/`then`/`else`, so a body the contract admits never fails here. Whether
      * the reporter may report a LINK at all is the reach's question, not the shape's: only a guest of a `WRITE_ONLY` link
      * has one in reach (`404 report_item_not_found` for everyone else, as for any item outside their reach).
      */
@@ -248,9 +251,13 @@ class ReportHandler(
         return ReportOutcome.Received(report.id, now, cases)
     }
 
-    /** What a held item's snapshot is taken on: a node's live subtree (its `K_node` opens every key below it). */
+    /**
+     * What a held item's snapshot is taken on: a node's live subtree (its `K_node` opens every key below it); a name's
+     * node row alone (its field key opens that one name, nothing below it).
+     */
     private fun holdTarget(kind: ReportItemKind, itemId: String, scopeId: String): HoldTarget = when (kind) {
         ReportItemKind.NODE -> HoldTarget.Subtree(scopeId, sharing.liveSubtreeIds(scopeId, itemId))
+        ReportItemKind.NAME -> HoldTarget.Name(scopeId, itemId)
         ReportItemKind.ITEM -> HoldTarget.Item(scopeId, itemId)
         ReportItemKind.LINK -> HoldTarget.Link(scopeId, itemId)
     }
