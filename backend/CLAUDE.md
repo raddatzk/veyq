@@ -82,6 +82,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **A change to a lock, a gate or a transaction boundary also runs `python3 scripts/run_backend_races_on_mariadb.py`**
   (Docker; CI's `backend-races` job runs it too): every race class on a throwaway MariaDB of the pinned image. H2 cannot show what the production engine
   does under overlap — on 2026-10-03 three races green on H2 were red there ([ADR 0078](../docs/decisions/0078-production-reads-committed-like-its-tests.md)).
+  **A race round counts only when its order was forced** (inbox #512): race loops run through `raceRounds`, a hand-held commit
+  uses `holdForOverlap` + `requireForced()`; a round body builds its own fresh rows (an unforced round is re-run, up to 5 attempts).
+  The MariaDB runner grants its user `PROCESS` for InnoDB's lock-wait evidence.
 - **Every dependency is checksum-verified** (`gradle/verification-metadata.xml`, ADR 0057 §6), and so is the
   wrapper's distribution (`distributionSha256Sum`) and the wrapper JAR itself (`scripts/gradle_wrapper_jar.sha256`
   — a `./gradlew wrapper` that rewrites the JAR owes it a line, cross-checked as its header says). A dependency, plugin or Quarkus bump — **or a new
@@ -221,7 +224,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   one casts it to text (`CAST(t.id AS CHAR(36))`: a bare one is a `byte[]` on H2, measured). Never a sentinel id (`''`, `'system'`):
   write the query without the clause. A share id, a composite key and `owner_key` are not UUIDs and stay `VARCHAR`.
   A `UUID` column orders by its own segments, not by its text: sort ids in Kotlin where a text order is promised, and break a
-  `created_at` tie explicitly. A plain `TIMESTAMP` is **second-precision on MariaDB** (H2 keeps more, so H2 rarely shows the tie): a column that orders rows or picks the newest — `veyq_node`/`veyq_job`/`veyq_membership`/`veyq_tenant_invite.created_at`, the Memories media `updated_at` — is `TIMESTAMP(3)` (millisecond; inbox #387/#402), and the query still ends on `id`. **An entity maps such a column `@Column(columnDefinition = "uuid")`,
+  `created_at` tie explicitly. **A time column is `DATETIME(3)`, never `TIMESTAMP`** (inbox #509: MariaDB's `TIMESTAMP` ends at 2038-01-19T03:14:07Z and converts by the session's zone; `scripts/validate_time_columns.py` is red on one, and on a `DATETIME` with less than a millisecond — MariaDB truncates a fraction, H2 rounds it, so a whole-second column read up to half a second after its write on H2). It holds the UTC wall clock Hibernate writes for an `Instant` (a UTC calendar on bind and read; the H2 test URLs carry `TIME ZONE=UTC` so H2 stores the same), so a raw JDBC reader takes it as a `LocalDateTime` at UTC (`HoldSnapshot`), never through `getTimestamp(i)`'s JVM calendar, and a `LocalDate` binds as one (`@JdbcType(LocalDateJdbcType::class)`). Millisecond ties still happen: a query that orders rows or picks the newest ends on `id`. A request date-time binds only within 1582-10-15T00:00:00Z … 9999-12-31T23:59:59.999Z with an offset within ±18:00, else `422 date_time_out_of_range` (`StrictJsonTypes`; before the Gregorian cutover the `java.sql.Timestamp` Hibernate binds through writes the Julian date). **An entity maps such a column `@Column(columnDefinition = "uuid")`,
   never `length = 36`**: Hibernate's schema validator (a `%dev` boot runs it, `validate-in-dev-mode`; production's `none` does not)
   compares the declared type name with the database's, and `length = 36` says `varchar(36)` — an ERROR per column in every IntelliJ
   start. `EntitySchemaValidationTest` (in `:core` and `:apps:memories`) boots with `strategy=validate`, so a drift is red on H2 and,
