@@ -241,6 +241,66 @@ describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)'
   })
 })
 
+describe('enterScope — a superseded entry installs nothing', () => {
+  // The shell's entry (an app page loaded straight) and the home's can overlap; only the latest may win.
+  it('an earlier entry that resolves last is dropped and its keys zeroed; the later one stays', async () => {
+    const tenantKey = new Uint8Array(32).fill(3)
+    const personalKey = new Uint8Array(32).fill(4)
+    let resolveTenant!: (v: ReturnType<typeof opened>) => void
+    vi.mocked(openScope).mockImplementation((kind) =>
+      kind === ScopeKind.Tenant
+        ? new Promise((r) => { resolveTenant = r })
+        : Promise.resolve(opened(PERSONAL_SCOPE_ID, ScopeKind.Personal, personalKey)),
+    )
+    vi.mocked(ensurePersonalScope).mockResolvedValue(false)
+
+    const first = enterScope(TENANT_SCOPE)
+    await enterScope(PERSONAL_SCOPE)
+    resolveTenant(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, tenantKey))
+    await first
+
+    expect(activeSpace.status).toBe('ready')
+    expect(activeSpace.scopeId).toBe(PERSONAL_SCOPE_ID)
+    expect(activeSpace.kind).toBe(ScopeKind.Personal)
+    expect(activeScopeKey()).toBe(personalKey)
+    expect(Array.from(tenantKey)).toEqual(Array(32).fill(0))
+  })
+
+  it('an entry still opening when the space is cleared (logout / re-lock) installs nothing', async () => {
+    const key = new Uint8Array(32).fill(5)
+    let resolveTenant!: (v: ReturnType<typeof opened>) => void
+    vi.mocked(openScope).mockImplementation(() => new Promise((r) => { resolveTenant = r }))
+
+    const entering = enterScope(TENANT_SCOPE)
+    clearActiveSpace()
+    resolveTenant(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, key))
+    await entering
+
+    expect(activeSpace.status).toBe('idle')
+    expect(activeSpace.scopeId).toBeNull()
+    expect(activeScopeKey()).toBeNull()
+    expect(Array.from(key)).toEqual(Array(32).fill(0))
+  })
+
+  it('a superseded entry that fails leaves the newer entry\'s status alone', async () => {
+    let rejectTenant!: (e: unknown) => void
+    vi.mocked(openScope).mockImplementation((kind) =>
+      kind === ScopeKind.Tenant
+        ? new Promise((_r, j) => { rejectTenant = j })
+        : Promise.resolve(opened(PERSONAL_SCOPE_ID, ScopeKind.Personal, new Uint8Array(32))),
+    )
+    vi.mocked(ensurePersonalScope).mockResolvedValue(false)
+
+    const first = enterScope(TENANT_SCOPE)
+    await enterScope(PERSONAL_SCOPE)
+    rejectTenant(new Error('boom'))
+    await first
+
+    expect(activeSpace.status).toBe('ready')
+    expect(activeSpace.kind).toBe(ScopeKind.Personal)
+  })
+})
+
 describe('clearActiveSpace', () => {
   it('zeroes the held key and resets state', async () => {
     const key = new Uint8Array(32).fill(7)
