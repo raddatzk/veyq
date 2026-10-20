@@ -721,6 +721,13 @@ edited at all: a comment in the core baseline migration names the dev compose fi
 `validate_migration_versions.py` (`db/migration/` is out of every move's locator). And a link a guard resolves breaks
 in the phase that moves its target, so that phase re-points it, not a later docs phase.
 
+**After the `git mv`, diff `git status --short --ignored` against the listing taken before it.** A relative path
+that misses does not always fail — it can *create*: `cr-repo-layout-src` moved `web/` one level deeper, and
+`openapitools.json`'s `storageDir: ../node_modules/.openapi-generator` quietly downloaded the generator into a new,
+ignored `src/node_modules/` while every check stayed green. A new ignored directory is that miss's only signature. And
+a locator that filters the moved prefix out of its hits must filter the *match*, not the line: one that drops every
+line under `src/` cannot see the moved trees' own `CLAUDE.md` and comments.
+
 ### Promote one-shot proofs to permanent guards
 
 When a CR's correctness rests on a structural invariant it
