@@ -1,8 +1,9 @@
 # Local dev database (uc.* slices). A persistent MariaDB so dev data survives a backend restart — closer to
-# prod than the in-memory H2, which the test suite keeps using. Start it before `./gradlew quarkusDev`:
-#   docker compose up -d        (from backend/)
-#   docker compose down         (stop; data is kept in the named volume)
-#   docker compose down -v      (stop AND wipe the data — fresh instance)
+# prod than the in-memory H2, which the test suite keeps using. Start it before `./gradlew quarkusDev`
+# (`./gradlew infra:up` does, infra/README.md), or from the repository root:
+#   docker compose -f infra/docker/docker-compose.yml up -d        (start)
+#   docker compose -f infra/docker/docker-compose.yml down         (stop; data is kept in the named volume)
+#   docker compose -f infra/docker/docker-compose.yml down -v      (stop AND wipe the data — fresh instance)
 
 # The project name is a property of THIS FILE, not of the directory it sits in (ADR 0106 decision 2): the dev stack
 # has been project `infra` since it was born, so its volumes are `infra_veyq-*` and its network `infra_default`.

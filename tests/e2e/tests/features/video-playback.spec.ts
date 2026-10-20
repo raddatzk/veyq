@@ -8,7 +8,7 @@
 // the windows a seek in a long video would ask for are asked here directly, through the same worker and playback — a
 // range across the first chunk boundary and a suffix range, each the original's exact bytes.
 //
-// The fixture is a generated test pattern, not footage (`e2e/fixtures/testsrc2-6s-vp8.webm`, 6 s, 320×240, VP8, three
+// The fixture is a generated test pattern, not footage (`tests/e2e/fixtures/testsrc2-6s-vp8.webm`, 6 s, 320×240, VP8, three
 // 256 KiB chunks), made with
 //   ffmpeg -f lavfi -i "testsrc2=size=320x240:rate=25:duration=6" -c:v libvpx -b:v 900k -minrate 900k -maxrate 900k \
 //     -g 25 -keyint_min 25 -auto-alt-ref 0 -an -map_metadata -1 -fflags +bitexact -flags:v +bitexact out.webm

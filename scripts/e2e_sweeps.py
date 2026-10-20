@@ -85,7 +85,7 @@ def log(msg: str) -> None:
 class Stack(NamedTuple):
     """Which compose project the sweeps read: everything that differs between the dev stack and a lane's instance.
 
-    `compose` is the command prefix that addresses the project (`docker compose -f infra/docker-compose.yml …` for the
+    `compose` is the command prefix that addresses the project (`docker compose -f infra/docker/docker-compose.yml …` for the
     dev stack, `docker compose -p veyq-e2e-<stamp>` for a lane); every container a sweep reads is reached through it,
     by service name, so no container name is spelled here. The store fields are what an operator's backup reads
     (`instance_backup.Store`): the INTERNAL S3 endpoint on `docker_network`, which the tool's rclone container joins,

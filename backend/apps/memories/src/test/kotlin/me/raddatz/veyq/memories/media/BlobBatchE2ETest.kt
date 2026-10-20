@@ -44,7 +44,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
  * And it moves a blob of more than one presign window through the real store (ADR 0013 §2): `start` signs the
  * first window, `blob-upload-windows` each next one, and every URL is a working PUT for its chunk's exact length.
  *
- * Bring the store up with `docker compose -f infra/docker-compose.yml --profile s3 up -d` (see infra README).
+ * Bring the store up with `docker compose -f infra/docker/docker-compose.yml --profile s3 up -d` (see infra README).
  */
 @QuarkusTest
 @TestProfile(BlobBatchE2ETest.S3Profile::class)
@@ -211,7 +211,7 @@ class BlobBatchE2ETest {
     }
 
     companion object {
-        // The dev credentials the bundled Garage imports (infra/docker-compose.yml --profile s3): derived from its
+        // The dev credentials the bundled Garage imports (infra/docker/docker-compose.yml --profile s3): derived from its
         // admin token (ADR 0089 decision 3), which is the documented dev throwaway unless the run says otherwise.
         private val DEV = BundledStoreCredentials.derive(System.getenv("VEYQ_S3_ADMIN_TOKEN") ?: "veyq-dev-admin-token")
         val DEV_KEY_ID: String get() = DEV.accessKey

@@ -188,7 +188,7 @@ class TraefikFileIngressSink(
         const val INERT = "veyq-blobs-inert"
         const val CLIENT_ADDR = "veyq-client-addr"
 
-        /** The local plugin's name as the compose recipe declares it (`infra/traefik-clientaddr.go`). */
+        /** The local plugin's name as the compose recipe declares it (`infra/docker/traefik-clientaddr.go`). */
         const val PLUGIN = "clientaddr"
     }
 }

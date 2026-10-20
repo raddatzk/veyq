@@ -3,7 +3,7 @@ name: veyq
 description: >-
   Self-hostable, end-to-end-encrypted memory sharing. The operator-blind server, its administration surface,
   MariaDB and the bundled Garage object store on an operator's own Kubernetes cluster (ADR 0064) — the same
-  four workloads infra/docker-compose.prod.yml runs beside its Traefik, whose job a Gateway API implementation
+  four workloads infra/docker/docker-compose.prod.yml runs beside its Traefik, whose job a Gateway API implementation
   of the operator's choice does here: the chart owns one Gateway, tenant domains are projected as HTTPRoutes (and,
   under per-domain TLS, ListenerSets) by the backend itself, and certificates are obtained through cert-manager.
 type: application

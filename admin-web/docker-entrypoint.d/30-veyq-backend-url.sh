@@ -9,7 +9,7 @@
 # template therefore lives OUTSIDE /etc/nginx/templates so the built-in script never sees it.
 set -eu
 
-# `app:8090` is the backend's ADMIN LISTENER under its service name in infra/docker-compose.prod.yml — never its
+# `app:8090` is the backend's ADMIN LISTENER under its service name in infra/docker/docker-compose.prod.yml — never its
 # public port, which 404s every Server-Owner operation (ADR 0065). A default, not a fallback to something
 # wrong: the overwhelmingly common case is the bundled stack, and an operator running the container by hand
 # sets BACKEND_URL.
@@ -24,7 +24,7 @@ VEYQ_RESOLVERS=$(awk '/^nameserver/ { print ($2 ~ /:/) ? "[" $2 "]" : $2 }' /etc
 : "${VEYQ_RESOLVERS:=127.0.0.11}"
 export VEYQ_RESOLVERS
 
-# The deployment's HSTS switch — fed from the same key as the app's (`VEYQ_HSTS_ENABLED` in infra/.env,
+# The deployment's HSTS switch — fed from the same key as the app's (`VEYQ_HSTS_ENABLED` in infra/docker/.env,
 # `hsts.enabled` in the chart; https://raddatzk.github.io/veyq/run/new-instance/), so one value governs both origins;
 # docs/crosscutting/cc.security.csp.md § admin-web says why there is one and not two. Exactly `true` (the default
 # when unset or empty) or `false`. Anything else stops the container here, naming the variable — the image's

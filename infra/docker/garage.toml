@@ -4,7 +4,7 @@
 # ONE config file serves both stacks, and it holds NO secrets: `rpc_secret` and `admin_token` come from the
 # environment (`GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN`, both supported by the pinned binary — measured).
 # docker-compose.yml supplies the documented dev throwaways; docker-compose.prod.yml requires real ones from
-# infra/.env. A secret written into a tracked file is one an operator inherits by accident.
+# infra/docker/.env. A secret written into a tracked file is one an operator inherits by accident.
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
 # `garage meta snapshot` defaults to writing INSIDE metadata_dir — i.e. into the very volume a same-host

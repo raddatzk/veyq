@@ -11,7 +11,7 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
     web     -> a file path (relative to web/) that both exists AND is a test file (*.test|*.spec)
     crypto  -> the same rule, rooted at packages/crypto/ (the shared crypto workspace package, ADR 0065)
     admin-web -> the same rule, rooted at admin-web/ (the Server-Owner administration surface, ADR 0065)
-    stack   -> the same rule, rooted at e2e/ (lane L1's browser suite against the candidate image, ADR 0090), where a
+    stack   -> the same rule, rooted at tests/e2e/ (lane L1's browser suite against the candidate image, ADR 0090), where a
                Playwright setup file (*.setup.ts) is a test file too; which criterion its test carries is
                `validate_stack_criterion_tags.py`'s
 

@@ -9,7 +9,7 @@ A fresh instance has an object store that is **running but not usable**: Garage 
 bucket, no access key and no grant. Today `infra/garage-init.sh` closes that gap as a one-shot compose service,
 and it needs a container of its own for a reason that has nothing to do with the work — the official Garage
 image is `scratch`-based and has no shell, so `infra/garage-init.Dockerfile` exists purely to put the `garage`
-CLI on an Alpine that has one. That image carries `build:` in `infra/docker-compose.prod.yml` and is not one of
+CLI on an Alpine that has one. That image carries `build:` in `infra/docker/docker-compose.prod.yml` and is not one of
 the images the publish workflow (then `container.yml`, `ci.yml` since ADR 0091) publishes.
 
 Forces:

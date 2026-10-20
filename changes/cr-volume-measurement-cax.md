@@ -113,10 +113,10 @@ while a phone uploads — the CAX run should watch the app there first.
   there, so the clients no longer compete with each other's host — but they still share this Mac; the scenario's
   client half is only meaningful once #488 is fixed.
 - *A browser wait needs a wall-clock guard too*: under the throttle the 10,000 Chapter kept the page's main thread busy
-  for over 30 minutes, so the page-side stall clock never ran; `e2e/measure/volume.ts` now stops a run whose page does
+  for over 30 minutes, so the page-side stall clock never ran; `tests/e2e/measure/volume.ts` now stops a run whose page does
   not answer for `stallSecs`.
 - *The L1 overlay moves with main*: on 2026-10-18 it gained `garage=info` (the wire sweep's control), which the
-  measurement overlay removes again. Re-read `infra/e2e/docker-compose.e2e.yml`'s diff before booting.
+  measurement overlay removes again. Re-read `tests/e2e/stack/docker-compose.e2e.yml`'s diff before booting.
 
 **The procedure, exactly as it ran** (`I` = an instance directory outside git; the readings go to `.run/measurements/`):
 1. Images from the tree: `docker build -f Dockerfile -t veyq-vol:local .` and `docker build -f admin-web/Dockerfile -t
@@ -137,7 +137,7 @@ Re-seed time for the full dataset locally: boot 20 s, photos about 3,200 a minut
 members about 12 a minute end to end (20 joined, 31 profiled; Argon2id dominates).
 The harness files phase 5 deletes are the ones listed there, plus `web/scripts/volumeHarness.mts`,
 `web/scripts/volumePrelude.mts`, the `installPinnedFetch` half of `web/scripts/apiTransport.mts`, `src/env.d.ts` in
-`web/tsconfig.scripts.json`'s `include`, and `measure` in `e2e/tsconfig.json`'s `include`.
+`web/tsconfig.scripts.json`'s `include`, and `measure` in `tests/e2e/tsconfig.json`'s `include`.
 
 ## Decisions this CR takes
 
@@ -182,7 +182,7 @@ owner's to give with the server.
   retrospective (how far the local run was off is worth knowing for the next one). · Done when: the site check and
   the trust-chain guards green.
 - [ ] **5 remove** (not before #489's reading at the V1 heavy stage — it measures with this harness): delete the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
-  `scripts/measure_volume.py`, `e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
+  `scripts/measure_volume.py`, `tests/e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
   the owner deletes the server and the DNS record. · Done when: `git ls-files` shows none of the harness files;
   `npm run check` in `web/` green; the owner confirms the server is gone.
 

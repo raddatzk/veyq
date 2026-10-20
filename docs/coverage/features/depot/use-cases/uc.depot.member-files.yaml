@@ -67,7 +67,7 @@ acceptanceCriteria:
         e2e: [src/features/depot/depot.e2e.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/depot-download.spec.ts`, `e2e/tests/features/depot-files.spec.ts`)
+    Lane L1's browser suite (`tests/e2e/tests/features/depot-download.spec.ts`, `tests/e2e/tests/features/depot-files.spec.ts`)
     drives `upload-attaches-one-sealed-blob`, `download-returns-the-original-bytes`, `a-file-name-is-folded-as-a-file-name`,
     `replace-is-a-compare-and-set-on-the-blob`, `metadata-is-the-blobs-own`, `delete-goes-to-the-trash` in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its

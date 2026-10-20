@@ -6,7 +6,7 @@
 // refused to a caller without a grant; a second member of a shared scope replaces it. Run against a FRESH instance:
 // `python3 scripts/run_web_e2e.py` (what CI runs) gives this file its own database.
 //
-//   docker compose -f infra/docker-compose.yml --profile s3 up -d
+//   docker compose -f infra/docker/docker-compose.yml --profile s3 up -d
 //   VEYQ_E2E=1 npx vitest run files.e2e
 //
 // A file's type, uploaded name and modified time are its BLOB's sealed meta (`wrappedBlobMeta` under `K_blob`, declared

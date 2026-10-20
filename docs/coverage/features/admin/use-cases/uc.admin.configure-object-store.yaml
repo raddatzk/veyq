@@ -130,7 +130,7 @@ gaps:
     The web client has no part in configuring the store; it only uploads to whatever store the backend signs for.
     Its upload refusal (no-store-refuses-uploads-with-a-reason) is reached through the backend's response.
   stack: >-
-    Lane L1's browser suite (`e2e/tests/setup/first-run.setup.ts`) drives `server-owner-sets-and-checks-the-store`
+    Lane L1's browser suite (`tests/e2e/tests/setup/first-run.setup.ts`) drives `server-owner-sets-and-checks-the-store`
     in Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged
     with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` →
     `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the

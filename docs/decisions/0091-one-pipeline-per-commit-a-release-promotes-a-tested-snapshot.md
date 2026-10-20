@@ -156,10 +156,10 @@ Three structural costs sit on top of those numbers:
      bundled store, the e2e profile whose rate limits do not refuse a run's volume. Not lane L1: the candidate's
      production limits answer 429 long before a run is through, its lane owns ports 80 and 443, and its budget is
      spent on the browser. What Traefik and the image add is L1's and the pentests' (ADR 0100) to see.
-   - **It runs in an image of our own** (`infra/fuzz/Dockerfile`), which the runner builds: a Python base pinned by
+   - **It runs in an image of our own** (`tests/fuzz/Dockerfile`), which the runner builds: a Python base pinned by
      digest like every other third-party image (ADR 0057 §6, `validate_image_pins.py`), and Schemathesis from PyPI
-     with every package pinned by version and wheel hash (`infra/fuzz/requirements.txt`, installed with
-     `--require-hashes`, written by `infra/fuzz/lock.py`). Schemathesis needs Python ≥ 3.11 and the host scripts run on
+     with every package pinned by version and wheel hash (`tests/fuzz/requirements.txt`, installed with
+     `--require-hashes`, written by `tests/fuzz/lock.py`). Schemathesis needs Python ≥ 3.11 and the host scripts run on
      3.9, so the image carries what they cannot. Not the official `schemathesis/schemathesis` image: it also installs
      TraceCov, a proprietary, binary-only coverage plugin, and loads it on every run (owner, 2026-10-18); veyq's hooks
      refuse to load if it is ever imported.

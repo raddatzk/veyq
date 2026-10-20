@@ -1882,7 +1882,7 @@ The generated resource then `@Consumes` JSON, and RESTEasy answers a request wit
 handler, however optional the body is. cr-statement-legal-gaps gave `suspendTenant` an optional statement: admin-web's
 generated client sends the header on every call and kept working, while nine slice tests and two projector tests that
 posted the suspension bare went red at once. So a CR that adds an optional body to an existing operation greps its
-route across the test trees, `e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
+route across the test trees, `tests/e2e/` and the Run docs for a caller that sends no `Content-Type`, and says in the
 contract that the request is JSON either way.
 
 ### A locator for an endpoint's callers greps its route, not only its operation name

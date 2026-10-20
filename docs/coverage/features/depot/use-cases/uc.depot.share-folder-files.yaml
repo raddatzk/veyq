@@ -70,7 +70,7 @@ acceptanceCriteria:
       backend: { integration: [ShareFilesSliceTest.aDeletedLinkKeepsItsGuestsIdentityWhileItsFileNamesIt] }
 gaps:
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/guest-take-back.spec.ts`, `e2e/tests/features/depot-download.spec.ts`)
+    Lane L1's browser suite (`tests/e2e/tests/features/guest-take-back.spec.ts`, `tests/e2e/tests/features/depot-download.spec.ts`)
     drives `a-read-guest-lists-and-downloads-the-subtree`, `a-refused-upload-leaves-no-file-behind`, `guest-files-count-against-the-link-limit`,
     `a-guest-takes-back-only-its-own-placeholder` in Chromium against the release candidate's two images, installed
     through `veyqctl` (ADR 0090), each test tagged with its criterion. A guest's upload the space's per-link limit

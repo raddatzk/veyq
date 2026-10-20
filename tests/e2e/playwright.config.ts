@@ -42,7 +42,7 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
     launchOptions: { args: [`--host-resolver-rules=${resolverRules()}`] },
     // The certificate is a real ACME one from the run's Pebble, whose root the container's NSS db trusts
-    // (infra/e2e/nss_trust_root.py) and nothing else does: a certificate Traefik failed to obtain — its default one,
+    // (tests/e2e/stack/nss_trust_root.py) and nothing else does: a certificate Traefik failed to obtain — its default one,
     // ADR 0071's silent failure — is a red navigation here, not an ignored warning.
     ignoreHTTPSErrors: false,
     trace: 'on',

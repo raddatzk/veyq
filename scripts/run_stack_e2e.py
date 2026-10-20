@@ -39,7 +39,7 @@ the recipe:
      own `keytool` (the overlay says why the app needs it). Pebble's minica root is copied out of the overlay's pinned
      Pebble image first, for Traefik's ACME client to trust Pebble's listener.
   3. **install** — `veyqctl install --unsigned-local --source src/` into the run's `home/`, the release's own
-     `veyqctl` as the operator fetches it, with `infra/e2e/docker-compose.e2e.yml` as the instance's override file
+     `veyqctl` as the operator fetches it, with `tests/e2e/stack/docker-compose.e2e.yml` as the instance's override file
      `compose.override.yml` (Pebble, the browser behind a profile, and the DNS name and CA trust the internet would
      give the instance) and the run's values through `--set`; `veyqctl` generates the secrets, writes `.env` from the
      release's template and the image lines from its manifest, and waits until every service is healthy. stdin is
@@ -54,25 +54,25 @@ the recipe:
      (`e2e_sweeps.StatementLog`, a sentinel statement at each end), and one unsigned request for a run-unique key
      sent through Traefik to the bucket, which Garage's log must then carry percent-encoded (the container sweep's
      control). The stack's own containers only, through the run's compose project.
-  7. **browser** — `e2e/`'s Playwright suite, whole, in the Playwright image the overlay pins, started with
+  7. **browser** — `tests/e2e/`'s Playwright suite, whole, in the Playwright image the overlay pins, started with
      `docker compose run --rm browser` on the run's own `edge` and `admin` networks — never on the host, so a laptop
      runs what CI runs. The container first trusts the run's Pebble root (and nothing more) in Chromium's NSS db
-     (`infra/e2e/nss_trust_root.py`); the suite reaches the domain through Traefik and the admin console through an
-     in-container loopback tunnel to `admin:8080` (`e2e/src/tunnel.ts`), and everything it may reach is named in
+     (`tests/e2e/stack/nss_trust_root.py`); the suite reaches the domain through Traefik and the admin console through an
+     in-container loopback tunnel to `admin:8080` (`tests/e2e/src/tunnel.ts`), and everything it may reach is named in
      `stack.json`, which this stage writes. Its exit code is the verdict; the JUnit report's tests and times are
      printed. Preflight refuses a run whose installed `@playwright/test` is not exactly the image's version (the
      browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
      green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
      every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
   7b. **guest-write record** — the stack scenario ADR 0094 § For the moderation CR asks for, the half the `client port`
-     stage leaves open (that one reads an echo): `e2e/tests/features/guest-write-record.spec.ts` has a guest create a
+     stage leaves open (that one reads an echo): `tests/e2e/tests/features/guest-write-record.spec.ts` has a guest create a
      folder through the release's Traefik and writes, from the browser container's own TCP table, the sockets it holds to
      Traefik's :443 and the folder's id (`guest-write-record.json`). This stage reads the app's record of that write off
      the instance's database: exactly one row, the browser's own address, and a port that is one of the browser's own
      sockets' — the one Traefik accepted and its plugin stated (ADR 0094 decision 7). Skipped, saying so, when the
      selection ran no test of that spec; red when it ran one and left no file.
   8. **sweep** — the ADR 0053 wire assertion, with the sensors `run_web_e2e.py` uses (`scripts/e2e_sweeps.py`,
-     parameterised by compose project): every value the suite typed (`canaries-<spec>.json`, `e2e/src/canaries.ts`)
+     parameterised by compose project): every value the suite typed (`canaries-<spec>.json`, `tests/e2e/src/canaries.ts`)
      must be absent from the instance's database, its bucket (keys and bytes), every container log of the project
      since the run began, and every statement the database received in the window — each sensor armed by a positive
      control, and every spec file that executed a test must have recorded canaries. And every address an account was
@@ -160,15 +160,15 @@ RELEASE_ASSETS = ROOT / "scripts" / "release_assets.py"
 RUN_ROOT = ROOT / ".e2e-stack-out"
 E2E_PACKAGE = repo_layout.E2E_DIR / "package.json"
 INSTALLED_PLAYWRIGHT = ROOT / "node_modules" / "@playwright" / "test" / "package.json"
-# What the browser container is told it may reach (e2e/src/stack.ts). Paths are the container's: the run directory
+# What the browser container is told it may reach (tests/e2e/src/stack.ts). Paths are the container's: the run directory
 # is mounted at /out.
 ADMIN_UPSTREAM = "admin:8080"
 TRAEFIK_SERVICE = "traefik"
 # The overlay's Mailpit on the run's `admin` network, by the alias a Server Owner types as the SMTP host: its HTTP API,
-# which the suite reads the mail the instance sent from (infra/e2e/docker-compose.e2e.yml says why it is there).
+# which the suite reads the mail the instance sent from (tests/e2e/stack/docker-compose.e2e.yml says why it is there).
 MAIL_API = "http://mail.relay.test:8025"
 # The overlay's stub release mirror on the run's `admin` network, by the address a Server Owner types as the release
-# check's source (infra/e2e/docker-compose.e2e.yml says why it is there).
+# check's source (tests/e2e/stack/docker-compose.e2e.yml says why it is there).
 RELEASE_MIRROR_SOURCE = "http://releases.mirror.test:8080"
 CONTAINER_OUT = "/out"
 APP_TRUSTSTORE = "app-truststore.p12"
@@ -303,7 +303,7 @@ def browser_pins() -> None:
     installed = json.loads(INSTALLED_PLAYWRIGHT.read_text(encoding="utf-8"))["version"]
     image = overlay_image("browser")
     tag = re.search(r":v(\d+\.\d+\.\d+)-", image)
-    versions = {"e2e/package.json": pinned, "node_modules": installed, "the overlay's image": tag.group(1) if tag else image}
+    versions = {"tests/e2e/package.json": pinned, "node_modules": installed, "the overlay's image": tag.group(1) if tag else image}
     if len(set(versions.values())) != 1:
         raise Red(f"Playwright versions disagree: {versions} — the library must be exactly the image's browser's")
     print(f"browser: Playwright {installed} (library and image agree)", flush=True)
@@ -781,7 +781,7 @@ def browser(compose: list[str], workdir: Path, mirror: Mirror, selection: list[s
         "domain": DOMAIN,
         "appOrigin": f"https://{DOMAIN}",
         "traefikHost": TRAEFIK_SERVICE,
-        # The same port number an operator's tunnel listens on, inside the container (e2e/src/tunnel.ts).
+        # The same port number an operator's tunnel listens on, inside the container (tests/e2e/src/tunnel.ts).
         "adminOrigin": f"http://localhost:{ADMIN_PORT}",
         "adminUpstream": ADMIN_UPSTREAM,
         "mailApi": MAIL_API,
@@ -965,7 +965,7 @@ def guest_write_record(stack: sweeps.Stack, workdir: Path) -> None:
 def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
     """Every typed canary of the run, swept everywhere an operator of this instance could read it (ADR 0053).
 
-    The browser suite records what it typed (`e2e/src/canaries.ts`), one `canaries-<spec>.json` per spec file; every
+    The browser suite records what it typed (`tests/e2e/src/canaries.ts`), one `canaries-<spec>.json` per spec file; every
     spec file that executed a test must have left one, or that file's values were never looked for. Then: the
     instance's database (data-only dump), its bucket (keys and bytes), every container log of the project since the
     run began, and every statement the database received in the window. Each is armed by a positive control — the
@@ -974,7 +974,7 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
     from a sensor that read nothing is not a pass.
 
     The `pii` set (ADR 0092 § 4): every address an account was signed up with (`freshOwner` records it,
-    `e2e/src/accounts.ts`) is searched in every container log, and nowhere else — the dump, the statement log and the
+    `tests/e2e/src/accounts.ts`) is searched in every container log, and nowhere else — the dump, the statement log and the
     mailbox hold it by design. Its control ([sweeps.pii_control]): at least one, and each found in the statement log,
     which holds every account the instance created in the window; this lane reads no mailbox (below), so the mailbox
     control `run_web_e2e.py` uses is not open here.
@@ -991,7 +991,7 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
               if ran and not (workdir / f"canaries-{Path(name).name.removesuffix('.ts')}.json").is_file()]
     if silent:
         raise Red(f"spec file(s) {silent} executed tests but recorded no canary — what they typed was never swept for "
-                  "(every typed value goes through recordTyped, e2e/src/canaries.ts)")
+                  "(every typed value goes through recordTyped, tests/e2e/src/canaries.ts)")
     carriers, problems = sweeps.load_canaries(canary_files)
     if problems or not carriers:
         raise Red("the run's canaries could not be read: " + "; ".join(problems or ["the canary files hold none"]))
@@ -1000,7 +1000,7 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
     instance = json.loads((workdir / "instance.json").read_text(encoding="utf-8"))
     email = instance["owner"]["email"]
     print(f"sweep: {len(carriers)} typed canary/canaries from {', '.join(p.name for p in canary_files)}", flush=True)
-    # The third needle set: every address an account was signed up with (`recordPii`, e2e/src/accounts.ts), searched
+    # The third needle set: every address an account was signed up with (`recordPii`, tests/e2e/src/accounts.ts), searched
     # in the container logs only — the database, the statement log and the mailbox hold it by design (ADR 0092 § 4).
     pii_files = sorted(workdir.glob("pii-*.json"))
     pii, pii_problems = sweeps.load_pii(pii_files)

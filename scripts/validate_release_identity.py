@@ -87,16 +87,16 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      or on the Run pages (`site/src/content/docs/run/`, where the operator procedures live) matches a tag the
      pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
-     `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
+     `infra/docker/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
      `.github/workflows/ci.yml` actually publishes — the set is read out of that workflow's build
      matrix, never listed here (§ *a guard derives its anchor set from the code*). A recipe that builds is a
      recipe only `docker compose` can deploy: Compose hides it by building on the operator's host, and
      [ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)'s Helm chart cannot, because a
      chart has nothing to build with.
   6. **The production project name is a property of the compose file, not a rule stated in prose.**
-     `infra/docker-compose.prod.yml` declares a top-level `name:`, and no file of durable state instructs
+     `infra/docker/docker-compose.prod.yml` declares a top-level `name:`, and no file of durable state instructs
      `-p <that name>` / `--project-name <that name>`. Compose derives a project from the compose file's
-     *directory* when the file names none, and both compose files sit in `infra/` — so a production procedure
+     *directory* when the file names none, and both compose files sit in `infra/docker/` — so a production procedure
      that depends on an operator remembering a flag is one shell away from addressing the wrong stack. The two
      halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
      flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
@@ -232,7 +232,7 @@ or an action other than the login and build-push ones — is not held; the recog
 action names in the code.
 
 **Assertion 5's own limit, and it is deliberate: it is scoped to the RELEASE RECIPE and says nothing about
-`infra/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
+`infra/docker/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
 legitimate thing to want — so forbidding one from a guard whose subject is *releases* would be this guard
 overreaching into a file it has no argument about. It also reads the compose file rather than a registry, so
 "the workflow publishes this name" means the matrix says so, never that a push ever succeeded (see the
@@ -240,7 +240,7 @@ no-remote limit above).
 
 Assertion 6 adds two limits of its own, and the first is the one that matters. **It reads the file, so it says
 nothing about the project the operator actually brought their stack up under.** `docker compose -p something-else
--f infra/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
+-f infra/docker/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
 green here means the *procedure* can no longer be wrong by default, never that a given host is right. `veyqctl`
 closes that for an instance it manages — it records the project at `install` and names it on every command — which
 is the tool's job and explicitly not this guard's.
@@ -380,7 +380,7 @@ if version_text is None:
     fail(
         "there is no VERSION file at the repository root. It IS the release identity (ADR 0057 §1): without it "
         "the publish workflow dies on its first command and nothing can ever be published, while "
-        "infra/.env.example tells the operator to pin an image tag that has no producer."
+        "infra/docker/.env.example tells the operator to pin an image tag that has no producer."
     )
 elif not version_match:
     fail(
@@ -1229,7 +1229,7 @@ if not refusals:
                     )
 
 written_tags = 0
-# Tracked files only, as in assertion 9's flag scan. A gitignored `infra/.env` is one operator's local pin (a
+# Tracked files only, as in assertion 9's flag scan. A gitignored `infra/docker/.env` is one operator's local pin (a
 # dev build's `veyq:cr162`, say), not something this repository tells anyone to run — scanning it made the
 # guard red on that machine and green in CI over the same commit.
 RUN_PAGES = ROOT / "site/src/content/docs/run"  # the operator procedures (ADR 0087), which write tags down too

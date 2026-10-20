@@ -82,7 +82,7 @@ acceptanceCriteria:
         unit: [src/features/spaces/scopes.test.ts, src/features/memories/sealBinding.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/node-urls.spec.ts`) drives `switch-space-by-fragment` in Chromium
+    Lane L1's browser suite (`tests/e2e/tests/features/node-urls.spec.ts`) drives `switch-space-by-fragment` in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090): the address grammar of ADR 0015
     (a folder's slash, a Memory's `memories/`, a reserved name numbered, a file and a folder of one slug apart, two
     files of one slug numbered by creation, a folder's address without its slash), each address written by a click

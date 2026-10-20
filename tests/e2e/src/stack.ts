@@ -30,7 +30,7 @@ export interface Stack {
    */
   mailApi: string
   /**
-   * The release check's test double (infra/e2e/docker-compose.e2e.yml, `release-mirror`; inbox #464): the release the
+   * The release check's test double (tests/e2e/stack/docker-compose.e2e.yml, `release-mirror`; inbox #464): the release the
    * run stamped its instance with, and the newer ones the stub mirror at `source` lists — the next minor, the next
    * major (planned, published on `plannedDate`) and the one after (marked unscheduled). Each a `<major>.<minor>`.
    */

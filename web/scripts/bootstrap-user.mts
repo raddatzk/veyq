@@ -143,7 +143,7 @@ console.log(`env: owner key material written to ${ENV_FILE}`)
 // dotted name that resolves to loopback because the contract's host pattern rejects a bare `localhost`.
 async function configureMail(): Promise<boolean> {
   if (!(await mailpitReachable())) {
-    console.warn(`mail: no Mailpit at ${MAILPIT} — skipping mail settings (start it: docker compose -f infra/docker-compose.yml --profile mail up -d)`)
+    console.warn(`mail: no Mailpit at ${MAILPIT} — skipping mail settings (start it: docker compose -f infra/docker/docker-compose.yml --profile mail up -d)`)
     return false
   }
   try {

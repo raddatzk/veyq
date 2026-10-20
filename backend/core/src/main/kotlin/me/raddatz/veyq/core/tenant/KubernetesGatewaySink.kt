@@ -236,7 +236,7 @@ class KubernetesGatewaySink(
 
         /**
          * The chart's `Gateway` listener names this sink attaches to. They are a contract with
-         * `charts/veyq/templates/gateway.yaml`, held there by `scripts/chart_meta_check.py`, which reads them from
+         * `infra/kubernetes/charts/veyq/templates/gateway.yaml`, held there by `scripts/chart_meta_check.py`, which reads them from
          * these lines: a renamed listener would leave every route `Accepted: False` with no error on this side.
          */
         const val HTTP_LISTENER = "http"

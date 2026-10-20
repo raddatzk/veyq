@@ -10,8 +10,8 @@ A **tenant** carries a domain, and host-based routing resolves every request's t
 its own domain"). Tenant creation is a **runtime** Server-Owner action (`POST /api/tenants`,
 [tenants.openapi.yaml](../../contracts/api/tenants.openapi.yaml)) — but the reverse proxy that actually
 routes a domain to the `app`/`garage` containers does not know about it. Today
-`infra/docker-compose.prod.yml` carries exactly one static Traefik `Host(...)` label per service, driven by
-the single `${VEYQ_DOMAIN}` value in `infra/.env`. A second tenant with its own domain is therefore not
+`infra/docker/docker-compose.prod.yml` carries exactly one static Traefik `Host(...)` label per service, driven by
+the single `${VEYQ_DOMAIN}` value in `infra/docker/.env`. A second tenant with its own domain is therefore not
 actually usable end-to-end: creating it via the API succeeds, but no router forwards its traffic until an
 operator hand-edits the compose file and restarts the stack — a deployment-time action gating what is
 documented as a runtime one.
@@ -137,7 +137,7 @@ startup regenerate.
   - the same bind into a **writable** volume runs, but it makes Traefik a second writer of the routing and
     leaves a root-owned empty stub in the app's volume.
 - **ACME rate limits become an operator-visible concern** once domains can be added faster than by hand;
-  `infra/.env.example`'s existing `VEYQ_ACME_CASERVER` staging-server advice is the same mitigation, now
+  `infra/docker/.env.example`'s existing `VEYQ_ACME_CASERVER` staging-server advice is the same mitigation, now
   worth surfacing at tenant-creation time too.
 - **Multi-domain-per-tenant and tenant self-service stay out of scope.** This ADR removes the *manual
   compose edit* for an **additional single-domain tenant**; it does not touch

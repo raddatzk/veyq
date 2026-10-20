@@ -13,7 +13,7 @@ ref or is declared under `gaps` with a reason — never left silent. `crypto`, `
 
 > **A surface that no CI job runs makes no coverage claim** ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
 > The surfaces are **`backend`**, **`web`**, **`crypto`** (`packages/crypto/`), **`admin-web`** and **`stack`**
-> (`e2e/`, lane L1's browser suite against the release candidate, [ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md)),
+> (`tests/e2e/`, lane L1's browser suite against the release candidate, [ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md)),
 > each run by a CI job. `http/` was hand-fired IDE tooling and has been deleted — real
 > requests that proved nothing, because nobody fired them. A surface enters this model when its CI job is
 > green, not when its code exists — and "green" means a run executed it, not that a workflow declares it. A
@@ -67,7 +67,7 @@ gaps:
 - **Areas and levels come from the fixed sets above**; unknown names fail validation (catches typos).
 - **References must resolve:** a `backend` `ClassName.method` ref resolves against *that* test class (a file
   whose stem is `ClassName`, containing `method`); a `web` ref's file must exist, and so must a `crypto` or
-  `admin-web` one under that package's root. A `stack` ref is a file under `e2e/` (`*.spec.ts`, or the setup
+  `admin-web` one under that package's root. A `stack` ref is a file under `tests/e2e/` (`*.spec.ts`, or the setup
   project's `*.setup.ts`) one of whose tests carries the criterion's tag, `@<use-case>:<criterion-id>` — every lane
   L1 test carries one, every tag names a criterion, and a use-case a tag names says something on `stack`
   (`scripts/validate_stack_criterion_tags.py`).

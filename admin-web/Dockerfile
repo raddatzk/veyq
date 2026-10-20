@@ -1,13 +1,13 @@
 # The Server-Owner administration surface as its own image (ADR 0065) — `ghcr.io/raddatzk/veyq-admin`,
 # versioned and signed the same way as the app image (ADR 0057).
 #
-# Separate from the root Dockerfile on purpose: that one builds a JVM application server with the app SPA baked
+# Separate from the app image's Dockerfile (infra/docker/Dockerfile) on purpose: that one builds a JVM application server with the app SPA baked
 # into its resources, this one is static assets plus a reverse proxy. They share no stage and must not: the
 # whole point of the extraction is that an operator can firewall this container off the internet without
 # touching the app.
 
 # --- build ------------------------------------------------------------------------------------------------
-# Mirrors the root Dockerfile's frontend-build stage, including its two hard-won details: the OpenAPI client is
+# Mirrors the app image Dockerfile's frontend-build stage, including its two hard-won details: the OpenAPI client is
 # GENERATED and never tracked (so the stage needs a JRE for openapi-generator), and the specs must land BEFORE
 # `npm ci` because `prepare` runs generate:api during the install.
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build

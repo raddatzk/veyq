@@ -1,4 +1,4 @@
-"""veyq's own Schemathesis checks — loaded by `infra/fuzz/schemathesis.toml` (`hooks`), run by `scripts/run_api_fuzz.py`.
+"""veyq's own Schemathesis checks — loaded by `tests/fuzz/schemathesis.toml` (`hooks`), run by `scripts/run_api_fuzz.py`.
 
 Two rules a generic fuzzer does not know (ADR 0091 decision 9):
 
@@ -55,9 +55,9 @@ from schemathesis.specs.openapi._auth_retry import clone_case, send_probe
 from schemathesis.specs.openapi.checks import negative_data_rejection
 
 # TraceCov — the proprietary coverage plugin the official Schemathesis image loads on every run — is not in our image
-# (`infra/fuzz/Dockerfile`); this makes "it never runs" a fact rather than a hope, whatever image runs this file.
+# (`tests/fuzz/Dockerfile`); this makes "it never runs" a fact rather than a hope, whatever image runs this file.
 if "tracecov" in sys.modules:
-    raise RuntimeError("TraceCov was loaded — the API fuzzing runs only the MIT tool (infra/fuzz/Dockerfile)")
+    raise RuntimeError("TraceCov was loaded — the API fuzzing runs only the MIT tool (tests/fuzz/Dockerfile)")
 
 # Headers the transport or the run sets on every request; their values are no generated input.
 TRANSPORT_HEADERS = {"content-type", "accept", "accept-encoding", "user-agent", "connection", "content-length",

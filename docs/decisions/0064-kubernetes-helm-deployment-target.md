@@ -5,7 +5,7 @@
 
 ## Context
 
-veyq ships one deployment artifact today: `infra/docker-compose.prod.yml`, a release's asset beside its signed
+veyq ships one deployment artifact today: `infra/docker/docker-compose.prod.yml`, a release's asset beside its signed
 images ([ADR 0057 §3](0057-release-identity-and-deployment-recipe.md)). A **V1 scope cut recorded 2026-08-06**
 ([inbox #26](../inbox.md)) explicitly dropped Helm: *"zero k8s artefacts in the tree and the §10
 self-hostability bar is literally one `docker compose up` + a JVM."* That reasoning held while veyq's
@@ -42,7 +42,7 @@ Forces:
 
 ## Decision
 
-**A `charts/veyq` Helm chart ships alongside `infra/`, covering the same services**: `app`, `mariadb` (with
+**A Helm chart (`infra/kubernetes/charts/veyq`) ships alongside the Compose recipe, covering the same services**: `app`, `mariadb` (with
 a `mariadb.enabled: false` escape hatch onto an operator-managed database, which K8s deployments commonly
 already have), `garage`, an implementation-neutral **Gateway API** resource set (`Gateway`, `HTTPRoute`, `ListenerSet`), and the
 admin container ([ADR 0065](0065-admin-ui-cli-separate-service.md)).

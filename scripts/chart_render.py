@@ -1,6 +1,6 @@
 """The one way the chart scripts render a chart: `helm template` of a chart directory with one values file.
 
-`chart_meta_check.py` renders the checkout's `charts/veyq` and asserts what one render must hold;
+`chart_meta_check.py` renders the checkout's `infra/kubernetes/charts/veyq` and asserts what one render must hold;
 `chart_upgrade_check.py` renders two charts - the upgrade predecessor's, read out of git, and the candidate's - and
 compares them. Both go through here, so the two never disagree on the release name, the flags or how a rendered
 stream is split into objects (cr-helm-upgrade-check Decision 1: one rendering helper).

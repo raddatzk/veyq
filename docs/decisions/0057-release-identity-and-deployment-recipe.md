@@ -94,8 +94,8 @@ major ≥ 1, which the owner declares on the `release:` line of `scripts/applied
 one tree. A snapshot has none: it names a build, not a release.
 
 **3. The deployment recipe is the release's assets; the binding is the release, not the image.** A release carries
-its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`: `infra/docker-compose.prod.yml`,
-`infra/.env.example` and every file the compose file reads beside itself (`garage.toml`), derived from the compose
+its recipe as assets of an immutable GitHub Release on `v<major>.<minor>`: `infra/docker/docker-compose.prod.yml`,
+`infra/docker/.env.example` and every file the compose file reads beside itself (`garage.toml`), derived from the compose
 file by `scripts/release_assets.py` rather than listed, beside `veyqctl`, the backup tool and a manifest naming both
 images by `tag@digest` and every asset by its sha256 ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)
 decision 3). No image carries a recipe. Two things follow:

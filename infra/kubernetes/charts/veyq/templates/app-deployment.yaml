@@ -115,7 +115,7 @@ spec:
             - name: admin
               containerPort: 8090
           env:
-            # Mirrors infra/docker-compose.prod.yml's app service, name for name, so the two recipes can be read
+            # Mirrors infra/docker/docker-compose.prod.yml's app service, name for name, so the two recipes can be read
             # against each other. What differs is said where it differs.
             - name: QUARKUS_DATASOURCE_JDBC_URL
               value: {{ include "veyq.jdbcUrl" . | quote }}

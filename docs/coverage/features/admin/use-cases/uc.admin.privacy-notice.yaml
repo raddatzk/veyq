@@ -17,7 +17,7 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           Each link is its component's, mounted alone; that the login page, the share page and the shell place the footer
-          is their templates, walked by lane L1 (e2e/tests/features/privacy-notice.spec.ts and first-run.setup.ts, the
+          is their templates, walked by lane L1 (tests/e2e/tests/features/privacy-notice.spec.ts and first-run.setup.ts, the
           `stack` gap) and by no web suite.
   - id: fixed-text-with-instance-values
     text: The notice is veyq's fixed text in DE and EN, filled with the instance's current values (the provider, the contact, a data-protection officer, the supervisory authority, the recipients — what each does and its country named in the page's own language, an OTHER one's description shown as typed and quoted on both —, N, B, the erasure's window, an external store's host), its passages following the switches that are on for the host's space, and each outside service named by the address the instance calls — a mirror never by HIBP's name; each right to object stands apart.
@@ -53,5 +53,5 @@ gaps:
   stack: >-
     Lane L1 walks the notice in a browser — from the sign-in page's footer without an account, in English and German, in
     both modes, from the invite acceptance, the report dialog and a guest's first-write notice, and the guest id copied
-    (e2e/tests/features/privacy-notice.spec.ts, terms-operator-section.spec.ts, setup/first-run.setup.ts), tagged per
+    (tests/e2e/tests/features/privacy-notice.spec.ts, terms-operator-section.spec.ts, setup/first-run.setup.ts), tagged per
     criterion; green only in local runs of `scripts/run_stack_e2e.py`, the lane's CI job awaits its first run.

@@ -91,7 +91,7 @@ the stack names one of them.
   </TabItem>
   <TabItem label="Kubernetes">
 
-`charts/veyq` is the second deployment target ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)):
+`infra/kubernetes/charts/veyq` is the second deployment target ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)):
 the same four workloads as the production compose file — the app, its administration surface, MariaDB and
 Garage — on an operator's own cluster, with a Gateway API implementation of the operator's choice in place of the
 compose file's Traefik (the chart owns one `Gateway`; the implementation, its CRDs at v1.5 or later and, for the ACME

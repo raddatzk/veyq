@@ -6,7 +6,7 @@ title: Object to a measure
 # objection decision on the backend; features/moderation's decision panel and features/moderation/statement (the notice
 # on the lightbox, a blocked node's page and the share lists) on web; the moderation-statement-facts,
 # moderation-facts-key and moderation-objection seals in packages/crypto. Lane L1's browser pass is
-# e2e/tests/features/statement-and-objection.spec.ts, tagged per criterion; `stack` waits under gaps until a run admits it.
+# tests/e2e/tests/features/statement-and-objection.spec.ts, tagged per criterion; `stack` waits under gaps until a run admits it.
 acceptanceCriteria:
   - id: the-statement-is-sent-with-the-measure
     text: >-
@@ -128,6 +128,6 @@ gaps:
     the purposes' tests
     (packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).
   stack: >-
-    e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,
+    tests/e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,
     the affected member's reading and objection, and the other moderator's decision; stack refs are admitted only once a
     CI run executed lane L1 (ADR 0040).

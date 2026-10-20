@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hold the API fuzzing's baseline (`infra/fuzz/baseline.json`) to its rules (ADR 0091 decision 9).
+"""Hold the API fuzzing's baseline (`tests/fuzz/baseline.json`) to its rules (ADR 0091 decision 9).
 
 **What it asserts.** The baseline is the list of Schemathesis failures a run accepts (`scripts/run_api_fuzz.py`); every
 entry of it:

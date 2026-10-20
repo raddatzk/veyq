@@ -3,7 +3,7 @@
 
 TEMPORARY. `cr-volume-measurement-cax` runs it once more against a real CAX11, writes the sizing recommendation into the
 Run area and deletes it with the rest of the harness (`web/scripts/seed-volume.mts`, `web/scripts/measure-volume.mts`,
-`web/scripts/volumeHarness.mts`, `web/scripts/volumePrelude.mts`, `e2e/measure/`, the bench files).
+`web/scripts/volumeHarness.mts`, `web/scripts/volumePrelude.mts`, `tests/e2e/measure/`, the bench files).
 
 **What it measures on.** A throwaway instance of the PRODUCTION recipe, never the dev stack: `boot` installs the
 candidate images the way lane L1 does — `scripts/run_stack_e2e.py`'s own stages (assets, release mirror, Pebble,
@@ -21,7 +21,7 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
     measure_volume.py --instance DIR seed <seed-volume args>       web/scripts/seed-volume.mts against it
     measure_volume.py --instance DIR invite-limit <N|default>      the per-tenant invite limit while seeding members, app recreated
     measure_volume.py --instance DIR server <axis>                 the server leg, with the sampler
-    measure_volume.py --instance DIR browser <axis> [...]          the browser leg, e2e/measure/volume.ts
+    measure_volume.py --instance DIR browser <axis> [...]          the browser leg, tests/e2e/measure/volume.ts
     measure_volume.py --instance DIR scenario <idle|five|upload>   a household scenario, with the sampler
     measure_volume.py --instance DIR stage <axis> <N>              seed to N, then the server and the browser leg
     measure_volume.py --instance DIR sample --seconds S            the sampler alone
@@ -258,7 +258,7 @@ def measurement_overlay(source: Path, target: Path, cpuset: str, outside: str) -
     garage_env.pop("RUST_LOG", None)
     if "garage" in services and not garage_env:
         services["garage"].pop("environment", None)
-    target.write_text("# Written by scripts/measure_volume.py boot: infra/e2e/docker-compose.e2e.yml plus the "
+    target.write_text("# Written by scripts/measure_volume.py boot: tests/e2e/stack/docker-compose.e2e.yml plus the "
                       "measurement's pins.\n" + yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
 
 
@@ -677,7 +677,7 @@ def server_leg(inst: Instance, axis: str, out: Path, calls: int = 5) -> dict:
 
 
 def browser_leg(inst: Instance, spec: dict, out: Path) -> dict:
-    """e2e/measure/volume.ts in the overlay's Playwright container, on the run's own networks and the outside cores.
+    """tests/e2e/measure/volume.ts in the overlay's Playwright container, on the run's own networks and the outside cores.
     `spec` is what the test reads (/out/browser-spec.json); it writes /out/browser-result.json."""
     result = inst.dir / "browser-result.json"
     if result.exists():

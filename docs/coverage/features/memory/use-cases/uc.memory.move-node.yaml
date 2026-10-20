@@ -61,7 +61,7 @@ acceptanceCriteria:
         unit: [src/core/node/move.test.ts, src/core/node/move.wire.test.ts, src/core/node/MoveNodesDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/field-seal.spec.ts`) drives `a-move-keeps-the-subtree-readable` in
+    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `a-move-keeps-the-subtree-readable` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with
     its criterion. A folder moved through core's move dialog shows under its destination, by its name, after a reload
     and on a second device. Not covered there: a moved subtree's children. Green only in local runs of

@@ -3,7 +3,7 @@
 (and VARCHAR(36) in ascii_bin, the no-type-change variant).
 
 Not a gate, not part of any check. It starts ONE disposable MariaDB container of the exact image the project pins
-(read from infra/docker-compose.yml), publishes no port (it is driven with `docker exec`), uses its own container
+(read from infra/docker/docker-compose.yml), publishes no port (it is driven with `docker exec`), uses its own container
 and volume names (veyq-bench-387), and removes both when it finishes -- it touches nothing else of Docker's. Only the stdlib is used.
 
 The shape is the hot one of the schema: `veyq_node` (random-UUIDv4 id PK, scope_id, parent_id, the unique

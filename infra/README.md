@@ -1,5 +1,11 @@
 # infra — local dev stack
 
+The deployment lives here by target ([ADR 0106](../docs/decisions/0106-deployment-under-infra-tests-under-tests.md)):
+[`docker/`](docker/) holds what Docker builds and Compose runs — the app image's `Dockerfile` (built from the repo
+root), the dev stack's `docker-compose.yml` this file is about, the production recipe `docker-compose.prod.yml` and
+what both read beside them; [`kubernetes/`](kubernetes/) holds the Helm chart (`infra/kubernetes/charts/veyq/`) and
+the `veyq-tools` image only the chart runs (`infra/kubernetes/tools/`). An instance's local `.env` sits beside the compose file, in `infra/docker/`.
+
 ## The launcher: `./gradlew <surface>:<verb>`
 
 The repo root is a Gradle build whose only job is to **trigger** what this file and the surfaces' own docs
@@ -19,7 +25,7 @@ holds no surface's build, and no task aggregates their checks — each still pro
 | `backend:run` · `web:run` · `admin:run` · `site:run` | `quarkusDev` · Vite on 8081 · Vite on 5174 · Astro on 4321 |
 | `backend:seed` | `npm run bootstrap:user` in `web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
 | `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `npm run build` in each |
-| `backend:image` · `admin:image` | `docker build` of `Dockerfile` (the app image, web's SPA baked in) · of `admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
+| `backend:image` · `admin:image` | `docker build` of `infra/docker/Dockerfile` (the app image, web's SPA baked in) · of `admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
 
 A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
 browse `veyq.localhost:8081`. `backend:run` does not start the infra on its own: a backend restart should not touch
@@ -36,7 +42,7 @@ Each npm task runs the `node` on the Gradle daemon's `PATH` — IntelliJ's proje
 configurations used, no longer applies.
 
 **`infra:*` always runs the main checkout's compose file**, also from a worktree. The containers are named
-(`veyq-mariadb`, …) and the project is named after the file's directory, so a worktree's copy is the same project
+(`veyq-mariadb`, …) and the file declares its project (`name: infra`), so a worktree's copy is the same project
 with other mount sources, and `up` would recreate the running containers onto the worktree's files (measured with
 `--dry-run`: `veyq-garage` and `veyq-traefik` *Recreate*). One machine, one dev infra.
 
@@ -64,16 +70,16 @@ Docker Compose for the local dev dependencies. Three profiles:
 
 ```sh
 # database only (the usual dev loop)
-docker compose -f infra/docker-compose.yml up -d
-docker compose -f infra/docker-compose.yml down        # stop, keep data
-docker compose -f infra/docker-compose.yml down -v      # stop AND wipe (fresh instance)
+docker compose -f infra/docker/docker-compose.yml up -d
+docker compose -f infra/docker/docker-compose.yml down        # stop, keep data
+docker compose -f infra/docker/docker-compose.yml down -v      # stop AND wipe (fresh instance)
 
 # + the bundled object store (media transport). This leaves it RUNNING BUT NOT USABLE —
 # the first backend start sets up layout + bucket + dev key + CORS itself (ADR 0067)
-docker compose -f infra/docker-compose.yml --profile s3 up -d
+docker compose -f infra/docker/docker-compose.yml --profile s3 up -d
 
 # + the test mailbox (per-tenant SMTP smoke) — SMTP on :11025, web UI/API on :18025
-docker compose -f infra/docker-compose.yml --profile mail up -d
+docker compose -f infra/docker/docker-compose.yml --profile mail up -d
 ```
 
 ## Object store (media, `--profile s3`)
@@ -124,7 +130,7 @@ starts and looks healthy either way.
 
 A browser can only PUT/GET a presigned URL if the store is reachable from the web origin **and** allows CORS —
 unless the store is **same-origin**. `traefik` path-routes the bucket so it is, from the static
-[`traefik-dev/blobs.yml`](traefik-dev/blobs.yml) — its only provider, as in production, so it holds no Docker
+[`traefik-dev/blobs.yml`](docker/traefik-dev/blobs.yml) — its only provider, as in production, so it holds no Docker
 socket. It forwards `/<bucket>/…` **without stripping the prefix** and **preserving the Host header** (SigV4 signs host+path+query, so a
 stripPrefix or host rewrite would break the signature). Entry is `http://localhost:18080`; sign presigned URLs
 for that public endpoint via `veyq.bundled-store.public-endpoint=http://localhost:18080` (CORS-free, ADR 0013 §4).

@@ -1,7 +1,7 @@
 # Production stack for a self-hosted veyq instance: the app, its database, the bundled object store, and a
 # Traefik that terminates TLS in front of both. See https://raddatzk.github.io/veyq/run/new-instance/.
 #
-#     docker compose -f infra/docker-compose.prod.yml up -d
+#     docker compose -f infra/docker/docker-compose.prod.yml up -d
 #
 # It is a STANDALONE file, deliberately not an override of docker-compose.yml. That file has no app service at
 # all (the backend is run from the IDE), publishes 3306/19000/18080, and ships `change-me` passwords — an
@@ -9,7 +9,7 @@
 # by accident.
 #
 # Every secret is REQUIRED and has no default: `${VAR:?…}` fails the `up` when it is unset. A prod stack that
-# boots with `change-me` is worse than one that refuses to boot. Copy infra/.env.example to infra/.env
+# boots with `change-me` is worse than one that refuses to boot. Copy infra/docker/.env.example to infra/docker/.env
 # (gitignored) and fill it in.
 
 # The project name is a property of THIS FILE — not of the directory it is run from, and not of a flag an
@@ -17,7 +17,7 @@
 # which both compose files share, and two things follow that no amount of prose prevents: an unqualified
 # `down -v` meant for the dev stack destroys the production volumes, and `scripts/instance_backup.py` — whose
 # `docker compose … exec` emits no `-p` — aims the documented production capture at whatever happens to be
-# running out of `infra/`, backing up the wrong instance and reporting success. Naming it here is what keeps
+# running out of `infra/docker/`, backing up the wrong instance and reporting success. Naming it here is what keeps
 # `infra_*` (dev) and `veyq_*` (prod) apart on one host. `scripts/validate_release_identity.py` holds it.
 name: veyq
 

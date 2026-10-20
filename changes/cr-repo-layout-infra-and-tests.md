@@ -79,7 +79,7 @@ Build stage 1 of [ADR 0106](../docs/decisions/0106-deployment-under-infra-tests-
   `docker buildx build --check -f <each of the three Dockerfiles> .` (lint only, no image); `python3
   scripts/release_assets.py` in whatever dry mode it has, else its selftest. **No** L1, web-e2e, api-fuzz or races
   run — those are the owner's V1 heavy stage (owner 2026-10-19), and the owner runs the full suite after this CR.
-- [ ] **3 docs and prose** — `CLAUDE.md` § Repository shape (and its mentions of `charts/veyq/`, `e2e/`),
+- [x] **3 docs and prose** — `CLAUDE.md` § Repository shape (and its mentions of `charts/veyq/`, `e2e/`),
   `infra/README.md` (its `-f infra/docker-compose.yml` commands, `traefik-dev/` link, the launcher section),
   root `README.md`, `backend/CLAUDE.md`, the site's Run and Security pages that give a repo path or a
   `github.com/…/blob/main/<path>` link, ADR text that *instructs or links* (0057, 0063, 0064, 0067, 0090, 0091, 0096,
@@ -119,3 +119,27 @@ steps after the merge: move `infra/.env` to `infra/docker/.env`, and bring the d
 
 ## Retrospective
 
+- **Planning — decision 1 said "every script", and two scripts ship alone.** `instance_backup.py` and its selftest
+  are copied into the tools image's `/opt/veyq/` (and the backup tool is a release asset beside `veyqctl`), where
+  `repo_layout.py` is not; an import there would have broken the in-cluster `backup-gate` and `veyqctl backup` at run
+  time while every in-repo check stayed green. They keep their literals, and the selftest compares them with
+  `repo_layout` when it runs in a checkout (bitten: a wrong default compose path reds it). Root cause: the inventory
+  asked *who spells a path*, not *where each reader runs*. Next time a CR adds an import to `scripts/`, it lists what
+  ships out of the tree (`infra/kubernetes/tools/Dockerfile`'s `COPY`, `release_assets.TOOLS`).
+- **Planning — "prose comments in code" reached an immutable file.** The core baseline migration's comment names the
+  dev compose file; rewriting it changed its checksum (`validate_migration_versions.py` red, and every dev database
+  would have had to be recreated). It keeps the old path. And phase 3 owned the doc links, but phase 2's done-when
+  (every guard green) cannot pass without the two links the move broke (ADR 0057, the Security page), so they moved
+  into phase 2. Next time: a move's locator excludes `db/migration/`, and phase 2 owns every link a guard resolves.
+- **Planning — the phase 1 bite cannot bite on the untouched tree.** There the candidate's chart path and
+  `charts/veyq` are one string, so "lookup at the old path only" changes nothing; the selftest spells its own path for
+  the new layout, which is what made the bite red on phase 1. The real proof came after phase 2:
+  `chart_upgrade_check.py` against the phase-1 commit found its chart at `charts/veyq` and reported 0 findings.
+- **Execution.** The first `./gradlew check` was red on `S3BlobStoreListTest` (its raw-socket stub answered 404) at a
+  load of ~9; the class alone and the full rerun were green. `release_assets.py` has no dry mode or selftest, so its
+  recipe derivation and copy ran into a scratch directory instead. Two deviations, both reported: `.gitignore` still
+  ignores `infra/.env` beside `infra/docker/.env` (a checkout that has not moved its secrets yet must not be able to
+  commit them), and `CLAUDE.md`'s shape gained `scripts/` (missing before, and "shape matches `ls`" asked for it) and
+  says the production compose file is a release asset rather than "inside the signed image".
+- **Next time:** the locator's file list is split by *how a file is consumed* (shipped alone, checksummed, rendered)
+  before its hits are classified as reader, record or prose.

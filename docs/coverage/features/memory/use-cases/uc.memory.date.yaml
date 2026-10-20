@@ -49,7 +49,7 @@ acceptanceCriteria:
           - src/features/memories/memoryDate.test.ts
 gaps:
   stack: >-
-    Lane L1's browser suite (`e2e/tests/features/field-seal.spec.ts`) drives `four-mode-date-header-editor` in Chromium
+    Lane L1's browser suite (`tests/e2e/tests/features/field-seal.spec.ts`) drives `four-mode-date-header-editor` in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
     criterion. The single-day mode only: the day set in the header editor reads back in the header after a reload and on
     a second device. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`)

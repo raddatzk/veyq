@@ -38,11 +38,17 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,
   release info and **first-run setup**; what looks admin-ish but is reachable by an ordinary member — accepting
   a tenant invite, accepting terms, and a tenant owner's own terms/mail settings — deliberately stays in `web/`.
-- `infra/` + `charts/veyq/` — the two deployment targets: the production compose file (travels inside the
-  signed image, [ADR 0057](docs/decisions/0057-release-identity-and-deployment-recipe.md)) and the Helm chart
-  ([ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)). Every infra-level decision has an
-  answer on both, and a change to one checks the other; the docs site's Run area (`site/src/content/docs/run/`) owns
-  the operator commands for both, and `infra/README.md` the dev stack and cutting a release.
+- `infra/` — the two deployment targets, one directory each ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md)):
+  `infra/docker/` — the app image's `Dockerfile` (built from the repo root), the dev and the production compose file
+  (the production one a release asset, [ADR 0057](docs/decisions/0057-release-identity-and-deployment-recipe.md)) and
+  what they read beside them; `infra/kubernetes/` — the Helm chart (`infra/kubernetes/charts/veyq/`,
+  [ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)) and the image only the chart runs (`tools/`).
+  Every infra-level decision has an answer on both, and a change to one checks the other; the docs site's Run area
+  (`site/src/content/docs/run/`) owns the operator commands for both, and `infra/README.md` the dev stack and cutting
+  a release. A script learns these paths from `scripts/repo_layout.py`, never by spelling them.
+- `tests/` — the harnesses no surface owns: `tests/e2e/` (lane L1's browser suite, the npm workspace `@veyq/e2e`, with
+  its compose overlay in `tests/e2e/stack/`, [ADR 0090](docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md))
+  and `tests/fuzz/` (the API fuzzer, [ADR 0091](docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)).
 - `settings.gradle.kts` + `launcher/` — the **dev launcher**: `./gradlew <surface>:<verb>` (`infra:up`,
   `backend:run`, `web:bootstrap`, `admin:image`, …) triggers the commands the surfaces already have, from a terminal
   or IntelliJ's Gradle tool window; it replaced the `.run/*.xml` configurations. A launcher, never an
@@ -51,12 +57,14 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   task list and the per-worktree ports.
 - `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
-  shared by `web/` and `admin-web/` (and read by `e2e/`, with the wire assertion's canary collision rule, ADR 0090)
+  shared by `web/` and `admin-web/` (and read by `tests/e2e/`, with the wire assertion's canary collision rule, ADR 0090)
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
   package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
   else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves
   itself with its own `npm run check`.
 - `docs/` — internal engineering state (English) + working flow (`ai/`, `inbox.md`).
+- `scripts/` — the guards (`validate_*.py`, the trust chain below) and the repository's tools (the e2e orchestrators,
+  `veyqctl`, the backup tool), in Python.
 - `site/` — the **published** documentation site (Astro Starlight, GitHub Pages; its own package outside the npm
   workspace, [ADR 0087](docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)):
   **Use** (plain language, **EN+DE**, for users and space owners), **Run** (EN, for Server Owners) and

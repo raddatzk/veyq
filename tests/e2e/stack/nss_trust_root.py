@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Trust ONE root in Chromium's NSS database, inside the Playwright image, with no `certutil` (ADR 0090 decision 3).
 
-Runs as the browser container's first step (`infra/e2e/docker-compose.e2e.yml`, service `browser`), before
+Runs as the browser container's first step (`tests/e2e/stack/docker-compose.e2e.yml`, service `browser`), before
 Playwright: it creates `<db>` (Chromium on Linux reads `$HOME/.pki/nssdb`) and imports the run's Pebble root into it
 as a trusted TLS issuer (`C,,`, what `certutil -A -t "C,,"` sets). Nothing else is trusted beyond Chromium's own
 root store, so a certificate that does not chain to this run's Pebble — Traefik's default one above all — fails the

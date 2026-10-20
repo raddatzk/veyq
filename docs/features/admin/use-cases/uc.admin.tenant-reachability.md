@@ -128,7 +128,7 @@ flowchart LR
   Two routers claiming one `Host` make the proxy drop both.
 - **The same projection serves Kubernetes, and that is why it is a projection.** ADR 0064's Gateway API objects
   are a second sink for the identical table-derived description, and the chart that deploys it lives in
-  `charts/veyq`; the wildcard-subdomain shortcut that would have avoided all of this was rejected precisely
+  `infra/kubernetes/charts/veyq`; the wildcard-subdomain shortcut that would have avoided all of this was rejected precisely
   because it could not be extended to it ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)
   § Consequences), and the wildcard *certificate* is offered on that target only as the operator's own choice,
   never as the default, for the same reason.

@@ -97,8 +97,8 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # published it. A native image returns only as a decision with its own CI build and e2e run (inbox #243).
 
 # --- runtime (JVM) — the target ci.yml's `build` job builds -------------------------------------------------
-# The LAST stage on purpose: a bare `docker build .` builds the last stage, so it builds what the release
-# publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
+# The LAST stage on purpose: a build with no `--target` (`docker build -f infra/docker/Dockerfile .`) builds the last
+# stage, so it builds what the release publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
 FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d428dc2a6f75513789983c5e254f AS runtime-jvm
 ARG VEYQ_VERSION=""
 ARG VEYQ_REVISION=""
@@ -119,7 +119,7 @@ WORKDIR /work/
 # Docker seeds a fresh volume from the image directory it covers, ownership included, and a root-owned mount
 # would leave the server unable to write its own key. Deployments set
 # VEYQ_SECURITY_CONFIG_SECRET_FILE=/var/lib/veyq/config-secret.key and mount a volume here;
-# infra/docker-compose.prod.yml does exactly that, and scripts/validate_config_secret_persistence.py holds
+# infra/docker/docker-compose.prod.yml does exactly that, and scripts/validate_config_secret_persistence.py holds
 # the three files to it.
 #
 # /etc/traefik/dynamic is the SECOND such path and was missing until 2026-09-08 — the tenant-ingress

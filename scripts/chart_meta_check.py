@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Helm chart (ADR 0064) holds the structural invariants the compose recipe's guards hold — on rendered objects.
 
-**What it asserts.** It renders `charts/veyq` with `helm template` once per values file in `charts/veyq/ci/` —
+**What it asserts.** It renders `infra/kubernetes/charts/veyq` with `helm template` once per values file in `infra/kubernetes/charts/veyq/ci/` —
 the set is the directory, never a list here, so a new file enrols itself; each satisfies the schema without an
 operator, because the chart generates no secret and a bare render is refused by design — and, over every
 render, asserts — deriving every anchor from the source rather than listing it:

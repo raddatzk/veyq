@@ -14,7 +14,7 @@ import { ScopeKind } from '../../api/generated/scopes'
  * bundled Garage store (a byte-path store is a hard instance requirement, cr-0105). Gated on `VEYQ_E2E=1`;
  * default `npm run check` skips it.
  *
- *   docker compose -f infra/docker-compose.yml --profile s3 up -d   # backend + store behind Traefik
+ *   docker compose -f infra/docker/docker-compose.yml --profile s3 up -d   # backend + store behind Traefik
  *   VEYQ_E2E=1 npx vitest run media.e2e                             # against a FRESH instance
  *
  * Or `python3 scripts/run_web_e2e.py`, which brings the stack up and gives this file its own database — that is

@@ -48,9 +48,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   through `Arc` in whatever application is under test), consumed by the root as
   `testImplementation(testFixtures(project(":apps:memories")))` (inbox #335). So core's world builds with core alone,
   and a second application covers its routes in the gate probes by contributing a `WorldContent` the same way.
-- **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
+- **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
-  infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
+  infra/docker/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
 - **A write of node or attachment rows bumps the scope's tree revision** (`NodesStore.bumpTree`, [ADR 0081](../docs/decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)) as its last
   statement, in the same transaction and **under the scope lock it already holds** — that is what keeps the first-bump
   insert race-free and the revision row a leaf (a bump after a node row, with no scope lock, is the lock-order inversion
@@ -210,7 +210,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   correct the live copy of that rule (the entity KDoc, the ADR) and leave the file alone. **Until the first
   release** (the owner declares it on the pin file's `release:` line; `none` today) a baseline may still change,
   but only together with its pin line in the same commit, so the change is a visible diff — and every existing
-  database, dev ones included, is then recreated (`docker compose -f infra/docker-compose.yml down -v`; repair does
+  database, dev ones included, is then recreated (`docker compose -f infra/docker/docker-compose.yml down -v`; repair does
   not rescue a changed baseline). From the release on the rule is absolute: a released migration is only followed
   by a new one. The upgrade proof (`python3 scripts/run_web_e2e.py --upgrade`, `site/src/content/docs/run/upgrade.mdx`) runs
   against the previous commit until then and against the release from then on; **the commit that sets `release:`

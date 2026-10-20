@@ -6,7 +6,7 @@
 ## Context
 
 An instance is configured today almost entirely through environment variables: the compose recipe passes about
-two dozen (`infra/.env.example`), the Helm chart as many values, and the backend reads them once at boot
+two dozen (`infra/docker/.env.example`), the Helm chart as many values, and the backend reads them once at boot
 (`VeyqConfig.kt`). The object store is the largest block — type, endpoint, public endpoint, signing mode, bucket,
 region, access key, secret key, and Garage's admin endpoint and token — and it is also the one an operator is most
 likely to get wrong, because a wrong value shows only when a photo will not upload.

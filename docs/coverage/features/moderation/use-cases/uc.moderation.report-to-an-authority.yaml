@@ -3,7 +3,7 @@ feature: moderation
 title: Report to an authority
 # Built by cr-authority-orders-and-art18-reports: core/moderation/cases (CaseExports, CaseDecisions.handover) and the
 # hold's instants (HoldSnapshot) on the backend; features/moderation/orders (AuthoritySection, art18Export) and
-# CsamWarning on web. Lane L1's browser pass is e2e/tests/features/takedown-orders-and-art18.spec.ts; `stack` waits
+# CsamWarning on web. Lane L1's browser pass is tests/e2e/tests/features/takedown-orders-and-art18.spec.ts; `stack` waits
 # under gaps. A child-sexual-abuse case's hold bounded to 90 days and ended by the handover: Holds, ReportHandler and
 # CaseDecisions.handoverIn (the moderation-retention follow-up of #462). Not built, waiting on counsel (ADR 0093 § Legal
 # basis, Still open 1 and 2): a hold until the handover past 90 days, and an authority's link to a held copy.
@@ -48,5 +48,5 @@ acceptanceCriteria:
 # still decides (ADR 0093 § 13), so it carries no backend ref.
 gaps:
   stack: >-
-    e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) prepares the export of an order's case and records its
+    tests/e2e/tests/features/takedown-orders-and-art18.spec.ts (lane L1) prepares the export of an order's case and records its
     handover in a browser; stack refs are admitted only once a CI run executed lane L1 (ADR 0040).

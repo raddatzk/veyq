@@ -58,7 +58,7 @@ services:
       - "127.0.0.1::15000"
 
   # The mail relay an operator's provider gives the instance (ADR 0097's instance mail, ADR 0048's tenant mail): the
-  # SMTP host a Server Owner types into Server → Mail. Mailpit, the dev stack's own pin (infra/docker-compose.yml),
+  # SMTP host a Server Owner types into Server → Mail. Mailpit, the dev stack's own pin (infra/docker/docker-compose.yml),
   # accepts everything over plain SMTP on :1025 and keeps it in memory; the suite reads what arrived through its HTTP
   # API on :8025 (`mailApi` in stack.json) — the confirmation code a save mails, the notices. On `admin`, the one
   # network the app and the browser share that is not the internet-facing `edge`; its alias is a dotted name because
@@ -125,15 +125,15 @@ services:
   # Lane L1's browser (ADR 0090 decision 3, cr-stack-e2e phase 2): Playwright in its official image, on the run's
   # networks, so a laptop runs exactly what CI runs — the browser never runs on the host (macOS has no certutil, and its
   # Chromium reads no NSS db). The orchestrator starts it with `compose run --rm browser` after `up`; the profile keeps
-  # `up` from starting it. The image's Playwright version is e2e/package.json's exact pin (the orchestrator refuses a
+  # `up` from starting it. The image's Playwright version is tests/e2e/package.json's exact pin (the orchestrator refuses a
   # mismatch); bump both together.
   #
   # How it reaches the instance, decided in phase 2 — the way an operator does, without publishing anything:
   #   - the domain through Traefik: on `edge`, Chromium resolves `veyq.test` and every `*.veyq.test` to the `traefik`
-  #     service (`--host-resolver-rules`, e2e/playwright.config.ts), as public DNS resolves an operator's domain to
+  #     service (`--host-resolver-rules`, tests/e2e/playwright.config.ts), as public DNS resolves an operator's domain to
   #     the host; TLS is Traefik's, with the certificate Pebble issued;
   #   - the admin console through a tunnel: on `admin`, a loopback listener on the admin port forwards to `admin:8080`
-  #     (e2e/src/tunnel.ts), the in-container `ssh -L` of run/first-run.mdx, so the console opens at
+  #     (tests/e2e/src/tunnel.ts), the in-container `ssh -L` of run/first-run.mdx, so the console opens at
   #     `http://localhost:<ADMIN_PORT>` — a secure context, as an operator's tunnel gives one. Rejected: the host's
   #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
   #     runner, so the run would differ between a laptop and CI.
@@ -155,7 +155,7 @@ services:
       HOME: /tmp/home
       VEYQ_STACK_FILE: /out/stack.json
     volumes:
-      # The checkout read-only: e2e/, packages/crypto/ and the root node_modules the host installed through
+      # The checkout read-only: tests/e2e/, packages/crypto/ and the root node_modules the host installed through
       # scripts/npm_ci_no_deprecated.py — nothing is installed in here. Pure-JS packages only on this path
       # (@playwright/test, @veyq/crypto, @noble/*), so a macOS install runs in this Linux image unchanged.
       - ${VEYQ_E2E_REPO:?set by scripts/run_stack_e2e.py}:/repo:ro

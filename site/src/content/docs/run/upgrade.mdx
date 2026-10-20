@@ -138,9 +138,9 @@ way back. Four things are specific to this target.
   Argo CD shows the application progressing; the Deployment reports `ProgressDeadlineExceeded` after
   `progressDeadlineSeconds` (600 by default), and Kubernetes keeps retrying the gate.
 - **What the chart change between two releases is checked for — and what not** ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)
-  § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's `charts/veyq` out of git
+  § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's chart out of git
   (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
-  another), renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
+  another) — at `infra/kubernetes/charts/veyq`, or at `charts/veyq` where an older release carries it — renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
   `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, any StatefulSet
   `spec` field the API server does not let an update change (all but `replicas`, `ordinals`, `template`,
   `updateStrategy`, `persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) - `serviceName`, `podManagementPolicy`,

@@ -20,7 +20,7 @@ import { ScopeKind } from '../../api/generated/scopes'
  *
  * Gated on `VEYQ_E2E=1`; default `npm run check` skips it. The instance is cold-birthed over the real API by
  * `src/test/e2eBootstrap.ts`, so this needs a FRESH instance and no seeder:
- *   docker compose -f infra/docker-compose.yml --profile s3 up -d && (start backend)
+ *   docker compose -f infra/docker/docker-compose.yml --profile s3 up -d && (start backend)
  *   VEYQ_E2E=1 npx vitest run memoryLocation.e2e
  * Or `python3 scripts/run_web_e2e.py`, which is what CI runs.
  *
