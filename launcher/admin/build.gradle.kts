@@ -5,10 +5,13 @@ val adminDir = rootDir.resolve("src/admin-web")
 
 tasks.register<Exec>("bootstrap") {
     group = "veyq"
-    description = "(Re)generates admin-web's API client from the contracts (npm run generate:api). Its dependencies " +
-        "come from the one workspace install, web:bootstrap. Re-run after any contracts change."
+    description = "Installs the npm workspace and (re)generates admin-web's API client from the contracts (npm install " +
+        "in src/admin-web/; its prepare hook runs generate:api). Re-run after any contracts change."
     workingDir = adminDir
-    commandLine("npm", "run", "generate:api")
+    // The same command as web:bootstrap, on purpose: `npm install` in a workspace member installs the WHOLE workspace
+    // (one lockfile, one root node_modules) but runs `prepare` for that member only (measured 2026-10-20), so each
+    // frontend's bootstrap stands on its own on a fresh checkout and neither borrows the other's install.
+    commandLine("npm", "install")
 }
 
 tasks.register<Exec>("run") {
