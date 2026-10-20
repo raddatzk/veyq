@@ -176,22 +176,26 @@ async function confirm() {
              now — rather than letting the field read as an unexplained extra hurdle. -->
         <Message v-if="!coldUnlock" severity="info" :closable="false">{{ t('rotation.gateNotCold') }}</Message>
 
-        <div class="settings-field">
-          <label for="rotation-password">{{ t('rotation.passwordLabel') }}</label>
-          <Password
-            id="rotation-password"
-            v-model="password"
-            :feedback="false"
-            toggle-mask
-            autocomplete="current-password"
-            :disabled="busy"
-          />
-        </div>
-        <div class="settings-field">
-          <label for="rotation-secret-key">{{ t('rotation.secretKeyLabel') }}</label>
-          <SecretKeyField v-model="secretKey" input-id="rotation-secret-key"
-                          :expected-email="account.email" :disabled="busy" />
-          <small>{{ t('rotation.secretKeyHint') }}</small>
+        <!-- `veyq-form` for the field widths and spacing its siblings get (ChangePasswordPanel), on a div: a
+             <form> would let Enter submit past the confirm dialog. -->
+        <div class="veyq-form">
+          <div class="settings-field">
+            <label for="rotation-password">{{ t('rotation.passwordLabel') }}</label>
+            <Password
+              id="rotation-password"
+              v-model="password"
+              :feedback="false"
+              toggle-mask
+              autocomplete="current-password"
+              :disabled="busy"
+            />
+          </div>
+          <div class="settings-field">
+            <label for="rotation-secret-key">{{ t('rotation.secretKeyLabel') }}</label>
+            <SecretKeyField v-model="secretKey" input-id="rotation-secret-key"
+                            :expected-email="account.email" :disabled="busy" />
+            <small>{{ t('rotation.secretKeyHint') }}</small>
+          </div>
         </div>
 
         <Message v-if="error" severity="error" :closable="false">
