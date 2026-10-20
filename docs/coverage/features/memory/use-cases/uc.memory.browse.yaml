@@ -122,13 +122,16 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser suite (`e2e/tests/scenarios/memory-roundtrip.spec.ts`, `e2e/tests/features/field-seal.spec.ts`,
-    `e2e/tests/features/guest-take-back.spec.ts`, `e2e/tests/features/depot-live.spec.ts`) drives
-    `create-folder-and-memory`, `rename-and-delete-subtree`, `level-live-refresh` in
+    `e2e/tests/features/guest-take-back.spec.ts`, `e2e/tests/features/depot-live.spec.ts`,
+    `e2e/tests/features/memories-styles.spec.ts`) drives
+    `create-folder-and-memory`, `rename-and-delete-subtree`, `level-live-refresh`, `view-modes` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with
     its criterion. The rename is read back after a reload and on a second device; the delete half is not driven there.
     An open folder level shows a guest's upload, and an open link page the owner's, without a reload (a marker on the
     document survives), in separate browser contexts; the pause of a tab in the background is not driven (Playwright keeps every
-    page visible).
+    page visible). `view-modes` is driven as far as a Memory's chapters grid and its grid/list switch, read as computed
+    styles in light and dark (inbox #513 moved those rules into Memories' own stylesheet); that spec is written, not yet
+    run (the V1 heavy stage).
     Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits the first CI
     run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each
     file becomes a ref on the criteria its tests are tagged with, and this gap goes.

@@ -1,7 +1,8 @@
 # Cross-cutting: German inclusive language (neutral-first)
 
 - **ID:** cc.inclusive-language
-- **Applies to:** every **German user-facing** string — the `de` catalog in `web/src/i18n/index.ts` and the
+- **Applies to:** every **German user-facing** string — the `de` blocks of web's catalogs (core's `web/src/i18n/index.ts` and each application's
+  `web/src/features/<owner>/i18n.ts`) and the
   German pages of the docs site (`site/src/content/docs/de/`). **English strings and code/identifiers are unaffected** — this is a
   language convention for the German product voice only.
 
