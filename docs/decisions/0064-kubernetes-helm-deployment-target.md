@@ -1,6 +1,7 @@
 # ADR 0064 — Kubernetes is a first-class deployment target (Helm chart)
 
-- Status: Accepted
+- Status: Accepted. The bundled store is opt-in on this target and stays the default on Compose (owner
+  2026-10-21, inbox #520).
 - Date: 2026-09-07
 
 ## Context
@@ -44,13 +45,13 @@ Forces:
 
 **A Helm chart (`infra/kubernetes/charts/veyq`) ships alongside the Compose recipe, covering the same services**: `app`, `mariadb` (with
 a `mariadb.enabled: false` escape hatch onto an operator-managed database, which K8s deployments commonly
-already have), `garage`, an implementation-neutral **Gateway API** resource set (`Gateway`, `HTTPRoute`, `ListenerSet`), and the
+already have), `garage` (opt-in, below), an implementation-neutral **Gateway API** resource set (`Gateway`, `HTTPRoute`, `ListenerSet`), and the
 admin container ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
 
 **The store's bring-up is not this chart's to solve.** It once travelled with a `garage-init` sidecar whose
 image was built locally and never published — which a chart cannot pull, because Helm builds nothing.
 [ADR 0067](0067-store-provisioning-from-a-declared-type.md) removes it: the backend provisions the store
-itself from a declared store type, so the chart deploys `garage` and nothing beside it.
+itself from a declared store type, so where the chart deploys `garage` it deploys nothing beside it.
 
 - **Routing is the Gateway API, not `Ingress`** (owner, 2026-10-16). The `Ingress` API is **frozen, not
   deprecated**: GA, no removal planned, no further development, and the Kubernetes project recommends Gateway
@@ -166,7 +167,7 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   by default and every mailed link is `https`, so a chart that cannot obtain a certificate for a tenant domain
   ships an instance that boots and then silently breaks sessions — which is why `none` is the default for
   continuity and the chart's notes say so loudly.
-- **Garage gets its own host by default on Kubernetes**, not the compose same-origin path route.
+- **Garage gets its own host on Kubernetes**, wherever the chart brings it, not the compose same-origin path route.
   Because the gateway implementation is operator-chosen and its exact prefix/Host-preservation behavior is not
   guaranteed, the chart defaults to the CORS-policy branch [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)
   already documents as the alternative for stores that aren't behind the specific bundled-Traefik route —
@@ -187,6 +188,39 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   host, where every tenant signs against the *same* store origin. That second signing mode is
   [ADR 0067](0067-store-provisioning-from-a-declared-type.md)'s Decision 5 — one mechanism, of which this
   chart is one of two callers.
+- **The bundled store is opt-in on this target, and stays the default on Compose** (owner 2026-10-21, inbox #520).
+  `garage.enabled` defaults to `false`. On a cluster the bundled Garage is one node on one claim, with no replication
+  and no versioning, so [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3's *keeping the objects is
+  the store operator's job* falls back onto the operator's volume snapshots; it needs a host of its own (`storeDomain`:
+  DNS, a certificate, a listener); and an operator who runs a cluster commonly runs an S3 store already. The chart has
+  no release yet, so the default costs no install a migration. Off, the chart renders none of Garage's objects (the
+  StatefulSet, its Service, ConfigMap and HTTPRoute, the `https-store` listener, its NetworkPolicy), passes no
+  `VEYQ_BUNDLED_STORE_*` to the app or the backup gate, and requires neither `storeDomain` nor `garageRpcSecret` /
+  `garageAdminToken`. The app starts with no store, the console offers only a store of the operator's own (*Use the
+  bundled store* exists only where the hint does, [ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)
+  Decision 3), and no tenant is created before that store passes its check. On, the chart is what it was.
+
+  **On Compose Garage stays in the recipe and on**: it shares the app's origin there and costs one container. An
+  operator leaves it out with the instance's `compose.override.yml` ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md)),
+  which disables the service and blanks the hint; the recipe's `app` → `garage` dependency is `required: false` so
+  that the override needs nothing more. *Rejected:* a Compose profile that is off by default — an instance upgraded
+  with its old `.env` would lose the Garage its store is. The Traefik sink's same-origin blobs route
+  (`veyq.tenant.ingress.upstream.blobs`, [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) §4) is rendered
+  only while the store in use is the bundled one; otherwise it points at nothing, or serves an unused Garage's S3 API
+  on every tenant domain. (The Gateway sink renders none: the store has its own host here.)
+
+  **Backup and restore need nothing new.** A store of the operator's own hands the backup its endpoint and key pair
+  (`backup.store.existingSecret` on the chart, `VEYQ_BACKUP_STORE_*` on Compose; ADR 0089 Decision 7), because the
+  pair the console holds is sealed under the KEK the backup never reads; the bundled one derives its pair from the
+  admin token. *Rejected:* a schema rule requiring `backup.store.existingSecret` with `garage.enabled: false` — the
+  store is set after the install, and the gate's refusal at the first capture names the value.
+
+  **Turning Garage off under an instance whose store is the bundled one is not guarded.** Helm cannot read the store
+  setting (`lookup` is blind under `helm template` and GitOps), and the backup gate reads it only when it captures,
+  not on an upgrade that changes values alone. Nothing is lost: the claims outlive the StatefulSet
+  (`volumeClaimTemplates`, no retention policy), so `garage.enabled: true` again restores the instance, which until
+  then names the cause (*the bundled store is chosen, but this deployment offers none*). The one loss is deleting
+  those claims, and the Run area says so where it documents the switch.
 - **The chart is released the same way the image is.** Packaged and pushed as an **OCI artifact** to the same
   GHCR registry, at `ghcr.io/<owner>/charts/veyq`, by the same publish as the images, with the same version, and
   **cosign-signed** the same way — extending [ADR 0057](0057-release-identity-and-deployment-recipe.md)'s
