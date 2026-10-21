@@ -32,7 +32,6 @@ import GuestWriteRecordPanel from '../features/instance/GuestWriteRecordPanel.vu
 import BackupRetentionPanel from '../features/instance/BackupRetentionPanel.vue'
 import ModerationPanel from '../features/instance/ModerationPanel.vue'
 import OrderPanel from '../features/instance/OrderPanel.vue'
-import OperatingModePanel from '../features/instance/OperatingModePanel.vue'
 import OperatorPanel from '../features/instance/OperatorPanel.vue'
 import AccountsPanel from '../features/instance/AccountsPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
@@ -57,7 +56,7 @@ const createOpen = ref(false)
 const selected = ref<string | null>(null)
 // One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
 const serverPanel = ref<
-  | 'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | 'moderation' | 'accounts' | 'mode' | 'operator'
+  | 'release' | 'store' | 'configSecret' | 'capabilities' | 'services' | 'mail' | 'moderation' | 'accounts' | 'operator'
   | null
 >(null)
 const loading = ref(true)
@@ -226,11 +225,6 @@ async function signOut() {
             </button>
           </li>
           <li>
-            <button type="button" :class="{ 'is-active': serverPanel === 'mode' }" @click="serverPanel = 'mode'">
-              <span class="pi pi-home" aria-hidden="true" /> {{ t('operatingMode.navTitle') }}
-            </button>
-          </li>
-          <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'operator' }" @click="serverPanel = 'operator'">
               <span class="pi pi-id-card" aria-hidden="true" /> {{ t('operator.navTitle') }}
             </button>
@@ -260,7 +254,6 @@ async function signOut() {
         </div>
         <!-- An erasure can leave a tenant ownerless (a stop, owned again): the list's marker is read again. -->
         <AccountsPanel v-else-if="serverPanel === 'accounts'" @changed="onTenantsChanged" />
-        <OperatingModePanel v-else-if="serverPanel === 'mode'" />
         <OperatorPanel v-else-if="serverPanel === 'operator'" />
         <TenantDetailPanel
           v-else-if="selected"

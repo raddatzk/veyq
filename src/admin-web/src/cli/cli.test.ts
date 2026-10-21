@@ -80,10 +80,9 @@ vi.mock('../features/instance/orders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/orders')>()),
   enterOrder: vi.fn(),
 }))
-// The rules stay real (the notice's tick, the preset's changes, the merge base): what is asserted is what they send.
+// The rules stay real (the merge base, the recipient rows): what is asserted is what they send.
 vi.mock('../features/instance/operator', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/operator')>()),
-  getOperatingMode: vi.fn(),
   getOperator: vi.fn(),
   setOperator: vi.fn(),
   clearOperator: vi.fn(),
@@ -122,13 +121,12 @@ import {
   rotateModerationKey,
 } from '../features/instance/moderation'
 import type { InstanceModeration, ModerationSteps } from '../features/instance/moderation'
-import { clearOperator, getOperatingMode, getOperator, setOperator } from '../features/instance/operator'
-import type { InstanceOperatingMode, InstanceOperator } from '../features/instance/operator'
-import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
+import { clearOperator, getOperator, setOperator } from '../features/instance/operator'
+import type { InstanceOperator } from '../features/instance/operator'
 import { enterOrder, OrderInvalid, type AuthorityOrder } from '../features/instance/orders'
 import { stepStatement } from '../features/instance/stepStatement'
 import { ORDER_FORMS } from '../features/instance/orderForms'
-import { instanceBackupRetentionApi, instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
+import { instanceBackupRetentionApi, instanceGuestWriteRecordApi } from '../api/client'
 import { eraseAccount, listAccountErasures, stopAccountErasure, type PendingAccountErasure } from '../features/instance/accounts'
 import { stubApi } from '../test/apiMock'
 import { httpError } from '../test/httpError'
@@ -914,62 +912,34 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   })
 })
 
-describe('veyq-admin — the operating mode and the operator details (uc.admin.operator-details A4)', () => {
-  const guestRecord = {
-    id: 'core.public-shares.guest-write-record', title: { en: 'Guest-write record', de: 'Gast-Schreibprotokoll' },
-    onInPrivate: false, onInOrganisation: true, off: false,
-  }
-  const modeRead = (over: Partial<InstanceOperatingMode> = {}): InstanceOperatingMode =>
-    ({ mode: 'ORGANISATION', chosen: true, preset: [guestRecord], ...over })
+describe('veyq-admin — the operator details (uc.admin.operator-details A4)', () => {
   const op = (over: Partial<InstanceOperator> = {}): InstanceOperator => ({
-    operatingMode: 'ORGANISATION', contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: undefined,
+    contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: undefined,
     notificationEmail: 'alerts@example.org', notificationConfirmation: 'CONFIRMED', notificationConfirmedAt: EXPIRES,
     instanceMailReady: true, providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: undefined,
     providerRepresentative: undefined, supervisoryAuthority: undefined, recipients: [], recipientSuggestions: [], ...over,
   })
 
-  it('mode show prints the mode, the notice in the locale, and what the other mode would switch', async () => {
-    vi.mocked(getOperatingMode).mockResolvedValueOnce(modeRead())
-    const r = await invoke(['mode', 'show'], { ...ENV, LANG: 'de_DE.UTF-8' })
-    expect(r.code).toBe(0)
-    expect(r.out.split('\n')[0]).toBe('mode organisation')
-    expect(r.out).toContain(OPERATING_MODE_NOTICE.de.exemption)
-    expect(r.out).toContain('mode set private would switch:\n  core.public-shares.guest-write-record  off  Gast-Schreibprotokoll')
+  it('there is no mode command any more: the operating mode is retired (ADR 0093 § 14)', async () => {
+    for (const words of [['mode', 'show'], ['mode', 'set', 'private']]) {
+      const r = await invoke(words)
+      expect(r.code).toBe(1)
+      expect(r.err).toContain(`unknown command '${words.join(' ')}'`)
+    }
+    expect(signIn).not.toHaveBeenCalled()
   })
 
-  it('mode set private without --accept-notice prints the notice, refuses and sets nothing', async () => {
-    const operatorApi = stubApi(instanceOperatorApi, { setInstanceOperatingMode: modeRead() })
-    const r = await invoke(['mode', 'set', 'private'])
-    expect(r.code).toBe(1)
-    expect(r.err).toContain(OPERATING_MODE_NOTICE.en.leavesOff)
-    expect(r.err).toContain('--accept-notice')
-    expect(operatorApi.setInstanceOperatingMode).not.toHaveBeenCalled()
-  })
-
-  it('mode set private --accept-notice sets it, and prints the notice again with the result', async () => {
-    const operatorApi = stubApi(instanceOperatorApi, { setInstanceOperatingMode: modeRead({ mode: 'PRIVATE', preset: [{ ...guestRecord, off: true }] }) })
-    const r = await invoke(['mode', 'set', 'private', '--accept-notice'])
-    expect(r.code).toBe(0)
-    expect(operatorApi.setInstanceOperatingMode).toHaveBeenCalledWith({ instanceOperatingModeUpdate: { mode: 'PRIVATE' } })
-    expect(r.out.split('\n')[0]).toBe('mode private')
-    expect(r.out).toContain(OPERATING_MODE_NOTICE.en.intro)
-  })
-
-  it('mode set organisation needs no flag; anything but the two modes is refused', async () => {
-    const operatorApi = stubApi(instanceOperatorApi, { setInstanceOperatingMode: modeRead() })
-    expect((await invoke(['mode', 'set', 'organisation'])).code).toBe(0)
-    expect(operatorApi.setInstanceOperatingMode).toHaveBeenCalledWith({ instanceOperatingModeUpdate: { mode: 'ORGANISATION' } })
-    const r = await invoke(['mode', 'set', 'household'])
-    expect(r.code).toBe(1)
-    expect(r.err).toContain('private or organisation')
-    expect(operatorApi.setInstanceOperatingMode).toHaveBeenCalledOnce()
-  })
-
-  it('operator show prints the values as JSON a script can read', async () => {
+  it('operator show prints the values as JSON a script can read, every value there and null where none is set', async () => {
     vi.mocked(getOperator).mockResolvedValueOnce(op())
     const r = await invoke(['operator', 'show'])
     expect(r.code).toBe(0)
-    expect(JSON.parse(r.out)).toMatchObject({ contactEmail: 'contact@example.org', notificationConfirmation: 'CONFIRMED' })
+    const printed = JSON.parse(r.out)
+    expect(printed).toMatchObject({ contactEmail: 'contact@example.org', notificationConfirmation: 'CONFIRMED' })
+    // The gaps a reader of the published texts sees as "not stated by this operator" — present, as null.
+    for (const k of ['statementEmail', 'providerEmail', 'providerRepresentative', 'supervisoryAuthority', 'dataProtectionOfficer']) {
+      expect(printed).toHaveProperty(k, null)
+    }
+    expect(printed).toHaveProperty('providerName', 'Example e. V.') // control: a set value is its value
   })
 
   it('operator set changes the given values, keeps the rest, and none clears one', async () => {
@@ -1128,7 +1098,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'account erase --address', 'account stop-erasure --address', 'account erasures', 'tenant delete --tenant-id', 'tenant stop-deletion --tenant-id', 'tenant invite-owner --tenant-id','order remove --share', 'order preserve --share', 'order inform --share', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'account erase --address', 'account stop-erasure --address', 'account erasures', 'tenant delete --tenant-id', 'tenant stop-deletion --tenant-id', 'tenant invite-owner --tenant-id','order remove --share', 'order preserve --share', 'order inform --share', 'operator show', 'operator set', 'operator clear']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

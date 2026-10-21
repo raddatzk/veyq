@@ -46,7 +46,7 @@ acceptanceCriteria:
       - surface: backend
         reason: >-
           The suggested row's adoption, the kind list with Other's description, the country list sending its code
-          (`countries.test.ts`), the officer field, the privacy warning and `--recipients` are admin-web's
+          (`countries.test.ts`), the officer field and `--recipients` are admin-web's
           (`OperatorPanel.test.ts`, `operator.test.ts`, `cli.test.ts`), waiting under the use-case gap; lane L1 sets them
           at first-run setup (the `stack` gap).
   - id: the-notification-address-is-confirmed-by-a-code

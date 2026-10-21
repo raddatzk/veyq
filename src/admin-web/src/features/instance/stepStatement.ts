@@ -8,7 +8,8 @@
 //   - that log copy is sealed HERE to the moderation key's PUBLIC half (`moderation-step-facts` [epoch, statementId]),
 //     bound to the statement id this client mints — admin-web holds no private half and opens nothing
 //     (`moderation.noOpen.test.ts`);
-//   - what the operating mode requires (the facts and the provision in the full form) is the server's to refuse.
+//   - the facts and the provision are required of every statement (ADR 0093 § 7, one form on every instance, § 14) —
+//     the server's to refuse, by name.
 import { instanceModerationApi } from '../../api/client'
 import type { ServerOwnerStatementInput, ServerOwnerStatementInputGroundEnum as ModerationGround } from '../../api/generated/instance'
 import { sealStepFacts } from '@veyq/crypto/v1'

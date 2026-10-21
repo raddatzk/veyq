@@ -50,7 +50,10 @@ describe('GuestWriteRecordPanel (en.moderation.guest-write-record, admin-web)', 
     const w = await mountPanel()
     expect((w.find('input.input').element as HTMLInputElement).value).toBe('7')
     expect(w.text()).toContain('Not set yet: 7 days, the default.')
-    expect(w.text()).toContain('Record guests’ writes') // where the switch is
+    // No switch of its own: the panel names the two that decide where a guest may write (ADR 0093 § 10).
+    expect(w.text()).toContain('Links to look and add')
+    expect(w.text()).toContain('Drop boxes')
+    expect(w.text()).not.toContain('Record guests’ writes')
   })
 
   it('says a reason is owed above seven days, and not at seven', async () => {

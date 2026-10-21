@@ -181,7 +181,7 @@ const en = {
     "saveFailed": "Couldn’t save the number of days.",
     "saved": "Saved. A shorter time reaches what is already kept at the next cleanup, within the hour; a longer one only what is kept from now on.",
     "invalid": "Enter a whole number of days from {min} to {max}.",
-    "switchHint": "Whether anything is kept at all is the switch “Record guests’ writes” under Capabilities; choosing the private operating mode switches it off, club, organisation or company on.",
+    "switchHint": "The record has no switch of its own: it is kept wherever a guest may write. To keep no guest’s address, switch off “Links to look and add” and “Drop boxes” under Capabilities.",
     "days": "Keep for (days, {min} to {max})",
     "default": "Not set yet: {days} days, the default.",
     "chosen": "Set by you.",
@@ -239,35 +239,24 @@ const en = {
     "copy": "Copy",
     "copied": "Copied"
   },
-  "operatingMode": {
-    "navTitle": "Operating mode",
-    "sub": "How this instance is run, on your own assessment. It presets the switches it names and decides whether this console warns about an empty contact or provider identification. It never turns reporting or the moderators off.",
-    "loading": "Reading the operating mode…",
-    "loadFailed": "Couldn’t read the operating mode.",
-    "notOwner": "Only the server owner can set the operating mode.",
-    "saveFailed": "Couldn’t set the operating mode.",
-    "saved": "The operating mode is set.",
-    "choose": "Operating mode",
-    "private": "Private (family, circle of friends)",
-    "organisation": "Club, organisation or company",
-    "current": "In effect: {mode}.",
-    "notChosen": "No mode was chosen yet, so this instance runs as club, organisation or company.",
-    "changes": "Setting this mode switches:",
-    "changeOn": "{title}: on",
-    "changeOff": "{title}: off",
-    "noChanges": "Setting this mode changes no switch.",
-    "set": "Set operating mode"
+  "operatorDuties": {
+    "title": "What you may have to state",
+    "exemption": "The GDPR’s household exemption covers only a purely personal or family activity, and it ends once content is reachable for an unrestricted number of people — a link shared publicly (CJEU Lindqvist, C-101/01; Buivids, C-345/17). Whether the Digital Services Act and the EU regulation on terrorist content reach an unpaid private instance is legally uncertain.",
+    "owes": "If you share links publicly, or run veyq for a club, an organisation or a company, you are probably not exempt, and then owe at least a name and a postal address (§ 5 DDG, § 18 (1) MStV) and the controller’s contact details (Art. 13 (1)(a) GDPR).",
+    "everyTenant": "This covers every space on this instance: you host all of them, and you cannot see whether someone posted a space’s link publicly — a circle of friends’ space stays private only as long as its links do.",
+    "gap": "Nothing here is required. Every value you leave empty is published as “not stated by this operator” wherever a text names it, until you fill it in.",
+    "assessment": "This is your own assessment, not veyq’s, and not legal advice."
   },
   "operator": {
     "navTitle": "Operator",
     "sub": "Who runs this instance and how to reach them. Everything here but the notification address is public, also before sign-in; the provider identification appears on the sign-in and share pages. Every field may stay empty.",
+    "notStated": "Not stated",
+    "noRecipient": "No recipient is stated yet: the privacy notice says “not stated by this operator” there.",
     "loading": "Reading the operator details…",
     "loadFailed": "Couldn’t read the operator details.",
     "notOwner": "Only the server owner can set the operator details.",
     "saveFailed": "Couldn’t save the operator details.",
     "invalid": "Check the fields: addresses must be email addresses, languages short codes such as de or pt-BR, and a recipient of the kind Other needs a description.",
-    "warnContact": "Public links are on and no instance contact is set. A club, organisation or company has to name a point of contact for users and authorities.",
-    "warnIdentification": "The provider identification is incomplete. A club, organisation or company has to publish its name, an address for service and an email address.",
     "contactTitle": "Instance contact",
     "contactEmail": "Contact address",
     "contactHint": "The single point of contact for users and authorities, and for removal orders on terrorist content.",
@@ -293,7 +282,6 @@ const en = {
     "providerEmail": "Email",
     "providerRepresentative": "Represented by (for a club or company)",
     "supervisoryAuthority": "Data-protection supervisory authority",
-    "warnPrivacy": "The privacy notice names no recipient or no supervisory authority, and shows “not stated by this operator” there. A club, organisation or company has to say who receives data and which authority is competent.",
     "privacyTitle": "Privacy notice",
     "privacySub": "The instance’s privacy notice is veyq’s fixed text, public on every space’s domain; these values fill it. Name everyone who processes data for you — who hosts the server, an external object store, a mail relay, a backup host — with where they process it.",
     "recipientName": "Name",
@@ -319,7 +307,7 @@ const en = {
     "save": "Save",
     "clear": "Clear all",
     "clearTitle": "Clear the operator details?",
-    "clearConfirm": "Every value is removed, the notification address and its confirmation included. The operating mode stays."
+    "clearConfirm": "Every value is removed, the notification address and its confirmation included."
   },
   "moderation": {
     "navTitle": "Moderation",
@@ -410,9 +398,9 @@ const en = {
         "copy": "A step over content goes with a statement to the people it affects — the blocked member, or the tenant’s owners — by the instance mail and with what you found, since they cannot sign in to read it. Objections go to the instance contact. A draft until a lawyer has reviewed it.",
         "ground": "Ground",
         "provision": "The law or the clause it relies on",
-        "provisionHint": "A short reference, for example “§ 86a StGB” or “Space terms, clause 4”. Required on an instance run by a club, an organisation or a company.",
+        "provisionHint": "A short reference, for example “§ 86a StGB” or “Space terms, clause 4”. Required.",
         "facts": "What you found",
-        "factsHint": "Why the content falls under the law or the clause. It goes in the mail in your words; the server keeps it only sealed to the moderation key. Required on an instance run by a club, an organisation or a company.",
+        "factsHint": "Why the content falls under the law or the clause. It goes in the mail in your words; the server keeps it only sealed to the moderation key. Required.",
         "noMail": "The instance mail is not set up, so this statement cannot be mailed: nobody learns of it unless you tell them through the instance contact. Set it up under Server → Mail.",
         "send": "Block and send the statement",
         "cancel": "Cancel"
@@ -610,7 +598,7 @@ const en = {
     "creating": "Creating the account…",
     "createFailed": "The account could not be created. Your kit is still valid — try again.",
     "alreadyComplete": "This instance was set up by someone else in the meantime, so no account was created for you. Discard this kit; it belongs to no account.",
-    "modeTitle": "How is this instance run?"
+    "dutiesTitle": "What you may have to state"
   },
   "members": {
     "copied": "Copied",
@@ -864,7 +852,7 @@ const de: typeof en = {
     "saveFailed": "Die Zahl der Tage konnte nicht gespeichert werden.",
     "saved": "Gespeichert. Eine kürzere Zeit erreicht, was schon aufbewahrt ist, bei der nächsten Bereinigung, innerhalb einer Stunde; eine längere nur, was ab jetzt aufbewahrt wird.",
     "invalid": "Gib eine ganze Zahl von Tagen von {min} bis {max} ein.",
-    "switchHint": "Ob überhaupt etwas aufbewahrt wird, entscheidet der Schalter „Schreibvorgänge von Gästen festhalten“ unter Funktionen; die Betriebsart „privat“ schaltet ihn aus, „Verein, Organisation oder Unternehmen“ ein.",
+    "switchHint": "Dafür gibt es keinen eigenen Schalter: Aufbewahrt wird, wo immer ein Gast etwas hinzufügen kann. Soll keine Adresse eines Gastes aufbewahrt werden, schalte „Links zum Ansehen und Hinzufügen“ und „Briefkästen“ unter Funktionen aus.",
     "days": "Aufbewahren für (Tage, {min} bis {max})",
     "default": "Noch nicht festgelegt: {days} Tage, die Voreinstellung.",
     "chosen": "Von dir festgelegt.",
@@ -922,35 +910,24 @@ const de: typeof en = {
     "copy": "Kopieren",
     "copied": "Kopiert"
   },
-  "operatingMode": {
-    "navTitle": "Betriebsart",
-    "sub": "Wie diese Instanz betrieben wird, nach deiner eigenen Einschätzung. Sie stellt die Schalter vor, die sie nennt, und entscheidet, ob diese Konsole vor einer leeren Kontaktstelle oder Anbieterkennzeichnung warnt. Melden und Moderation schaltet sie nie ab.",
-    "loading": "Betriebsart wird gelesen…",
-    "loadFailed": "Die Betriebsart konnte nicht gelesen werden.",
-    "notOwner": "Nur die Besitzperson des Servers kann die Betriebsart festlegen.",
-    "saveFailed": "Die Betriebsart konnte nicht festgelegt werden.",
-    "saved": "Die Betriebsart ist festgelegt.",
-    "choose": "Betriebsart",
-    "private": "Privat (Familie, Freundeskreis)",
-    "organisation": "Verein, Organisation oder Unternehmen",
-    "current": "Aktuell: {mode}.",
-    "notChosen": "Es wurde noch keine Betriebsart gewählt, darum läuft diese Instanz als Verein, Organisation oder Unternehmen.",
-    "changes": "Diese Betriebsart schaltet:",
-    "changeOn": "{title}: an",
-    "changeOff": "{title}: aus",
-    "noChanges": "Diese Betriebsart ändert keinen Schalter.",
-    "set": "Betriebsart festlegen"
+  "operatorDuties": {
+    "title": "Was du womöglich angeben musst",
+    "exemption": "Die Haushaltsausnahme der DSGVO gilt nur für ausschließlich persönliche oder familiäre Tätigkeiten, und sie endet, sobald Inhalte für eine unbegrenzte Zahl von Menschen erreichbar sind – etwa über einen öffentlich geteilten Link (EuGH Lindqvist, C-101/01; Buivids, C-345/17). Ob der Digital Services Act und die EU-Verordnung über terroristische Online-Inhalte eine unentgeltliche private Instanz erfassen, ist rechtlich unsicher.",
+    "owes": "Wenn du Links öffentlich teilst oder veyq für einen Verein, eine Organisation oder ein Unternehmen betreibst, bist du wahrscheinlich nicht ausgenommen und schuldest dann mindestens einen Namen und eine Postanschrift (§ 5 DDG, § 18 Abs. 1 MStV) sowie die Kontaktdaten der verantwortlichen Stelle (Art. 13 Abs. 1 lit. a DSGVO).",
+    "everyTenant": "Das gilt für jeden Bereich auf dieser Instanz: Du hostest sie alle und kannst nicht sehen, ob jemand den Link eines Bereichs öffentlich gepostet hat – der Bereich eines Freundeskreises bleibt nur so lange privat wie seine Links.",
+    "gap": "Nichts davon ist Pflicht. Jede Angabe, die du leer lässt, erscheint überall, wo ein Text sie nennt, als „von der Betreiberseite nicht angegeben“, bis du sie einträgst.",
+    "assessment": "Das ist deine eigene Einschätzung, nicht die von veyq, und keine Rechtsberatung."
   },
   "operator": {
     "navTitle": "Betreiber",
     "sub": "Wer diese Instanz betreibt und wie man sie erreicht. Alles hier außer der Benachrichtigungsadresse ist öffentlich, auch vor der Anmeldung; die Anbieterkennzeichnung erscheint auf der Anmelde- und der Freigabeseite. Jedes Feld darf leer bleiben.",
+    "notStated": "Nicht angegeben",
+    "noRecipient": "Noch keine Stelle angegeben, die Daten erhält: Die Datenschutzerklärung zeigt dort „von der Betreiberseite nicht angegeben“.",
     "loading": "Betreiberangaben werden gelesen…",
     "loadFailed": "Die Betreiberangaben konnten nicht gelesen werden.",
     "notOwner": "Nur die Besitzperson des Servers kann die Betreiberangaben festlegen.",
     "saveFailed": "Die Betreiberangaben konnten nicht gespeichert werden.",
     "invalid": "Prüfe die Felder: Adressen müssen E-Mail-Adressen sein, Sprachen Kürzel wie de oder pt-BR, und ein Empfänger der Art Sonstiges braucht eine Beschreibung.",
-    "warnContact": "Öffentliche Links sind an und keine Kontaktstelle ist eingetragen. Ein Verein, eine Organisation oder ein Unternehmen muss eine Kontaktstelle für Nutzende und Behörden nennen.",
-    "warnIdentification": "Die Anbieterkennzeichnung ist unvollständig. Ein Verein, eine Organisation oder ein Unternehmen muss Namen, eine ladungsfähige Anschrift und eine E-Mail-Adresse veröffentlichen.",
     "contactTitle": "Kontaktstelle",
     "contactEmail": "Kontaktadresse",
     "contactHint": "Die zentrale Kontaktstelle für Nutzende und Behörden, auch für Entfernungsanordnungen zu terroristischen Inhalten.",
@@ -976,7 +953,6 @@ const de: typeof en = {
     "providerEmail": "E-Mail",
     "providerRepresentative": "Vertreten durch (bei einem Verein oder Unternehmen)",
     "supervisoryAuthority": "Datenschutz-Aufsichtsbehörde",
-    "warnPrivacy": "Die Datenschutzerklärung nennt keine Empfänger oder keine Aufsichtsbehörde und zeigt dort „von der Betreiberseite nicht angegeben“. Ein Verein, eine Organisation oder ein Unternehmen muss sagen, wer Daten erhält und welche Behörde zuständig ist.",
     "privacyTitle": "Datenschutzerklärung",
     "privacySub": "Die Datenschutzerklärung der Instanz ist ein fester Text von veyq, öffentlich auf der Domain jedes Bereichs; diese Angaben füllen ihn. Nenne alle, die für dich Daten verarbeiten — wer den Server hostet, einen externen Objektspeicher, ein Mail-Relay, einen Ort für Sicherungen — und wo sie das tun.",
     "recipientName": "Name",
@@ -1002,7 +978,7 @@ const de: typeof en = {
     "save": "Speichern",
     "clear": "Alles leeren",
     "clearTitle": "Betreiberangaben leeren?",
-    "clearConfirm": "Alle Werte werden entfernt, auch die Benachrichtigungsadresse und ihre Bestätigung. Die Betriebsart bleibt."
+    "clearConfirm": "Alle Werte werden entfernt, auch die Benachrichtigungsadresse und ihre Bestätigung."
   },
   "moderation": {
     "navTitle": "Moderation",
@@ -1093,9 +1069,9 @@ const de: typeof en = {
         "copy": "Ein Schritt, der Inhalte betrifft, geht mit einer Begründung an die Betroffenen — das gesperrte Mitglied oder die Besitzpersonen des Tenants — per Instanz-E-Mail und mit dem, was du festgestellt hast, denn sie können sich nicht anmelden, um sie zu lesen. Widersprüche gehen an den Instanzkontakt. Ein Entwurf, bis er rechtlich geprüft ist.",
         "ground": "Grund",
         "provision": "Gesetz oder Klausel, auf die er sich stützt",
-        "provisionHint": "Ein kurzer Verweis, etwa „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
+        "provisionHint": "Ein kurzer Verweis, etwa „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“. Erforderlich.",
         "facts": "Was du festgestellt hast",
-        "factsHint": "Warum der Inhalt unter das Gesetz oder die Klausel fällt. Es geht in deinen Worten in die E-Mail; der Server behält es nur an den Moderationsschlüssel versiegelt. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
+        "factsHint": "Warum der Inhalt unter das Gesetz oder die Klausel fällt. Es geht in deinen Worten in die E-Mail; der Server behält es nur an den Moderationsschlüssel versiegelt. Erforderlich.",
         "noMail": "Die Instanz-E-Mail ist nicht eingerichtet, daher kann diese Begründung nicht verschickt werden: Niemand erfährt davon, wenn du es nicht über den Instanzkontakt mitteilst. Richte sie unter Server → E-Mail ein.",
         "send": "Sperren und Begründung senden",
         "cancel": "Abbrechen"
@@ -1293,7 +1269,7 @@ const de: typeof en = {
     "creating": "Konto wird angelegt…",
     "createFailed": "Das Konto konnte nicht angelegt werden. Dein Kit bleibt gültig — versuch es erneut.",
     "alreadyComplete": "Diese Instanz wurde inzwischen von jemand anderem eingerichtet, für dich wurde kein Konto angelegt. Verwirf dieses Kit; es gehört zu keinem Konto.",
-    "modeTitle": "Wie wird diese Instanz betrieben?"
+    "dutiesTitle": "Was du womöglich angeben musst"
   },
   "members": {
     "copied": "Kopiert",

@@ -108,7 +108,7 @@ and PrimeVue; those stay.
   `./gradlew check` green. **Bite:** with the capability check put back into the write path, decision 6's
   "a guest write is recorded" goes red; with the `switch` key put back into the privacy notice, its record-passage
   assertion goes red; with a `variant` column left in the UNIQUE constraint, the accept-a-pair slice test goes red.
-- [ ] **3 admin-web**: setup without the mode step and with § 14's information; the operator panel without warnings
+- [x] **3 admin-web**: setup without the mode step and with § 14's information; the operator panel without warnings
   and with the gaps shown; the mode panel, choice, notice and CLI `mode` gone; `guestWriteRecord.switchHint` pointing at
   `contribute` / `drop-box`; the step-statement hints required. · Done when: `npm run check` in `src/admin-web/`
   green; setup, the operator panel and a step over content clicked in a browser.

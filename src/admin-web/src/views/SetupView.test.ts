@@ -38,14 +38,7 @@ const stubs = {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  // The mode step's choice: one button per option, as PrimeVue's SelectButton offers them.
-  SelectButton: {
-    props: ['modelValue', 'options'],
-    emits: ['update:modelValue'],
-    template: '<div><button v-for="o in options" :key="o.value" type="button" :class="\'opt-\' + o.value" @click="$emit(\'update:modelValue\', o.value)">{{ o.label }}</button></div>',
-  },
-  // The breach warning's "Use it anyway" and the mode step's tick: a native checkbox, so a test ticks it with
-  // `setValue(true)`.
+  // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
   Checkbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
@@ -64,6 +57,11 @@ const i18n = createI18n({
       setup: {
         title: 'Set up', sub: 'sub', submit: 'Set up', submitting: 'Setting up', failed: 'failed', kitTitle: 'Kit', kitSub: 'kit',
         kitProceed: 'Proceed', creating: 'Creating', createFailed: 'create failed', alreadyComplete: 'already complete',
+        dutiesTitle: 'What you may have to state',
+      },
+      operatorDuties: {
+        exemption: 'household exemption', owes: 'owes a name', everyTenant: 'every space', gap: 'not stated by this operator',
+        assessment: 'your own assessment, not veyq’s, and not legal advice',
       },
     },
   },
@@ -151,7 +149,7 @@ describe('SetupView — the breached-password check', () => {
   })
 })
 
-describe('SetupView — the owner is created only after the kit is confirmed and the mode chosen (uc.admin.setup-server E1, step 4)', () => {
+describe('SetupView — the owner is created only after the kit is confirmed and what may be owed was shown (uc.admin.setup-server E1, step 4)', () => {
   const toKitScreen = async () => {
     const w = mount(SetupView, { global: { plugins: [i18n], stubs } })
     await flushPromises()
@@ -164,12 +162,11 @@ describe('SetupView — the owner is created only after the kit is confirmed and
   type Wrapper = Awaited<ReturnType<typeof toKitScreen>>
   const kitContinue = (w: Wrapper) => w.find('button.setup-kit-continue')
   const proceedButton = (w: Wrapper) => w.find('button.setup-create')
-  const toModeStep = async (mode: 'PRIVATE' | 'ORGANISATION' = 'ORGANISATION') => {
+  const toDutiesStep = async () => {
     const w = await toKitScreen()
     await w.find('.stub-kit-saved').trigger('click')
     await kitContinue(w).trigger('click')
     await flushPromises()
-    await w.find(`.opt-${mode}`).trigger('click')
     return w
   }
 
@@ -182,42 +179,27 @@ describe('SetupView — the owner is created only after the kit is confirmed and
     expect(kitContinue(w).attributes('disabled')).toBeDefined()
   })
 
-  it('asks the operating mode after the kit, with its notice, before anything is posted', async () => {
-    const w = await toKitScreen()
-    await w.find('.stub-kit-saved').trigger('click')
-    await kitContinue(w).trigger('click')
-    await flushPromises()
-    expect(w.find('[data-test="mode-notice"]').text()).toContain('not legal advice')
-    // No mode is preselected: the notice is read before one is picked.
-    expect(proceedButton(w).attributes('disabled')).toBeDefined()
+  it('after the kit, tells what may be owed as information — nothing to choose or tick — before anything is posted', async () => {
+    const w = await toDutiesStep()
+    expect(w.find('[data-test="operator-duties"]').text()).toContain('not legal advice')
+    expect(w.find('[data-test="operator-duties"]').text()).toContain('household exemption')
+    expect(w.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(w.findAll('[role="radio"], .opt-PRIVATE, .opt-ORGANISATION')).toHaveLength(0)
+    expect(proceedButton(w).attributes('disabled')).toBeUndefined()
     expect(createServerOwner).not.toHaveBeenCalled()
   })
 
-  it('creates the owner with the chosen mode once the kit is confirmed, then goes to sign-in', async () => {
-    const w = await toModeStep('ORGANISATION')
-    expect(w.find('input[type="checkbox"]').exists()).toBe(false) // organisation asks no tick
+  it('creates the owner with no mode once the kit is confirmed, then goes to sign-in', async () => {
+    const w = await toDutiesStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
-    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, 'ORGANISATION', false)
+    expect(createServerOwner).toHaveBeenCalledWith(PREPARED)
     expect(push).toHaveBeenCalledWith({ name: 'login' })
-  })
-
-  it('cannot post private without the tick, and posts it with the tick', async () => {
-    const w = await toModeStep('PRIVATE')
-    expect(proceedButton(w).attributes('disabled')).toBeDefined()
-    await proceedButton(w).trigger('click')
-    await flushPromises()
-    expect(createServerOwner).not.toHaveBeenCalled()
-
-    await w.find('input[type="checkbox"]').setValue(true)
-    await proceedButton(w).trigger('click')
-    await flushPromises()
-    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, 'PRIVATE', true)
   })
 
   it('keeps the kit and says so when someone else finished setup first', async () => {
     vi.mocked(createServerOwner).mockRejectedValue(httpError(409, 'setup_already_complete'))
-    const w = await toModeStep()
+    const w = await toDutiesStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('already complete')
@@ -226,7 +208,7 @@ describe('SetupView — the owner is created only after the kit is confirmed and
 
   it('lets a failed create be tried again with the same kit', async () => {
     vi.mocked(createServerOwner).mockRejectedValueOnce(httpError(500))
-    const w = await toModeStep()
+    const w = await toDutiesStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('create failed')
