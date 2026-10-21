@@ -88,6 +88,9 @@ a client red names the typed line it expects to fail — and runs `npm run check
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
 dev seeder, web's e2e harness and two backend tests also build that request, and `moderationEpoch` named all of them.
+**A reshaped *response* is found the same way, by its fields, not by its path:** cr-statement-delivery-report nested
+`blockAccountSignIn`'s `ModerationSteps` under `steps`, and its locator — the operation's path — missed the slice test
+that read `signInBlocks[0].id` off the answer; the first full check found it. Grep the answer's fields too.
 
 **The qualifier is load-bearing: an operation on a NEW tag compiles.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase

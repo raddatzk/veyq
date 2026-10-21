@@ -43,6 +43,8 @@ import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
 import { decodeHttpError, isUnauthorized } from '../../shared/httpError'
 import StepStatementFields from '../instance/StepStatementFields.vue'
+import StatementDeliveryNotice from '../instance/StatementDeliveryNotice.vue'
+import { reportOf, type StatementReport } from '../instance/statementDelivery'
 import { stepStatement, StepStatementInvalid, type StepStatementDraft } from '../instance/stepStatement'
 import { getModerationSteps, ProposalStep, type OpenModerationProposal } from '../instance/moderation'
 
@@ -78,6 +80,10 @@ const loadedQuota = ref<{ text: string; bytes: number } | null>(null)
 const deleteTyped = ref('')
 // A moderator's open proposal to take this tenant offline, read with the tenant (see `overContent` below).
 const proposal = ref<OpenModerationProposal | null>(null)
+// What the last step over content answered about its statement's mail, when it did not plainly reach everyone (ADR 0093
+// § 7): kept under the header with the words as sent until dismissed — a reload after the step keeps it, another tenant
+// drops it.
+const report = ref<StatementReport | null>(null)
 
 const isPending = computed(() => tenant.value?.status === 'PENDING')
 // ADR 0066 — the third status. Availability only: SUSPENDED says nothing about the tenant's content, which is
@@ -114,7 +120,10 @@ const { pending: loading, error: loadErr, reload } = useAsyncData(async () => {
   proposal.value = found && (found.status === 'ACTIVE' || found.status === 'SUSPENDED') ? await openOfflineProposal() : null
   return found
 }, { onError: on401 })
-watch(() => props.tenantId, () => reload())
+watch(() => props.tenantId, () => {
+  report.value = null
+  reload()
+})
 // The load error, plus the business `gone` state (loaded fine, no such tenant) the error slot can't carry.
 const loadError = computed<'' | 'notAuthorized' | 'failed' | 'gone'>(() => {
   const kind = loadErrorKind(loadErr.value)
@@ -193,9 +202,15 @@ async function setSuspended(suspend: boolean) {
   }
   actionError.value = ''
   try {
-    if (suspend) await suspendTenant(props.tenantId, overContent.value ? await stepStatement(draft.value) : null)
-    else await reactivateTenant(props.tenantId)
-    toast.success(t(suspend ? 'tenant.suspended' : 'tenant.reactivated'))
+    let shown: StatementReport | null = null
+    if (suspend) {
+      const statement = overContent.value ? await stepStatement(draft.value) : null
+      const { statementDelivery } = await suspendTenant(props.tenantId, statement)
+      shown = reportOf(statementDelivery, statement)
+      report.value = shown
+    } else await reactivateTenant(props.tenantId)
+    // The standing report says the step was taken; only a plain success is a toast.
+    if (!shown) toast.success(t(suspend ? 'tenant.suspended' : 'tenant.reactivated'))
     resetStatement()
     await reload()
   } catch (e) {
@@ -294,8 +309,10 @@ async function removeTenant() {
   actionError.value = ''
   try {
     const statement = overContent.value ? await stepStatement(draft.value) : null
-    const { dueAt } = await deleteTenant(props.tenantId, deleteTyped.value, statement)
-    toast.success(t('tenant.deletionStarted', { date: at(dueAt) }))
+    const { dueAt, statementDelivery } = await deleteTenant(props.tenantId, deleteTyped.value, statement)
+    report.value = reportOf(statementDelivery, statement)
+    // As for taking it offline: the standing report says the step was taken (the date is in the pending-deletion notice).
+    if (!report.value) toast.success(t('tenant.deletionStarted', { date: at(dueAt) }))
     resetStatement()
     emit('changed')
     await reload()
@@ -376,6 +393,8 @@ async function copyInviteLink() {
         </div>
         <span class="veyq-badge" :class="statusTone">{{ statusLabel }}</span>
       </div>
+
+      <StatementDeliveryNotice v-if="report" :key="report.statement.statementId" :report="report" @dismiss="report = null" />
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
       <Message v-if="isSuspended" severity="warn" :closable="false">{{ t('tenant.suspendedHint') }}</Message>

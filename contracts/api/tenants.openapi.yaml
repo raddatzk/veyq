@@ -814,7 +814,8 @@ paths:
         termination of the service): always when a moderator's proposal to take the tenant offline is open, and when
         `overContent` says so. Then `statement` is required (`400 statement_required`); it is recorded with the deletion,
         in its transaction, as a measure of kind `TENANT_DELETED` that `stopTenantDeletion` lifts, and mailed with the
-        facts to each owner once the deletion committed — exactly as `suspendTenant`'s statement.
+        facts to each owner once the deletion committed — exactly as `suspendTenant`'s statement; the answer's
+        `statementDelivery` reports whom that mail reached, and the deletion stands whatever it says.
       security:
         - bearerAuth: []
       parameters:
@@ -991,7 +992,9 @@ paths:
         suspension, in its transaction, as a measure of kind `TENANT_OFFLINE` that `reactivateTenant` lifts, and mailed
         with the facts to each owner of the tenant once the suspension committed (owner decision Q25). A suspension for
         any other reason (unpaid, maintenance) sends no body, or `overContent` false, and carries none. The request is
-        JSON either way (`Content-Type: application/json`, with or without a body).
+        JSON either way (`Content-Type: application/json`, with or without a body). The answer reports whom the
+        statement's mail reached (`statementDelivery`, absent without a statement); the suspension stands whatever it
+        says.
       security:
         - bearerAuth: []
       parameters:
@@ -1003,8 +1006,12 @@ paths:
             schema: { $ref: "#/components/schemas/SuspendTenantRequest" }
             example: { overContent: true, statement: { statementId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, ground: TERMS_BREACH, provision: "Space terms, clause 4", facts: The space hosts a public link to unlawful content after two warnings., factsForLog: { epoch: 2, sealedFacts: c2VhbGVkLWZhY3Rz } } }
       responses:
-        "204":
-          description: The tenant is now SUSPENDED.
+        "200":
+          description: The tenant is now SUSPENDED; over content, whom the statement's mail reached.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantSuspension" }
+              example: { statementDelivery: { outcome: REACHED, notReached: [] } }
         "400":
           description: >
             `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
@@ -2473,6 +2480,17 @@ components:
           format: date-time
           description: When the purge erases the tenant — the deletion plus the scope trash's retention.
           example: 2026-11-17T10:00:00Z
+        statementDelivery:
+          description: Whom the statement's mail reached, when the deletion was over content; absent otherwise.
+          $ref: "#/components/schemas/StatementDelivery"
+
+    TenantSuspension:
+      type: object
+      description: A suspension that took the tenant offline; over content, whom its statement's mail reached.
+      properties:
+        statementDelivery:
+          description: Whom the statement's mail reached, when the suspension was over content; absent otherwise.
+          $ref: "#/components/schemas/StatementDelivery"
 
     InviteTenantOwnerRequest:
       type: object
@@ -3203,6 +3221,8 @@ components:
     # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
     ServerOwnerStatementInput:
       $ref: '_common.openapi.yaml#/components/schemas/ServerOwnerStatementInput'
+    StatementDelivery:
+      $ref: '_common.openapi.yaml#/components/schemas/StatementDelivery'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

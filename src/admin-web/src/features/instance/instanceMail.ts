@@ -1,5 +1,5 @@
 import { instanceApi } from '../../api/client'
-import type { InstanceMailSettings, InstanceMailSettingsUpdate } from '../../api/generated/instance'
+import { InstanceMailSettingsConfirmationEnum, type InstanceMailSettings, type InstanceMailSettingsUpdate } from '../../api/generated/instance'
 
 export type { InstanceMailSettings, InstanceMailSettingsUpdate } from '../../api/generated/instance'
 export { InstanceMailSettingsConfirmationEnum, InstanceMailSettingsConfigSecretStateEnum } from '../../api/generated/instance'
@@ -27,4 +27,18 @@ export function updateInstanceMail(update: InstanceMailSettingsUpdate): Promise<
  *  it — save again for a new one), 429 `rate_limited`. */
 export function confirmInstanceMail(code: string): Promise<InstanceMailSettings> {
   return instanceApi().confirmInstanceMail({ instanceMailConfirmation: { code } })
+}
+
+/**
+ * Whether a Server Owner's statement of reasons cannot be mailed because no instance mail is set up (ADR 0093 § 7) — what
+ * the console warns of before a step over content. Settings that are set up but not yet confirmed still send, so only
+ * `NOT_CONFIGURED` counts. Best effort: a failed read answers false, and the step's answer still says what the mail
+ * reached (`statementDelivery`).
+ */
+export async function statementMailNotSetUp(): Promise<boolean> {
+  try {
+    return (await getInstanceMail()).confirmation === InstanceMailSettingsConfirmationEnum.NotConfigured
+  } catch {
+    return false
+  }
 }

@@ -44,7 +44,7 @@
    proposal is over content and carries its statement of reasons, entered with it — ground, provision, facts —, by
    mail to the member or to the tenant's owners ([uc.moderation.object-to-a-measure](uc.moderation.object-to-a-measure.md)
    A7); a step without a case carries one when the Server Owner marks it as over content. The step's answer names whom
-   that mail did not reach (A7 there; not built — `changes/cr-statement-delivery-report.md`).
+   that mail did not reach (A7 there).
 6. Each step takes an optional note sealed to the moderation key. A moderator's step (2–4) also takes its **statement
    of reasons** — the ground, the provision or clause it relies on, and the facts sealed to the moderation key and, once,
    for the affected members, under a key wrapped to each one's identity key —

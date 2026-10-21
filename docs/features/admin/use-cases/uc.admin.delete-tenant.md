@@ -25,7 +25,7 @@
    tenant's owners receive it by mail (ADR 0093 § 7): a `TENANT_DELETED` record carries it, the tenant's other members
    are told nothing beyond the deletion, and a moderator's open proposal to take the tenant offline makes the deletion
    over content — without a statement it is refused. Whom the mail did not reach, the answer names, as a suspension's
-   does ([uc.admin.suspend-tenant](uc.admin.suspend-tenant.md) A6; not built — `changes/cr-statement-delivery-report.md`).
+   does ([uc.admin.suspend-tenant](uc.admin.suspend-tenant.md) A6).
 5. When the retention ends, one purge erases every scope of the tenant through the scope erasure, then the tenant's
    remaining rows and the tenant, and writes the erasure into the ledger. A record over content still in force on the
    tenant (a suspension's or this deletion's) ends with it, so it and its statement go at their own date.

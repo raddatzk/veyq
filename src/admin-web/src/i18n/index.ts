@@ -413,9 +413,16 @@ const en = {
         "provisionHint": "A short reference, for example “§ 86a StGB” or “Space terms, clause 4”. Required on an instance run by a club, an organisation or a company.",
         "facts": "What you found",
         "factsHint": "Why the content falls under the law or the clause. It goes in the mail in your words; the server keeps it only sealed to the moderation key. Required on an instance run by a club, an organisation or a company.",
-        "noMail": "Without the instance mail set up, nobody is told.",
+        "noMail": "The instance mail is not set up, so this statement cannot be mailed: nobody learns of it unless you tell them through the instance contact. Set it up under Server → Mail.",
         "send": "Block and send the statement",
         "cancel": "Cancel"
+      },
+      "delivery": {
+        "notReached": "The step was taken, but its statement of reasons could not be mailed to {addresses}. It is not sent again: tell them through the instance contact, with the statement below.",
+        "unknown": "The step was taken, but the server could not tell whom its statement of reasons reached. Tell the people it affects through the instance contact, with the statement below.",
+        "nobodyToTell": "The step was taken. Its statement of reasons went to nobody: the tenant has no owner, or the account no longer exists. The statement as you wrote it:",
+        "copy": "Copy the statement",
+        "copied": "Copied"
       }
     }
   },
@@ -1089,9 +1096,16 @@ const de: typeof en = {
         "provisionHint": "Ein kurzer Verweis, etwa „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
         "facts": "Was du festgestellt hast",
         "factsHint": "Warum der Inhalt unter das Gesetz oder die Klausel fällt. Es geht in deinen Worten in die E-Mail; der Server behält es nur an den Moderationsschlüssel versiegelt. Erforderlich auf einer Instanz, die ein Verein, eine Organisation oder ein Unternehmen betreibt.",
-        "noMail": "Ohne eingerichtete Instanz-E-Mail erfährt es niemand.",
+        "noMail": "Die Instanz-E-Mail ist nicht eingerichtet, daher kann diese Begründung nicht verschickt werden: Niemand erfährt davon, wenn du es nicht über den Instanzkontakt mitteilst. Richte sie unter Server → E-Mail ein.",
         "send": "Sperren und Begründung senden",
         "cancel": "Abbrechen"
+      },
+      "delivery": {
+        "notReached": "Der Schritt ist getan, aber seine Begründung konnte nicht an {addresses} verschickt werden. Sie wird nicht erneut gesendet: Teile sie ihnen über den Instanzkontakt mit, mit der Begründung unten.",
+        "unknown": "Der Schritt ist getan, aber der Server kann nicht sagen, wen seine Begründung erreicht hat. Teile sie den Betroffenen über den Instanzkontakt mit, mit der Begründung unten.",
+        "nobodyToTell": "Der Schritt ist getan. Seine Begründung ging an niemanden: Der Tenant hat keine Besitzperson, oder das Konto gibt es nicht mehr. Die Begründung, wie du sie geschrieben hast:",
+        "copy": "Begründung kopieren",
+        "copied": "Kopiert"
       }
     }
   },

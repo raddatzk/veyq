@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.generated.model.DeleteTenantRequest
 import me.raddatz.veyq.core.generated.model.InviteTenantOwnerRequest
 import me.raddatz.veyq.core.generated.model.SetTenantMemberRoleRequest
 import me.raddatz.veyq.core.generated.model.TenantDeletion
+import me.raddatz.veyq.core.generated.model.TenantSuspension
 import me.raddatz.veyq.core.generated.model.AcceptPreviewRequest
 import me.raddatz.veyq.core.generated.model.AcceptTermsRequest
 import me.raddatz.veyq.core.generated.model.ChangeDomainRequest
@@ -137,7 +138,7 @@ class TenantsResource(
                 deleteTenantRequest.statement?.toStepInput(),
             )
         ) {
-            is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc())).build()
+            is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc(), o.statement?.delivery())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -168,7 +169,7 @@ class TenantsResource(
                 suspendTenantRequest?.statement?.toStepInput(),
             )
         ) {
-            SuspendOutcome.Done -> Response.noContent().build()
+            is SuspendOutcome.Done -> Response.ok(TenantSuspension(o.statement?.delivery())).build()
             is HttpFailure -> httpError(o)
         }
 

@@ -52,7 +52,7 @@ class TenantSuspendSliceTest {
     @Test
     fun suspendFlipsToSuspendedAndReactivateFlipsBack() {
         val (tenantId, _) = seedActiveTenant()
-        suspend(ownerToken(), tenantId).then().statusCode(204)
+        suspend(ownerToken(), tenantId).then().statusCode(200)
         assertEquals(TenantEntity.SUSPENDED, statusOf(tenantId))
         reactivate(ownerToken(), tenantId).then().statusCode(204)
         assertEquals(TenantEntity.ACTIVE, statusOf(tenantId))
@@ -104,7 +104,7 @@ class TenantSuspendSliceTest {
         given().header("X-Forwarded-Host", domain).`when`().get("/api/scopes")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
 
-        suspend(ownerToken(), tenantId).then().statusCode(204)
+        suspend(ownerToken(), tenantId).then().statusCode(200)
 
         given().header("X-Forwarded-Host", domain).`when`().get("/api/scopes")
             .then().statusCode(403).body("code", equalTo("tenant_suspended"))
@@ -122,7 +122,7 @@ class TenantSuspendSliceTest {
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$tenantId' }", notNullValue())
 
-        suspend(ownerToken(), tenantId).then().statusCode(204)
+        suspend(ownerToken(), tenantId).then().statusCode(200)
 
         given().header("Authorization", "Bearer $token").header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(403).body("code", equalTo("tenant_suspended"))
@@ -145,7 +145,7 @@ class TenantSuspendSliceTest {
         joinTenant(member, otherId)
         val token = sessions.issue(member).accessToken
 
-        suspend(ownerToken(), suspendedId).then().statusCode(204)
+        suspend(ownerToken(), suspendedId).then().statusCode(200)
 
         // Refused on the suspended tenant's domain…
         given().header("Authorization", "Bearer $token").header("X-Forwarded-Host", suspendedDomain)
@@ -162,7 +162,7 @@ class TenantSuspendSliceTest {
         // or after some *other* tenant is suspended. (Without this, a gate that defaulted to refusing on an
         // unresolvable host would lock out the bootstrap domain and every self-hosted direct-port deployment.)
         val (tenantId, _) = seedActiveTenant()
-        suspend(ownerToken(), tenantId).then().statusCode(204)
+        suspend(ownerToken(), tenantId).then().statusCode(200)
         given().header("X-Forwarded-Host", "nobody-${UUID.randomUUID()}.example.com")
             .`when`().get("/api/scopes").then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -176,7 +176,7 @@ class TenantSuspendSliceTest {
         seedTenantMember(tenantId)
         val before = membershipFingerprint(tenantId)
 
-        suspend(ownerToken(), tenantId).then().statusCode(204)
+        suspend(ownerToken(), tenantId).then().statusCode(200)
         assertEquals(before, membershipFingerprint(tenantId))
         reactivate(ownerToken(), tenantId).then().statusCode(204)
         assertEquals(before, membershipFingerprint(tenantId))

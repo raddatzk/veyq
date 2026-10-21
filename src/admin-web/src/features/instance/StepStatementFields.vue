@@ -4,12 +4,19 @@
 // tenant's suspension both show them. What the fields become is `stepStatement.ts`'s; what the mode requires is the
 // server's to refuse, so the hints say when each is required rather than the form guessing the mode. Native controls,
 // as src/web/'s decision panel has them (`CaseDetail.vue`'s statement).
+// Without instance mail the statement reaches nobody, so the fields say so before the step — read when they open, best
+// effort (`statementMailNotSetUp`): a failed read says nothing, and the step's answer still reports what the mail reached.
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Message from 'primevue/message'
 import { GROUNDS, type StepStatementDraft } from './stepStatement'
+import { statementMailNotSetUp } from './instanceMail'
 
 const draft = defineModel<StepStatementDraft>({ required: true })
 defineProps<{ idPrefix: string; disabled?: boolean }>()
 const { t } = useI18n()
+const noMail = ref(false)
+onMounted(async () => { noMail.value = await statementMailNotSetUp() })
 </script>
 
 <template>
@@ -26,6 +33,6 @@ const { t } = useI18n()
     <label :for="`${idPrefix}-facts`">{{ t('moderation.steps.statement.facts') }}</label>
     <textarea :id="`${idPrefix}-facts`" v-model="draft.facts" class="p-inputtext step-statement__facts" rows="4" maxlength="4000" :disabled="disabled" />
     <small class="settings-muted">{{ t('moderation.steps.statement.factsHint') }}</small>
-    <small class="settings-muted step-statement__no-mail">{{ t('moderation.steps.statement.noMail') }}</small>
+    <Message v-if="noMail" severity="warn" :closable="false" class="step-statement__no-mail">{{ t('moderation.steps.statement.noMail') }}</Message>
   </div>
 </template>

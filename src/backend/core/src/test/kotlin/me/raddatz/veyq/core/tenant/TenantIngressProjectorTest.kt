@@ -288,7 +288,7 @@ class TenantIngressProjectorTest {
             TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
         }
         givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
-            .`when`().post("/api/tenants/$tenantId/suspend").then().statusCode(204)
+            .`when`().post("/api/tenants/$tenantId/suspend").then().statusCode(200)
         assertFalse(projectedHosts().contains(moved), "suspend must reproject without the tenant")
 
         // 4 — reactivate

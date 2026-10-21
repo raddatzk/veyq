@@ -43,6 +43,23 @@ acceptanceCriteria:
         integration:
           - ServerOwnerStatementSliceTest.aTenantDeletedOverContentTellsItsOwnersOnlyAndAStopLiftsTheRecord
           - ServerOwnerStatementSliceTest.aMeasureOnAnErasedTenantOrAccountEndsWithItAndItsRecordsGoAtTheirDate
+  - id: delete-over-content-reports-its-delivery
+    # Added by cr-statement-delivery-report (ADR 0093 § 7, uc.admin.suspend-tenant A6).
+    text: >-
+      A deletion over content answers, beside its due date, whom its statement's mail reached — every owner, or every
+      address it did not reach while the deletion stands — and a deletion without a statement answers none.
+    coverage:
+      backend:
+        integration:
+          - ServerOwnerStatementSliceTest.eachStepOverContentWithMailSetUpAnswersReachedAndMarksEveryRecipientMailed
+          - ServerOwnerStatementSliceTest.withoutInstanceMailADeletionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands
+          - ServerOwnerStatementSliceTest.aStepWithoutAStatementAnswersNoDelivery
+        unit:
+          - StatementMailingTest.everyMailWentOutIsReached
+          - StatementMailingTest.noMailWentOutNamesEveryRecipient
+          - StatementMailingTest.oneOfTwoWentOutNamesTheOtherOnly
+          - StatementMailingTest.noRecipientIsNobodyToTell
+          - StatementMailingTest.aListThatCouldNotBeReadIsUnknown
   - id: an-ownerless-tenant-has-two-ways-on
     text: A tenant owner makes a member an owner, the last owner cannot be demoted, and the Server Owner's owner invite to a member of an ownerless tenant makes them its owner once they accept it; an address that is no member's is refused.
     coverage:
@@ -57,9 +74,11 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     Built and passing locally: `src/features/tenants/TenantDetailPanel.test.ts` (the typed delete refused until the
-    domain matches, the stop, the ownerless notice and the owner invite, the statement over content), `tenants.test.ts`,
+    domain matches, the stop, the ownerless notice and the owner invite, the statement over content and what its mail
+    reached), `tenants.test.ts`,
     `src/views/AdminConsoleView.test.ts` (the ownerless marker) and `src/cli/cli.test.ts` (`tenant delete` with and
-    without `--over-content`, `stop-deletion`, `invite-owner`). admin-web's job has never executed, so ADR 0040 admits it nowhere.
+    without `--over-content`, its delivery's stderr warning, `stop-deletion`, `invite-owner`). admin-web's job has never
+    executed, so ADR 0040 admits it nowhere.
   stack: >-
     Lane L1's browser pass (`tests/e2e/tests/features/tenant-and-account-erasure.spec.ts`) deletes a tenant in the console with its typed
     domain and stops the deletion, against the release candidate's two images. Green only in local runs of

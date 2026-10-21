@@ -24,7 +24,7 @@ export async function describeFailure(e: unknown): Promise<string> {
 }
 
 /**
- * The success document. A 204 operation (change-domain, revoke, suspend, reactivate) resolves to `undefined`,
+ * The success document. A 204 operation (change-domain, revoke, reactivate) resolves to `undefined`,
  * which `JSON.stringify` renders as no output at all — a silent success is indistinguishable from a silent
  * failure to whatever reads this, so it gets an explicit `{"ok": true}` instead.
  */
