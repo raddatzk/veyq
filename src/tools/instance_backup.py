@@ -2322,7 +2322,9 @@ def gate_store(args: argparse.Namespace, db: Database, env: dict[str, str]) -> S
         endpoint, token = env.get("VEYQ_BUNDLED_STORE_ENDPOINT", ""), env.get("VEYQ_BUNDLED_STORE_ADMIN_TOKEN", "")
         if not endpoint or not token.strip():
             raise BackupError("the instance uses the bundled store, and VEYQ_BUNDLED_STORE_ENDPOINT / "
-                              "VEYQ_BUNDLED_STORE_ADMIN_TOKEN are not both set — the chart passes the app's own")
+                              "VEYQ_BUNDLED_STORE_ADMIN_TOKEN are not both set — the chart passes the app's own, and "
+                              "only with garage.enabled: true (turned off under this instance, its claims are still "
+                              "there, and true again restores it)")
         args.store_endpoint = endpoint
         args.store_access_key, args.store_secret_key = derive_bundled_credentials(token)
         args.store_bucket = env.get("VEYQ_BUNDLED_STORE_BUCKET") or "blobs"
