@@ -19,7 +19,7 @@ import java.time.temporal.ChronoUnit
 enum class ReconcileFailure { STORE_UNREACHABLE, LIST_DENIED, NO_STORE, NO_STORE_CLOCK, DATABASE }
 
 /** Why every first-seen clock last restarted — the wire's `clocksRestartReason`. A restore leaves no reason: it empties
- *  both tables (`scripts/instance_backup.py`), so after one there is no row to carry it. */
+ *  both tables (`src/tools/instance_backup.py`), so after one there is no row to carry it. */
 enum class ClocksRestart { GAP, STORE_CHANGED }
 
 /**

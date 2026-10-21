@@ -5,7 +5,8 @@
   `scripts/repo_layout.py`, except in what ships alone (`instance_backup.py`, which spells its own and is compared by
   its selftest). Stage 2 decided by the owner the same day (decision 5) and built the same day (cr-repo-layout-src): the code
   surfaces' paths live in `scripts/repo_layout.py` too, a predecessor's in either layout. Stage 3 decided by the owner
-  2026-10-21 (decision 8), not yet built (cr-tools-under-src).
+  2026-10-21 (decision 8) and built the same day (cr-tools-under-src): `scripts/repo_layout.py` names the tools, and
+  the scripts that import one put their directory on `sys.path` through it.
 - Date: 2026-10-20
 
 ## Context

@@ -1,6 +1,6 @@
 {{- if .Values.backup.enabled }}
 # The daily prune (ADR 0056 decision 8): every capture on the backup claim older than B, the newest too — the same
-# prune the gate runs at every start (scripts/instance_backup.py `prune`), so an instance that starts rarely still
+# prune the gate runs at every start (src/tools/instance_backup.py `prune`), so an instance that starts rarely still
 # keeps no capture past B. What it reaches and writes, asked again for a pod of its own (changes/README.md): the
 # database, to read B — by the app's own URL and user, admitted by its own NetworkPolicy (networkpolicy.yaml) — and
 # the backup claim, which it writes only by deleting; never the config-secret claim, so it can never hold the KEK

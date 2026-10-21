@@ -24,8 +24,9 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 ## Repository shape
 - `contracts/` — OpenAPI + crypto vectors, and the fixed texts the server renders (moderation templates, the
   operator section of the terms): the source of truth code is generated from or pinned to.
-- `src/` — the code surfaces, one directory each ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md)
-  stage 2): the four below. Not to be confused with a surface's own `src/` (`src/web/src`, a Gradle module's `src/main`).
+- `src/` — everything a release ships: the code surfaces, one directory each, and the operator tools
+  ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md) stages 2 and 3), all below. Not to be
+  confused with a surface's own `src/` (`src/web/src`, a Gradle module's `src/main`).
 - `src/backend/` + `src/web/` — the two user-facing surfaces. A CR's phase order is
   **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
@@ -64,9 +65,12 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
   else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves
   itself with its own `npm run check`.
+- `src/tools/` — the two operator tools a release ships as assets: `veyqctl` (installs, upgrades and backs up a
+  Compose instance from its releases, [ADR 0096](docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md))
+  and `instance_backup.py` (the backup tool it runs, and the `veyq-tools` image's entrypoint). Each ships alone.
 - `docs/` — internal engineering state (English) + working flow (`ai/`, `inbox.md`).
-- `scripts/` — the guards (`validate_*.py`, the trust chain below) and the repository's tools (the e2e orchestrators,
-  `veyqctl`, the backup tool), in Python.
+- `scripts/` — what the repository runs on itself, in Python: the guards (`validate_*.py`, the trust chain below),
+  the e2e orchestrators and the release producer.
 - `site/` — the **published** documentation site (Astro Starlight, GitHub Pages; its own package outside the npm
   workspace, [ADR 0087](docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)):
   **Use** (plain language, **EN+DE**, for users and space owners), **Run** (EN, for Server Owners) and
@@ -102,5 +106,6 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 
 ## Prove your work
 Each surface's own `CLAUDE.md` names its check: [`src/backend/CLAUDE.md`](src/backend/CLAUDE.md) (`./gradlew check`),
-[`src/web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`). The doc trust chain is the `trust-chain` CI job
+[`src/web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`), [`src/tools/CLAUDE.md`](src/tools/CLAUDE.md) (the two
+selftests). The doc trust chain is the `trust-chain` CI job
 (`scripts/validate_*.py`); run it before claiming a doc change is sound.

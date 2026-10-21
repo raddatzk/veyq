@@ -746,7 +746,7 @@ def fresh_bucket(name: str) -> None:
 
 
 def backup_env() -> dict[str, str]:
-    """What `scripts/instance_backup.py` reads — the app's OWN variables, pointed at the store's INTERNAL name.
+    """What `src/tools/instance_backup.py` reads — the app's OWN variables, pointed at the store's INTERNAL name.
 
     `%e2e` gives the jar `http://localhost:19000`, the published port; the tool's rclone runs in a container on
     the compose network, where the store is `garage:3900`. Two addresses for one store, and handing the wrong

@@ -5,7 +5,7 @@
 -- content). No User-Agent, no content. expires_at is observed_at plus the retention as it stood at the write; the purge
 -- also deletes a row older than the retention as it stands now, so no guest is kept longer than the page told them.
 -- The row goes with its identity (cascading) and with its object (core's erasers, an application's through core). The
--- instance backup dumps this table's schema and leaves out its rows (scripts/instance_backup.py).
+-- instance backup dumps this table's schema and leaves out its rows (src/tools/instance_backup.py).
 CREATE TABLE veyq_guest_write_record (
     id                UUID         NOT NULL PRIMARY KEY,
     share_identity_id UUID         NOT NULL,

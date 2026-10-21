@@ -201,7 +201,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `EveryStoredTimeHasAReaderTest`, or that test is red — the one sweep a new table meets that no contract guard
   predicts (cr-release-notices' list of sweeps missed it). A migration that **seeds rows** (`INSERT … VALUES`) puts
   them into every fresh install, which the restore's emptiness gate then reads as data: run
-  `python3 scripts/instance_backup_selftest.py`, which fails until the table is in `instance_backup.py`'s `NOT_DATA`
+  `python3 src/tools/instance_backup_selftest.py`, which fails until the table is in `instance_backup.py`'s `NOT_DATA`
   with its reason — it runs in CI's `web-e2e` job only, so no backend check sees it (two seeding migrations of
   2026-10-16 refused every restore before it). **An applied migration is never edited — not even a comment in it.** Flyway validates the
   checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment fails startup on

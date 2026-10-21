@@ -113,7 +113,7 @@ acceptanceCriteria:
       - surface: backend
         reason: >-
           "Any restore restarts every grace period" is the restore tool's half: `instance_backup.py restore` empties the
-          reconcile's tables after its load, pinned by `scripts/instance_backup_selftest.py` (G5, `ci.yml`'s `web-e2e`
+          reconcile's tables after its load, pinned by `src/tools/instance_backup_selftest.py` (G5, `ci.yml`'s `web-e2e`
           job) and shown on a real rollback in cr-bucket-reconcile's live proof — neither a coverage surface. The backend
           proves the gap rule, its other detector. That the reclaim sweep then deletes what was recorded is
           `StoreReclaimSweepSliceTest`'s.

@@ -1,5 +1,5 @@
 -- The bucket reconcile (ADR 0062 § Consequences, cr-bucket-reconcile). Two tables, neither of them anyone's data: a
--- fresh instance's first pass writes both, so scripts/instance_backup.py names them in NOT_DATA, and a restore empties
+-- fresh instance's first pass writes both, so src/tools/instance_backup.py names them in NOT_DATA, and a restore empties
 -- both after loading its dump, so every first-seen clock restarts and the exclusive-bucket confirmation must be given
 -- again. Counts, instants and opaque storage keys only: no scope, no node (ADR 0062 Decision 6).
 

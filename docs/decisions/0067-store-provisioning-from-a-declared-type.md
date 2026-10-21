@@ -175,7 +175,7 @@ customer's infrastructure, never their data.
   trap **and** the tension are recorded as a comment there rather than only here.
 - **A restore target can no longer be prepared without the app, so the gate that defines one moves from
   "no tables" to "no data".** [uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)
-  A5 defines a restore onto an *empty* instance, and `scripts/instance_backup.py` implements *empty* as **zero
+  A5 defines a restore onto an *empty* instance, and `src/tools/instance_backup.py` implements *empty* as **zero
   tables in the target database**. That worked because the store's bucket came from a sidecar while the
   database stayed untouched. With the backend as the only provisioner the two preconditions become mutually
   unreachable: the bucket exists only after the app has started, and the same start migrates the schema — the

@@ -325,7 +325,7 @@ class BundledStoreHint(
  * 3): veyq imports exactly this pair into the Garage it provisions, so the bundled case needs no credential of its
  * own in the environment and none sealed under the config-secret key — a lost key cannot take the bundled store's
  * media with it. HKDF-SHA256 (RFC 5869) over the token, one `info` per half, in Garage's key shapes: `GK` + 24 hex
- * for the id, 64 hex for the secret. `scripts/instance_backup.py` derives the same pair from the same token for the
+ * for the id, 64 hex for the secret. `src/tools/instance_backup.py` derives the same pair from the same token for the
  * bundled capture; `BundledStoreCredentialsTest` and its self-test pin one vector on both sides.
  */
 data class BundledStoreCredentials(val accessKey: String, val secretKey: String) {

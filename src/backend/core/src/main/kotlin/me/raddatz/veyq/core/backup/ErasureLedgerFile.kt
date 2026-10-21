@@ -129,7 +129,7 @@ class ErasureLedgerFile(config: VeyqConfig, private val retention: BackupRetenti
     data class Read(val lines: List<LedgerLine>, val unreadable: Int)
 
     companion object {
-        /** Beside leg (c)'s key; `scripts/instance_backup.py` (`LEDGER_FILE`) and `veyqctl` name the same file. */
+        /** Beside leg (c)'s key; `src/tools/instance_backup.py` (`LEDGER_FILE`) and `veyqctl` name the same file. */
         const val NAME = "erasures.log"
     }
 }
