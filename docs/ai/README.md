@@ -288,7 +288,9 @@ A refined CR nails **decisions, not keystrokes**:
   Server Owner invite a new owner into an active tenant, and only a member can ever be given the key (ADR 0020 move 6),
   so the implementation had to narrow the invite to members. And a refine that reuses an operation ("as a removal
   does") lists that operation's refusals beside its own decision: the same ADR's "the Server Owner's door does not
-  refuse" met the moderator removal's last-holder refusal only in the implementation. A proof that seems to need a root Linux host (a file's owner in a
+  refuse" met the moderator removal's last-holder refusal only in the implementation. The reverse holds too: a refusal
+  a decision puts into a shared helper lists the helper's callers — cr-bundled-store-opt-in put the own-store pair's
+  refusal into veyqctl's `backup_tool`, which `status` and the daily prune also call for the database alone. A proof that seems to need a root Linux host (a file's owner in a
   Docker volume) usually needs only a root container that mounts the volume (cr-restore-places-the-key-as-the-runtime-user
   waited two weeks on the owner for a run an agent then did in an hour); and an expected log line in a CR is measured, not
   remembered.
