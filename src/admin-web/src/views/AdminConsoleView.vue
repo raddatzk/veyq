@@ -242,7 +242,7 @@ async function signOut() {
         <!-- The running release, then what the daily check found beside it (uc.admin.learn-of-new-releases). -->
         <div v-if="serverPanel === 'release'" class="admin-shell__stack">
           <ReleaseVersionPanel />
-          <ReleaseNoticesPanel />
+          <ReleaseNoticesPanel @open-mail="serverPanel = 'mail'" />
         </div>
         <StorePanel v-else-if="serverPanel === 'store'" @changed="store = $event" />
         <ConfigSecretPanel v-else-if="serverPanel === 'configSecret'" />

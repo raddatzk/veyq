@@ -4,7 +4,9 @@
 //   - an unscheduled major is marked urgent, apart from the other notices (main flow 2);
 //   - a build with no release stamp says it checks nothing, rather than "nothing newer" (precondition);
 //   - switching the check off stores it and the panel says it no longer looks (A1), from the server's answer;
-//   - a source that is not an http(s) URL is refused in words.
+//   - a source that is not an http(s) URL is refused in words;
+//   - whether a find is also mailed is said beside the switch, from the instance mail's confirmation — and a mail state
+//     that cannot be read costs that line only, never the notices.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -14,7 +16,13 @@ vi.mock('./releaseNotices', async () => {
   return { ...actual, getReleaseNotices: vi.fn(), setReleaseCheck: vi.fn() }
 })
 
+vi.mock('./instanceMail', async () => {
+  const actual = await vi.importActual<typeof import('./instanceMail')>('./instanceMail')
+  return { ...actual, getInstanceMail: vi.fn() }
+})
+
 import ReleaseNoticesPanel from './ReleaseNoticesPanel.vue'
+import { getInstanceMail, type InstanceMailSettings } from './instanceMail'
 import { getReleaseNotices, setReleaseCheck, type InstanceReleaseNotice, type InstanceReleaseNotices } from './releaseNotices'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
@@ -46,6 +54,10 @@ function read(over: Partial<InstanceReleaseNotices> = {}): InstanceReleaseNotice
   return { releaseLine: true, enabled: true, source: undefined, lastSuccessAt: new Date('2026-10-16T04:00:00Z'), notices: [], ...over }
 }
 
+function mail(confirmation: InstanceMailSettings['confirmation']): InstanceMailSettings {
+  return { tls: true, passwordSet: true, configSecretState: 'OK', address: 'owner@example.com', confirmation }
+}
+
 async function mountPanel() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
   const wrapper = mount(ReleaseNoticesPanel, { global: { plugins: [router, i18n], stubs } })
@@ -57,6 +69,7 @@ describe('ReleaseNoticesPanel (uc.admin.learn-of-new-releases, admin-web)', () =
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
+    vi.mocked(getInstanceMail).mockResolvedValue(mail('NOT_CONFIGURED'))
   })
 
   it('marks an unscheduled major urgent, apart from a release of the running major', async () => {
@@ -104,5 +117,46 @@ describe('ReleaseNoticesPanel (uc.admin.learn-of-new-releases, admin-web)', () =
     await flushPromises()
     expect(setReleaseCheck).toHaveBeenCalledWith(true, 'ftp://mirror.example.com')
     expect(w.text()).toContain(i18n.global.t('releaseCheck.invalidSource'))
+  })
+
+  it('names the address a find is mailed to once instance mail is confirmed', async () => {
+    vi.mocked(getReleaseNotices).mockResolvedValue(read())
+    vi.mocked(getInstanceMail).mockResolvedValue(mail('CONFIRMED'))
+    const w = await mountPanel()
+    expect(w.find('.check-mail').text()).toBe(i18n.global.t('releaseCheck.mailed', { address: 'owner@example.com' }))
+    expect(w.find('.check-mail-open').exists()).toBe(false)
+  })
+
+  it('says finds are only shown without confirmed mail, and leads to Server → Mail', async () => {
+    vi.mocked(getReleaseNotices).mockResolvedValue(read())
+    const w = await mountPanel()
+    expect(w.find('.check-mail').text()).toContain(i18n.global.t('releaseCheck.mailNotSetUp'))
+    await w.find('.check-mail-open').trigger('click')
+    expect(w.emitted('openMail')).toHaveLength(1)
+    // Set up but not confirmed is its own sentence: the fix is a code, not the settings.
+    vi.mocked(getInstanceMail).mockResolvedValue(mail('CODE_SENT'))
+    const w2 = await mountPanel()
+    expect(w2.find('.check-mail').text()).toContain(i18n.global.t('releaseCheck.mailUnconfirmed'))
+    expect(w2.text()).not.toContain(i18n.global.t('releaseCheck.mailed', { address: 'owner@example.com' }))
+  })
+
+  it('says nothing about mail while the check is off or has nothing to compare', async () => {
+    vi.mocked(getInstanceMail).mockResolvedValue(mail('CONFIRMED'))
+    vi.mocked(getReleaseNotices).mockResolvedValue(read({ enabled: false }))
+    expect((await mountPanel()).find('.check-mail').exists()).toBe(false)
+    vi.mocked(getReleaseNotices).mockResolvedValue(read({ releaseLine: false }))
+    expect((await mountPanel()).find('.check-mail').exists()).toBe(false)
+    // Control on the same predicate: on, with a release line, the line is there.
+    vi.mocked(getReleaseNotices).mockResolvedValue(read())
+    expect((await mountPanel()).find('.check-mail').exists()).toBe(true)
+  })
+
+  it('still shows the notices when the mail state cannot be read', async () => {
+    vi.mocked(getReleaseNotices).mockResolvedValue(read({ notices: [notice('RELEASE', '1.9')] }))
+    vi.mocked(getInstanceMail).mockRejectedValue(httpError(500, 'internal'))
+    const w = await mountPanel()
+    expect(w.findAll('.notice-list .notice')).toHaveLength(1)
+    expect(w.text()).not.toContain(i18n.global.t('releaseCheck.loadFailed'))
+    expect(w.find('.check-mail').exists()).toBe(false)
   })
 })

@@ -47,7 +47,8 @@ import {
 import { eraseAccount, listAccountErasures, stopAccountErasure } from '../features/instance/accounts'
 import { CliError, renderResult } from './output'
 import { getInstanceRelease } from '../features/instance/release'
-import { getReleaseNotices, setReleaseCheck } from '../features/instance/releaseNotices'
+import { getReleaseNotices, noticesMailedTo, setReleaseCheck } from '../features/instance/releaseNotices'
+import { getInstanceMail } from '../features/instance/instanceMail'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import {
   BUNDLED_STORE_UPDATE,
@@ -417,10 +418,14 @@ export const COMMANDS: Record<string, Command> = {
   release: {
     usage: 'release',
     summary:
-      'Print the release version the running instance was published under, the daily release check (on or off, its source, its last success) and every newer release it found — an UNSCHEDULED_MAJOR means upgrade now.',
+      'Print the release version the running instance was published under, the daily release check (on or off, its source, its last success), every newer release it found — an UNSCHEDULED_MAJOR means upgrade now — and noticesMailedTo: the address a new find is also mailed to, or null while instance mail is not set up and confirmed (then finds are only shown).',
     flags: {},
     // `release` stays the document's first key, so a script that read it before still reads it.
-    run: async () => ({ ...(await getInstanceRelease()), ...(await getReleaseNotices()) }),
+    run: async () => ({
+      ...(await getInstanceRelease()),
+      ...(await getReleaseNotices()),
+      noticesMailedTo: noticesMailedTo(await getInstanceMail()),
+    }),
   },
   'release check': {
     usage: 'release check <on|off>',

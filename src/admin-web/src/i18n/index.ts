@@ -132,7 +132,11 @@ const en = {
     "sourceHint": "Leave empty for veyq’s GitHub Releases, or enter the http(s) address of a mirror in the release layout veyqctl reads.",
     "save": "Save",
     "invalidSource": "The source must be an http or https address, without a login, query or fragment.",
-    "saveFailed": "Couldn’t save the release check."
+    "saveFailed": "Couldn’t save the release check.",
+    "mailed": "Each new find is also mailed to {address}.",
+    "mailNotSetUp": "Finds are only shown here: this server has no mail of its own yet. To get them by mail, set it up and confirm it.",
+    "mailUnconfirmed": "Finds are only shown here: this server’s mail is set up but not confirmed. Confirm it to get them by mail.",
+    "openMail": "Open Server → Mail"
   },
   "instanceMail": {
     "navTitle": "Mail",
@@ -802,7 +806,11 @@ const de: typeof en = {
     "sourceHint": "Leer lassen für die GitHub-Releases von veyq, oder die http(s)-Adresse eines Spiegels im Release-Layout eintragen, das veyqctl liest.",
     "save": "Speichern",
     "invalidSource": "Die Quelle muss eine http- oder https-Adresse sein, ohne Anmeldung, Query oder Fragment.",
-    "saveFailed": "Die Release-Prüfung konnte nicht gespeichert werden."
+    "saveFailed": "Die Release-Prüfung konnte nicht gespeichert werden.",
+    "mailed": "Jeder neue Fund wird dir auch an {address} gemailt.",
+    "mailNotSetUp": "Funde werden nur hier angezeigt: Dieser Server hat noch keine eigene E-Mail. Damit sie dir gemailt werden, richte sie ein und bestätige sie.",
+    "mailUnconfirmed": "Funde werden nur hier angezeigt: Die E-Mail dieses Servers ist eingerichtet, aber nicht bestätigt. Bestätige sie, damit sie dir gemailt werden.",
+    "openMail": "Server → E-Mail öffnen"
   },
   "instanceMail": {
     "navTitle": "E-Mail",
