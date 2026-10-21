@@ -49,7 +49,7 @@ tags:
 
   - name: instance-operator
     description: >
-      The operating mode (ADR 0093 § 14, ADR 0088 decision 14) and the values a host publishes about itself — the
+      The values a host publishes about itself — the
       instance contact, the provider identification, the supervisory authority (ADR 0093 § 11, ADR 0035 decisions
       6–7) — with the contact's private notification address and its code confirmation (ADR 0097 decision 5). A tag
       of its own, so its resource owns the `/api/instance/operator` subtree. The public read of the published values
@@ -58,9 +58,9 @@ tags:
   - name: instance-guest-write-record
     description: >
       How long the guest-write record keeps a row (ADR 0093 § 10, ADR 0092 § 2): N days, an instance setting the Server
-      Owner sets (ADR 0089), and the deletion of one identity's rows when its guest objects (GDPR Art. 21). Whether the
-      record is kept at all is the capability switch `core.public-shares.guest-write-record`, not this. A tag of its
-      own, so its resource owns the
+      Owner sets (ADR 0089), and the deletion of one identity's rows when its guest objects (GDPR Art. 21). The record
+      has no switch: it is kept wherever a guest may write, which `core.public-shares.contribute` and `.drop-box`
+      decide. A tag of its own, so its resource owns the
       `/api/instance/guest-write-record` subtree.
 
   - name: instance-backup-retention
@@ -1570,7 +1570,7 @@ paths:
           description: >
             `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
             `statement_required` = the block is over content and carries no statement; `statement_facts_required` /
-            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
+            `statement_provision_required` = the facts / the provision were not given (ADR 0093 § 7).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1711,8 +1711,7 @@ paths:
         uc.admin.operator-details): the instance contact with its languages, the address statements and disclosures
         name, the provider identification and the competent supervisory authority — all public through
         `GET /api/operator` — and the notification address, which is not public and leaves the server only here, with
-        where its confirmation stands (ADR 0097 decision 5). Also the operating mode in effect, which decides whether
-        admin-web warns about an empty value (ADR 0093 § 14), and the recipients and data-protection officer the
+        where its confirmation stands (ADR 0097 decision 5). Also the recipients and data-protection officer the
         privacy notice names (ADR 0035 decision 8), with the recipients the instance suggests from its own
         configuration. Every value may be empty. Server-Owner only.
       security:
@@ -1724,7 +1723,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/InstanceOperator" }
               example:
-                operatingMode: ORGANISATION
                 contactEmail: contact@example.org
                 contactLanguages: [de, en]
                 statementEmail: moderation@example.org
@@ -1765,8 +1763,8 @@ paths:
       x-veyq-channel: admin
       summary: Set the instance contact, the provider identification and the supervisory authority.
       description: >
-        A full replace: a value omitted or null is cleared. Nothing is required, in either operating mode — required
-        means warned in admin-web, never refused (ADR 0093 § 14). A notification address that is set and not confirmed
+        A full replace: a value omitted or null is cleared. Nothing is required and nothing warns: an empty value
+        renders as "not stated by this operator" wherever a text names it (ADR 0093 § 14). A notification address that is set and not confirmed
         gets a one-time code through instance mail, but only while the Server Owner's own instance mail is confirmed
         (`instanceMailReady`); typed into `POST /api/instance/operator/notification/confirmation`, it confirms the
         address. A changed address is unconfirmed by that change alone; setting the confirmed address again keeps it
@@ -1823,8 +1821,7 @@ paths:
       summary: Clear every value, the notification address and its confirmation included.
       description: >
         Clears the contact, the identification, the supervisory authority, the recipients, the data-protection officer
-        and the notification address with any code and confirmation. The operating mode is not a value here and stays.
-        Server-Owner only.
+        and the notification address with any code and confirmation. Server-Owner only.
       security:
         - bearerAuth: []
       responses:
@@ -1905,90 +1902,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: rate_limited }
-
-  /api/instance/operator/mode:
-    get:
-      tags: [instance-operator]
-      operationId: getInstanceOperatingMode
-      x-veyq-channel: admin
-      summary: Read the operating mode and the switches its preset names.
-      description: >
-        The operating mode in effect (ADR 0093 § 14) — `ORGANISATION` where none was ever chosen (`chosen: false`) —
-        and every capability entry the catalog gives a value per mode, with its own instance switch now, so admin-web
-        and the CLI can list which switches choosing the other mode would change before it is set (ADR 0088 decision
-        14). Server-Owner only.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: The mode and the preset.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/InstanceOperatingMode" }
-              example:
-                mode: ORGANISATION
-                chosen: true
-                preset: []
-        "401":
-          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: authentication_failed }
-        "403":
-          description: The caller is authenticated but is not the Server Owner.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: not_server_owner }
-    put:
-      tags: [instance-operator]
-      operationId: setInstanceOperatingMode
-      x-veyq-concurrency:
-        mode: last-writer-wins
-        reason: >-
-          One writer: the Server Owner; a mode is one value, and setting it again sets its preset again by design.
-      x-veyq-channel: admin
-      summary: Set the operating mode, and with it the preset's instance switches.
-      description: >
-        Stores the mode and, in the same transaction, sets the instance-level switch of every capability entry whose
-        catalog `modes` gives a value for it — and nothing more: a tenant's switches and every entry without a preset
-        are untouched, and each preset switch stays an ordinary switch afterwards (ADR 0088 decision 14). Setting the
-        mode it already has sets its preset again. The notice and, for `PRIVATE`, the operator's tick are admin-web's
-        and the CLI's: the server does not record them (ADR 0093 § 14). Server-Owner only.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/InstanceOperatingModeUpdate" }
-            example: { mode: PRIVATE }
-      responses:
-        "200":
-          description: Set; the mode and the preset as they now stand.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/InstanceOperatingMode" }
-        "400":
-          description: The request was malformed (no mode, or one that is neither PRIVATE nor ORGANISATION).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invalid_request }
-        "401":
-          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: authentication_failed }
-        "403":
-          description: The caller is authenticated but is not the Server Owner.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: not_server_owner }
-        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/instance/guest-write-record:
     get:
@@ -3740,19 +3653,15 @@ components:
       type: object
       description: >
         The instance contact, the provider identification and the supervisory authority (all public through
-        `GET /api/operator`), the notification address (admin channel only) with its confirmation, and the operating
-        mode in effect; the recipients and the data-protection officer the privacy notice names (ADR 0035 decision 8),
+        `GET /api/operator`), the notification address (admin channel only) with its confirmation; the recipients and the data-protection officer the privacy notice names (ADR 0035 decision 8),
         with what the instance itself suggests as a recipient. Every value may be null or empty.
       required:
-        - operatingMode
         - contactLanguages
         - notificationConfirmation
         - instanceMailReady
         - recipients
         - recipientSuggestions
       properties:
-        operatingMode:
-          $ref: "#/components/schemas/OperatingMode"
         contactEmail:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -4089,63 +3998,6 @@ components:
           example: "48213075"
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 16)'
 
-    InstanceOperatingMode:
-      type: object
-      description: The operating mode in effect, whether one was ever chosen, and the preset it sets.
-      required: [mode, chosen, preset]
-      properties:
-        mode:
-          $ref: "#/components/schemas/OperatingMode"
-        chosen:
-          x-veyq-visibility: flag
-          type: boolean
-          description: False on an instance where no mode was ever chosen; it then runs as ORGANISATION.
-          example: true
-        preset:
-          type: array
-          description: Every capability entry the catalog gives a value per mode, in catalog order; empty when none does.
-          items: { $ref: "#/components/schemas/InstanceOperatingModePresetEntry" }
-
-    InstanceOperatingModePresetEntry:
-      type: object
-      description: One entry of the preset (ADR 0088 decision 14) — its value in each mode, and its own instance switch now.
-      # "off" quoted, here as on the property: bare, YAML 1.1 reads it as the boolean false, and the client generator
-      # then refuses the whole spec ("required is not of type `string`").
-      required: [id, title, onInPrivate, onInOrganisation, "off"]
-      properties:
-        id:
-          x-veyq-visibility: public
-          type: string
-          description: The capability id, as `listInstanceCapabilities` serves it.
-          maxLength: 64
-          example: core.public-shares.guest-write-record
-        title:
-          $ref: "#/components/schemas/InstanceCapabilityText"
-        onInPrivate:
-          x-veyq-visibility: flag
-          type: boolean
-          description: Whether the PRIVATE mode switches the entry on (true) or off (false).
-          example: false
-        onInOrganisation:
-          x-veyq-visibility: flag
-          type: boolean
-          description: Whether the ORGANISATION mode switches the entry on (true) or off (false).
-          example: true
-        "off":
-          x-veyq-visibility: flag
-          type: boolean
-          description: The entry's own instance switch now — true while the Server Owner has it switched off.
-          example: false
-
-    InstanceOperatingModeUpdate:
-      type: object
-      description: The mode to set.
-      required: [mode]
-      properties:
-        mode:
-          $ref: "#/components/schemas/OperatingMode"
-
-
     InstanceGuestWriteRecord:
       type: object
       description: How many days the guest-write record keeps a row, and whether the Server Owner set it.
@@ -4221,8 +4073,6 @@ components:
           type: integer
           description: How many of this identity's rows a hold copied; they stay until their hold ends.
           example: 1
-    OperatingMode:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
 
     # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
     ServerOwnerStatementInput:

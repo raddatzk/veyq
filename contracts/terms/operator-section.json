@@ -1,7 +1,7 @@
 {
-  "revision": 2,
+  "revision": 3,
   "draft": true,
-  "note": "The operator section of the terms (ADR 0035 decision 6, ADR 0093 § 14; uc.admin.tenant-terms, uc.account.accept-terms, uc.sharing.share-accept): fixed text veyq ships, DE and EN, served after every space's own terms by the endpoints that serve them, filled with the values the Server Owner sets. Read by the backend alone (core/terms/OperatorSection.kt renders it); clients render what the endpoints serve. Nobody edits it at runtime. 'revision' moves with the text and only with it, in the release that changes it; a bump reopens every terms gate. 'draft' is true until a qualified legal review (ADR 0093 § Legal basis: every text needs one before anything ships); while it is true every rendering starts with 'draftBanner'. Each passage is marked by 'part': 'both' (both variants), 'full' (only the full variant, the club, organisation or company mode's; the private mode's reduced variant leaves it out — exactly what ADR 0035 decision 6 lists under drops) or 'record' (the pointer to the guest-write record's GDPR Art. 13 information, rendered exactly while core.public-shares.guest-write-record is on for the space, in either variant; the information itself, with its right to object apart, is the instance privacy notice's, contracts/terms/privacy-notice.json — one home for every Art. 13 passage, Q27 of cr-instance-privacy-notice, which moved the revision to 2). Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line with a placeholder whose value is empty is left out where the line is 'optional', in the reduced variant (the private mode: an unset value is simply absent, ADR 0035 decision 8's rule, owner Q26); otherwise the value renders as 'gap' — a visible 'not stated by this operator', never an empty sentence. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {supervisoryAuthority}, {contactEmail}, {contactLanguages} (the tags, joined by ', '), {privacyContact} (the address the disclosures name, else the contact) and {retention} (N with its unit, from 'retentionUnit'). Each takes a value the Server Owner typed to be published, never user data; a newline in a value renders as ', '.",
+  "note": "The operator section of the terms (ADR 0035 decision 6, ADR 0093 § 14; uc.admin.tenant-terms, uc.account.accept-terms, uc.sharing.share-accept): fixed text veyq ships, DE and EN, served after every space's own terms by the endpoints that serve them, filled with the values the Server Owner sets. Read by the backend alone (core/terms/OperatorSection.kt renders it); clients render what the endpoints serve. Nobody edits it at runtime. 'revision' moves with the text and only with it, in the release that changes it; a bump reopens every terms gate. 'draft' is true until a qualified legal review (ADR 0093 § Legal basis: every text needs one before anything ships); while it is true every rendering starts with 'draftBanner'. The section has one form on every instance (ADR 0093 § 14: no operating mode, revision 3). Every passage renders in order, except the one marked 'record': true — the pointer to the guest-write record's GDPR Art. 13 information, served apart as the section's 'record' and always present, since the record is kept wherever a guest may write (ADR 0093 § 10); the information itself, with its right to object apart, is the instance privacy notice's, contracts/terms/privacy-notice.json — one home for every Art. 13 passage, Q27 of cr-instance-privacy-notice. Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line with a placeholder whose value is empty is left out where the line is 'optional'; otherwise the value renders as 'gap' — a visible 'not stated by this operator', never an empty sentence. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {supervisoryAuthority}, {contactEmail}, {contactLanguages} (the tags, joined by ', '), {privacyContact} (the address the disclosures name, else the contact) and {retention} (N with its unit, from 'retentionUnit'). Each takes a value the Server Owner typed to be published, never user data; a newline in a value renders as ', '.",
   "draftBanner": {
     "en": "*Draft: this section has not yet been reviewed by a lawyer.*",
     "de": "*Entwurf: Dieser Abschnitt ist noch nicht anwaltlich geprüft.*"
@@ -23,7 +23,6 @@
   "passages": [
     {
       "id": "intro",
-      "part": "both",
       "lines": [
         {
           "en": "## On this instance: reports, measures and what is kept",
@@ -37,7 +36,6 @@
     },
     {
       "id": "provider",
-      "part": "both",
       "lines": [
         {
           "en": "",
@@ -64,7 +62,6 @@
     },
     {
       "id": "notice",
-      "part": "both",
       "lines": [
         {
           "en": "### Reporting content",
@@ -102,7 +99,6 @@
     },
     {
       "id": "kept",
-      "part": "both",
       "lines": [
         {
           "en": "### What is kept after a report",
@@ -144,7 +140,6 @@
     },
     {
       "id": "measures",
-      "part": "both",
       "lines": [
         {
           "en": "### Measures",
@@ -178,7 +173,6 @@
     },
     {
       "id": "statement",
-      "part": "both",
       "lines": [
         {
           "en": "### Being told why, and objecting",
@@ -207,8 +201,7 @@
       ]
     },
     {
-      "id": "statement-full",
-      "part": "full",
+      "id": "statement-content",
       "lines": [
         {
           "en": "",
@@ -222,7 +215,6 @@
     },
     {
       "id": "deferral",
-      "part": "full",
       "lines": [
         {
           "en": "Only an authority can ask for those affected to be told later: then the statement waits up to six weeks, renewed at most once, and goes out at the end.",
@@ -232,7 +224,6 @@
     },
     {
       "id": "authorities",
-      "part": "full",
       "lines": [
         {
           "en": "### Authorities and contact",
@@ -262,7 +253,7 @@
     },
     {
       "id": "record",
-      "part": "record",
+      "record": true,
       "lines": [
         {
           "en": "### Your IP address when you add something as a guest",

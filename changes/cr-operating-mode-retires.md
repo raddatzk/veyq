@@ -100,7 +100,7 @@ and PrimeVue; those stay.
 
 ## Phases
 
-- [ ] **1 contracts**: decisions 1, 2 and 4 in `contracts/` (catalog, OpenAPI, the three fixed texts with trap 4's
+- [x] **1 contracts**: decisions 1, 2 and 4 in `contracts/` (catalog, OpenAPI, the three fixed texts with trap 4's
   sentence), the `modes` rule out of `validate_capabilities.py`. · Done when: `generate:api` in both clients and the
   contracts guards green; the predicted reds — the backend's users of the removed generated types, both clients'
   setup request and `variant` readers — seen once by building.

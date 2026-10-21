@@ -666,9 +666,9 @@ paths:
         **Its statement of reasons is sent with it** (ADR 0093 § 7, uc.moderation.object-to-a-measure): the ground, and
         the facts sealed to the moderation key and once more under a fresh `K_facts`, which alone is wrapped to each
         affected member's identity (`getModerationStatementRecipients` lists them for this step and target). The
-        statement's id is the client's, the facts bound to it (`409 id_taken` when it is not free). In the *club, organisation or company*
-        operating mode the facts and the provision or clause relied on are required (`400 statement_facts_required`,
-        `400 statement_provision_required`); in *private* both are optional. Facts
+        statement's id is the client's, the facts bound to it (`409 id_taken` when it is not free). The facts and the
+        provision or clause relied on are required (`400 statement_facts_required`,
+        `400 statement_provision_required`; ADR 0093 § 7). Facts
         sealed for other members than the server would tell are refused (`409 statement_recipients_changed`: read the
         recipients again). The case is then `DECIDED` and its hold ends six months after the statement is sent — from
         the decision where nobody can be told. The reporters in `reporterNotices` are told the decision, as on a
@@ -692,7 +692,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ModerationCase" }
         "400":
-          description: "`invalid_request` = the request was malformed, or the facts for the log, the facts sealed once and their wrapped keys do not come together; `statement_facts_required` / `statement_provision_required` = the operating mode asks for the facts / the provision or clause relied on and none was given."
+          description: "`invalid_request` = the request was malformed, or the facts for the log, the facts sealed once and their wrapped keys do not come together; `statement_facts_required` / `statement_provision_required` = the facts / the provision or clause relied on were not given."
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: statement_facts_required } }
         "401": { $ref: "#/components/responses/AuthenticationFailed" }
@@ -968,8 +968,7 @@ paths:
       summary: The statements of reasons addressed to the caller.
       description: >
         ADR 0093 § 7 (uc.moderation.object-to-a-measure step 5): every statement that names the caller as a recipient,
-        newest first — the measure, its target, the ground, how it came about, its form by the operating mode now (`FULL`
-        or `REDUCED`, ADR 0093 § 14), the facts sealed to the caller's identity, whether the measure is in force, the
+        newest first — the measure, its target, the ground, how it came about, the facts sealed to the caller's identity, whether the measure is in force, the
         contact address statements name, and the objection's state and answer. Never the moderator.
       security:
         - bearerAuth: []
@@ -1668,7 +1667,7 @@ components:
       type: object
       description: One case as the moderation surface shows it (uc.moderation.review-a-case step 2).
       required: [id, itemKind, itemId, scopeId, category, state, reports, measures, proposals, targets, events,
-        statementForm, objections, origin, orders]
+        objections, origin, orders]
       properties:
         origin: { $ref: "#/components/schemas/ModerationCaseOrigin" }
         orders:
@@ -1676,7 +1675,6 @@ components:
           maxItems: 100
           description: The authority's orders that opened this case (an `ORDER` case's); empty for a report's.
           items: { $ref: "#/components/schemas/AuthorityOrder" }
-        statementForm: { $ref: "#/components/schemas/StatementForm" }
         objections:
           type: array
           maxItems: 1000
@@ -2206,16 +2204,6 @@ components:
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
 
 
-    StatementForm:
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        The form a statement of reasons takes, by the instance's operating mode now (ADR 0093 § 14): `FULL` (club,
-        organisation or company) or `REDUCED` (private). The template in `contracts/moderation/statement-of-reasons.json`
-        marks what only `FULL` carries.
-      enum: [FULL, REDUCED]
-      example: FULL
-
     StatementBasis:
       x-veyq-visibility: enum
       type: string
@@ -2482,7 +2470,7 @@ components:
       description: >
         A statement of reasons as an affected member reads it (ADR 0093 § 7) — the clear fields the template is rendered
         from, the facts sealed once, and their key wrapped to the reader. It names the host, never the moderator.
-      required: [id, caseId, measureKind, targetId, ground, basis, form, sentAt, roles, inForce, endedWithTarget, canObject]
+      required: [id, caseId, measureKind, targetId, ground, basis, sentAt, roles, inForce, endedWithTarget, canObject]
       properties:
         id: { type: string, format: uuid, x-veyq-visibility: id, example: 5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e }
         caseId:
@@ -2531,7 +2519,6 @@ components:
         ground: { $ref: "#/components/schemas/ModerationGround" }
         provision: { $ref: "#/components/schemas/StatementProvision" }
         basis: { $ref: "#/components/schemas/StatementBasis" }
-        form: { $ref: "#/components/schemas/StatementForm" }
         sentAt:
           x-veyq-visibility: time
           type: string

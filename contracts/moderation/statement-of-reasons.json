@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 16(5), 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by src/web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. A passage is rendered in order when its 'full' is false, or when the form is FULL (ADR 0093 § 14: the private mode's REDUCED form leaves out every passage marked full: true). A passage with 'when' is rendered only when that value is there: 'facts' when facts were written (the full form requires them), 'provision' when the provision or clause relied on was named (the full form requires it), 'contact' when the instance names an address, 'inApp' for a moderator's measure (the objection is made in veyq), 'byContact' for a Server Owner's step when the instance names an address (the objection goes to it). A moderator's measure's mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place; a Server Owner's step's mail carries them after the facts passage, the Server Owner's own words (ADR 0093 § 7, ADR 0049 decision 2). Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground}, {provision} and {contact}, and {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field or the clear value named, never content. 'reporterDecision' is the redress a reporter's decision mail carries after its outcome (DSA Art. 16(5), Art. 53), in the same form. Every text is a draft until a qualified legal review (ADR 0093 § Legal basis). It names the host, never the moderator.",
+  "version": 2,
+  "note": "The statement of reasons (ADR 0093 § 7, DSA Art. 16(5), 17; uc.moderation.object-to-a-measure): ONE template, rendered by the backend for the mail (core/moderation/statement/StatementTemplate.kt) and by src/web/ on the placeholder (src/features/moderation/statement/template.ts); each pins these texts and a conformance test in each compares them with this file, so the two cannot drift. There is one form on every instance (ADR 0093 § 14: no operating mode, version 2). A passage is rendered in order; one with 'when' only when that value is there: 'facts' when facts were written (required of every statement), 'provision' when the provision or clause relied on was named (required of every statement), 'inApp' for a moderator's measure (the objection is made in veyq), 'byContact' for a Server Owner's step (the objection goes to the instance contact). {contact} renders as 'gap' while the instance names no address — a visible 'not stated by this operator', never an empty sentence (ADR 0093 §§ 7, 14). A moderator's measure's mail never carries the facts: it renders 'factsInVeyq' in the facts passage's place; a Server Owner's step's mail carries them after the facts passage, the Server Owner's own words (ADR 0093 § 7, ADR 0049 decision 2). Several roles are joined by 'rolesJoiner'. Placeholders are {date} (when the statement was sent), {measure}, {reach}, {roles}, {basis}, {ground}, {provision} and {contact}, and {domain} (the tenant's host, ADR 0049); each takes the text this file gives for the clear field or the clear value named, never content. 'reporterDecision' is the redress a reporter's decision mail carries after its outcome (DSA Art. 16(5), Art. 53); its coordinator sentence carries its own 'where the DSA applies to this instance', since veyq cannot know whether it does and a right only the DSA grants is never promised unconditionally (ADR 0093 § 7). Every text is a draft until a qualified legal review (ADR 0093 § Legal basis). It names the host, never the moderator.",
   "measures": {
     "SHARE": {
       "en": {
@@ -99,6 +99,10 @@
     "en": " and ",
     "de": " und "
   },
+  "gap": {
+    "en": "not stated by this operator",
+    "de": "von der Betreiberseite nicht angegeben"
+  },
   "basis": {
     "REPORT": {
       "en": "a report by someone who could see it",
@@ -138,78 +142,65 @@
   "passages": [
     {
       "id": "measure",
-      "full": false,
       "en": "On {date}, the people who run this veyq instance took a measure: {measure}. {reach}",
       "de": "Am {date} wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: {measure}. {reach}"
     },
     {
       "id": "roles",
-      "full": false,
       "en": "You are told as {roles}.",
       "de": "Du erhältst diese Begründung als {roles}."
     },
     {
       "id": "facts",
-      "full": false,
       "when": "facts",
       "en": "What they found:",
       "de": "Was sie festgestellt haben:"
     },
     {
       "id": "basis",
-      "full": true,
       "en": "The measure was taken after {basis}.",
       "de": "Die Maßnahme wurde ergriffen nach {basis}."
     },
     {
       "id": "automation",
-      "full": true,
       "en": "No automated means found or decided it: a person did.",
       "de": "Kein automatisiertes Verfahren hat das erkannt oder entschieden, sondern ein Mensch."
     },
     {
       "id": "ground",
-      "full": false,
       "en": "The ground: {ground}.",
       "de": "Der Grund: {ground}."
     },
     {
       "id": "provision",
-      "full": false,
       "when": "provision",
       "en": "It relies on {provision}.",
       "de": "Sie stützt sich auf {provision}."
     },
     {
       "id": "scope",
-      "full": true,
       "en": "It applies wherever this veyq instance is reached, and lasts until it is lifted.",
       "de": "Sie gilt überall, wo diese veyq-Instanz erreichbar ist, und dauert an, bis sie aufgehoben wird."
     },
     {
       "id": "objection",
-      "full": false,
       "when": "inApp",
       "en": "If you disagree, you can object once, in veyq, where you see this statement. Another moderator reviews your objection where there is one.",
       "de": "Wenn du nicht einverstanden bist, kannst du einmal widersprechen, in veyq, dort, wo du diese Begründung siehst. Eine andere Person aus der Moderation prüft deinen Widerspruch, sofern es eine gibt."
     },
     {
       "id": "objectionByContact",
-      "full": false,
       "when": "byContact",
       "en": "If you disagree, write to {contact}: the people who run this instance look at it again.",
       "de": "Wenn du nicht einverstanden bist, schreib an {contact}: Wer diese Instanz betreibt, prüft es erneut."
     },
     {
       "id": "contact",
-      "full": false,
-      "when": "contact",
       "en": "Questions go to {contact}.",
       "de": "Fragen gehen an {contact}."
     },
     {
       "id": "courts",
-      "full": true,
       "en": "You can also go to court; you do not need to object first.",
       "de": "Du kannst dich auch an ein Gericht wenden; ein Widerspruch vorher ist dafür nicht nötig."
     }
@@ -218,28 +209,23 @@
     "passages": [
       {
         "id": "again",
-        "full": false,
         "en": "If you have more information, you can report it again.",
         "de": "Wenn du weitere Informationen hast, kannst du es erneut melden."
       },
       {
         "id": "contact",
-        "full": false,
-        "when": "contact",
         "en": "Questions go to {contact}.",
         "de": "Fragen gehen an {contact}."
       },
       {
         "id": "courts",
-        "full": true,
         "en": "You can also go to court.",
         "de": "Du kannst dich auch an ein Gericht wenden."
       },
       {
         "id": "coordinator",
-        "full": true,
-        "en": "You can also complain to the Digital Services Coordinator of the Member State where you live or are established.",
-        "de": "Du kannst dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist."
+        "en": "Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator of the Member State where you live or are established.",
+        "de": "Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt, kannst du dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist."
       }
     ]
   },

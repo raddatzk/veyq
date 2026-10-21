@@ -81,10 +81,8 @@ paths:
         as-is. It does not verify the password (there is none) — `authPublicKey` is stored for later
         challenge-response login. In the same transaction it stores `moderationEpoch`, epoch 1 of the instance
         moderation key sealed to this identity, and records the Server Owner as its first moderator (ADR 0099 § 3);
-        an epoch that is no public bundle answers `400 invalid_request` and stores nothing. It stores `operatingMode`,
-        the Server Owner's own assessment of how the instance is run (ADR 0093 § 14), and in that same transaction sets
-        the instance-level switch of every capability entry whose catalog `modes` names a value for it (ADR 0088
-        decision 14); a request without a mode answers `400 invalid_request`.
+        an epoch that is no public bundle answers `400 invalid_request` and stores nothing. Setup asks for no operator
+        value: every one is optional and set later in admin-web (ADR 0093 § 14).
       requestBody:
         required: true
         content:
@@ -101,7 +99,6 @@ paths:
                   wrappedKey: d3JhcHBlZC1tYXN0ZXIta2V5
               secretKeyProofPublicKey: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
               moderationEpoch: { kemPublicKey: a2VtLXB1YmxpYy1rZXk=, signPublicKey: c2lnbi1wdWJsaWMta2V5, sealedGrant: c2VhbGVkLWdyYW50 }
-              operatingMode: PRIVATE
       responses:
         "201":
           description: The Server Owner was created and setup is now locked.
@@ -256,7 +253,6 @@ components:
         - authPublicKey
         - secretKeyProofPublicKey
         - moderationEpoch
-        - operatingMode
       properties:
         email:
           x-veyq-visibility: pii
@@ -320,13 +316,6 @@ components:
         moderationEpoch:
           $ref: "#/components/schemas/ModerationEpochOne"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
-        operatingMode:
-          # Required, so no instance completes setup without one (ADR 0093 § 14): an enum is refused by
-          # deserialization when absent, before the handler.
-          $ref: "#/components/schemas/OperatingMode"
-
-    OperatingMode:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatingMode'
 
     SetupResult:
       type: object
