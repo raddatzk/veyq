@@ -445,6 +445,8 @@ components:
         member whose sign-in is blocked, or to each owner of the tenant taken offline, **with the facts**: they cannot
         sign in to open a sealed copy (owner decisions Q24-Q25 of cr-statement-legal-gaps). The server mails the facts
         once, after the step committed, and keeps them only as `factsForLog`, sealed; the objection goes to the instance contact.
+        The step's answer reports whom that mail reached (`StatementDelivery`); a recipient it did not reach is not mailed
+        again, so the Server Owner tells them through the contact, with the words their own client still holds.
         The full form requires the facts and the provision (`400 statement_facts_required`,
         `400 statement_provision_required`); `facts` and `factsForLog` come together or not at all (`400
         invalid_request`).
@@ -475,6 +477,40 @@ components:
             - $ref: "#/components/schemas/SealedStepFacts"
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    StatementDelivery:
+      type: object
+      description: >
+        Whom the mail of a Server Owner's step over content reached (ADR 0093 § 7: "So the step reports what the mail
+        reached"). Request-scoped: it answers the step and is never stored — each recipient's `mailedAt` stays the only
+        stored trace, and the facts are mailed once, so a recipient not reached is told by the Server Owner through the
+        instance contact. The step stands whatever this says; it is never refused or rolled back for want of mail.
+      required: [outcome, notReached]
+      properties:
+        outcome:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `REACHED` = every recipient's mail went out; `NOT_ALL_REACHED` = at least one did not — no instance mail is
+            set up, or the send failed; `NOBODY_TO_TELL` = the step had no recipient (a tenant without an owner, an
+            account erased before the send); `UNKNOWN` = the recipients could not be read after the step committed, so
+            the server cannot say.
+          enum: [REACHED, NOT_ALL_REACHED, NOBODY_TO_TELL, UNKNOWN]
+          example: NOT_ALL_REACHED
+        notReached:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The addresses of the recipients the statement's mail did not reach, answered on the admin channel to the
+            Server Owner who must tell them through the instance contact (ADR 0093 § 7); they are member and owner
+            addresses the Server Owner already reads there (the tenant's owners, the sign-in block form). Never stored.
+          type: array
+          description: The addresses whose mail did not go out; empty unless `outcome` is `NOT_ALL_REACHED`.
+          maxItems: 10000
+          items:
+            type: string
+            format: email
+            maxLength: 254
+          example: [owner@example.com]
 
     # An authority's order (ADR 0093 § 12, uc.moderation.authority-order) — single-sourced: a moderator enters it on the
     # public listener (moderation.openapi.yaml) and the Server Owner on the admin channel (instance.openapi.yaml).

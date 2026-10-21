@@ -1550,7 +1550,8 @@ paths:
         `overContent` says so. Then `statement` is required (`400 statement_required`) and is written with the block, in
         its transaction — the row, its recipient (the account), the log event — and mailed to the account's address with
         the facts once the block committed. A block with no case, no proposal and `overContent` false carries none. A
-        block from a proposal with no case named is recorded on the proposal's case.
+        block from a proposal with no case named is recorded on the proposal's case. The answer reports whom the
+        statement's mail reached (`statementDelivery`, absent without a statement); the block stands whatever it says.
       security:
         - bearerAuth: []
       requestBody:
@@ -1561,10 +1562,10 @@ paths:
             example: { address: member@example.com, caseId: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
       responses:
         "200":
-          description: Blocked; the steps as they now stand.
+          description: Blocked; the steps as they now stand and, over content, whom the statement's mail reached.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ModerationSteps" }
+              schema: { $ref: "#/components/schemas/SignInBlockResult" }
         "400":
           description: >
             `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
@@ -2593,6 +2594,16 @@ components:
           type: array
           maxItems: 10000
           items: { $ref: "#/components/schemas/AccountSignInBlock" }
+
+    SignInBlockResult:
+      type: object
+      description: A sign-in block's answer — the steps as they now stand and, over content, whom its statement reached.
+      required: [steps]
+      properties:
+        steps: { $ref: "#/components/schemas/ModerationSteps" }
+        statementDelivery:
+          description: Whom the statement's mail reached, when the block was over content; absent otherwise.
+          $ref: "#/components/schemas/StatementDelivery"
 
     OpenModerationProposal:
       type: object
@@ -4216,6 +4227,8 @@ components:
     # A Server Owner's step over content carries its statement (ADR 0093 § 7), single-sourced in _common.
     ServerOwnerStatementInput:
       $ref: '_common.openapi.yaml#/components/schemas/ServerOwnerStatementInput'
+    StatementDelivery:
+      $ref: '_common.openapi.yaml#/components/schemas/StatementDelivery'
 
     # An authority's order is single-sourced with the moderator's door (moderation.openapi.yaml, enterModerationOrder).
     AuthorityOrderKind:

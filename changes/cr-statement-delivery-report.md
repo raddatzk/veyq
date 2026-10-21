@@ -1,7 +1,7 @@
 ---
 id: cr-statement-delivery-report
 title: A Server Owner's step over content reports whom its statement reached
-status: planned
+status: in-progress
 satisfies: ["uc.admin.suspend-tenant", "uc.admin.delete-tenant", "uc.moderation.object-to-a-measure", "uc.moderation.take-a-measure"]
 adrs: ["0093"]
 invariants:
