@@ -172,14 +172,14 @@ test(
         .filter({ has: page.locator('.veyq-badge', { hasText: /^Open$/ }) }),
     )
     await expect(page.locator('.moderation-report')).toContainText(guestReason)
-    // The organisation mode (first-run setup's) asks for the facts: without them the block is not sent.
+    // Every statement asks for the facts (one form on every instance): without them the block is not sent.
     await page.locator('.moderation-block-content').click()
-    await expect(page.locator('.moderation-case-error')).toHaveText('Write what you found: on this instance a block’s statement must state the facts.')
+    await expect(page.locator('.moderation-case-error')).toHaveText('Write what you found: a block’s statement must state the facts.')
     await expect(page.locator('#moderation-statement-ground')).toHaveValue('ILLEGAL_CONTENT')
     await page.locator('#moderation-statement-facts').fill(recordTyped(facts))
     // ... and the law or the clause the ground relies on (DSA Art. 17(3)(d), (e)): without it the block is not sent either.
     await page.locator('.moderation-block-content').click()
-    await expect(page.locator('.moderation-case-error')).toHaveText('Name the law or the clause the block relies on: on this instance a block’s statement must name it.')
+    await expect(page.locator('.moderation-case-error')).toHaveText('Name the law or the clause the block relies on: a block’s statement must name it.')
     await page.locator('#moderation-statement-provision').fill(provision)
     await page.locator('.moderation-block-content').click()
     await confirmDecision(page, 'Block the content')
@@ -199,10 +199,10 @@ test(
     expect(mail.text, 'the facts stay out of the mail').not.toContain(stamp)
     const [decision] = await awaitMails(reporterAddress(), DECISION_MAIL)
     expect(decision!.text).toContain('took a measure')
-    // The reporter's redress (DSA Art. 16(5), Art. 53), in the organisation mode's full form.
+    // The reporter's redress (DSA Art. 16(5), Art. 53), whole on every instance, the coordinator where the DSA applies.
     expect(decision!.text).toContain('If you have more information, you can report it again.')
     expect(decision!.text).toContain('You can also go to court.')
-    expect(decision!.text).toContain('Digital Services Coordinator of the Member State where you live or are established')
+    expect(decision!.text).toContain('Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator of the Member State where you live or are established')
     expect(decision!.text).toContain('Koordinator für digitale Dienste')
     expect(decision!.text).not.toContain(stamp)
   },

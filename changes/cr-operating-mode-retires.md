@@ -115,7 +115,7 @@ and PrimeVue; those stay.
 - [x] **4 web**: trap 3's client half, the terms gate on pairs, the tests that pinned variants or "switch off ⇒ no
   notice", the seeds (`instanceBirth.mts`, `e2eBootstrap.ts`). · Done when: `npm run check` in `src/web/` green; the
   terms gate and a moderator's statement clicked in a browser.
-- [ ] **5 docs, site, coverage, e2e**: the use-cases, coverage files, enabler and security model the locator finds,
+- [x] **5 docs, site, coverage, e2e**: the use-cases, coverage files, enabler and security model the locator finds,
   ADR 0093's, 0035's and 0088's status lines to *built*, inbox #496 rescoped; the site pages above (Use pages EN and
   DE together); `first-run.setup.ts` without the mode and the two mode specs rewritten to the one form. Running L1
   waits for the V1 heavy stage. · Done when: the trust-chain guards green, `validate_guard_gaps.py --force` included
@@ -128,4 +128,50 @@ instance with every operator value empty, every fixed text renders whole with it
 
 ## Retrospective
 
-_Filled at implementation._
+Implemented 2026-10-21 in one subagent run, phases 1–5 committed in order (contracts `6a7523f0`, backend `278a1839`,
+admin-web `b86fea80`, web `074888f4`, docs/site/e2e last).
+
+**Bites (phase 2), each by snapshot-and-restore of the file, measured:**
+- capability check put back into `GuestWriteRecords.record` (`isActive("core.public-shares.guest-write-record")`) →
+  `GuestWriteRecordCoreSliceTest.anInstanceWithNoModeServesEveryTextWholeAndRecordsAGuestWrite` red at "a guest write is
+  recorded" (and 13 other record tests of the class);
+- `"switch": "core.public-shares.guest-write-record"` put back on the notice's two record passages → the same test red
+  at "the record passages", plus `PrivacyNoticeRendererTest.theRecordsPassageIsAlwaysThere…` and
+  `PrivacyNoticeSliceTest.theRecordsPassageIsServedWithTheNServedNow`;
+- `variant` kept as a nullable column inside the rebuilt UNIQUE (`V202610211103`) →
+  `TenantTermsOperatorSectionSliceTest.aMemberAcceptsThePairAndTheHistoryHoldsOneRowPerPair` red at "the UNIQUE holds
+  one row per pair" (NULL never collides).
+
+**What the refine got wrong or left open:**
+- **The contact's gap in the statement of reasons was decided but not inventoried.** ADR 0093 § 7 (as edited by the
+  refine) says "an empty instance contact renders as the gap" for the reporter's redress, and § 14 says so "wherever a
+  text names it", but the CR's decisions name only trap 4's DSA sentence for `statement-of-reasons.json`. Built as the
+  ADR says: the template gained `gap`, `when: contact` went from both `contact` passages, and `byContact` no longer
+  waits on a contact — so a Server Owner's step with no contact says "write to not stated by this operator". Worth an
+  owner look: that sentence is honest but awkward, and § 7's objection for a Server Owner's step has no other route.
+- **`OperatorSection.record` became required and non-null** — "always in it" (ADR 0035 decision 6) implied it; the CR
+  did not say whether the wire field stays nullable. A comment carries what the description could not (a description
+  beside a `$ref` makes the generator inline a copy).
+- **`operator show` "prints the values with their gaps"** met an existing design (JSON a script reads). Kept JSON, every
+  value present and `null` for its gap, rather than switching to text.
+- **Phase 1's contract sweep missed two descriptions** (`OperatorRecipient.country`, `InstanceOperatorUpdate`) that
+  angle 2 caught in phase 5 ("full notice", "required means warned"); fixed then.
+- **Coverage could not wait for phase 5.** Phase 2 removed the tests the coverage refs named, so the criteria were
+  rewritten in the phase that removed them (and the e2e specs' criterion tags retagged then, `validate_stack_criterion_tags`
+  being red otherwise); phase 5 wrote the use-cases. The CR's phase plan put "coverage files" in phase 5 only.
+- `GuestWriteRecords.record` lost its `scopeId` parameter (unused once the check went) — six callers in core, Memories
+  and Depot, not in the inventory.
+- `SetupServerSliceTest.createsOwner` now compares the switch rows before and after setup, not "none at all": the H2
+  database is shared across classes.
+- An old client still sending `variant` in `AcceptTermsRequest` is accepted (Jackson ignores unknown properties here),
+  so no "refused" test was possible; the pair alone decides.
+
+**Process observations:**
+- `cp -f` still prompts here (the `cp -i` alias wins), which hung a backgrounded bite run until stopped; `/bin/cp -f`
+  works. Worth a line beside the existing `rm`/`cp` hint.
+- zsh does not word-split `$P`: an explicit-path `git add $P` failed atomically; `--pathspec-from-file` is the form that
+  works, and `git add` refuses a path already staged as deleted (`git rm`) — commit with the pathspec, add without it.
+- `tests/e2e`'s `typecheck` cannot run in a worktree without `@playwright/test` installed; the edited specs were linted
+  only. `site/` needed its own `npm ci` before `npm run check`.
+- Not run (owner rule, V1 heavy stage): L1, web-e2e, api-fuzz, races. The rewritten `first-run.setup.ts`,
+  `terms-operator-section.spec.ts` and the statement assertions are unexecuted.

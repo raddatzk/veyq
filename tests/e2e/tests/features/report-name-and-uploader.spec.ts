@@ -186,7 +186,7 @@ test(
     const uploader = page.locator('.moderation-uploader').filter({ hasText: 'Member' })
     await expect(uploader).toHaveCount(1)
     await expect(uploader.locator('.moderation-uploader-items')).toHaveText('2 items uploaded to this space')
-    // The organisation mode (first-run setup's) asks for the statement's facts and the clause.
+    // Every statement asks for the facts and the clause (one form on every instance).
     await page.locator('#moderation-statement-facts').fill(recordTyped(facts))
     await page.locator('#moderation-statement-provision').fill('Space terms, clause 4')
     const label = 'Block everything from this uploader (2)'

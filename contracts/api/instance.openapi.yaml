@@ -3835,7 +3835,7 @@ components:
             — the list the backend's JDK knows; a code of the right shape it does not know is refused (`400
             invalid_request`). The notice names the country in each page's own language ("Deutschland" on the German
             page, "Germany" on the English one), so neither page carries the other's word. Null = not named, which the
-            full notice shows as "not stated by this operator".
+            notice shows as "not stated by this operator".
           pattern: '^[A-Z]{2}$'
           example: DE
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Pattern(regexp = "^[A-Z]{2}$")'
@@ -3874,8 +3874,8 @@ components:
     InstanceOperatorUpdate:
       type: object
       description: >
-        The values to store — a full replace: an omitted or null value is cleared. Nothing is required (ADR 0093 § 14:
-        required means warned, never refused).
+        The values to store — a full replace: an omitted or null value is cleared. Nothing is required and nothing warns
+        (ADR 0093 § 14): an empty value renders as "not stated by this operator".
       properties:
         contactEmail:
           x-veyq-visibility: pii

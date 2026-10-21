@@ -5,9 +5,10 @@
   services (#439 step 4); a member's share list says why a link serves no guest (#457) (§ Consequences). It replaces
   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8 and reshapes
   [ADR 0032](0032-capability-discovery-version-gating.md) §2, §3 and §5, all three edited to match. Decision 14
-  was revised 2026-10-21 (no operating mode, so no preset) and that revision is **not built**: the catalog's
-  `modes`, the generated `CapabilityPresets`, the write that sets them with the mode and the one entry that carries a
-  preset, `core.public-shares.guest-write-record`, are still in the tree until cr-operating-mode-retires removes them.
+  was revised 2026-10-21 (no operating mode, so no preset) and that revision is **built** (cr-operating-mode-retires,
+  2026-10-21): the catalog's `modes`, the generated `CapabilityPresets`, the write that set them with the mode and the
+  one entry that carried a preset, `core.public-shares.guest-write-record`, are gone, its stored switch rows deleted by
+  migration.
 - Date: 2026-10-15
 
 ## Context

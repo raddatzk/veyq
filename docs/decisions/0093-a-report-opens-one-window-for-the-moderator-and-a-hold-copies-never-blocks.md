@@ -43,18 +43,18 @@
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
-  in §§ 1–3, 6–7 and 11–13. § 14 was revised 2026-10-21 (no operating mode, one form of
-  each text, nothing required) and that revision is **not built** (cr-operating-mode-retires): the tree still has the
-  mode of 2026-10-17, its choice at setup, its notice, the warnings per mode and the reduced texts. § 11's instance
-  contact is built with its
+  in §§ 1–3, 6–7 and 11–13. § 14 as revised 2026-10-21 (no operating mode, one form of each text, nothing required,
+  what an operator may owe told as information at setup, in the operator settings and in the Run docs) is **built**
+  (cr-operating-mode-retires, 2026-10-21). § 11's instance contact is built with its
   notification address's code confirmation ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
-  § 10's guest-write record is built, still behind the switch its 2026-10-21 revision removes (cr-operating-mode-retires; built by cr-guest-write-record, 2026-10-17;
+  § 10's guest-write record is built, kept wherever a guest may write with no switch of its own (built by
+  cr-guest-write-record, 2026-10-17, its switch removed by cr-operating-mode-retires, 2026-10-21;
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
-  N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
+  N with its two-limit purge, the hold's copy, the backup without its rows and the
   first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
   instance privacy notice ([ADR 0035](0035-server-terms-of-service.md) decision 8, built by cr-instance-privacy-notice,
-  2026-10-19; a draft until a qualified review), to which the operator section of the terms (decision 6, built in both
-  variants by cr-operator-section-of-the-terms, 2026-10-18) points. It is on the V1 line (owner
+  2026-10-19; a draft until a qualified review), to which the operator section of the terms (decision 6, built by
+  cr-operator-section-of-the-terms, 2026-10-18, in one form since cr-operating-mode-retires) points. It is on the V1 line (owner
   2026-10-16, [inbox](../inbox.md) #462).
 - Date: 2026-10-16
 

@@ -22,14 +22,15 @@
    do and where in the page's own language (an *other* one with the Server Owner's description as typed; the country
    from its code, "Deutschland" on the German page and "Germany" on the English one), the rights and the
    supervisory authority, with each right to object set apart (GDPR Art. 21(4)).
-3. The passages follow the instance and the host: a switch that is off there (the guest-write record, the
-   breached-password check, an external service a member's browser calls) drops its passage, a service's passage names
+3. The passages follow the instance and the host: a switch that is off there (the breached-password check, an
+   external service a member's browser calls) drops its passage — the guest-write record's are bound to none, since the
+   record is kept wherever a guest may write (ADR 0093 § 10) — a service's passage names
    the address the instance actually uses, and N, B and the erasure's window are the values set now.
 
 ## Alternate / exception flows
 
-- **A1 — A value not set:** in the *club, organisation or company* mode the passage shows "not stated by this
-  operator" and admin-web warns; in the *private* mode it is absent and nothing warns.
+- **A1 — A value not set:** the passage shows "not stated by this operator" and nothing warns; the notice has one
+  form on every instance (ADR 0093 § 14). An optional line (a representative, an officer) is left out.
 - **A2 — The notice cannot be fetched:** the link's page says so and names the instance contact where the public
   operator values load; nothing is blocked by it.
 - **A3 — A guest objects to the guest-write record:** a guest has no account, so the line on a link's page that says

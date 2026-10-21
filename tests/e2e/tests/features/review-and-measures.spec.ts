@@ -208,7 +208,7 @@ test(
   async () => {
     const { page } = moderator
     await openCase(page)
-    // The organisation mode (first-run setup's) asks for the statement's facts (uc.moderation.object-to-a-measure).
+    // Every statement asks for the facts (uc.moderation.object-to-a-measure, one form on every instance).
     await page.locator('#moderation-statement-facts').fill(recordTyped(facts))
     await page.locator('#moderation-statement-provision').fill('Space terms, clause 4')
     await page.locator('.moderation-block-content').click()

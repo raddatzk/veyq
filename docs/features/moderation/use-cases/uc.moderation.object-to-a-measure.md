@@ -27,9 +27,9 @@
    and refuses the measure when the wrapped keys do not name exactly the members it would tell
    (`statement_recipients_changed`). The list is whole or refused, never cut: every wrap travels in the measure's one
    request, a fixed 1.6 KB a member whatever the facts' length, so with facts a step reaches at most 6,000 members
-   (`StatementRecipients.MAX_SEALED`), and past that it is refused by name (`statement_recipients_too_many`). In the
-   full form, which requires the facts, such a step cannot be taken at all — the wall that remains; only paging the
-   upload removes it.
+   (`StatementRecipients.MAX_SEALED`), and past that it is refused by name (`statement_recipients_too_many`). Every
+   statement requires the facts, so such a step cannot be taken at all — the wall that remains; only paging the upload
+   removes it.
 2. **Who is told.** The creator of a blocked link, or of the link a blocked guest came through; the uploaders the held
    rows name (a blocked guest: that guest); and, on a content block, every owner of the space. A guest is told nothing
    in veyq and has no address: a guest uploader counts as *nobody can be told*.
@@ -37,12 +37,10 @@
    mail and by src/web/ on the placeholder: the measure and its reach, why the reader gets it, the facts, whether a report
    or an order led to it, that no automated means decided, the ground and the provision or clause it relies on, that
    the measure applies wherever the instance is reached and lasts until it is lifted (DSA Art. 17(3)(a)), the
-   objection, the contact address and the courts. It names the host, never the moderator.
-4. **Its form follows the operating mode**, read when it is rendered (ADR 0093 § 14): *club, organisation or company*
-   — the full form, and the facts and the provision are required (`statement_facts_required`,
-   `statement_provision_required`); *private* — the reduced form: the measure and its reach, the ground and the
-   objection, the facts and the provision only where the moderator wrote them, and neither the report or order, the
-   automation line, the territorial sentence nor the courts.
+   objection, the contact address — "not stated by this operator" where none is set — and the courts. It names the
+   host, never the moderator.
+4. **One form on every instance** (ADR 0093 § 14): the facts and the provision are required of every statement
+   (`statement_facts_required`, `statement_provision_required`); there is no reduced form.
 5. **In veyq and by mail.** The member sees the statement on the placeholder of the blocked item or node and on the
    blocked link in their share list, the facts opened with their own identity key. Instance mail (ADR 0097 decision 3)
    tells each one's account address that a statement is there: the template's clear parts, never the facts; a send that
@@ -52,9 +50,10 @@
 7. **The reporter.** The deciding moderator's browser opens each report's sealed contact and sends the address once,
    beside the dismissal or the measure; the server mails the decision — dismissed, or a measure taken — from memory, at
    most once per report, and logs that it did. The decision carries the reporter's **redress** (DSA Art. 16(5)), one
-   fixed passage of the template: that they may report again with more information, the instance contact, and — in the
-   full form only — that they may go to court and complain to the Digital Services Coordinator of the Member State
-   where they live or are established (DSA Art. 53). The sealed contact goes six months after that — or, where no decision
+   fixed passage of the template: that they may report again with more information, the instance contact (or its gap),
+   that they may go to court, and — where the DSA applies to the instance, in the sentence's own words, since veyq
+   cannot know whether it does — that they may complain to the Digital Services Coordinator of the Member State where
+   they live or are established (DSA Art. 53). The sealed contact goes six months after that — or, where no decision
    could be told, six months after the case's decision; the "decision sent" event stays (ADR 0093 § 11).
 8. **The objection.** An affected member objects once per measure, in free text, on the statement: sealed in their
    browser to the moderation key's current epoch (`moderation-objection` [epoch, statementId]). It reopens the case — a
@@ -75,7 +74,7 @@
 - **A4 — An objection decided twice**, by two moderators at once: the first decision stands, the second is refused
   (`objection_decided`).
 - **A5 — No instance mail.** The statement is in veyq all the same; admin-web already warns that mail is missing.
-- **A6 — No contact address** (*private* may leave it empty): the statement names none.
+- **A6 — No contact address** (the Server Owner may leave it empty): the statement shows "not stated by this operator" where the contact goes.
 - **A7 — The Server Owner's steps over content** (a member's sign-in block, a tenant taken offline) carry a statement
   in the same template and form (DSA Art. 17(1)(c), (d)), entered with the step in admin-web or `veyq-admin`: always
   for a step from a case's proposal, and for a step without a case when the Server Owner says it is over content

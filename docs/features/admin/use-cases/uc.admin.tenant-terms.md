@@ -30,9 +30,9 @@ the numbering. Absent a template insert, a language is free markdown from the fi
 Every space's terms are followed by a fixed **operator section** ([ADR 0035](../../../decisions/0035-server-terms-of-service.md)
 decision 6): veyq's own text, DE and EN, filled with the values the Server Owner sets in admin-web and the CLI
 ([uc.admin.operator-details](uc.admin.operator-details.md)) — the notice path, what is kept, the measures, the statement
-and the objection, and, in the *club, organisation or company* mode, the authorities; the guest-write record's
-information while that record is on. It is served by the same endpoints, after the space's text, in the variant the
-operating mode picks (**full** or **reduced**). The space owner cannot edit or remove it; the terms panel shows it,
+and the objection, the authorities with the contact point, and a pointer to the guest-write record's information. It is
+served by the same endpoints, after the space's text, in one form on every instance (ADR 0093 § 14), an empty value
+showing as "not stated by this operator". The space owner cannot edit or remove it; the terms panel shows it,
 read-only, below their own text, and so does a member's. Its revision moves only with a veyq release, so the space's
 `terms_revision` stays the owner's alone; what the members' gate compares is
 [uc.account.accept-terms](../../account/use-cases/uc.account.accept-terms.md)'s.

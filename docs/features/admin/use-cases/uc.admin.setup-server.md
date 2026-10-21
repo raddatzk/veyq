@@ -10,8 +10,8 @@
 - **Postconditions (success):** The Server Owner account exists with its own identity keys, Master Key
   wraps and a saved Emergency Kit; the instance is marked set up; the operator holds **no** content keys. The
   instance moderation key has its epoch 1, granted to the Server Owner alone, so reporting is on from the first day
-  ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md)). The
-  operating mode the Server Owner chose is stored, with its preset's switches
+  ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md)). No operator
+  value and no capability switch is set: every value is optional, set later
   ([uc.admin.operator-details](uc.admin.operator-details.md)).
 
 ## Main flow
@@ -25,19 +25,19 @@
 3. The client generates, **cold** (no invite, no temp-wrap — this is the root of the owner's own key
    tree): the **identity keypair**, the **Master Key** with one wrap per chosen unlock method, and the
    **Emergency Kit** (email + Secret Key — its format is [en.account.key-model § The Emergency Kit](../../account/enablers/en.account.key-model.md#the-emergency-kit)), then forces the owner to confirm they saved the kit.
-4. Once the kit is confirmed, the Server Owner chooses the instance's **operating mode** — *private (family, circle
-   of friends)* or *club, organisation or company* — after the notice that this is their own assessment, not veyq's
+4. Once the kit is confirmed, the console says, as information and not as a choice, what an operator may owe: the
+   household exemption ends once a link is shared publicly, an operator who shares links publicly or runs veyq for a
+   club or a company probably owes at least a name, a postal address and the controller's contact, it covers every
+   space on the instance, and it is the Server Owner's own assessment, not veyq's
    ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-   § 14); *private* needs a tick that the notice was read. The setup request cannot be sent without a mode.
+   § 14). Nothing is ticked or chosen; every value stays optional.
 5. The client uploads the **identity public key + wrapped blobs + a password-derived auth *public* key**
    (operator-blind password auth, [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md):
    the server never sees the password and stores no credential/verifier — login is challenge-response);
    the server stores ciphertext + the public key only and **marks setup complete** (single-owner lock). With it go
    epoch 1 of the instance moderation key — its public bundle and `M_1` sealed to the identity just born, `M_1` then
    forgotten ([ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
-   § 3) — stored in the same transaction, the Server Owner its first moderator; and the operating mode, whose preset
-   sets its instance-level switches in that same transaction
-   ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 14).
+   § 3) — stored in the same transaction, the Server Owner its first moderator.
 
 ```mermaid
 ---
@@ -53,9 +53,9 @@ sequenceDiagram
   C->>C: generate cold —<br>identity keypair, Master Key + wraps,<br>Emergency Kit (email + Secret Key)
   C->>O: show Emergency Kit
   O->>C: confirm saved
-  C->>O: the operating-mode notice
-  O->>C: choose a mode (private: tick)
-  C->>S: POST setup/owner<br>{ email, identityPublicKey, wrapped blobs,<br>authPublicKey, suiteId, operatingMode }
+  C->>O: what an operator may owe (information)
+  O->>C: continue
+  C->>S: POST setup/owner<br>{ email, identityPublicKey, wrapped blobs,<br>authPublicKey, suiteId, moderationEpoch }
   S->>S: store ciphertext only#59;<br>mark setup complete (single-owner lock)
   S-->>C: Server Owner created
 ```

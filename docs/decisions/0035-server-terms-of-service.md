@@ -3,14 +3,14 @@
 - Status: Accepted; amended 2026-10-16 by [ADR 0086](0086-one-word-per-meaning.md): the terms' change counter is a
   **revision** (`terms_revision`, `accepted_terms_revision`, `termsRevision`, was `…version`); the pre-E2EE
   product's `Tenant.termsVersion` below keeps its own name. Decisions 6 (the fixed operator section) and 7 (the
-  provider identification), added 2026-10-16 from the legal research behind ADR 0093 and made mode-dependent on
-  2026-10-17 (ADR 0093 § 14), belong to the moderation work (inbox #462), and both are **built**: decision 7 is set in
-  admin-web and the CLI, warned about in the organisation mode (until cr-operating-mode-retires: nothing warns, the
-  mode is retired, ADR 0093 § 14 as revised 2026-10-21), and shown with the instance contact on the login and
+  provider identification), added 2026-10-16 from the legal research behind ADR 0093, belong to the moderation work
+  (inbox #462), and both are **built**, in one form with nothing required since the operating mode was retired
+  (ADR 0093 § 14 as revised 2026-10-21, built by cr-operating-mode-retires): decision 7 is set in admin-web and the
+  CLI, never warned about, and shown with the instance contact on the login and
   share pages and in the signed-in shell ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
   decision 6's section (cr-operator-section-of-the-terms, 2026-10-18) is `contracts/terms/operator-section.json`,
-  rendered by the backend into every terms read and at a public page of its own, in both variants, with the gate on
-  the triple ([uc.account.accept-terms](../features/account/use-cases/uc.account.accept-terms.md)). Its text is a
+  rendered by the backend into every terms read and at a public page of its own, in one form, with the gate on
+  the pair ([uc.account.accept-terms](../features/account/use-cases/uc.account.accept-terms.md)). Its text is a
   **draft until a qualified legal review** and says so on every rendering; decision 6 names the gaps against the law
   that remain. Decision 8 (the instance privacy notice, GDPR
   Art. 13, decided 2026-10-18 from the legal audit of that day by the owner rule that a legal duty wins) is **built**
@@ -157,8 +157,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the drafts of the
    2026-10-16 research; the template's clause 9 then points to this section instead of regulating review itself.
 
-   **The section has one form on every instance** (ADR 0093 § 14, revised 2026-10-21; until cr-operating-mode-retires
-   it still has a reduced variant for a *private* mode). Every value it names — the instance contact, the provider
+   **The section has one form on every instance** (ADR 0093 § 14, revised 2026-10-21; built). Every value it names — the instance contact, the provider
    identification — shows when set and as "not stated by this operator" when empty, and the pointer to the guest-write
    record's information is always in it (ADR 0093 § 10: the record is kept wherever a guest may write). The section
    carries one revision, moved with its text, and the gate compares it: a moved revision **reopens the gate**, since
@@ -250,8 +249,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 - **The operator section and the provider identification are new public surface** (6, 7): instance settings in
   admin-web and the CLI ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
   rendered into the terms endpoints and served publicly. A Server Owner who leaves the identification empty is
-  neither warned nor refused; the section shows the gap (decision 6). Both are built, the mode-dependent warning and
-  reduced section still in the tree until cr-operating-mode-retires; decision 6 names the gaps against the law that remain.
+  neither warned nor refused; the section shows the gap (decision 6). Both are built; decision 6 names the gaps against
+  the law that remain.
 - **The privacy notice is a second fixed text** (8), with its own public route and endpoint, the recipients list and
   an optional data-protection officer as new instance values, and links from every place that collects. The space
   template's privacy clause stays the space owner's description of their space, never the operator's notice. The

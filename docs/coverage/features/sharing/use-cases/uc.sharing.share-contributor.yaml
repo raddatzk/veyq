@@ -207,7 +207,7 @@ acceptanceCriteria:
         e2e: [src/features/memories/folderShareGuest.e2e.test.ts]
   - id: a-guests-write-records-the-address-the-network-vouches-for
     text: >-
-      While core.public-shares.guest-write-record is on, every write that enters a guest as last editor — naming
+      Every write that enters a guest as last editor — naming
       itself, a node it creates, renames or moves, a photo or file it adds — records in its own transaction the client
       address of core's one resolver (the rightmost X-Forwarded-For entry no trusted proxy wrote; never the client's own
       leftmost entry, which is in no record and no log line), the port that entry carries or the configured source

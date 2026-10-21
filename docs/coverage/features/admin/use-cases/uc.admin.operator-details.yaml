@@ -1,6 +1,6 @@
 useCase: uc.admin.operator-details
 feature: admin
-title: Choose the operating mode and publish who runs the instance
+title: Publish who runs the instance
 # Built by cr-instance-contact-and-provider-identification; the operating mode it carried was retired by
 # cr-operating-mode-retires. The values and the code live on the admin channel, so most refs are the backend's slice; the web's are the identification on the login and share pages.
 # admin-web's suites (the panels, the setup step, the facade, the CLI) and lane L1's scenario wait under `gaps` until

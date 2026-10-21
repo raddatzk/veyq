@@ -1,5 +1,5 @@
-// The operator section of the terms in a browser (ADR 0035 decision 6, cr-operator-section-of-the-terms), on the run's
-// club, organisation or company instance, so the full variant with the guest-write record's information:
+// The operator section of the terms in a browser (ADR 0035 decision 6, cr-operator-section-of-the-terms), in its one
+// form on every instance (ADR 0093 § 14), with the pointer to the guest-write record's information:
 //
 //   1. Anyone, without an account, opens **Terms of this instance** from the sign-in page and reads the section — the
 //      draft banner first, and at the record's anchor its pointer to the privacy notice, which holds the record's
@@ -7,20 +7,17 @@
 //   2. The space's owner publishes terms of their own: the Terms panel shows the section read-only below them, and the
 //      owner, like every member, is then asked to agree — to the space's text and the section after it.
 //   3. A guest opening a link of the space meets the same two at the link's terms gate, and after accepting, the link.
-//   4. The Server Owner switches to the private mode in the console: the owner is asked again, now with the reduced
-//      section, and a German visitor reads the reduced section without the record's passage (the private preset
-//      switched the record off), and the reduced privacy notice: no record passage, and a value left unset absent
-//      rather than a gap. The mode goes back to club, organisation or company at the end.
+//   4. A German visitor reads the same one form — the authorities, the record's pointer — and the privacy notice: the
+//      record's passage, and the recipient's country left unset shown as a gap.
 //
 // THIS FILE RUNS LAST ON PURPOSE. Publishing terms gates every later guest and every later sign-in of the space, and v1
 // has no way to unpublish them (ADR 0035 decision 1), so it is named to sort after every other feature scenario
 // (`workers: 1`, files in name order). A scenario added after it meets a gated space.
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
 import { confineToInstance } from '../../src/egress'
-import { instance, newDevice, openSettings, passwordField, signInOwner, tenantOrigin, type Device } from '../../src/devices'
-import { stack } from '../../src/stack'
+import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -61,7 +58,7 @@ test(
     const section = terms.getByTestId('operator-section')
     await expect(section.getByText('Draft: this section has not yet been reviewed by a lawyer.')).toBeVisible()
     await expect(section.getByRole('heading', { name: 'On this instance: reports, measures and what is kept' })).toBeVisible()
-    await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toBeVisible() // the full variant
+    await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toBeVisible() // the one form
     await expect(terms.locator('#guest-write-record')).toContainText('privacy notice of this instance')
     await expect(terms.getByRole('link', { name: 'Read it in the privacy notice' })).toHaveAttribute('href', '/privacy#guest-write-record')
     await expect(terms.locator('aside')).toHaveCount(0) // the right to object is the notice's now
@@ -132,77 +129,43 @@ test(
     await page.getByRole('button', { name: 'Accept and continue' }).click()
     await expect(page.getByText('Please accept the terms of use')).toBeHidden()
     await expect(page.getByText(sharedFolder).first()).toBeVisible({ timeout: 60_000 })
-    // The acceptance stays on the device and holds the triple; a reload does not ask again.
+    // The acceptance stays on the device and holds the pair; a reload does not ask again.
     await page.reload()
     await expect(page.getByText(sharedFolder).first()).toBeVisible({ timeout: 60_000 })
     await expect(page.getByText('Please accept the terms of use')).toBeHidden()
   },
 )
 
-/** The console, signed in as the Server Owner, at Server → Operating mode; sets [mode] and waits for it to hold. */
-async function setMode(page: Page, mode: 'Private (family, circle of friends)' | 'Club, organisation or company') {
-  const { owner } = instance()
-  await page.goto(stack().adminOrigin)
-  await page.getByLabel('Email', { exact: true }).fill(owner.email)
-  await passwordField(page).fill(recordTyped(owner.password))
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: 'Server administration', level: 1 })).toBeVisible({ timeout: 60_000 })
-  await page.getByRole('button', { name: 'Operating mode', exact: true }).click()
-  await page.getByRole('button', { name: mode }).click()
-  const tick = page.getByRole('checkbox', { name: 'I have read this and choose Private on my own responsibility.' })
-  if (mode.startsWith('Private')) await tick.check()
-  await page.getByRole('button', { name: 'Set operating mode' }).click()
-  await expect(page.getByText(`In effect: ${mode}.`)).toBeVisible()
-}
-
 test(
-  'in the private mode the owner is asked again with the reduced section, and a German visitor reads it',
+  'a German visitor reads the one form of the section and of the privacy notice, an unset value as its gap',
   {
     tag: [
-      '@uc.account.accept-terms:the-gate-compares-the-pair',
       '@uc.account.accept-terms:the-section-has-one-form',
       '@uc.admin.privacy-notice:a-missing-value-shows-as-not-stated',
     ],
   },
   async ({ browser }) => {
-    const console_ = await newDevice(browser)
     const context = await browser.newContext({ locale: 'de-DE' })
     const confinement = await confineToInstance(context)
     try {
-      await setMode(console_.page, 'Private (family, circle of friends)')
-
-      const { page } = owner
-      await page.goto(tenantOrigin())
-      await expect(page.getByText('Please review the terms')).toBeVisible({ timeout: 60_000 })
-      const section = page.locator('.terms-body').getByTestId('operator-section')
-      await expect(section).toContainText('On this instance: reports, measures and what is kept')
-      await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toHaveCount(0)
-      await page.getByRole('button', { name: 'I agree' }).click()
-      await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
-
       const german = await context.newPage()
       await german.goto(`${tenantOrigin()}/operator-terms`)
-      const reduced = german.getByTestId('operator-section')
-      await expect(reduced.getByText('Entwurf: Dieser Abschnitt ist noch nicht anwaltlich geprüft.')).toBeVisible({ timeout: 60_000 })
-      await expect(reduced.getByRole('heading', { name: 'Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung' })).toBeVisible()
-      await expect(reduced.getByRole('heading', { name: 'Inhalte melden' })).toBeVisible()
-      await expect(reduced.getByRole('heading', { name: 'Behörden und Kontakt' })).toHaveCount(0)
-      await expect(german.locator('#guest-write-record')).toHaveCount(0) // the private preset switched the record off
+      const section = german.getByTestId('operator-section')
+      await expect(section.getByText('Entwurf: Dieser Abschnitt ist noch nicht anwaltlich geprüft.')).toBeVisible({ timeout: 60_000 })
+      await expect(section.getByRole('heading', { name: 'Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung' })).toBeVisible()
+      await expect(section.getByRole('heading', { name: 'Inhalte melden' })).toBeVisible()
+      await expect(section.getByRole('heading', { name: 'Behörden und Kontakt' })).toBeVisible()
+      await expect(german.locator('#guest-write-record')).toContainText('Datenschutzerklärung dieser Instanz')
 
-      // The reduced privacy notice: the record's passage gone with its switch, the recipient's open country simply
-      // absent rather than a gap (owner Q26) — the full one shows "von der Betreiberseite nicht angegeben" there.
+      // The privacy notice: the record's passage on every instance, and the recipient's open country a visible gap.
       await german.goto(`${tenantOrigin()}/privacy`)
       await expect(german.locator('#recipients')).toContainText('E2E Hosting GmbH: hostet den Server', { timeout: 60_000 })
-      await expect(german.locator('#recipients')).not.toContainText('nicht angegeben')
-      await expect(german.locator('#guest-write-record')).toHaveCount(0)
+      await expect(german.locator('#recipients')).toContainText('von der Betreiberseite nicht angegeben')
+      await expect(german.locator('#guest-write-record')).toBeVisible()
       await expect(german.locator('aside#right-to-object')).toBeVisible() // control: the page rendered, its general right too
       confinement.assertConfined()
     } finally {
-      await setMode(console_.page, 'Club, organisation or company')
-      console_.confinement.assertConfined()
-      await console_.context.close()
       await context.close()
     }
   },
 )
-
