@@ -209,10 +209,15 @@ itself from a declared store type, so where the chart deploys `garage` it deploy
   only while the store in use is the bundled one; otherwise it points at nothing, or serves an unused Garage's S3 API
   on every tenant domain. (The Gateway sink renders none: the store has its own host here.)
 
-  **Backup and restore need nothing new.** A store of the operator's own hands the backup its endpoint and key pair
-  (`backup.store.existingSecret` on the chart, `VEYQ_BACKUP_STORE_*` on Compose; ADR 0089 Decision 7), because the
-  pair the console holds is sealed under the KEK the backup never reads; the bundled one derives its pair from the
-  admin token. *Rejected:* a schema rule requiring `backup.store.existingSecret` with `garage.enabled: false` — the
+  **Backup and restore take the own store's pair on both targets.** A store of the operator's own hands the backup its
+  endpoint and key pair (`backup.store.existingSecret` on the chart, `VEYQ_BACKUP_STORE_*` in `veyqctl`'s shell on
+  Compose; ADR 0089 Decision 7), because the pair the console holds is sealed under the KEK the backup never reads;
+  the bundled one derives its pair from the admin token. The chart's gate already reads either. `veyqctl` learns the
+  Compose recipe without Garage: today it refuses a recipe whose `garage` service is missing or whose app carries no
+  hint, because it puts the backup's rclone container on Garage's network and hands it the bundled pair. Where the
+  composed recipe has no `garage` service, it runs that container on Docker's default network (the own store is
+  reached like any other host) and passes no bundled pair, and it refuses, naming them, when the
+  `VEYQ_BACKUP_STORE_*` pair is not in its shell. *Rejected:* a schema rule requiring `backup.store.existingSecret` with `garage.enabled: false` — the
   store is set after the install, and the gate's refusal at the first capture names the value.
 
   **Turning Garage off under an instance whose store is the bundled one is not guarded.** Helm cannot read the store
