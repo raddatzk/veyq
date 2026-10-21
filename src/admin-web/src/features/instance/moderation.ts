@@ -21,13 +21,14 @@ import {
   type MintModerationEpochRequestReasonEnum,
   type ModerationGrantForMint,
   type ModerationSteps,
+  type SignInBlockResult,
 } from '../../api/generated/instance'
 import { deserializeIdentityPublic, generateModerationKey, moderationBundle, sealTo } from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import type { ServerOwnerStatementInput } from './stepStatement'
 
 export type {
-  AccountSignInBlock, InstanceModeration, InstanceModerator, ModerationSteps, OpenModerationProposal,
+  AccountSignInBlock, InstanceModeration, InstanceModerator, ModerationSteps, OpenModerationProposal, SignInBlockResult,
 } from '../../api/generated/instance'
 // Each re-export carries the generated const AND its union type, so `RotationReason.Removal` and `: RotationReason`
 // both read from here.
@@ -128,7 +129,7 @@ export async function removeModerator(accountId: string): Promise<InstanceModera
 // uc.moderation.take-a-measure step 5 — the Server Owner's steps. A moderator proposes; only the Server Owner takes
 // one: a member's sign-in block here, or the tenant's suspension (`features/tenants/tenants.ts`'s `suspendTenant`,
 // which settles every open TENANT_OFFLINE proposal of that tenant as taken). None of these touches a key; each
-// answers with the steps as they now stand.
+// answers with the steps as they now stand — a block inside `SignInBlockResult`, beside whom its statement reached.
 
 /** The open proposals and every sign-in block in force. Refusal: 403 `not_server_owner`. */
 export function getModerationSteps(): Promise<ModerationSteps> {
@@ -144,13 +145,14 @@ export function declineProposal(proposalId: string): Promise<ModerationSteps> {
  * Block an account's sign-in, by its address, answering `caseId` when a proposal asked for it: every session of the
  * account ends at once and every sign-in is refused until the block is lifted. Settles the account's open
  * MEMBER_SIGN_IN proposals as taken. Over content — a case, an open proposal, or `overContent` — it carries its
- * `statement` (ADR 0093 § 7, `stepStatement.ts`), mailed with the facts to the account's address. Refusals: 400
+ * `statement` (ADR 0093 § 7, `stepStatement.ts`), mailed with the facts to the account's address; the answer is the steps
+ * as they now stand and, over content, whom that mail reached (`statementDelivery`). Refusals: 400
  * `statement_required` / `statement_facts_required` / `statement_provision_required`, 404 `account_not_found` /
  * `case_not_found`, 409 `sign_in_block_exists` / `cannot_block_server_owner` / `moderation_epoch_changed`.
  */
 export function blockSignIn(
   address: string, caseId?: string | null, statement?: ServerOwnerStatementInput | null, overContent = false,
-): Promise<ModerationSteps> {
+): Promise<SignInBlockResult> {
   return instanceModerationApi().blockAccountSignIn({
     blockAccountSignInRequest: { address: address.trim(), caseId: caseId ?? null, overContent: overContent || !!statement, statement: statement ?? null },
   })

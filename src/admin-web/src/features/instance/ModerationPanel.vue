@@ -13,7 +13,8 @@
 // — a member's sign-in block, taken here with its statement of reasons (a proposal is over content, ADR 0093 § 7) after
 // a confirm, or the tenant's suspension, taken on the tenant's own page
 // (the console opens it; suspending settles the proposal) — each of which may be declined instead, and every sign-in
-// block in force, which is lifted here.
+// block in force, which is lifted here. A block whose statement did not plainly reach the member leaves a standing report
+// here with the words as sent (ADR 0093 § 7, `StatementDeliveryNotice.vue`), until dismissed.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -28,7 +29,9 @@ import {
   type OpenModerationProposal,
 } from './moderation'
 import StepStatementFields from './StepStatementFields.vue'
+import StatementDeliveryNotice from './StatementDeliveryNotice.vue'
 import { stepStatement, StepStatementInvalid, type StepStatementDraft } from './stepStatement'
+import { reportOf, type StatementReport } from './statementDelivery'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
@@ -182,6 +185,8 @@ async function actOnSteps(change: () => Promise<ModerationSteps>): Promise<void>
 // The proposal whose block is being written, and its statement (ADR 0093 § 7): a block from a proposal is over content.
 const blocking = ref<string | null>(null)
 const draft = ref<StepStatementDraft>({ ground: 'TERMS_BREACH', provision: '', facts: '' })
+// What the last block answered about its statement's mail, when it did not plainly reach the member.
+const report = ref<StatementReport | null>(null)
 
 /** Open the statement for [p]'s block, its ground the case's category. */
 function startBlock(p: OpenModerationProposal) {
@@ -199,7 +204,12 @@ async function block(p: OpenModerationProposal) {
   })
   const address = p.address
   if (!accepted) return
-  await actOnSteps(async () => blockSignIn(address, p.caseId, await stepStatement(draft.value)))
+  await actOnSteps(async () => {
+    const statement = await stepStatement(draft.value)
+    const { steps: after, statementDelivery } = await blockSignIn(address, p.caseId, statement)
+    report.value = reportOf(statementDelivery, statement)
+    return after
+  })
   if (!error.value) blocking.value = null
 }
 
@@ -242,6 +252,7 @@ const at = (d: Date) => d.toLocaleString(locale.value)
 
       <template v-else-if="moderation">
         <Message v-if="error" severity="error" :closable="false" class="mod-error">{{ error }}</Message>
+        <StatementDeliveryNotice v-if="report" :key="report.statement.statementId" :report="report" @dismiss="report = null" />
 
         <template v-if="!moderation.enabled">
           <Message severity="warn" :closable="false" class="mod-off">{{ t('moderation.off') }}</Message>

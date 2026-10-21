@@ -97,7 +97,9 @@ import {
   RotationReason,
   type InstanceModeration,
   type ModerationSteps,
+  type SignInBlockResult,
 } from '../features/instance/moderation'
+import { StatementOutcome, type StatementDelivery } from '../features/instance/statementDelivery'
 import {
   clearOperator,
   CLI_RECIPIENT_KINDS,
@@ -158,6 +160,9 @@ export type Command = {
   /** Text for a person instead of the JSON document — for a command whose output is the served words in the
    *  operator's language, which a script has no use for and a person cannot read as JSON. */
   render?: (result: unknown, flags: Record<string, string>, env: Record<string, string | undefined>) => string
+  /** One line for stderr after the printed result, or null — a step that stands but left the Server Owner something to
+   *  do (a statement its mail did not reach). The exit code stays the command's. */
+  warning?: (result: unknown) => string | null
 }
 
 const tenantId: Flag = { describe: 'tenant id', required: true }
@@ -261,7 +266,11 @@ async function moderatorByAddress(address: string): Promise<string> {
  *  case, the case's category, the step and its target — the member's address (what `account block` takes), or the
  *  tenant's id and domain (what `tenant suspend` takes) — and when; per block in force its address, case and since. */
 function renderSteps(s: ModerationSteps): string {
-  return renderResult({
+  return renderResult(stepsDocument(s))
+}
+
+function stepsDocument(s: ModerationSteps) {
+  return {
     proposals: s.proposals.map((p) => ({
       id: p.id,
       caseId: p.caseId ?? null,
@@ -271,8 +280,29 @@ function renderSteps(s: ModerationSteps): string {
       proposedAt: p.proposedAt,
     })),
     signInBlocks: s.signInBlocks.map((b) => ({ address: b.address, caseId: b.caseId ?? null, blockedAt: b.blockedAt })),
-  })
+  }
 }
+
+/**
+ * The stderr line after a step over content whose statement did not plainly reach everyone (ADR 0093 § 7): the step
+ * stands and the exit code stays 0, but the facts are mailed once, so whoever was not reached is the Server Owner's to
+ * tell through the instance contact. Null when there was no statement or its mail reached everyone.
+ */
+export function statementWarning(delivery: StatementDelivery | undefined): string | null {
+  switch (delivery?.outcome) {
+    case StatementOutcome.NotAllReached:
+      return `the statement of reasons could not be mailed to ${delivery.notReached.join(', ')} and is not sent again — tell them through the instance contact`
+    case StatementOutcome.Unknown:
+      return 'the server could not tell whom the statement of reasons reached — tell the people it affects through the instance contact'
+    case StatementOutcome.NobodyToTell:
+      return 'the statement of reasons went to nobody: the tenant has no owner, or the account no longer exists'
+    default:
+      return null
+  }
+}
+
+/** The warning of a result that carries `statementDelivery` (a suspension, a deletion, a sign-in block). */
+const deliveryWarning = (r: unknown) => statementWarning((r as { statementDelivery?: StatementDelivery }).statementDelivery)
 
 /** The sign-in block in force for this address (case-insensitive, as the server matches an account address). */
 async function signInBlockByAddress(address: string): Promise<string> {
@@ -375,9 +405,12 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant suspend': {
     usage: 'tenant suspend --tenant-id <id> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it.',
+    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
     flags: { 'tenant-id': tenantId, ...STATEMENT_FLAGS },
     run: async (f) => suspendTenant(f['tenant-id'], await statementOf(f)),
+    // `ok` as before, and over content whom the statement's mail reached.
+    render: (r) => renderResult({ ok: true, ...(r as object) }),
+    warning: deliveryWarning,
   },
   'tenant reactivate': {
     usage: 'tenant reactivate --tenant-id <id>',
@@ -388,9 +421,10 @@ export const COMMANDS: Record<string, Command> = {
   'tenant delete': {
     usage: 'tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
     summary:
-      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does.',
+      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does, and prints and warns of whom it reached as that does.',
     flags: { 'tenant-id': tenantId, domain: { describe: 'the tenant’s own domain, typed as the confirmation', required: true }, ...STATEMENT_FLAGS },
     run: async (f) => deleteTenant(f['tenant-id'], f.domain, await statementOf(f)),
+    warning: deliveryWarning,
   },
   'tenant stop-deletion': {
     usage: 'tenant stop-deletion --tenant-id <id>',
@@ -767,14 +801,18 @@ export const COMMANDS: Record<string, Command> = {
   },
   'account block': {
     usage: 'account block --address <address> [--case <caseId>] [--over-content] [--ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it.',
+    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
     flags: {
       address: { describe: 'the account’s address', required: true },
       case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
       ...STATEMENT_FLAGS,
     },
     run: async (f) => blockSignIn(f.address, f.case ?? null, await statementOf(f), f['over-content'] === 'true'),
-    render: (r) => renderSteps(r as ModerationSteps),
+    render: (r) => {
+      const { steps, statementDelivery } = r as SignInBlockResult
+      return renderResult({ steps: stepsDocument(steps), ...(statementDelivery ? { statementDelivery } : {}) })
+    },
+    warning: deliveryWarning,
   },
   'account unblock': {
     usage: 'account unblock --address <address>',

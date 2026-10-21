@@ -8,6 +8,8 @@
 // uc.admin.delete-tenant: an ACTIVE or SUSPENDED tenant is deleted only once its domain is typed; a PENDING_DELETION one
 // shows its due date and is stopped; an ownerless one says so and invites one of its members to own it.
 // Both measures ask the over-content question once, above both; a moderator's open proposal ticks and holds it.
+// ADR 0093 § 7: a step over content whose statement did not plainly reach every owner leaves a standing report under the
+// header with the words as sent (only a plain success is a toast), and the fields warn before the step without mail.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -55,6 +57,9 @@ vi.mock('../instance/stepStatement', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../instance/stepStatement')>()),
   stepStatement: vi.fn(),
 }))
+vi.mock('../instance/instanceMail', () => ({ statementMailNotSetUp: vi.fn() }))
+const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }))
+vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: toastSuccess }) }))
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
 import {
@@ -65,6 +70,8 @@ import type { TenantInviteState, TenantSummary } from './tenants'
 import { httpError } from '../../test/httpError'
 import { stepStatement } from '../instance/stepStatement'
 import { getModerationSteps, type OpenModerationProposal } from '../instance/moderation'
+import { statementMailNotSetUp } from '../instance/instanceMail'
+import { copyText } from '../../shared/inviteLink'
 import { session, setTokens } from '../../app/session'
 
 const i18n = createI18n({
@@ -99,7 +106,13 @@ const i18n = createI18n({
         measuresTitle: 'Take offline or delete', suspendSend: 'Take offline and send', deleteSend: 'Delete and send',
         proposalOpen: 'Proposed: {category}, case {caseId}',
       },
-      moderation: { steps: { categories: { ILLEGAL_CONTENT: 'Illegal content' } } },
+      moderation: {
+        steps: {
+          categories: { ILLEGAL_CONTENT: 'Illegal content', TERMS_BREACH: 'A breach of the terms' },
+          statement: { ground: 'Ground', provision: 'Provision', facts: 'Facts', noMail: 'Mail is not set up' },
+          delivery: { notReached: 'Not mailed to {addresses}', unknown: 'Cannot say', nobodyToTell: 'Nobody to tell', copy: 'Copy', copied: 'Copied' },
+        },
+      },
       members: { copyLinkIntro: 'copy', copyLink: 'link', copied: 'copied' },
       common: { done: 'Done', cancel: 'Cancel' },
     },
@@ -114,7 +127,12 @@ const stubs = {
   // read the default "yes" and perform the very mutation the case asserts was refused.
   // `disabled` is carried so the delete gate's disarmed state is observable, not only its refused submit.
   Button: { props: ['label', 'icon', 'ariaLabel', 'disabled'], emits: ['click'], template: '<button :aria-label="ariaLabel" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  // `severity` and the close button are carried so the standing statement report's tone and dismissal are observable.
+  Message: {
+    props: ['severity', 'closable'],
+    emits: ['close'],
+    template: '<div class="msg" :data-severity="severity"><slot /><button v-if="closable" class="msg-close" @click="$emit(\'close\')">x</button></div>',
+  },
   // a native checkbox, so `setValue` and `disabled` read as on the page; the class falls through onto it
   Checkbox: {
     props: ['modelValue', 'disabled', 'inputId'],
@@ -159,13 +177,14 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(reassignInvite).mockResolvedValue(INVITE)
     vi.mocked(revokeTenant).mockResolvedValue(undefined)
     vi.mocked(changeTenantDomain).mockResolvedValue(undefined)
-    vi.mocked(suspendTenant).mockResolvedValue(undefined)
+    vi.mocked(suspendTenant).mockResolvedValue({})
     vi.mocked(reactivateTenant).mockResolvedValue(undefined)
     vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
     vi.mocked(deleteTenant).mockResolvedValue({ dueAt: DUE })
     vi.mocked(stopTenantDeletion).mockResolvedValue(undefined)
     vi.mocked(inviteTenantOwner).mockResolvedValue({ ...INVITE, ownerEmail: 'member@live.example' })
     vi.mocked(getModerationSteps).mockResolvedValue({ proposals: [], signInBlocks: [] })
+    vi.mocked(statementMailNotSetUp).mockResolvedValue(false)
   })
 
   it('renders a PENDING tenant with its invite controls (reassign / resend / revoke)', async () => {
@@ -686,5 +705,121 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await flushPromises()
     expect(replace).toHaveBeenCalledWith({ name: 'login' })
     expect(session.accessToken).toBeNull()
+  })
+
+  // ADR 0093 § 7 — what the step's answer says its statement's mail reached.
+  const STATEMENT = { statementId: 's-9', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
+  async function suspendOverContent(answer: Awaited<ReturnType<typeof suspendTenant>>) {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(stepStatement).mockResolvedValue(STATEMENT)
+    vi.mocked(suspendTenant).mockResolvedValue(answer)
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    await w.find('.step-statement__provision').setValue('Space terms, clause 4')
+    await w.find('.step-statement__facts').setValue('what was found')
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, status: 'SUSPENDED' }])
+    await w.find('.tenant-suspend').trigger('click')
+    await flushPromises()
+    return w
+  }
+
+  it('a suspension over content whose mail reached every owner is only the toast', async () => {
+    const w = await suspendOverContent({ statementDelivery: { outcome: 'REACHED', notReached: [] } })
+    expect(toastSuccess).toHaveBeenCalledWith('offline')
+    expect(w.find('.statement-delivery').exists()).toBe(false)
+  })
+
+  it('a suspension whose mail did not reach every owner names them and keeps the words in view, not a toast', async () => {
+    const w = await suspendOverContent({ statementDelivery: { outcome: 'NOT_ALL_REACHED', notReached: ['a@live.example', 'b@live.example'] } })
+    const report = w.find('.statement-delivery')
+    expect(report.exists()).toBe(true)
+    expect(report.attributes('data-severity')).toBe('warn')
+    expect(report.find('.statement-delivery__what').text()).toBe('Not mailed to a@live.example, b@live.example')
+    expect(report.find('.statement-delivery__ground').text()).toBe('A breach of the terms')
+    expect(report.find('.statement-delivery__provision').text()).toBe('Space terms, clause 4')
+    expect(report.find('.statement-delivery__facts').text()).toBe('what was found')
+    expect(toastSuccess).not.toHaveBeenCalled()
+    // It survives the reload that follows the step; the editable draft does not (a following delete starts empty).
+    expect(w.text()).toContain('Suspended')
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    expect((w.find('.step-statement__facts').element as HTMLTextAreaElement).value).toBe('')
+    // The words go to the clipboard as entered, to be passed on through the instance contact.
+    await report.find('.statement-delivery__copy').trigger('click')
+    await flushPromises()
+    expect(copyText).toHaveBeenCalledWith('Ground: A breach of the terms\nProvision: Space terms, clause 4\nFacts: what was found')
+    // Dismissed, it is gone.
+    await report.find('.msg-close').trigger('click')
+    expect(w.find('.statement-delivery').exists()).toBe(false)
+  })
+
+  it('the report goes when the panel loads another tenant', async () => {
+    const w = await suspendOverContent({ statementDelivery: { outcome: 'NOT_ALL_REACHED', notReached: ['a@live.example'] } })
+    expect(w.find('.statement-delivery').exists()).toBe(true)
+    vi.mocked(listTenants).mockResolvedValue([SUSPENDED])
+    await w.setProps({ tenantId: 't-3' })
+    await flushPromises()
+    expect(w.find('.statement-delivery').exists()).toBe(false)
+  })
+
+  it('a deletion whose delivery the server cannot say, or that told nobody, says so with the words', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(stepStatement).mockResolvedValue(STATEMENT)
+    vi.mocked(deleteTenant).mockResolvedValue({ dueAt: DUE, statementDelivery: { outcome: 'UNKNOWN', notReached: [] } })
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    await deleteInput(w).setValue('live.example')
+    await submitDelete(w)
+    await flushPromises()
+    let report = w.find('.statement-delivery')
+    expect(report.attributes('data-severity')).toBe('warn')
+    expect(report.find('.statement-delivery__what').text()).toBe('Cannot say')
+    expect(report.find('.statement-delivery__facts').text()).toBe('what was found')
+    expect(toastSuccess).not.toHaveBeenCalled()
+
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(deleteTenant).mockResolvedValue({ dueAt: DUE, statementDelivery: { outcome: 'NOBODY_TO_TELL', notReached: [] } })
+    vi.mocked(stepStatement).mockResolvedValue({ ...STATEMENT, statementId: 's-10' })
+    const second = mountPanel('t-2')
+    await flushPromises()
+    await second.find('.tenant-over-content__toggle').setValue(true)
+    await deleteInput(second).setValue('live.example')
+    await submitDelete(second)
+    await flushPromises()
+    report = second.find('.statement-delivery')
+    expect(report.attributes('data-severity')).toBe('info')
+    expect(report.find('.statement-delivery__what').text()).toBe('Nobody to tell')
+  })
+
+  it('a deletion without a statement is the toast, as before — control', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await deleteInput(w).setValue('live.example')
+    await submitDelete(w)
+    await flushPromises()
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringContaining('deleting'))
+    expect(w.find('.statement-delivery').exists()).toBe(false)
+  })
+
+  it('warns before the step that the statement cannot be mailed while the instance mail is not set up', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(statementMailNotSetUp).mockResolvedValue(true)
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    await flushPromises()
+    expect(w.find('.step-statement__no-mail').text()).toBe('Mail is not set up')
+  })
+
+  it('says nothing of mail before the step when the instance mail is set up — control', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    await flushPromises()
+    expect(statementMailNotSetUp).toHaveBeenCalled()
+    expect(w.find('.step-statement__no-mail').exists()).toBe(false)
   })
 })

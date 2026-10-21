@@ -197,6 +197,20 @@ only if an import was added (`src/admin-web/CLAUDE.md`).
   `…ASuspensionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands`,
   `…ADeletionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands`: "Expected: NOT_ALL_REACHED Actual: REACHED"), and
   `anOwnerlessTenantTakenOfflineOverContentAnswersNobodyToTell` with them; 8 of 12 stayed green.
+- **Phase 3.** One standing notice (`features/instance/StatementDeliveryNotice.vue` + `statementDelivery.ts`'s
+  `reportOf`) serves both panels; the warning before the step lives in `StepStatementFields.vue`, which both places open,
+  read through `instanceMail.ts`'s new `statementMailNotSetUp` (only `NOT_CONFIGURED` counts — decision 8: unconfirmed
+  settings still send). It replaced the fields' static "Without the instance mail set up, nobody is told", which said it
+  whether or not mail was set up. Interpretations to check: the step's success toast is left out whenever the report
+  stands (a deletion too — its date is in the pending-deletion notice); a block had no toast before and has none on
+  `REACHED`; `tenant suspend` prints `{"ok": true, …}` so a script reading `ok` keeps working; the CLI's warning names
+  "the instance contact" without reading its address (one more call, one more way to fail). The panels' tests trip the
+  suite's network guard if `instanceMail` is not mocked — every test that opens the statement's fields now mocks it.
+  **Bite** (injection, snapshot-and-restore): the `NOT_ALL_REACHED` branch of the notice's text removed → 2 red
+  (`TenantDetailPanel.test.ts` "a suspension whose mail did not reach every owner names them…", `ModerationPanel.test.ts`
+  "a block whose statement did not reach the member names the address…"), 79 green; restored, grep = 1. `npm run check`
+  green (53 files, 535 tests). No import of a new package, so no container build. **No browser pass**: it needs a running
+  backend, and this loop starts none — owed with the V1 heavy stage.
 - **The decided docs said counts, the decision said an enum.** ADR 0093 § 7 and the use cases (commit d1d993d5) said the
   answer "names how many were to be told"; decision 1 chose an outcome *instead of* counts (`UNKNOWN` has no honest one).
   Phase 4 states what is built and drops the count.

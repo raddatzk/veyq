@@ -220,7 +220,7 @@ beforeEach(() => {
   vi.mocked(tenants.reassignInvite).mockImplementation(async (_tenantId, ownerEmail) => invite(ownerEmail))
   vi.mocked(tenants.changeTenantDomain).mockResolvedValue(undefined)
   vi.mocked(tenants.revokeTenant).mockResolvedValue(undefined)
-  vi.mocked(tenants.suspendTenant).mockResolvedValue(undefined)
+  vi.mocked(tenants.suspendTenant).mockResolvedValue({})
   vi.mocked(tenants.reactivateTenant).mockResolvedValue(undefined)
   vi.mocked(getInstanceRelease).mockResolvedValue({ release: '1.4.0' })
   vi.mocked(getReleaseNotices).mockResolvedValue(noticesRead)
@@ -271,11 +271,14 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
 
   it('tenant revoke, suspend and reactivate each reach their own operation', async () => {
     await invoke(['tenant', 'revoke', '--tenant-id', 't1'])
-    await invoke(['tenant', 'suspend', '--tenant-id', 't2'])
+    const suspended = await invoke(['tenant', 'suspend', '--tenant-id', 't2'])
     await invoke(['tenant', 'reactivate', '--tenant-id', 't2'])
     expect(tenants.revokeTenant).toHaveBeenCalledWith('t1')
     expect(tenants.suspendTenant).toHaveBeenCalledWith('t2', null)
     expect(tenants.reactivateTenant).toHaveBeenCalledWith('t2')
+    // A suspension without a statement answers no delivery: `ok` as before, and nothing on stderr.
+    expect(JSON.parse(suspended.out)).toEqual({ ok: true })
+    expect(suspended.err).toBe('')
   })
 
   it('tenant delete passes the id and the typed domain, and prints when the tenant is erased (uc.admin.delete-tenant)', async () => {
@@ -758,7 +761,7 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   })
 
   it('account block passes the address and the case, or no case when none is given', async () => {
-    vi.mocked(blockSignIn).mockResolvedValue(steps())
+    vi.mocked(blockSignIn).mockResolvedValue({ steps: steps() })
     expect((await invoke(['account', 'block', '--address', 'member@example.com', '--case', 'case-1'])).code).toBe(0)
     expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', 'case-1', null, false)
     expect((await invoke(['account', 'block', '--address', 'member@example.com'])).code).toBe(0)
@@ -766,7 +769,7 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   })
 
   it('account block over content carries its statement of reasons from the flags, sealed by the facade', async () => {
-    vi.mocked(blockSignIn).mockResolvedValue(steps())
+    vi.mocked(blockSignIn).mockResolvedValue({ steps: steps() })
     const statement = { statementId: 's-1', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
     vi.mocked(stepStatement).mockResolvedValueOnce(statement)
     const r = await invoke([
@@ -794,6 +797,67 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
     expect(r.code).toBe(0)
     expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: '', facts: 'what was found' })
     expect(tenants.suspendTenant).toHaveBeenLastCalledWith('t3', statement)
+  })
+
+  // ADR 0093 § 7: the step stands (exit 0) and the JSON carries `statementDelivery`; unless it reached everyone, one
+  // stderr line names who was not reached and the instance contact.
+  it('tenant suspend over content prints whom the statement reached, and stays quiet when it reached every owner', async () => {
+    vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-1', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+    vi.mocked(tenants.suspendTenant).mockResolvedValueOnce({ statementDelivery: { outcome: 'REACHED', notReached: [] } })
+    const r = await invoke(['tenant', 'suspend', '--tenant-id', 't3', '--over-content', '--ground', 'TERMS_BREACH'])
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({ ok: true, statementDelivery: { outcome: 'REACHED', notReached: [] } })
+    expect(r.err).toBe('')
+  })
+
+  it('tenant suspend whose statement did not reach every owner exits 0 and warns on stderr, naming them', async () => {
+    vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-1', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+    const delivery = { outcome: 'NOT_ALL_REACHED' as const, notReached: ['a@club.example.org', 'b@club.example.org'] }
+    vi.mocked(tenants.suspendTenant).mockResolvedValueOnce({ statementDelivery: delivery })
+    const r = await invoke(['tenant', 'suspend', '--tenant-id', 't3', '--over-content', '--ground', 'TERMS_BREACH'])
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({ ok: true, statementDelivery: delivery })
+    expect(r.err).toBe(
+      'veyq-admin: warning: the statement of reasons could not be mailed to a@club.example.org, b@club.example.org and is not sent again — tell them through the instance contact',
+    )
+  })
+
+  it('tenant delete whose statement went to nobody, or to an unknown few, exits 0 and warns', async () => {
+    for (const [outcome, line] of [
+      ['NOBODY_TO_TELL', 'veyq-admin: warning: the statement of reasons went to nobody: the tenant has no owner, or the account no longer exists'],
+      ['UNKNOWN', 'veyq-admin: warning: the server could not tell whom the statement of reasons reached — tell the people it affects through the instance contact'],
+    ] as const) {
+      vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-2', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+      vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES, statementDelivery: { outcome, notReached: [] } })
+      const r = await invoke(['tenant', 'delete', '--tenant-id', 't3', '--domain', 'f.example.com', '--over-content', '--ground', 'TERMS_BREACH'])
+      expect(r.code).toBe(0)
+      expect(JSON.parse(r.out)).toEqual({ dueAt: EXPIRES.toISOString(), statementDelivery: { outcome, notReached: [] } })
+      expect(r.err).toBe(line)
+    }
+  })
+
+  it('account block prints the SignInBlockResult — the steps and whom the statement reached — and warns when it did not reach the member', async () => {
+    vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-3', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+    vi.mocked(blockSignIn).mockResolvedValueOnce({
+      steps: steps({ proposals: [] }),
+      statementDelivery: { outcome: 'NOT_ALL_REACHED', notReached: ['member@example.com'] },
+    })
+    const r = await invoke(['account', 'block', '--address', 'member@example.com', '--over-content', '--ground', 'TERMS_BREACH'])
+    expect(r.code).toBe(0)
+    const printed = JSON.parse(r.out)
+    expect(printed.statementDelivery).toEqual({ outcome: 'NOT_ALL_REACHED', notReached: ['member@example.com'] })
+    expect(printed.steps.signInBlocks).toEqual([
+      { address: 'Blocked@Example.com', caseId: 'case-3', blockedAt: EXPIRES.toISOString() },
+      { address: 'ordered@example.com', caseId: null, blockedAt: EXPIRES.toISOString() },
+    ])
+    expect(r.err).toBe(
+      'veyq-admin: warning: the statement of reasons could not be mailed to member@example.com and is not sent again — tell them through the instance contact',
+    )
+    // Without a statement there is no delivery to print and nothing to warn of.
+    vi.mocked(blockSignIn).mockResolvedValueOnce({ steps: steps() })
+    const plain = await invoke(['account', 'block', '--address', 'member@example.com'])
+    expect(JSON.parse(plain.out)).not.toHaveProperty('statementDelivery')
+    expect(plain.err).toBe('')
   })
 
   it('tenant delete over content carries its statement to the tenant’s owners', async () => {
