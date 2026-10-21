@@ -7,19 +7,42 @@ sources:
 
 import Screenshot from '../../../components/Screenshot.astro';
 
-If someone else got into your account, for example because you approved a code that was not your own new device,
-signing their device out is not enough: it already holds your keys. Replacing your keys shuts it out from now on.
+This is for an emergency only: when someone else has your keys, for example because you approved a code that was not
+your own new device. The page explains the same before it asks for anything, and none of it is small print.
 
-Read these four points first. The page shows them too, and none of them is small print:
+## What gets replaced
 
-- **It stops what comes next; it can't take back what's gone.** Anything that person already saw, they still have.
+The keys that actually open your data: your **Master Key** and your **identity**, the key everyone else recognises
+you by. Your password and your Secret Key stay the same, and your Emergency Kit keeps working.
+
+## Why this step exists
+
+Signing a device out and removing its saved key take away its access to the server, but not the keys it already
+holds. With them, that person can keep reading as soon as they reach your encrypted data some other way, and can pose
+as you. Only new keys change that.
+
+## Do you need this?
+
+Yes, if a device that is not yours had your keys. No, if you only lost a device of your own: choose **Sign out and
+remove this device's saved key** for it instead ([Devices and sessions](/veyq/account/devices-and-sessions/)).
+
+## What changes afterwards
+
+- **To everyone else you are a new identity.** They all see that your key changed, and anyone who had verified you
+  has to compare the safety number again.
+- **In every shared space you are outside until someone there confirms your new key**, best by comparing the safety
+  number over a call: [Verify a person](/veyq/account/verify-a-person/).
 - **Every other device is signed out and loses its saved key.** Each one needs your password and your Secret Key to
   get back in, or you add it again from this device. This device also asks for both the next time you sign in here.
+- **Group invitations to you that are still open lapse** and have to be sent again.
+- **It can't be undone, and it takes nothing back:** what that person already saw stays with them.
+
+Two things before you start:
+
+- **If you are the only owner of a shared space, make someone else an owner first.** Otherwise nobody there can fit
+  the new lock, and your old key keeps reading there.
 - **You need your Emergency Kit.** That is on purpose: it is the one thing the other person does not have, and it is
   what stops them from doing this to you first.
-- **In shared spaces, someone else has to confirm it is really you** before you are back in, best by comparing the
-  safety number over a call: [Verify a person](/veyq/account/verify-a-person/). In a space only you own, make someone
-  else an owner first, or nobody there can let you back in.
 
 ## Replace them
 
@@ -27,7 +50,7 @@ Read these four points first. The page shows them too, and none of them is small
 2. Under **Replace your keys**, enter **Your password** and **Your Secret Key**.
 3. Choose **Replace my keys** and confirm with **Replace my keys** in the dialog.
 
-<Screenshot id="account-replace-keys" shows="The Replace your keys block under Security with its four points, the password and Secret Key fields and the Replace my keys button" />
+<Screenshot id="account-replace-keys" shows="The Replace your keys block under Security with what gets replaced, why, when and what changes afterwards, the password and Secret Key fields and the Replace my keys button" />
 
 The page then says **Your keys are replaced** and lists each space with its state:
 
