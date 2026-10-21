@@ -110,7 +110,7 @@ const en = {
     "notOwner": "Only the server owner can see which release this instance runs.",
     "running": "Running release",
     "unstamped": "This build carries no release stamp. It was never published — a local build, or a development run — so there is no version to name, and none is invented here.",
-    "rollbackHint": "Pin this version in your deployment rather than a tag that moves: it is the one you can go back to, and going back means restoring the backup you took before the update."
+    "rollbackHint": "Pin this version in your deployment rather than a tag that moves. A backup records the release it was taken under; going back after an update means running that release again and restoring the backup you took before the update — under a moving tag, the next start pulls the newer release and migrates the restored data up again."
   },
   "releaseCheck": {
     "title": "New releases",
@@ -787,7 +787,7 @@ const de: typeof en = {
     "notOwner": "Nur die Besitzperson des Servers kann sehen, welches Release diese Instanz ausführt.",
     "running": "Laufendes Release",
     "unstamped": "Dieser Stand trägt keine Release-Kennung. Er wurde nie veröffentlicht — ein lokaler Build oder ein Entwicklungslauf —, es gibt also keine Version zu benennen, und hier wird keine erfunden.",
-    "rollbackHint": "Trage diese Version fest in dein Deployment ein statt eines Tags, der sich bewegt: Sie ist die, zu der du zurückkehren kannst — und Zurückkehren heißt, das Backup einzuspielen, das du vor dem Update gemacht hast."
+    "rollbackHint": "Trage diese Version fest in dein Deployment ein statt eines Tags, der sich bewegt. Ein Backup hält fest, unter welchem Release es entstand; nach einem Update zurückzukehren heißt, genau dieses Release wieder laufen zu lassen und das Backup einzuspielen, das du vor dem Update gemacht hast — mit einem Tag, der sich bewegt, zieht der nächste Start wieder das neue Release und migriert die eingespielten Daten erneut hoch."
   },
   "releaseCheck": {
     "title": "Neue Releases",
