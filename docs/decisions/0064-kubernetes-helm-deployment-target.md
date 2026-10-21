@@ -1,7 +1,7 @@
 # ADR 0064 — Kubernetes is a first-class deployment target (Helm chart)
 
 - Status: Accepted. The bundled store is opt-in on this target and stays the default on Compose (owner
-  2026-10-21, inbox #520).
+  2026-10-21, inbox #521).
 - Date: 2026-09-07
 
 ## Context
@@ -188,7 +188,7 @@ itself from a declared store type, so where the chart deploys `garage` it deploy
   host, where every tenant signs against the *same* store origin. That second signing mode is
   [ADR 0067](0067-store-provisioning-from-a-declared-type.md)'s Decision 5 — one mechanism, of which this
   chart is one of two callers.
-- **The bundled store is opt-in on this target, and stays the default on Compose** (owner 2026-10-21, inbox #520).
+- **The bundled store is opt-in on this target, and stays the default on Compose** (owner 2026-10-21, inbox #521).
   `garage.enabled` defaults to `false`. On a cluster the bundled Garage is one node on one claim, with no replication
   and no versioning, so [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3's *keeping the objects is
   the store operator's job* falls back onto the operator's volume snapshots; it needs a host of its own (`storeDomain`:

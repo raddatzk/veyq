@@ -193,7 +193,7 @@ claim of it — the gate carries `VEYQ_BACKUP_DB_*` instead. (xxvii) came with a
 written: the chart set no `RUST_LOG`, so the store ran at its image's `garage=info`; run against that chart it was red in
 every render, and it was bitten by injection (the env removed from the template, `garage.logFilter=garage=info`).
 (xix) and (xxvii) became conditional on `garage.enabled` when the bundled store turned opt-in on this target (ADR 0064,
-inbox #520); each direction was bitten by injection — the StatefulSet, the app's hint and the gate's hint each
+inbox #521); each direction was bitten by injection — the StatefulSet, the app's hint and the gate's hint each
 rendered unconditionally, the app's hint dropped where on, and no `ci/` file left turning it on.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
