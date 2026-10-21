@@ -36,7 +36,7 @@ SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
 LEGACY_SURFACES = {BACKEND: "backend", WEB: "web", ADMIN_WEB: "admin-web", CRYPTO: "packages/crypto"}
 # The two operator tools a release ships as assets, with their selftests (ADR 0106 decision 8). Not a surface: no
 # reader takes them from a predecessor's tree, so they need no legacy path.
-TOOLS_DIR = ROOT / "scripts"
+TOOLS_DIR = SRC / "tools"
 VEYQCTL = TOOLS_DIR / "veyqctl.py"
 INSTANCE_BACKUP = TOOLS_DIR / "instance_backup.py"
 

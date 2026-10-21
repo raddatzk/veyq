@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin what `scripts/veyqctl.py` decides, without Docker, cosign or a network (cr-veyqctl).
+"""Pin what `src/tools/veyqctl.py` decides, without Docker, cosign or a network (cr-veyqctl).
 
 `veyqctl` is a host tool, not a coverage surface (ADR 0040): this self-test and the live runs recorded in the CR are
 what prove it. Everything here runs against a mirror directory this file writes and a stand-in for the host
@@ -67,7 +67,7 @@ what prove it. Everything here runs against a mirror directory this file writes 
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
-    python3 scripts/veyqctl_selftest.py
+    python3 src/tools/veyqctl_selftest.py
 """
 from __future__ import annotations  # the repo's scripts run on Python 3.9
 

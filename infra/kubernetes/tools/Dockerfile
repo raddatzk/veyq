@@ -22,7 +22,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=mariadb-client /usr/bin/mariadb /usr/bin/mariadb-dump /usr/bin/
 COPY --from=rclone /usr/local/bin/rclone /usr/local/bin/rclone
-COPY scripts/instance_backup.py scripts/instance_backup_selftest.py /opt/veyq/
+COPY src/tools/instance_backup.py src/tools/instance_backup_selftest.py /opt/veyq/
 
 # What the gate holds a release change to (instance_backup.py `gate`): this image's release, and the release a new
 # major is entered from — the predecessor this release's own upgrade proof and chart check ran from
