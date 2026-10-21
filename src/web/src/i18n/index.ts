@@ -271,15 +271,29 @@ const en = {
   },
   rotation: {
     title: 'Replace your keys',
-    sub: 'If someone else got hold of your account, this is how you shut them out.',
-    factNotRepair:
-      'It stops what comes next — it can’t take back what’s gone. Anything that person already saw, they still have.',
+    sub: 'Only for an emergency: when someone else has your keys — for example because you approved a device that wasn’t yours.',
+    whatTitle: 'What gets replaced',
+    whatBody:
+      'The keys that actually open your data: your Master Key and your identity, the key everyone else recognises you by. Your password and your Secret Key stay the same, and your Emergency Kit keeps working.',
+    whyTitle: 'Why this step exists',
+    whyBody:
+      'Signing a device out and removing its saved key take away its access to the server, but not the keys it already holds. With them, that person can keep reading as soon as they reach your encrypted data some other way, and can pose as you. Only new keys change that.',
+    whenTitle: 'Do you need this?',
+    whenBody:
+      'Yes, if a device that isn’t yours had your keys. No, if you only lost a device of your own: choose “Sign out and remove this device’s saved key” for it instead.',
+    afterTitle: 'What changes afterwards',
+    factIdentity:
+      'To everyone else you are a new identity: they all see that your key changed, and anyone who had verified you has to compare the safety number again.',
+    factSharedSpaces:
+      'In every shared space you are outside until someone there confirms your new key — best by comparing the safety number over a call.',
     factSignsOut:
       'Every other device is signed out and loses its saved key. To get back in, each one needs your password and your Secret Key — or to be added again from this device with “Add a device”.',
+    factInvites: 'Group invitations to you that are still open lapse and have to be sent again.',
+    factNotRepair: 'It can’t be undone, and it takes nothing back: what that person already saw stays with them.',
+    soleOwner:
+      'If you are the only owner of a shared space, make someone else an owner first. Otherwise nobody there can fit the new lock, and your old key keeps reading there.',
     factNeedsKit:
       'You need your Emergency Kit. That’s on purpose: it’s the one thing they don’t have, and it’s what stops them doing this to you.',
-    factSharedSpaces:
-      'In shared spaces, someone else has to confirm it’s really you — best by comparing the security number over a call — before you’re back in. In a space you own alone, make someone else an owner first, or nobody there can let you back in.',
     gateNotCold:
       'This device unlocked without your Secret Key, so it asks for it here. That’s the check that stops someone who got into your account from doing this to you — they don’t have your Emergency Kit.',
     passwordLabel: 'Your password',
@@ -2223,15 +2237,29 @@ const de: typeof en = {
   },
   rotation: {
     title: 'Schlüssel ersetzen',
-    sub: 'Wenn jemand anderes an dein Konto gekommen ist, sperrst du die Person hier aus.',
-    factNotRepair:
-      'Es stoppt, was danach kommt — es holt nichts zurück. Was diese Person schon gesehen hat, hat sie weiterhin.',
+    sub: 'Nur für den Notfall: wenn jemand anderes deine Schlüssel hat — etwa weil du einem fremden Gerät den Zugang bestätigt hast.',
+    whatTitle: 'Was ersetzt wird',
+    whatBody:
+      'Die Schlüssel, die deine Daten tatsächlich öffnen: dein Master Key und deine Identität, an der dich alle anderen erkennen. Dein Passwort und dein Secret Key bleiben gleich, dein Notfall-Kit gilt weiter.',
+    whyTitle: 'Warum es diesen Schritt gibt',
+    whyBody:
+      'Abmelden und den gespeicherten Schlüssel eines Geräts entfernen nehmen ihm den Zugang zum Server, aber nicht die Schlüssel, die es schon hat. Mit ihnen kann die Person weiterlesen, sobald sie anders an deine verschlüsselten Daten kommt, und sich als dich ausgeben. Das ändern nur neue Schlüssel.',
+    whenTitle: 'Brauchst du das?',
+    whenBody:
+      'Ja, wenn ein Gerät deine Schlüssel hatte, das nicht deins ist. Nein, wenn du nur ein eigenes Gerät verloren hast: Wähle dafür stattdessen „Abmelden und gespeicherten Schlüssel entfernen“.',
+    afterTitle: 'Was danach anders ist',
+    factIdentity:
+      'Für alle anderen bist du eine neue Identität: Alle sehen, dass sich dein Schlüssel geändert hat, und wer dich verifiziert hatte, muss die Sicherheitsnummer neu vergleichen.',
+    factSharedSpaces:
+      'In jedem geteilten Bereich bist du draußen, bis jemand dort deinen neuen Schlüssel bestätigt — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht.',
     factSignsOut:
       'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes dein Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
+    factInvites: 'Offene Gruppeneinladungen an dich verfallen und müssen neu geschickt werden.',
+    factNotRepair: 'Es lässt sich nicht rückgängig machen, und es holt nichts zurück: Was die Person schon gesehen hat, bleibt bei ihr.',
+    soleOwner:
+      'Bist du in einem geteilten Bereich die einzige besitzende Person, mach vorher jemand anderen dazu. Sonst kann dort niemand das neue Schloss einbauen, und dein alter Schlüssel liest dort weiter mit.',
     factNeedsKit:
       'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
-    factSharedSpaces:
-      'In geteilten Bereichen muss jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht — bevor du wieder drin bist. In einem Bereich, den nur du besitzt, mach vorher jemanden zur besitzenden Person, sonst kann dich dort niemand wieder hineinlassen.',
     gateNotCold:
       'Dieses Gerät wurde ohne deinen Secret Key entsperrt, deshalb wird er hier abgefragt. Genau diese Prüfung hindert jemanden, der in dein Konto gekommen ist, daran, das mit dir zu tun — dein Notfall-Kit hat die Person nicht.',
     passwordLabel: 'Dein Passwort',
