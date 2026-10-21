@@ -35,9 +35,10 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    CORS policy is provisioning, which ADR 0067 decision 1 keeps away from an unknown store, and stays away. S3 has no
    portable way to ask what a key *may* do, so the probe is how the check learns it. For Garage, veyq provisions
    first and then runs the same check.
-3. **The bundled Garage is the one exception, as a hint, not a setting.** The bundled recipes still generate
-   Garage's RPC secret and admin token, because the Garage container needs them at its own start, and they pass the
-   app a **bundled-store hint** (endpoint and admin token). Where the hint exists the console offers *Use the
+3. **The bundled Garage is the one exception, as a hint, not a setting.** A recipe that brings Garage — Compose by
+   default, the chart with `garage.enabled` ([ADR 0064](0064-kubernetes-helm-deployment-target.md) § the bundled
+   store is opt-in) — still generates or requires Garage's RPC secret and admin token, because the Garage container
+   needs them at its own start, and passes the app a **bundled-store hint** (endpoint and admin token). Where the hint exists the console offers *Use the
    bundled store*; choosing it stores a reference to the hint, not a copy of its secrets. A restore onto a fresh
    install and a lost config-secret key therefore leave the bundled case untouched: it reads the hint of the install
    it runs on.

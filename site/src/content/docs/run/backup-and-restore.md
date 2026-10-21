@@ -26,7 +26,7 @@ invites and password resets with `503 mail_unavailable` — the leg that gets fo
 looks like health.
 
 **The capture is cold, and *cold* means the writer is stopped — not the stores.** Stop the application; leave
-MariaDB and Garage running, because the capture reads through their own interfaces. That single act is the whole
+MariaDB and Garage (where the recipe runs it) running, because the capture reads through their own interfaces. That single act is the whole
 consistency argument: with the app down the database gains no rows, so a row whose object was never captured is
 structurally impossible and there is no ordering to remember. `instance_backup.py` cannot check this and does not
 pretend to; `veyqctl` stops the application itself, so a step by hand is the only place it can be forgotten.
@@ -183,7 +183,11 @@ entered in the console (the console never shows them again, and neither can the 
 `VEYQ_BACKUP_STORE_ENDPOINT`, `VEYQ_BACKUP_STORE_ACCESS_KEY` and `VEYQ_BACKUP_STORE_SECRET_KEY` instead of the
 bundled pair, plus `VEYQ_BACKUP_STORE_BUCKET` and `VEYQ_BACKUP_STORE_REGION` when they are not `blobs` and
 `us-east-1`. Keep them in a password manager: after a lost config-secret key the console asks for the same
-credentials again.
+credentials again. `veyqctl` passes the same variables from its shell through to the tool. Where your
+`compose.override.yml` leaves the bundled store out ([Set up a new instance](/veyq/run/new-instance/#install)), they are
+the only pair: `veyqctl` then runs the tool's rclone container on Docker's default network, where it reaches your store
+like any other host, and refuses `backup`, `upgrade` and `restore` before anything stops while one of the three is not
+exported, naming it. Its prune and `status` read only the database and need none.
 
 The network is `veyq_edge`, the one the store is on: the production compose file declares `name: veyq`, so that is
 the project. Leg (c) lives on a **volume**, under Docker's data root, which a host cannot always read (Docker Desktop
@@ -376,9 +380,11 @@ Your part:
   "due".
 - **What a capture holds**: the database dump and the store's **index** — every object's key, size and MD5 — never
   the objects and never the key. Two things are therefore yours:
-  - **The store keeps its objects.** Turn on its versioning, replication or snapshots (for the bundled Garage, of its
-    data claim). A restore checks that every object the database needs is still in the store and refuses otherwise,
-    but it cannot bring back one the store lost.
+  - **The store keeps its objects.** Turn on its versioning, replication or snapshots (for the bundled Garage,
+    `garage.enabled`, of its data claim — it has nothing else). A restore checks that every object the database needs
+    is still in the store and refuses otherwise, but it cannot bring back one the store lost. **Deleting the claims
+    Garage left behind deletes the objects**: they outlive `garage.enabled: false` and `helm uninstall` alike, and
+    `garage.enabled: true` again restores an instance whose store was the bundled one.
   - **The key, exported once**, after the first start, onto a medium of its own. It does not change between
     upgrades, and the gate never reads it:
 
@@ -388,7 +394,7 @@ Your part:
       ./veyq-config-secret.key)
     # move it to its medium, then delete ./veyq-config-secret.key
     ```
-- **A store of your own.** The gate cannot open its secret key (that would need the key above), so name a Secret
+- **A store of your own** — the default here, since the bundled Garage is opt-in. The gate cannot open its secret key (that would need the key above), so name a Secret
   with `endpoint`, `bucket`, `accessKey` and `secretKey` (optionally `region`) in `backup.store.existingSecret`; a key
   pair that can list the bucket is enough. The gate refuses when the instance uses its own store and none is named,
   or when the Secret's endpoint or bucket is not the store in use.
@@ -443,8 +449,8 @@ kubectl -n veyq scale deploy/veyq-app --replicas=1      # 8. the gate finds <rel
 ```
 
 `veyq-restore.yaml` — the release name `veyq`, the chart's Secret `veyq` (or yours, `secrets.existingSecret`), the
-bundled store and database; for a store of your own, the four `VEYQ_BACKUP_STORE_*` variables from your Secret
-instead of the token:
+bundled store (`garage.enabled`) and database; for a store of your own, the four `VEYQ_BACKUP_STORE_*` variables
+from your Secret instead of the two `VEYQ_BUNDLED_STORE_*` lines:
 
 ```yaml
 apiVersion: batch/v1

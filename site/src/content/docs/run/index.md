@@ -39,19 +39,19 @@ The [Security](/veyq/security/start-here/) area explains the model, its threat m
 | **Application** | `app`: serves the web client and the API; reaches the database and the store; a second, internal listener (8090) answers only Server-Owner operations | Deployment `veyq-app`, one replica, Service `veyq-app` (8080) and Service `veyq-app-admin` (8090) |
 | **Admin surface** | `admin`: the Server-Owner console and the `veyq-admin` CLI, published on `127.0.0.1` only | Deployment `veyq-admin`, a ClusterIP Service, no route unless you set `admin.domain` |
 | **Database** | `mariadb`, on a network with no route out | StatefulSet `veyq-mariadb`, or your own database |
-| **Object store** | `garage` (Garage, S3-compatible); browsers upload and download straight to it through presigned links | StatefulSet `veyq-garage`, with an `HTTPRoute` on its own host |
+| **Object store** | `garage` (Garage, S3-compatible) by default, or a store of your own with Garage left out; browsers upload and download straight to it through presigned links | A store of your own by default; opted in (`garage.enabled`), StatefulSet `veyq-garage`, with an `HTTPRoute` on its own host |
 | **Proxy and TLS** | `traefik`, the only container with public ports (80, 443); it routes what the application writes into its one routing file | A Gateway API implementation of your choice serving the chart's `Gateway`; the application writes one `HTTPRoute` (and under per-domain TLS a `ListenerSet`) per tenant into its own namespace |
 | **One-shot** | `volume-ownership` hands the Garage and certificate volumes to their non-root writers and exits | — |
 
-The application provisions the store itself on first start (bucket, access key, layout, CORS), and routes every
+The application provisions the bundled store itself once it is chosen (bucket, access key, layout, CORS), and routes every
 tenant's domain without a restart. There is no Docker socket mounted anywhere and no cluster-wide permission: on
-Kubernetes the application may manage Ingresses in its own namespace and nothing else.
+Kubernetes the application may manage `HTTPRoute`s and `ListenerSet`s in its own namespace and nothing else.
 
 ## The honest state, first
 
 **There is no supported production deployment yet.** veyq is pre-V1, and no release has been published. There
 is a production Compose recipe (the application, its separate administration surface, MariaDB, the Garage object
-store and a Traefik that terminates TLS in front of them), installed and upgraded by `veyqctl`, and a Helm chart for
+store unless you leave it out, and a Traefik that terminates TLS in front of them), installed and upgraded by `veyqctl`, and a Helm chart for
 Kubernetes. Without the store there
 is no media, and a space whose owner has not set up email can invite nobody and none of its members can reset a
 password, so neither is optional in a real instance.

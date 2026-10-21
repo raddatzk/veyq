@@ -66,7 +66,7 @@ itself from a declared store type, so where the chart deploys `garage` it deploy
   **The chart owns its `Gateway`; the operator picks the implementation.** One `Gateway`, `veyq`, in the release
   namespace, its `gatewayClassName` from `gateway.className` (Traefik is the docs'
   example, never a requirement). Its listeners: plain HTTP on 80 with no hostname, an HTTPS listener per chart
-  host (`domain`, `storeDomain`, `admin.domain` when set), and `allowedListeners` from the **same namespace only**,
+  host (`domain`, `storeDomain` with `garage.enabled`, `admin.domain` when set), and `allowedListeners` from the **same namespace only**,
   so the backend's `ListenerSet`s attach and nothing from another namespace does. A listener on the `Gateway` wins
   a hostname conflict against any `ListenerSet` (Gateway API's own precedence), so a tenant domain cannot take
   the bootstrap, store or admin host — by the API, not only by the sink's bootstrap exclusion. *Rejected:* an

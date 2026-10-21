@@ -56,11 +56,22 @@ it. Whether the application learns a client's source port is `app.clientPort.sou
 gateway to the app's routes alone (never the store's), or a header your edge overwrites, configured both on your
 gateway and here ([Networking](/veyq/run/networking/#where-the-source-port-comes-from)).
 
-Generate the bundled store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret` (exactly
-64 hex characters) and a long random value for `garageAdminToken`. The app's S3 key pair is derived from the admin token, so
-the chart carries no access key. The store itself is not a value: after the install, the Server Owner chooses the
-bundled store in the admin console (**Server → Object store**) or enters an S3-compatible one there, and checks it. An
-operator who keeps key material out of values files names an existing `Secret` in `secrets.existingSecret` instead.
+**The bundled store is opt-in here** (`garage.enabled`, `false` by default; [ADR
+0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)). The store
+itself is not a value: after the install, the Server Owner enters an S3-compatible store of your own in the admin
+console (**Server → Object store**) and checks it, and no tenant is created before it passes. Off, the chart renders
+nothing of Garage and the console offers no bundled store; the backup gate then reads that store through
+`backup.store.existingSecret` ([Backup and restore](/veyq/run/backup-and-restore/#under-kubernetes)).
+
+Turn it on only knowing what it is on a cluster: **one Garage node on one claim**, with no replication and no object
+versions, so keeping its objects is your volume snapshots' job; and a host of its own, `storeDomain`, with its DNS,
+its certificate and its listener. With `garage.enabled: true`, set `storeDomain` and generate its secrets the same
+way as for compose: `openssl rand -hex 32` for `secrets.garageRpcSecret` (exactly 64 hex characters) and a long random
+value for `secrets.garageAdminToken`. The app's S3 key pair is derived from the admin token, so the chart carries no
+access key, and the console then offers **Use the bundled store**. An operator who keeps key material out of values
+files names an existing `Secret` in `secrets.existingSecret` instead. Turning it off again under an instance whose
+store is the bundled one is not refused: the app then names the cause, and Garage's claims stay behind, so `true`
+again restores it. **Deleting those claims deletes the objects.**
 
 **The admin listener has a `Service` of its own, `veyq-app-admin`, and a `NetworkPolicy` keeps every other pod off
 it.** It is deliberately not a second port on `veyq-app`: that Service is what the chart's `HTTPRoute`, every
@@ -73,8 +84,8 @@ separation still keeps every route off it, but in-cluster reachability is then o
 unprivileged for exactly this — so the namespace can carry that label from the start. Every container also has a
 read-only root filesystem.
 
-**Three hosts, two of them mandatory.** `domain` is the instance (the compose file's `VEYQ_DOMAIN`);
-`storeDomain` is the object store on **its own host** — not a path under `domain`, because an operator-chosen
+**Up to three hosts, one of them mandatory.** `domain` is the instance (the compose file's `VEYQ_DOMAIN`);
+with `garage.enabled`, `storeDomain` is the bundled store on **its own host** — not a path under `domain`, because an operator-chosen
 gateway implementation is not guaranteed to preserve the prefix and `Host` header a SigV4 signature needs, so
 presigned URLs are signed against the store's own origin (`store-origin` signing,
 [ADR 0067](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5) under the `*` CORS
@@ -93,7 +104,7 @@ or — opted in — the one the chart templates (below):
   and every mailed link is `https`, so an instance nothing terminates TLS for boots, serves every page, and silently
   breaks sessions.
 - `per-domain`: an HTTPS listener per host whose certificate `Secret` is named after the host's route — `veyq-app`,
-  `veyq-garage` and `veyq-admin` on the `Gateway`, and for each tenant a `ListenerSet` of its own under the tenant's
+  `veyq-garage` (with `garage.enabled`) and `veyq-admin` on the `Gateway`, and for each tenant a `ListenerSet` of its own under the tenant's
   object name. A listener on the `Gateway` wins a hostname conflict against any `ListenerSet`, so a tenant cannot
   take the instance's, the store's or the admin host. Every tenant domain — a custom domain included — gets its own
   certificate with no chart edit and no restart, from `gateway.tls.acme`'s issuer or, bringing your own, from the
