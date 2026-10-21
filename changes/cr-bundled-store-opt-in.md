@@ -1,7 +1,7 @@
 ---
 id: cr-bundled-store-opt-in
 title: The bundled store is opt-in on Kubernetes and can be left out on Compose
-status: planned
+status: done
 satisfies: ["uc.admin.configure-object-store"]
 adrs: ["0064", "0089", "0067", "0013", "0056", "0096"]
 invariants:
@@ -123,4 +123,30 @@ in `site/`).
 
 ## Retrospective
 
-_(filled by the implementer)_
+- **Decision 7 read literally would have broken two callers.** "`backup_tool` refuses … when the `VEYQ_BACKUP_STORE_*`
+  pair is not in its shell" — but `backup_tool` is also what `status` (pool and retention warnings), `start` and
+  `backup prune` call, and those read only the database. A Garage-less instance's daily prune timer would have failed
+  every night for a pair it never uses. Built as `backup_tool(store=False)` for those four, the refusal kept on
+  `backup`/`upgrade`/`restore` and the rollback (which calls `stack_facts` directly and needed the same check).
+  Root cause: the refine named the function, not its callers. *Next time:* a refusal a decision puts into a shared
+  helper lists the helper's callers in the CR (harvested into `docs/ai/README.md`'s refinement checklist).
+- **Decision 3 moved the sentinel and silently weakened what it proves.** Planted at the start it proved the container
+  log window reaches back to the run's start; planted after the browser stage it proves only that the sweep reads
+  Garage's log up to the end. The CR did not say so; the residual is now written where it binds
+  (`plant_store_sentinel`'s and `e2e_sweeps.store_sentinel`'s docstrings). The stack e2e itself was **not run** (V1
+  heavy stage, by the brief): the move is unproven end to end until then.
+- **Decision 5's expected `chart_upgrade_check` finding did not appear — a different one did.** Measured
+  (`python3 scripts/chart_upgrade_check.py`, predecessor HEAD^1 = 96d30c6741ed): acme/shared `27 -> 27` and
+  `29 -> 29 objects, 0 finding(s)`; the candidate renders all four predecessor `ci/` files; and 2 findings, "the
+  predecessor's chart with the candidate's ci/lint-values.yaml (and proxy-protocol-values.yaml): `helm template`
+  failed" — the predecessor's schema requires `storeDomain`/`garageRpcSecret`/`garageAdminToken`, which the Garage-off
+  files no longer carry, so no object comparison (and no rule-7 "StatefulSet missing") happens for them; exit 0,
+  "information only while `release: none`". Recommendation: **rule 7 needs no change.** The finding is transitional —
+  from the first release on, the predecessor's schema is this one — and a values-driven removal would only be
+  reported if a `ci/` file flipped `garage.enabled` between predecessor and candidate, which is a `ci/` edit, not an
+  operator's upgrade.
+- Smaller: the inventory's `Home.astro` stack list and `index.md` (`Ingresses`, stale since the Gateway API move —
+  fixed in passing) were right to list. `docs/inbox.md` carries **two rows numbered 520** (this one and
+  `cr-statement-delivery-report`'s) under a header that says 520 is the highest used — a parallel-session collision
+  left for the owner. Process: a `cp` without `-f` in a bite-test script hung on this Mac's interactive alias (the
+  memory note exists; using `/bin/cp -f` from the start would have saved a restore).
