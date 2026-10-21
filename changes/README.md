@@ -711,7 +711,10 @@ first, and only then do the guards that judge its result change.
 sibling feature (`'../memory/memoryNodes'`, `'../../memory/api'`) never spell the parent directory, and only `vue-tsc`
 named them. Resolve every relative specifier against its file and test where it lands — the way
 `validate_web_core_imports_no_applications.py` reads an edge — and a docs tree that shares the name
-(`docs/features/memory/`) is set apart by its prefix, not by hand.
+(`docs/features/memory/`) is set apart by its prefix, not by hand. A Python module spells even less: `import
+instance_backup` resolves through `sys.path`, which holds the running script's own directory, so cr-tools-under-src's
+locator for the file names missed three importers in `scripts/` that only a run after the move would have broken.
+Moving a `.py` file greps `^\s*(import|from) <module>` as well.
 
 **Before its hits are classified, a move's locator sorts the files by how each is consumed.** A file that *ships
 alone* cannot import a sibling the move adds: `cr-repo-layout-infra-and-tests` switched every script to one

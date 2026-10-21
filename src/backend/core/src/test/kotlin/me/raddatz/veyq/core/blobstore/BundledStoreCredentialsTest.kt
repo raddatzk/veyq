@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * The bundled store's derived key pair (ADR 0089 decision 3). The backend imports this pair into the Garage it
- * provisions, and `scripts/instance_backup.py` derives the same pair to capture that store: a drift on either side
+ * provisions, and `src/tools/instance_backup.py` derives the same pair to capture that store: a drift on either side
  * makes every bundled backup fail its first store call. The vector below is pinned in `instance_backup_selftest.py`
  * too — change both together, or neither.
  */

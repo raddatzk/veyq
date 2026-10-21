@@ -32,7 +32,7 @@ acceptanceCriteria:
       # A precondition of that `OK`, not a criterion of its own: the restored key must be READABLE by the app
       # (uid 10001 on both deployment targets), or it reads ABSENT with the key present (inbox #188). The
       # rehearsal cannot see it — it restores as the same user that runs the backend. The tool's owner rule is
-      # proven docker-free by `scripts/instance_backup_selftest.py` (every plan branch, and a refusal before the
+      # proven docker-free by `src/tools/instance_backup_selftest.py` (every plan branch, and a refusal before the
       # first write), which `ci.yml`'s `web-e2e` job runs; a Python operator tool is no coverage surface, so it is
       # named here rather than cited. The production recipe's live run was recorded once, on 2026-10-15, in
       # cr-restore-places-the-key-as-the-runtime-user phase 3. It ran in containers on Docker Desktop's Linux VM, with
@@ -140,7 +140,7 @@ acceptanceCriteria:
     # copy of the capture whose manifest claims a schema above the target's — chosen so that string order would
     # call it OLDER — and requires the refusal to name the newer schema and the release, and the target's tables,
     # Flyway history and key file to be what they were before. Version order itself, the message and the closing
-    # log are pinned without Docker by `scripts/instance_backup_selftest.py`.
+    # log are pinned without Docker by `src/tools/instance_backup_selftest.py`.
     text: >-
       A backup whose schema is newer than the target's is refused before anything is written, and the message
       names the release the backup came from (A10). The target's release would refuse to start on a history
@@ -164,7 +164,7 @@ acceptanceCriteria:
       this is what keeps a leaked capture from being the leak the key file exists to defend against (ADR 0056 §1,
       ADR 0050).
   - id: the-store-leg-is-verifiable-before-the-restore
-    # No coverage, and none to come: the observable is the exit code of `scripts/instance_backup.py verify`, and a
+    # No coverage, and none to come: the observable is the exit code of `src/tools/instance_backup.py verify`, and a
     # Python operator tool is not a coverage surface (ADR 0040). Proven by that tool's own asymmetry (stated on
     # `a-stopped-app-makes-the-dangerous-skew-impossible`) and the CR's bite-proofing.
     text: >-
@@ -174,7 +174,7 @@ acceptanceCriteria:
       and the reason this form was chosen.
   - id: an-index-capture-restores-only-against-the-objects-it-indexed
     # A4 and A11 (ADR 0098). No coverage on a surface: the observable is the operator tool's exit and message — a
-    # Python operator tool, not a coverage surface (ADR 0040). Proven by `scripts/instance_backup_selftest.py` (G5:
+    # Python operator tool, not a coverage surface (ADR 0040). Proven by `src/tools/instance_backup_selftest.py` (G5:
     # a format-3 restore against a fake live listing — all present loads and never writes to the store, a missing
     # and a resized object each refuse naming it before the load, an extra object is tolerated,
     # `--accept-missing-objects` loads and names the broken object, `--record` writes the backup's release; G6: every
@@ -189,7 +189,7 @@ acceptanceCriteria:
       knowingly restores without it. An older tool refuses such a capture by its format number.
   - id: a-restore-copies-objects-only-into-an-empty-store
     # ADR 0056 §7, A5. No coverage on a surface (a Python operator tool, ADR 0040). Proven by
-    # scripts/instance_backup_selftest.py P7 (a store holding one object refused before load, naming the count; one
+    # src/tools/instance_backup_selftest.py P7 (a store holding one object refused before load, naming the count; one
     # holding only the store check's probe loads, copying exactly the index's keys the source holds, before the load),
     # P8 (a source object of another MD5 or a missing required one refused by name; --accept-missing-objects; an absent
     # orphan tolerated), P9 (a format-2 capture's objects/ the same way); and by the web-e2e restore groups, which
@@ -202,7 +202,7 @@ acceptanceCriteria:
       the restore refuses naming each; then exactly the index's keys are copied, never with a delete.
   - id: an-object-pool-keeps-what-its-retained-captures-index
     # ADR 0056 §3 (owner 2026-10-17). No coverage on a surface (a Python operator tool, ADR 0040). Proven by
-    # scripts/instance_backup_selftest.py P1 (the index's keys copied with --immutable, incrementally; the pool made
+    # src/tools/instance_backup_selftest.py P1 (the index's keys copied with --immutable, incrementally; the pool made
     # 0700), P2 (a short pool fails the capture with no manifest, no ledger entry and no delete; a differing copy fails
     # and is kept), P3 (an object a retained capture's index names stays, a stray one goes; after rotation the object
     # only the rotated-out capture named goes), P4 (a ledger read lacking the new entry prunes nothing), P5 (every argv
@@ -215,7 +215,7 @@ acceptanceCriteria:
       new capture's index is complete in the pool. The capture records the pool's target, never a credential, and its
       index is what a restore copies out of the pool.
   - id: the-cluster-capture-never-holds-the-key
-    # A11, ADR 0098 decision 4c. No coverage on a surface: proven by `scripts/instance_backup_selftest.py` G8 (the
+    # A11, ADR 0098 decision 4c. No coverage on a surface: proven by `src/tools/instance_backup_selftest.py` G8 (the
     # gate, with a readable key at the default path, records leg (c) separate and no file on the volume holds the
     # key's bytes) and by `scripts/chart_meta_check.py` (xxiv) (the init container never mounts the config-secret
     # claim; bitten by mounting it).
@@ -226,9 +226,9 @@ acceptanceCriteria:
   - id: every-capture-is-pruned-at-b
     # A12, ADR 0056 decision 8. No coverage on a surface: the observable is the operator tools' exits and what they
     # leave on disk — Python operator tools and a chart, no coverage surface (ADR 0040). Proven by
-    # scripts/instance_backup_selftest.py (group R: captures past B gone on a fake clock, the newest too, `keep` still a
+    # src/tools/instance_backup_selftest.py (group R: captures past B gone on a fake clock, the newest too, `keep` still a
     # bound, the pool's ledger entries past B dropped and their objects with them, B read from the database and 30 when
-    # it cannot be), scripts/veyqctl_selftest.py (`backup`, `upgrade`, `start` and `backup prune` run the prune, `status`
+    # it cannot be), src/tools/veyqctl_selftest.py (`backup`, `upgrade`, `start` and `backup prune` run the prune, `status`
     # warns while no capture is younger than B) and scripts/chart_meta_check.py (the daily prune's CronJob reaches the
     # database and the backup claim alone, and never the key's claim).
     text: >-
@@ -282,7 +282,7 @@ acceptanceCriteria:
           - src/features/moderation/ModerationQueue.test.ts
           - src/features/moderation/CaseDetail.test.ts
   - id: the-object-check-honours-erased-keys
-    # A13. No coverage on a surface (a Python operator tool, ADR 0040). Proven by scripts/instance_backup_selftest.py
+    # A13. No coverage on a surface (a Python operator tool, ADR 0040). Proven by src/tools/instance_backup_selftest.py
     # (group L: a key the ledger lists is reported as erased and never refuses; no ledger, today's refusal and the
     # restore says no ledger was given) and the veyqctl self-test (restore and rollback hand the tool the ledger read
     # from the state volume).

@@ -1,6 +1,6 @@
 -- B, the days a backup is kept (ADR 0056 decision 8), once the Server Owner set it: one row, id 1, 7 to 365. No seeded
 -- row — no row reads as the default, 30 (BackupRetention). The capture tooling reads it over the connection it dumps
--- through (scripts/instance_backup.py), so it is instance configuration and none of the restore's data (NOT_DATA).
+-- through (src/tools/instance_backup.py), so it is instance configuration and none of the restore's data (NOT_DATA).
 CREATE TABLE veyq_backup_retention (
     id             INT NOT NULL PRIMARY KEY,
     retention_days INT NOT NULL

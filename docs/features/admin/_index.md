@@ -71,7 +71,7 @@ handling of reported shares.
   lock on the tenant row)
 - Set tenant branding — planned
 - ★ [Back up & restore the instance](use-cases/uc.admin.back-up-and-restore-instance.md) — **built** (the operator tool
-  `scripts/instance_backup.py`; capture and restore onto an empty instance are rehearsed in the web e2e run)
+  `src/tools/instance_backup.py`; capture and restore onto an empty instance are rehearsed in the web e2e run)
   ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md); three legs not two, a cold
   capture that stops only the writer, and a store leg captured as objects rather than volumes)
 - ★ [Know which release runs, and which a backup came from](use-cases/uc.admin.identify-instance-release.md) —
@@ -79,8 +79,8 @@ handling of reported shares.
   the operator's, the pre-auth `major`/`build` is the client's; they share the major
   ([ADR 0085](../../decisions/0085-one-major-moved-on-a-yearly-train.md), generated from `VERSION`) and the precise release never goes pre-auth)
 - ★ [Install an instance and keep it on its release line](use-cases/uc.admin.install-and-upgrade-instance.md) —
-  **built** (`scripts/veyqctl.py`, [ADR 0096](../../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md);
-  coverage stays `planned`, a host tool being no coverage surface — `scripts/veyqctl_selftest.py` and the stack lane
+  **built** (`src/tools/veyqctl.py`, [ADR 0096](../../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md);
+  coverage stays `planned`, a host tool being no coverage surface — `src/tools/veyqctl_selftest.py` and the stack lane
   prove it). A release is an immutable GitHub Release whose assets are the recipe; `veyqctl install` and `upgrade`
   verify its images before anything is pulled, and an upgrade begins with the backup above by decision, not by advice —
   the schema migrates at boot with no gate and the migration set has no downgrade path

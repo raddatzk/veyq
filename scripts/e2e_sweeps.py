@@ -47,9 +47,11 @@ from typing import Callable, Iterable, Iterator, NamedTuple
 
 import yaml
 
-# The store sweep mirrors a bucket with the operator tool's own rclone plumbing, never a second copy of it. Importable
-# because Python puts the running script's own directory — `scripts/` — on `sys.path`, for either orchestrator and for
-# a guard that imports one of them by path.
+# The store sweep mirrors a bucket with the operator tool's own rclone plumbing, never a second copy of it. `repo_layout`
+# is importable because Python puts the running script's own directory — `scripts/` — on `sys.path`, for either
+# orchestrator and for a guard that imports one of them by path; it puts the tools' directory beside it.
+import repo_layout
+repo_layout.tools_importable()
 import instance_backup
 # The opacity oracle needs the set of properties a spec DECLARES opaque. It is derived from the
 # contracts here, never listed, by reusing the guard's own predicate — one definition of "opaque",

@@ -46,7 +46,7 @@ spec:
       # before this one is created, so the capture is cold by construction. It reads what the app reads — the database
       # by the app's own URL and user, the bundled store's hint — and LESS: no config-secret mount, so no capture on
       # the claim can hold the KEK (scripts/chart_meta_check.py (xxiv)). Same pod, so the NetworkPolicy set gains no
-      # peer. What it decides and refuses: scripts/instance_backup.py `gate`.
+      # peer. What it decides and refuses: src/tools/instance_backup.py `gate`.
       initContainers:
         - name: backup-gate
           image: {{ include "veyq.toolsImage" . | quote }}

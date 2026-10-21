@@ -1,7 +1,7 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
 - Status: Accepted 2026-10-16; built: `veyqctl` (decisions 1, 2, 4–7), the producer of a release's assets, and no
-  image carries a recipe (`scripts/veyqctl.py`, `scripts/release_assets.py`); the stack lane installs every candidate
+  image carries a recipe (`src/tools/veyqctl.py`, `scripts/release_assets.py`); the stack lane installs every candidate
   through it; the publish creating the GitHub Release (decision 3, `ci.yml`'s `publish` job, held by
   `scripts/validate_release_identity.py` assertion 11 and never run: there is no remote); the Run pages around
   `veyqctl`, each keeping the commands the tool runs, and *Verify a release*'s `cosign verify-blob` for `veyqctl`
@@ -10,7 +10,7 @@
   Built 2026-10-17 (cr-backup-store-leg-is-an-index): `backup` and `upgrade` capture the database and the store's index
   with an optional, pruned object pool, `restore` checks the objects and copies them only into an empty store, `status`
   warns while the bundled store has no pool, and `rollback` goes back in place (decisions 1, 5 and 6,
-  [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3 and §7) — held by `scripts/veyqctl_selftest.py`
+  [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) §3 and §7) — held by `src/tools/veyqctl_selftest.py`
   (`test_pool`, `test_rollback`) and run live on a throwaway Compose project.
 - Date: 2026-10-16
 

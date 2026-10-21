@@ -213,7 +213,7 @@ port (Kubernetes documents traffic from a pod's own node as always allowed; no c
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
 digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification.
 (xxiv) proves what the init container is handed, not what it does: the gate's decisions are
-`scripts/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
+`src/tools/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
 pod and that the gate captures cold were measured once, on a kind cluster (cr-kubernetes-backup-gate), not here. And
 it recognises the config-secret claim only through the app container's KEK path; a key the app reads from elsewhere
 is out of its reach. (xxvii) reads what the container is told, not what Garage does with it (that `warn` drops the

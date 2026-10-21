@@ -60,7 +60,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      upload|edit|delete`, `gh api …/releases`, `uploads.github.com`, an action whose name says `release`): an immutable
      release takes no asset after it is published. **And the cosign that signs is the line operators verify with**
      (inbox #474): exactly one `sigstore/cosign-installer` step in the file, in the `publish` job before every step
-     that runs `cosign`, with `cosign-release` an exact `v<major>.<minor>.<patch>` no older than `scripts/veyqctl.py`'s
+     that runs `cosign`, with `cosign-release` an exact `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s
      `COSIGN_MIN_VERSION` — never the installer's default, which lags — and no `cosign` line anywhere passes the
      deprecated flag that chose the bundle format (cosign 3 writes the Sigstore bundle by default, and only its
      `=false` spelling still writes the legacy one).
@@ -79,7 +79,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      path, `../`, a directory in it, a name GitHub would rename, `include:`, `extends`). Here that derivation is run
      on the tree, its refusals are this guard's reds, and the producer's carry step is run into a scratch directory,
      where every derived file must be, byte-identical to the tree (the `.env` template under its asset name,
-     `env.example`). Every `*_ASSET` name `scripts/veyqctl.py` fetches must be one a release has — the producer's
+     `env.example`). Every `*_ASSET` name `src/tools/veyqctl.py` fetches must be one a release has — the producer's
      files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11)
      — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
      The derived list is printed on the OK line. Plus: every veyq image
@@ -111,7 +111,7 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      verify-blob --bundle <release_assets.MANIFEST_BUNDLE>` on `manifest.json`, before its digests are read (inbox
      #469) — and the workflow states no identity of its own. The upstream is the chart's
      `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included. The
-     operator's tool runs the same check (`veyqctl verify`, `install`, `upgrade`, ADR 0096): `scripts/veyqctl.py`'s
+     operator's tool runs the same check (`veyqctl verify`, `install`, `upgrade`, ADR 0096): `src/tools/veyqctl.py`'s
      `COSIGN_OIDC_ISSUER` and `COSIGN_IDENTITY_REGEXP` are held to the same accepts and rejects, and to be exactly
      the identity the page documents, so the page and the tool can never state two.
 
@@ -137,7 +137,7 @@ under Helm, and it is what [ADR 0067](../docs/decisions/0067-store-provisioning-
 removed by moving the bring-up into the backend. It was, measured at that moment, the only `build:` stanza in
 either compose file.
 
-Assertion 6 was bought separately and just as concretely (2026-08-17). `scripts/instance_backup.py` builds
+Assertion 6 was bought separately and just as concretely (2026-08-17). `src/tools/instance_backup.py` builds
 `docker compose -f <file> exec` with **no `-p`**, and no compose file declared a `name:`, so the documented
 production capture resolved project `infra`. Measured on a host running the dev stack, that does not fail:
 `docker compose -f infra/docker-compose.prod.yml ps` listed all four *dev* containers as its own and the
@@ -258,7 +258,7 @@ construct where they diverge would be judged by the wrong one. The rejected iden
 ways a pattern is too wide, not a proof that no other string is accepted; the accepted ones are derived. The
 registry (`ghcr.io`) is a constant here. And it cannot see whether an operator runs the command at all. For
 `veyqctl` it reads the two constants, not the `cosign verify` and `cosign verify-blob` calls that pass them:
-`scripts/veyqctl_selftest.py` holds both calls to exactly those two values.
+`src/tools/veyqctl_selftest.py` holds both calls to exactly those two values.
 """
 from __future__ import annotations
 
@@ -403,8 +403,8 @@ def job_steps(doc: dict, job: str) -> list[dict]:
 
 
 def veyqctl_constants(pattern: str) -> dict[str, str]:
-    """`scripts/veyqctl.py`'s module-level string constants whose names match `pattern`, read without importing it."""
-    path = ROOT / "scripts/veyqctl.py"
+    """`src/tools/veyqctl.py`'s module-level string constants whose names match `pattern`, read without importing it."""
+    path = repo_layout.VEYQCTL
     if not path.is_file():
         return {}
     found = {}
@@ -1129,7 +1129,7 @@ if workflow_doc:
     if not cosign_runs:
         fail(f"{WORKFLOW.relative_to(ROOT)} runs no `cosign` at all, so the check of the cosign that signs checked NOTHING")
     if floor_parts is None:
-        fail(f"scripts/veyqctl.py assigns no `COSIGN_MIN_VERSION` as `<major>.<minor>.<patch>` (found {cosign_floor!r}) "
+        fail(f"src/tools/veyqctl.py assigns no `COSIGN_MIN_VERSION` as `<major>.<minor>.<patch>` (found {cosign_floor!r}) "
              f"— the floor the publish's cosign is held to is the one `veyqctl` verifies with")
     if len(installers) != 1 or installers[0][0] != PUBLISH_JOB:
         fail(
@@ -1151,7 +1151,7 @@ if workflow_doc:
         elif floor_parts and tuple(int(x) for x in pinned.groups()) < floor_parts:
             fail(
                 f"the `{COSIGN_INSTALLER}` step installs cosign {cosign_release}, older than {cosign_floor}, the oldest "
-                f"`veyqctl` (scripts/veyqctl.py COSIGN_MIN_VERSION) and the Run page verify with — the publish would "
+                f"`veyqctl` (src/tools/veyqctl.py COSIGN_MIN_VERSION) and the Run page verify with — the publish would "
                 f"sign with a cosign its own operators are told to refuse"
             )
         for job_name, index, step, line in cosign_runs:
@@ -1212,19 +1212,19 @@ if not refusals:
             # found by a name pattern loses a constant silently, green (cr-signed-release-manifest).
             veyqctl_assets = veyqctl_constants(r"[A-Z][A-Z_]*_ASSET")
             if not veyqctl_assets:
-                fail("scripts/veyqctl.py names no `*_ASSET` constant, so the names it fetches checked NOTHING")
+                fail("src/tools/veyqctl.py names no `*_ASSET` constant, so the names it fetches checked NOTHING")
             # The manifest's bundle by name, not merely a name a release has: `veyqctl.bundle` is one too, and a
             # `veyqctl` that verified the manifest against it would refuse every published release.
             if veyqctl_assets.get("MANIFEST_BUNDLE_ASSET") != release_assets.MANIFEST_BUNDLE:
                 fail(
-                    f"scripts/veyqctl.py's `MANIFEST_BUNDLE_ASSET` is `{veyqctl_assets.get('MANIFEST_BUNDLE_ASSET')}`, not "
+                    f"src/tools/veyqctl.py's `MANIFEST_BUNDLE_ASSET` is `{veyqctl_assets.get('MANIFEST_BUNDLE_ASSET')}`, not "
                     f"`{release_assets.MANIFEST_BUNDLE}`, the manifest's bundle the publish writes — `veyqctl` would "
                     f"verify the manifest against another file, or refuse every release for the lack of it"
                 )
             for constant, name in sorted(veyqctl_assets.items()):
                 if name not in produced:
                     fail(
-                        f"scripts/veyqctl.py's `{constant}` is `{name}`, which scripts/release_assets.py does not write "
+                        f"src/tools/veyqctl.py's `{constant}` is `{name}`, which scripts/release_assets.py does not write "
                         f"(it writes {', '.join(sorted(produced))}) — `veyqctl install` would miss it in every release"
                     )
 
@@ -1411,7 +1411,7 @@ else:
         fail(
             f"{PROD_COMPOSE.relative_to(ROOT)} declares no top-level `name:`. Compose then derives the project "
             f"from the file's DIRECTORY — `{PROD_COMPOSE.parent.name}` — which the dev compose file shares, so "
-            f"an unqualified `down -v` reaches the production volumes and `scripts/instance_backup.py`'s "
+            f"an unqualified `down -v` reaches the production volumes and `src/tools/instance_backup.py`'s "
             f"`docker compose … exec` (which emits no `-p`) aims the documented production capture at whatever "
             f"runs out of that directory. On a host that also runs the dev stack it does not fail: it captures "
             f"the wrong instance and reports success."
@@ -1461,7 +1461,7 @@ UPSTREAM = re.compile(r"^https://github\.com/([^/\s]+)/([^/\s]+?)/?$")
 FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 # The operator's tool runs the same verification (ADR 0096): the identity it hands cosign is two module-level string
 # constants, read here without importing it.
-VEYQCTL = ROOT / "scripts/veyqctl.py"
+VEYQCTL = repo_layout.VEYQCTL
 VEYQCTL_ISSUER = "COSIGN_OIDC_ISSUER"
 VEYQCTL_IDENTITY = "COSIGN_IDENTITY_REGEXP"
 

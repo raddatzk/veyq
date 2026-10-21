@@ -600,6 +600,7 @@ def pebble_compose(release: Release, workdir: Path, values: dict[str, str]) -> l
     nothing Pebble's service or the `edge` network reads, so `install`'s `up` finds both as this stage left them (the
     install stage holds it to that: Pebble's container must survive it, or its root is not the one the app trusts).
     """
+    repo_layout.tools_importable()
     import veyqctl  # the one reading of which variables a compose file requires
 
     recipe = release.tag / "docker-compose.prod.yml"

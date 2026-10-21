@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pin who owns the config-secret key a restore places, without Docker (inbox #188).
 
-`scripts/instance_backup.py restore` used to write the key as whoever ran it. On the production recipe that is
+`src/tools/instance_backup.py restore` used to write the key as whoever ran it. On the production recipe that is
 root, writing into the `veyq-config-secret` volume Docker seeded from the image as `10001:10001` — and the app,
 running as uid 10001, cannot read a `root:root 0600` file: `ConfigSecretSeal.readOrGenerate` swallows the
 `AccessDeniedException`, the state reads `ABSENT`, and invites and resets are refused with the key sitting right
@@ -52,7 +52,7 @@ in a running container — that is the live proof on the production recipe, reco
 `uc.admin.back-up-and-restore-instance` says. Not a `validate_*.py`: it asserts nothing about the repository,
 only about the tool, and it runs beside the tool's own rehearsal in `ci.yml`'s `web-e2e` job. Runnable locally:
 
-    python3 scripts/instance_backup_selftest.py
+    python3 src/tools/instance_backup_selftest.py
 """
 from __future__ import annotations  # the repo's scripts run on Python 3.9
 
@@ -294,13 +294,16 @@ def checkout_backend() -> pathlib.Path | None:
     """The backend of the repository checkout this file sits in (`scripts/repo_layout.py`'s), or None outside one.
 
     The veyq-tools image ships the tool and this self-test, not the backend: there no migration is beside it, and the
-    repository's run (ci.yml's web-e2e job) is the one that reads them. Only there - no `.git` beside `scripts/` - is
-    a case that reads the backend skipped. Inside a checkout the backend is `repo_layout`'s, and one that is not where
-    that says fails the case instead of skipping it: a skip keyed on the directory itself went quiet when the backend
-    moved (cr-repo-layout-src)."""
-    root = pathlib.Path(__file__).resolve().parent.parent
+    repository's run (ci.yml's web-e2e job) is the one that reads them. Only there - no `.git` two levels above
+    `src/tools/` - is a case that reads the backend skipped. Inside a checkout the backend is `repo_layout`'s, and one
+    that is not where that says fails the case instead of skipping it: a skip keyed on the directory itself went quiet
+    when the backend moved (cr-repo-layout-src). `repo_layout` lives in the checkout's `scripts/`, which is not this
+    file's directory, so that one goes on `sys.path` here — never in the image, where it does not exist."""
+    root = pathlib.Path(__file__).resolve().parents[2]
     if not (root / ".git").exists():
         return None
+    if str(root / "scripts") not in sys.path:
+        sys.path.insert(0, str(root / "scripts"))
     import repo_layout
     return repo_layout.BACKEND
 

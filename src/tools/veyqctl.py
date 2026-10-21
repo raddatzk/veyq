@@ -147,7 +147,7 @@ operator fetches by hand, before any manifest is checked; `install` and `upgrade
 manifest binds `veyqctl` by its sha256 like every other asset.
 
 **What proves it** — it is a host tool, not a coverage surface (ADR 0040; the use-case
-`uc.admin.install-and-upgrade-instance` stays `planned` for that reason): `scripts/veyqctl_selftest.py`, without
+`uc.admin.install-and-upgrade-instance` stays `planned` for that reason): `src/tools/veyqctl_selftest.py`, without
 Docker, holds the resolver, the manifest's signature and parse, the template merge, `upgrade`'s order and every
 refusal, with a stand-in for cosign; `cosign verify-blob` in the exact form it runs was run against cosign's own
 signed release files (cr-signed-release-manifest), never against a veyq release, none being published; the live

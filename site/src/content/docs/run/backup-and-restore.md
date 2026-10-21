@@ -194,7 +194,7 @@ its own, never into the capture.
 **How far this is proven.** `veyqctl backup` and `upgrade` ran live (2026-10-17) on an instance the stack lane had
 installed and filled through the browser: the capture into a directory pool with the early copy before the stop, an
 object the store lost kept in the pool while a retained capture named it, the prune deleting what no kept capture
-named, and the capture restored from the pool onto a second fresh install. `scripts/instance_backup_selftest.py` holds
+named, and the capture restored from the pool onto a second fresh install. `src/tools/instance_backup_selftest.py` holds
 the pool's builder (copied into with `--immutable`, deleted from only by the prune), the prune and every refusal without Docker. Every `scripts/run_web_e2e.py` run captures a
 live instance into a pool, destroys it, restores it from the pool and runs a suite against the result, and holds the
 production capture to resolving the production project rather than whatever else runs.
@@ -333,7 +333,7 @@ tool, given a `--config-secret-file` inside the volume itself, gives the key the
 and refuses a run that cannot — the route for an operator who mounts the volume as root.) **How far this is proven:**
 `veyqctl restore` ran once, live, putting an upgrade's capture onto a fresh install: 46 tables dropped, the dump and
 4 objects loaded, the key in the app's volume as `10001:10001 600`, and a Memory opened there. The tool's owner rule
-is held by `scripts/instance_backup_selftest.py`, without Docker or root. A restore from a pool ran live
+is held by `src/tools/instance_backup_selftest.py`, without Docker or root. A restore from a pool ran live
 (2026-10-17): refused onto the fresh install without `--objects-from`, naming the pool; refused while its bucket held
 one object; then 6 objects copied, the config-secret state `OK`, and the bucket equal to the capture's index.
 

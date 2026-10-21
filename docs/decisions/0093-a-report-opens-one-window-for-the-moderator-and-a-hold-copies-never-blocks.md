@@ -403,7 +403,7 @@ range and its no-extension rule (§ 2 there).
   backup's stale rows go at boot; it is the reader `EveryStoredTimeHasAReaderTest` asks for. The foreign keys
   delete with the identity or object; a hold has copied what was reported.
 - **Backups.** The instance backup's database dump ([ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md),
-  `scripts/instance_backup.py`) **leaves out the table's rows**, keeping its schema: what is lost is at most 30
+  `src/tools/instance_backup.py`) **leaves out the table's rows**, keeping its schema: what is lost is at most 30
   days old and expiring anyway, and what was reported lives in the hold tables, which are backed up. Where an
   operator backs up otherwise (volume snapshots, their own dumps), the Run docs give the deletion concept the
   EDPB's erasure report asks for (L): a backup retention B, at most 30 days recommended for a backup holding the

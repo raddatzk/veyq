@@ -18,7 +18,7 @@ title: Know which release an instance runs, and which release a backup came from
 #     executed in this repository" — a stricter bar than the corpus set any other backend ref, retired with
 #     that note.)
 #  2. **`a-backup-names-the-release-it-came-from` has no coverage surface at all**, and never will: its
-#     observable is a manifest written by `scripts/instance_backup.py`, and a Python operator tool is not a
+#     observable is a manifest written by `src/tools/instance_backup.py`, and a Python operator tool is not a
 #     coverage surface (ADR 0040) — the same shape as uc.admin.back-up-and-restore-instance's store-leg
 #     criterion. It keeps this file `planned` after admin-web flips, too: a criterion no surface reaches has no
 #     other legal home (docs/coverage/README.md § Rules). How it is proven instead is on the criterion.
@@ -66,7 +66,7 @@ acceptanceCriteria:
           - InstanceReleaseSliceTest.aMemberIsNotTheServerOwnerAndIsRefused
           - InstanceReleaseSliceTest.anUnauthenticatedCallerIsRefused
   - id: a-backup-names-the-release-it-came-from
-    # No coverage, and none to come: the observable is `scripts/instance_backup.py`'s manifest (header,
+    # No coverage, and none to come: the observable is `src/tools/instance_backup.py`'s manifest (header,
     # condition 2). It is proven by that tool's own bite-proofing — `app_release()` was run against a real,
     # STOPPED container built from this Dockerfile (the cold-capture state) and returned the stamped `1.0`;
     # against the dev compose, which declares no app service, it returned an explicit `no-app-service`; and a

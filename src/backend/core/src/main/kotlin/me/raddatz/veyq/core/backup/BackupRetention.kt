@@ -24,7 +24,7 @@ data class BackupRetentionDays(val days: Int, val chosen: Boolean)
 
 /**
  * B, the days every capture veyq's tooling wrote is kept (ADR 0056 decision 8, an instance setting by ADR 0089): 30 until
- * the Server Owner sets 7 to 365. Two readers besides the console: `scripts/instance_backup.py`, which reads the row over
+ * the Server Owner sets 7 to 365. Two readers besides the console: `src/tools/instance_backup.py`, which reads the row over
  * the connection it dumps through and prunes every capture older than B (30 when it cannot read it), and the erasure
  * ledger's start, which drops every line older than B — no capture that could be restored predates it.
  */

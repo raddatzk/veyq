@@ -267,5 +267,5 @@ only ([Restore under Helm](/veyq/run/backup-and-restore/#restore-under-helm)).
 
 **How far this is proven:** `veyqctl rollback` ran once, live (2026-10-17): an instance upgraded from one local release
 to the next was rolled back in place, its config-secret state read `OK`, its store check passed, and every object the
-rows require was in the store as indexed; no browser opened its Memory afterwards. `scripts/veyqctl_selftest.py` holds
+rows require was in the store as indexed; no browser opened its Memory afterwards. `src/tools/veyqctl_selftest.py` holds
 its order and its refusals.

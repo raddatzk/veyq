@@ -28,7 +28,7 @@ CREATE INDEX ix_hold_row_hold ON veyq_hold_row (hold_id);
 
 -- veyq_hold_pin: a store object prefix (storage_key/0 … storage_key/(chunk_count-1)) the hold keeps. While expires_at is
 -- in the future, StoreReclaimStore.due leaves a reclaim row of that key out — never deferring it, so its attempts stay —
--- and a backup's store leg lists it (scripts/instance_backup.py, blob_index).
+-- and a backup's store leg lists it (src/tools/instance_backup.py, blob_index).
 CREATE TABLE veyq_hold_pin (
     id          UUID         NOT NULL PRIMARY KEY,
     hold_id     UUID         NOT NULL,
