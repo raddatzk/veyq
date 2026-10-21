@@ -1,3 +1,4 @@
+{{- if .Values.garage.enabled }}
 # The bundled object store (ADR 0013, ADR 0067). Deployed RUNNING; the app brings it to USABLE itself on first
 # start over the admin API — layout, bucket, key, grant and the CORS policy — so there is no init container.
 #
@@ -32,3 +33,4 @@ data:
 
     [admin]
     api_bind_addr = "[::]:3903"
+{{- end }}

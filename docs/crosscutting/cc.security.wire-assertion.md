@@ -88,12 +88,12 @@ photo's file name and EXIF text, the share's label. Every spec file that execute
 |---|---|---|
 | Database (the instance's `veyq`) | `sweep()` | the owner's email — declared plaintext the app wrote — must be in a data row (`present`); the browser records no HTTP, so there is no token hash control |
 | Object store (the bucket `blobs`) | `sweep_store()` | the database's own `veyq_blob` count: rows with an empty mirror fail |
-| Every container log of the project, since the run began | `sweep_containers()` | the sentinel key, sent through Traefik on the public origin to the bucket and found percent-encoded in Garage's log; the `app` container's log must name its database (Flyway's JDBC line) — the backend's log is a container log here |
+| Every container log of the project, since the run began | `sweep_containers()` | the sentinel key, sent through Traefik on the public origin to the bucket once the browser suite's setup has put the bundled store in use (the app routes the bucket path only then, ADR 0064) and found percent-encoded in Garage's log; the `app` container's log must name its database (Flyway's JDBC line) — the backend's log is a container log here |
 | Statement log, for the window around the browser stage | `StatementLog`, `sweep_statements()` | the two sentinel statements; and, since the app's pool connected at `up`, before the window, the owner's email in a literal the backend sent (`written`) in place of a `Connect` entry |
 | Every container log, for the `pii` set | `sweep_containers(pii=…)` | at least one address (`freshOwner` records each, `tests/e2e/src/accounts.ts`), and each in the statement log: an account the instance created ([`pii_control()`](#the-pii-needle-set)) |
 
 The store's request log the container control reads exists only because the run asks for it: the production recipe
-and the chart run Garage at `RUST_LOG=garage=warn`, which logs no request
+and the chart (with `garage.enabled`) run Garage at `RUST_LOG=garage=warn`, which logs no request
 ([ADR 0092](../decisions/0092-logs-are-operational-and-name-no-person.md) § 5), and `tests/e2e/stack/docker-compose.e2e.yml`
 raises it back to `garage=info` for the lane; the development stack keeps the image's own `garage=info`.
 

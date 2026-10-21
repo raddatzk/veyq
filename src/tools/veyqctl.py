@@ -97,7 +97,10 @@ checked against its manifest's sha256 before it runs — so the tool that captur
 veyqctl gives it what the operator gave it by hand: the database password, the bundled store's endpoint and admin
 token (read from the instance's interpolated recipe, so through the environment, never an argv), the store's network,
 and Compose pointed at THIS instance (`COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES`). A store of the operator's own
-(`VEYQ_BACKUP_STORE_*` in the shell) passes through, as the tool documents. Leg (c) lives on a volume under Docker's
+(`VEYQ_BACKUP_STORE_*` in the shell) passes through, as the tool documents. Where `compose.override.yml` leaves the
+bundled store out (no `garage` in the composed recipe, ADR 0064), that shell pair is the only one: the rclone container
+runs on Docker's default network, no bundled pair is passed, and a run that reaches the store is refused before
+anything stops while `VEYQ_BACKUP_STORE_ENDPOINT` / `_ACCESS_KEY` / `_SECRET_KEY` are not set. Leg (c) lives on a volume under Docker's
 data root, which a host cannot always read (Docker Desktop keeps it in a VM) and which needs root where it can: so the
 key comes out of the stopped app container with `docker cp`, into a `0700` directory in the home for as long as the
 tool needs it, and a restored key goes back in through a one-off container of the `app` service running as the
@@ -1052,7 +1055,7 @@ def cmd_start(args: argparse.Namespace, host: Host) -> int:
     state = read_state(home)
     up(host, compose(home, state.release, state.project), state.project)
     try:
-        prune(host, home, state, backup_tool(host, home, state), required=False)
+        prune(host, home, state, backup_tool(host, home, state, store=False), required=False)
     except Refused as e:  # the tool itself could not be settled: said, the start stands
         say(f"WARNING: the captures older than B were not pruned ({str(e).splitlines()[0][:200]})")
     return 0
@@ -1146,11 +1149,20 @@ def cmd_check(args: argparse.Namespace, host: Host) -> int:
 
 class Facts(NamedTuple):
     """What the backup tool needs, read from the instance's own interpolated recipe — never from key names here."""
-    key_path: str        # where the app keeps leg (c), inside its container
-    network: str         # the network the store is on, for the tool's rclone container
-    store_endpoint: str  # the bundled store, as that container reaches it
-    store_token: str     # the bundled store's admin token; the tool derives the S3 key pair from it
-    db_password: str     # the database's root password, for the dump and the load
+    key_path: str              # where the app keeps leg (c), inside its container
+    network: str               # the network the store is on, for the tool's rclone container
+    store_endpoint: str | None  # the bundled store, as that container reaches it; None: the recipe runs no Garage
+    store_token: str | None     # the bundled store's admin token; the tool derives the S3 key pair from it
+    db_password: str           # the database's root password, for the dump and the load
+
+
+# The store of the operator's own, as the backup tool reads it from its environment — the pair the console holds is
+# sealed under the KEK the backup never reads (ADR 0089 decision 7), so with no Garage in the recipe it comes from the
+# operator's shell or nowhere. (The bucket and region have the tool's defaults.)
+OWN_STORE_KEYS = ("VEYQ_BACKUP_STORE_ENDPOINT", "VEYQ_BACKUP_STORE_ACCESS_KEY", "VEYQ_BACKUP_STORE_SECRET_KEY")
+# Docker's default network: where the rclone container runs when the recipe has no store of its own to join, and
+# reaches the operator's store like any other host.
+DEFAULT_NETWORK = "bridge"
 
 
 def stack_facts(host: Host, base: list[str]) -> Facts:
@@ -1164,6 +1176,12 @@ def stack_facts(host: Host, base: list[str]) -> Facts:
                           f"is not one this veyqctl knows how to back up")
         return str(value)
 
+    if "garage" not in services:
+        # The bundled store left out (ADR 0064: the instance's compose.override.yml disables it and blanks the hint),
+        # so the composed config lists no `garage`: the store is the operator's own, reached on Docker's default
+        # network, and no bundled pair is passed. Its pair comes from the shell ([backup_tool] refuses without it).
+        return Facts(env("app", "VEYQ_SECURITY_CONFIG_SECRET_FILE"), DEFAULT_NETWORK, None, None,
+                     env("mariadb", "MARIADB_ROOT_PASSWORD"))
     store_networks = list((services.get("garage") or {}).get("networks") or {})
     if not store_networks:
         raise Refused("the recipe puts the store (`garage`) on no network, so the backup's rclone container cannot "
@@ -1179,10 +1197,11 @@ def backup_env(home: Path, state: State, facts: Facts) -> dict[str, str]:
     The tool runs `docker compose -f <recipe> exec …` with no `-p` and no `--env-file`; the project and the `.env`
     reach it through Compose's own variables, so it addresses this instance and interpolates the recipe with its
     values. A store of the operator's own (`VEYQ_BACKUP_STORE_*` in the shell) passes through and wins, as the tool
-    documents.
+    documents. With no Garage in the recipe no bundled pair is passed at all.
     """
-    return {"VEYQ_BACKUP_DB_PASSWORD": facts.db_password, "VEYQ_BUNDLED_STORE_ENDPOINT": facts.store_endpoint,
-            "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": facts.store_token, "COMPOSE_PROJECT_NAME": state.project,
+    bundled = ({"VEYQ_BUNDLED_STORE_ENDPOINT": facts.store_endpoint, "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": facts.store_token}
+               if facts.store_endpoint and facts.store_token else {})
+    return {"VEYQ_BACKUP_DB_PASSWORD": facts.db_password, **bundled, "COMPOSE_PROJECT_NAME": state.project,
             "COMPOSE_ENV_FILES": str(home / ENV_FILE)}
 
 
@@ -1230,9 +1249,25 @@ class BackupTool(NamedTuple):
     env: dict
 
 
-def backup_tool(host: Host, home: Path, state: State) -> BackupTool:
-    """The running release's tool, checked, and what it needs — all of it settled BEFORE the app stops."""
+def require_own_store_pair(facts: Facts) -> None:
+    """With no Garage in the recipe, a run that reaches the store needs the operator's own pair in this shell (ADR 0064
+    § backup and restore take the own store's pair) — refused here, before anything stops, naming what is missing."""
+    if facts.store_endpoint is not None:
+        return
+    absent = [key for key in OWN_STORE_KEYS if not os.environ.get(key, "").strip()]
+    if absent:
+        raise Refused(f"this instance's recipe runs no bundled store (compose.override.yml leaves `garage` out), so the "
+                      f"backup reaches a store of your own with the endpoint and key pair from this shell — and "
+                      f"{', '.join(absent)} {'is' if len(absent) == 1 else 'are'} not set (the pair the console holds is "
+                      f"sealed under the key the backup never reads). Export them and run it again. Nothing was stopped.")
+
+
+def backup_tool(host: Host, home: Path, state: State, *, store: bool = True) -> BackupTool:
+    """The running release's tool, checked, and what it needs — all of it settled BEFORE the app stops. `store=False`
+    for a run that reads only the database (the prune, `status`'s readings), which needs no store pair."""
     facts = stack_facts(host, compose(home, state.release, state.project))
+    if store:
+        require_own_store_pair(facts)
     return BackupTool(verified_asset(home, state.release, BACKUP_ASSET), facts, backup_env(home, state, facts))
 
 
@@ -1316,7 +1351,7 @@ def pool_warning(host: Host, home: Path, state: State) -> None:
     if pool_choice(home, None, POOL_TARGET_KEY).target:
         return
     try:
-        tool = backup_tool(host, home, state)
+        tool = backup_tool(host, home, state, store=False)
         in_use = host.run([sys.executable, str(tool.path), "store-in-use", "--compose-file",
                            str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env).stdout.strip()
     except Refused as e:
@@ -1367,7 +1402,7 @@ def retention_warning(host: Host, home: Path, state: State) -> None:
     """`status` (ADR 0056 decision 8): say it while no capture under `backups/` is younger than B — admin-web cannot see
     the captures. Never changes an exit code."""
     try:
-        tool = backup_tool(host, home, state)
+        tool = backup_tool(host, home, state, store=False)
         raw = host.run([sys.executable, str(tool.path), "retention", "--captures", str((home / BACKUPS_DIR).absolute()),
                         "--compose-file", str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env).stdout
         answer = json.loads(raw.strip().splitlines()[-1])
@@ -1519,7 +1554,7 @@ def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     if args.action == "prune":
         # ADR 0056 decision 8: only the age prune, for a daily timer — nothing stops, no key is needed.
         state = read_state(home)
-        prune(host, home, state, backup_tool(host, home, state), required=True)
+        prune(host, home, state, backup_tool(host, home, state, store=False), required=True)
         return 0
     key_into = key_destination(home, args.key_into, "`backup`")
     state = read_state(home)
@@ -1608,6 +1643,7 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
     # the capture against the live store — the in-place rollback writes no object, so every one must be there.
     running = compose(home, state.release, state.project)
     facts = stack_facts(host, running)
+    require_own_store_pair(facts)
     tool = BackupTool(verified_asset(home, target, BACKUP_ASSET), facts, backup_env(home, state, facts))
     old_manifest = read_release_manifest(home, target)
     template = (release_dir(home, target) / TEMPLATE_ASSET).read_text()

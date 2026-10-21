@@ -154,7 +154,9 @@ Path-style signing makes an object's path `/<bucket>/<key>`, so a route that nam
 default and nothing else — changing the setting, as a restore onto another store may
 ([uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)
 A6), would 404 every object with nothing reporting it. `TraefikFileIngressSink` renders every blobs router from
-the setting, and because the value lands in the routing file of every tenant, `BlobStoreStartupCheck` refuses a
+the setting — and only while the store in use is the bundled one: a store of the operator's own has an origin of
+its own, so a route there would point at nothing or serve an unused Garage's S3 API on every tenant domain, and none
+is rendered ([ADR 0064](0064-kubernetes-helm-deployment-target.md) § the bundled store is opt-in), and because the value lands in the routing file of every tenant, `BlobStoreStartupCheck` refuses a
 name that breaks S3's bucket-naming rules rather than trusting it. The rule is `` PathPrefix(`/<bucket>/`) `` **with**
 the trailing slash: Traefik's `PathPrefix` is a raw string prefix (`strings.HasPrefix` in v3.6's
 `pkg/muxer/http/matcher.go`), so without it the store also claims every app path that merely begins with the
@@ -171,8 +173,9 @@ reserved-name list and none is needed. Once an instance is installed the name is
 **Two same-origin strategies, chosen per deployment target.** The bundled-store-behind-Traefik path route
 above is the **docker-compose** answer, and depends on that specific proxy's prefix/Host-preservation
 behavior. The **Kubernetes** target ([ADR 0064](0064-kubernetes-helm-deployment-target.md)) cannot assume an
-operator-chosen gateway implementation preserves it, so it defaults to the CORS-policy branch instead — Garage
-gets its own host there (an `HTTPRoute` of its own on the chart's `Gateway`), not a path route.
+operator-chosen gateway implementation preserves it, so it defaults to the CORS-policy branch instead — wherever
+the chart brings Garage (`garage.enabled`, opt-in there) it gets its own host (an `HTTPRoute` of its own on the
+chart's `Gateway`), not a path route.
 
 **What "a bucket CORS policy" can actually express on the bundled store — measured against the pinned Garage
 v2.0.0, not inferred from the S3 API it implements.** `PutBucketCors` and `GetBucketCors` work, and a real

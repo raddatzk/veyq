@@ -106,7 +106,8 @@ environment ([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decision
 **A tenant cannot be created until a store is set and has passed its check.** Open **Server → Object store**:
 
 1. Choose the **Store**:
-   - **Use the bundled store** — the Garage the recipe brings (offered when the deployment provides it). There is
+   - **Use the bundled store** — the Garage the recipe brings (offered when the deployment provides it: on Compose
+     unless your override leaves it out, on Kubernetes with `garage.enabled`). There is
      nothing to enter.
    - **S3-compatible store** — one you run or rent: **Endpoint**, **Public endpoint** (only if browsers reach the
      store at another address than the server does), **Bucket** (it must exist already: veyq never creates a bucket

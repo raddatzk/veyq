@@ -61,8 +61,9 @@ those to it.
 ## Kubernetes: the chart's values
 
 Run `helm show values` for the chart and its comments. The chart generates no secret, and `values.schema.json`
-refuses an install that leaves a required value unset, naming it. Required: `domain`, `storeDomain`,
-`gateway.className`, every key under `secrets` (or `secrets.existingSecret`), `networkPolicy.ingressFrom` while
+refuses an install that leaves a required value unset, naming it. Required: `domain`, `gateway.className`, the
+database keys under `secrets` (or `secrets.existingSecret`), `storeDomain` and the two Garage keys under `secrets`
+when `garage.enabled` is `true`, `networkPolicy.ingressFrom` while
 network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `gateway.tls.secretName` in
 `shared` mode, `gateway.tls.acme.email` when the ACME issuer is on, and a backup choice: `backup.existingClaim`, or
 `backup.enabled: false`.
@@ -72,7 +73,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | Value | Default | Meaning |
 |---|---|---|
 | `domain` | — | The instance's domain, as `VEYQ_DOMAIN` above |
-| `storeDomain` | — | The bundled store's own host; browsers upload to and download from it |
+| `storeDomain` | — | The bundled store's own host; browsers upload to and download from it. Required, and read, only with `garage.enabled` |
 | `hsts.enabled` | `true` | HSTS on the instance and the admin surface |
 | `image.repository` | `ghcr.io/raddatzk/veyq` | The application image |
 | `image.tag` | the chart's `appVersion` | The release; set it when installing from a checkout |
@@ -127,11 +128,11 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 
 | Value | Default | Meaning |
 |---|---|---|
-| `secrets.existingSecret` | — | The name of a Secret of your own holding the four keys below; the chart then renders none |
+| `secrets.existingSecret` | — | The name of a Secret of your own holding the keys below (the two Garage keys only with `garage.enabled`); the chart then renders none |
 | `secrets.mariadbPassword` | — | The application's database password |
 | `secrets.mariadbRootPassword` | — | MariaDB's root password |
-| `secrets.garageRpcSecret` | — | Exactly 64 hex characters |
-| `secrets.garageAdminToken` | — | The bundled Garage's admin token; the application derives the store's access keys from it |
+| `secrets.garageRpcSecret` | — | Exactly 64 hex characters. Required only with `garage.enabled` |
+| `secrets.garageAdminToken` | — | The bundled Garage's admin token; the application derives the store's access keys from it. Required only with `garage.enabled` |
 
 ### Database and store
 
@@ -146,6 +147,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `mariadb.resources.requests.memory` | `256Mi` | |
 | `externalDatabase.jdbcUrl` | — | `jdbc:mariadb://…` of your own database; the password is still `secrets.mariadbPassword` |
 | `externalDatabase.username` | `veyq` | |
+| `garage.enabled` | `false` | `true` deploys the bundled Garage and offers it in the console. Off by default here, unlike on Compose: on a cluster it is one node on one claim, with no replication or versioning, and needs a host of its own. Off, set a store of your own after the install ([Storage and email](/veyq/run/storage-and-email/)) |
 | `garage.image` | `dxflrs/garage:v2.0.0@sha256:…` | Pinned by digest |
 | `garage.logFilter` | `garage=warn` | The store's `RUST_LOG`. At `info` it logs every request with the reader's address; raise it only to troubleshoot ([Operations](/veyq/run/operations/#logs)) |
 | `garage.persistence.storageClass` | — | |

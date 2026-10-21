@@ -54,6 +54,7 @@ spec:
         - port: admin
   egress:
     - {}
+{{- if .Values.garage.enabled }}
 ---
 # The store: S3 from the gateway's data plane (the store's own host) and the app; its admin API from the app alone;
 # its RPC port from itself, which it dials at its own advertised address.
@@ -97,6 +98,7 @@ spec:
               {{- include "veyq.selector" (dict "Release" .Release "component" "garage") | nindent 14 }}
       ports:
         - port: rpc
+{{- end }}
 {{- if .Values.mariadb.enabled }}
 ---
 # The database: from the app, and — with the backup gate on — from the daily prune, which reads B there (ADR 0056

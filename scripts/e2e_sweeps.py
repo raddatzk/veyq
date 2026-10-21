@@ -1160,9 +1160,10 @@ def store_sentinel(stamp: str) -> tuple[str, str]:
     find the value it was handed cannot be trusted to find one it was not. The sentinel holds a space and a non-ASCII
     character so the store logs it ENCODED — measured on Garage v2.0.0, which logs `<addr> <method> <uri>` at INFO for
     a request it then refuses (`403 AccessDenied`, anonymous access unsupported) — and the sweep can only find it
-    through the `pct` needle. Unsigned on purpose: refused, it reads and writes nothing. Planted at the START of the
-    run, so finding it also proves the log window reaches back to where the run began. HOW it is sent is the
-    orchestrator's: to the dev store's published port, or through a lane's Traefik on the public origin.
+    through the `pct` needle. Unsigned on purpose: refused, it reads and writes nothing. WHEN and HOW it is sent is the
+    orchestrator's: `run_web_e2e.py` sends it to the dev store's published port at the START of the run, so finding it
+    also proves the log window reaches back to where the run began; lane L1 (`run_stack_e2e.py`) sends it through its
+    Traefik on the public origin once the bundled store is in use — before that, no bucket path routes there.
     """
     sentinel = f"veyq wire-log sentinel {stamp} Größe"
     return sentinel, urllib.parse.quote(sentinel, safe=URI_COMPONENT_SAFE)

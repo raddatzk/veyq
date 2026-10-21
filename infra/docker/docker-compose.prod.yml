@@ -144,8 +144,12 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      # `required: false`: an instance's compose.override.yml may leave the bundled store out (ADR 0064 § the
+      # bundled store is opt-in) by disabling `garage` and blanking the hint below, and then needs nothing more —
+      # with `true` (or the short form) Compose refuses the disabled service as an undefined dependency.
       garage:
         condition: service_started
+        required: false
     environment:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:mariadb://mariadb:3306/veyq
       QUARKUS_DATASOURCE_USERNAME: veyq

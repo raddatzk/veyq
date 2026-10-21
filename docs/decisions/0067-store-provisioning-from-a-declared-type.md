@@ -130,8 +130,8 @@ Forces:
    `S3BlobStore.endpointFor` swaps `public-endpoint`'s host for the resolved tenant's domain, which is right
    for the compose same-origin path route ([ADR 0063](0063-database-driven-tenant-ingress.md)) and wrong for
    any store reached at an origin of its own. Two things need the same mode and neither is a special case of
-   the other: [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s Kubernetes branch, where Garage gets its
-   own host on the chart's `Gateway`, and a SaaS tenant on their own `s3.amazonaws.com` bucket. It is therefore one mechanism
+   the other: [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s Kubernetes branch, where the chart's opt-in
+   Garage gets its own host on the chart's `Gateway`, and a SaaS tenant on their own `s3.amazonaws.com` bucket. It is therefore one mechanism
    with two callers, decided here rather than inside either of them.
 
 **Not decided here: whether a store connection may belong to a tenant, and on what terms.** V1 is self-hosted
@@ -185,8 +185,8 @@ customer's infrastructure, never their data.
   untouched — nothing reconciles two *populated* instances.
 
   **This is not a cost this ADR introduces; it is one it stops hiding.** On Kubernetes there has never been a
-  sidecar — [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart deploys `garage` and the app and
-  nothing beside them — so a cluster restore has always faced exactly this wall, which ADR 0064 left to a decision
+  sidecar — [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart deploys the app and, opted in, `garage`,
+  and nothing beside them — so a cluster restore has always faced exactly this wall, which ADR 0064 left to a decision
   of its own ([ADR 0098](0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)). Compose merely had
   a sidecar in front of it. Redefining the gate fixes both targets with one change, where a compose-shaped
   remedy would have fixed neither.

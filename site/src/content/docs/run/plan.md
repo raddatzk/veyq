@@ -24,7 +24,7 @@ Both targets run the same images and the same procedures; every page in this are
 | What you need | One host with Docker (Compose v2), `python3` 3.9 or later and `cosign` (v3.1.3 or later) | A cluster you already run (Kubernetes 1.31 or later), the Gateway API CRDs (v1.5 or later) and an implementation of them, and cert-manager 1.21 or later if the chart should obtain certificates |
 | Install and upgrade | `veyqctl`, from a release's files; upgrades by hand, a new major only from the previous one's last release | `helm install` / `helm upgrade` by digest |
 | Proxy and TLS | The bundled Traefik, with Let's Encrypt over HTTP-01 | Your Gateway API implementation, serving the chart's `Gateway`; TLS by `gateway.tls.mode`, optionally through the chart's cert-manager issuer |
-| Object store | Same origin as the instance, under a path | A host of its own (`storeDomain`) |
+| Object store | The bundled Garage by default, on the instance's own origin under a path; or a store of your own, the bundled one left out | A store of your own by default; the bundled Garage opt-in (`garage.enabled`), one node on one claim, on a host of its own (`storeDomain`) |
 | Network isolation | Separate container networks | A NetworkPolicy set, enforced only if your CNI enforces NetworkPolicy |
 | Database | The bundled MariaDB | The bundled MariaDB, or your own (`mariadb.enabled: false`, `externalDatabase.jdbcUrl`) |
 | Backup and restore | Rehearsed with the backup tool | The chart's backup gate captures the database and an index of the store before every release change; a restore is a one-off Job; both run once on a kind cluster |
@@ -42,11 +42,12 @@ No CPU, memory or disk minimum is documented. What the recipes set:
 | Application | `mem_limit` 1 GiB (`VEYQ_MEM_LIMIT`) | 250m CPU, 512 Mi | 1 Gi |
 | Admin surface | — | 50m CPU, 32 Mi | 128 Mi |
 | MariaDB | — | 250m CPU, 256 Mi | 1 Gi |
-| Garage | — | 100m CPU, 128 Mi | 512 Mi |
+| Garage (with `garage.enabled` on Kubernetes) | — | 100m CPU, 128 Mi | 512 Mi |
 
 The application's JVM sizes its heap at 60 % of the container's memory limit; without a limit it sizes off the
 host's memory. Change the Compose and Helm values together, or neither. On Kubernetes the default claims are 10 Gi
-for MariaDB, 50 Gi for Garage's data, 1 Gi each for its metadata and snapshots, and 100 Mi for the config-secret key.
+for MariaDB, 100 Mi for the config-secret key and, with `garage.enabled`, 50 Gi for Garage's data and 1 Gi each for
+its metadata and snapshots.
 
 ## Storage and quotas
 
@@ -83,7 +84,7 @@ stored object once, growing by the new uploads at each backup and pruned to what
 | Domain | Docker Compose | Kubernetes | Notes |
 |---|---|---|---|
 | The instance (`VEYQ_DOMAIN` / `domain`) | Required | Required | Written into every invitation and recovery link; changing it later is not supported, and a restore must target the same domain |
-| The object store | — (served under the instance's own origin) | `storeDomain`, required, a host of its own | Presigned uploads and downloads go straight from the browser to this origin |
+| The bundled object store | — (served under the instance's own origin) | `storeDomain`, required with `garage.enabled`, a host of its own | Presigned uploads and downloads go straight from the browser to this origin; a store of your own has its own address |
 | The admin surface (`ADMIN_DOMAIN` / `admin.domain`) | Optional, unset by default | Optional, unset by default | Leave it unset and reach the console over an SSH tunnel or a port-forward; if you set it, only after the Server Owner exists, and choose a name you publish nowhere |
 | Each tenant's own domain | Required per tenant | Required per tenant | One domain per tenant, routed when the tenant is created, with no restart |
 

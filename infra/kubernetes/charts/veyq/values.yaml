@@ -11,8 +11,9 @@
 # gateway.className. Under gateway.tls.mode=per-domain also an implementation that supports ListenerSet, and for
 # gateway.tls.acme cert-manager 1.21 or later with its Gateway API AND ListenerSet support switched on.
 #
-# What is required and has no default:  domain · storeDomain · gateway.className ·
-# every key under secrets (or secrets.existingSecret) · externalDatabase.jdbcUrl when mariadb.enabled=false ·
+# What is required and has no default:  domain · gateway.className ·
+# the database keys under secrets (or secrets.existingSecret) · storeDomain and the two Garage keys under secrets
+# when garage.enabled · externalDatabase.jdbcUrl when mariadb.enabled=false ·
 # gateway.tls.secretName when gateway.tls.mode=shared · gateway.tls.acme.email when gateway.tls.acme.enabled ·
 # networkPolicy.ingressFrom while networkPolicy.enabled (the default) · backup.existingClaim, or backup.enabled: false.
 
@@ -21,9 +22,10 @@
 # it a second time), and the domain a restore targets. Changing it later is not supported.
 domain: ""
 
-# The bundled store's OWN host — a second HTTPRoute, not a path under `domain`. An operator-chosen gateway
-# implementation is not guaranteed to preserve the prefix and Host header a SigV4 signature needs, so on this
-# target the store gets its own origin and every presigned URL is signed against it verbatim
+# The bundled store's OWN host — required with garage.enabled, read by nothing without it. A second HTTPRoute, not
+# a path under `domain`: an operator-chosen gateway implementation is not guaranteed to preserve the prefix and Host
+# header a SigV4 signature needs, so on this target the store gets its own origin and every presigned URL is signed
+# against it verbatim
 # (`veyq.bundled-store.signing-mode=store-origin`, ADR 0067 Decision 5; ADR 0013 §4's CORS branch). The bucket's
 # CORS policy is written by the backend at runtime and is `*` — the only policy the bundled store can express
 # for a multi-tenant instance — so the chart templates no origin list.
@@ -293,8 +295,8 @@ gateway:
       server: https://acme-v02.api.letsencrypt.org/directory
 
 secrets:
-  # Name an existing Secret carrying the keys below (mariadbPassword, mariadbRootPassword, garageRpcSecret,
-  # garageAdminToken) and the chart renders none of its own — for sealed-secrets,
+  # Name an existing Secret carrying the keys below (mariadbPassword, mariadbRootPassword, and with garage.enabled
+  # garageRpcSecret and garageAdminToken) and the chart renders none of its own — for sealed-secrets,
   # external-secrets or any operator who keeps key material out of values files. Leave empty to have the chart
   # render a Secret from the values below.
   existingSecret: ""
@@ -302,7 +304,8 @@ secrets:
   # capture (ADR 0056) and the image's own bootstrap.
   mariadbPassword: ""
   mariadbRootPassword: ""
-  # Object store. The RPC secret must be exactly 64 hex characters (`openssl rand -hex 32`); the admin token
+  # The bundled object store — required with garage.enabled, rendered into nothing without it (an existingSecret then
+  # needs neither key). The RPC secret must be exactly 64 hex characters (`openssl rand -hex 32`); the admin token
   # is read by TWO components — the store, and the app, which brings the store from running to usable on
   # first start (ADR 0067: layout, bucket, key, grant, CORS). The app DERIVES the bundled store's S3 key pair
   # from that token (ADR 0089), so there is no key pair to set here: the Server Owner chooses "Use the bundled
@@ -331,6 +334,18 @@ externalDatabase:
   username: veyq
 
 garage:
+  # The bundled object store (ADR 0064 § the bundled store is opt-in): OFF by default on this target, unlike compose.
+  # On a cluster it is one node on one claim, with no replication and no versioning, so keeping its objects falls back
+  # onto your volume snapshots (ADR 0056 §3); it needs a host of its own (storeDomain: DNS, a certificate, a
+  # listener); and a cluster commonly has an S3-compatible store already. Off, the chart renders none of Garage's
+  # objects and passes the app no bundled-store hint: after the install, set a store of your own in the admin
+  # console (Server → Object store) — no tenant is created before it passes its check — and name it to the backup
+  # gate in backup.store.existingSecret. On, set storeDomain and secrets.garageRpcSecret / garageAdminToken, and the
+  # console offers "Use the bundled store".
+  # Turning it off under an instance whose store IS the bundled one is not refused (Helm cannot read the setting):
+  # the app then names the cause, and the claims stay behind (volumeClaimTemplates, no retention policy), so `true`
+  # again restores it. Deleting those claims deletes the objects.
+  enabled: false
   image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
   # The store's RUST_LOG. The image bakes in `garage=info`, which logs every S3 and admin request with the peer's
   # address and port and the URI with its query (object keys, presign signatures); `warn` keeps warnings and errors

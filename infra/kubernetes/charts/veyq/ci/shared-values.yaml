@@ -8,6 +8,10 @@
 # the guard renders each file on its own.
 domain: veyq.example.org
 storeDomain: store.veyq.example.org
+# The bundled store on (it is off by default, ADR 0064): the store's route on the shared listener — a shape lint-values.yaml, which
+# leaves it off, never renders.
+garage:
+  enabled: true
 image:
   repository: ghcr.io/example/veyq
   # A pinned release, so a render where the app's tag is not the chart's appVersion is one a file here selects: the
