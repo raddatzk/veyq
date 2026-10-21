@@ -4,7 +4,8 @@
   stage 1 built 2026-10-20 (cr-repo-layout-infra-and-tests): the script-side paths live once in
   `scripts/repo_layout.py`, except in what ships alone (`instance_backup.py`, which spells its own and is compared by
   its selftest). Stage 2 decided by the owner the same day (decision 5) and built the same day (cr-repo-layout-src): the code
-  surfaces' paths live in `scripts/repo_layout.py` too, a predecessor's in either layout.
+  surfaces' paths live in `scripts/repo_layout.py` too, a predecessor's in either layout. Stage 3 decided by the owner
+  2026-10-21 (decision 8), not yet built (cr-tools-under-src).
 - Date: 2026-10-20
 
 ## Context
@@ -58,6 +59,17 @@ every open worktree branch conflicts with a move of the files it touches.
    checkout holds in the image.
 7. **A reader that compares two trees finds a surface in either layout** (decision 3's rule, for the code): the
    upgrade proof builds a predecessor from before stage 2, where the surfaces are at the root.
+8. **Stage 3 — what a release ships lives under `src/`, what the repository runs on itself under `scripts/`.** Decided
+   by the owner on 2026-10-21. Decision 1 left `scripts/` whole, and it held two kinds: the guards, orchestrators and
+   the release producer, which run only in a checkout, and the two operator tools a release carries — `veyqctl`, signed
+   and published as an asset, and `instance_backup.py`, an asset beside it and the `veyq-tools` image's entrypoint (the
+   cluster's backup gate). The two tools and their selftests move to **`src/tools/`**: the release producer already
+   groups exactly these two as its `TOOLS`, and the image that runs one of them is `veyq-tools`. They are no coverage
+   surface (ADR 0040 — a Python operator tool proves itself by its selftest, not by a coverage ref), so
+   `src/tools/CLAUDE.md` names that selftest as their check, beside the surfaces' own. They keep shipping alone:
+   Python 3.9 and the standard library only, no import of anything under `scripts/`. Release assets are flat names
+   (`releases/<r>/veyqctl`), so an installed instance and `self-update` see no change; no reader takes a tool from a
+   predecessor's tree, so decision 7's rule has nothing to apply to here.
 
 ## Consequences
 
