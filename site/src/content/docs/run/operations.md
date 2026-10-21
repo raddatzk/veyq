@@ -174,8 +174,9 @@ forgotten instance still hears of a security fix.
 - **What it does with the answer.** Nothing but show it: the console's **Server → Release** lists every newer release
   — a newer one of your major, a planned new major with the day your major leaves the apps' window, an unscheduled
   major marked **urgent** — and `veyq-admin release` prints the same. Upgrading stays yours
-  ([Upgrade](/veyq/run/upgrade/)). With the instance's own mail set up, each notice is also mailed to you once
-  ([Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)).
+  ([Upgrade](/veyq/run/upgrade/)). With the instance's own mail set up and confirmed, each notice is also mailed to
+  you once ([Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)); until then the panel says,
+  beside the switch, that finds are only shown, and `veyq-admin release` prints `noticesMailedTo` as null.
 - **When it fails.** A source that cannot be reached, answers slowly (10 s), too much or something that is not a
   release list is logged as a warning and asked again the next day. Nothing waits on it. The panel shows when it
   last succeeded.

@@ -30,7 +30,12 @@ vi.mock('../features/instance/stepStatement', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/stepStatement')>()),
   stepStatement: vi.fn(),
 }))
-vi.mock('../features/instance/releaseNotices', () => ({ getReleaseNotices: vi.fn(), setReleaseCheck: vi.fn() }))
+vi.mock('../features/instance/releaseNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/instance/releaseNotices')>()),
+  getReleaseNotices: vi.fn(),
+  setReleaseCheck: vi.fn(),
+}))
+vi.mock('../features/instance/instanceMail', () => ({ getInstanceMail: vi.fn() }))
 vi.mock('../features/instance/configSecret', () => ({ getInstanceConfigSecret: vi.fn() }))
 vi.mock('../features/instance/store', async (importOriginal) => ({
   // the builders stay real: what `store set` sends is what is asserted on
@@ -97,6 +102,7 @@ import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
 import { getReleaseNotices, setReleaseCheck, type InstanceReleaseNotices } from '../features/instance/releaseNotices'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
+import { getInstanceMail, type InstanceMailSettings } from '../features/instance/instanceMail'
 import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import {
   confirmExclusiveBucket,
@@ -189,6 +195,9 @@ const noticesRead: InstanceReleaseNotices = {
     foundAt: new Date('2026-10-16T04:00:00.000Z'), mailedAt: undefined,
   }],
 }
+function mailRead(confirmation: InstanceMailSettings['confirmation']): InstanceMailSettings {
+  return { tls: true, passwordSet: false, configSecretState: 'OK', address: 'owner@example.com', confirmation }
+}
 const register: InstanceCapability[] = [
   capability('core.x', 'Ex', false, true),
   capability('core.a', 'Alpha', true, false),
@@ -217,6 +226,7 @@ beforeEach(() => {
   vi.mocked(getReleaseNotices).mockResolvedValue(noticesRead)
   vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => ({ ...noticesRead, enabled, source: source ?? undefined }))
   vi.mocked(getInstanceConfigSecret).mockResolvedValue({ state: 'MISMATCH' })
+  vi.mocked(getInstanceMail).mockResolvedValue(mailRead('NOT_CONFIGURED'))
 })
 
 describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.suspend-tenant)', () => {
@@ -330,7 +340,15 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     expect(doc.release).toBe('1.4.0')
     expect(doc.enabled).toBe(true)
     expect(doc.notices).toEqual([expect.objectContaining({ kind: 'UNSCHEDULED_MAJOR', release: '2.0' })])
+    expect(doc.noticesMailedTo).toBeNull() // no instance mail: the finds are only shown
     expect(r.code).toBe(0)
+  })
+
+  it('release names the address a find is mailed to only once instance mail is confirmed (ADR 0097 decisions 4 and 5)', async () => {
+    vi.mocked(getInstanceMail).mockResolvedValue(mailRead('CODE_SENT'))
+    expect(JSON.parse((await invoke(['release'])).out).noticesMailedTo).toBeNull()
+    vi.mocked(getInstanceMail).mockResolvedValue(mailRead('CONFIRMED'))
+    expect(JSON.parse((await invoke(['release'])).out).noticesMailedTo).toBe('owner@example.com')
   })
 
   it('release check off switches the check off and keeps its source (uc.admin.learn-of-new-releases A1)', async () => {

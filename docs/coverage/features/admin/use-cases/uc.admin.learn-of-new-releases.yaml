@@ -67,7 +67,8 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     Server → Release's notices and check (`ReleaseNoticesPanel.test.ts`: the urgent row apart, an unstamped build said
-    as such, switching off, a refused source), Server → Mail (`InstanceMailPanel.test.ts`: the write-only password, the
+    as such, switching off, a refused source, whether a find is also mailed — said only while the check can find
+    anything, and never at the notices' cost), Server → Mail (`InstanceMailPanel.test.ts`: the write-only password, the
     code entry and its refusal, the key state), the nav (`AdminConsoleView.test.ts`) and `veyq-admin release` /
     `release check on|off` (`cli.test.ts`) live in `admin-web` (ADR 0065); their suites exist and pass under
     `npm run check`, and wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.
