@@ -7,7 +7,9 @@
 //   3. the Server Owner takes the proposal in admin-web with its statement — the ground, the clause it relies on and what
 //      they found — and the member's address is mailed the statement WITH those words (a blocked member cannot sign in to
 //      read it; owner decision Q24), the objection going to the instance contact;
-//   4. the block is lifted again, so nothing of this run outlives it.
+//   4. the block's answer says the mail reached the member (ADR 0093 § 7, `statementDelivery` REACHED), so the console
+//      shows no standing report and the fields warned of nothing (the instance mail is set up);
+//   5. the block is lifted again, so nothing of this run outlives it.
 //
 // It runs after moderation.spec.ts and instance-mail.spec.ts (the instance mail is set up there). What the Server Owner
 // found is deliberately NOT a canary: it travels in the clear to the server and in the mail by design (a `pii` field),
@@ -214,12 +216,22 @@ test(
     await expect(proposal.locator('.step-statement__ground')).toHaveValue('TERMS_BREACH')
     await proposal.locator('.step-statement__provision').fill(provision)
     await proposal.locator('.step-statement__facts').fill(facts)
+    // The instance mail is set up (instance-mail.spec.ts), so the fields warn of nothing.
+    await expect(proposal.locator('.step-statement__no-mail')).toHaveCount(0)
     await proposal.locator('.mod-proposal__send').click()
     const confirm = page.getByRole('dialog', { name: `Block the sign-in of ${memberAccount.email}?` })
     await expect(confirm).toBeVisible()
+    const answer = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/instance/moderation/sign-in-blocks',
+    )
     await confirm.getByRole('button', { name: 'Block sign-in', exact: true }).click()
     const block = page.locator(`.mod-block[data-block="${memberAccount.email}"]`)
     await expect(block).toBeVisible({ timeout: 60_000 })
+    // The block's answer reports the one mail as gone out, and the console keeps no report standing beside the steps.
+    const blocked = await answer
+    expect(blocked.status()).toBe(200)
+    expect((await blocked.json()).statementDelivery).toEqual({ outcome: 'REACHED', notReached: [] })
+    await expect(page.locator('.statement-delivery')).toHaveCount(0)
 
     const [mail] = await awaitMails(memberAccount.email, STATEMENT_MAIL)
     expect(mail!.text).toContain('your account was blocked from signing in')

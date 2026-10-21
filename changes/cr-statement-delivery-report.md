@@ -1,7 +1,7 @@
 ---
 id: cr-statement-delivery-report
 title: A Server Owner's step over content reports whom its statement reached
-status: in-progress
+status: done
 satisfies: ["uc.admin.suspend-tenant", "uc.admin.delete-tenant", "uc.moderation.object-to-a-measure", "uc.moderation.take-a-measure"]
 adrs: ["0093"]
 invariants:
@@ -214,3 +214,12 @@ only if an import was added (`src/admin-web/CLAUDE.md`).
 - **The decided docs said counts, the decision said an enum.** ADR 0093 § 7 and the use cases (commit d1d993d5) said the
   answer "names how many were to be told"; decision 1 chose an outcome *instead of* counts (`UNKNOWN` has no honest one).
   Phase 4 states what is built and drops the count.
+- **Phase 4.** ADR 0093 (§ 7 and the Status), the four use cases, `run/moderation.md` (a new `### What the mail reached`
+  the three passages point to) and `run/first-run.mdx` § Tenants say it as built; coverage gained the four criteria
+  (backend refs; admin-web's tests named under its existing `gaps`, its job never having run); inbox #520 is "built,
+  browser pass owed". `server-owner-statement.spec.ts` asserts the block's `REACHED` answer and that no notice stands —
+  **written, not run, and not even type-checked**: this worktree has no `@playwright/test` installed (the heavy suites
+  run once at V1's end, owner 2026-10-19). `site/`'s `npm run check` was not run either (no `node_modules` there); the
+  trust-chain glob is green (`validate_guard_gaps.py` not run: no guard changed).
+- **Next time:** a CR that reshapes an answer greps the tests for the answer's *fields* (`signInBlocks[0]`), not only for
+  the operation's path — the path locator found where the operation is called, not where its answer is read.

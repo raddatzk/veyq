@@ -179,10 +179,26 @@ veyq-admin account block --address <address> --over-content --ground TERMS_BREAC
 
 A blocked member cannot sign in to read a statement, so it goes **by the instance mail to the account's address, with
 what you found** in your words; the server keeps those words only sealed to the moderation key, for the log. Their
-objection goes to the instance contact the statement names, and you lift with **Lift** or `account unblock`. The mail
-goes once: a send that fails is not retried, since the server keeps no copy of your words to send again — without
-instance mail, nobody is told, and you tell them through the contact yourself. A step without a case on your own finding
-says so in the statement. The wording is a draft until a lawyer has reviewed it.
+objection goes to the instance contact the statement names, and you lift with **Lift** or `account unblock`. A step
+without a case on your own finding says so in the statement. The wording is a draft until a lawyer has reviewed it.
+
+### What the mail reached
+
+The mail goes once: a send that fails is not retried, since the server keeps no copy of your words to send again. So
+every step over content — a sign-in block, a tenant taken offline, a tenant deleted — tells you what its mail reached,
+and the step stands whatever it says:
+
+- **Before the step**, while no instance mail is set up, the statement's fields say it cannot be mailed. Set it up
+  under **Server → Mail** first, or be ready to tell them yourself.
+- **After the step**, when the mail did not reach everyone — no instance mail, or the send failed — the console names
+  each address it did not reach, in a notice that stays at the top of the Moderation page (a block) or under the
+  tenant's name (a tenant) until you close it, with your statement beside it — the ground, the law or clause, what you
+  found — and **Copy the statement**. Tell those people through the instance contact, with those words. The notice also
+  says when there was nobody to tell (a tenant without an owner, an account erased meanwhile) and when the server
+  cannot say whom the mail reached. When it reached everyone, the console adds nothing to the step's usual answer.
+- **In the CLI**, `account block`, `tenant suspend` and `tenant delete` print it as `statementDelivery` — `outcome`
+  `REACHED`, `NOT_ALL_REACHED` (with the addresses in `notReached`), `NOBODY_TO_TELL` or `UNKNOWN` — and for anything
+  but `REACHED` add one `warning:` line on stderr. They still exit 0: the step was taken.
 
 ## Take a tenant offline
 
@@ -210,8 +226,9 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
   **Because of the tenant's content** and fill in the statement before **Take offline and send the statement**, or add
   `--over-content --ground <ground> [--provision <text>] [--facts <text>]` to `tenant suspend`. A moderator's open
   proposal makes the suspension over content: without a statement it is refused, so the page shows the proposal and
-  keeps the box ticked. A suspension for any other reason — unpaid, maintenance — carries none. Bringing the tenant back
-  lifts the record.
+  keeps the box ticked. What the mail reached is said as for a sign-in block ([What the mail reached](#what-the-mail-reached)):
+  an owner it did not reach is named under the tenant's name with your statement beside it. A suspension for any other
+  reason — unpaid, maintenance — carries none. Bringing the tenant back lifts the record.
 
 You still cannot read anything private, which is the design working as intended.
 
@@ -220,7 +237,8 @@ To close a tenant for good, **Delete tenant** takes it offline the same way and 
 as taken, as a suspension does. **Over content** it carries a statement of reasons to each owner of the tenant exactly
 as taking it offline does: the same **Because of the tenant's content** box and statement, above both buttons, or add `--over-content
 --ground <ground> [--provision <text>] [--facts <text>]` to `tenant delete`; a moderator's open proposal makes it over
-content. **Stop deletion** lifts that record. Its holds and this page's records stay: they hang on cases, not tenants. A
+content, and what the mail reached is said the same way ([What the mail reached](#what-the-mail-reached)). **Stop
+deletion** lifts that record. Its holds and this page's records stay: they hang on cases, not tenants. A
 record still in force on the tenant, or a sign-in block on an account you erase, ends when the purge erases what it
 was on, so its statement goes at its date instead of being kept forever.
 

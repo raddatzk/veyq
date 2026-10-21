@@ -116,18 +116,43 @@ acceptanceCriteria:
         unit: [StatementTemplateConformanceTest.aServerOwnersStepCarriesItsFactsAndSendsTheObjectionToTheContact]
       web:
         unit: [src/features/moderation/statement/template.test.ts]
+  - id: a-server-owners-step-reports-whom-its-statement-reached
+    # Added by cr-statement-delivery-report (ADR 0093 § 7): the report is the answer's alone, never stored.
+    text: >-
+      A Server Owner's step over content — a sign-in block, a tenant taken offline or deleted — answers whom its
+      statement's single mail reached: every recipient, every address it did not reach (no instance mail, or a failed
+      send), nobody to tell, or that the server cannot say; the step stands in every case, and a step without a
+      statement answers none.
+    coverage:
+      backend:
+        integration:
+          - ServerOwnerStatementSliceTest.eachStepOverContentWithMailSetUpAnswersReachedAndMarksEveryRecipientMailed
+          - ServerOwnerStatementSliceTest.withoutInstanceMailABlockOverContentAnswersNotAllReachedAndStands
+          - ServerOwnerStatementSliceTest.withoutInstanceMailASuspensionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands
+          - ServerOwnerStatementSliceTest.withoutInstanceMailADeletionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands
+          - ServerOwnerStatementSliceTest.anOwnerlessTenantTakenOfflineOverContentAnswersNobodyToTell
+          - ServerOwnerStatementSliceTest.aStepWithoutAStatementAnswersNoDelivery
+        unit:
+          - StatementMailingTest.everyMailWentOutIsReached
+          - StatementMailingTest.noMailWentOutNamesEveryRecipient
+          - StatementMailingTest.oneOfTwoWentOutNamesTheOtherOnly
+          - StatementMailingTest.noRecipientIsNobodyToTell
+          - StatementMailingTest.aListThatCouldNotBeReadIsUnknown
 gaps:
   admin-web: >-
     The Server Owner's statement — the fields on a proposal's block and on the tenant's suspension, `veyq-admin account
     block` and `tenant suspend` with --over-content, --ground, --provision and --facts, the facts sealed for the log —
     is covered by src/admin-web/src/features/instance/stepStatement.test.ts (the real crypto opens what was sealed),
-    ModerationPanel.test.ts, src/features/tenants/TenantDetailPanel.test.ts and src/cli/cli.test.ts, but admin-web's
-    refs wait until its job is admitted (ADR 0040).
+    ModerationPanel.test.ts, src/features/tenants/TenantDetailPanel.test.ts and src/cli/cli.test.ts — which also hold
+    what a step reports of its mail (the standing notice with the words, the warning before the step, the stderr line),
+    with src/features/instance/instanceMail.test.ts — but admin-web's refs wait until its job is admitted (ADR 0040).
   crypto: >-
     The moderation-statement-facts, moderation-facts-key and moderation-objection seals are pinned by their vectors and
     the purposes' tests
     (src/packages/crypto/src/report.test.ts, mutation gate 100 %), but the crypto job has never executed (ADR 0040).
   stack: >-
     tests/e2e/tests/features/statement-and-objection.spec.ts (lane L1) tags the statement, the form, the reporter's decision,
-    the affected member's reading and objection, and the other moderator's decision; stack refs are admitted only once a
-    CI run executed lane L1 (ADR 0040).
+    the affected member's reading and objection, and the other moderator's decision, and
+    tests/e2e/tests/features/server-owner-statement.spec.ts the Server Owner's block over content and its REACHED answer
+    (written, not yet run: the heavy suites run at V1's end); stack refs are admitted only once a CI run executed lane L1
+    (ADR 0040).

@@ -25,7 +25,8 @@
   facts (Art. 17(1)(c), (d); owner Q24–Q25), the provision or clause a ground relies on and the territorial sentence
   (Art. 17(3)(a), (d), (e)), and a guest uploader's notice of a removal on an authority's order (TCO Art. 11(1)) — every
   text a draft until a qualified review. A tenant's deletion over content carries it too (with `cr-account-erasure`,
-  2026-10-18: a `TENANT_DELETED` record a stop lifts and the tenant's purge ends). §§ 12 and 13, § 7's
+  2026-10-18: a `TENANT_DELETED` record a stop lifts and the tenant's purge ends), and each such step's answer reports
+  whom its statement's mail reached (cr-statement-delivery-report, 2026-10-21). §§ 12 and 13, § 7's
   deferral and § 4's order rows are built (cr-authority-orders-and-art18-reports, 2026-10-18;
   [uc.moderation.authority-order](../features/moderation/use-cases/uc.moderation.authority-order.md),
   [uc.moderation.report-to-an-authority](../features/moderation/use-cases/uc.moderation.report-to-an-authority.md)):
@@ -305,12 +306,15 @@ objects, and the step ends at once.
   moderation key for the log — and the objection goes to the instance contact (owner decisions Q24–Q25, 2026-10-18:
   facts by mail rather than a restricted second session kind for one case; a tenant's owners only, since facts mailed to
   every member could expose one member's content to all). The mail goes once: the server keeps no clear copy to retry.
-  **So the step reports what the mail reached** (owner 2026-10-21; not built — `changes/cr-statement-delivery-report.md`):
-  its answer names how many were to be told and the address of each one the mail did not reach — the instance mail is
-  not set up, or the send failed — and admin-web keeps the Server Owner's own words in view, so they tell those through
-  the instance contact while the words are still on their screen; `veyq-admin` prints the same and warns. A step with
-  nobody to tell (a tenant without an owner) says so. A step over content is never refused for want of mail: what must
-  go does not wait on the mail. The report is the answer's alone; what is stored stays each recipient's `mailedAt`.
+  **So the step reports what the mail reached** (owner 2026-10-21): its answer's `statementDelivery` says whether the
+  mail reached everyone, and names the address of each one it did not reach — the instance mail is not set up, or the
+  send failed; a step with nobody to tell (a tenant without an owner, an account erased before the send) says so, and
+  one whose recipients could not be read after the commit says it cannot tell. It is an outcome, not counts: the
+  client derives nothing, and "cannot tell" has no honest count. admin-web keeps the Server Owner's own words in view
+  beside it, so they tell those through the instance contact while the words are still on their screen, and warns
+  before the step while no instance mail is set up; `veyq-admin` prints it and warns on stderr, exiting 0. A step over
+  content is never refused for want of mail: what must go does not wait on the mail. The report is the answer's alone;
+  what is stored stays each recipient's `mailedAt`.
 - **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
   report again with more information, the instance contact, that they may go to court, and that they may complain to
   the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
