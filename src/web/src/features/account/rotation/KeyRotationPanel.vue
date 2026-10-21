@@ -162,15 +162,37 @@ async function confirm() {
         </div>
       </div>
 
-      <!-- Step 1: what this costs, before any button. Not a disclosure to be scrolled past — these are the
-           three facts that decide whether the person should be on this screen at all. -->
+      <!-- Step 1: which keys, why, when, and what this costs, before any button. Not a disclosure to be scrolled
+           past — this is what decides whether the person should be on this screen at all. -->
       <template v-if="!result">
-        <ul class="rotation-facts">
-          <li><i class="pi pi-history" aria-hidden="true" /><span>{{ t('rotation.factNotRepair') }}</span></li>
-          <li><i class="pi pi-sign-out" aria-hidden="true" /><span>{{ t('rotation.factSignsOut') }}</span></li>
-          <li><i class="pi pi-key" aria-hidden="true" /><span>{{ t('rotation.factNeedsKit') }}</span></li>
-          <li><i class="pi pi-users" aria-hidden="true" /><span>{{ t('rotation.factSharedSpaces') }}</span></li>
-        </ul>
+        <div class="rotation-explain">
+          <div>
+            <h3>{{ t('rotation.whatTitle') }}</h3>
+            <p>{{ t('rotation.whatBody') }}</p>
+          </div>
+          <div>
+            <h3>{{ t('rotation.whyTitle') }}</h3>
+            <p>{{ t('rotation.whyBody') }}</p>
+          </div>
+          <div>
+            <h3>{{ t('rotation.whenTitle') }}</h3>
+            <p>{{ t('rotation.whenBody') }}</p>
+          </div>
+          <div>
+            <h3>{{ t('rotation.afterTitle') }}</h3>
+            <ul class="rotation-facts">
+              <li><i class="pi pi-id-card" aria-hidden="true" /><span>{{ t('rotation.factIdentity') }}</span></li>
+              <li><i class="pi pi-users" aria-hidden="true" /><span>{{ t('rotation.factSharedSpaces') }}</span></li>
+              <li><i class="pi pi-sign-out" aria-hidden="true" /><span>{{ t('rotation.factSignsOut') }}</span></li>
+              <li><i class="pi pi-envelope" aria-hidden="true" /><span>{{ t('rotation.factInvites') }}</span></li>
+              <li><i class="pi pi-history" aria-hidden="true" /><span>{{ t('rotation.factNotRepair') }}</span></li>
+            </ul>
+          </div>
+          <ul class="rotation-facts">
+            <li><i class="pi pi-crown" aria-hidden="true" /><span>{{ t('rotation.soleOwner') }}</span></li>
+            <li><i class="pi pi-key" aria-hidden="true" /><span>{{ t('rotation.factNeedsKit') }}</span></li>
+          </ul>
+        </div>
 
         <!-- E1. This session did not prove the Secret Key when it unlocked, so say why it is being asked for
              now — rather than letting the field read as an unexplained extra hurdle. -->
@@ -302,9 +324,17 @@ async function confirm() {
 </template>
 
 <style scoped>
+.rotation-explain {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.rotation-explain h3 {
+  margin-bottom: 0.35rem;
+}
 .rotation-facts {
   list-style: none;
-  margin: 0.5rem 0 1rem;
+  margin: 0.5rem 0 0;
   padding: 0;
   display: grid;
   gap: 0.5rem;
