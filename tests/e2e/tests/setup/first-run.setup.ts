@@ -52,7 +52,7 @@ test(
 
 test(
   'a Server Owner sets the instance up, saves the Emergency Kit and signs in',
-  { tag: ['@uc.admin.setup-server:create-owner-and-complete', '@uc.admin.setup-server:setup-stores-the-operating-mode'] },
+  { tag: ['@uc.admin.setup-server:create-owner-and-complete', '@uc.admin.setup-server:setup-asks-for-no-operator-value'] },
   async () => {
     const owner = freshOwner(`e2e.${stack().domain}`)
 
@@ -120,8 +120,8 @@ test(
   'the Server Owner publishes who runs the instance; the console warns in the organisation mode only',
   {
     tag: [
-      '@uc.admin.operator-details:admin-web-warns-in-the-organisation-mode-only',
-      '@uc.admin.operator-details:the-notice-comes-before-the-mode',
+      '@uc.admin.operator-details:nothing-is-required-and-an-empty-value-shows-as-its-gap',
+      '@uc.admin.operator-details:the-server-owner-is-told-what-they-may-owe',
       '@uc.admin.operator-details:the-privacy-notice-values-are-set-and-never-published-unsaved',
     ],
   },

@@ -1,7 +1,5 @@
 package me.raddatz.veyq.core.moderation.statement
 
-import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
-import me.raddatz.veyq.core.admin.operator.OperatorDetailsStore
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.call
@@ -21,7 +19,6 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -41,14 +38,11 @@ import java.util.UUID
  * body the contract lets a step have at the bound and the server reads it; red when the bound grows past what Quarkus'
  * 10,240 KiB request limit holds: the server refuses the body on its `Content-Length` (`413 request_too_large`,
  * `RequestTooLargeRoutes`) and closes the connection, which a client still uploading sees as a reset — measured at
- * 6,400 (`SocketException: Connection reset`). Past the bound, a step with facts is refused by name, and the same step
- * without facts still tells every member.
+ * 6,400 (`SocketException: Connection reset`). Past the bound, a step is refused by name: every statement carries the
+ * facts (ADR 0093 § 7, one form on every instance), so none is taken there.
  */
 @QuarkusTest
 class StatementRecipientsBoundSliceTest {
-
-    @Inject
-    lateinit var operator: OperatorDetailsStore
 
     private data class Reported(val scopeId: String, val folder: String, val caseId: String)
 
@@ -94,7 +88,7 @@ class StatementRecipientsBoundSliceTest {
     }
 
     @Test
-    fun pastTheBoundAStepWithFactsIsRefusedByNameAndWithoutFactsStillTellsEveryone() {
+    fun pastTheBoundAStepIsRefusedByName() {
         val mod = CaseTestKit.moderator()
         val over = StatementRecipients.MAX_SEALED + 1
         val r = reported(owners = over)
@@ -104,18 +98,9 @@ class StatementRecipientsBoundSliceTest {
             .body("code", equalTo("statement_recipients_too_many"))
         mod.take(r.caseId, "CONTENT", targetId = r.folder).then().statusCode(422)
             .body("code", equalTo("statement_recipients_too_many"))
-        // The wall this leaves: the organisation's full form needs the facts, so there no step is taken at all …
+        // The wall this leaves: every statement needs the facts (ADR 0093 § 7, one form), so past it no step is taken at all.
         mod.take(r.caseId, "CONTENT", targetId = r.folder, facts = false).then().statusCode(400)
             .body("code", equalTo("statement_facts_required"))
-        // … and in the private form the step without facts still tells every member.
-        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
-        try {
-            QuarkusTransaction.requiringNew().run { operator.lockedRow().operatingMode = "PRIVATE" }
-            mod.take(r.caseId, "CONTENT", targetId = r.folder, facts = false).then().statusCode(201)
-                .body("measures[0].statement.recipients", equalTo(over))
-        } finally {
-            QuarkusTransaction.requiringNew().run { operator.lockedRow().operatingMode = before }
-        }
     }
 
     /**

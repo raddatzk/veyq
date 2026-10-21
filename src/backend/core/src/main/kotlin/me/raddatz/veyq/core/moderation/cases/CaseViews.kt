@@ -1,6 +1,5 @@
 package me.raddatz.veyq.core.moderation.cases
 
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.generated.model.ModerationCase
 import me.raddatz.veyq.core.generated.model.ModerationCaseEvent
 import me.raddatz.veyq.core.generated.model.ModerationCaseOrigin
@@ -18,7 +17,6 @@ import me.raddatz.veyq.core.generated.model.ModerationObjection
 import me.raddatz.veyq.core.generated.model.ModerationGround
 import me.raddatz.veyq.core.generated.model.ObjectionOutcome
 import me.raddatz.veyq.core.generated.model.StatementBasis
-import me.raddatz.veyq.core.generated.model.StatementForm
 import me.raddatz.veyq.core.generated.model.ModerationProposal
 import me.raddatz.veyq.core.generated.model.ModerationProposalStep
 import me.raddatz.veyq.core.generated.model.ModerationReport
@@ -57,15 +55,13 @@ import java.util.UUID
  * The moderation surface's reads (uc.moderation.review-a-case steps 1-2): the instance-wide queue in clear fields, and one
  * case with its sealed reports, measures and their statements, objections, proposals, hold, targets and log. Nothing here
  * opens anything: the reports, the notes, the facts and the objections stay sealed, the browser opens them with the
- * epoch's key. The statement's form is the operating mode's now (ADR 0093 § 14), and whether the caller may decide an
- * objection is the separation of duties' answer for that caller (ADR 0099 § 5).
+ * epoch's key. Whether the caller may decide an objection is the separation of duties' answer for that caller (ADR 0099 § 5).
  */
 @ApplicationScoped
 class CaseViews(
     private val holds: Holds,
     private val blocks: ModerationBlocks,
     private val targets: CaseTargets,
-    private val operatingMode: OperatingModeHandler,
     private val orders: AuthorityOrderHandler,
 ) {
 
@@ -129,7 +125,6 @@ class CaseViews(
         ModerationCase(
             origin = ModerationCaseOrigin.valueOf(case.origin),
             orders = orders.ofCase(case.id),
-            statementForm = StatementForm.valueOf(StatementMail.formNow(operatingMode).name),
             objections = ModerationObjectionEntity.list("caseId = ?1 order by receivedAt", case.id).mapNotNull { o ->
                 val statement = statements.values.firstOrNull { it.id == o.statementId } ?: return@mapNotNull null
                 val takenBy = measureRows.firstOrNull { it.id == statement.measureId }?.takenBy

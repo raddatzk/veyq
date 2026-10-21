@@ -17,48 +17,43 @@ data class SectionValues(
     val retentionDays: Int,
 )
 
-/** The section rendered for one language each; [record] — the pointer to the privacy notice — is null while the record is off. */
+/** The section rendered for one language each; [record] is the pointer to the privacy notice, always served. */
 data class RenderedSection(
     val revision: Int,
-    val variant: SectionVariant,
     val text: SectionTexts,
-    val record: SectionTexts?,
+    val record: SectionTexts,
 )
 
 /**
- * Renders [OperatorSectionText] (ADR 0035 decision 6, decision 3 of cr-operator-section-of-the-terms). Pure: the
- * variant, the values and whether the guest-write record is on come in, markdown goes out.
+ * Renders [OperatorSectionText] (ADR 0035 decision 6, decision 3 of cr-operator-section-of-the-terms). Pure: the values
+ * come in, markdown goes out.
  *
- * - A `full` passage renders only in [SectionVariant.FULL]; a `record` passage exactly while [recordOn], in either
- *   variant — the record's pointer follows its switch, never the mode. The record's information itself is the privacy
- *   notice's ([PrivacyNoticeRenderer], Q27 of cr-instance-privacy-notice).
+ * - There is one form on every instance (ADR 0093 § 14): every passage renders, the `record` one apart as [RenderedSection.record]
+ *   — the record is kept wherever a guest may write (§ 10), so its pointer is always there. The record's information itself
+ *   is the privacy notice's ([PrivacyNoticeRenderer], Q27 of cr-instance-privacy-notice).
  * - The placeholder rules are the ones both fixed texts share ([FixedTextLines]): a line naming an empty value is
- *   dropped where it is optional and in [SectionVariant.REDUCED], and otherwise shows the visible gap.
+ *   dropped where it is optional, and otherwise shows the visible gap.
  */
 object OperatorSectionRenderer {
 
-    fun render(text: OperatorSectionText, variant: SectionVariant, values: SectionValues, recordOn: Boolean): RenderedSection {
-        fun part(filter: (SectionPassage) -> Boolean, banner: Boolean): SectionTexts? {
-            val passages = text.passages.filter(filter)
-            if (passages.isEmpty()) return null
+    fun render(text: OperatorSectionText, values: SectionValues): RenderedSection {
+        fun part(record: Boolean, banner: Boolean): SectionTexts {
+            val passages = text.passages.filter { it.record == record }
+            check(passages.isNotEmpty()) { "the operator section has no ${if (record) "record" else "main"} passage" }
             return SectionTexts(
-                en = renderLang(text, passages, variant, values, en = true, banner = banner && text.draft),
-                de = renderLang(text, passages, variant, values, en = false, banner = banner && text.draft),
+                en = renderLang(text, passages, values, en = true, banner = banner && text.draft),
+                de = renderLang(text, passages, values, en = false, banner = banner && text.draft),
             )
         }
-        val main = part({ p -> p.part == SectionPart.BOTH || (p.part == SectionPart.FULL && variant == SectionVariant.FULL) }, banner = true)
-            ?: error("the operator section has no passage for every variant")
-        val record = if (recordOn) part({ it.part == SectionPart.RECORD }, banner = false) else null
-        return RenderedSection(text.revision, variant, main, record)
+        return RenderedSection(text.revision, part(record = false, banner = true), part(record = true, banner = false))
     }
 
     private fun renderLang(
-        text: OperatorSectionText, passages: List<SectionPassage>, variant: SectionVariant, values: SectionValues,
-        en: Boolean, banner: Boolean,
+        text: OperatorSectionText, passages: List<SectionPassage>, values: SectionValues, en: Boolean, banner: Boolean,
     ): String {
         val blocks = passages.map { p ->
             p.lines.flatMap { line ->
-                FixedTextLines.render(line.text.pick(en), line.optional, variant == SectionVariant.REDUCED, text.gap.pick(en)) {
+                FixedTextLines.render(line.text.pick(en), line.optional, text.gap.pick(en)) {
                     FixedValue.Text(value(it, values, text, en))
                 } ?: emptyList()
             }.joinToString("\n").trim()

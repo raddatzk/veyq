@@ -1,7 +1,5 @@
 package me.raddatz.veyq.core.admin.setup
 
-import me.raddatz.veyq.core.admin.operator.OperatingMode
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
 import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
@@ -35,8 +33,6 @@ data class OwnerRegistration(
     val secretKeyProofPublicKey: String,
     val wraps: List<WrapInput>,
     val moderationEpoch: ModerationEpochOne,
-    /** The Server Owner's own assessment of how the instance is run (ADR 0093 § 14); its preset is set with it. */
-    val operatingMode: OperatingMode,
 )
 
 /** Epoch 1 of the instance moderation key, minted by the setup client and sealed to this owner (ADR 0099 § 3). */
@@ -61,7 +57,6 @@ class SetupHandler(
     private val instanceStore: InstanceStore,
     private val capabilities: CapabilityRegistry,
     private val services: ExternalServiceAddresses,
-    private val modes: OperatingModeHandler,
     config: VeyqConfig,
 ) {
     // The advertised version (ADR 0032). `major` is the ONLY hard gate and the platform's one major, generated from
@@ -89,8 +84,6 @@ class SetupHandler(
         val userId = createOrConflict(
             conflict = { if (store.isSetupComplete()) throw SetupAlreadyComplete() else null },
         ) { store.persistOwner(registration) }
-        // The mode's preset committed with the owner; only now may the gates read the switches it set.
-        modes.afterCommit()
         return userId
     }
 }

@@ -1,6 +1,5 @@
 package me.raddatz.veyq.core.admin.setup
 
-import me.raddatz.veyq.core.admin.operator.OperatingMode
 import me.raddatz.veyq.core.generated.api.SetupApi
 import me.raddatz.veyq.core.platform.capabilities.capabilityWire
 import me.raddatz.veyq.core.generated.model.CreateServerOwnerRequest
@@ -71,5 +70,4 @@ private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
     secretKeyProofPublicKey = secretKeyProofPublicKey,
     wraps = masterKeyWraps.map { WrapInput(method = it.method.value, wrappedKey = it.wrappedKey, kdfParams = it.kdfParams) },
     moderationEpoch = ModerationEpochOne(moderationEpoch.kemPublicKey, moderationEpoch.signPublicKey, moderationEpoch.sealedGrant),
-    operatingMode = OperatingMode.valueOf(operatingMode.value),
 )

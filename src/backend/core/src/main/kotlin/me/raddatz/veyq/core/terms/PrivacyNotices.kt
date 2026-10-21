@@ -19,9 +19,8 @@ import jakarta.enterprise.context.ApplicationScoped
 /**
  * The instance privacy notice as `GET /api/operator/privacy-notice` serves it (ADR 0035 decision 8,
  * uc.admin.privacy-notice): the fixed text the jar carries ([PrivacyNoticeText], loaded once at startup — a build
- * without it fails to start rather than serve none), rendered ([PrivacyNoticeRenderer]) in the operating mode's variant
- * ([OperatorSections.variant], the same choice the operator section makes), with the values as they stand now and the
- * switches of the space a host serves. "It states only what the running instance does": every passage bound to a switch
+ * without it fails to start rather than serve none), rendered ([PrivacyNoticeRenderer]) in its one form (ADR 0093
+ * § 14), with the values as they stand now and the switches of the space a host serves. "It states only what the running instance does": every passage bound to a switch
  * reads [CapabilityRegistry.isActive] for that space (ADR 0088: the instance level along the path), and each outside
  * service is named by the address the instance is set to call, so a mirror replaces the default's name.
  */
@@ -29,7 +28,6 @@ import jakarta.enterprise.context.ApplicationScoped
 @ApplicationScoped
 class PrivacyNotices(
     private val details: OperatorDetailsHandler,
-    private val sections: OperatorSections,
     private val records: GuestWriteRecords,
     private val capabilities: CapabilityRegistry,
     private val services: ExternalServiceAddresses,
@@ -70,14 +68,13 @@ class PrivacyNotices(
                 },
             storeHost = suggestions.storeHost(),
         )
-        PrivacyNoticeRenderer.render(text, sections.variant(), values) { active(it) }
+        PrivacyNoticeRenderer.render(text, values) { active(it) }
     }
 }
 
 /** The wire form of the notice (`PrivacyNotice` in `operator.openapi.yaml`). */
 fun RenderedNotice.toWire(): PrivacyNotice = PrivacyNotice(
     revision = revision,
-    variant = PrivacyNotice.Variant.valueOf(variant.name),
     draftBanner = draftBanner?.toNoticeText(),
     passages = passages.map { PrivacyNoticePassage(id = it.id, separate = it.separate, text = it.text.toNoticeText()) },
 )

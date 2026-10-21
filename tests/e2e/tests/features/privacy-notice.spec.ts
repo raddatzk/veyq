@@ -59,7 +59,7 @@ test(
     tag: [
       '@uc.admin.privacy-notice:public-without-signing-in',
       '@uc.admin.privacy-notice:fixed-text-with-instance-values',
-      '@uc.admin.privacy-notice:a-missing-value-follows-the-mode',
+      '@uc.admin.privacy-notice:a-missing-value-shows-as-not-stated',
     ],
   },
   async () => {

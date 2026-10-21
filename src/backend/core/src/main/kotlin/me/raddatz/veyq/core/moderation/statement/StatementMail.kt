@@ -1,7 +1,6 @@
 package me.raddatz.veyq.core.moderation.statement
 
 import me.raddatz.veyq.core.admin.instance.InstanceNoticeMailer
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsHandler
 import me.raddatz.veyq.core.generated.model.DeliveryResult
 import me.raddatz.veyq.core.generated.model.StatementDelivery
@@ -56,8 +55,8 @@ data class StatementMailing(val tried: List<Tried>?) {
  * The mails of the statement of reasons and the objection (ADR 0093 §§ 2, 7; ADR 0097 decision 3 as owner decision Q11
  * widened it; uc.moderation.object-to-a-measure), all through the instance mail and **after** the decision committed —
  * a mail that fails costs the decision nothing:
- *  - [statementSent]: each member a statement names, at their account address — the template's clear parts in the
- *    current form ([StatementTemplate.mailBody]), **never the facts** of a moderator's measure: their passage says they
+ *  - [statementSent]: each member a statement names, at their account address — the template's clear parts
+ *    ([StatementTemplate.mailBody]), **never the facts** of a moderator's measure: their passage says they
  *    are in veyq (ADR 0049). A recipient whose mail did not go out is retried by the hourly cleanup ([retryDue]) for
  *    seven days. **A Server Owner's own step** (a sign-in block, a tenant taken offline) is mailed with its facts, the
  *    Server Owner's own words handed in with the step and held only in memory (owner decision Q24 of
@@ -65,7 +64,7 @@ data class StatementMailing(val tried: List<Tried>?) {
  *    clear copy to retry from, so [retryDue] leaves those statements alone, and [stepStatementSent] answers whom the one
  *    send reached, for the step's answer to report (ADR 0093 § 7: "So the step reports what the mail reached").
  *  - [tellReporters]: a reporter who left a contact, the dismissal or the decision and their redress (DSA Art. 16(5),
- *    [StatementTemplate.renderRedress] in the current form) — once per report (a `DECISION_SENT` event is the record),
+ *    [StatementTemplate.renderRedress]) — once per report (a `DECISION_SENT` event is the record),
  *    from the address the deciding moderator's browser opened and sent, mailed from memory and stored nowhere, bounded
  *    per address as a receipt is ([ReportRateLimiter.allowReceipt]).
  *  - [objectionReceived]: every confirmed moderator and the contact's notification address, that an objection arrived.
@@ -78,7 +77,6 @@ class StatementMail(
     private val notices: ModeratorNotices,
     private val limiter: ReportRateLimiter,
     private val moderationLog: ModerationLog,
-    private val operatingMode: OperatingModeHandler,
     private val operator: OperatorDetailsHandler,
 ) {
     private val log = Logger.getLogger(StatementMail::class.java)
@@ -149,7 +147,6 @@ class StatementMail(
             else -> statement.caseId?.let { ModerationCaseEntity.findById(it) }
                 ?.let { ScopeEntity.findById(it.scopeId) }?.tenantId?.let { TenantEntity.findById(it) }?.domain ?: return emptyList()
         }
-        val form = formNow(operatingMode)
         val contact = contactOf(operator)
         return StatementRecipientEntity.list(
             "statementId = ?1 and recipientKind = ?2 and mailedAt is null", statementId, RecipientKind.ACCOUNT.name,
@@ -167,7 +164,7 @@ class StatementMail(
                 channel = if (step) ObjectionChannel.BY_CONTACT else ObjectionChannel.IN_APP,
                 mailFacts = stepFacts.takeIf { step },
             )
-            Outgoing(r.id, address, StatementTemplate.mailBody(form, fields, domain))
+            Outgoing(r.id, address, StatementTemplate.mailBody(fields, domain))
         }
     }
 
@@ -183,7 +180,7 @@ class StatementMail(
                     if (ofCase && !told) ReportReceived.reference(notice.reportId) else null
                 } ?: return@runCatching
                 if (!limiter.allowReceipt(notice.address)) return@runCatching
-                val body = decisionBody(reference, decision, formNow(operatingMode), contactOf(operator))
+                val body = decisionBody(reference, decision, contactOf(operator))
                 if (mailer.mailTo(notice.address, DECISION_SUBJECT, body, "a report's decision") == DeliveryResult.SENT) {
                     QuarkusTransaction.requiringNew().run {
                         moderationLog.appendCase(
@@ -216,10 +213,6 @@ class StatementMail(
         private val RETRY_WINDOW: Duration = Duration.ofDays(7)
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC)
 
-        /** The form a statement is rendered in now: the operating mode, read when it is rendered (ADR 0093 § 14). */
-        fun formNow(mode: OperatingModeHandler): StatementForm =
-            if (mode.read().mode == me.raddatz.veyq.core.admin.operator.OperatingMode.PRIVATE) StatementForm.REDUCED else StatementForm.FULL
-
         /** The address statements name: the statement address, else the contact's (ADR 0093 § 11); null where none is set. */
         fun contactOf(operator: OperatorDetailsHandler): String? = operator.publicValues().let { it.statementEmail ?: it.contactEmail }
 
@@ -228,10 +221,10 @@ class StatementMail(
         const val ANSWER_SUBJECT = "veyq: your objection was decided / über deinen Widerspruch wurde entschieden"
 
         /**
-         * A reporter's decision: their reference, the outcome and their redress in [form] (DSA Art. 16(5); the template's
+         * A reporter's decision: their reference, the outcome and their redress (DSA Art. 16(5); the template's
          * `reporterDecision`) — nothing of the case (ADR 0049).
          */
-        fun decisionBody(reference: String, decision: Decision, form: StatementForm, contact: String?): String {
+        fun decisionBody(reference: String, decision: Decision, contact: String?): String {
             val en = if (decision == Decision.DISMISSED) {
                 "The moderators of this veyq instance looked at your report and took no measure."
             } else {
@@ -242,8 +235,8 @@ class StatementMail(
             } else {
                 "Die Moderation dieser veyq-Instanz hat deine Meldung geprüft und eine Maßnahme ergriffen."
             }
-            val redressEn = StatementTemplate.renderRedress(StatementLang.EN, form, contact)
-            val redressDe = StatementTemplate.renderRedress(StatementLang.DE, form, contact)
+            val redressEn = StatementTemplate.renderRedress(StatementLang.EN, contact)
+            val redressDe = StatementTemplate.renderRedress(StatementLang.DE, contact)
             return """
                 |$en
                 |$redressEn

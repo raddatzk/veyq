@@ -104,7 +104,7 @@ and PrimeVue; those stay.
   sentence), the `modes` rule out of `validate_capabilities.py`. · Done when: `generate:api` in both clients and the
   contracts guards green; the predicted reds — the backend's users of the removed generated types, both clients'
   setup request and `variant` readers — seen once by building.
-- [ ] **2 backend**: decisions 2–6; the three migrations with their pins; the tests rewritten. · Done when:
+- [x] **2 backend**: decisions 2–6; the three migrations with their pins; the tests rewritten. · Done when:
   `./gradlew check` green. **Bite:** with the capability check put back into the write path, decision 6's
   "a guest write is recorded" goes red; with the `switch` key put back into the privacy notice, its record-passage
   assertion goes red; with a `variant` column left in the UNIQUE constraint, the accept-a-pair slice test goes red.

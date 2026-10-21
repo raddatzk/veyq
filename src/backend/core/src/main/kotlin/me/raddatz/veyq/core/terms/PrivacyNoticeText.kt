@@ -5,16 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper
 
 /**
  * When a passage of the privacy notice renders (the file's `note` says the rules): every condition set must hold.
- * [fullOnly] — the club, organisation or company mode only; [switch] — a capability active for the host's space;
- * [ifValue] / [ifNoValue] — a value set / not set; [about] — a value whose absence drops the passage in the reduced
- * variant only (the full one shows its gap).
+ * [switch] — a capability active for the host's space; [ifValue] / [ifNoValue] — a value set / not set. There is one
+ * form of the notice (ADR 0093 § 14), so no condition reads a mode.
  */
 data class NoticeConditions(
-    val fullOnly: Boolean = false,
     val switch: String? = null,
     val ifValue: String? = null,
     val ifNoValue: String? = null,
-    val about: String? = null,
 )
 
 /** One passage of the notice; [id] is its anchor, a [separate] one a right to object (GDPR Art. 21(4)). */
@@ -47,17 +44,14 @@ data class PrivacyNoticeText(
 
         fun parse(root: JsonNode): PrivacyNoticeText {
             val passages = root.required("passages").map { p ->
-                val part = p.required("part").textValue()
-                require(part == "both" || part == "full") { "a notice passage is 'both' or 'full', not '$part'" }
+                require(!p.has("part") && !p.has("about")) { "the notice has one form (ADR 0093 § 14): ${p.path("id")}" }
                 NoticePassage(
                     id = p.required("id").textValue().also { require(ANCHOR.matches(it)) { "a passage id is an anchor: $it" } },
                     separate = p.path("separate").asBoolean(false),
                     conditions = NoticeConditions(
-                        fullOnly = part == "full",
                         switch = p.path("switch").textValue(),
                         ifValue = p.path("ifValue").textValue(),
                         ifNoValue = p.path("ifNoValue").textValue(),
-                        about = p.path("about").textValue(),
                     ),
                     lines = p.required("lines").map { l -> SectionLine(SectionTexts.of(l), l.path("optional").asBoolean(false)) },
                 )

@@ -2,10 +2,6 @@ package me.raddatz.veyq.core.admin.operator
 
 import me.raddatz.veyq.core.generated.api.InstanceOperatorApi
 import me.raddatz.veyq.core.generated.api.OperatorApi
-import me.raddatz.veyq.core.generated.model.InstanceCapabilityText
-import me.raddatz.veyq.core.generated.model.InstanceOperatingMode
-import me.raddatz.veyq.core.generated.model.InstanceOperatingModePresetEntry
-import me.raddatz.veyq.core.generated.model.InstanceOperatingModeUpdate
 import me.raddatz.veyq.core.generated.model.InstanceOperator
 import me.raddatz.veyq.core.generated.model.InstanceOperatorConfirmation
 import me.raddatz.veyq.core.generated.model.InstanceOperatorUpdate
@@ -26,12 +22,11 @@ import jakarta.annotation.security.PermitAll
 import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
-import me.raddatz.veyq.core.generated.model.OperatingMode as WireOperatingMode
 import me.raddatz.veyq.core.generated.model.OperatorRecipient as WireRecipient
 import me.raddatz.veyq.core.generated.model.OperatorRecipientKind as WireRecipientKind
 
 /**
- * HTTP adapter for the Server Owner's operating mode and operator details (uc.admin.operator-details). Implements the
+ * HTTP adapter for the Server Owner's operator details (uc.admin.operator-details). Implements the
  * generated [InstanceOperatorApi]; thin (ADR 0001). Every operation is admin-channel marked in the contract and gated
  * here by the class-level `@RolesAllowed(SERVER_OWNER)`: a missing token 401, a non-owner 403. The one operation with
  * something to guess, the notification code, carries its own `@RateLimit(USER)` on top of the handler's attempt limit,
@@ -39,14 +34,13 @@ import me.raddatz.veyq.core.generated.model.OperatorRecipientKind as WireRecipie
  */
 @RolesAllowed(SERVER_OWNER)
 @RateLimitExempt(
-    reason = "Server-Owner-only reads and writes of one instance-wide row — the operating mode with its preset (a fixed " +
-        "register's few switches) and the operator's published values, whose save mails at most one code to the address " +
+    reason = "Server-Owner-only reads and writes of one instance-wide row — the operator's published values, whose save " +
+        "mails at most one code to the address " +
         "the owner typed, bounded by the SMTP timeout. There is no per-caller state to enumerate and no work an anonymous " +
         "caller could amplify; the role gate bounds the caller set to one account.",
 )
 class InstanceOperatorResource(
     private val details: OperatorDetailsHandler,
-    private val modes: OperatingModeHandler,
 ) : InstanceOperatorApi {
 
     override fun getInstanceOperator(): Response = Response.ok(details.read().toWire()).build()
@@ -66,11 +60,6 @@ class InstanceOperatorResource(
             is HttpFailure -> httpError(outcome)
         }
 
-    override fun getInstanceOperatingMode(): Response = Response.ok(modes.read().toWire()).build()
-
-    override fun setInstanceOperatingMode(instanceOperatingModeUpdate: InstanceOperatingModeUpdate): Response =
-        Response.ok(modes.set(OperatingMode.valueOf(instanceOperatingModeUpdate.mode.value)).toWire()).build()
-
     private fun InstanceOperatorUpdate.toValues() = OperatorValues(
         contactEmail = contactEmail,
         contactLanguages = contactLanguages ?: emptyList(),
@@ -86,7 +75,6 @@ class InstanceOperatorResource(
     )
 
     private fun OperatorDetailsView.toWire() = InstanceOperator(
-        operatingMode = WireOperatingMode.valueOf(mode.name),
         contactEmail = values.contactEmail,
         contactLanguages = values.contactLanguages,
         statementEmail = values.statementEmail,
@@ -103,20 +91,6 @@ class InstanceOperatorResource(
         dataProtectionOfficer = values.dataProtectionOfficer,
         recipientSuggestions = suggestions.map {
             OperatorRecipientSuggestion(kind = OperatorRecipientSuggestion.Kind.valueOf(it.kind.name), host = it.host)
-        },
-    )
-
-    private fun OperatingModeView.toWire() = InstanceOperatingMode(
-        mode = WireOperatingMode.valueOf(mode.name),
-        chosen = chosen,
-        preset = preset.map {
-            InstanceOperatingModePresetEntry(
-                id = it.id,
-                title = InstanceCapabilityText(en = it.texts.title.en, de = it.texts.title.de),
-                onInPrivate = it.preset.onInPrivate,
-                onInOrganisation = it.preset.onInOrganisation,
-                off = it.off,
-            )
         },
     )
 }
@@ -145,11 +119,10 @@ class OperatorResource(
 
     /**
      * The operator section of the terms, public (ADR 0035 decision 6; DSA Art. 14(1) asks the terms to be publicly
-     * available and easily accessible): the instance's rendering — Host-independent like the values, and with the
-     * guest-write record's passages while the record is on at the instance level, the switch being the operator's alone.
+     * available and easily accessible): Host-independent like the values, the guest-write record's pointer included.
      */
     @RateLimit(key = RateLimitKey.IP) // unauthenticated; read by the public terms page every login and share page links
-    override fun getOperatorTerms(): Response = Response.ok(sections.render(null).toWire()).build()
+    override fun getOperatorTerms(): Response = Response.ok(sections.render().toWire()).build()
 
     @RateLimit(key = RateLimitKey.IP) // unauthenticated; read by every login and share page
     override fun getOperatorDetails(): Response {

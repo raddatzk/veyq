@@ -165,38 +165,41 @@ class StatementMailSliceTest {
         }
     }
 
+    /**
+     * A reporter's decision carries their whole redress on every instance (DSA Art. 16(5), 53; ADR 0093 §§ 7, 14): report
+     * again, the contact — the gap where none is set —, the courts, and the coordinator under its own "where the DSA
+     * applies". Control on the same mail: a contact set replaces its gap.
+     */
     @Test
-    fun aReportersDecisionCarriesTheirRedressInTheFormTheModeSets() {
-        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
+    fun aReportersDecisionCarriesTheirWholeRedressAndTheGapWhereNoContactIsSet() {
+        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.contactEmail }
         try {
-            // Organisation: the full redress — report again, the courts, the Digital Services Coordinator (DSA Art. 16(5), 53).
-            mode(null)
+            contact(null)
             val reporter = "redress-${UUID.randomUUID()}@example.com"
-            val org = reported()
-            mod.dismiss(org.caseId, reporters = listOf(org.reportId to reporter)).then().statusCode(200)
-            val full = textOf(mailsTo(reporter).single { it.subject == StatementMail.DECISION_SUBJECT })
-            assertTrue(full.contains("If you have more information, you can report it again."), full)
-            assertTrue(full.contains("You can also go to court."), full)
-            assertTrue(full.contains("Digital Services Coordinator of the Member State where you live or are established"), full)
-            assertTrue(full.contains("Koordinator für digitale Dienste"), full)
-            // Private: the reduced form drops the courts and the coordinator — and keeps "report again" (the control).
-            mode("PRIVATE")
+            val r1 = reported()
+            mod.dismiss(r1.caseId, reporters = listOf(r1.reportId to reporter)).then().statusCode(200)
+            val mail = textOf(mailsTo(reporter).single { it.subject == StatementMail.DECISION_SUBJECT })
+            assertTrue(mail.contains("If you have more information, you can report it again."), mail)
+            assertTrue(mail.contains("Questions go to not stated by this operator."), mail)
+            assertTrue(mail.contains("You can also go to court."), mail)
+            assertTrue(mail.contains("Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator"), mail)
+            assertTrue(mail.contains("Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt"), mail)
+
+            contact("abuse@example.org")
             mailbox.purgeEmailFromAllMailboxes()
-            val privateReporter = "redress-${UUID.randomUUID()}@example.com"
-            val priv = reported()
-            mod.take(priv.caseId, "CONTENT", targetId = priv.folder, facts = false, reporters = listOf(priv.reportId to privateReporter))
-                .then().statusCode(201)
-            val reduced = textOf(mailsTo(privateReporter).single { it.subject == StatementMail.DECISION_SUBJECT })
-            assertTrue(reduced.contains("If you have more information, you can report it again."), reduced)
-            assertFalse(reduced.contains("go to court"), reduced)
-            assertFalse(reduced.contains("Digital Services Coordinator"), reduced)
+            val second = "redress-${UUID.randomUUID()}@example.com"
+            val r2 = reported()
+            mod.dismiss(r2.caseId, reporters = listOf(r2.reportId to second)).then().statusCode(200)
+            val withContact = textOf(mailsTo(second).single { it.subject == StatementMail.DECISION_SUBJECT })
+            assertTrue(withContact.contains("Questions go to abuse@example.org."), withContact)
+            assertFalse(withContact.contains("not stated by this operator"), withContact)
         } finally {
-            mode(before)
+            contact(before)
         }
     }
 
-    /** The operating mode's column alone — the statement's form reads it. */
-    private fun mode(value: String?) = QuarkusTransaction.requiringNew().run { operator.lockedRow().operatingMode = value }
+    /** The instance contact's column alone — the redress names it. */
+    private fun contact(value: String?) = QuarkusTransaction.requiringNew().run { operator.lockedRow().contactEmail = value }
 
     @Test
     fun theModeratorsLearnOfAnObjectionAndTheObjectorOfItsAnswer() {

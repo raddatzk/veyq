@@ -18,8 +18,6 @@ enum class NotificationConfirmationState { NOT_SET, CODE_SENT, SEND_FAILED, UNCO
 
 /** The operator details as the Server Owner reads them on the admin channel. */
 data class OperatorDetailsView(
-    /** The mode in effect: [OperatingMode.ORGANISATION] where none was ever chosen (ADR 0093 § 14). */
-    val mode: OperatingMode,
     val values: OperatorValues,
     val confirmation: NotificationConfirmationState,
     val confirmedAt: Instant?,
@@ -52,8 +50,8 @@ sealed interface OperatorConfirmOutcome {
  * decisions 6–7, uc.admin.operator-details): what `/api/instance/operator` and its `notification/confirmation` do, and
  * what the public `GET /api/operator` reads.
  *
- * **Nothing is required.** Every value may stay empty in either mode — required means warned in admin-web, never
- * refused (ADR 0093 § 14); the contract bounds each value and refuses a malformed one before this runs.
+ * **Nothing is required and nothing warns** (ADR 0093 § 14): every value may stay empty, and the fixed texts render an
+ * empty one as "not stated by this operator"; the contract bounds each value and refuses a malformed one before this runs.
  *
  * **The notification address is confirmed by a mailed code** (ADR 0097 decision 5, owner 2026-10-17), under the rule
  * every confirmed address shares ([CodeConfirmation]): confirmed means a code confirmed the address stored NOW, so a
@@ -122,7 +120,7 @@ class OperatorDetailsHandler(
         return OperatorSetOutcome.Ok(read(now))
     }
 
-    /** Clear every value, the notification address with its code and confirmation included. The mode stays. */
+    /** Clear every value, the notification address with its code and confirmation included. */
     fun clear(now: Instant = Instant.now()): OperatorDetailsView {
         QuarkusTransaction.requiringNew().run {
             val e = store.lockedRow()
@@ -190,7 +188,6 @@ class OperatorDetailsHandler(
             else -> NotificationConfirmationState.UNCONFIRMED
         }
         return OperatorDetailsView(
-            mode = row?.mode ?: OperatingMode.ORGANISATION,
             values = row?.values ?: OperatorValues(),
             confirmation = state,
             confirmedAt = row?.confirmedAt.takeIf { state == NotificationConfirmationState.CONFIRMED },

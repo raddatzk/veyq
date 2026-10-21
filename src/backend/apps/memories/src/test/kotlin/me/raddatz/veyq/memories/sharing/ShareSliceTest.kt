@@ -238,10 +238,10 @@ class ShareSliceTest {
             .body("termsRevision", equalTo(1))
             .body("terms.de", equalTo("## Nutzungsbedingungen"))
             .body("terms.en", equalTo("## Terms of use"))
-            // ... with the operator section after them (ADR 0035 decision 6): its revision and variant join the
-            // visitor's local key.
+            // ... with the operator section after them (ADR 0035 decision 6): its revision joins the visitor's local
+            // key; the section has one form, so no variant does (ADR 0093 § 14).
             .body("operatorSection.revision", greaterThanOrEqualTo(1))
-            .body("operatorSection.variant", notNullValue())
+            .body("operatorSection.variant", nullValue())
             .body("operatorSection.text.en", containsString("## On this instance"))
             .body("operatorSection.text.de", containsString("## Auf dieser Instanz"))
 

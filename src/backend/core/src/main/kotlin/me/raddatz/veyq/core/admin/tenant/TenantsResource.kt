@@ -46,7 +46,6 @@ import me.raddatz.veyq.core.generated.model.TenantStorageUpdate
 import me.raddatz.veyq.core.generated.model.TenantSummary
 import me.raddatz.veyq.core.generated.model.TenantTerms
 import me.raddatz.veyq.core.generated.model.TenantTermsUpdate
-import me.raddatz.veyq.core.terms.toSection
 import me.raddatz.veyq.core.terms.toWire
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
@@ -357,7 +356,6 @@ class TenantsResource(
     override fun acceptTenantTerms(tenantId: UUID, acceptTermsRequest: AcceptTermsRequest): Response =
         when (val o = termsHandler.accept(
             identity.principal.name, tenantId.toString(), acceptTermsRequest.revision, acceptTermsRequest.operatorRevision,
-            acceptTermsRequest.variant.toSection(),
         )) {
             is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)

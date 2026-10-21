@@ -218,11 +218,10 @@ abstract class GenerateAdminChannelOperations : DefaultTask() {
  * (ADR 0032 §6); the lifecycle that reserves an id ahead of its use-cases would add the skip here and there together.
  * `TENANT_SWITCHABLE` is every entry whose `levels` name `tenant` (ADR 0088 decision 12), and `CapabilityRequirements`
  * every entry's `requirements` with their kind and words (decision 8), each name unique in the catalog, and
- * `EXTERNAL_SERVICES` every entry whose `source` is `external-service` (decision 7). `CapabilityPresets` is every entry
- * whose `modes` gives its value in each operating mode (decision 14): what choosing a mode sets the instance switch to.
- * The build refuses an id that is not lowercase-dotted, two ids that name one constant, an entry without its six texts,
- * one without its levels and a `modes` that does not give both modes as booleans, rather than generate a register with
- * a hole in it; the guard says the same about the catalog before any build.
+ * `EXTERNAL_SERVICES` every entry whose `source` is `external-service` (decision 7). The build refuses an id that is not
+ * lowercase-dotted, two ids that name one constant, an entry without its six texts, one without its levels, and a
+ * `modes` (the operating mode's preset, retired with the mode, ADR 0088 decision 14), rather than generate a register
+ * with a hole in it; the guard says the same about the catalog before any build.
  */
 @CacheableTask
 abstract class GenerateCapabilityRegister : DefaultTask() {
@@ -260,18 +259,10 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
                 }
                 Requirement(name, kind, reqTexts)
             }
-            val modes = entry.get("modes")?.let { m ->
-                val values = MODES.map { m.path(it) }
-                if (!m.isObject || m.size() != MODES.size || values.any { !it.isBoolean }) {
-                    problems += "$id: modes must give ${MODES.joinToString(" and ")}, each true or false, and nothing else"
-                    null
-                } else {
-                    values.map { it.asBoolean() }
-                }
-            }
+            if (entry.has("modes")) problems += "$id: modes was the operating mode's preset, retired with the mode (ADR 0088 decision 14)"
             Entry(
                 id, constantName(id), entry.path("description").asText(""), texts, "tenant" in levels, requirements,
-                entry.path("source").asText("") == "external-service", modes,
+                entry.path("source").asText("") == "external-service",
             )
         }
         register.groupBy { it.constant }.filterValues { it.size > 1 }.forEach { (name, clash) ->
@@ -331,22 +322,6 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
             |}
             |""".trimMargin(),
         )
-        dir.resolve("CapabilityPresets.kt").writeText(
-            """
-            |package $PACKAGE
-            |
-            |/** One entry's value in each operating mode (ADR 0088 decision 14): true = on, false = off. */
-            |data class CapabilityPreset(val onInPrivate: Boolean, val onInOrganisation: Boolean)
-            |
-            |/** Generated from contracts/platform/capabilities.json (buildSrc's GenerateCapabilityRegister) — never edited. The
-            | *  entries whose `modes` give their value per operating mode: choosing a mode sets each one's instance switch to
-            | *  it, and nothing else (ADR 0088 decision 14). Catalog order. */
-            |object CapabilityPresets {
-            |    val BY_ID: Map<String, CapabilityPreset> = mapOf(
-            |${register.filter { it.modes != null }.joinToString("") { "        CapabilityIds.${it.constant} to CapabilityPreset(${it.modes!![0]}, ${it.modes[1]}),\n" }}    )
-            |}
-            |""".trimMargin(),
-        )
         dir.resolve("CapabilityRequirements.kt").writeText(
             """
             |package $PACKAGE
@@ -376,8 +351,6 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
     private data class Entry(
         val id: String, val constant: String, val description: String, val texts: Map<String, Map<String, String>>, val tenant: Boolean,
         val requirements: List<Requirement>, val external: Boolean,
-        /** The catalog's `modes` in [MODES] order, or null where the entry carries none. */
-        val modes: List<Boolean>?,
     )
 
     private data class Requirement(val name: String, val kind: String, val texts: Map<String, Map<String, String>>)
@@ -391,7 +364,6 @@ abstract class GenerateCapabilityRegister : DefaultTask() {
         val LEVELS = setOf("instance", "tenant")
         val REQUIREMENT_KINDS = setOf("flag", "days")
         val REQUIREMENT_TEXTS = listOf("title", "whenSet")
-        val MODES = listOf("private", "organisation")
 
         /** `linkMaxDays` → `LINK_MAX_DAYS`. */
         fun requirementConstant(name: String): String = name.replace(Regex("([a-z0-9])([A-Z])"), "$1_$2").uppercase()

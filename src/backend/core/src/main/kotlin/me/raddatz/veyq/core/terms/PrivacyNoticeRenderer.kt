@@ -53,41 +53,35 @@ data class RenderedPassage(val id: String, val separate: Boolean, val text: Sect
 /** The notice as one host serves it; [draftBanner] null once the text is reviewed. */
 data class RenderedNotice(
     val revision: Int,
-    val variant: SectionVariant,
     val draftBanner: SectionTexts?,
     val passages: List<RenderedPassage>,
 )
 
 /**
- * Renders [PrivacyNoticeText] (ADR 0035 decision 8, cr-instance-privacy-notice decision 2). Pure: the variant, the
- * values and which capabilities are active on the host come in, markdown passages go out.
+ * Renders [PrivacyNoticeText] (ADR 0035 decision 8, cr-instance-privacy-notice decision 2) in its one form (ADR 0093
+ * § 14). Pure: the values and which capabilities are active on the host come in, markdown passages go out.
  *
  * - A passage renders exactly while its conditions hold ([NoticeConditions]): a passage bound to a switch is there
  *   exactly while [active] says it is on — "it states only what the running instance does".
  * - The placeholder rules are the operator section's ([FixedTextLines]); a list value ({recipients}, {browserServices})
- *   becomes one bullet per item, and an [NoticeConditions.about] value that is empty drops its passage in the reduced
- *   variant (the private mode's "simply absent") and shows the gap in the full one.
+ *   becomes one bullet per item, and an empty one shows the gap.
  * - A passage whose every line was dropped is absent too, rather than a heading over nothing.
  */
 object PrivacyNoticeRenderer {
 
-    fun render(text: PrivacyNoticeText, variant: SectionVariant, values: NoticeValues, active: (String) -> Boolean): RenderedNotice {
-        val reduced = variant == SectionVariant.REDUCED
+    fun render(text: PrivacyNoticeText, values: NoticeValues, active: (String) -> Boolean): RenderedNotice {
         val passages = text.passages.filter { p ->
             val c = p.conditions
-            (!c.fullOnly || !reduced) &&
-                (c.switch == null || active(c.switch)) &&
+            (c.switch == null || active(c.switch)) &&
                 (c.ifValue == null || !empty(c.ifValue, values, text)) &&
-                (c.ifNoValue == null || empty(c.ifNoValue, values, text)) &&
-                (c.about == null || !reduced || !empty(c.about, values, text))
+                (c.ifNoValue == null || empty(c.ifNoValue, values, text))
         }.mapNotNull { p ->
-            val en = renderPassage(text, p, reduced, values, en = true)
-            val de = renderPassage(text, p, reduced, values, en = false)
+            val en = renderPassage(text, p, values, en = true)
+            val de = renderPassage(text, p, values, en = false)
             if (en.isEmpty() && de.isEmpty()) null else RenderedPassage(p.id, p.separate, SectionTexts(en = en, de = de))
         }
         return RenderedNotice(
             revision = text.revision,
-            variant = variant,
             draftBanner = text.draftBanner.takeIf { text.draft },
             passages = passages,
         )
@@ -111,9 +105,9 @@ object PrivacyNoticeRenderer {
         "tile.openstreetmap.org" to "OpenStreetMap Foundation",
     )
 
-    private fun renderPassage(text: PrivacyNoticeText, p: NoticePassage, reduced: Boolean, values: NoticeValues, en: Boolean): String {
+    private fun renderPassage(text: PrivacyNoticeText, p: NoticePassage, values: NoticeValues, en: Boolean): String {
         val lines = p.lines.flatMap { line ->
-            FixedTextLines.render(line.text.pick(en), line.optional, reduced, text.gap.pick(en)) { value(it, values, text, en, reduced) }
+            FixedTextLines.render(line.text.pick(en), line.optional, text.gap.pick(en)) { value(it, values, text, en) }
                 ?: emptyList()
         }
         // A passage left with nothing but its heading and blank lines says nothing: drop it whole.
@@ -122,9 +116,9 @@ object PrivacyNoticeRenderer {
     }
 
     private fun empty(name: String, values: NoticeValues, text: PrivacyNoticeText): Boolean =
-        with(FixedTextLines) { value(name, values, text, en = true, reduced = false).isEmpty() }
+        with(FixedTextLines) { value(name, values, text, en = true).isEmpty() }
 
-    private fun value(name: String, v: NoticeValues, text: PrivacyNoticeText, en: Boolean, reduced: Boolean): FixedValue = when (name) {
+    private fun value(name: String, v: NoticeValues, text: PrivacyNoticeText, en: Boolean): FixedValue = when (name) {
         "providerName" -> FixedValue.Text(v.providerName)
         "providerAddress" -> FixedValue.Text(v.providerAddress)
         "providerEmail" -> FixedValue.Text(v.providerEmail)
@@ -132,7 +126,7 @@ object PrivacyNoticeRenderer {
         "privacyContact" -> FixedValue.Text(v.privacyContact)
         "dataProtectionOfficer" -> FixedValue.Text(v.dataProtectionOfficer)
         "supervisoryAuthority" -> FixedValue.Text(v.supervisoryAuthority)
-        "recipients" -> FixedValue.Items(v.recipients.map { recipient(it, text, en, reduced) })
+        "recipients" -> FixedValue.Items(v.recipients.map { recipient(it, text, en) })
         "retention" -> FixedValue.Text(text.dayUnit.render(v.retentionDays, en))
         "backupRetention" -> FixedValue.Text(text.dayUnit.render(v.backupRetentionDays, en))
         "erasureWindow" -> FixedValue.Text(text.dayUnit.render(v.erasureWindowDays, en))
@@ -145,14 +139,14 @@ object PrivacyNoticeRenderer {
     /**
      * `name: what they do (country)`, what they do being the kind's label in this language — an OTHER one's with the
      * typed description put in, shown as typed on both pages — and the country the code's name in this language too
-     * ([RecipientCountries.name]). A country not named shows the gap in the full variant and is left out in the reduced.
+     * ([RecipientCountries.name]). A country not named shows the gap.
      */
-    private fun recipient(r: NoticeRecipient, text: PrivacyNoticeText, en: Boolean, reduced: Boolean): String {
+    private fun recipient(r: NoticeRecipient, text: PrivacyNoticeText, en: Boolean): String {
         val name = FixedTextLines.inline(r.name)
         val purpose = text.recipientKinds.getValue(r.kind).pick(en)
             .replace(PrivacyNoticeText.DESCRIPTION, FixedTextLines.inline(r.description.orEmpty()))
         val country = r.country?.let { RecipientCountries.name(it, en) }
-        val where = country ?: if (reduced) null else text.gap.pick(en)
-        return "$name: $purpose" + (where?.let { " ($it)" } ?: "")
+        val where = country ?: text.gap.pick(en)
+        return "$name: $purpose ($where)"
     }
 }

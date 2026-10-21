@@ -215,13 +215,13 @@ class TenantTermsSliceTest {
     @Test
     fun anAcceptWithoutItsRevisionIs400() {
         // A missing `revision` binds the primitive to 0, which `minimum: 1` refuses — the refusal is the bound's, so
-        // lowering that bound to 0 would let an unversioned accept through. The rest of the triple is there, so nothing
+        // lowering that bound to 0 would let an unversioned accept through. The rest of the pair is there, so nothing
         // else refuses it first.
         val (tenantId, _) = seedActiveTenant("terms-noversion.example.com", "owner@terms-noversion.example.com")
         val member = seedUser(email = "member@terms-noversion.example.com")
         seedMembership(tenantId, member, MembershipEntity.MEMBER)
         given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
-            .body("""{"operatorRevision":${section.revision},"variant":"${section.variant().name}"}""")
+            .body("""{"operatorRevision":${section.revision}}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
             .then().statusCode(400)
     }
@@ -259,7 +259,7 @@ class TenantTermsSliceTest {
 
     /** An accept naming [revision] and the operator section as it is served now (ADR 0035 decision 6). */
     private fun acceptBody(revision: Int) =
-        """{"revision":$revision,"operatorRevision":${section.revision},"variant":"${section.variant().name}"}"""
+        """{"revision":$revision,"operatorRevision":${section.revision}}"""
 
     /** Every stored acceptance of [userId] for [tenantId], revision → server time. */
     private fun storedAcceptances(userId: String, tenantId: String): Map<Int, Instant> =

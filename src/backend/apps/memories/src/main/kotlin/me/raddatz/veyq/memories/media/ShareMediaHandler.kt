@@ -249,7 +249,7 @@ class ShareMediaHandler(
         return ShareMediaCompleteOutcome.Results(
             completions.complete(
                 gated.scopeId, completeItems, UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
-                attached = { mediaId -> guestWriteRecords.record(seen, gated.identityId, gated.scopeId, GuestWriteObject.ITEM, mediaId, null) },
+                attached = { mediaId -> guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.ITEM, mediaId, null) },
             ),
         )
     }

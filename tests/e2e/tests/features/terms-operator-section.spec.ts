@@ -159,9 +159,9 @@ test(
   'in the private mode the owner is asked again with the reduced section, and a German visitor reads it',
   {
     tag: [
-      '@uc.account.accept-terms:the-gate-compares-the-triple',
-      '@uc.account.accept-terms:the-variant-follows-the-operating-mode',
-      '@uc.admin.privacy-notice:a-missing-value-follows-the-mode',
+      '@uc.account.accept-terms:the-gate-compares-the-pair',
+      '@uc.account.accept-terms:the-section-has-one-form',
+      '@uc.admin.privacy-notice:a-missing-value-shows-as-not-stated',
     ],
   },
   async ({ browser }) => {

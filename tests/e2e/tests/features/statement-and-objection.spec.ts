@@ -153,7 +153,7 @@ test(
   {
     tag: [
       '@uc.moderation.object-to-a-measure:the-statement-is-sent-with-the-measure',
-      '@uc.moderation.object-to-a-measure:the-form-follows-the-operating-mode',
+      '@uc.moderation.object-to-a-measure:the-statement-has-one-form',
       '@uc.moderation.object-to-a-measure:the-reporter-is-told-the-decision',
       '@uc.moderation.object-to-a-measure:the-statement-names-the-provision-and-where-it-applies',
       '@uc.moderation.object-to-a-measure:the-reporter-is-told-their-redress',

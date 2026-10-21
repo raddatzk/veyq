@@ -3,14 +3,8 @@ package me.raddatz.veyq.core.terms
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 
-/** Which variant of the operator section a space's terms carry (ADR 0035 decision 6, ADR 0093 § 14). */
-enum class SectionVariant { FULL, REDUCED }
-
-/** Where a passage belongs: both variants, the full one only, or the guest-write record's pointer (either variant). */
-enum class SectionPart { BOTH, FULL, RECORD }
-
-/** One passage of the section. */
-data class SectionPassage(val id: String, val part: SectionPart, val lines: List<SectionLine>)
+/** One passage of the section; [record] marks the guest-write record's pointer, served apart. */
+data class SectionPassage(val id: String, val record: Boolean, val lines: List<SectionLine>)
 
 /**
  * The operator section's fixed text, as `contracts/terms/operator-section.json` holds it (its `note` says the rules).
@@ -43,9 +37,10 @@ data class OperatorSectionText(
             retentionUnit = RetentionUnit.of(root.required("retentionUnit")),
             passages = root.required("passages").map { p ->
                 require(!p.has("separate")) { "the section's right to object moved to the privacy notice (Q27): ${p.path("id")}" }
+                require(!p.has("part")) { "the section has one form (ADR 0093 § 14), no 'part': ${p.path("id")}" }
                 SectionPassage(
                     id = p.required("id").textValue(),
-                    part = SectionPart.valueOf(p.required("part").textValue().uppercase()),
+                    record = p.path("record").asBoolean(false),
                     lines = p.required("lines").map { l -> SectionLine(SectionTexts.of(l), l.path("optional").asBoolean(false)) },
                 )
             },
