@@ -84,7 +84,12 @@
   **with the facts**, the Server Owner's own words, which the server sees as it sends them and keeps only sealed to
   the moderation key for the log (owner Q24–Q25). The objection goes to the instance contact the statement names;
   the Server Owner lifts with the existing unblock or reactivate. The mail goes once, after the step committed: a send
-  that fails is not retried, because the server keeps no clear copy of the facts.
+  that fails is not retried, because the server keeps no clear copy of the facts. **So the step's answer reports what
+  the mail reached** (owner 2026-10-21; not built — `changes/cr-statement-delivery-report.md`): how many were to be told, and every address
+  it did not reach — the instance mail is not set up, or the send failed. admin-web says so where it stays on screen and
+  keeps the Server Owner's words in view, so they tell those through the instance contact; `veyq-admin` prints it and
+  warns. Nobody to tell (a tenant without an owner) is said as such. The step stands either way: it is never refused
+  for want of mail.
 
 ## Quality notes
 

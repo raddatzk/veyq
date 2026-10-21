@@ -61,6 +61,18 @@ stateDiagram-v2
 - **A4 — on a moderator's proposal** ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)):
   admin-web's moderation panel and `veyq-admin moderation proposals` list a proposal to take the tenant offline with its
   case; suspending the tenant settles every open such proposal as taken, and the Server Owner may decline one instead.
+- **A5 — over content** ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 7):
+  the Server Owner says the suspension is over content, or a moderator's proposal to take the tenant offline is open (the
+  server then refuses it without one, `400 statement_required`), and enters the statement of reasons with it — in
+  admin-web one checkbox and one statement above both measures, offline and delete, held ticked while such a proposal is
+  open; in `veyq-admin` `--over-content`. It is mailed with the facts to each owner of the tenant once the suspension
+  committed ([uc.moderation.object-to-a-measure](../../moderation/use-cases/uc.moderation.object-to-a-measure.md) A7);
+  reactivating lifts its record. A suspension for any other reason carries none.
+- **A6 — the statement does not reach everyone** (not built — `changes/cr-statement-delivery-report.md`): the answer names how many were
+  to be told and every address the mail did not reach — the instance mail is not set up, or the send failed. admin-web
+  says so where it stays on screen and keeps the statement's words in view, so the Server Owner tells those through the
+  instance contact; `veyq-admin` prints it and warns. A tenant with nobody to tell (no owner) is said as such. The
+  suspension stands either way: it is never refused for want of mail.
 - **E1 — the Server Owner themselves holds a membership in the suspended tenant** (the on-premise
   collapsed case, see *create-tenant*'s note): they are refused exactly like any other member. Server-Owner
   status is global and lets them *reactivate* the tenant through the (unaffected) server-admin surface, but
