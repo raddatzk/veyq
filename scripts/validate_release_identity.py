@@ -404,7 +404,7 @@ def job_steps(doc: dict, job: str) -> list[dict]:
 
 def veyqctl_constants(pattern: str) -> dict[str, str]:
     """`scripts/veyqctl.py`'s module-level string constants whose names match `pattern`, read without importing it."""
-    path = ROOT / "scripts/veyqctl.py"
+    path = repo_layout.VEYQCTL
     if not path.is_file():
         return {}
     found = {}
@@ -1461,7 +1461,7 @@ UPSTREAM = re.compile(r"^https://github\.com/([^/\s]+)/([^/\s]+?)/?$")
 FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 # The operator's tool runs the same verification (ADR 0096): the identity it hands cosign is two module-level string
 # constants, read here without importing it.
-VEYQCTL = ROOT / "scripts/veyqctl.py"
+VEYQCTL = repo_layout.VEYQCTL
 VEYQCTL_ISSUER = "COSIGN_OIDC_ISSUER"
 VEYQCTL_IDENTITY = "COSIGN_IDENTITY_REGEXP"
 

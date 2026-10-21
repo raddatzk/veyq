@@ -35,6 +35,7 @@ is consumed):
 | the release producer | `scripts/release_assets.py:77` | `TOOLS = {…: ROOT / "scripts/veyqctl.py", …}` |
 | the release-identity guard | `scripts/validate_release_identity.py:407`, `:1464` | reads `veyqctl.py`'s constants without importing it |
 | the browser orchestrator | `scripts/run_web_e2e.py:772` | runs `instance_backup.py` for the restore group |
+| three importers (found at implement: an import spells no path) | `scripts/run_web_e2e.py:138`, `scripts/e2e_sweeps.py:53`, `scripts/run_stack_e2e.py:603` | `import instance_backup` / `import veyqctl`, resolved only because Python puts `scripts/` on `sys.path` — located by `grep -rn -E '^[[:space:]]*(import|from) (instance_backup|veyqctl)( \|$)' scripts tests --include='*.py'` |
 | the tools image | `infra/kubernetes/tools/Dockerfile:25` | `COPY scripts/instance_backup.py scripts/instance_backup_selftest.py /opt/veyq/` |
 | CI | `.github/workflows/ci.yml:301`, `:306` | the two selftest steps (`:635` runs the copy inside the image — path unchanged) |
 | the backup tool's own defaults | `scripts/instance_backup.py:221` | `REPO = Path(__file__).resolve().parent.parent` — one level too shallow from `src/tools/` |
