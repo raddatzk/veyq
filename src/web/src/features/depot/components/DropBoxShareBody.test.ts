@@ -358,13 +358,4 @@ describe('DropBoxShareBody: the guest-write record (uc.depot.drop-box A4b)', () 
     expect(w.find('.guest-naming-identity').exists()).toBe(true)
     expect(notice(w).exists()).toBe(true)
   })
-
-  it('says nothing while the switch is off (no N served) — control: the same page served one', async () => {
-    vi.mocked(loadDropGuest).mockReturnValue(null)
-    const off = { ...HEAD, share: { ...SHARE_ANSWER, guestWriteRecordDays: null } } as PublicShareHead
-    const w = mountPage(async () => {}, off)
-    await flushPromises()
-    expect(w.find('.guest-naming-input').exists()).toBe(true)
-    expect(notice(w).exists()).toBe(false)
-  })
 })

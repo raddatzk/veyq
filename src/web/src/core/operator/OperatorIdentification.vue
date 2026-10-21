@@ -7,7 +7,7 @@
 //  - the instance privacy notice, always, the same way (ADR 0035 decision 8, GDPR Art. 13: one click from every page);
 //  - behind "Legal notice", the provider identification (ADR 0035 decision 7, § 5 DDG) and the single point of contact
 //    for users and authorities with its languages (ADR 0093 § 11, DSA Art. 11-12, TCO Art. 15) — each where the Server
-//    Owner published it, in either operating mode; the link is absent while neither is set or the read failed
+//    Owner published it; the link is absent while neither is set or the read failed
 //    (fail-open, `operatorDetails.ts`), so it never stands between a visitor and the page.
 // A guest-mode mount: the read is the public client, never an authenticated one.
 import { onMounted, ref } from 'vue'

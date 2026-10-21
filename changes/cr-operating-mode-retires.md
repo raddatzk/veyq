@@ -112,7 +112,7 @@ and PrimeVue; those stay.
   and with the gaps shown; the mode panel, choice, notice and CLI `mode` gone; `guestWriteRecord.switchHint` pointing at
   `contribute` / `drop-box`; the step-statement hints required. · Done when: `npm run check` in `src/admin-web/`
   green; setup, the operator panel and a step over content clicked in a browser.
-- [ ] **4 web**: trap 3's client half, the terms gate on pairs, the tests that pinned variants or "switch off ⇒ no
+- [x] **4 web**: trap 3's client half, the terms gate on pairs, the tests that pinned variants or "switch off ⇒ no
   notice", the seeds (`instanceBirth.mts`, `e2eBootstrap.ts`). · Done when: `npm run check` in `src/web/` green; the
   terms gate and a moderator's statement clicked in a browser.
 - [ ] **5 docs, site, coverage, e2e**: the use-cases, coverage files, enabler and security model the locator finds,

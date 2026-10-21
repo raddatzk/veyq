@@ -2,9 +2,9 @@
 // The guest-write record's first-layer notice on the share page (ADR 0093 § 10, en.moderation.guest-write-record,
 // uc.sharing.share-contributor A5): before a READ_WRITE guest's first write — in the shell's naming dialog — and beside
 // the line that says whose session this device holds, the page says what is kept for the N the resolve served, with the
-// right to object as a sentence of its own. A READ link is served no N and says nothing (nothing is recorded); a
-// READ_WRITE link while the instance's switch is off is served none either and says nothing. Each absence beside its
-// control: the same READ_WRITE link served an N. Guest mode: no authenticated client is called.
+// right to object as a sentence of its own. A READ link is served no N and says nothing (nothing is recorded); the record
+// has no switch (ADR 0093 § 10), so a writing link is always served one. The absence beside its control: the READ_WRITE
+// link served an N. Guest mode: no authenticated client is called.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -99,13 +99,6 @@ describe("the guest-write record's notice on the share page", () => {
     expect(notices(w)).toHaveLength(1)
     expect(notices(w)[0].text()).toContain(t('share.guest.recordKept', { days: 1 }, 1))
     expect(notices(w)[0].text()).toContain('one day')
-  })
-
-  it('a READ_WRITE link while the switch is off is served no N and says nothing, before or at the first write', async () => {
-    const w = await mountPage(ShareRole.ReadWrite, null)
-    await firstWrite(w)
-    expect(w.find('.dialog-stub .header').text(), 'the dialog is there: the absence is the notice, not the dialog').toBe(t('share.guest.nameTitle'))
-    expect(notices(w)).toHaveLength(0)
   })
 
   it('a READ link says nothing: nothing is recorded', async () => {

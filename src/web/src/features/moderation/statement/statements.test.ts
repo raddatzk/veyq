@@ -39,7 +39,6 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   ground: 'TERMS_BREACH',
   provision: null,
   basis: 'REPORT',
-  form: 'FULL',
   sentAt: new Date(),
   roles: ['UPLOADER'],
   sealedFacts: undefined,

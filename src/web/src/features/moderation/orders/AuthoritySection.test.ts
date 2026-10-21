@@ -31,7 +31,7 @@ const order: AuthorityOrder = {
 const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
   id: CASE, itemKind: 'NODE', itemId: 'node', scopeId: 'scope', tenantId: undefined, tenantDomain: undefined, category: 'TERRORIST_CONTENT',
   state: 'DECIDED', decidedAt: new Date(), closedAt: undefined, hold: undefined, reports: [], measures: [], proposals: [],
-  targets: { links: [], uploaders: [] }, events: [], statementForm: 'FULL', objections: [], origin: 'ORDER', orders: [order], ...over,
+  targets: { links: [], uploaders: [] }, events: [], objections: [], origin: 'ORDER', orders: [order], ...over,
 })
 
 const stubs = {

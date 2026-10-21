@@ -34,7 +34,6 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
   ground: 'TERMS_BREACH',
   provision: '§ 86a StGB',
   basis: 'REPORT',
-  form: 'FULL',
   sentAt: new Date('2026-10-18T09:00:00Z'),
   roles: ['SCOPE_OWNER'],
   sealedFacts: 'c2VhbGVk',
@@ -76,7 +75,7 @@ describe('StatementNotice', () => {
     expect(w.find('.statement-notice').exists()).toBe(false)
   })
 
-  it('renders the full form from the template with the facts opened, and offers the objection', async () => {
+  it('renders the one form from the template with the facts opened, and offers the objection', async () => {
     const w = await mountNotice({ targetId: NODE })
     const ids = w.findAll('.statement-passage').map((p) => p.attributes('data-passage'))
     expect(ids).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objection', 'contact', 'courts'])
@@ -87,11 +86,13 @@ describe('StatementNotice', () => {
     expect(w.find('.statement-objection').exists()).toBe(true)
   })
 
-  it('the reduced form leaves out what only the full form carries', async () => {
-    state.list = [statement({ form: 'REDUCED', sealedFacts: undefined, contactAddress: undefined, provision: null })]
+  it('one form on every instance: no contact set shows the gap where the contact goes', async () => {
+    state.list = [statement({ contactAddress: undefined })]
     const w = await mountNotice({ targetId: NODE })
-    expect(w.findAll('.statement-passage').map((p) => p.attributes('data-passage'))).toEqual(['measure', 'roles', 'ground', 'objection'])
-    expect(w.find('.statement-facts').exists()).toBe(false)
+    expect(w.findAll('.statement-passage').map((p) => p.attributes('data-passage'))).toEqual(
+      ['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objection', 'contact', 'courts'],
+    )
+    expect(w.text()).toContain('Questions go to not stated by this operator.')
   })
 
   it('a blocked link finds its statement by the share id', async () => {

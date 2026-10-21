@@ -121,7 +121,7 @@ test(
 
 test(
   'a guest meets the space’s terms and the section at the link, and enters after accepting',
-  { tag: '@uc.sharing.share-accept:the-guest-accepts-the-triple' },
+  { tag: '@uc.sharing.share-accept:the-guest-accepts-the-pair' },
   async () => {
     const { page } = guest
     await page.goto(shareLink)

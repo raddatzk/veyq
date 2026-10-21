@@ -62,7 +62,6 @@ const aCase: ModerationCase = {
   proposals: [],
   targets: { links: [], uploaders: [] },
   events: [],
-  statementForm: 'FULL',
   origin: 'REPORT',
   orders: [],
   objections: [],
