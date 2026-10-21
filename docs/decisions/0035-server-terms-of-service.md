@@ -5,7 +5,8 @@
   product's `Tenant.termsVersion` below keeps its own name. Decisions 6 (the fixed operator section) and 7 (the
   provider identification), added 2026-10-16 from the legal research behind ADR 0093 and made mode-dependent on
   2026-10-17 (ADR 0093 § 14), belong to the moderation work (inbox #462), and both are **built**: decision 7 is set in
-  admin-web and the CLI, warned about in the organisation mode, and shown with the instance contact on the login and
+  admin-web and the CLI, warned about in the organisation mode (until cr-operating-mode-retires: nothing warns, the
+  mode is retired, ADR 0093 § 14 as revised 2026-10-21), and shown with the instance contact on the login and
   share pages and in the signed-in shell ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
   decision 6's section (cr-operator-section-of-the-terms, 2026-10-18) is `contracts/terms/operator-section.json`,
   rendered by the backend into every terms read and at a public page of its own, in both variants, with the gate on
@@ -82,7 +83,7 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
 3. **Anonymous share acceptance — client-side** (uc.sharing.share-accept). An accountless public-share visitor
    sees the tenant terms + revision and must accept (**hard gate + re-accept** on a revision change), but acceptance
    is stored **client-side** (localStorage, keyed **per tenant**, holding the triples accepted — the revision with the
-   operator section's revision and variant, decision 6 — accepting on one share of a tenant clears the gate on every
+   operator section's revision, decision 6 — accepting on one share of a tenant clears the gate on every
    share of that tenant, since they are the *space's* terms, not the link's) — the server
    records **nothing** about the accountless visitor, preserving anonymity — and its logs name no visitor either: no
    address, no User-Agent, no request URI ([ADR 0092](0092-logs-are-operational-and-name-no-person.md) § 3). This reuses the same tenant terms (the
@@ -156,30 +157,16 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    without a gate. The clauses' DE and EN wording is written in the CR that builds this, from the drafts of the
    2026-10-16 research; the template's clause 9 then points to this section instead of regulating review itself.
 
-   **The section has two variants, chosen by the instance's operating mode** (ADR 0093 § 14, owner 2026-10-17). The
-   **full** section above is the *club, organisation or company* mode's. The **reduced** section is the *private*
-   mode's, for an operator who assessed that the GDPR, the DSA and the TCO Regulation do not reach their instance; it
-   keeps what tells a member or a guest how to report and what happens then, and drops what only those laws ask for
-   (ADR 0093 § Legal basis, items 1, 2 and 6):
-   - **stays:** the notice path, whole; what is kept (the hold and its ends, backups); the measures in steps and
-     reversible; that the affected are told what was blocked and why, and may object in the app once;
-   - **drops:** the authorities bullet — Art. 18 reports, orders, the terrorist-content policy (TCO Art. 7(1)) and the
-     contact point for users and authorities with its languages (DSA Art. 11–12, TCO Art. 15); the statement's
-     deferral on an authority's request (TCO Art. 11(3)); and the statement's further content, reduced as ADR 0093
-     § 7 says;
-   - **follows its value, not the mode:** the pointer to the guest-write record's information is in the section
-     exactly while `core.public-shares.guest-write-record` is on, in either variant; a contact or a provider
-     identification the operator set is shown, and one left empty is simply absent — the full section shows that gap
-     as "not stated by this operator".
-
-   Both variants carry one revision, moved with the text of either, and the gate compares the variant with it:
-   switching the mode **reopens the gate**, since what members accepted changed. Switching the record does not: its
-   information reaches a guest at the write itself (ADR 0093 § 10), like a changed value. A member's history keeps one
-   row per accepted triple (space revision, section revision, variant), and the gate asks whether the current triple
-   has one; a guest's device keeps the last four triples it accepted, and its gate asks the same question. Four, since
-   both revisions only grow: both variants at the current revisions and at the previous ones (a rolled-back release) are
-   all that can come back. So switching the mode back to a variant accepted before asks nobody again, member or guest
-   (the owner's decision of 2026-10-18).
+   **The section has one form on every instance** (ADR 0093 § 14, revised 2026-10-21; until cr-operating-mode-retires
+   it still has a reduced variant for a *private* mode). Every value it names — the instance contact, the provider
+   identification — shows when set and as "not stated by this operator" when empty, and the pointer to the guest-write
+   record's information is always in it (ADR 0093 § 10: the record is kept wherever a guest may write). The section
+   carries one revision, moved with its text, and the gate compares it: a moved revision **reopens the gate**, since
+   what members accepted changed; a changed value or retention N does not, since that information reaches its reader
+   where it applies (ADR 0093 § 10), like a changed value. A member's history keeps one row per accepted pair (space
+   revision, section revision), and the gate asks whether the current pair has one; a guest's device keeps the last
+   two pairs it accepted (the current revisions and the previous ones, for a rolled-back release), and its gate asks
+   the same question. A variant in the pair, as built from 2026-10-18, goes with the mode.
 
    **Gaps against the law, named rather than papered over** (the owner's rule of 2026-10-18: a legal duty wins over
    what an ADR or the code says). Each is a correction owed before the first release, or a question for the qualified
@@ -187,15 +174,15 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    - **A space's own terms are not public before sign-in** (decision 5); whether DSA Art. 14(1) reaches them, as terms
      the provider's service runs under, is a question for the review.
 
-   What the section says per mode, and the gaps, are the Server Owner's to know: the Run docs'
+   What the section says, and the gaps, are the Server Owner's to know: the Run docs'
    [Moderation](../../site/src/content/docs/run/moderation.md) page says so.
 
 7. **A provider identification, set in admin-web.** Name, an address for service, an email address, and for a
    legal person who represents it (a club's board). Required by § 5 DDG of a commercial operator and by § 18 MStV
-   of every operator not serving exclusively personal or family purposes. **Required in the *club, organisation or
-   company* mode**: admin-web warns while it is empty, and never refuses (ADR 0093 § 14). **Optional in the
-   *private* mode**, with no warning. Where it is set it appears, in either mode, in the operator section and on the
-   login and share pages. It is public operational data, like the terms.
+   of every operator not serving exclusively personal or family purposes. **Never required by veyq, and nothing
+   warns** (ADR 0093 § 14): which of those duties reaches an instance is the Server Owner's assessment, and an empty
+   identification shows as "not stated by this operator" in the operator section. Where it is set it appears there
+   and on the login and share pages. It is public operational data, like the terms.
 
 8. **A fixed instance privacy notice, public, from the Server Owner** (GDPR Art. 13(1), (2)). Like the operator
    section, veyq ships its text (DE+EN), nobody edits it, and it renders instance values: the controller (the provider
@@ -216,15 +203,14 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    collection — the invite acceptance that births an account, the report dialog that takes a contact, a guest's
    first write — and each of those links to it, as do the login page, the share page and the signed-in app
    (the provider identification's footer, which the app shell gains). It is information, not consent: no gate, no
-   acceptance, and its revision moves only with its text. It is shown in both operating modes (owner, Q26 below); in the *private* mode an empty value is simply absent and nothing warns, in the
-   other the full notice shows the gap as "not stated by this operator" and admin-web warns, as for the
-   identification. Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
+   acceptance, and its revision moves only with its text. It is shown on every instance (owner, Q26 below), in one form, an empty value showing as "not stated by this
+   operator" and nothing warning (ADR 0093 § 14, revised 2026-10-21). Whether a tenant owner is a joint controller (Art. 26) and whether the breached-password check may
    run by default are open (ADR 0093 Still open 6 and 7); until answered the notice names the Server Owner as the
    controller and states the check as it runs.
 
-   The owner's answers (2026-10-18, Q26–Q28 of `cr-instance-privacy-notice`): the notice is shown in **both modes**,
-   every passage being a fact of the software true on every instance (in *private* the household exemption only makes
-   it not owed); it is the **one home of every Art. 13 passage**, the guest-write record's included, its right to
+   The owner's answers (2026-10-18, Q26–Q28 of `cr-instance-privacy-notice`): the notice is shown on **every
+   instance**, every passage being a fact of the software true on every instance (for a household the exemption only
+   makes it not owed); it is the **one home of every Art. 13 passage**, the guest-write record's included, its right to
    object set apart as in decision 6 before, and the operator section keeps a pointer; the recipients are a **list** the
    Server Owner keeps — name, what they do, country — with suggested rows for what the instance knows (an external
    store's host, the instance mail relay's host) that publish nothing until saved, since fixed slots miss a backup host
@@ -263,9 +249,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
   uc.moderation.object-to-a-measure) and the operator section that states them (security model § Sharing).
 - **The operator section and the provider identification are new public surface** (6, 7): instance settings in
   admin-web and the CLI ([ADR 0089](0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)),
-  rendered into the terms endpoints and served publicly. A Server Owner in the *club, organisation or company* mode
-  who leaves the identification empty sees a warning, not a refusal; one in the *private* mode sees nothing and gets
-  the reduced section (decision 6). Both are built; decision 6 names the gaps against the law that remain.
+  rendered into the terms endpoints and served publicly. A Server Owner who leaves the identification empty is
+  neither warned nor refused; the section shows the gap (decision 6). Both are built, the mode-dependent warning and
+  reduced section still in the tree until cr-operating-mode-retires; decision 6 names the gaps against the law that remain.
 - **The privacy notice is a second fixed text** (8), with its own public route and endpoint, the recipients list and
   an optional data-protection officer as new instance values, and links from every place that collects. The space
   template's privacy clause stays the space owner's description of their space, never the operator's notice. The

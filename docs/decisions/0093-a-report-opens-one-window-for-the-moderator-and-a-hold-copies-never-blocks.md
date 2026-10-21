@@ -16,7 +16,7 @@
   [uc.moderation.take-a-measure](../features/moderation/use-cases/uc.moderation.take-a-measure.md)). § 7 is built
   (cr-statement-of-reasons-and-objection, 2026-10-18;
   [uc.moderation.object-to-a-measure](../features/moderation/use-cases/uc.moderation.object-to-a-measure.md)): a
-  moderator's measure carries its statement in the form the operating mode sets, to its recipients in the app and by
+  moderator's measure carries its statement, to its recipients in the app and by
   instance mail, a reporter is told the decision, the affected object once and another moderator decides, and the
   measure's hold counts from the statement (§ 4); a guest is told nothing in the app for a moderator's measure (it
   has no account, so a guest uploader counts as nobody to tell, DSA Art. 17(2)). The four legal gaps the audit of
@@ -43,10 +43,12 @@
   Server Owner appoints, sharing one instance moderation key — is
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)'s, accepted 2026-10-17,
   and built as far as no report is needed (the roster, the key, the proof, the log's instance events), and stated here
-  in §§ 1–3, 6–7 and 11–13. § 14's operating mode (owner 2026-10-17) is built — the choice at first-run setup and
-  later, its notice, the preset mechanism and the warnings per mode — and so is § 11's instance contact with its
+  in §§ 1–3, 6–7 and 11–13. § 14 was revised 2026-10-21 (no operating mode, one form of
+  each text, nothing required) and that revision is **not built** (cr-operating-mode-retires): the tree still has the
+  mode of 2026-10-17, its choice at setup, its notice, the warnings per mode and the reduced texts. § 11's instance
+  contact is built with its
   notification address's code confirmation ([uc.admin.operator-details](../features/admin/use-cases/uc.admin.operator-details.md));
-  § 10's guest-write record is built and carries the catalog's first preset (cr-guest-write-record, 2026-10-17;
+  § 10's guest-write record is built, still behind the switch its 2026-10-21 revision removes (cr-operating-mode-retires; built by cr-guest-write-record, 2026-10-17;
   [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)): the record,
   N with its two-limit purge, the switch's default per mode, the hold's copy, the backup without its rows and the
   first-layer sentence — whose wording waits on counsel (Still open 4) — with its link to the record passage of the
@@ -75,10 +77,9 @@ an online platform as long as a share's audience is chosen by its sender (recita
 GDPR; a hosting service provider under the terrorist-content Regulation (EU) 2021/784 ("TCO"); and a provider who
 identifies itself under § 5 DDG or § 18 MStV (L). A household instance is the subset where some of these duties
 may not apply. **The design never relies on that**: every mechanism below is built for every instance, and it costs
-nothing until someone reports. What a household operator may leave off is **their own call, made as an operating
-mode** (§ 14, owner 2026-10-17): at first-run setup the Server Owner chooses *private* or *club, organisation or
-company*, a preset that switches off, in *private*, only what serves the GDPR, the DSA's formalities and the TCO
-Regulation — never the report, the hold, the block or the moderators, since criminal law and the hosting privilege's
+nothing until someone reports. What a household operator may leave out is **their own call**, and it is made by
+leaving values empty, not by a mode (§ 14, owner 2026-10-21): every instance serves the full texts, and an unset value
+shows as not stated — never by leaving off the guest-write record (§ 10, kept wherever a guest may write), and never the report, the hold, the block or the moderators, since criminal law and the hosting privilege's
 "once known, act" reach every operator (§ 7 DDG covers unpaid services too, L). The choice says plainly that it is
 the operator's assessment and not veyq's. The hosting-not-platform reading holds while a share has no directory, no search
 and its key in the fragment; a feature that changes any of these (a public gallery, a listing of public shares, a
@@ -277,13 +278,11 @@ objects, and the step ends at once.
 - **After a measure** the statement (DSA Art. 17) goes to the share's creator and the uploader, and to the scope
   owner on a content block. It names the measure and its reach, the facts and whether a report or an order led to
   it, that no automated means decided, the ground — its category **and the provision of the law or the clause of
-  the terms relied on**, required in the full form, with the facts explaining why the content falls under it
+  the terms relied on**, required, with the facts explaining why the content falls under it
   (Art. 17(3)(d), (e)) — that the measure applies wherever the instance is reached and lasts until it is lifted
-  (Art. 17(3)(a)), and the objection and the courts (Art. 17(3), L). A dismissed report is told only to the reporter. In the *private* mode (§ 14) the
-  statement is **reduced**: it names the measure and its reach, the ground and the objection, and leaves out the
-  rest of Art. 17(3)'s list — the facts as a required part (the moderator may still write them), whether a report
-  or an order led to it, that no automated means decided, the courts, the territorial sentence, and the provision
-  or clause as a required part (the moderator may still name it). Who receives it does not change.
+  (Art. 17(3)(a)), and the objection and the courts (Art. 17(3), L). A dismissed report is told only to the reporter.
+  There is one form on every instance (§ 14): the reduced form a *private* mode served until 2026-10-21 is gone, so a
+  moderator always states the facts and the provision or clause.
 - **The facts are sealed once, and per affected member only their key** (owner 2026-10-19). The moderator's browser
   seals the facts under a fresh 32-byte `K_facts`, bound to the case and to the statement, whose id that browser mints
   (`moderation-statement-facts` [caseId, statementId]; [ADR 0072](0072-a-seal-binds-its-object.md) Decision 3), and
@@ -316,10 +315,11 @@ objects, and the step ends at once.
   content is never refused for want of mail: what must go does not wait on the mail. The report is the answer's alone;
   what is stored stays each recipient's `mailedAt`.
 - **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
-  report again with more information, the instance contact, that they may go to court, and that they may complain to
-  the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
-  Bundesnetzagentur, the authority § 12(1) DDG names under DSA Art. 49(1)). In the *private* mode the passage keeps
-  the first two only, as the reduced statement drops the courts.
+  report again with more information, the instance contact, that they may go to court, and that, where the DSA reaches
+  this instance, they may complain to the Digital Services Coordinator of the Member State where they live or are
+  established (DSA Art. 53; in Germany the Bundesnetzagentur, the authority § 12(1) DDG names under DSA Art. 49(1)).
+  The qualifier is the passage's own, not a mode's: veyq cannot know whether the DSA reaches an instance (§ 14), and
+  a right that only the DSA grants is never promised unconditionally. An empty instance contact renders as the gap.
 - **Deferring the statement is an authority's switch, never the moderator's discretion** (L: Art. 17 DSA has no
   exception of its own; TCO Art. 11(3) lets the authority forbid the notice for six weeks, renewable once by six).
   It needs the authority's reference (sealed) and an end date, at most six weeks per request; at that date the
@@ -392,11 +392,15 @@ range and its no-extension rule (§ 2 there).
 - **Its basis is Art. 6(1)(f) GDPR** (L): a host has no duty to keep addresses and is permitted to keep them
   briefly, for a stated purpose, disclosed — the legitimate interest in tracing the misuse of a guest link once it
   is reported. The Server Owner is the controller; the information duty is theirs, not the tenant owner's.
-- **Switch `core.public-shares.guest-write-record`**, operator only (`*`), its default set by the operating mode
-  (§ 14): off in *private*, on in *club, organisation or company*
-  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 14). Off: nothing
-  is recorded, and the next purge deletes every live row; hold copies stay. The disclosure below follows the switch,
-  not the mode: a private operator who switches the record on gives the same information.
+- **No switch: the record is kept wherever a guest may write** (owner 2026-10-21; it replaced the switch
+  `core.public-shares.guest-write-record`, whose default followed the operating mode). A row exists only where a link
+  lets a guest write, so `core.public-shares.contribute` and `.drop-box` — at the instance and in each tenant — already
+  decide where it is kept, and a Server Owner who wants no guest address kept switches guest writes off. Why no switch
+  of its own: what the record is for, a write link that reached strangers, is exactly what an operator-blind Server
+  Owner cannot see, so a switch would let them drop the trace where nobody can tell it is needed; and a default per
+  mode made the mode a second source of truth for it
+  ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 14, revised). The
+  basis below is unchanged, the disclosure is shown on every instance, and N bounds it on every instance.
 - **Retention is an instance setting** (0092 § 2: N days, 7 by default, 1 to 30). Seven days is the supervisory
   practice and roughly what an access provider keeps today, past which a host's address resolves to nobody; a value
   above seven needs a reason the Run docs ask the operator to write into their record of processing (L). A row is
@@ -469,9 +473,8 @@ range and its no-extension rule (§ 2 there).
 - **An instance contact**, set in admin-web and the CLI: the single point of contact for users and authorities
   (DSA Art. 11–12) and the TCO contact point for removal orders (TCO Art. 15), with the languages it answers in;
   the notification address; and the address the disclosures and statements name. It is public, in the operator
-  section of the terms. In the *club, organisation or company* mode (§ 14) it is required: admin-web warns while
-  public links are on and no contact is set. In *private* it is optional and nothing warns; a contact that is set is
-  shown all the same.
+  section of the terms. It is never required and nothing warns about it (§ 14): an empty contact renders as "not
+  stated by this operator" wherever a text names it, so the gap is visible to whoever reads it.
 
 ### 12. An authority's order acts on ids, within the hour, without a key and without a report
 
@@ -515,37 +518,34 @@ range and its no-extension rule (§ 2 there).
   StGB, L): recording the handover ends it, and the moderation surface says so before it is recorded. A file or a
   screenshot never goes by mail or to a hotline.
 
-### 14. The operating mode: what a private operator may leave off, on their own assessment
+### 14. No operating mode: every instance carries the full texts, and the Server Owner fills in what applies
 
-The Server Owner chooses the instance's **operating mode** at first-run setup in admin-web and can change it there
-and in `veyq-admin` later (owner 2026-10-17): **private** (family, circle of friends) or **club, organisation or
-company**. Until one is chosen the instance runs as the second. The mode is a **preset**
-([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md) decision 14): it sets the
-switches it names when chosen, and each can then be set on its own. What it decides, per section:
+Every instance serves **one** form of each fixed text: the full operator section of the terms (ADR 0035 decisions
+6–7), the full statement of reasons (§ 7) and the full privacy notice (ADR 0035 decision 8). **Nothing is required
+and nothing warns**: every value the Server Owner may set — the instance contact (§ 11), the provider identification
+(ADR 0035 decision 7), a privacy contact — is optional, and an empty one renders as "not stated by this operator"
+wherever a text names it (owner 2026-10-21). Which duties reach an instance turns on facts veyq cannot see — who the
+members are, whether a tenant owner posted a link publicly — so the Server Owner fills in the values once they apply,
+as on any other self-hosted service; the gap stays visible to whoever reads the text until they do.
 
-| Section | Private | Club, organisation or company |
-|---|---|---|
-| §§ 1–6, 12, 13: report, hold, measures, moderators, orders, Art. 18 export, CSAM flow | on | on |
-| § 7: the statement of reasons | reduced (§ 7) | full |
-| § 7: deferral on an authority's request | possible, not stated in the terms | possible, stated |
-| § 10: `core.public-shares.guest-write-record` | off by default | on by default, N = 7 |
-| § 11: the instance contact | optional, no warning | required, admin-web warns while empty |
-| [ADR 0035](0035-server-terms-of-service.md) decision 6: the operator section | reduced | full |
-| ADR 0035 decision 7: the provider identification | optional, no warning | required, admin-web warns while empty |
+**What the Server Owner is told, as information and not as a choice**: at first-run setup, in admin-web's operator
+settings and in the Run docs. The GDPR's household exemption covers only a natural person's purely personal or family
+activity, and it ends once content is made reachable for an unrestricted number of people — a link shared publicly
+(CJEU C-101/01 *Lindqvist*, C-345/17 *Buivids*); whether the DSA and the TCO Regulation reach an unpaid private
+instance is legally uncertain (L, item 1); an operator who shares links publicly or runs veyq for a club or a company
+is probably not exempt, and then owes at least a name and a postal address (§ 5 DDG, § 18(1) MStV) and the controller's
+contact details (Art. 13(1)(a) GDPR). It covers every tenant on the instance: the Server Owner is the host for all of
+them (ADR 0099 § 1), and cannot see whether a tenant owner posted a link publicly, so a friend's tenant stays private
+only as long as its links do. *This is your own assessment, not veyq's.*
 
-**Required means warned, never refused**: veyq cannot tell a true address from a false one, and refusing setup or
-public links over an empty field would stop an operator from trying the instance before they publish it. The first
-row is no switch at all: the mode never turns the report path or the moderators off (when moderation starts is
-ADR 0099 § 3's).
-
-**The choice carries a notice**, shown before the mode is set and again when it is changed, and in the CLI before
-it asks: *this is your own assessment, not veyq's.* The GDPR's household exemption covers only a natural person's
-purely personal or family activity, and it ends once content is made reachable for an unrestricted number of people
-— a link shared publicly (CJEU C-101/01 *Lindqvist*, C-345/17 *Buivids*); whether the DSA and the TCO Regulation
-reach an unpaid private instance is legally uncertain (L, item 1); an operator who shares links publicly or runs veyq
-for a club or a company is probably not exempt and should choose the second mode. Choosing *private* needs a tick
-that the operator has read this. Everything stays built: *private* only switches it off on the operator's own
-responsibility, and switching back to the second mode turns it on again.
+**Why no mode** (owner 2026-10-17, retired 2026-10-21). A mode *private* or *club, organisation or company*, chosen at
+setup, decided four things: a reduced statement and operator section, whether admin-web warned about empty values,
+and — as a preset — the guest-write record's switch. Once the record had no switch (§ 10) and warnings had no reader
+an operator would not ignore, the mode decided only how long the texts were, and its reduced texts left out what veyq
+does on every instance anyway (the report path, the order path, the Art. 18 export are built everywhere and refused
+nowhere, "it costs nothing until someone reports"). So the full texts describe every instance more truly than the
+reduced ones did, and one form of each is one state to test instead of two. A sentence in them that grants a right
+only the DSA gives says *where the DSA reaches this instance* in its own words (§ 7's reporter redress).
 
 ## Consequences
 
@@ -562,9 +562,7 @@ responsibility, and switching back to the second mode turns it on again.
   the report dialog's fields and categories (§ 1); the CSAM flow and the BKA export (§ 13); the backup dump without
   the record's rows, which changes what [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   database leg holds (§ 10); and in [ADR 0035](0035-server-terms-of-service.md) the fixed operator section and the
-  provider identification. The operating mode (§ 14) adds one instance setting, a step in first-run setup, a
-  reduced variant of the operator section and of the statement, and a second state every mode-dependent text is
-  tested in.
+  provider identification, each in one form (§ 14).
 - **Transparency reports: the operator's duty, not built** (§ Legal basis, 8). An operator may owe three, and veyq
   compiles none: a yearly DSA Art. 15 report unless they are a micro or small enterprise (Recommendation 2003/361/EC;
   whether a non-economic club is an enterprise at all is Still open 8);
@@ -583,8 +581,8 @@ responsibility, and switching back to the second mode turns it on again.
   their retention; an address without a port may name no single subscriber; an operator who cannot keep the TCO
   hour has to turn public links off. A household instance may be outside the DSA, the TCO Regulation and the GDPR
   (L); the Run docs show which instances are (a table by operator kind, and that one link posted publicly can
-  leave the household exemption), what the *private* mode switches off (§ 14), and that veyq meets a hosting
-  service's duties in the other mode.
+  leave the household exemption), which values each kind of operator owes (§ 14), and that veyq meets a hosting
+  service's duties on every instance once those values are set.
 - **Docs** ([moderation](../../site/src/content/docs/run/moderation.md) stops sending the operator to the tenant
   owner and gains an emergency page: 110, the BKA portal registered ahead, `TCO@bka.bund.de`, what never to do;
   the security model's T&S section, `CLAUDE.md`'s invariant on what the server keeps,
@@ -625,11 +623,16 @@ responsibility, and switching back to the second mode turns it on again.
   proceedings) and against a TCO order's six months.
 - **Keeping the guest-write record as long as the access providers may soon have to** (three months in the German
   bill). That bill does not reach a host, and the 1-to-30-day cap is what bounds the legitimate interest.
-- **A private mode that switches the report path off too** (§ 14). Criminal law and the hosting privilege's duty to
-  act once a host knows reach a family's operator as much as a club's; a report path is how they come to know.
-- **veyq deciding the mode** (by the number of accounts or tenants, or by whether public links are on). Which law
-  applies turns on facts veyq cannot see — who the members are, whether a link was posted publicly — so the
-  assessment stays the operator's, with the notice telling them what it turns on.
+- **An operating mode, *private* or *club, organisation or company*** (built 2026-10-17, retired 2026-10-21; § 14
+  says why): it ended as a second state for every fixed text that only shortened them, and a preset that let a
+  private instance drop the guest-write record where it mattered most.
+- **An operating mode per tenant.** The duties are the host's, and the host is the Server Owner for every tenant
+  (ADR 0099 § 1); a tenant cannot be *private* on an instance whose operator hosts a club beside it.
+- **Switching the report path off for a household** (§ 14). Criminal law and the hosting privilege's duty to act once
+  a host knows reach a family's operator as much as a club's; a report path is how they come to know.
+- **veyq deciding which duties apply** (by the number of accounts or tenants, or by whether public links are on).
+  Which law applies turns on facts veyq cannot see — who the members are, whether a link was posted publicly — so the
+  assessment stays the operator's, with § 14's information telling them what it turns on.
 - **Crypto-shredding the record** (a daily key outside the database) to keep it out of backups. Solves volume
   snapshots too, but costs key management outside the database for what leaving the rows out of the dump does.
 
@@ -650,8 +653,8 @@ Research, not legal advice, 2026-10-16. Each answer needs a qualified review bef
    exemption (CJEU C-101/01 *Lindqvist*, C-345/17 *Buivids*), so one link posted publicly can end it. Whether the
    DSA reaches an unpaid private service is uncertain; the Bundestag's research service calls it so in
    [*WD 7 - 3000 - 026/26*, "Haftung von Serverbetreibern und Bestimmung der Nutzerzahlen dezentraler Netzwerke"](https://www.bundestag.de/resource/blob/1182736/WD-7-026-26.pdf)
-   (2026; the document's existence and title measured 2026-10-17, its conclusion taken from the research report, not re-read). Hence the operating mode of
-   § 14 as the operator's own assessment.
+   (2026; the document's existence and title measured 2026-10-17, its conclusion taken from the research report, not re-read). Hence § 14 leaves
+   the assessment to the operator.
    [DSA](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32022R2065) ·
    [CJEU C-25/17](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:62017CJ0025) ·
    [CJEU C-101/01](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:62001CJ0101) ·
