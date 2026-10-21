@@ -305,6 +305,12 @@ objects, and the step ends at once.
   moderation key for the log — and the objection goes to the instance contact (owner decisions Q24–Q25, 2026-10-18:
   facts by mail rather than a restricted second session kind for one case; a tenant's owners only, since facts mailed to
   every member could expose one member's content to all). The mail goes once: the server keeps no clear copy to retry.
+  **So the step reports what the mail reached** (owner 2026-10-21; not built — `changes/cr-statement-delivery-report.md`):
+  its answer names how many were to be told and the address of each one the mail did not reach — the instance mail is
+  not set up, or the send failed — and admin-web keeps the Server Owner's own words in view, so they tell those through
+  the instance contact while the words are still on their screen; `veyq-admin` prints the same and warns. A step with
+  nobody to tell (a tenant without an owner) says so. A step over content is never refused for want of mail: what must
+  go does not wait on the mail. The report is the answer's alone; what is stored stays each recipient's `mailedAt`.
 - **The reporter's decision carries their redress** (DSA Art. 16(5)): one fixed bilingual passage — that they may
   report again with more information, the instance contact, that they may go to court, and that they may complain to
   the Digital Services Coordinator of the Member State where they live or are established (DSA Art. 53; in Germany the
