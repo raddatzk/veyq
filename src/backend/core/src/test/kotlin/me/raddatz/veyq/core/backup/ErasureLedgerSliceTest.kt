@@ -15,6 +15,7 @@ import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationLog
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.ModerationBlockEntity
+import me.raddatz.veyq.core.moderation.cases.BlockOutcome
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.dismiss
 import me.raddatz.veyq.core.moderation.hold.HoldEntity
@@ -287,8 +288,8 @@ class ErasureLedgerSliceTest {
         val owner = seedUser(serverRole = "SERVER_OWNER")
         val blocked = seedUser()
         val lifted = seedUser()
-        assertNull(blocks.block(owner, "u-$blocked@example.com", null))
-        assertNull(blocks.block(owner, "u-$lifted@example.com", null))
+        assertEquals(BlockOutcome.Blocked(null), blocks.block(owner, "u-$blocked@example.com", null))
+        assertEquals(BlockOutcome.Blocked(null), blocks.block(owner, "u-$lifted@example.com", null))
         val liftedRow = read { ModerationBlockEntity.find("targetId", lifted).firstResult()!!.id }
         assertNull(blocks.unblock(owner, liftedRow))
         // The restore: a capture before either block.
@@ -307,7 +308,7 @@ class ErasureLedgerSliceTest {
     fun aMeasureEndedByItsTargetsErasureIsALiftAndARestoreDoesNotBringItBack() {
         val owner = seedUser(serverRole = "SERVER_OWNER")
         val member = seedUser()
-        assertNull(blocks.block(owner, "u-$member@example.com", null))
+        assertEquals(BlockOutcome.Blocked(null), blocks.block(owner, "u-$member@example.com", null))
         val block = read { ModerationBlockEntity.find("targetId", member).firstResult()!!.id }
         val user = read { VeyqUser.findById(member)!! }
         QuarkusTransaction.requiringNew().run {
@@ -335,7 +336,7 @@ class ErasureLedgerSliceTest {
     fun aBlockLiftedAfterTheCaptureStaysLifted() {
         val owner = seedUser(serverRole = "SERVER_OWNER")
         val member = seedUser()
-        assertNull(blocks.block(owner, "u-$member@example.com", null))
+        assertEquals(BlockOutcome.Blocked(null), blocks.block(owner, "u-$member@example.com", null))
         val row = read { ModerationBlockEntity.find("targetId", member).firstResult()!!.id }
         assertNull(blocks.unblock(owner, row))
         // The restore: the capture held the block in force.

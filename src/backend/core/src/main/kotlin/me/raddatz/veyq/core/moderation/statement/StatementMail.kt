@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.admin.instance.InstanceNoticeMailer
 import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsHandler
 import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.generated.model.StatementDelivery
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
@@ -29,6 +30,29 @@ import java.time.format.DateTimeFormatter
 data class ReporterNotice(val reportId: String, val address: String)
 
 /**
+ * What one send of a statement reached: each recipient tried, at their address, and whether its mail went out — or null
+ * [tried] when the recipients could not be read at all. Request-scoped, never stored: the recipient row's `mailedAt` stays
+ * the only stored trace (ADR 0093 § 7). [delivery] is what a Server Owner's step answers.
+ */
+data class StatementMailing(val tried: List<Tried>?) {
+    data class Tried(val address: String, val sent: Boolean)
+
+    /** How many went out. */
+    val sent: Int get() = tried?.count { it.sent } ?: 0
+
+    /**
+     * The answer's `statementDelivery`: nobody to tell when nobody was tried, reached when every mail went out, else the
+     * addresses whose mail did not; unknown when the recipients could not be read. The client never derives a state.
+     */
+    fun delivery(): StatementDelivery = when {
+        tried == null -> StatementDelivery(StatementDelivery.Outcome.UNKNOWN, emptyList())
+        tried.isEmpty() -> StatementDelivery(StatementDelivery.Outcome.NOBODY_TO_TELL, emptyList())
+        tried.all { it.sent } -> StatementDelivery(StatementDelivery.Outcome.REACHED, emptyList())
+        else -> StatementDelivery(StatementDelivery.Outcome.NOT_ALL_REACHED, tried.filterNot { it.sent }.map { it.address })
+    }
+}
+
+/**
  * The mails of the statement of reasons and the objection (ADR 0093 §§ 2, 7; ADR 0097 decision 3 as owner decision Q11
  * widened it; uc.moderation.object-to-a-measure), all through the instance mail and **after** the decision committed —
  * a mail that fails costs the decision nothing:
@@ -38,7 +62,8 @@ data class ReporterNotice(val reportId: String, val address: String)
  *    seven days. **A Server Owner's own step** (a sign-in block, a tenant taken offline) is mailed with its facts, the
  *    Server Owner's own words handed in with the step and held only in memory (owner decision Q24 of
  *    cr-statement-legal-gaps; ADR 0049 decision 2: a consented disclosure by their author) — once: the server keeps no
- *    clear copy to retry from, so [retryDue] leaves those statements alone.
+ *    clear copy to retry from, so [retryDue] leaves those statements alone, and [stepStatementSent] answers whom the one
+ *    send reached, for the step's answer to report (ADR 0093 § 7: "So the step reports what the mail reached").
  *  - [tellReporters]: a reporter who left a contact, the dismissal or the decision and their redress (DSA Art. 16(5),
  *    [StatementTemplate.renderRedress] in the current form) — once per report (a `DECISION_SENT` event is the record),
  *    from the address the deciding moderator's browser opened and sent, mailed from memory and stored nowhere, bounded
@@ -63,21 +88,37 @@ class StatementMail(
 
     private data class Outgoing(val recipientRowId: String, val address: String, val body: String)
 
+    /** Mail every member [statementId] names whose mail has not gone out — a moderator's measure's, retried by [retryDue]. */
+    fun statementSent(statementId: String): StatementMailing = send(statementId, null, serverOwnerStep = false)
+
     /**
-     * Mail every member [statementId] names whose mail has not gone out. Answers how many went out now. [stepFacts] are a
-     * Server Owner's step's facts, which only that step's own call hands in.
+     * Mail a Server Owner's step's statement with its [stepFacts], which only that step's own call hands in — once: what
+     * did not go out now is not retried, so the answer is what the step reports.
      */
-    fun statementSent(statementId: String, stepFacts: String? = null): Int = runCatching {
-        val outgoing = QuarkusTransaction.requiringNew().call { outgoingOf(statementId, stepFacts) }
-        outgoing.count { o ->
-            val sent = mailer.mailTo(o.address, StatementTemplate.MAIL_SUBJECT.en + " / " + StatementTemplate.MAIL_SUBJECT.de, o.body, "a statement of reasons") ==
-                DeliveryResult.SENT
-            if (sent) QuarkusTransaction.requiringNew().run { StatementRecipientEntity.findById(o.recipientRowId)?.mailedAt = Instant.now() }
-            sent
+    fun stepStatementSent(statementId: String, stepFacts: String?): StatementMailing = send(statementId, stepFacts, serverOwnerStep = true)
+
+    private fun send(statementId: String, stepFacts: String?, serverOwnerStep: Boolean): StatementMailing {
+        val outgoing = runCatching { QuarkusTransaction.requiringNew().call { outgoingOf(statementId, stepFacts) } }.getOrElse {
+            log.warn(
+                if (serverOwnerStep) "a Server Owner's statement of reasons could not be mailed; it is not retried, and the step's answer says so"
+                else "a statement of reasons could not be mailed; the hourly cleanup retries it",
+            )
+            return StatementMailing(null)
         }
-    }.getOrElse {
-        log.warn("a statement of reasons could not be mailed; the hourly cleanup retries it")
-        0
+        // One recipient at a time: a mail that failed, or a mark that could not be written, costs the others nothing.
+        return StatementMailing(
+            outgoing.map { o ->
+                val sent = runCatching {
+                    mailer.mailTo(o.address, StatementTemplate.MAIL_SUBJECT.en + " / " + StatementTemplate.MAIL_SUBJECT.de, o.body, "a statement of reasons") ==
+                        DeliveryResult.SENT
+                }.getOrDefault(false)
+                if (sent) {
+                    runCatching { QuarkusTransaction.requiringNew().run { StatementRecipientEntity.findById(o.recipientRowId)?.mailedAt = Instant.now() } }
+                        .onFailure { log.warn("a statement of reasons went out but its recipient could not be marked as mailed") }
+                }
+                StatementMailing.Tried(o.address, sent)
+            },
+        )
     }
 
     /** The cleanup's retry: every statement sent in the last seven days that still owes a member its mail. */
@@ -92,7 +133,7 @@ class StatementMail(
                 "statementId in ?1 and recipientKind = ?2 and mailedAt is null", recent, RecipientKind.ACCOUNT.name,
             ).map { it.statementId }.distinct()
         }
-        return due.sumOf { statementSent(it) }
+        return due.sumOf { statementSent(it).sent }
     }
 
     private fun outgoingOf(statementId: String, stepFacts: String?): List<Outgoing> {

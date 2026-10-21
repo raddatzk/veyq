@@ -172,4 +172,31 @@ only if an import was added (`src/admin-web/CLAUDE.md`).
 
 ## Retrospective
 
-_(filled in by the implementer)_
+- **Phase 1 — the `_common` naming trap, met again.** `outcome` was first written as its own `_common` schema
+  (`StatementDeliveryOutcome`) aliased in both specs; both generators inlined it anyway (Kotlin
+  `StatementDelivery.Outcome`, TypeScript `StatementDeliveryOutcomeEnum`) and left the alias as a dead class. Found by the
+  one-use-per-language scratch (written, compiled, deleted before the commit); the enum is inline now, as decision 1
+  wrote it. Prediction held: `./gradlew check` green after phase 1 (the generated interfaces answer `Response`; 2277 tests,
+  0 failed, 6 skipped); admin-web red at exactly the three typed lines (`tenants.ts` `suspendTenant`, `moderation.ts`
+  `blockSignIn`, `moderation.test.ts`'s stub).
+- **Phase 2 — what the locator did not list.** `SignInBlocks.block` answered `HttpFailure?`; carrying the mailing needed a
+  `BlockOutcome`, and its two other callers (`ErasureLedgerSliceTest` ×4, `ModerationRacesSliceTest` ×1) were not in the
+  locator. And `validate_guard_gaps.py` anchors on `if (outcome is SuspendOutcome.Done) {\n            reproject()` in
+  `TenantHandler.suspend` (`TENANT_REPROJECT_CALL`): the first reshape (`if (outcome !is …) return outcome`) broke the
+  anchor; the "grep `scripts/` before reshaping a symbol" rule caught it before any run, and the shape was restored rather
+  than the guard edited, so no guard changed. Of the callers decision 3 says "keep counting", only `retryDue` counts; the
+  other three discard the result, as before. The block's new answer shape (`steps` nested) also reddened
+  `ModerationMeasuresSliceTest.aSignInBlockEndsEverySessionAndRefusesEverySignInUntilLifted`, which reads
+  `signInBlocks[0].id` off the answer — the locator listed the file for `/suspend` only; found by the first full check
+  (2288 tests, 1 red), green after re-pointing the path (2288, 0 failed, 6 skipped). `StatementMail` now tries each recipient on its own: before, one throw in a
+  `mailedAt` write ended the loop for every recipient after it.
+- **Phase 2 bite** (injection, snapshot-and-restore with `/bin/cp -f`, restore checked by grep = 0): `mailStatement`
+  answering `REACHED` whatever was sent. The CR's one no-mail test would have gone red at its first step and hidden the
+  other two, so it is three tests, one per step: all three went red
+  (`withoutInstanceMailABlockOverContentAnswersNotAllReachedAndStands`,
+  `…ASuspensionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands`,
+  `…ADeletionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands`: "Expected: NOT_ALL_REACHED Actual: REACHED"), and
+  `anOwnerlessTenantTakenOfflineOverContentAnswersNobodyToTell` with them; 8 of 12 stayed green.
+- **The decided docs said counts, the decision said an enum.** ADR 0093 § 7 and the use cases (commit d1d993d5) said the
+  answer "names how many were to be told"; decision 1 chose an outcome *instead of* counts (`UNKNOWN` has no honest one).
+  Phase 4 states what is built and drops the count.

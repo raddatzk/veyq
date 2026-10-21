@@ -51,7 +51,7 @@ object StepStatementFailures {
  * Written **in the step's transaction**, as a moderator's measure writes its own: the statement row on the step's measure
  * row (its case, where it has one), a recipient row per account told — the blocked member, or every owner of the tenant
  * (owner decision Q25) — and the `STATEMENT_SENT` event. The facts are stored **only sealed** ([StepStatementInput.factsForLog]);
- * the clear copy goes to [StatementMail.statementSent] after the commit, by the step's own caller, and nowhere else.
+ * the clear copy goes to [StatementMail.stepStatementSent] after the commit, by the step's own caller, and nowhere else.
  */
 @ApplicationScoped
 class StepStatements(private val operatingMode: OperatingModeHandler, private val log: ModerationLog) {

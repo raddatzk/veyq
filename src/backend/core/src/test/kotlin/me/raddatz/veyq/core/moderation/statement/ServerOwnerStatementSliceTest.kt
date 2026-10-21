@@ -39,6 +39,13 @@ import jakarta.mail.Part
 import jakarta.mail.internet.MimeMessage
 import jakarta.mail.internet.MimeMultipart
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItem
+import org.hamcrest.CoreMatchers.not
+import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.Matchers.contains
+import org.hamcrest.Matchers.containsInAnyOrder
+import org.hamcrest.Matchers.empty
+import org.hamcrest.Matchers.hasKey
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -56,7 +63,9 @@ import java.util.UUID
  * uc.moderation.object-to-a-measure A7), over GreenMail on this class's own port: a sign-in block that takes a proposal
  * cannot go without one while a block with no case, no proposal and no "over content" goes as before; the blocked member
  * is mailed the statement **with** the facts, which the database holds only sealed; a tenant taken offline over content
- * tells its owners and nobody else, and its reactivation lifts the record; a case-less step's records go with it.
+ * tells its owners and nobody else, and its reactivation lifts the record; a case-less step's records go with it. Each
+ * step's answer says whom its statement reached (ADR 0093 § 7) — reached, not reached without instance mail (the step
+ * standing), nobody to tell for an ownerless tenant, and nothing for a step without a statement.
  */
 @QuarkusTest
 class ServerOwnerStatementSliceTest {
@@ -208,7 +217,7 @@ class ServerOwnerStatementSliceTest {
             .then().statusCode(400).body("code", equalTo("statement_required"))
         assertEquals(TenantEntity.ACTIVE, QuarkusTransaction.requiringNew().call { TenantEntity.findById(m.tenantId)!!.status })
         ModerationTestKit.asOwner(mod.id).body("""{"overContent":true,"statement":${statement()}}""").post("/api/tenants/${m.tenantId}/suspend")
-            .then().statusCode(204)
+            .then().statusCode(200).body("statementDelivery.outcome", equalTo("REACHED"))
         // The owner is mailed with the facts and the tenant's domain; the member (no owner) is told nothing (owner Q25).
         val text = textOf(mailsTo(emailOf(owner)).single())
         assertTrue(text.contains("a space you own, $domain, was taken offline"), text)
@@ -223,7 +232,7 @@ class ServerOwnerStatementSliceTest {
         ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/reactivate").then().statusCode(204)
         QuarkusTransaction.requiringNew().run { assertNull(ModerationBlockEntity.findById(record.id)!!.activeKey) }
         mailbox.purgeEmailFromAllMailboxes()
-        ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/suspend").then().statusCode(204)
+        ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/suspend").then().statusCode(200)
         assertEquals(1L, QuarkusTransaction.requiringNew().call { ModerationBlockEntity.count("kind = ?1 and targetId = ?2", BlockKind.TENANT_OFFLINE.name, m.tenantId) })
         ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/reactivate").then().statusCode(204)
     }
@@ -318,6 +327,109 @@ class ServerOwnerStatementSliceTest {
             assertEquals(0L, StatementRecipientEntity.count("statementId", statementId))
             assertNull(ModerationBlockEntity.findById(blockId))
         }
+    }
+
+    /** A tenant with two owners beside [m]'s member, so the answer has more than one recipient to name. */
+    private fun withTwoOwners(): Triple<String, String, String> {
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        val owners = listOf(seedUser(), seedUser())
+        QuarkusTransaction.requiringNew().run { owners.forEach { TenantRoots.join(it, m.tenantId, MembershipEntity.OWNER) } }
+        return Triple(m.tenantId, owners[0], owners[1])
+    }
+
+    private fun domainOf(tenantId: String) = QuarkusTransaction.requiringNew().call { TenantEntity.findById(tenantId)!!.domain }
+    private fun statusOf(tenantId: String) = QuarkusTransaction.requiringNew().call { TenantEntity.findById(tenantId)!!.status }
+    private fun mailedAts(statementId: String) =
+        QuarkusTransaction.requiringNew().call { StatementRecipientEntity.list("statementId", statementId).map { it.mailedAt } }
+
+    @Test
+    fun eachStepOverContentWithMailSetUpAnswersReachedAndMarksEveryRecipientMailed() {
+        val member = seedUser()
+        val blockStatement = UUID.randomUUID().toString()
+        block(emailOf(member), ""","overContent":true,"statement":${statement(blockStatement)}""").then().statusCode(200)
+            .body("statementDelivery.outcome", equalTo("REACHED")).body("statementDelivery.notReached", empty<String>())
+            .body("steps.signInBlocks.address", hasItem(emailOf(member)))
+        val (offline, _, _) = withTwoOwners()
+        val suspendStatement = UUID.randomUUID().toString()
+        ModerationTestKit.asOwner(mod.id).body("""{"overContent":true,"statement":${statement(suspendStatement)}}""")
+            .post("/api/tenants/$offline/suspend").then().statusCode(200)
+            .body("statementDelivery.outcome", equalTo("REACHED")).body("statementDelivery.notReached", empty<String>())
+        val (deleted, _, _) = withTwoOwners()
+        val deleteStatement = UUID.randomUUID().toString()
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"${domainOf(deleted)}","overContent":true,"statement":${statement(deleteStatement)}}""")
+            .post("/api/tenants/$deleted/deletion").then().statusCode(200)
+            .body("dueAt", notNullValue()).body("statementDelivery.outcome", equalTo("REACHED"))
+        assertEquals(1, mailedAts(blockStatement).size)
+        assertEquals(2, mailedAts(suspendStatement).size)
+        assertEquals(2, mailedAts(deleteStatement).size)
+        listOf(blockStatement, suspendStatement, deleteStatement).forEach { id ->
+            assertTrue(mailedAts(id).all { it != null }, "a recipient of $id is not marked mailed")
+        }
+    }
+
+    // Without instance mail each step over content answers NOT_ALL_REACHED naming every recipient, and stands — one test
+    // per step, so a report that ignores the mail is red on each.
+    private fun withoutInstanceMail() = QuarkusTransaction.requiringNew().run { InstanceMailSettingsEntity.deleteAll() }
+
+    @Test
+    fun withoutInstanceMailABlockOverContentAnswersNotAllReachedAndStands() {
+        withoutInstanceMail()
+        val member = seedUser()
+        block(emailOf(member), ""","overContent":true,"statement":${statement()}""").then().statusCode(200)
+            .body("statementDelivery.outcome", equalTo("NOT_ALL_REACHED"))
+            .body("statementDelivery.notReached", contains(emailOf(member)))
+        assertEquals(1L, blocksOn(member))
+        QuarkusTransaction.requiringNew().run {
+            assertNotNull(ModerationBlockEntity.find("targetId = ?1 and kind = ?2", member, BlockKind.MEMBER_SIGN_IN.name).firstResult()!!.activeKey)
+        }
+    }
+
+    @Test
+    fun withoutInstanceMailASuspensionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands() {
+        withoutInstanceMail()
+        val (offline, a, b) = withTwoOwners()
+        val suspendStatement = UUID.randomUUID().toString()
+        ModerationTestKit.asOwner(mod.id).body("""{"overContent":true,"statement":${statement(suspendStatement)}}""")
+            .post("/api/tenants/$offline/suspend").then().statusCode(200)
+            .body("statementDelivery.outcome", equalTo("NOT_ALL_REACHED"))
+            .body("statementDelivery.notReached", containsInAnyOrder(emailOf(a), emailOf(b)))
+        assertEquals(TenantEntity.SUSPENDED, statusOf(offline))
+        assertTrue(mailedAts(suspendStatement).all { it == null })
+    }
+
+    @Test
+    fun withoutInstanceMailADeletionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands() {
+        withoutInstanceMail()
+        val (deleted, c, d) = withTwoOwners()
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"${domainOf(deleted)}","overContent":true,"statement":${statement()}}""")
+            .post("/api/tenants/$deleted/deletion").then().statusCode(200)
+            .body("statementDelivery.outcome", equalTo("NOT_ALL_REACHED"))
+            .body("statementDelivery.notReached", containsInAnyOrder(emailOf(c), emailOf(d)))
+        assertEquals(TenantEntity.PENDING_DELETION, statusOf(deleted))
+        mailbox.waitForIncomingEmail(500, 1)
+        assertEquals(0, mailbox.receivedMessages.size, "no instance mail, yet something was mailed")
+    }
+
+    @Test
+    fun anOwnerlessTenantTakenOfflineOverContentAnswersNobodyToTell() {
+        // Its only member owns nothing (ADR 0101 decision 9): the statement names no recipient, so nothing is tried.
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        ModerationTestKit.asOwner(mod.id).body("""{"overContent":true,"statement":${statement()}}""").post("/api/tenants/${m.tenantId}/suspend")
+            .then().statusCode(200)
+            .body("statementDelivery.outcome", equalTo("NOBODY_TO_TELL")).body("statementDelivery.notReached", empty<String>())
+        assertEquals(TenantEntity.SUSPENDED, statusOf(m.tenantId))
+    }
+
+    @Test
+    fun aStepWithoutAStatementAnswersNoDelivery() {
+        val plain = seedUser()
+        block(emailOf(plain)).then().statusCode(200).body("steps", notNullValue()).body("\$", not(hasKey("statementDelivery")))
+        val m = seedMemberScope(ScopeEntity.GROUP)
+        ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/suspend").then().statusCode(200)
+            .body("\$", not(hasKey("statementDelivery")))
+        ModerationTestKit.asOwner(mod.id).post("/api/tenants/${m.tenantId}/reactivate").then().statusCode(204)
+        ModerationTestKit.asOwner(mod.id).body("""{"domain":"${domainOf(m.tenantId)}"}""").post("/api/tenants/${m.tenantId}/deletion")
+            .then().statusCode(200).body("dueAt", notNullValue()).body("\$", not(hasKey("statementDelivery")))
     }
 
     private fun blocksOn(accountId: String): Long =
