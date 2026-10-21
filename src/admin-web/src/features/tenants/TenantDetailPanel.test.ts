@@ -7,6 +7,7 @@
 // uc.admin.tenant-storage-quota: the panel shows usage beside the quota, and sets (GiB in, bytes out) or clears it.
 // uc.admin.delete-tenant: an ACTIVE or SUSPENDED tenant is deleted only once its domain is typed; a PENDING_DELETION one
 // shows its due date and is stopped; an ownerless one says so and invites one of its members to own it.
+// Both measures ask the over-content question once, above both; a moderator's open proposal ticks and holds it.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -44,6 +45,12 @@ vi.mock('../../shared/inviteLink', () => ({
 // confirm-gating cases below by confirming nothing — which is why `no-alert` is not exempted for tests.
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
+// The real `ProposalStep`: which proposal the panel picks is what the proposal cases assert. The facade is mocked
+// whole — its key minting pulls in `@veyq/crypto`, which none of these cases reach.
+vi.mock('../instance/moderation', () => ({
+  ProposalStep: { MemberSignIn: 'MEMBER_SIGN_IN', TenantOffline: 'TENANT_OFFLINE' },
+  getModerationSteps: vi.fn(),
+}))
 vi.mock('../instance/stepStatement', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../instance/stepStatement')>()),
   stepStatement: vi.fn(),
@@ -57,6 +64,7 @@ import {
 import type { TenantInviteState, TenantSummary } from './tenants'
 import { httpError } from '../../test/httpError'
 import { stepStatement } from '../instance/stepStatement'
+import { getModerationSteps, type OpenModerationProposal } from '../instance/moderation'
 import { session, setTokens } from '../../app/session'
 
 const i18n = createI18n({
@@ -88,7 +96,10 @@ const i18n = createI18n({
         inviteOwnerTitle: 'Invite an owner', inviteOwnerEmail: 'Member address', inviteOwner: 'Invite owner',
         ownerInviteMailed: 'mailed to {email}', ownerInviteCopy: 'copy the link for {email}',
         notTenantMember: 'not a member', ownerInviteNotActive: 'not online',
+        measuresTitle: 'Take offline or delete', suspendSend: 'Take offline and send', deleteSend: 'Delete and send',
+        proposalOpen: 'Proposed: {category}, case {caseId}',
       },
+      moderation: { steps: { categories: { ILLEGAL_CONTENT: 'Illegal content' } } },
       members: { copyLinkIntro: 'copy', copyLink: 'link', copied: 'copied' },
       common: { done: 'Done', cancel: 'Cancel' },
     },
@@ -104,6 +115,12 @@ const stubs = {
   // `disabled` is carried so the delete gate's disarmed state is observable, not only its refused submit.
   Button: { props: ['label', 'icon', 'ariaLabel', 'disabled'], emits: ['click'], template: '<button :aria-label="ariaLabel" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>' },
   Message: { template: '<div class="msg"><slot /></div>' },
+  // a native checkbox, so `setValue` and `disabled` read as on the page; the class falls through onto it
+  Checkbox: {
+    props: ['modelValue', 'disabled', 'inputId'],
+    emits: ['update:modelValue'],
+    template: '<input type="checkbox" :id="inputId" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 const NO_QUOTA = { storageUsedBytes: 0, storageQuotaBytes: undefined, ownerless: false, deletionDueAt: undefined }
@@ -117,6 +134,10 @@ const DELETING: TenantSummary = {
 // The stored owner address of an ownerless tenant is its first owner's — possibly the very account erased.
 const OWNERLESS: TenantSummary = { ...ACTIVE, tenantId: 't-5', ownerEmail: 'erased@live.example', ownerless: true }
 const GiB = 1024 ** 3
+const PROPOSAL: OpenModerationProposal = {
+  id: 'p-1', caseId: 'c-1', category: 'ILLEGAL_CONTENT', step: 'TENANT_OFFLINE', proposedAt: new Date('2026-10-20T12:00:00.000Z'),
+  tenantId: 't-2', tenantDomain: 'live.example',
+}
 const INVITE: TenantInviteState = {
   ownerEmail: 'owner@acme.example', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date('2026-10-10T12:00:00.000Z'),
   bootstrapSecret: 'sek', delivery: 'FALLBACK_COPYLINK',
@@ -144,6 +165,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(deleteTenant).mockResolvedValue({ dueAt: DUE })
     vi.mocked(stopTenantDeletion).mockResolvedValue(undefined)
     vi.mocked(inviteTenantOwner).mockResolvedValue({ ...INVITE, ownerEmail: 'member@live.example' })
+    vi.mocked(getModerationSteps).mockResolvedValue({ proposals: [], signInBlocks: [] })
   })
 
   it('renders a PENDING tenant with its invite controls (reassign / resend / revoke)', async () => {
@@ -447,13 +469,13 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(deleteTenant).mockResolvedValue({ dueAt: DUE })
     const w = mountPanel('t-2')
     await flushPromises()
-    const form = w.find('form.tenant-delete')
-    expect(form.find('.step-statement').exists()).toBe(false)
-    await form.find('.tenant-delete-over-content__toggle').setValue(true)
-    expect(form.find('.step-statement').exists()).toBe(true)
-    await form.find('.step-statement__provision').setValue('Space terms, clause 4')
-    await form.find('.step-statement__facts').setValue('what was found')
+    expect(w.find('.step-statement').exists()).toBe(false)
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    expect(w.find('.step-statement').exists()).toBe(true)
+    await w.find('.step-statement__provision').setValue('Space terms, clause 4')
+    await w.find('.step-statement__facts').setValue('what was found')
     await deleteInput(w).setValue('live.example')
+    expect(btn(w, 'Delete and send')).toBeTruthy()
     await submitDelete(w)
     await flushPromises()
     expect(stepStatement).toHaveBeenCalledWith(expect.objectContaining({ provision: 'Space terms, clause 4', facts: 'what was found' }))
@@ -470,7 +492,8 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await submitDelete(w)
     await flushPromises()
     expect(deleteTenant).toHaveBeenCalledWith('t-2', 'live.example', null)
-    expect(w.find('form.tenant-delete .step-statement').exists()).toBe(true)
+    expect(w.find('.tenant-measures .step-statement').exists()).toBe(true)
+    expect((w.find('.tenant-over-content__toggle').element as HTMLInputElement).checked).toBe(true)
   })
 
   it('names the delete refusals apart', async () => {
@@ -485,6 +508,70 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
       await flushPromises()
       expect(w.text()).toContain(expected)
     }
+  })
+
+  // --- the one over-content question (ADR 0093 § 7, ADR 0101 decision 10) ---
+
+  it('asks over content once for both measures, and both buttons say a statement goes out', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    // The bite: the page asked it twice, once per measure, under one and the same label.
+    expect(w.findAll('.tenant-over-content__toggle')).toHaveLength(1)
+    expect(w.findAll('.step-statement')).toHaveLength(0)
+    expect(btn(w, 'Take offline')).toBeTruthy()
+    expect(btn(w, 'Delete tenant')).toBeTruthy()
+    await w.find('.tenant-over-content__toggle').setValue(true)
+    expect(w.findAll('.step-statement')).toHaveLength(1)
+    expect(btn(w, 'Take offline and send')).toBeTruthy()
+    expect(btn(w, 'Delete and send')).toBeTruthy()
+  })
+
+  it('a SUSPENDED tenant brings it back online above, outside the measures, which hold only Delete', async () => {
+    vi.mocked(listTenants).mockResolvedValue([SUSPENDED])
+    const w = mountPanel('t-3')
+    await flushPromises()
+    const measures = w.find('.tenant-measures')
+    expect(measures.find('h3').text()).toBe('Delete this tenant')
+    expect(measures.findAll('button').map((b) => b.text())).toEqual(['Delete tenant'])
+    expect(btn(w, 'Bring back online')).toBeTruthy() // control: it is on the page, just not among the measures
+  })
+
+  it('a moderator’s open proposal to take the tenant offline is shown, and holds the checkbox ticked', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(getModerationSteps).mockResolvedValue({
+      // another tenant's proposal and a sign-in block's must not count
+      proposals: [{ ...PROPOSAL, id: 'p-0', tenantId: 't-9' }, { ...PROPOSAL, id: 'p-2', step: 'MEMBER_SIGN_IN', tenantId: 't-2' }, PROPOSAL],
+      signInBlocks: [],
+    })
+    const statement = { statementId: 's-3', ground: 'ILLEGAL_CONTENT' as const, provision: '', facts: '', factsForLog: undefined }
+    vi.mocked(stepStatement).mockResolvedValue(statement)
+    const w = mountPanel('t-2')
+    await flushPromises()
+    expect(w.find('.tenant-proposal').text()).toBe('Proposed: Illegal content, case c-1')
+    const toggle = w.find('.tenant-over-content__toggle').element as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(toggle.disabled).toBe(true)
+    expect(w.find('.step-statement').exists()).toBe(true)
+    await w.find('.tenant-suspend').trigger('click')
+    await flushPromises()
+    expect(suspendTenant).toHaveBeenCalledWith('t-2', statement)
+  })
+
+  it('without an open proposal for this tenant the checkbox is the Server Owner’s, also when the read fails', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
+    vi.mocked(getModerationSteps).mockResolvedValue({ proposals: [{ ...PROPOSAL, tenantId: 't-9' }], signInBlocks: [] })
+    let w = mountPanel('t-2')
+    await flushPromises()
+    expect(w.find('.tenant-proposal').exists()).toBe(false)
+    expect((w.find('.tenant-over-content__toggle').element as HTMLInputElement).disabled).toBe(false)
+
+    vi.mocked(getModerationSteps).mockRejectedValueOnce(httpError(500))
+    w = mountPanel('t-2')
+    await flushPromises()
+    expect(w.text()).toContain('Live') // the tenant still loaded
+    expect(w.find('.tenant-proposal').exists()).toBe(false)
+    expect((w.find('.tenant-over-content__toggle').element as HTMLInputElement).checked).toBe(false)
   })
 
   it('offers no delete on a PENDING tenant — it is revoked instead', async () => {

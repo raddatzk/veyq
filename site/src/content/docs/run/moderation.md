@@ -206,17 +206,19 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
 - It applies to an active tenant only, and it locks out your own membership in that tenant too.
 - **Over content**, it carries a statement of reasons to **each owner of the tenant**, by the instance mail with what you
   found, as a sign-in block does ([above](#a-members-sign-in-and-a-tenant-your-steps)) — its other members are told
-  nothing beyond the space being offline. Tick **Over content** and fill in the statement before **Take offline and send
-  the statement**, or add `--over-content --ground <ground> [--provision <text>] [--facts <text>]` to `tenant
-  suspend`. A moderator's open proposal makes the suspension over content: without a statement it is refused. A
-  suspension for any other reason — unpaid, maintenance — carries none. Bringing the tenant back lifts the record.
+  nothing beyond the space being offline. Under **Take offline or delete** at the end of the tenant's page, tick
+  **Because of the tenant's content** and fill in the statement before **Take offline and send the statement**, or add
+  `--over-content --ground <ground> [--provision <text>] [--facts <text>]` to `tenant suspend`. A moderator's open
+  proposal makes the suspension over content: without a statement it is refused, so the page shows the proposal and
+  keeps the box ticked. A suspension for any other reason — unpaid, maintenance — carries none. Bringing the tenant back
+  lifts the record.
 
 You still cannot read anything private, which is the design working as intended.
 
 To close a tenant for good, **Delete tenant** takes it offline the same way and erases it 30 days later
 ([First-run setup and the admin console](/veyq/run/first-run/#tenants)); a deletion settles the tenant's open proposals
 as taken, as a suspension does. **Over content** it carries a statement of reasons to each owner of the tenant exactly
-as taking it offline does: tick **Over content** in the delete form and fill in the statement, or add `--over-content
+as taking it offline does: the same **Because of the tenant's content** box and statement, above both buttons, or add `--over-content
 --ground <ground> [--provision <text>] [--facts <text>]` to `tenant delete`; a moderator's open proposal makes it over
 content. **Stop deletion** lifts that record. Its holds and this page's records stay: they hang on cases, not tenants. A
 record still in force on the tenant, or a sign-in block on an account you erase, ends when the purge erases what it
