@@ -10,6 +10,10 @@
 # is whole by itself enrols by existing, with no layering order for the guard to know.
 domain: veyq.example.org
 storeDomain: store.veyq.example.org
+# The bundled store on (it is off by default, ADR 0064): per-domain renders a listener per chart host, the store's included — a shape lint-values.yaml, which
+# leaves it off, never renders.
+garage:
+  enabled: true
 image:
   repository: ghcr.io/example/veyq
 admin:

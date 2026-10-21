@@ -4,9 +4,9 @@
 #
 # The chart's bare defaults deliberately do NOT render: the operator supplies every secret (values.yaml, top),
 # so a render with no values fails on the first unset one, by path. This file is how a render without an
-# operator is still possible.
+# operator is still possible. It leaves garage.enabled at its default, off — so it sets no storeDomain and no Garage
+# secret, which is the render proving the chart needs neither then (acme-values.yaml and shared-values.yaml turn it on).
 domain: veyq.example.org
-storeDomain: store.veyq.example.org
 image:
   repository: ghcr.io/example/veyq
   # A digest, so the `repository:tag@digest` render is one a file here selects (acme-values.yaml renders without).
@@ -26,8 +26,6 @@ networkPolicy:
 secrets:
   mariadbPassword: ci-only-not-a-password
   mariadbRootPassword: ci-only-not-a-password
-  garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  garageAdminToken: ci-only-not-a-token
 gateway:
   className: traefik
 backup:

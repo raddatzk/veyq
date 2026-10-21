@@ -44,7 +44,7 @@ spec:
       {{- if .Values.backup.enabled }}
       # The backup gate (ADR 0098), before the container that migrates. Under Recreate the old pod has terminated
       # before this one is created, so the capture is cold by construction. It reads what the app reads — the database
-      # by the app's own URL and user, the bundled store's hint — and LESS: no config-secret mount, so no capture on
+      # by the app's own URL and user, the bundled store's hint where the chart brings the store — and LESS: no config-secret mount, so no capture on
       # the claim can hold the KEK (scripts/chart_meta_check.py (xxiv)). Same pod, so the NetworkPolicy set gains no
       # peer. What it decides and refuses: src/tools/instance_backup.py `gate`.
       initContainers:
@@ -72,6 +72,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: mariadbPassword
+            {{- if .Values.garage.enabled }}
+            # The bundled store's hint, as the app has it — only where the chart brings the store (garage.enabled).
             - name: VEYQ_BUNDLED_STORE_ENDPOINT
               value: {{ include "veyq.bundledStoreEndpoint" . | quote }}
             - name: VEYQ_BUNDLED_STORE_ADMIN_TOKEN
@@ -79,6 +81,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: garageAdminToken
+            {{- end }}
             {{- with .Values.backup.store.existingSecret }}
             # A store of the operator's own: what the gate cannot read from the database without the KEK.
             - name: VEYQ_BACKUP_STORE_ENDPOINT
@@ -151,16 +154,18 @@ spec:
             # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
             - name: VEYQ_HTTP_HSTS_ENABLED
               value: {{ .Values.hsts.enabled | quote }}
+            {{- if .Values.garage.enabled }}
             # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where the chart's
             # Garage is, the host browsers reach it at, and its admin token. The Server Owner chooses "Use the
             # bundled store" in the admin console and enters nothing else: the S3 key pair is DERIVED from the
             # token, so the chart holds no key pair. The store is reached INTERNALLY; presigned URLs are signed
             # for the store's OWN public host, verbatim — the departure from compose's same-origin path route
-            # (ADR 0064, ADR 0067 Decision 5).
+            # (ADR 0064, ADR 0067 Decision 5). Only with garage.enabled: without it there is no hint, and the
+            # console offers a store of the operator's own alone (ADR 0064 § the bundled store is opt-in).
             - name: VEYQ_BUNDLED_STORE_ENDPOINT
               value: {{ include "veyq.bundledStoreEndpoint" . | quote }}
             - name: VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT
-              value: https://{{ required "storeDomain is required" .Values.storeDomain }}
+              value: https://{{ required "storeDomain is required with garage.enabled" .Values.storeDomain }}
             - name: VEYQ_BUNDLED_STORE_SIGNING_MODE
               value: store-origin
             # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) over its admin API — a
@@ -172,6 +177,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: garageAdminToken
+            {{- end }}
             # The KEK, on the claim below — an ABSOLUTE path outside /work, which holds the application itself.
             - name: VEYQ_SECURITY_CONFIG_SECRET_FILE
               value: /var/lib/veyq/config-secret.key
