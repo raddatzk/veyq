@@ -27,15 +27,20 @@ acceptanceCriteria:
       # No web surface: routing is a server-side projection with no client half to get wrong.
   - id: the-blob-route-follows-the-bucket
     # ADR 0013 §4: path-style presigning puts every object at `/<bucket>/<key>`, so the blobs route IS the bucket
-    # and is derived from the store setting's bucket, never spelled. The ref configures a bucket that is not the
-    # default — every default-bucket test passes a sink that hard-codes the default, since there the literal and
-    # the setting agree (bitten: a hard-coded `/blobs/` reddens this ref alone). The whole rule is compared, so
-    # the prefix without its trailing slash — which claims every app path beginning with the name — fails too.
-    # Kubernetes has no blobs route to derive (its store has a host of its own, ADR 0064).
-    text: Every blobs route the proxy is given — the bootstrap domain's and each tenant's — routes the configured bucket's path and no path that merely begins with its name, so a bucket other than the default routes with configuration alone.
+    # and is derived from the bundled store's bucket, never spelled. ADR 0064 § the bundled store is opt-in: only the
+    # bundled store sits behind this deployment's proxy, so only while it is the store in use is a route rendered —
+    # with a store of the operator's own, no store, or the bundled one chosen where the deployment passes no hint, a
+    # route would point at nothing or serve an unused Garage's S3 API on every tenant domain. The integration ref
+    # walks those states through the producer's sink and the real store setting, each negative read against the
+    # bundled render on the same file, with a bucket that is not the default (bitten: a hard-coded `/blobs/`, and a
+    # bucket taken from any store in use, each redden it). The whole rule is compared, so the prefix without its
+    # trailing slash — which claims every app path beginning with the name — fails too. The unit refs decide the
+    # same two halves as pure functions. Kubernetes has no blobs route to derive (its store has a host of its own).
+    text: While the bundled store is the store in use, every blobs route the proxy is given — the bootstrap domain's and each tenant's — routes its bucket's path and no path that merely begins with its name; while any other store, or none, is in use, no domain gets a blobs route.
     coverage:
       backend:
-        integration: [TenantIngressBucketRouteTest.everyBlobsRouterRoutesTheConfiguredBucketAndNothingElse]
+        unit: [TraefikFileBlobsRouteTest.onlyTheBundledStoreReadyNamesABucket, TraefikFileBlobsRouteTest.withoutABucketNoDomainGetsABlobsRouterAndNothingOnlyTheyReference, TraefikFileBlobsRouteTest.theBucketIsReadAtEveryRender]
+        integration: [TenantIngressBucketRouteTest.onlyTheBundledStoreInUseIsRoutedAndAtItsBucketsPathAlone]
       # No web surface, for the reason domain-actually-routes states: routing has no client half.
   - id: presign-for-a-reachable-origin
     # ADR 0013 §4 as amended by ADR 0063, and ADR 0067 Decision 5. The negative is the load-bearing one: the

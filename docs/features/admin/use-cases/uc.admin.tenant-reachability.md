@@ -11,8 +11,9 @@
   (the docker-compose stack wires Traefik's file provider, the Helm chart wires the Kubernetes Gateway API;
   an instance with neither has no routing to project and is covered by A1); the domain's DNS points at this
   host.
-- **Postconditions (success):** Every non-`SUSPENDED` tenant's domain routes to the app **and** to the blob
-  path on that same origin; a suspended or revoked tenant's does not; and a presigned blob URL handed to a
+- **Postconditions (success):** Every non-`SUSPENDED` tenant's domain routes to the app **and**, while the store
+  in use is behind this deployment's own proxy, to the blob path on that same origin; a suspended or revoked
+  tenant's does not; and a presigned blob URL handed to a
   client on that domain is signed for an origin **that client can actually reach**. Where the store is behind
   this deployment's own proxy — the shape the main flow describes — that origin is the tenant's own domain and
   the fetch is same-origin; A5 is where it is not.
@@ -34,9 +35,10 @@
    HTTPS listener every route attaches to.
    A custom domain that is nobody's subdomain gets its certificate the same way; only the operator's own
    choice of a shared wildcard certificate excludes it, knowingly. On compose each domain gets the **same
-   pair** of routes the bootstrap domain has: the app, and the configured bucket's path on that same origin with
-   its prefix and `Host` preserved ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)); on
-   Kubernetes the store has a host of its own and each domain gets the app route alone (A5).
+   pair** of routes the bootstrap domain has: the app, and — while the bundled store is the store in use — its
+   bucket's path on that same origin with its prefix and `Host` preserved ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
+   with a store of the operator's own, or none, and on Kubernetes, where the store has a host of its own, each
+   domain gets the app route alone (A5, [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
 4. A member or guest opens that domain. The request resolves to its tenant by the `Host` it arrived on —
    the one canonical resolution every gate and handler shares.
 5. When that client asks for media, the server signs the presigned URL for **the resolved tenant's own
