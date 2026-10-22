@@ -8,7 +8,8 @@
 #   always       `http`  :80, no hostname — routes under `none`, the HTTPS redirect otherwise, and every HTTP-01
 #                        challenge (cert-manager's solver routes, a ListenerSet's through the parent-ref fallback)
 #   shared       `https` :443, no hostname, the one pre-provisioned Secret every route is served under
-#   per-domain   `https-app` / `https-store` / `https-admin` :443, one per chart host, each referencing a Secret
+#   per-domain   `https-app` / `https-store` / `https-admin` :443, one per chart host (the store's with
+#                garage.enabled, the admin's with admin.domain), each referencing a Secret
 #                named after the host's route — exactly the shape the backend gives a tenant's ListenerSet. A
 #                listener here wins a hostname conflict against any ListenerSet (Gateway API's own precedence),
 #                so a tenant domain cannot take the bootstrap, store or admin host.

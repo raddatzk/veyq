@@ -148,7 +148,9 @@ class FakeHost(vc.Host):
 
     def __init__(self, *, local_images=(), signed=(), cosign=True, project="veyq", answers=None, ps=HEALTHY,
                  fail_tool: str = "", cosign_version: str = "v3.1.3", watch: pathlib.Path | None = None,
-                 store_in_use: str | None = "bundled", ledger: str | None = None, fresh: bool | None = True) -> None:
+                 store_in_use: str | None = "bundled", ledger: str | None = None, fresh: bool | None = True,
+                 garage: bool = True) -> None:
+        self.garage = garage                # False: the override left the bundled store out (no `garage`, hint blank)
         self.store_in_use = store_in_use    # what the tool's `store-in-use` prints; None: it fails
         self.ledger = ledger                # what `erasures.log` in the app's volume holds; None: there is none
         self.fresh = fresh                  # the tool's `retention`: a capture younger than B; None: it fails
@@ -207,17 +209,19 @@ class FakeHost(vc.Host):
                         ) if {"--certificate-oidc-issuer", "--certificate-identity-regexp"} <= set(cmd) else False
             rc = 0 if bundle and bundle.is_file() and bundle.read_text() == bundle_token(blob) and identity else 1
         elif "config" in cmd and "--format" in cmd:
-            out = json.dumps({
-                "name": self.project,
-                "services": {
-                    "app": {"environment": {"VEYQ_SECURITY_CONFIG_SECRET_FILE": "/var/lib/veyq/config-secret.key",
-                                            "VEYQ_BUNDLED_STORE_ENDPOINT": "http://garage:3900",
-                                            "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": STORE_TOKEN}},
-                    "mariadb": {"environment": {"MARIADB_ROOT_PASSWORD": DB_ROOT}},
-                    "garage": {"networks": {"edge": None}},
-                },
-                "networks": {"edge": {"name": f"{self.project}_edge"}},
-            })
+            services = {
+                "app": {"environment": {"VEYQ_SECURITY_CONFIG_SECRET_FILE": "/var/lib/veyq/config-secret.key",
+                                        "VEYQ_BUNDLED_STORE_ENDPOINT": "http://garage:3900",
+                                        "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": STORE_TOKEN}},
+                "mariadb": {"environment": {"MARIADB_ROOT_PASSWORD": DB_ROOT}},
+                "garage": {"networks": {"edge": None}},
+            }
+            if not self.garage:  # what the measured override merge composes: no `garage`, the hint blanked
+                del services["garage"]
+                services["app"]["environment"].update({"VEYQ_BUNDLED_STORE_ENDPOINT": "",
+                                                       "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": ""})
+            out = json.dumps({"name": self.project, "services": services,
+                              "networks": {"edge": {"name": f"{self.project}_edge"}}})
         elif "ps" in cmd and "--format" in cmd:
             out = "\n".join(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}) for r in self.ps)
         elif cmd[:2] == ["docker", "inspect"]:
@@ -796,6 +800,55 @@ def test_backup_restore(tmp: pathlib.Path) -> None:
           rc == 1 and not host.ran("up") and not host.ran("run", "--rm", "app", "place-key"))
 
 
+OWN_STORE = {"VEYQ_BACKUP_STORE_ENDPOINT": "https://s3.example.org", "VEYQ_BACKUP_STORE_ACCESS_KEY": "own-access",
+             "VEYQ_BACKUP_STORE_SECRET_KEY": "own-secret-in-shell"}
+
+
+def test_backup_without_garage(tmp: pathlib.Path) -> None:
+    """ADR 0064: a recipe whose override leaves the bundled store out is backed up with the own store's pair from the
+    shell — on Docker's default network, with no bundled pair — and refused, naming the pair, before anything stops."""
+    mirror = upgrade_mirror(tmp / "mirror-ng")
+    home = installed(tmp, "home-ng", mirror, "1.3", "1.3")
+    saved = dict(os.environ)
+    try:
+        for key in OWN_STORE:
+            os.environ.pop(key, None)
+        os.environ["VEYQ_BACKUP_STORE_ENDPOINT"] = "https://s3.example.org"  # one of three: the other two are named
+        host = FakeHost(local_images=all_images(), project="veyq-ng", garage=False)
+        rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "ng0.key")], host)
+        check("no garage: `backup` without the own store's pair is refused before anything stops, naming what is missing",
+              rc == 1 and not host.ran("stop") and not host.ran("capture") and "VEYQ_BACKUP_STORE_ACCESS_KEY" in out
+              and "VEYQ_BACKUP_STORE_SECRET_KEY" in out and "VEYQ_BACKUP_STORE_ENDPOINT" not in out, out)
+        host = FakeHost(local_images=all_images(), project="veyq-ng", garage=False)
+        rc, out = run_quiet(["--home", str(home), "backup", "prune"], host)
+        check("no garage: `backup prune` reads only the database and needs no store pair", rc == 0 and host.ran("prune"), out)
+
+        os.environ.update(OWN_STORE)
+        host = FakeHost(local_images=all_images(), project="veyq-ng", garage=False)
+        rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "ng1.key")], host)
+        first = first_of(host)
+        ran = host.commands[first("capture")] if host.ran("capture") else []
+        env = host.envs[first("capture")] if host.ran("capture") else {}
+        check("no garage, the pair in the shell: the capture runs, its rclone container on Docker's default network",
+              rc == 0 and ran[ran.index("--docker-network") + 1] == vc.DEFAULT_NETWORK, out + str(ran))
+        check("no garage: no bundled pair is handed to the tool", not any(k.startswith("VEYQ_BUNDLED_STORE_") for k in env),
+              str(sorted(env)))
+
+        # The control on the same predicate: with a `garage` service, the same shell changes nothing — the store's
+        # own network and the bundled pair, as before.
+        host = FakeHost(local_images=all_images(), project="veyq-ng")
+        rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "ng2.key")], host)
+        first = first_of(host)
+        ran = host.commands[first("capture")] if host.ran("capture") else []
+        env = host.envs[first("capture")] if host.ran("capture") else {}
+        check("with garage: the store's network and the bundled pair, the shell's own pair notwithstanding",
+              rc == 0 and ran[ran.index("--docker-network") + 1] == "veyq-ng_edge"
+              and env.get("VEYQ_BUNDLED_STORE_ADMIN_TOKEN") == STORE_TOKEN, out + str(ran))
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+
+
 def with_env(home: pathlib.Path, **values: str) -> None:
     """Lines an operator adds to `.env` (or uncomments from the template)."""
     with (home / vc.ENV_FILE).open("a") as f:
@@ -1351,6 +1404,7 @@ def main() -> int:
         test_upgrade_order(tmp)
         test_upgrade_refusals(tmp)
         test_backup_restore(tmp)
+        test_backup_without_garage(tmp)
         test_pool(tmp)
         test_rollback(tmp)
         test_retention_and_ledger(tmp)

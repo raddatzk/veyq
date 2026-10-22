@@ -172,7 +172,7 @@ digest. **Rollback** is the capture the gate took when you left that release, re
 [Restore under Helm](/veyq/run/backup-and-restore/#restore-under-helm).
 
 **With `backup.enabled: false`** nothing captures before the migration, and the backup is yours, by hand, with the
-app **scaled to zero** — *cold* means the writer is stopped — through `kubectl port-forward` to MariaDB and Garage
+app **scaled to zero** — *cold* means the writer is stopped — through `kubectl port-forward` to MariaDB and, with `garage.enabled`, Garage — a store of your own by its address
 ([Backup and restore](/veyq/run/backup-and-restore/)). The key is copied out before the scale-down, because only the
 app pod mounts its claim, and goes on a medium of its own, never into the capture directory
 ([Capture](/veyq/run/backup-and-restore/#capture)). This procedure has not been run on a cluster.

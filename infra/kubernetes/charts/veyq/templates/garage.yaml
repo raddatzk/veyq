@@ -1,3 +1,4 @@
+{{- if .Values.garage.enabled }}
 # S3 on 3900 for the app AND, through the HTTPRoute below, for browsers; RPC on 3901 so the advertised
 # rpc_public_addr resolves to a real listener; the admin API on 3903 for the app's provisioning — on the
 # Service, and deliberately on no route.
@@ -168,3 +169,4 @@ spec:
       backendRefs:
         - name: veyq-garage
           port: 3900
+{{- end }}

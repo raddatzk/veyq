@@ -103,12 +103,14 @@ parentRefs:
 
 {{/*
 The chart's own hosts, one per HTTPS listener under `per-domain`: [listener name, hostname, certificate (= the
-route's own object name, exactly as the backend names a tenant's)]. One list, read by gateway.yaml for the
+route's own object name, exactly as the backend names a tenant's)]. The store's host only with garage.enabled. One list, read by gateway.yaml for the
 listeners and by every route for its parent, so a host cannot have a route without a listener or the reverse.
 */}}
 {{- define "veyq.chartHosts" -}}
 - [https-app, {{ required "domain is required" .Values.domain | quote }}, veyq-app]
-- [https-store, {{ required "storeDomain is required" .Values.storeDomain | quote }}, veyq-garage]
+{{- if .Values.garage.enabled }}
+- [https-store, {{ required "storeDomain is required with garage.enabled" .Values.storeDomain | quote }}, veyq-garage]
+{{- end }}
 {{- with .Values.admin.domain }}
 - [https-admin, {{ . | quote }}, veyq-admin]
 {{- end }}

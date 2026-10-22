@@ -3,7 +3,7 @@
   "title": "veyq chart values",
   "description": "The shapes the operator's values must have. Helm applies this to install, upgrade, lint AND template, naming the path and the pattern of a violation — which is why nothing here has a generated fallback: a value the chart cannot assert is a value the chart does not supply.",
   "type": "object",
-  "required": ["domain", "storeDomain", "image", "admin", "gateway", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage", "backup"],
+  "required": ["domain", "image", "admin", "gateway", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage", "backup"],
   "$defs": {
     "hostname": {
       "type": "string",
@@ -25,7 +25,7 @@
   },
   "properties": {
     "domain": { "$ref": "#/$defs/hostname" },
-    "storeDomain": { "$ref": "#/$defs/hostname" },
+    "storeDomain": { "type": "string" },
     "hsts": {
       "type": "object",
       "additionalProperties": false,
@@ -160,12 +160,10 @@
       },
       "if": { "properties": { "existingSecret": { "maxLength": 0 } } },
       "then": {
-        "required": ["mariadbPassword", "mariadbRootPassword", "garageRpcSecret", "garageAdminToken"],
+        "required": ["mariadbPassword", "mariadbRootPassword"],
         "properties": {
           "mariadbPassword": { "$ref": "#/$defs/nonEmpty" },
-          "mariadbRootPassword": { "$ref": "#/$defs/nonEmpty" },
-          "garageRpcSecret": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-          "garageAdminToken": { "$ref": "#/$defs/nonEmpty" }
+          "mariadbRootPassword": { "$ref": "#/$defs/nonEmpty" }
         }
       }
     },
@@ -186,19 +184,45 @@
     },
     "garage": {
       "type": "object",
+      "required": ["enabled"],
       "properties": {
+        "enabled": { "type": "boolean" },
         "image": { "$ref": "#/$defs/nonEmpty" },
         "logFilter": { "type": "string", "pattern": "^[A-Za-z0-9_:=,.-]+$" }
       }
     }
   },
-  "if": { "properties": { "mariadb": { "properties": { "enabled": { "const": false } } } } },
-  "then": {
-    "properties": {
-      "externalDatabase": {
-        "required": ["jdbcUrl"],
-        "properties": { "jdbcUrl": { "type": "string", "pattern": "^jdbc:mariadb://.+" } }
+  "allOf": [
+    {
+      "if": { "properties": { "mariadb": { "properties": { "enabled": { "const": false } } } } },
+      "then": {
+        "properties": {
+          "externalDatabase": {
+            "required": ["jdbcUrl"],
+            "properties": { "jdbcUrl": { "type": "string", "pattern": "^jdbc:mariadb://.+" } }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "The bundled store (ADR 0064 § the bundled store is opt-in): its host and its two secrets are required only when the chart brings it — the same if/then shape as mariadb.enabled above. Off, neither is read.",
+      "if": { "properties": { "garage": { "properties": { "enabled": { "const": true } } } } },
+      "then": {
+        "required": ["storeDomain"],
+        "properties": {
+          "storeDomain": { "$ref": "#/$defs/hostname" },
+          "secrets": {
+            "if": { "properties": { "existingSecret": { "maxLength": 0 } } },
+            "then": {
+              "required": ["garageRpcSecret", "garageAdminToken"],
+              "properties": {
+                "garageRpcSecret": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "garageAdminToken": { "$ref": "#/$defs/nonEmpty" }
+              }
+            }
+          }
+        }
       }
     }
-  }
+  ]
 }

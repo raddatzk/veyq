@@ -62,7 +62,7 @@ What each source holds:
 | Application | operational lines, with ids (account, tenant, scope, node, share), domains, key ids and counts; an unexpected error by its id, route template and class chain |
 | Admin surface | an access log of the admin console: the time, the method, the path without its query, the status and the size — not who asked: no client address, no user agent, no forwarded address. Its error log, at nginx's default, names the hop that reached it: the loopback or the container bridge on the recipe's binding, a person's address only if you expose the console beyond that |
 | Traefik (Compose) | its own errors, at `--log.level=ERROR`, set by the recipe; **no** access log, which the release's posture check holds. Turning one on records every reader with every share link they open, and it is then your own processing to disclose and bound |
-| Garage | warnings and errors only — `RUST_LOG=garage=warn`, set by both recipes; no line per request |
+| Garage | warnings and errors only — `RUST_LOG=garage=warn`, set by both recipes (the chart's with `garage.enabled`); no line per request |
 | MariaDB | startup and errors; no general, slow-query or binary log |
 | Your gateway (Kubernetes) | its own access log if you turn it on: every reader's address and path, kept as you configure it |
 
