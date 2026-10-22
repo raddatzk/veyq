@@ -14,12 +14,14 @@ import org.junit.jupiter.api.Test
 import java.nio.file.Path
 
 /**
- * The two halves of "the blobs route is rendered only while the store in use is the bundled one" (ADR 0064 § the
- * bundled store is opt-in), each a pure function and so decided here without a `%test` hint or a profile:
+ * The two halves of "the blobs route is rendered only while the store in use, or the pending one, is the bundled one"
+ * (ADR 0064 § the bundled store is opt-in, ADR 0089 decision 3), each a pure function and so decided here without a
+ * `%test` hint or a profile:
  *
  *  - **which bucket the route serves, per resolution** — [StoreSettings.bundledRouteBucket]: the bundled store's,
  *    ready; none for a store of the operator's own (one WITH a bucket, so the negative is not a missing value), no
- *    store, an unreadable one, or the bundled one where the deployment passes no hint.
+ *    store, an unreadable one, or the bundled one where the deployment passes no hint. The same for the pending
+ *    setting with none in use: its check uploads through the route, so a pending bundled store is routed too.
  *  - **what the sink renders with none** — no blobs router for any domain (the bootstrap pair's included), and
  *    neither the service nor the middleware only they reference; every negative is read against the same sink's
  *    render with the bucket, its positive control.
@@ -37,6 +39,19 @@ class TraefikFileBlobsRouteTest {
         assertNull(StoreSettings.bundledRouteBucket(StoreResolution.NotSet), "no store")
         assertNull(StoreSettings.bundledRouteBucket(StoreResolution.Unavailable(emptyList(), hintMissing = true)), "bundled, but no hint")
         assertNull(StoreSettings.bundledRouteBucket(StoreResolution.Unavailable(listOf(StoreSecret.SECRET_KEY))), "an unreadable store")
+    }
+
+    @Test
+    fun aPendingBundledStoreReadyNamesABucketToo() {
+        val bundled = StoreResolution.Ready(connection(bundled = true))
+        val own = StoreResolution.Ready(connection(bundled = false, bucket = "own"))
+        assertEquals("blobs", StoreSettings.bundledRouteBucket(StoreResolution.NotSet, bundled), "nothing in use, the bundled store pending")
+        assertEquals("blobs", StoreSettings.bundledRouteBucket(own, bundled), "back to the bundled store from one's own")
+        assertEquals("blobs", StoreSettings.bundledRouteBucket(bundled, own), "the bundled store in use, one's own pending")
+        // Each negative against the positive control above: the pending side is the only thing that changes.
+        assertNull(StoreSettings.bundledRouteBucket(StoreResolution.NotSet, own), "a pending store of the operator's own")
+        assertNull(StoreSettings.bundledRouteBucket(StoreResolution.NotSet, StoreResolution.Unavailable(emptyList(), hintMissing = true)), "pending bundled, but no hint")
+        assertNull(StoreSettings.bundledRouteBucket(StoreResolution.NotSet, null), "nothing pending")
     }
 
     // --- what the sink renders ---
@@ -91,9 +106,9 @@ class TraefikFileBlobsRouteTest {
 
     private fun keys(rendered: String) = rendered.lineSequence().map { it.trim() }.toList()
 
-    private fun connection(bundled: Boolean) = StoreConnection(
+    private fun connection(bundled: Boolean, bucket: String = "blobs") = StoreConnection(
         bundled = bundled, type = if (bundled) StoreType.GARAGE else StoreType.S3, endpoint = "http://s3.invalid:9000",
-        publicEndpoint = null, signingMode = SigningMode.INTERNAL_ENDPOINT, bucket = "blobs", region = "us-east-1",
+        publicEndpoint = null, signingMode = SigningMode.INTERNAL_ENDPOINT, bucket = bucket, region = "us-east-1",
         accessKey = "access", secretKey = "secret", garageAdminEndpoint = null, garageAdminToken = null,
     )
 

@@ -372,10 +372,12 @@ class StoreSettings(
     @Volatile
     private var cached: Cached? = null
 
-    fun current(): StoreResolution {
+    fun current(): StoreResolution = resolved().resolution
+
+    private fun resolved(): Cached {
         val current = generation.get()
-        cached?.takeIf { it.generation == current }?.let { return it.resolution }
-        return resolve().also { cached = Cached(current, it) }
+        cached?.takeIf { it.generation == current }?.let { return it }
+        return resolve(current).also { cached = it }
     }
 
     /** Forget the cached resolution. Call after the transaction that changed the setting has COMMITTED — before it,
@@ -384,7 +386,9 @@ class StoreSettings(
         generation.incrementAndGet()
     }
 
-    private class Cached(val generation: Long, val resolution: StoreResolution)
+    /** [pendingBundled] is the pending setting's resolution only while that one is the bundled store, else null — all
+     *  [bundledRouteBucket] needs of it, so a pending store of the operator's own is never unsealed for a read. */
+    private class Cached(val generation: Long, val resolution: StoreResolution, val pendingBundled: StoreResolution?)
 
     /**
      * The precondition for creating a tenant (ADR 0089 decision 6): a store is set, usable, and its last check passed.
@@ -398,9 +402,9 @@ class StoreSettings(
         is StoreResolution.Ready -> QuarkusTransaction.joiningExisting().call { store.checkPassed() }
     }
 
-    /** The bucket the same-origin blobs route serves (ADR 0013 §4) — [bundledRouteBucket] of the setting in use, read
-     *  by the Traefik sink at every render. */
-    fun bundledRouteBucket(): String? = bundledRouteBucket(current())
+    /** The bucket the same-origin blobs route serves (ADR 0013 §4) — [bundledRouteBucket] of the setting in use and
+     *  the pending one, read by the Traefik sink at every render. */
+    fun bundledRouteBucket(): String? = resolved().let { bundledRouteBucket(it.resolution, it.pendingBundled) }
 
     /** Which stored secrets cannot be opened under the current key — the console's re-entry prompt. */
     fun unreadable(row: StoreSettingRow): List<StoreSecret> = buildList {
@@ -410,9 +414,9 @@ class StoreSettings(
         }
     }
 
-    private fun resolve(): StoreResolution {
-        val row = QuarkusTransaction.joiningExisting().call { store.find() } ?: return StoreResolution.NotSet
-        return resolve(row)
+    private fun resolve(generation: Long): Cached {
+        val (active, pending) = QuarkusTransaction.joiningExisting().call { store.find() to store.findPending() }
+        return Cached(generation, active?.let { resolve(it) } ?: StoreResolution.NotSet, pending?.takeIf { it.bundled }?.let { resolve(it) })
     }
 
     /** What [row] would resolve to — the check of a pending setting reaches its store through this, uncached. */
@@ -444,13 +448,19 @@ class StoreSettings(
 
     companion object {
         /**
-         * The bundled store's bucket while it is the store in use and ready, else none (ADR 0064 § the bundled store is
-         * opt-in): only the bundled store sits behind this deployment's proxy, so only it has a same-origin route. A
-         * store of the operator's own has an origin of its own, and with no store, an unreadable one, or the bundled
-         * one chosen where the deployment passes no hint, a route would point at nothing — or serve an unused Garage's
-         * S3 API on every tenant domain. Pure, so `TraefikFileBlobsRouteTest` decides every resolution without a hint.
+         * The bundled store's bucket while it is the store in use and ready — else while it is the [pending] setting and
+         * ready — else none (ADR 0064 § the bundled store is opt-in): only the bundled store sits behind this
+         * deployment's proxy, so only it has a same-origin route. A store of the operator's own has an origin of its
+         * own, and with no store, an unreadable one, or the bundled one chosen where the deployment passes no hint, a
+         * route would point at nothing — or serve an unused Garage's S3 API on every tenant domain. A pending bundled
+         * store is the one about to be used, and its check uploads its probe through this route (ADR 0089 decision 3):
+         * without it, the check of a first bundled store fails at `PROBE_PUT` on Compose, whose hint signs for the
+         * public domain. Pure, so `TraefikFileBlobsRouteTest` decides every pair of resolutions without a hint.
          */
-        fun bundledRouteBucket(resolution: StoreResolution): String? =
+        fun bundledRouteBucket(inUse: StoreResolution, pending: StoreResolution? = null): String? =
+            bundledBucket(inUse) ?: pending?.let { bundledBucket(it) }
+
+        private fun bundledBucket(resolution: StoreResolution): String? =
             (resolution as? StoreResolution.Ready)?.connection?.takeIf { it.bundled }?.bucket
     }
 }

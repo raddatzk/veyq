@@ -36,7 +36,9 @@ acceptanceCriteria:
       in use; a failed one leaves the setting in use untouched, and a pending one can be discarded.
     coverage:
       backend:
-        integration: [InstanceStoreSliceTest.aChangedSettingIsNotUsedUntilItsCheckPassesAndAFailingOneLeavesTheOldInUse, InstanceStoreSliceTest.aPendingSettingCanBeDiscardedAndTheOneInUseStays, InstanceStoreSliceTest.aWriteEqualToTheSettingInUseLeavesNothingPending, InstanceStoreSliceTest.withNothingPendingTheCheckRunsAgainstTheSettingInUse, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse]
+        # The race ref is the promotion's lock: two checks of one pending setting (the boot's and the Server Owner's,
+        # A8) put it in use once; without the lock the second failed on the first's uncommitted active row (bitten, 500).
+        integration: [InstanceStoreSliceTest.aChangedSettingIsNotUsedUntilItsCheckPassesAndAFailingOneLeavesTheOldInUse, InstanceStoreSliceTest.aPendingSettingCanBeDiscardedAndTheOneInUseStays, InstanceStoreSliceTest.aWriteEqualToTheSettingInUseLeavesNothingPending, InstanceStoreSliceTest.withNothingPendingTheCheckRunsAgainstTheSettingInUse, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse, InstanceStoreSliceTest.twoChecksOfOnePendingSettingPutItInUseOnce]
   - id: no-tenant-without-a-checked-store
     text: >-
       Creating a tenant is refused with a reason until the current store setting has passed its check.

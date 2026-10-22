@@ -32,9 +32,17 @@ object StoreSettingFixtures {
      * so the caller still [clear]s in its `finally`.
      */
     fun useBundled(bucket: String = "blobs") {
+        offerBundled(bucket)
+        chooseBundled()
+    }
+
+    /** The deployment offers the bundled store ([ReadyBundledHint], with [bucket]) and nothing is chosen — what a
+     *  test of the Server Owner's own save of the bundled store starts from. The same `QuarkusMock` scope as
+     *  [useBundled]. */
+    fun offerBundled(bucket: String = "blobs") {
         val config = Arc.container().instance(VeyqConfig::class.java).get()
         QuarkusMock.installMockForType(ReadyBundledHint(config, bucket), BundledStoreHint::class.java)
-        chooseBundled()
+        settings().invalidate()
     }
 
     /** An S3-compatible store of the operator's own. */
@@ -62,6 +70,7 @@ object StoreSettingFixtures {
     /** Save [row] as the PENDING setting (ADR 0089 decision 5) — beside the one in use, which it does not change. */
     fun setPending(row: StoreSettingRow) {
         QuarkusTransaction.requiringNew().run { store().savePending(row) }
+        settings().invalidate() // the cached resolution carries a pending bundled store's route too
     }
 
     /** Record a check of the current setting — passed, with every step passing — without any network. */

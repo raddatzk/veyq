@@ -36,8 +36,8 @@
    A custom domain that is nobody's subdomain gets its certificate the same way; only the operator's own
    choice of a shared wildcard certificate excludes it, knowingly. On compose each domain gets the **same
    pair** of routes the bootstrap domain has: the app, and — while the bundled store is the store in use, or is the
-   pending setting waiting for its check *(the pending half planned, `cr-bundled-store-adopts-itself`: the check's
-   probe travels this route, so without it the bundled store could never pass)* — its
+   pending setting waiting for its check (the check's probe travels this route, so without it the bundled store
+   could never pass; saving or discarding the pending setting re-renders the routes, as its promotion does) — its
    bucket's path on that same origin with its prefix and `Host` preserved ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
    with a store of the operator's own, or none, and on Kubernetes, where the store has a host of its own, each
    domain gets the app route alone (A5, [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
