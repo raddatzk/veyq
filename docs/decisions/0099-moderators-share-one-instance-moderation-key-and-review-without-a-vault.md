@@ -178,8 +178,8 @@ What exists to build on (measured in this worktree):
 ### 7. Every moderator is notified
 
 - **A new case mails every accepted moderator** at their account address, as 0093 § 2 describes the mail (category
-  and "new case", never a key or a link; the first three categories at once, the rest bundled), and the instance
-  contact's notification address where one is set. Through the instance mail of ADR 0097 decision 3, widened from
+  and "new case", and where the moderation page is as plain text, never a key, a host or a link; the first three
+  categories at once, the rest bundled), and the instance contact's notification address where one is set. Through the instance mail of ADR 0097 decision 3, widened from
   "only the Server Owner" to "the Server Owner and the moderators, for moderation notices".
 - **An address receives notices once confirmed** with a one-time code, as ADR 0097 decision 5 does for the Server
   Owner; a moderator types it into the moderation surface, which they can reach. Accepting the appointment asks for

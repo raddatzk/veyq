@@ -169,8 +169,9 @@ share, report and hold are platform terms, and Depot needs them as much as Memor
   Every accepted moderator is notified by mail at their account address, and the instance contact's notification
   address where one is set (§ 11;
   [ADR 0099](0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md) § 7): category and "new
-  case", never a key or a link; the first three categories of § 1 at once, the rest bundled. A reporter who left a
-  contact gets a receipt and, later, the decision (DSA Art. 16(4)–(5), L).
+  case", and where the moderation page is as plain text — Settings → Moderation, or `/moderation` on a space's address
+  (owner 2026-10-22) — never a key, a host or a link; the first three categories of § 1 at once, the rest bundled. A
+  reporter who left a contact gets a receipt and, later, the decision (DSA Art. 16(4)–(5), L).
 - **Nothing is blocked by a report.** A human decides.
 
 ### 3. Review is a share view in moderation mode; deciding is the moderation surface's
