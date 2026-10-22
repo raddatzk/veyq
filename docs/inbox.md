@@ -8,8 +8,8 @@ When a topic is refined, its ideas move into durable state under [`features/`](f
 > **A done row is deleted** (owner 2026-10-19), like a CR when it is done: what it taught lives in the ADRs,
 > features and coverage it changed, and its history in git (`git log -S'| <n> |' -- docs/inbox.md`). A row that is
 > built but still owes a measurement or a proof is not done. **Row numbers stay reserved and are never reused** — a
-> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 522** —
-> the next row is 523; raise this line with every new row.
+> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 524** —
+> the next row is 525; raise this line with every new row.
 >
 > An open row holds its title, tags, status, the next step and the links that matter — no history. Its status names
 > where it stands against V1: **V1** (on the V1 line), **end of V1** (needs a remote or a release, done at the very
@@ -110,6 +110,8 @@ other, so when scope shrinks the copy is corrected in the same pass, not filed.
 | 6 | Live collaboration (blind CRDT relay) | journal, crdt | **inbox · out of V1** — nothing built; it follows the journal (#18), and [ADR 0033](decisions/0033-live-media-updates-revision-polling.md)'s polling is the only live mechanism. Next: refine together with #18. |
 | 10 | Agent mode (on-device processing) | processing, ml | **inbox · out of V1** — the job mechanism exists ([ADR 0021](decisions/0021-operator-blind-background-tasks.md)); no headless agent and no on-device processing job. Next: refine together with #23. |
 | 43 | At-rest encryption of server-visible PII + multi-ServerOwner / server-scope key | security, crypto, saas | **inbox · out of V1** (owner 2026-09-28: it defends a leaked backup, not the operator) — built: the per-tenant SMTP password sealed under a KEK key file with a fingerprint ([ADR 0050](decisions/0050-operator-config-secret-encryption.md), `ConfigSecretSeal`). Left: sealing the rest of the server-visible PII (the account email needs a blind login index), a multi-ServerOwner / server-scope key, and KEK rotation. Next: refine with SaaS (#41). |
+| 523 | **Can `style-src 'unsafe-inline'` go once PrimeVue is out?** | security, csp, web | **inbox · after cr-own-ui-components-on-reka** (2026-10-22) — [cc.security.csp](crosscutting/cc.security.csp.md) justifies the gap by PrimeVue's and `@primeuix`'s runtime `<style>` tags and the app's `:style` bindings; [ADR 0107](decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md) removes the first. Next: measure in a browser whether anything still needs the keyword (Vue sets `:style` through the CSSOM, which `style-src` does not govern), then tighten in a CR of its own. |
+| 524 | **PrimeVue 5 is commercial — the clients own their UI components on Reka UI** | web, admin-web, dependencies, ui, licence | **planned · V1** (owner 2026-10-22; the dependency rule makes it work for now) — [ADR 0107](decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md), [cr-own-ui-components-on-reka](../changes/cr-own-ui-components-on-reka.md). Next: the owner's go on the CR. |
 
 ## Features (+ use-cases)
 
