@@ -28,6 +28,7 @@ import me.raddatz.veyq.core.tenant.TenantIngressProjector
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
+import org.jboss.logging.Logger
 import java.net.URI
 
 /** The setting as the Server Owner reads it — connection values only; the secrets are flags (ADR 0089 decision 4). */
@@ -83,6 +84,10 @@ sealed interface StoreCheckRun {
     data object NotConfigured : StoreCheckRun, HttpFailure by httpFailure("store_not_configured", FailureStatus.CONFLICT)
 }
 
+/** What [StoreHandler.adoptBundled] did: saved the bundled store as pending, found it pending from an earlier boot, or
+ *  left the instance alone (a setting is saved, or the deployment offers no bundled store). */
+enum class StoreAdoption { ADOPTED, RESUMED, NONE }
+
 /**
  * The Server Owner's object-store setting and its check (ADR 0089): what `GET`/`PUT /api/instance/store`,
  * `DELETE /api/instance/store/pending` and `POST /api/instance/store/check` do. The persistence is
@@ -116,8 +121,13 @@ class StoreHandler(
 
     fun read(): StoreView = QuarkusTransaction.requiringNew().call { view() }
 
-    /** Save [update] as the pending setting — or, equal to the setting in use, discard the pending one. */
+    /**
+     * Save [update] as the pending setting — or, equal to the setting in use, discard the pending one. Under the instance
+     * singleton's row lock, as [adoptInTransaction] is: a save racing the boot's adoption waits for it and then replaces
+     * the adopted store, rather than inserting a second pending row beside it.
+     */
     fun set(update: StoreUpdate): StoreSetOutcome = QuarkusTransaction.requiringNew().call<StoreSetOutcome> {
+        lockInstance()
         val active = store.find()
         // The form edits what the owner last saved: an omitted secret is kept from the pending setting, else the active.
         val row = when (val built = build(update, store.findPending() ?: active)) {
@@ -146,11 +156,52 @@ class StoreHandler(
     }
 
     /**
-     * Check the pending setting, or with none pending the setting in use. A pending setting that passes replaces the
-     * one in use (decision 5); one that fails stays pending and changes nothing the instance does.
+     * Where the deployment offers the bundled store and no setting is saved — none in use, none pending — save the
+     * bundled store as pending (ADR 0089 decision 3); the boot worker then checks it ([BundledStoreAdoption]). A bundled
+     * store already pending from an earlier boot is [StoreAdoption.RESUMED], for that worker to check again. Anything
+     * the Server Owner saved, in use or pending, is never replaced.
      */
-    fun check(): StoreCheckRun {
+    fun adoptBundled(): StoreAdoption =
+        QuarkusTransaction.requiringNew().call { adoptInTransaction() }.also {
+            when (it) {
+                StoreAdoption.ADOPTED -> {
+                    log.info("No store setting; adopting the bundled store and checking it.")
+                    pendingChanged()
+                }
+                StoreAdoption.RESUMED -> log.info("The bundled store is still pending from an earlier start; checking it again.")
+                StoreAdoption.NONE -> Unit
+            }
+        }
+
+    /** [adoptBundled]'s transaction, in the caller's: the condition is read again under the singleton lock, so a save
+     *  of the Server Owner's that committed first wins. */
+    internal fun adoptInTransaction(): StoreAdoption {
+        if (!hint.available) return StoreAdoption.NONE
+        lockInstance()
+        if (store.find() != null) return StoreAdoption.NONE
+        val pending = store.findPending()
+        return when {
+            pending == null -> {
+                store.savePending(StoreSettingRow.BUNDLED)
+                StoreAdoption.ADOPTED
+            }
+            pending.bundled -> StoreAdoption.RESUMED
+            else -> StoreAdoption.NONE
+        }
+    }
+
+    /** Whether the bundled store is the pending setting — what the adoption's check loop goes on while. */
+    fun bundledPending(): Boolean = QuarkusTransaction.requiringNew().call { store.findPending()?.bundled == true }
+
+    /**
+     * Check the pending setting, or with none pending the setting in use. A pending setting that passes replaces the
+     * one in use (decision 5); one that fails stays pending and changes nothing the instance does. With [onlyPending]
+     * — the boot's own check of the store it adopted — nothing is checked unless that very setting is pending
+     * ([StoreCheckRun.NotConfigured]): a store the Server Owner saved meanwhile is theirs to check.
+     */
+    fun check(onlyPending: StoreSettingRow? = null): StoreCheckRun {
         val (active, pending) = QuarkusTransaction.requiringNew().call { store.find() to store.findPending() }
+        if (onlyPending != null && pending != onlyPending) return StoreCheckRun.NotConfigured
         val target = pending ?: active ?: return StoreCheckRun.NotConfigured
         val resolution = if (pending != null) settings.resolve(pending) else settings.current()
         val (connection, unreadableDetail) = when (resolution) {
@@ -186,7 +237,7 @@ class StoreHandler(
      * second waits, then finds nothing pending and records nothing (`InstanceStoreSliceTest`'s race).
      */
     internal fun settle(target: StoreSettingRow, checkedPending: Boolean, result: StoreCheckResult): Boolean {
-        VeyqInstance.findById(VeyqInstance.SINGLETON_ID, LockModeType.PESSIMISTIC_WRITE)
+        lockInstance()
         // A setting changed while the check ran has not been checked: record only against the one that was.
         return when {
             !checkedPending -> {
@@ -203,6 +254,12 @@ class StoreHandler(
                 false
             }
         }
+    }
+
+    /** The instance singleton's row lock, which [set], the adoption and the check's promotion take first — the writes
+     *  that insert a row of the setting, and so could collide on its key. [discardPending] only deletes. */
+    private fun lockInstance() {
+        VeyqInstance.findById(VeyqInstance.SINGLETON_ID, LockModeType.PESSIMISTIC_WRITE)
     }
 
     private fun unavailableDetail(r: StoreResolution.Unavailable): String =
@@ -229,7 +286,7 @@ class StoreHandler(
                 return Built.Refused(StoreSetOutcome.Invalid)
             }
             if (!hint.available) return Built.Refused(StoreSetOutcome.NoBundledStore)
-            return Built.Row(StoreSettingRow(true, null, null, null, null, null, null, null, null, null))
+            return Built.Row(StoreSettingRow.BUNDLED)
         }
         val type = u.type ?: return Built.Refused(StoreSetOutcome.Invalid)
         val endpoint = u.endpoint.clean()
@@ -316,6 +373,10 @@ class StoreHandler(
     }
 
     private fun String?.clean(): String? = this?.trim()?.ifEmpty { null }
+
+    private companion object {
+        val log: Logger = Logger.getLogger(StoreHandler::class.java)
+    }
 
     private fun isHttpUrl(value: String): Boolean = runCatching {
         val uri = URI.create(value)

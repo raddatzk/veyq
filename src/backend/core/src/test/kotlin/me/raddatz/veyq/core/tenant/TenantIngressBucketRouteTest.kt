@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.tenant
 
+import me.raddatz.veyq.core.admin.instance.StoreAdoption
+import me.raddatz.veyq.core.admin.instance.StoreHandler
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -57,6 +59,9 @@ class TenantIngressBucketRouteTest {
     @Inject
     lateinit var projector: TenantIngressProjector
 
+    @Inject
+    lateinit var handler: StoreHandler
+
     @Test
     fun onlyTheBundledStoreInUseIsRoutedAndAtItsBucketsPathAlone() {
         val tenant = "b-${UUID.randomUUID()}.example.com"
@@ -112,6 +117,25 @@ class TenantIngressBucketRouteTest {
                 .body("""{"bundled":false,"type":"S3","endpoint":"http://s3.invalid:9000","bucket":"$BUCKET","region":"eu-central-1","accessKey":"a","secretKey":"s"}""")
                 .`when`().put("/api/instance/store").then().statusCode(200).body("pending.setting.bundled", equalTo(false))
             assertNoBlobsRoute("a pending store of the operator's own", tenant)
+        } finally {
+            StoreSettingFixtures.clear()
+        }
+    }
+
+    @Test
+    fun theBundledStoreTheServerAdoptsIsRoutedForItsCheck() {
+        // ADR 0089 decision 3: the boot's adoption saves the bundled store as pending and then checks it — through
+        // this route, so the adoption renders it as the Server Owner's own save does.
+        val tenant = "a-${UUID.randomUUID()}.example.com"
+        seedTenant(domain = tenant)
+        try {
+            StoreSettingFixtures.clear()
+            StoreSettingFixtures.offerBundled(bucket = BUCKET)
+            projector.regenerate()
+            assertNoBlobsRoute("the bundled store offered, nothing set", tenant)
+
+            assertEquals(StoreAdoption.ADOPTED, handler.adoptBundled())
+            assertRoutesOnly(BUCKET, tenant)
         } finally {
             StoreSettingFixtures.clear()
         }

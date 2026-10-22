@@ -1,7 +1,7 @@
 # ADR 0089 — Instance settings live in admin-web; the environment only bootstraps
 
-- Status: Accepted; built for the object store (`cr-store-connection-in-admin-web`). Decision 3's second
-  paragraph (amended 2026-10-22) is not built yet (`cr-bundled-store-adopts-itself`)
+- Status: Accepted; built for the object store (`cr-store-connection-in-admin-web`), decision 3's second paragraph
+  with `cr-bundled-store-adopts-itself`
 - Date: 2026-10-15
 
 ## Context

@@ -7,8 +7,12 @@ import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
+import io.restassured.config.HttpClientConfig
+import io.restassured.config.RestAssuredConfig
 import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -48,6 +52,22 @@ class AppShellStoreOriginSliceTest {
     @Inject
     lateinit var blobStore: BlobStore
 
+    /**
+     * The shell reads the store origin on the IO thread, where Quarkus refuses a database read
+     * (`BlockingOperationNotAllowedException`, the response never written). So a change of the store setting must leave
+     * its resolution warm, not merely forgotten: the Server Owner's save, the adoption at boot and a check's promotion
+     * all change it, and the next request is as likely to be a page as an API call (bitten: with the cache only
+     * forgotten, each page here hung until the client gave up).
+     */
+    @Test
+    fun aPageAnswersRightAfterTheStoreSettingChanged() {
+        val page = { given().config(SHORT).header("Accept", HTML).`when`().get("/recover").then().statusCode(200).extract().header("Content-Security-Policy") }
+        StoreSettingFixtures.clear()
+        assertFalse(page().contains("https://store.example.net"), "no store: no store origin in the policy")
+        StoreSettingFixtures.chooseBundled()
+        assertTrue(page().contains("https://store.example.net"), "the bundled store again, its origin back at once")
+    }
+
     @Test
     fun thePolicyAllowsTheOriginOfAUrlThisAppSigns() {
         // The expected origin is taken from a URL the running signer produced, not from the profile above — so a
@@ -63,5 +83,11 @@ class AppShellStoreOriginSliceTest {
                 "connect-src 'self' $origin https://nominatim.openstreetmap.org https://api.pwnedpasswords.com; form-action 'self'",
             csp,
         )
+    }
+
+    private companion object {
+        /** Long enough for a loaded machine, short of the minutes a hung response would hold the suite. */
+        val SHORT: RestAssuredConfig = RestAssuredConfig.config()
+            .httpClient(HttpClientConfig.httpClientConfig().setParam("http.socket.timeout", 15_000))
     }
 }

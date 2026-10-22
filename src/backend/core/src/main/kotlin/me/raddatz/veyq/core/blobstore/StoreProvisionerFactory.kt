@@ -5,6 +5,17 @@ import me.raddatz.veyq.core.config.VeyqConfig.StoreType
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
 
+/** What [StoreProvisionerFactory.forBoot] brings up, and from which source. */
+data class BootProvisioning(val provisioner: StoreProvisioner, val source: Source) {
+    enum class Source {
+        /** The store setting in use. */
+        SETTING,
+
+        /** The bundled-store hint, because no store is in use — whether or not one is pending. */
+        BUNDLED_HINT,
+    }
+}
+
 /**
  * Turns a store into a [StoreProvisioner], **or into none at all**.
  *
@@ -15,8 +26,9 @@ import org.jboss.logging.Logger
  *
  * **Which store is provisioned at boot** follows ADR 0089: the store setting when one is set (a Garage one is
  * provisioned, an S3-compatible one is not), and otherwise the deployment's bundled-store hint — so a fresh install,
- * the target of a restore above all, has its bundled bucket before anybody has chosen it in the console. The check
- * provisions a Garage setting again, synchronously, before it probes ([forConnection]).
+ * the target of a restore above all, has its bundled bucket before any store is in use — and the server then adopts the
+ * bundled store where nothing is saved (ADR 0089 decision 3, `BundledStoreAdoption`). The check provisions a Garage
+ * setting again, synchronously, before it probes ([forConnection]).
  *
  * **A plain factory rather than a `@Produces` method**, deliberately: a producer for a normal-scoped bean may
  * not return `null` at all, and Kotlin's own `?` says "sometimes there is nothing" with less machinery.
@@ -29,10 +41,14 @@ class StoreProvisionerFactory(
 ) {
     private val log = Logger.getLogger(StoreProvisionerFactory::class.java)
 
-    /** What to provision at boot: the setting's Garage, or with no setting the bundled hint's, or nothing. */
-    fun forBoot(): StoreProvisioner? = when (val current = settings.current()) {
-        is StoreResolution.Ready -> forConnection(current.connection)
-        StoreResolution.NotSet -> hint.connection?.let { forConnection(it) }
+    /**
+     * What to provision at boot: the setting's Garage, or with none in use the bundled hint's, or nothing — and which of
+     * the two it is, so the worker knows it brought up the hint's Garage for an instance with no store in use, the one
+     * case after which the server adopts the bundled store ([BootProvisioning.Source.BUNDLED_HINT]).
+     */
+    fun forBoot(): BootProvisioning? = when (val current = settings.current()) {
+        is StoreResolution.Ready -> forConnection(current.connection)?.let { BootProvisioning(it, BootProvisioning.Source.SETTING) }
+        StoreResolution.NotSet -> hint.connection?.let { forConnection(it) }?.let { BootProvisioning(it, BootProvisioning.Source.BUNDLED_HINT) }
         is StoreResolution.Unavailable -> {
             if (current.hintMissing) {
                 log.warn("The bundled store is chosen, but this deployment passes no bundled-store hint — nothing is provisioned.")
