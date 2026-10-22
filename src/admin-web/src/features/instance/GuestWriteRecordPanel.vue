@@ -3,8 +3,8 @@
 // many days a guest's write keeps its address, port and time. What it keeps honest:
 //   - only whole days from 1 to 30 are sent (the facade's `parseRetentionDays`, the rule the CLI shares);
 //   - above seven days the panel says a reason belongs in the record of processing — beside the value, before saving;
-//   - whether anything is kept at all is the Capabilities panel's switch, whose default follows the operating mode: the
-//     panel says so instead of offering a second switch.
+//   - the record has no switch (ADR 0093 § 10): it is kept wherever a guest may write, so the panel names the two
+//     Capabilities switches that decide where (`contribute`, `drop-box`) instead of offering one of its own.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'

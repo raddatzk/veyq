@@ -3,8 +3,8 @@
 // a not-yet-accepted visitor sees the gate (not the content); accepting clears it and reveals the content and
 // persists per tenant (a reload does not re-prompt); an owner revision bump re-gates; a transient terms-fetch
 // error FAILS OPEN (content, never a lock-out). The operator section comes after the space's text (ADR 0035 decision 6)
-// and what is stored is every accepted TRIPLE: an operator-revision bump or a variant change re-gates, a value change does
-// not, and a variant switched back to one accepted before does not either. We drive the REAL terms helpers (localStorage per tenant, the
+// and what is stored is every accepted PAIR: an operator-revision bump re-gates, a value change does not, and an earlier
+// client's triple (with the retired variant) asks once more. We drive the REAL terms helpers (localStorage per tenant, the
 // locale pick) + the REAL ShareView wiring (needsTerms/loadTerms/acceptTerms) — only the network resolve/terms
 // reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -54,6 +54,7 @@ import { realI18n, t } from '../test/i18n'
 import type { NodeKind } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { OPERATOR_SECTION } from '../test/models'
+import type { OperatorSection } from '../core/terms/operatorSection'
 
 function mountShareView() {
   return mount(ShareView, {
@@ -115,11 +116,11 @@ describe('ShareView — accountless terms gate', () => {
 
     expect(wrapper.find('.share-terms-card').exists()).toBe(false) // gate cleared
     expect(wrapper.find('.share-view-header').exists()).toBe(true) // content shown
-    expect(localStorage.getItem(ACCEPT_KEY)).toBe('1:1:FULL') // client-only, keyed per tenant, holding the triple
+    expect(localStorage.getItem(ACCEPT_KEY)).toBe('1:1') // client-only, keyed per tenant, holding the pair
   })
 
   it('does not re-prompt after a reload once accepted for the revision', async () => {
-    localStorage.setItem(ACCEPT_KEY, '1:1:FULL') // accepted on a previous visit
+    localStorage.setItem(ACCEPT_KEY, '1:1') // accepted on a previous visit
     const wrapper = mountShareView()
     await flushPromises()
 
@@ -128,7 +129,7 @@ describe('ShareView — accountless terms gate', () => {
   })
 
   it('re-gates when the space owner bumps the terms revision', async () => {
-    localStorage.setItem(ACCEPT_KEY, '1:1:FULL') // previously accepted v1
+    localStorage.setItem(ACCEPT_KEY, '1:1') // previously accepted v1
     vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 2, operatorSection: OPERATOR_SECTION, terms: { en: '## Rules v2' } })
     const wrapper = mountShareView()
     await flushPromises()
@@ -137,10 +138,10 @@ describe('ShareView — accountless terms gate', () => {
     expect(wrapper.find('.share-view-header').exists()).toBe(false)
   })
 
-  it('re-gates on an operator-section revision bump and on a variant change, not on a changed value', async () => {
-    localStorage.setItem(ACCEPT_KEY, '1:1:FULL')
-    const served = (section: typeof OPERATOR_SECTION | Record<string, unknown>) =>
-      vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: section as typeof OPERATOR_SECTION, terms: { en: '## Rules' } })
+  it('re-gates on an operator-section revision bump, not on a changed value', async () => {
+    localStorage.setItem(ACCEPT_KEY, '1:1')
+    const served = (section: OperatorSection) =>
+      vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: section, terms: { en: '## Rules' } })
     const gated = async () => {
       const w = mountShareView()
       await flushPromises()
@@ -150,31 +151,13 @@ describe('ShareView — accountless terms gate', () => {
     expect(await gated()).toBe(false) // control: a changed value reopens nothing
     served({ ...OPERATOR_SECTION, revision: 2 })
     expect(await gated()).toBe(true) // a release changed the section
-    served({ ...OPERATOR_SECTION, variant: 'REDUCED' })
-    expect(await gated()).toBe(true) // the operating mode changed
   })
 
-  it('a mode switched back to a variant this device accepted asks nothing again, as for a member', async () => {
-    const accept = async (variant: 'FULL' | 'REDUCED') => {
-      vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: { ...OPERATOR_SECTION, variant }, terms: { en: '## Rules' } })
-      const w = mountShareView()
-      await flushPromises()
-      const gated = w.find('.share-terms-card').exists()
-      if (gated) await w.find('.share-terms-card .share-name-submit').trigger('click')
-      await flushPromises()
-      return gated
-    }
-    expect(await accept('FULL')).toBe(true) // first visit: asked
-    expect(await accept('REDUCED')).toBe(true) // the Server Owner switched to the private mode: asked again
-    expect(await accept('FULL')).toBe(false) // switched back: the FULL triple is still accepted on this device
-    expect(await accept('REDUCED')).toBe(false) // and so is the REDUCED one
-  })
-
-  it('the single triple an earlier client stored still counts as accepted', async () => {
+  it('a triple an earlier client stored (with the retired variant) asks once more', async () => {
     localStorage.setItem(ACCEPT_KEY, '1:1:FULL')
     const wrapper = mountShareView()
     await flushPromises()
-    expect(wrapper.find('.share-terms-card').exists()).toBe(false)
+    expect(wrapper.find('.share-terms-card').exists()).toBe(true)
   })
 
   it('an acceptance an older client stored (a bare revision) asks once more: the section was not part of it', async () => {

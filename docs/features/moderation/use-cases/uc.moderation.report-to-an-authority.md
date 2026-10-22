@@ -41,7 +41,7 @@
 
 - **A1 — Nothing held** (the hold ended — after a child-sexual-abuse case's handover, too): the export carries the
   case's own fields, no uploader and no held record, and says that nothing is held.
-- **A2 — No address recorded** (the guest-write record was off, or the resolver yielded none): the export lists none.
+- **A2 — No address recorded** (the write predates the record, its row aged out, or the resolver yielded none): the export lists none.
 - **A3 — A hold until the handover past 90 days is not built.** Whether keeping it that long is covered — and for a
   non-commercial operator whether even the bounded hold is (§ 184b(5) StGB) — is open (ADR 0093 § Legal basis, Still
   open 1). The Run docs advise contacting the police at once and keeping nothing beyond the hold.

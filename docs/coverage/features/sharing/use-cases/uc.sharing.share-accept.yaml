@@ -66,24 +66,24 @@ acceptanceCriteria:
       web:
         unit: [src/views/ShareView.test.ts]
   # cr-operator-section-of-the-terms (ADR 0035 decision 6): the operator section after the space's text, the guest's
-  # local key on the triple, and the section's public page.
-  - id: the-guest-accepts-the-triple
+  # local key on the pair (one form since cr-operating-mode-retires), and the section's public page.
+  - id: the-guest-accepts-the-pair
     text: >-
       The share's terms read serves the operator section after the space's text, and the gate shows both; the visitor's
-      local acceptance holds the triple, so a release that changed the section or a changed operating mode asks again
-      and a changed value does not, and an acceptance stored before the section existed asks once more.
+      local acceptance holds the pair (space revision, section revision), so a release that changed the section asks
+      again and a changed value does not, and an acceptance stored before (a bare revision, or a triple with the retired
+      variant) asks once more.
     coverage:
       backend:
         integration: [ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance, ShareSliceTest.shareTermsRevisionZeroWhenTenantPublishedNoTerms]
       web:
         unit: [src/views/ShareView.test.ts, src/core/sharing/resolvePublicShare.test.ts]
-  # The owner's decision of 2026-10-18: a guest behaves as a member when the mode is switched back.
-  - id: the-guest-keeps-every-accepted-triple
+  # A guest behaves as a member: the gate asks the device's history, as a member's asks the server's rows.
+  - id: the-guest-keeps-its-accepted-pairs
     text: >-
-      The device keeps the triples it accepted per tenant, the last four, a re-accepted one moved to the end, and the
-      gate asks whether the current triple is among them: a mode switched back to a variant accepted before asks
-      nothing again. The single triple an earlier client stored counts as accepted; a bare revision does not, and the
-      next accept drops it.
+      The device keeps the pairs it accepted per tenant, the last two (the current revisions and the previous ones, for
+      a rolled-back release), a re-accepted one moved to the end, and the gate asks whether the current pair is among
+      them. An earlier client's value that is no pair counts as nothing, and the next accept drops it.
     coverage:
       web:
         unit: [src/views/ShareView.test.ts, src/core/sharing/resolvePublicShare.test.ts]

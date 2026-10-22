@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // The statement of reasons' fields for a Server Owner's own step over content (ADR 0093 § 7,
 // uc.moderation.object-to-a-measure A7): the ground, the law or clause relied on, and what was found — the sign-in block on a proposal and the
-// tenant's suspension both show them. What the fields become is `stepStatement.ts`'s; what the mode requires is the
-// server's to refuse, so the hints say when each is required rather than the form guessing the mode. Native controls,
+// tenant's suspension both show them. What the fields become is `stepStatement.ts`'s; the facts and the provision are
+// required of every statement (ADR 0093 § 7, one form), which the hints say and the server refuses. Native controls,
 // as src/web/'s decision panel has them (`CaseDetail.vue`'s statement).
 // Without instance mail the statement reaches nobody, so the fields say so before the step — read when they open, best
 // effort (`statementMailNotSetUp`): a failed read says nothing, and the step's answer still reports what the mail reached.

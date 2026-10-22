@@ -171,34 +171,28 @@ describe("the note's acceptance switch on the head (uc.sharing.share-note)", () 
 })
 
 describe('terms helpers', () => {
-  it('records and reads the accepted triples per tenant, and nothing for a tenant never seen', () => {
+  it('records and reads the accepted pairs per tenant, and nothing for a tenant never seen', () => {
     expect(acceptedTermsKeys('t-1')).toEqual([])
-    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 2, variant: 'REDUCED' })
-    expect(acceptedTermsKeys('t-1')).toEqual(['3:2:REDUCED'])
+    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 2 })
+    expect(acceptedTermsKeys('t-1')).toEqual(['3:2'])
     expect(acceptedTermsKeys('t-2')).toEqual([])
   })
 
-  it('keeps every accepted triple, the latest last, a re-accepted one moved to the end, the oldest beyond four dropped', () => {
-    recordTermsAccepted('t-1', { revision: 1, operatorRevision: 1, variant: 'FULL' })
-    recordTermsAccepted('t-1', { revision: 1, operatorRevision: 1, variant: 'REDUCED' })
-    expect(acceptedTermsKeys('t-1')).toEqual(['1:1:FULL', '1:1:REDUCED']) // a mode switch keeps the earlier variant
-    recordTermsAccepted('t-1', { revision: 1, operatorRevision: 1, variant: 'FULL' })
-    expect(acceptedTermsKeys('t-1')).toEqual(['1:1:REDUCED', '1:1:FULL']) // no duplicate, moved to the end
-    recordTermsAccepted('t-1', { revision: 2, operatorRevision: 1, variant: 'FULL' })
-    recordTermsAccepted('t-1', { revision: 2, operatorRevision: 1, variant: 'REDUCED' })
-    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 1, variant: 'FULL' })
-    expect(acceptedTermsKeys('t-1')).toEqual(['1:1:FULL', '2:1:FULL', '2:1:REDUCED', '3:1:FULL']) // bounded
+  it('keeps every accepted pair, the latest last, a re-accepted one moved to the end, the oldest beyond two dropped', () => {
+    recordTermsAccepted('t-1', { revision: 1, operatorRevision: 1 })
+    recordTermsAccepted('t-1', { revision: 2, operatorRevision: 1 })
+    expect(acceptedTermsKeys('t-1')).toEqual(['1:1', '2:1'])
+    recordTermsAccepted('t-1', { revision: 1, operatorRevision: 1 })
+    expect(acceptedTermsKeys('t-1')).toEqual(['2:1', '1:1']) // no duplicate, moved to the end
+    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 1 })
+    expect(acceptedTermsKeys('t-1')).toEqual(['1:1', '3:1']) // bounded to the current and the previous pair
   })
 
-  it('reads the single triple an earlier client stored as accepted, and drops a bare revision at the next record', () => {
-    localStorage.setItem('veyq:terms-accepted:t-1', '3:2:FULL') // the single value before the list
-    expect(acceptedTermsKeys('t-1')).toEqual(['3:2:FULL'])
-    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 2, variant: 'REDUCED' })
-    expect(acceptedTermsKeys('t-1')).toEqual(['3:2:FULL', '3:2:REDUCED'])
-    localStorage.setItem('veyq:terms-accepted:t-2', '3') // a bare revision, older still: no triple
-    expect(acceptedTermsKeys('t-2')).not.toContain('3:2:FULL')
-    recordTermsAccepted('t-2', { revision: 3, operatorRevision: 2, variant: 'FULL' })
-    expect(acceptedTermsKeys('t-2')).toEqual(['3:2:FULL'])
+  it('an earlier client’s triple or bare revision equals no pair, and goes at the next record', () => {
+    localStorage.setItem('veyq:terms-accepted:t-1', '3:2:FULL 3') // a triple with the retired variant, a bare revision
+    expect(acceptedTermsKeys('t-1')).not.toContain('3:2') // the visitor is asked again
+    recordTermsAccepted('t-1', { revision: 3, operatorRevision: 2 })
+    expect(acceptedTermsKeys('t-1')).toEqual(['3:2'])
   })
 
   it('fetches the terms of the share by its id, with no credential (terms are public)', async () => {

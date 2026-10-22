@@ -1,10 +1,7 @@
-// uc.admin.operator-details — the operating mode (ADR 0093 § 14, ADR 0088 decision 14) and the values a host publishes
-// about itself (ADR 0093 § 11, ADR 0035 decisions 6–7), Server-Owner only. Every rule the setup step, the two panels and
-// `veyq-admin` share lives here, so none of them can hold a laxer one (src/admin-web/CLAUDE.md):
-//   - *private* is set only with the notice accepted ([operatingModeRequest]); the server records no tick, so this is
-//     the one place it is asked;
-//   - which preset switches a mode would change ([presetChanges]) — from the server's own preset, never a copy;
-//   - the warnings and when they show ([operatorWarnings]) — only in the organisation mode, never a refusal;
+// uc.admin.operator-details — the values a host publishes about itself (ADR 0093 § 11, ADR 0035 decisions 6–7),
+// Server-Owner only. Every one is optional and nothing warns (ADR 0093 § 14: no operating mode); an empty one is
+// published as "not stated by this operator". Every rule the panel and `veyq-admin` share lives here, so neither can
+// hold a laxer one (src/admin-web/CLAUDE.md):
 //   - the privacy notice's recipients (ADR 0035 decision 8): what they do is a fixed kind the notice names in each of its
 //     languages, and only an OTHER one carries the operator's own words ([recipientFits], the server's rule); a row as
 //     the CLI types it ([parseRecipient]), and a suggestion the instance makes turned into a row of its kind the Server
@@ -13,11 +10,8 @@
 import { instanceOperatorApi } from '../../api/client'
 import { countryCode } from './countries'
 import {
-  OperatingMode,
   OperatorRecipientKind,
   OperatorRecipientSuggestionKindEnum as SuggestionKind,
-  type InstanceOperatingMode,
-  type InstanceOperatingModePresetEntry,
   type InstanceOperator,
   type InstanceOperatorUpdate,
   type OperatorRecipient,
@@ -25,68 +19,11 @@ import {
 } from '../../api/generated/instance'
 
 export {
-  OperatingMode, InstanceOperatorNotificationConfirmationEnum, OperatorRecipientKind, OperatorRecipientSuggestionKindEnum,
+  InstanceOperatorNotificationConfirmationEnum, OperatorRecipientKind, OperatorRecipientSuggestionKindEnum,
 } from '../../api/generated/instance'
 export type {
-  InstanceOperatingMode, InstanceOperatingModePresetEntry, InstanceOperator, InstanceOperatorUpdate, OperatorRecipient,
-  OperatorRecipientSuggestion,
+  InstanceOperator, InstanceOperatorUpdate, OperatorRecipient, OperatorRecipientSuggestion,
 } from '../../api/generated/instance'
-
-/** The capability entry a public link needs; the contact warning reads its effective state (ADR 0093 § 11). */
-export const PUBLIC_SHARES_ID = 'core.public-shares'
-
-/** Thrown when *private* is asked for without the notice accepted: nothing is sent. */
-export class NoticeNotAccepted extends Error {
-  constructor() {
-    super('notice_not_accepted')
-  }
-}
-
-/** Whether choosing [mode] needs the notice accepted first (ADR 0093 § 14: *private* needs the tick). */
-export function needsAcceptance(mode: OperatingMode): boolean {
-  return mode === OperatingMode.Private
-}
-
-/** The mode to send, or a refusal: *private* only with [accepted]. The setup step, the panel and the CLI all ask here. */
-export function operatingModeRequest(mode: OperatingMode, accepted: boolean): OperatingMode {
-  if (needsAcceptance(mode) && !accepted) throw new NoticeNotAccepted()
-  return mode
-}
-
-/** The entry's value in [mode]: true = on. */
-export function presetValue(entry: InstanceOperatingModePresetEntry, mode: OperatingMode): boolean {
-  return mode === OperatingMode.Private ? entry.onInPrivate : entry.onInOrganisation
-}
-
-/** The preset entries whose own instance switch choosing [mode] would change, each with the state it would get. */
-export function presetChanges(
-  preset: InstanceOperatingModePresetEntry[],
-  mode: OperatingMode,
-): { entry: InstanceOperatingModePresetEntry; on: boolean }[] {
-  return preset
-    .map((entry) => ({ entry, on: presetValue(entry, mode) }))
-    .filter(({ entry, on }) => entry.off === on)
-}
-
-/**
- * What admin-web warns about (ADR 0093 §§ 11 and 14, ADR 0035 decisions 7 and 8). Only in the organisation mode; in
- * private none shows, whatever is empty. The contact warning shows while public links are on and no contact is set; the
- * identification warning independently, while its required parts (name, address for service, email) are not all set —
- * the representative is asked only of a legal person, which the console cannot tell, so it is never part of it; the
- * privacy warning independently, while the notice names no recipient or no supervisory authority (it then shows "not
- * stated by this operator") — the data-protection officer is never part of it, since only some controllers need one.
- */
-export function operatorWarnings(
-  op: InstanceOperator,
-  publicSharesOn: boolean,
-): { contact: boolean; identification: boolean; privacy: boolean } {
-  if (op.operatingMode !== OperatingMode.Organisation) return { contact: false, identification: false, privacy: false }
-  return {
-    contact: publicSharesOn && !op.contactEmail,
-    identification: !op.providerName || !op.providerAddress || !op.providerEmail,
-    privacy: !op.recipients.length || !op.supervisoryAuthority,
-  }
-}
 
 /** The kinds in the order the console offers them, OTHER last. */
 export const RECIPIENT_KINDS: readonly OperatorRecipientKind[] = Object.values(OperatorRecipientKind)
@@ -137,18 +74,6 @@ export function parseRecipient(typed: string): OperatorRecipient | null {
   return kind && recipientFits(r) ? r : null
 }
 
-/** The mode in effect, whether one was ever chosen, and the preset with each entry's switch now. */
-export function getOperatingMode(): Promise<InstanceOperatingMode> {
-  return instanceOperatorApi().getInstanceOperatingMode()
-}
-
-/** Set the mode and with it the preset's instance switches, in one transaction on the server. *Private* needs
- *  [accepted]; without it nothing is sent ([NoticeNotAccepted]). */
-export function setOperatingMode(mode: OperatingMode, accepted: boolean): Promise<InstanceOperatingMode> {
-  const chosen = operatingModeRequest(mode, accepted)
-  return instanceOperatorApi().setInstanceOperatingMode({ instanceOperatingModeUpdate: { mode: chosen } })
-}
-
 /** The values with the notification address and where its confirmation stands. */
 export function getOperator(): Promise<InstanceOperator> {
   return instanceOperatorApi().getInstanceOperator()
@@ -163,7 +88,7 @@ export function setOperator(update: InstanceOperatorUpdate): Promise<InstanceOpe
   return instanceOperatorApi().setInstanceOperator({ instanceOperatorUpdate: update })
 }
 
-/** Clear every value, the notification address and its confirmation included. The mode stays. */
+/** Clear every value, the notification address and its confirmation included. */
 export function clearOperator(): Promise<InstanceOperator> {
   return instanceOperatorApi().clearInstanceOperator()
 }

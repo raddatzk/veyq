@@ -17,7 +17,7 @@ base64 inside JSON, then base64 again around the seal — and costs **2,361 byte
 exactly the 1,048,484 the volume measurement read in `veyq_identity_pins`). So the 445th member a key-holder admits is
 refused with `400 invalid_request`, the grant-delivery worker cannot wrap `K_tenant` to anyone after that, and the error
 is swallowed (`grantDeliveryPolling.ts`, M): the member stays *awaiting access* with no sign why (inbox #491). The
-*club, organisation or company* operating mode (ADR 0093 § 14) stops at about 445 members per key-holder. Every pin
+instance run for a club, an organisation or a company stops at about 445 members per key-holder. Every pin
 written today also re-uploads the whole store — 1 MiB per new member at the cap.
 
 Raising the cap moves the wall and keeps the O(N) write; a store per scope splits one contact's trust across scopes

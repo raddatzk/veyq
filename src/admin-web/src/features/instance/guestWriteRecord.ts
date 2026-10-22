@@ -10,8 +10,8 @@ export const DEFAULT_DAYS = 7
 
 /**
  * How many days the guest-write record keeps a row (ADR 0093 § 10, en.moderation.guest-write-record) — Server-Owner
- * only. Whether the record is kept at all is the capability switch `core.public-shares.guest-write-record` (the
- * Capabilities panel, `capability set`), whose default follows the operating mode; this is only N.
+ * only. The record has no switch: it is kept wherever a guest may write, which `core.public-shares.contribute` and
+ * `.drop-box` decide (the Capabilities panel, `capability set`); this is only N.
  */
 export function getGuestWriteRecord(): Promise<InstanceGuestWriteRecord> {
   return instanceGuestWriteRecordApi().getInstanceGuestWriteRecord()

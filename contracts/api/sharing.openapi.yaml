@@ -572,10 +572,9 @@ paths:
         `resolveShare`. Independent of the share password (terms are public — **no** `X-Share-Password`). The server
         records **nothing** about the accountless visitor: acceptance is client-only, no acceptance is written here.
         A tenant with no published terms returns `termsRevision: 0` (`terms` null) — the client never gates. The fixed
-        operator section (ADR 0035 decision 6) comes with them, after the space's text, in the operating mode's variant
-        and with the guest-write record's passages while that record is on for the space; the visitor's local
-        acceptance is keyed by the tenant and holds the triple (`termsRevision`, `operatorSection.revision`,
-        `operatorSection.variant`). At revision 0 the section is shown without a gate.
+        operator section (ADR 0035 decision 6) comes with them, after the space's text, in its one form and with the
+        pointer to the guest-write record's information; the visitor's local acceptance is keyed by the tenant and
+        holds the pair (`termsRevision`, `operatorSection.revision`). At revision 0 the section is shown without a gate.
       parameters:
         - $ref: "#/components/parameters/ShareId"
       responses:
@@ -589,8 +588,7 @@ paths:
                 termsRevision: 3
                 terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" }
                 operatorSection:
-                  revision: 2
-                  variant: FULL
+                  revision: 3
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                   record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "400":
@@ -1992,10 +1990,10 @@ components:
           x-veyq-visibility: measure
           type: [integer, "null"]
           description: >
-            While the instance records guest writes (`core.public-shares.guest-write-record` on): N, the days a guest's
-            write keeps its client address, source port and time (ADR 0093 § 10) — set on an unlocked response whose role
-            lets its guest write (READ_WRITE, WRITE_ONLY), so the page tells the guest before its first write, with the N
-            current then. Null while the switch is off, for a READ link (nothing is recorded) and in a locked response.
+            N, the days a guest's write keeps its client address, source port and time (ADR 0093 § 10; the record is
+            kept wherever a guest may write) — set on an unlocked response whose role lets its guest write (READ_WRITE,
+            WRITE_ONLY), so the page tells the guest before its first write, with the N current then. Null for a READ
+            link (nothing is recorded) and in a locked response.
           example: 7
         nodeId:
           x-veyq-visibility: id
@@ -2692,8 +2690,6 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
     OperatorSection:
       $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
-    OperatorSectionVariant:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
 
     ShareOrderNotice:
       type: object

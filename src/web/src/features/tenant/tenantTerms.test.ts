@@ -17,7 +17,7 @@ import { activeSpace, termsStale, markTermsAccepted, clearActiveSpace } from '..
 
 const TENANT = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 
-const SECTION = { revision: 1, variant: 'FULL' as const, text: { de: '## Auf dieser Instanz', en: '## On this instance' } }
+const SECTION = { revision: 1, text: { de: '## Auf dieser Instanz', en: '## On this instance' }, record: { de: '### Deine IP-Adresse', en: '### Your IP address' } }
 
 function stubTerms() {
   return stubApi(tenantsApi, {
@@ -50,10 +50,10 @@ describe('tenant terms facade (cr-0114)', () => {
 
   it('acceptTenantTerms sends the whole triple being accepted (ADR 0035 decision 6)', async () => {
     const api = stubTerms()
-    await acceptTenantTerms(TENANT, { revision: 3, operatorRevision: 1, variant: 'REDUCED' })
+    await acceptTenantTerms(TENANT, { revision: 3, operatorRevision: 1 })
     expect(api.acceptTenantTerms).toHaveBeenCalledWith({
       tenantId: TENANT,
-      acceptTermsRequest: { revision: 3, operatorRevision: 1, variant: 'REDUCED' },
+      acceptTermsRequest: { revision: 3, operatorRevision: 1 },
     })
   })
 })

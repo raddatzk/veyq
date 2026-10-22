@@ -27,7 +27,6 @@ const NO_DETAILS = {
 
 const SECTION = {
   revision: 1,
-  variant: 'FULL' as const,
   text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz' },
   record: { en: '### Your IP address when you add something as a guest\nIn the privacy notice.', de: '### Deine IP-Adresse' },
 }

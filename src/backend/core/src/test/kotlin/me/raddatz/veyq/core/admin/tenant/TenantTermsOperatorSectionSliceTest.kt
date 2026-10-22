@@ -1,16 +1,12 @@
 package me.raddatz.veyq.core.admin.tenant
 
-import me.raddatz.veyq.core.admin.operator.OperatingMode
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsHandler
 import me.raddatz.veyq.core.admin.operator.OperatorValues
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRetentionEntity
-import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
-import me.raddatz.veyq.core.platform.capabilities.StoredCapabilitySwitches
 import me.raddatz.veyq.core.terms.OperatorSections
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
@@ -28,14 +24,15 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.time.Instant
 import java.util.UUID
 
 /**
  * The operator section of the terms over the full HTTP layer (ADR 0035 decision 6; decisions 2-4 of
  * cr-operator-section-of-the-terms; uc.account.accept-terms, uc.admin.tenant-terms, uc.sharing.share-accept): served
- * after the space's text by the member read and the public read, in the operating mode's variant, and the gate on the
- * triple (space revision, operator revision, variant). Each negative stands beside its control on the same predicate.
+ * after the space's text by the member read and the public read, in its one form (ADR 0093 § 14), and the gate on the
+ * pair (space revision, operator revision). Each negative stands beside its control on the same predicate.
  *
  * The operator row, the retention, the switches and the served text are instance-wide H2 state: [restore] puts each back.
  */
@@ -44,8 +41,8 @@ class TenantTermsOperatorSectionSliceTest {
 
     @Inject lateinit var sections: OperatorSections
     @Inject lateinit var details: OperatorDetailsHandler
-    @Inject lateinit var modes: OperatingModeHandler
-    @Inject lateinit var switches: StoredCapabilitySwitches
+    @Inject lateinit var records: GuestWriteRecords
+    @Inject lateinit var em: jakarta.persistence.EntityManager
 
     @BeforeEach
     fun start() = restore()
@@ -57,7 +54,6 @@ class TenantTermsOperatorSectionSliceTest {
             OperatorDetailsEntity.deleteAll()
         }
         CapabilitySwitchFixtures.clear()
-        modes.afterCommit()
         sections.serve(null)
     }
 
@@ -95,88 +91,83 @@ class TenantTermsOperatorSectionSliceTest {
         assertEquals(r.getInt("operatorSection.revision"), public.getInt("revision"))
     }
 
+    /**
+     * The gate compares a pair (ADR 0035 decision 6): accepting it writes one history row, accepting it again none, and
+     * the database itself holds one row per pair — a second row for the same pair is refused by the UNIQUE, a row for
+     * another operator revision is not (the control on the same predicate). Bite (cr-operating-mode-retires): a variant
+     * column left in the UNIQUE lets the duplicate in.
+     */
     @Test
-    fun thePrivateModeServesTheReducedVariant() {
-        val (tenantId, member) = acceptedMember("terms-op-private.example.com")
-        val org = read(member, tenantId)
-        assertEquals("FULL", org.getString("operatorSection.variant"))
-        val orgText = org.getString("operatorSection.text.en")
-        assertTrue(orgText.contains("### Authorities and contact"), "control: organisation has the authorities")
-        assertTrue(orgText.contains("Only an authority can ask"), "control: organisation has the deferral")
-        assertTrue(orgText.contains("### Reporting content"), "control: organisation has the notice path")
+    fun aMemberAcceptsThePairAndTheHistoryHoldsOneRowPerPair() {
+        val (tenantId, member) = acceptedMember("terms-op-pair.example.com")
+        val shown = read(member, tenantId)
+        postAccept(member, tenantId, shown).then().statusCode(200)
+        assertEquals(1L, acceptances(member, tenantId), "accepting the pair again adds no row")
 
-        modes.set(OperatingMode.PRIVATE)
-        val priv = read(member, tenantId)
-        assertEquals("REDUCED", priv.getString("operatorSection.variant"))
-        val privText = priv.getString("operatorSection.text.en")
-        assertFalse(privText.contains("### Authorities and contact"), "private: no authorities passage")
-        assertFalse(privText.contains("Only an authority can ask"), "private: no deferral passage")
-        assertTrue(privText.contains("### Reporting content"), "private: the notice path stays")
-    }
-
-    @Test
-    fun aModeChangeReopensTheGateAndARecordSwitchDoesNot() {
-        val (tenantId, member) = acceptedMember("terms-op-mode.example.com")
-        assertTrue(read(member, tenantId).getString("operatorSection.record.en").isNotEmpty(), "organisation: the record is on")
-
-        // Control: switching the record off changes what is served, and reopens nothing.
-        CapabilitySwitchFixtures.with(GuestWriteRecords.SWITCH) {
-            val off = read(member, tenantId)
-            assertNull(off.get<Any?>("operatorSection.record"), "the record's passage follows the switch")
-            assertTrue(off.getBoolean("accepted"), "a record switch reopens no gate")
+        fun insert(operatorRevision: Int) = QuarkusTransaction.requiringNew().run {
+            TenantTermsAcceptanceEntity().apply {
+                id = UUID.randomUUID().toString(); userId = member; this.tenantId = tenantId
+                acceptedRevision = shown.getInt("termsRevision"); this.operatorRevision = operatorRevision; acceptedAt = Instant.now()
+            }.persistAndFlush()
         }
+        insert(shown.getInt("operatorSection.revision") + 1) // control: another pair is a row of its own
+        assertEquals(2L, acceptances(member, tenantId))
+        assertThrows<Exception>("the UNIQUE holds one row per pair") { insert(shown.getInt("operatorSection.revision")) }
+        assertEquals(2L, acceptances(member, tenantId))
+    }
 
-        modes.set(OperatingMode.PRIVATE)
-        val priv = read(member, tenantId)
-        assertFalse(priv.getBoolean("accepted"), "the mode changed: the gate reopens")
-        postAccept(member, tenantId, priv).then().statusCode(200)
-        assertTrue(read(member, tenantId).getBoolean("accepted"))
-        assertEquals(setOf("FULL", "REDUCED"), variantsAccepted(member, tenantId), "one history row per accepted triple")
-
-        // Switching back to a variant the member already accepted asks nothing again (owner decision 2026-10-18): the gate
-        // answers from the whole history, not from the latest row.
-        modes.set(OperatingMode.ORGANISATION)
-        val back = read(member, tenantId)
-        assertEquals("FULL", back.getString("operatorSection.variant"))
-        assertTrue(back.getBoolean("accepted"), "a variant accepted before stays accepted")
-        assertEquals(2, acceptances(member, tenantId), "and no history row is added")
+    /**
+     * The migration that made the acceptance a pair (V202610211103) keeps one row per pair of the history it found: where
+     * a member had accepted both variants of one pair, the earlier row and its time stay. Its copy statement, run against
+     * a history with the variant column as it stood; a row of another pair is the control.
+     */
+    @Test
+    fun theMigrationKeepsTheEarliestRowOfAPairAcceptedInBothVariants() {
+        val copy = javaClass.classLoader.getResource("db/migration/V202610211103__core_terms_acceptance_is_a_pair.sql")!!.readText()
+            .let { sql -> sql.substring(sql.indexOf("INSERT INTO veyq_tenant_terms_acceptance")).substringBefore(";") }
+        val (tenantId, member) = acceptedMember("terms-op-migration.example.com", accept = false)
+        val (early, late, other) = List(3) { UUID.randomUUID().toString() }
+        val t0 = java.time.LocalDateTime.of(2026, 10, 18, 9, 0)
+        QuarkusTransaction.requiringNew().run {
+            em.createNativeQuery(
+                "CREATE TABLE veyq_tenant_terms_acceptance_prev (id UUID, user_id UUID, tenant_id UUID, accepted_revision INT, " +
+                    "operator_revision INT, variant VARCHAR(16), accepted_at DATETIME(3))",
+            ).executeUpdate()
+            for ((id, operatorRevision, variant, at) in listOf(
+                listOf(late, 2, "FULL", t0.plusHours(1)), listOf(early, 2, "REDUCED", t0), listOf(other, 1, "FULL", t0.plusHours(2)),
+            )) {
+                em.createNativeQuery("INSERT INTO veyq_tenant_terms_acceptance_prev VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6)")
+                    .setParameter(1, UUID.fromString(id as String)).setParameter(2, UUID.fromString(member)).setParameter(3, UUID.fromString(tenantId))
+                    .setParameter(4, operatorRevision).setParameter(5, variant).setParameter(6, at).executeUpdate()
+            }
+        }
+        try {
+            QuarkusTransaction.requiringNew().run { em.createNativeQuery(copy).executeUpdate() }
+            val kept = QuarkusTransaction.requiringNew().call {
+                TenantTermsAcceptanceEntity.list("userId = ?1 and tenantId = ?2", member, tenantId).map { it.id }.toSet()
+            }
+            assertEquals(setOf(early, other), kept, "the earlier of the pair's two rows stays, and the other pair's row")
+        } finally {
+            QuarkusTransaction.requiringNew().run { em.createNativeQuery("DROP TABLE veyq_tenant_terms_acceptance_prev").executeUpdate() }
+        }
     }
 
     @Test
-    fun anAcceptNamingAnotherVariantIsRefused() {
-        val (tenantId, member) = acceptedMember("terms-op-variant.example.com", accept = false)
-        val r = read(member, tenantId)
-        val body = """{"revision":${r.getInt("termsRevision")},"operatorRevision":${r.getInt("operatorSection.revision")},"variant":"REDUCED"}"""
-        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body(body)
-            .`when`().post("/api/tenants/$tenantId/terms/accept").then().statusCode(409)
-        postAccept(member, tenantId, r).then().statusCode(200) // control: the served triple is accepted
-    }
-
-    @Test
-    fun theRecordsPointerFollowsItsSwitchInBothVariants() {
-        // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice); the section
-        // keeps a pointer, there exactly while the record is on — and no right to object of its own any more.
+    fun theRecordsPointerIsAlwaysServedAndReopensNoGate() {
+        // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice); the section keeps a
+        // pointer, always there since the record is kept wherever a guest may write (ADR 0093 § 10).
         val (tenantId, member) = acceptedMember("terms-op-record.example.com")
-        fun record() = read(member, tenantId).get<Any?>("operatorSection.record")
-
-        assertTrue(record() != null, "organisation, record on (its preset)")
-        assertNull(read(member, tenantId).get<Any?>("operatorSection.objection"), "the right to object moved to the notice")
-        CapabilitySwitchFixtures.with(GuestWriteRecords.SWITCH) {
-            assertNull(record(), "organisation, record off")
-        }
-
-        modes.set(OperatingMode.PRIVATE) // its preset switches the record off
-        assertNull(record(), "private, record off")
-        QuarkusTransaction.requiringNew().run { CapabilitySwitchEntity.deleteById(GuestWriteRecords.SWITCH) }
-        switches.invalidate()
-        val on = read(member, tenantId)
-        assertEquals("REDUCED", on.getString("operatorSection.variant"))
-        assertTrue(on.getString("operatorSection.record.en").contains("privacy notice of this instance"), "private, record switched on by hand: the pointer is there")
+        val r = read(member, tenantId)
+        assertTrue(r.getString("operatorSection.record.en").contains("privacy notice of this instance"))
+        assertNull(r.get<Any?>("operatorSection.variant"), "the section has one form: no variant on the wire")
+        assertNull(r.get<Any?>("operatorSection.objection"), "the right to object moved to the notice")
+        records.setRetention(12)
+        assertTrue(read(member, tenantId).getBoolean("accepted"), "a changed N reopens no gate")
     }
 
     // --- helpers ---
 
-    /** A tenant with published terms and a member who accepted the served triple (unless [accept] is false). */
+    /** A tenant with published terms and a member who accepted the served pair (unless [accept] is false). */
     private fun acceptedMember(domain: String, accept: Boolean = true): Pair<String, String> {
         val owner = seedUser(email = "owner@$domain")
         val tenantId = seedTenant(domain = domain, ownerEmail = "owner@$domain", owner = owner)
@@ -201,19 +192,11 @@ class TenantTermsOperatorSectionSliceTest {
         given().header("Authorization", bearer(user)).`when`().get("/api/tenants/$tenantId/terms")
             .then().statusCode(200).extract().jsonPath()
 
-    /** Accept the triple [shown] carried. */
+    /** Accept the pair [shown] carried. */
     private fun postAccept(user: String, tenantId: String, shown: JsonPath) =
         given().header("Authorization", bearer(user)).contentType(ContentType.JSON)
-            .body(
-                """{"revision":${shown.getInt("termsRevision")},"operatorRevision":${shown.getInt("operatorSection.revision")},""" +
-                    """"variant":"${shown.getString("operatorSection.variant")}"}""",
-            )
+            .body("""{"revision":${shown.getInt("termsRevision")},"operatorRevision":${shown.getInt("operatorSection.revision")}}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
-
-    private fun variantsAccepted(userId: String, tenantId: String): Set<String?> =
-        QuarkusTransaction.requiringNew().call {
-            TenantTermsAcceptanceEntity.list("userId = ?1 and tenantId = ?2", userId, tenantId).map { it.variant }.toSet()
-        }
 
     private fun acceptances(userId: String, tenantId: String): Long =
         QuarkusTransaction.requiringNew().call { TenantTermsAcceptanceEntity.count("userId = ?1 and tenantId = ?2", userId, tenantId) }

@@ -1,11 +1,9 @@
 package me.raddatz.veyq.core.moderation.statement
 
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsHandler
 import me.raddatz.veyq.core.generated.model.ModerationGround
 import me.raddatz.veyq.core.generated.model.ModerationStatement
 import me.raddatz.veyq.core.generated.model.StatementBasis as WireBasis
-import me.raddatz.veyq.core.generated.model.StatementForm as WireForm
 import me.raddatz.veyq.core.generated.model.StatementObjection
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.HttpFailure
@@ -55,7 +53,6 @@ sealed interface ObjectionResult {
 @ApplicationScoped
 class Statements(
     private val log: ModerationLog,
-    private val operatingMode: OperatingModeHandler,
     private val operator: OperatorDetailsHandler,
     private val mail: StatementMail,
 ) {
@@ -64,9 +61,8 @@ class Statements(
     fun mine(accountId: String): List<ModerationStatement> = QuarkusTransaction.requiringNew().call {
         val rows = StatementRecipientEntity.list("recipientKind = ?1 and recipientId = ?2", RecipientKind.ACCOUNT.name, accountId)
         if (rows.isEmpty()) return@call emptyList()
-        val form = StatementMail.formNow(operatingMode)
         val contact = StatementMail.contactOf(operator)
-        rows.mapNotNull { view(it, accountId, form, contact) }.sortedByDescending { it.sentAt }
+        rows.mapNotNull { view(it, accountId, contact) }.sortedByDescending { it.sentAt }
     }
 
     fun object_(accountId: String, statementId: String, epoch: Int, sealed: String, now: Instant = Instant.now()): ObjectionResult {
@@ -102,7 +98,7 @@ class Statements(
             }
             log.appendCase(ModerationEvent.OBJECTION_RECEIVED, now, case.id, actorId = accountId, reason = measure.kind, targetId = objection.id)
             ModerationObjectionEntity.getEntityManager().flush()
-            val view = view(recipient, accountId, StatementMail.formNow(operatingMode), StatementMail.contactOf(operator))
+            val view = view(recipient, accountId, StatementMail.contactOf(operator))
                 ?: return@createOrConflict refused(StatementFailures.statementNotFound)
             ObjectionResult.Received(view)
         }
@@ -117,7 +113,7 @@ class Statements(
             "statementId = ?1 and recipientKind = ?2 and recipientId = ?3", statementId, RecipientKind.ACCOUNT.name, accountId,
         ).firstResult()
 
-    private fun view(r: StatementRecipientEntity, accountId: String, form: StatementForm, contact: String?): ModerationStatement? {
+    private fun view(r: StatementRecipientEntity, accountId: String, contact: String?): ModerationStatement? {
         val s = ModerationStatementEntity.findById(r.statementId) ?: return null
         val sentAt = s.sentAt ?: return null
         // A Server Owner's step's statement is a mail's alone (ADR 0093 § 7): its kind has no wire name, and it has no case.
@@ -142,7 +138,6 @@ class Statements(
             ground = ModerationGround.valueOf(s.ground),
             provision = s.provision,
             basis = WireBasis.valueOf(s.basis),
-            form = WireForm.valueOf(form.name),
             sentAt = sentAt.utc(),
             roles = r.roleSet.map { ModerationStatement.Roles.valueOf(it.name) },
             sealedFacts = s.sealedMemberFacts,

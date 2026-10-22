@@ -8,8 +8,8 @@ import java.time.Instant
 
 /**
  * The guest-write record's purge ([GuestWriteRecords.purge], ADR 0093 § 10): on `veyq.moderation.guest-write-record.purge.every`
- * and **at startup**, before the first request is served — so a restored backup's stale rows, or the live rows of a
- * record switched off while the instance was down, go at boot rather than at the first tick. It is the reader
+ * and **at startup**, before the first request is served — so a restored backup's stale rows, or rows past an N
+ * shortened while the instance was down, go at boot rather than at the first tick. It is the reader
  * `EveryStoredTimeHasAReaderTest` names for both of the table's times.
  */
 @ApplicationScoped

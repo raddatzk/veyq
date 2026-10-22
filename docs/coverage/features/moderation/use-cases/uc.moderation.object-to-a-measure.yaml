@@ -16,17 +16,18 @@ acceptanceCriteria:
       6,000 members with facts, whatever their length.
     coverage:
       backend:
-        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused, StatementRecipientsBoundSliceTest.aStatementPastTheOldCapReachesEveryMemberWithTheFactsKeyWrappedToEach, StatementRecipientsBoundSliceTest.pastTheBoundAStepWithFactsIsRefusedByNameAndWithoutFactsStillTellsEveryone, StatementRecipientsBoundSliceTest.aBodyAtTheBoundWithEveryFieldAtItsLargestFitsTheRequestLimit, StatementRecipientsBoundSliceTest.theListAndTheFactsKeysCarryOneBound, SealedTextBoundsTest.theFactsSealedOnceAndEachWrapOfTheirKeyAreTakenAtTheirLargestAndNoLarger, SealedTextBoundsTest.aNoteEncodedSealOfEightThousandBytesIsTakenAndOneCharacterMoreIsNot]
+        integration: [StatementsSliceTest.aMeasureCarriesItsStatementToEveryAffectedMemberAndAStaleRecipientListIsRefused, StatementRecipientsBoundSliceTest.aStatementPastTheOldCapReachesEveryMemberWithTheFactsKeyWrappedToEach, StatementRecipientsBoundSliceTest.pastTheBoundAStepIsRefusedByName, StatementRecipientsBoundSliceTest.aBodyAtTheBoundWithEveryFieldAtItsLargestFitsTheRequestLimit, StatementRecipientsBoundSliceTest.theListAndTheFactsKeysCarryOneBound, SealedTextBoundsTest.theFactsSealedOnceAndEachWrapOfTheirKeyAreTakenAtTheirLargestAndNoLarger, SealedTextBoundsTest.aNoteEncodedSealOfEightThousandBytesIsTakenAndOneCharacterMoreIsNot]
       web:
         unit: [src/features/moderation/cases.test.ts, src/features/moderation/CaseDetail.test.ts]
-  - id: the-form-follows-the-operating-mode
+  - id: the-statement-has-one-form
     text: >-
-      Organisation mode renders the full form and refuses a measure without facts; private renders the reduced form,
-      without the report-or-order line, the automation line and the courts, and takes a measure without facts.
+      Every instance renders one form of the statement: the measure and its reach, the facts, whether a report or an
+      order led to it, that a person decided, the ground with its provision, where it applies, the objection, the
+      contact — "not stated by this operator" where none is set — and the courts; a measure without facts is refused.
     coverage:
       backend:
-        integration: [StatementsSliceTest.theFormFollowsTheOperatingModeReadWhenTheStatementIsRendered]
-        unit: [StatementTemplateConformanceTest.theReducedFormLeavesOutWhatOnlyTheFullFormCarriesAndTheMailNeverTheFacts, StatementTemplateConformanceTest.everyTextEqualsTheContract]
+        integration: [StatementsSliceTest.aMeasureNamesTheFactsAndTheProvisionItReliesOn]
+        unit: [StatementTemplateConformanceTest.theOneFormCarriesEveryPassageAndTheMailNeverTheFacts, StatementTemplateConformanceTest.everyTextEqualsTheContract]
       web:
         unit: [src/features/moderation/statement/template.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/CaseDetail.test.ts]
   - id: the-affected-read-it-in-veyq-and-are-mailed
@@ -83,24 +84,25 @@ acceptanceCriteria:
         integration: [StatementsSliceTest.theHoldCountsFromTheStatementAndFromTheDecisionWhereNobodyCanBeTold]
   - id: the-statement-names-the-provision-and-where-it-applies
     text: >-
-      The ground names the provision of the law or the clause of the terms relied on, required in the full form and
-      optional in the reduced, and the full form says the measure applies wherever the instance is reached and lasts until
-      it is lifted (DSA Art. 17(3)(a), (d), (e)); an authority's removal order names its own provision.
+      The ground names the provision of the law or the clause of the terms relied on, required of every statement (blank
+      counts as none), and the statement says the measure applies wherever the instance is reached and lasts until it is
+      lifted (DSA Art. 17(3)(a), (d), (e)); an authority's removal order names its own provision.
     coverage:
       backend:
-        integration: [StatementsSliceTest.aFullFormMeasureNamesTheProvisionItReliesOnAndAReducedOneMayLeaveItOut, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
-        unit: [StatementTemplateConformanceTest.theReducedFormLeavesOutWhatOnlyTheFullFormCarriesAndTheMailNeverTheFacts]
+        integration: [StatementsSliceTest.aMeasureNamesTheFactsAndTheProvisionItReliesOn, AuthorityOrdersSliceTest.aDeferredOrderTellsTheGuestNothingUntilItsEnd]
+        unit: [StatementTemplateConformanceTest.theOneFormCarriesEveryPassageAndTheMailNeverTheFacts]
       web:
         unit: [src/features/moderation/statement/template.test.ts, src/features/moderation/statement/StatementNotice.test.ts, src/features/moderation/CaseDetail.test.ts, src/features/moderation/cases.test.ts]
   - id: the-reporter-is-told-their-redress
     text: >-
-      A reporter's decision mail carries their redress (DSA Art. 16(5)): that they may report again with more information
-      and the instance contact, and in the full form that they may go to court and complain to the Digital Services
-      Coordinator of the Member State where they live or are established (Art. 53).
+      A reporter's decision mail carries their whole redress on every instance (DSA Art. 16(5)): that they may report again
+      with more information, the instance contact ("not stated by this operator" where none is set), that they may go to
+      court, and — where the DSA applies to the instance, in the sentence's own words — that they may complain to the
+      Digital Services Coordinator of the Member State where they live or are established (Art. 53).
     coverage:
       backend:
-        integration: [StatementMailSliceTest.aReportersDecisionCarriesTheirRedressInTheFormTheModeSets]
-        unit: [StatementTemplateConformanceTest.aReportersRedressFollowsTheForm, StatementTemplateConformanceTest.everyTextEqualsTheContract]
+        integration: [StatementMailSliceTest.aReportersDecisionCarriesTheirWholeRedressAndTheGapWhereNoContactIsSet]
+        unit: [StatementTemplateConformanceTest.aReportersRedressIsWholeWithTheDsaQualifierAndTheGap, StatementTemplateConformanceTest.everyTextEqualsTheContract]
       web:
         unit: [src/features/moderation/statement/template.test.ts]
   - id: a-server-owners-step-over-content-carries-a-statement-by-mail

@@ -1,7 +1,5 @@
 package me.raddatz.veyq.core.moderation.statement
 
-import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
-import me.raddatz.veyq.core.admin.operator.OperatorDetailsStore
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
 import me.raddatz.veyq.core.moderation.ModerationGrantEntity
@@ -62,9 +60,6 @@ import java.util.UUID
 class StatementsSliceTest {
 
     @Inject
-    lateinit var operator: OperatorDetailsStore
-
-    @Inject
     lateinit var purge: ModerationPurge
 
     private data class Reported(val userId: String, val scopeId: String, val folder: String, val caseId: String)
@@ -75,9 +70,6 @@ class StatementsSliceTest {
         asMember(m.userId, m.scopeId, body(listOf(item("NODE", folder)))).then().statusCode(201)
         return Reported(m.userId, m.scopeId, folder, openCase("NODE", folder)!!.id)
     }
-
-    /** The operating mode's column alone — the statement's form reads it; the mode's preset switches stay untouched. */
-    private fun mode(value: String?) = QuarkusTransaction.requiringNew().run { operator.lockedRow().operatingMode = value }
 
     private fun statementsOf(userId: String): Response = asUser(userId).get("/api/statements")
 
@@ -123,15 +115,9 @@ class StatementsSliceTest {
             )
         }
         takeWith(withoutOnce).then().statusCode(400).body("code", equalTo("invalid_request"))
-        // Without the log's facts the organisation's form refuses first, so the other two are asked in the private one.
-        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
-        mode("PRIVATE")
-        try {
-            for (statement in listOf(onceWithoutLog, keysWithoutFacts)) {
-                takeWith(statement).then().statusCode(400).body("code", equalTo("invalid_request"))
-            }
-        } finally {
-            mode(before)
+        // Without the log's facts every statement is refused for want of them first (ADR 0093 § 7: one form, § 14).
+        for (statement in listOf(onceWithoutLog, keysWithoutFacts)) {
+            takeWith(statement).then().statusCode(400).body("code", equalTo("statement_facts_required"))
         }
         mod.case(r.caseId).then().body("measures.size()", equalTo(0))
         // The statement's id is the one the browser minted, which the facts are sealed bound to.
@@ -143,7 +129,7 @@ class StatementsSliceTest {
             .body("measures[0].statement.ground", equalTo("TERMS_BREACH"))
             .body("measures[0].statement.sealedFacts", equalTo(SEALED_NOTE))
             .body("measures[0].statement.sentAt", notNullValue())
-            .body("statementForm", equalTo("FULL"))
+            .body("statementForm", nullValue()) // one form on every instance: no form on the wire
             .extract().path<String>("measures[0].statement.id")
 
         val mine = statementsOf(r.userId).then().statusCode(200)
@@ -156,7 +142,7 @@ class StatementsSliceTest {
             .body("statements[0].roles", equalTo(listOf("SCOPE_OWNER")))
             .body("statements[0].sealedFacts", equalTo(SEALED_FACTS))
             .body("statements[0].wrappedFactsKey", equalTo(WRAPPED_FACTS_KEY))
-            .body("statements[0].form", equalTo("FULL"))
+            .body("statements[0].form", nullValue())
             .body("statements[0].basis", equalTo("REPORT"))
             .body("statements[0].inForce", equalTo(true))
             .body("statements[0].canObject", equalTo(true))
@@ -181,63 +167,25 @@ class StatementsSliceTest {
             .body("statements.find { it.measureKind == 'SHARE' }.shareId", equalTo(link))
     }
 
+    /**
+     * Every statement names the facts and the provision or clause it relies on (DSA Art. 17(3)(d), (e); ADR 0093 § 7):
+     * one form on every instance (§ 14), with no operator value set. Blank counts as none, and nothing is written; the
+     * same measure with both is taken (the control on the same predicate).
+     */
     @Test
-    fun theFormFollowsTheOperatingModeReadWhenTheStatementIsRendered() {
+    fun aMeasureNamesTheFactsAndTheProvisionItReliesOn() {
         val mod = CaseTestKit.moderator()
-        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
-        try {
-            formFollowsTheMode(mod)
-        } finally {
-            mode(before)
-        }
-    }
-
-    private fun formFollowsTheMode(mod: CaseTestKit.Moderator) {
-        // Organisation (the mode until one is chosen): the full form, so the facts are required — and with them it passes.
-        mode(null)
-        val org = reported()
-        mod.take(org.caseId, "CONTENT", targetId = org.folder, facts = false).then().statusCode(400)
+        val r = reported()
+        mod.take(r.caseId, "CONTENT", targetId = r.folder, facts = false).then().statusCode(400)
             .body("code", equalTo("statement_facts_required"))
-        mod.take(org.caseId, "CONTENT", targetId = org.folder).then().statusCode(201).body("statementForm", equalTo("FULL"))
-
-        // Private: the reduced form, and the same measure without facts is taken.
-        mode("PRIVATE")
-        val priv = reported()
-        mod.take(priv.caseId, "CONTENT", targetId = priv.folder, facts = false).then().statusCode(201)
-            .body("statementForm", equalTo("REDUCED"))
-            .body("measures[0].statement.sealedFacts", nullValue())
-        statementsOf(priv.userId).then().body("statements.find { it.caseId == '${priv.caseId}' }.form", equalTo("REDUCED"))
-            .body("statements.find { it.caseId == '${priv.caseId}' }.sealedFacts", nullValue())
-        // Read when rendered: the same statement reads full once the mode is the organisation's again.
-        mode("ORGANISATION")
-        statementsOf(priv.userId).then().body("statements.find { it.caseId == '${priv.caseId}' }.form", equalTo("FULL"))
-    }
-
-    @Test
-    fun aFullFormMeasureNamesTheProvisionItReliesOnAndAReducedOneMayLeaveItOut() {
-        val mod = CaseTestKit.moderator()
-        val before = QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID)?.operatingMode }
-        try {
-            // Organisation: the full form requires the provision or clause (DSA Art. 17(3)(d), (e)); blank counts as none,
-            // and nothing is written.
-            mode(null)
-            val org = reported()
-            mod.take(org.caseId, "CONTENT", targetId = org.folder, provision = null).then().statusCode(400)
-                .body("code", equalTo("statement_provision_required"))
-            mod.take(org.caseId, "CONTENT", targetId = org.folder, provision = "  ").then().statusCode(400)
-                .body("code", equalTo("statement_provision_required"))
-            mod.case(org.caseId).then().body("measures.size()", equalTo(0))
-            mod.take(org.caseId, "CONTENT", targetId = org.folder, provision = "§ 86a StGB").then().statusCode(201)
-            statementsOf(org.userId).then().body("statements.find { it.caseId == '${org.caseId}' }.provision", equalTo("§ 86a StGB"))
-            assertEquals("§ 86a StGB", statementRow(org.caseId).provision)
-            // Control — private: the reduced form takes the measure without one.
-            mode("PRIVATE")
-            val priv = reported()
-            mod.take(priv.caseId, "CONTENT", targetId = priv.folder, facts = false, provision = null).then().statusCode(201)
-            statementsOf(priv.userId).then().body("statements.find { it.caseId == '${priv.caseId}' }.provision", nullValue())
-        } finally {
-            mode(before)
-        }
+        mod.take(r.caseId, "CONTENT", targetId = r.folder, provision = null).then().statusCode(400)
+            .body("code", equalTo("statement_provision_required"))
+        mod.take(r.caseId, "CONTENT", targetId = r.folder, provision = "  ").then().statusCode(400)
+            .body("code", equalTo("statement_provision_required"))
+        mod.case(r.caseId).then().body("measures.size()", equalTo(0))
+        mod.take(r.caseId, "CONTENT", targetId = r.folder, provision = "§ 86a StGB").then().statusCode(201)
+        statementsOf(r.userId).then().body("statements.find { it.caseId == '${r.caseId}' }.provision", equalTo("§ 86a StGB"))
+        assertEquals("§ 86a StGB", statementRow(r.caseId).provision)
     }
 
     @Test

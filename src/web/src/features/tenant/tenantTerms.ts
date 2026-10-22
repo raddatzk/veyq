@@ -8,22 +8,22 @@
 // content and acceptance is coarse metadata — no crypto.
 import { tenantsApi } from '../../api/client'
 import type { LocalizedMarkdown, TenantTerms } from '../../api/generated/tenants'
-import type { TermsTriple } from '../../core/terms/operatorSection'
+import type { TermsPair } from '../../core/terms/operatorSection'
 
 export type { TenantTerms, LocalizedMarkdown } from '../../api/generated/tenants'
 
-/** The tenant's current terms, the operator section after them, and whether the caller accepted the current triple
+/** The tenant's current terms, the operator section after them, and whether the caller accepted the current pair
  *  (member-readable; a non-member is 404). */
 export function getTenantTerms(tenantId: string): Promise<TenantTerms> {
   return tenantsApi().getTenantTerms({ tenantId })
 }
 
-/** Member: accept the triple the member was shown (ADR 0035 decision 6) — every part must equal the current one, else
+/** Member: accept the pair the member was shown (ADR 0035 decision 6) — both parts must equal the current ones, else
  *  409 `terms_revision_changed`. */
-export function acceptTenantTerms(tenantId: string, triple: TermsTriple): Promise<TenantTerms> {
+export function acceptTenantTerms(tenantId: string, pair: TermsPair): Promise<TenantTerms> {
   return tenantsApi().acceptTenantTerms({
     tenantId,
-    acceptTermsRequest: { revision: triple.revision, operatorRevision: triple.operatorRevision, variant: triple.variant },
+    acceptTermsRequest: { revision: pair.revision, operatorRevision: pair.operatorRevision },
   })
 }
 

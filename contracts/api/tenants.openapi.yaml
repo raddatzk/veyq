@@ -836,7 +836,7 @@ paths:
           description: >
             `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
             `statement_required` = the deletion is over content and carries no statement; `statement_facts_required` /
-            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
+            `statement_provision_required` = the facts / the provision were not given (ADR 0093 § 7).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1016,7 +1016,7 @@ paths:
           description: >
             `invalid_request` = the request was malformed, or `facts` and `factsForLog` do not come together;
             `statement_required` = the suspension is over content and carries no statement; `statement_facts_required` /
-            `statement_provision_required` = the operating mode asks for the facts / the provision and none was given.
+            `statement_provision_required` = the facts / the provision were not given (ADR 0093 § 7).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1099,8 +1099,8 @@ paths:
       summary: Read a tenant's current terms + the caller's accepted revision.
       description: >
         Returns the tenant's per-locale terms markdown, the current `termsRevision`, the operator section served after
-        it (ADR 0035 decision 6, the operating mode's variant with the current values), and whether the **caller**
-        `accepted` the current triple (space revision, operator revision, variant). Serves the owner editor (loads the
+        it (ADR 0035 decision 6, its one form with the current values), and whether the **caller**
+        `accepted` the current pair (space revision, operator revision). Serves the owner editor (loads the
         current text), the member accept-gate (`termsRevision > 0` and not `accepted`), and the `/terms` accept view. The terms are
         the operator's **public** policy (operational content, not E2EE); for now this is gated to **members**
         of the tenant (a non-member is `404`, indistinguishable) — a pre-auth public-serving path is a later
@@ -1122,11 +1122,9 @@ paths:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
                 operatorSection:
-                  revision: 1
-                  variant: FULL
+                  revision: 3
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
-                  record: null
-                  objection: null
+                  record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "401":
           description: Generic authentication failure.
           content:
@@ -1182,11 +1180,9 @@ paths:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
                 operatorSection:
-                  revision: 1
-                  variant: FULL
+                  revision: 3
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
-                  record: null
-                  objection: null
+                  record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "400":
           description: The request was malformed (terms too long).
           content:
@@ -1228,11 +1224,10 @@ paths:
             conflictCode: terms_revision_changed
       summary: Accept the tenant's current terms (member gate; re-accept on a bump).
       description: >
-        The signed-in **member** accepts the tenant's terms at the triple they were shown — the space's revision, the
-        operator section's revision and its variant. The server adds a row for that triple to `(caller, tenant)`'s
+        The signed-in **member** accepts the tenant's terms at the pair they were shown — the space's revision and the
+        operator section's revision. The server adds a row for that pair to `(caller, tenant)`'s
         history — **only if** each part equals the current one, else `409 terms_revision_changed` (the space owner
-        bumped them, a release changed the section, or the operating mode changed meanwhile → the client re-reads and
-        re-presents). Acceptance — which revision, and when, to the second — is **operational
+        bumped them, or a release changed the section meanwhile → the client re-reads and re-presents). Acceptance — which revision, and when, to the second — is **operational
         metadata** (like membership), never
         content. `@Authenticated`; a non-member is `404` (uc.account.accept-terms, ADR 0035).
       security:
@@ -1244,7 +1239,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/AcceptTermsRequest" }
-            example: { revision: 3, operatorRevision: 1, variant: FULL }
+            example: { revision: 3, operatorRevision: 3 }
       responses:
         "200":
           description: Accepted; the current terms state (now `accepted`) is returned.
@@ -1258,11 +1253,9 @@ paths:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
                 operatorSection:
-                  revision: 1
-                  variant: FULL
+                  revision: 3
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
-                  record: null
-                  objection: null
+                  record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "400":
           description: The request was malformed (missing/invalid revision).
           content:
@@ -2728,15 +2721,13 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
     OperatorSection:
       $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
-    OperatorSectionVariant:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
 
     TenantTerms:
       type: object
       description: >
         A tenant's terms as a member reads them: the space's own text and revision, the operator section served after
-        it (ADR 0035 decision 6), and whether the caller accepted what is current — the triple of `termsRevision`,
-        `operatorSection.revision` and `operatorSection.variant` (uc.account.accept-terms).
+        it (ADR 0035 decision 6), and whether the caller accepted what is current — the pair of `termsRevision` and
+        `operatorSection.revision` (uc.account.accept-terms).
       required: [termsRevision, accepted, operatorSection]
       properties:
         termsRevision:
@@ -2749,7 +2740,7 @@ components:
           x-veyq-visibility: structure
           type: boolean
           description: >
-            Whether the **caller's** acceptance history holds the current triple. False with `termsRevision` above 0 =
+            Whether the **caller's** acceptance history holds the current pair. False with `termsRevision` above 0 =
             the accept gate fires (uc.account.accept-terms); at revision 0 nothing gates.
           example: false
         terms:
@@ -2771,8 +2762,8 @@ components:
 
     AcceptTermsRequest:
       type: object
-      description: The triple the member was shown; every part must equal the current one, else 409.
-      required: [revision, operatorRevision, variant]
+      description: The pair the member was shown; both parts must equal the current ones, else 409.
+      required: [revision, operatorRevision]
       properties:
         revision:
           x-veyq-visibility: structure
@@ -2790,8 +2781,6 @@ components:
           minimum: 1
           example: 1
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
-        variant:
-          $ref: "#/components/schemas/OperatorSectionVariant"
 
     # --- cr-email-smtp-transport (ADR 0048/0049/0050): per-tenant SMTP + owner-authored invite templates ---
     TenantMailSettings:

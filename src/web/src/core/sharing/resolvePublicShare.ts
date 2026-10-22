@@ -19,7 +19,7 @@ import type { LocaleMap } from '../../shared/ui/localeMap'
 import { decodeShareNote, hasLocaleText, noteDigest, type ShareNote } from './shareNote'
 import type { NodeKind } from '../node/kind'
 import type { ShareRole, PublicShare, ShareTerms } from '../../api/generated/sharing'
-import { tripleKey, type TermsTriple } from '../terms/operatorSection'
+import { pairKey, type TermsPair } from '../terms/operatorSection'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
 // key is the binding. These two are the ones the platform half opens (and the application's curator side seals).
@@ -194,20 +194,18 @@ export async function pollPublicShare(
 // not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /
 // resolving the share directly), so it records + surfaces consent — it does not *prevent* access. The
 // legally-meaningful protection is the terms' content + the decryptable-on-report path, not this prompt.
-// What is stored per tenant is every accepted TRIPLE (ADR 0035 decision 6): the space's revision, the operator section's
-// revision and its variant, each as `tripleKey` spells it, space-separated, the latest last. The gate asks whether the
-// current triple is among them — as a member's gate asks whether a row exists for it — so a Server Owner switching the
-// operating mode back to a variant this device already accepted asks nobody again.
-// The list is bounded to TERMS_ACCEPTED_KEEP: a triple only comes back while its revisions are current or one step
-// back (both only grow; a rolled-back release is the step back), so four holds both variants at the current revisions
-// and both at the previous ones, and anything older is dead weight.
-// Migration needs no rewrite: the value a client stored before this list (one triple) already reads as a list of one,
-// so that acceptance holds. A value an older client still stored (a bare revision) equals no triple, so that visitor is
-// asked once more — rightly, since the operator section was not part of what they accepted — and the next record drops
-// it, keeping only triple-shaped entries.
+// What is stored per tenant is every accepted PAIR (ADR 0035 decision 6): the space's revision and the operator
+// section's revision, each as `pairKey` spells it, space-separated, the latest last. The gate asks whether the current
+// pair is among them — as a member's gate asks whether a row exists for it.
+// The list is bounded to TERMS_ACCEPTED_KEEP: a pair only comes back while its revisions are current or one step back
+// (both only grow; a rolled-back release is the step back), so two hold the current pair and the previous one, and
+// anything older is dead weight.
+// Migration needs no rewrite: a value an older client stored (a triple with the retired variant, or a bare revision)
+// equals no pair, so that visitor is asked once more — the section's revision moved with its one form anyway — and the
+// next record drops it, keeping only pair-shaped entries.
 const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
-const TERMS_ACCEPTED_KEEP = 4
-const TRIPLE_SHAPE = /^\d+:\d+:[A-Z]+$/
+const TERMS_ACCEPTED_KEEP = 2
+const PAIR_SHAPE = /^\d+:\d+$/
 
 /**
  * The owning tenant's public terms for a share (a guest read keyed on the non-enumerable `shareId`, so unknown/
@@ -227,7 +225,7 @@ export function pickShareTerms(terms: ShareTerms, locale: string): string {
   return pickLocaleText(map, locale)
 }
 
-/** Every triple this device accepted for a tenant, as `tripleKey` spells each, the latest last ([] if never accepted or
+/** Every pair this device accepted for a tenant, as `pairKey` spells each, the latest last ([] if never accepted or
  *  the store is unreadable). */
 export function acceptedTermsKeys(tenantId: string): string[] {
   try {
@@ -238,13 +236,13 @@ export function acceptedTermsKeys(tenantId: string): string[] {
   }
 }
 
-/** Record acceptance of [triple] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on one
- *  share of a tenant clears the gate on **every** share of that tenant. The triple joins those accepted before (moved
+/** Record acceptance of [pair] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on one
+ *  share of a tenant clears the gate on **every** share of that tenant. The pair joins those accepted before (moved
  *  to the end if it was among them), the oldest beyond TERMS_ACCEPTED_KEEP dropped. A storage failure is swallowed:
  *  the gate is operational, not enforcement, so it must never throw and block a visitor from viewing. */
-export function recordTermsAccepted(tenantId: string, triple: TermsTriple): void {
-  const key = tripleKey(triple)
-  const kept = acceptedTermsKeys(tenantId).filter((k) => k !== key && TRIPLE_SHAPE.test(k))
+export function recordTermsAccepted(tenantId: string, pair: TermsPair): void {
+  const key = pairKey(pair)
+  const kept = acceptedTermsKeys(tenantId).filter((k) => k !== key && PAIR_SHAPE.test(k))
   try {
     localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, [...kept, key].slice(-TERMS_ACCEPTED_KEEP).join(' '))
   } catch {

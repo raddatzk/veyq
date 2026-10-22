@@ -3,13 +3,10 @@ package me.raddatz.veyq.core.terms
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsEntity
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsSliceTest
-import me.raddatz.veyq.core.admin.operator.OperatingMode
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.admin.operator.OperatorRecipientEntity
 import me.raddatz.veyq.core.blobstore.StoreSettingEntity
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecordEntity
-import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRetentionEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
@@ -47,7 +44,7 @@ import java.util.logging.Logger
  *   - served without a session, and the read writes nothing — no row, and the caller's address in no log line;
  *   - a passage bound to a switch is there exactly while the switch is on, for the space the host serves;
  *   - the breached-password check names the address the instance calls: a mirror replaces HIBP's name;
- *   - the recipients follow the mode when none is named; the recipients and the officer are set, served and cleared;
+ *   - no recipient named is a visible gap; the recipients and the officer are set, served and cleared;
  *   - the instance suggests the recipients it knows of (an external store's host, the mail relay's host).
  *
  * The operator row, the recipients, the switches, the services, the store and the mail settings are instance-wide H2
@@ -56,7 +53,6 @@ import java.util.logging.Logger
 @QuarkusTest
 class PrivacyNoticeSliceTest {
 
-    @Inject lateinit var modes: OperatingModeHandler
     @Inject lateinit var services: ExternalServiceStore
     @Inject lateinit var addresses: StoredExternalServiceAddresses
     @Inject lateinit var origins: ExternalServiceOrigins
@@ -81,7 +77,6 @@ class PrivacyNoticeSliceTest {
         origins.refresh()
         CapabilitySwitchFixtures.clear()
         TenantCapabilitySwitchFixtures.clear()
-        modes.afterCommit()
     }
 
     @Test
@@ -89,7 +84,7 @@ class PrivacyNoticeSliceTest {
         val before = rows()
         val logs = capture {
             given().header("X-Forwarded-For", CALLER).`when`().get(PATH).then().statusCode(200)
-                .body("revision", equalTo(3)).body("draftBanner.en", equalTo("*Draft: this privacy notice has not yet been reviewed by a lawyer.*"))
+                .body("revision", equalTo(4)).body("draftBanner.en", equalTo("*Draft: this privacy notice has not yet been reviewed by a lawyer.*"))
         }
         assertEquals(before, rows(), "reading the notice writes no row")
         assertFalse(logs.contains(CALLER), "the caller's address is in no log line")
@@ -98,16 +93,12 @@ class PrivacyNoticeSliceTest {
     }
 
     @Test
-    fun theRecordsPassageFollowsItsSwitchWithTheNServedNow() {
+    fun theRecordsPassageIsServedWithTheNServedNow() {
         owner().contentType(ContentType.JSON).body("""{"retentionDays":12}""").`when`().put("/api/instance/guest-write-record")
             .then().statusCode(200)
         val on = passage("guest-write-record")
-        assertTrue(on!!.contains("deleted 12 days after the write"), "organisation, the record on (its preset), with N now: $on")
+        assertTrue(on!!.contains("deleted 12 days after the write"), "the record, with N now: $on")
         assertTrue(passage("guest-write-record-objection") != null, "and its right to object, apart")
-        CapabilitySwitchFixtures.with(GuestWriteRecords.SWITCH) {
-            assertNull(passage("guest-write-record"), "the record off: the passage goes")
-            assertNull(passage("guest-write-record-objection"), "and its right to object with it")
-        }
     }
 
     @Test
@@ -134,12 +125,10 @@ class PrivacyNoticeSliceTest {
     }
 
     @Test
-    fun theRecipientsFollowTheModeWhenNoneIsNamed() {
-        assertTrue(passage("recipients")!!.contains("not stated by this operator"), "organisation, none named: the gap shows")
-        modes.set(OperatingMode.PRIVATE)
-        assertNull(passage("recipients"), "private, none named: the passage is absent")
+    fun noRecipientNamedIsAVisibleGap() {
+        assertTrue(passage("recipients")!!.contains("not stated by this operator"), "none named: the gap shows")
         put(RECIPIENTS).statusCode(200)
-        assertTrue(passage("recipients")!!.contains("- Example Hosting GmbH: hosts the server (Germany)"), "control: a named one renders in private too")
+        assertTrue(passage("recipients")!!.contains("- Example Hosting GmbH: hosts the server (Germany)"), "control: a named one replaces it")
     }
 
     @Test

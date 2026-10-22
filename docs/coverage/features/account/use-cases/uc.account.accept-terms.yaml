@@ -36,7 +36,7 @@ acceptanceCriteria:
       # no dedicated test; an anonymous-visitor assertion is the honest remaining thin spot, not a false citation.
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.readOrAcceptByANonMemberIs404] }
   # cr-operator-section-of-the-terms (ADR 0035 decision 6): the fixed operator section after the space's text, and the
-  # gate on the triple (space revision, operator revision, variant). The text is contracts/terms/operator-section.json,
+  # gate on the pair (space revision, operator revision; one form since cr-operating-mode-retires). The text is contracts/terms/operator-section.json,
   # a draft until a qualified legal review.
   - id: the-operator-section-follows-the-space-terms
     text: >-
@@ -50,36 +50,35 @@ acceptanceCriteria:
         unit: [OperatorSectionRendererTest.theJarCarriesTheContractFileUnchanged, OperatorSectionRendererTest.aDraftSaysSoFirstAndOnlyWhileItIsOne, OperatorSectionRendererTest.everyPlaceholderTheFileNamesIsOneTheRendererKnows, OperatorSectionRendererTest.anUnknownPlaceholderIsRefusedRatherThanPrinted]
       web:
         unit: [src/views/TermsAcceptView.test.ts, src/features/tenant/TenantTermsPanel.test.ts]
-  - id: the-gate-compares-the-triple
+  - id: the-gate-compares-the-pair
     text: >-
-      What a member accepts is the triple of the space's revision, the section's revision and its variant, one history
-      row per triple: a release that changes the section or a changed operating mode reopens the gate, a value changed
-      in admin-web renders at once and reopens nothing, nor does the guest-write record switched, nor the mode
-      switched back to a variant the member accepted at the current revisions (no row is added); an accept naming
-      another triple is 409.
+      What a member accepts is the pair of the space's revision and the section's revision, one history row per pair: a
+      release that changes the section reopens the gate, a value or N changed in admin-web renders at once and reopens
+      nothing; accepting the pair again adds no row, and the database holds one row per pair; an accept naming another
+      pair is 409. A history the variant was part of keeps, per pair, its earliest row.
     coverage:
       backend:
-        integration: [TenantTermsOperatorSectionSliceTest.aValueChangedInAdminWebRendersAtOnceAndReopensNoGate, TenantTermsOperatorSectionSliceTest.aModeChangeReopensTheGateAndARecordSwitchDoesNot, TenantTermsOperatorSectionSliceTest.anAcceptNamingAnotherVariantIsRefused]
+        integration: [TenantTermsOperatorSectionSliceTest.aValueChangedInAdminWebRendersAtOnceAndReopensNoGate, TenantTermsOperatorSectionSliceTest.aMemberAcceptsThePairAndTheHistoryHoldsOneRowPerPair, TenantTermsOperatorSectionSliceTest.theMigrationKeepsTheEarliestRowOfAPairAcceptedInBothVariants]
       web:
         unit: [src/features/tenant/tenantTerms.test.ts, src/views/TermsAcceptView.test.ts]
-  - id: the-variant-follows-the-operating-mode
+  - id: the-section-has-one-form
     text: >-
-      The club, organisation or company mode serves the full variant; the private mode the reduced one, without the
-      authorities, the statement's deferral and the statement's further content, with the notice path whole. In the
-      full variant an empty value is a visible "not stated by this operator"; in the reduced one it is absent.
+      Every instance serves one form of the section: the notice path, what is kept, the measures, the statement with its
+      further content, the deferral and the authorities with the contact point. An empty value is a visible "not stated
+      by this operator", a value set replaces it; an optional line goes where its value is empty.
     coverage:
       backend:
-        integration: [TenantTermsOperatorSectionSliceTest.thePrivateModeServesTheReducedVariant]
-        unit: [OperatorSectionRendererTest.theReducedVariantLeavesOutTheAuthoritiesAndTheDeferralAndKeepsTheNoticePath, OperatorSectionRendererTest.theFullOnlyPassagesAreExactlyWhatAdr0035ListsUnderDrops, OperatorSectionRendererTest.anEmptyValueIsAVisibleGapInTheFullVariantAndAbsentInTheReducedOne, OperatorSectionRendererTest.anOptionalLineGoesInBothVariantsWhereItsValueIsEmpty, OperatorSectionRendererTest.aValuesNewlinesRenderInlineSoATypedAddressCannotStartAMarkdownBlock]
-  - id: the-record-pointer-follows-its-switch
+        integration: [GuestWriteRecordCoreSliceTest.anInstanceWithNoModeServesEveryTextWholeAndRecordsAGuestWrite]
+        unit: [OperatorSectionRendererTest.theSectionHasOneFormWithTheAuthoritiesTheDeferralAndTheNoticePath, OperatorSectionRendererTest.anEmptyValueIsAVisibleGap, OperatorSectionRendererTest.anOptionalLineGoesWhereItsValueIsEmpty, OperatorSectionRendererTest.aValuesNewlinesRenderInlineSoATypedAddressCannotStartAMarkdownBlock]
+  - id: the-record-pointer-is-always-there
     text: >-
       The section points to the guest-write record's GDPR Art. 13 information — the privacy notice's, with its right to
-      object apart (uc.admin.privacy-notice) — exactly while core.public-shares.guest-write-record is on, in either
-      variant; the section carries no right to object of its own, and the move bumped its revision once.
+      object apart (uc.admin.privacy-notice) — on every instance, set apart from the text, since the record is kept
+      wherever a guest may write; the section carries no right to object of its own.
     coverage:
       backend:
-        integration: [TenantTermsOperatorSectionSliceTest.theRecordsPointerFollowsItsSwitchInBothVariants]
-        unit: [OperatorSectionRendererTest.theRecordsPointerFollowsItsSwitchNotTheVariant, OperatorSectionRendererTest.theSectionCarriesNoRightToObjectOfItsOwnAnyMore]
+        integration: [TenantTermsOperatorSectionSliceTest.theRecordsPointerIsAlwaysServedAndReopensNoGate]
+        unit: [OperatorSectionRendererTest.theRecordsPointerIsAlwaysThereAndSetApart, OperatorSectionRendererTest.theSectionCarriesNoRightToObjectOfItsOwnAnyMore]
       web:
         unit: [src/views/TermsAcceptView.test.ts]
 gaps:

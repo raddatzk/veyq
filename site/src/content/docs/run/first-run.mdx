@@ -23,8 +23,8 @@ nobody who finds its domain can claim it first.
 :::note[How far this is proven]
 This page describes the console and the CLI as their code and tests define them (`src/admin-web/src/views`,
 `src/admin-web/src/cli`). The labels below are the console's own. The console's part of first run — the not-set-up page,
-the Server Owner, the Emergency Kit and the operating mode, signing in, the bundled store and its check, the operating
-mode switched both ways with the operator details and their warnings, the first tenant and its invite link, and the
+the Server Owner, the Emergency Kit and what an operator may owe, signing in, the bundled store and its check, the
+operator details, the first tenant and its invite link, and the
 provider identification on the tenant's sign-in page — is driven in this order in a real browser against the images that ship, by the end-to-end suite
 (`tests/e2e/tests/setup/first-run.setup.ts`), locally so far; no CI run yet. The CLI is not exercised on a running
 instance.
@@ -83,13 +83,13 @@ On a fresh instance the console opens on **Set up this instance**
 3. **Save your Emergency Kit.** **Download Emergency Kit (PDF)**, tick **I have saved my Emergency Kit somewhere
    safe.**, then **Continue**. The kit holds your email and your **Secret Key** (and a QR code of both); it does not
    hold your password.
-4. **How is this instance run?** Read the notice, then choose **Private (family, circle of friends)** or **Club,
-   organisation or company**. It is your own assessment, not veyq's; *private* needs the tick **I have read this and
-   choose Private on my own responsibility.** What each mode means is on
-   [Moderation](/veyq/run/moderation/#the-operating-mode); you can change it later. Then **Create the account and
-   sign in**. Only now is the account created, and from this moment the instance is set up: the setup screen does not
-   open again. The same step stores the mode and makes the instance's first moderation key, sealed to your new
-   account: you are its first moderator, and reports can be made from the first day
+4. **What you may have to state.** The console says, as information, which values an operator may owe — the
+   household exemption ends once a link is shared publicly, a club or a company probably owes a name, a postal address
+   and the controller's contact, it covers every space — and that this is your own assessment, not veyq's. There is
+   nothing to choose or tick; every value stays optional, set later under **Server → Operator**
+   ([What you may owe](/veyq/run/moderation/#what-you-may-owe)). Then **Create the account and sign in**. Only now is
+   the account created, and from this moment the instance is set up: the setup screen does not open again. The same
+   step makes the instance's first moderation key, sealed to your new account: you are its first moderator, and reports can be made from the first day
    ([Moderation](/veyq/run/moderation/)).
 5. **Sign in** with your email and password.
 
@@ -185,10 +185,9 @@ app.
   ([Backup and restore](/veyq/run/backup-and-restore/)).
 - **Capabilities** — what the instance offers at all, as a tree of switches
   ([Capabilities](/veyq/run/capabilities/)).
-- **Operating mode** — private, or club, organisation or company, with its notice and the switches choosing the other
-  mode would change ([Moderation](/veyq/run/moderation/#the-operating-mode)).
-- **Operator** — the instance contact, the provider identification and the supervisory authority, the recipients and a
-  data-protection officer for the privacy notice, and the private notification address with its code
+- **Operator** — what an operator may owe, as information; the instance contact, the provider identification and the
+  supervisory authority, the recipients and a data-protection officer for the privacy notice, each optional and shown
+  as not stated while empty, and the private notification address with its code
   ([Moderation](/veyq/run/moderation/#who-runs-the-instance), [The privacy notice](/veyq/run/moderation/#the-privacy-notice)).
 - **Accounts** — erase an account for a request that reached you another way, and stop a pending erasure
   ([below](#accounts)).
@@ -250,8 +249,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `store check` | Check the saved change (else the store in use) and print every step; a passing saved change is put in use; exits `1` if it failed |
 | `store discard` | Drop a saved change that has not passed its check; the store in use stays |
 | `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/veyq/run/capabilities/#switch-an-entry)) |
-| `mode show` / `mode set <private\|organisation> [--accept-notice]` | Print the operating mode, its notice and what the other mode would switch; set it. `set private` prints the notice and is refused without `--accept-notice`; prints text, not JSON |
-| `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details; change the values given (`none` clears one) and keep the rest — `--recipients '<name>\|<kind>\|<country>; …'` replaces the privacy notice's whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup` or `other:<what they do>`; the country a two-letter ISO 3166-1 code such as `DE`), `--data-protection-officer` sets the officer; clear them all. The notification address's code is typed into the console, never the CLI |
+| `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details, every value present and `null` where none is set (published as *not stated by this operator*); change the values given (`none` clears one) and keep the rest — `--recipients '<name>\|<kind>\|<country>; …'` replaces the privacy notice's whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup` or `other:<what they do>`; the country a two-letter ISO 3166-1 code such as `DE`), `--data-protection-officer` sets the officer; clear them all. The notification address's code is typed into the console, never the CLI |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits
 `1`. `veyq-admin --help` prints the usage. Setup is deliberately not a command: it creates key material and an

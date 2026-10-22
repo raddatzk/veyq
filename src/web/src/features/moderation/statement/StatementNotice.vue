@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The statement of reasons on a blocked item, node or link (ADR 0093 § 7, uc.moderation.object-to-a-measure steps 5, 8,
 // 10): shown only to a member it names — everyone else keeps the bare "Blocked by the operator" — rendered from the one
-// template in its form, the facts opened with the member's identity key, and the objection: its form once, then its
+// template (one form, ADR 0093 § 14), the facts opened with the member's identity key, and the objection: its form once, then its
 // state and answer. It names the host, never the moderator.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -33,7 +33,6 @@ const passages = computed(() => {
     roles: s.roles,
     basis: s.basis,
     ground: s.ground,
-    form: s.form,
     date: day(s.sentAt),
     contact: s.contactAddress ?? null,
     hasFacts: s.sealedFacts != null,

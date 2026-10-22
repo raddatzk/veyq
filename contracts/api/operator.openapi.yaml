@@ -11,7 +11,7 @@ info:
     8, uc.admin.privacy-notice), which alone publishes the recipients and a data-protection officer.
     They are public operational data like the terms, set by the Server Owner on the admin channel
     (`instance.openapi.yaml`, tag `instance-operator`), and instance-wide: the answer is the same on every host. The
-    notification address and the operating mode are never served here.
+    notification address is never served here.
 
     Nothing here is user content. Operator-blindness is untouched: these are the operator's own values, typed by the
     operator to be published.
@@ -27,8 +27,8 @@ paths:
       operationId: getOperatorDetails
       summary: Read who runs this instance — the contact, the provider identification and the supervisory authority.
       description: >
-        The values the Server Owner published, each null where none is set — in either operating mode a value that is
-        set is shown, one left empty is simply absent (ADR 0035 decision 6). src/web/ shows the identification on the
+        The values the Server Owner published, each null where none is set; the fixed texts render an empty one as "not
+        stated by this operator" (ADR 0093 § 14). src/web/ shows the identification on the
         login and the share pages (ADR 0035 decision 7). Host-independent: the values are the instance's, not a
         tenant's. Unauthenticated; rate-limited per client address.
       security: []
@@ -61,9 +61,8 @@ paths:
       summary: Read the operator section of the terms — public, without sign-in.
       description: >
         The fixed operator section of the terms ([ADR 0035](../../docs/decisions/0035-server-terms-of-service.md)
-        decision 6) as every space's terms carry it, rendered in the operating mode's variant with the values the
-        Server Owner set, and with the pointer to the guest-write record's information (`getPrivacyNotice`) while that
-        record is on for the instance. DSA Art. 14(1) asks for the terms to be publicly available and easily
+        decision 6) as every space's terms carry it, rendered in its one form with the values the Server Owner set,
+        and with the pointer to the guest-write record's information (`getPrivacyNotice`). DSA Art. 14(1) asks for the terms to be publicly available and easily
         accessible, so this read needs no account: src/web/ shows it at a page of its own, linked from the login page, the
         share page and the signed-in shell. The same
         section rides each space's terms (`getTenantTerms`, `getShareTerms`) after the space's own text; only there is
@@ -77,8 +76,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OperatorSection" }
               example:
-                revision: 2
-                variant: FULL
+                revision: 3
                 text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                 record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "429":
@@ -95,8 +93,8 @@ paths:
       summary: Read the instance's privacy notice — public, without sign-in, as this host's space runs it.
       description: >
         The fixed privacy notice ([ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) decision 8, GDPR
-        Art. 13; uc.admin.privacy-notice), rendered from `contracts/terms/privacy-notice.json` in the operating mode's
-        variant, with the values the Server Owner set (the provider identification, the contact, the supervisory
+        Art. 13; uc.admin.privacy-notice), rendered from `contracts/terms/privacy-notice.json` in its one form (an
+        empty value as "not stated by this operator", ADR 0093 § 14), with the values the Server Owner set (the provider identification, the contact, the supervisory
         authority, the recipients, a data-protection officer), the instance's own values (the guest-write record's N,
         the backup period B, the account erasure's window, an external object store's host) and one passage per
         processing the instance runs: a passage bound to a capability switch is present exactly while that switch is
@@ -115,8 +113,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PrivacyNotice" }
               example:
-                revision: 1
-                variant: FULL
+                revision: 4
                 draftBanner: { de: "*Entwurf: …*", en: "*Draft: …*" }
                 passages:
                   - id: account
@@ -217,8 +214,6 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
     OperatorSection:
       $ref: '_common.openapi.yaml#/components/schemas/OperatorSection'
-    OperatorSectionVariant:
-      $ref: '_common.openapi.yaml#/components/schemas/OperatorSectionVariant'
 
     # The privacy notice's schemas are this spec's own, its text type included, with no $ref into _common: a _common
     # schema this spec serves at the response level comes out of the generator under inline names of its own
@@ -230,7 +225,7 @@ components:
         The instance privacy notice as this host serves it (ADR 0035 decision 8): veyq's fixed text, its passages in
         order, each with its anchor. Public operational content, never E2EE: every value in it is the operator's own,
         typed to be published, or a fact of the running instance.
-      required: [revision, variant, passages]
+      required: [revision, passages]
       properties:
         revision:
           x-veyq-visibility: structure
@@ -239,14 +234,6 @@ components:
           minimum: 1
           description: The notice's revision — it moves with its text, that is with a veyq release, never with a value.
           example: 1
-        variant:
-          x-veyq-visibility: enum
-          type: string
-          enum: [FULL, REDUCED]
-          description: >
-            The operating mode's variant, as the operator section's (ADR 0093 § 14): REDUCED in the private mode, where
-            an unset value is absent; FULL otherwise, where it shows as "not stated by this operator".
-          example: FULL
         draftBanner:
           description: >
             The banner every rendering opens with while the text awaits a qualified legal review; absent once reviewed.

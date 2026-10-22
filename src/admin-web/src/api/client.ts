@@ -68,7 +68,7 @@ export function instanceStoreReconcileApi(): InstanceStoreReconcileApi {
   return new InstanceStoreReconcileApi(new InstanceConfiguration(bearerParams()))
 }
 
-// The operating mode and the operator's published values (ADR 0093 §§ 11 and 14) — the `instance-operator` tag of the
+// The operator's published values (ADR 0093 § 11) — the `instance-operator` tag of the
 // same instance spec: one more client CLASS, still four contracts.
 export function instanceOperatorApi(): InstanceOperatorApi {
   return new InstanceOperatorApi(new InstanceConfiguration(bearerParams()))

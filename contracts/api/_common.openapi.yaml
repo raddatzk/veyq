@@ -162,19 +162,6 @@ components:
       enum: [PENDING, ACTIVE, SUSPENDED, PENDING_DELETION]
       example: ACTIVE
 
-    OperatingMode:
-      # Shared by the setup spec (first-run setup chooses it) and the instance spec (the Server Owner changes it).
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        How the instance is run, on the Server Owner's own assessment (ADR 0093 § 14): PRIVATE (family, circle of
-        friends) or ORGANISATION (club, organisation or company). A preset over the capability register's instance
-        switches (ADR 0088 decision 14), and what decides whether admin-web warns about an empty instance contact or
-        provider identification. It never switches the report path or the moderators off. An instance where none was
-        ever chosen runs as ORGANISATION.
-      enum: [PRIVATE, ORGANISATION]
-      example: ORGANISATION
-
     Capability:
       type: object
       description: >
@@ -408,7 +395,7 @@ components:
         The provision of the law or the clause of the terms the ground relies on (DSA Art. 17(3)(d), (e); ADR 0093 § 7),
         a short reference in the moderator's own words — "§ 86a StGB", "Space terms, clause 4" — stored in the clear beside
         the ground and rendered after it. Never the facts: why the content falls under it is what the sealed facts explain.
-        Required in the full form (`statement_provision_required`), optional in the reduced; blank counts as none.
+        Required (`statement_provision_required`); blank counts as none.
       maxLength: 200
       example: § 86a StGB
       x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
@@ -441,13 +428,13 @@ components:
       type: object
       description: >
         The statement of reasons a Server Owner's own step over content carries (ADR 0093 § 7; DSA Art. 17(1)(c), (d)) —
-        entered with the step, in the template and the form the operating mode sets. It goes by instance mail to the
+        entered with the step, in the one template. It goes by instance mail to the
         member whose sign-in is blocked, or to each owner of the tenant taken offline, **with the facts**: they cannot
         sign in to open a sealed copy (owner decisions Q24-Q25 of cr-statement-legal-gaps). The server mails the facts
         once, after the step committed, and keeps them only as `factsForLog`, sealed; the objection goes to the instance contact.
         The step's answer reports whom that mail reached (`StatementDelivery`); a recipient it did not reach is not mailed
         again, so the Server Owner tells them through the contact, with the words their own client still holds.
-        The full form requires the facts and the provision (`400 statement_facts_required`,
+        The facts and the provision are required (`400 statement_facts_required`,
         `400 statement_provision_required`); `facts` and `factsForLog` come together or not at all (`400
         invalid_request`).
       required: [statementId, ground]
@@ -728,26 +715,16 @@ components:
           example: "## Terms of use\n…"
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 20000)'
 
-    OperatorSectionVariant:
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        Which variant of the operator section is served (ADR 0035 decision 6, ADR 0093 § 14): FULL in the club,
-        organisation or company mode, REDUCED in the private mode (without the authorities, the statement's deferral
-        and the statement's further content). Part of what a terms gate compares, so a mode change reopens it.
-      enum: [FULL, REDUCED]
-      example: FULL
-
     OperatorSection:
       # Shared by the tenants spec (the member gate), the sharing spec (the accountless share gate) and the operator
       # spec (the public page, DSA Art. 14(1)), like LocalizedMarkdown (ADR 0038).
       type: object
       description: >
         The fixed operator section of the terms (ADR 0035 decision 6), rendered by the server from
-        `contracts/terms/operator-section.json` in the operating mode's variant, with the values the Server Owner set
-        and the guest-write record's N. Clients show it after the space's own terms and never edit it. Public
-        operational content, never E2EE. Every text is a draft until a qualified legal review, and says so.
-      required: [revision, variant, text]
+        `contracts/terms/operator-section.json` in its one form (ADR 0093 § 14), with the values the Server Owner set
+        (an empty one as "not stated by this operator") and the guest-write record's N. Clients show it after the
+        space's own terms and never edit it. Public operational content, never E2EE. Every text is a draft until a qualified legal review, and says so.
+      required: [revision, text, record]
       properties:
         revision:
           x-veyq-visibility: structure
@@ -756,20 +733,16 @@ components:
           minimum: 1
           description: The section's revision — it moves with its text, that is with a veyq release, never with a value.
           example: 1
-        variant:
-          $ref: "#/components/schemas/OperatorSectionVariant"
         text:
           # The section in both languages, the record's pointer left out (it is `record`). No description beside the
           # $ref: the generator would emit an inline copy of LocalizedMarkdown.
           $ref: "#/components/schemas/LocalizedMarkdown"
         record:
-          description: >
-            The pointer to the guest-write record's GDPR Art. 13 information, which the instance privacy notice holds
-            with its right to object apart (`getPrivacyNotice`, ADR 0035 decision 8; clients link it there) — present
-            exactly while `core.public-shares.guest-write-record` is on for the space (either variant); null otherwise.
-          oneOf:
-            - $ref: "#/components/schemas/LocalizedMarkdown"
-            - type: "null"
+          # The pointer to the guest-write record's GDPR Art. 13 information, which the instance privacy notice holds
+          # with its right to object apart (`getPrivacyNotice`, ADR 0035 decision 8; clients link it there) — always
+          # present, since the record is kept wherever a guest may write (ADR 0093 § 10). A comment, not a
+          # description: beside the $ref the generator would emit an inline copy of LocalizedMarkdown.
+          $ref: "#/components/schemas/LocalizedMarkdown"
 
     PresignedUrl:
       # Shared by the blob spec (member upload/download) and the sharing spec (a guest's upload/download) — one

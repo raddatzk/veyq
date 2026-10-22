@@ -105,7 +105,7 @@ class ShareFilesHandler(
         val item = DepotUploadCompletion.item(target.nodeId, uploadId, expectedBlobId)
         val result = completions.complete(
             gated.scopeId, listOf(item), UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
-            attached = { fileId -> guestWriteRecords.record(seen, gated.identityId, gated.scopeId, GuestWriteObject.NODE, fileId, null) },
+            attached = { fileId -> guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, fileId, null) },
         ).single()
         return ShareFileCompleteOutcome.Completed(completedOutcome(store, gated.scopeId, target.nodeId, result))
     }

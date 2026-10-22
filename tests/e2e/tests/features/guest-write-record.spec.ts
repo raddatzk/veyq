@@ -1,6 +1,6 @@
 // The guest-write record through the release's own Traefik (ADR 0093 § 10, ADR 0094 § For the moderation CR; the
-// stack scenario cr-guest-write-record's phase 4 asks for). The run chose club, organisation or company at setup, so
-// the record is on with its default N = 7. The tenant owner shares a folder with a link guests may add through, and
+// stack scenario cr-guest-write-record's phase 4 asks for). The record has no switch, so a link guests may add
+// through records with the default N = 7. The tenant owner shares a folder with a link guests may add through, and
 // signs out of the browser; then a guest opens the link and creates a folder at its first write.
 //
 //   1. Before that first write, the naming dialog says what is kept: the IP address, the source port and the time, for

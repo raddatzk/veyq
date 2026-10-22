@@ -14,7 +14,6 @@ const fields: StatementFields = {
   roles: ['UPLOADER', 'SCOPE_OWNER'],
   basis: 'REPORT',
   ground: 'TERMS_BREACH',
-  form: 'FULL',
   date: '18 October 2026',
   contact: 'abuse@example.org',
   hasFacts: true,
@@ -27,10 +26,10 @@ describe('the statement template', () => {
     expect(TEMPLATE).toEqual(rest)
   })
 
-  it('renders every passage of the full form, in order, with the clear fields filled in', () => {
+  it('renders every passage of the one form, in order, with the clear fields filled in', () => {
     const full = renderStatement('en', { ...fields, provision: '§ 86a StGB' })
     expect(full.map((p) => p.id)).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objection', 'contact', 'courts'])
-    // The provision follows the ground; the territorial sentence (DSA Art. 17(3)(a)) is the full form's.
+    // The provision follows the ground, then the territorial sentence (DSA Art. 17(3)(a)).
     expect(full.find((p) => p.id === 'provision')!.text).toBe('It relies on § 86a StGB.')
     expect(full.find((p) => p.id === 'scope')!.text).toBe('It applies wherever this veyq instance is reached, and lasts until it is lifted.')
     // A moderator's measure is objected to in veyq; the contact objection is a Server Owner's step's, by mail alone.
@@ -44,14 +43,18 @@ describe('the statement template', () => {
     expect(full.every((p) => !p.text.includes('{'))).toBe(true)
   })
 
-  it('the reduced form leaves out what only the full form carries, and a passage whose value is not there', () => {
-    const reduced = renderStatement('de', { ...fields, form: 'REDUCED', hasFacts: false, contact: null, roles: ['SHARE_CREATOR'], measureKind: 'SHARE' })
-    expect(reduced.map((p) => p.id)).toEqual(['measure', 'roles', 'ground', 'objection'])
-    // A provision the moderator named stays in the reduced form; a blank one is none.
-    expect(renderStatement('en', { ...fields, form: 'REDUCED', provision: 'Space terms, clause 4' }).map((p) => p.id)).toContain('provision')
+  it('leaves out a passage whose value is not there, and shows the gap where no contact is set', () => {
+    const noContact = renderStatement('de', { ...fields, hasFacts: false, contact: null, roles: ['SHARE_CREATOR'], measureKind: 'SHARE' })
+    expect(noContact.map((p) => p.id)).toEqual(['measure', 'roles', 'basis', 'automation', 'ground', 'scope', 'objection', 'contact', 'courts'])
+    expect(noContact.find((p) => p.id === 'contact')!.text).toBe('Fragen gehen an von der Betreiberseite nicht angegeben.')
+    // A blank provision is none.
     expect(renderStatement('en', { ...fields, provision: '  ' }).map((p) => p.id)).not.toContain('provision')
-    expect(reduced[1].text).toBe('Du erhältst diese Begründung als Person, die den Link erstellt hat.')
-    // The facts stay in the reduced form when the moderator wrote them.
-    expect(renderStatement('en', { ...fields, form: 'REDUCED' }).map((p) => p.id)).toContain('facts')
+    expect(noContact[1].text).toBe('Du erhältst diese Begründung als Person, die den Link erstellt hat.')
+  })
+
+  it('the reporter’s coordinator sentence says where the DSA applies, in both languages (ADR 0093 § 7)', () => {
+    const coordinator = TEMPLATE.reporterDecision.passages.find((p) => p.id === 'coordinator')!
+    expect(coordinator.en.startsWith('Where the Digital Services Act (DSA) applies to this instance')).toBe(true)
+    expect(coordinator.de.startsWith('Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt')).toBe(true)
   })
 })

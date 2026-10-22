@@ -3,8 +3,8 @@
 // can write, before its first write — the naming step, the line that says whose session the device holds, the drop
 // pages (Q13 of cr-guest-write-record). Two sentences: what is kept and for how long, with the N the resolve served
 // (`PublicShare.guestWriteRecordDays`, the N current at the write), and the right to object (GDPR Art. 21) as a sentence
-// of its own (Art. 21(4)). `days` null — the switch is off, or a READ link, where nothing is recorded — renders nothing:
-// the notice follows the switch, never the operating mode.
+// of its own (Art. 21(4)). `days` null — a READ link, where nothing is recorded, or a locked answer — renders nothing;
+// the record has no switch (ADR 0093 § 10), so a writing link's unlocked answer always carries N.
 //
 // The wording waits on counsel (ADR 0093 § Legal basis, Still open 4: what the port is worth behind an operator's own
 // NAT). The full Art. 13 text — who the controller is, the purpose, the basis, N and B, the recipients, the rights and

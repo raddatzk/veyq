@@ -6,7 +6,6 @@ vi.mock('../../api/client', () => ({ setupApi: vi.fn() }))
 
 import { buildCreateServerOwnerRequest, createServerOwner, prepareServerOwner } from './setupServer'
 import { setupApi } from '../../api/client'
-import { NoticeNotAccepted } from '../instance/operator'
 import type { SetupApi, SetupStatus } from '../../api/generated'
 import { fakeApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
@@ -105,19 +104,15 @@ describe('prepareServerOwner / createServerOwner — mint first, send after the 
 
   it('rejects when the server rejects the registration (drives the setup-failed UX)', async () => {
     fakeApi(setupApi, { createServerOwner: () => Promise.reject(new Error('setup_already_complete')) })
-    await expect(createServerOwner(request0(), 'ORGANISATION', false)).rejects.toThrow('setup_already_complete')
+    await expect(createServerOwner(request0())).rejects.toThrow('setup_already_complete')
   })
 
-  it('posts the chosen operating mode, and private only with the notice accepted (uc.admin.setup-server step 4)', async () => {
+  it('posts the prepared account as it is, with no operating mode (uc.admin.setup-server step 4, ADR 0093 § 14)', async () => {
     const create = vi.fn<SetupApi['createServerOwner']>().mockResolvedValue({ userId: 'u-owner' })
     fakeApi(setupApi, { createServerOwner: create })
-    await expect(createServerOwner(request0(), 'PRIVATE', false)).rejects.toBeInstanceOf(NoticeNotAccepted)
-    expect(create).not.toHaveBeenCalled()
-
-    await createServerOwner(request0(), 'PRIVATE', true)
-    expect(create).toHaveBeenLastCalledWith({ createServerOwnerRequest: { email: 'owner@example.com', operatingMode: 'PRIVATE' } })
-    await createServerOwner(request0(), 'ORGANISATION', false)
-    expect(create).toHaveBeenLastCalledWith({ createServerOwnerRequest: { email: 'owner@example.com', operatingMode: 'ORGANISATION' } })
+    await expect(createServerOwner(request0())).resolves.toEqual({ userId: 'u-owner' })
+    expect(create).toHaveBeenLastCalledWith({ createServerOwnerRequest: { email: 'owner@example.com' } })
+    expect(create.mock.calls[0][0].createServerOwnerRequest).not.toHaveProperty('operatingMode')
   })
 })
 

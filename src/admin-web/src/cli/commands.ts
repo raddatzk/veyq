@@ -12,12 +12,9 @@
 // their requirements + the external services +
 // the moderator roster and the rotation of the instance moderation key (ADR 0099) + the Server Owner's moderation
 // steps: the moderators' open proposals, a member's sign-in block and its lift (uc.moderation.take-a-measure step 5;
-// a tenant-offline proposal is taken with `tenant suspend`, which settles it) + the operating mode and the
-// operator's published values (ADR 0093 §§ 11 and 14) + the guest-write record's retention (ADR 0093 § 10). The
-// operating mode's notice is printed from admin-web's own
-// i18n (`i18n/operatingModeNotice.ts`), the words the console shows, and *private* needs `--accept-notice` — the
-// facade's rule (`operatingModeRequest`), not one of this file's. The notification address's code is typed into the
-// console only, as instance mail's is.
+// a tenant-offline proposal is taken with `tenant suspend`, which settles it) + the operator's published values (ADR
+// 0093 § 11; every one optional, no operating mode, § 14) + the guest-write record's retention (ADR 0093 § 10). The
+// notification address's code is typed into the console only, as instance mail's is.
 // Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `src/web/` (src/admin-web/CLAUDE.md), so
 // they are not Server-Owner commands. The instance's OWN mail settings are the Server Owner's, but stay console-only
@@ -103,17 +100,12 @@ import { StatementOutcome, type StatementDelivery } from '../features/instance/s
 import {
   clearOperator,
   CLI_RECIPIENT_KINDS,
-  getOperatingMode,
   getOperator,
-  needsAcceptance,
-  OperatingMode,
   operatorUpdateOf,
   parseLanguages,
   parseRecipient,
-  presetChanges,
-  setOperatingMode,
   setOperator,
-  type InstanceOperatingMode,
+  type InstanceOperator,
   type InstanceOperatorUpdate,
 } from '../features/instance/operator'
 import {
@@ -129,7 +121,6 @@ import {
   type InstanceGuestWriteRecord,
 } from '../features/instance/guestWriteRecord'
 import * as backupRetention from '../features/instance/backupRetention'
-import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 import { enterOrder, OrderInvalid, type AuthorityOrder, type OrderKind } from '../features/instance/orders'
 import { GROUNDS, stepStatement, StepStatementInvalid, type ServerOwnerStatementInput, type StepStatementDraft } from '../features/instance/stepStatement'
 import { formTime, renderOrderForm } from '../features/instance/orderForms'
@@ -312,25 +303,19 @@ async function signInBlockByAddress(address: string): Promise<string> {
   return found.id
 }
 
-/** `mode set <word>` → the mode. */
-const MODES: Record<string, OperatingMode> = { private: OperatingMode.Private, organisation: OperatingMode.Organisation }
-const MODE_WORD: Record<OperatingMode, string> = { PRIVATE: 'private', ORGANISATION: 'organisation' }
-
-/** The mode, the notice, and which preset switches the other mode would change — what `mode show` prints, and what
- *  `mode set` prints after setting (the notice "either way", ADR 0093 § 14). */
-function renderMode(m: InstanceOperatingMode, locale: CapabilityLocale): string {
-  const other = m.mode === OperatingMode.Private ? OperatingMode.Organisation : OperatingMode.Private
-  const changes = presetChanges(m.preset, other)
-  const lines = [
-    `mode ${MODE_WORD[m.mode]}${m.chosen ? '' : ' (none chosen; runs as organisation)'}`,
-    '',
-    noticeText(locale),
-    '',
-    changes.length
-      ? `mode set ${MODE_WORD[other]} would switch:\n${changes.map((c) => `  ${c.entry.id}  ${c.on ? 'on' : 'off'}  ${inLocale(c.entry.title, locale)}`).join('\n')}`
-      : `mode set ${MODE_WORD[other]} would switch nothing`,
-  ]
-  return lines.join('\n')
+/**
+ * The values as `operator show` prints them: JSON a script can read, with every value the Server Owner may set present
+ * and `null` where none is set — its gap, which every fixed text publishes as "not stated by this operator" (ADR 0093
+ * § 14: nothing is required, so nothing here is flagged either).
+ */
+function renderOperator(op: InstanceOperator): string {
+  return renderResult({
+    ...operatorUpdateOf(op),
+    notificationConfirmation: op.notificationConfirmation,
+    notificationConfirmedAt: op.notificationConfirmedAt ?? null,
+    instanceMailReady: op.instanceMailReady,
+    recipientSuggestions: op.recipientSuggestions,
+  })
 }
 
 /** The operator flags `operator set` takes, each to its field. `none` clears one; a flag left out keeps its value. */
@@ -666,36 +651,10 @@ export const COMMANDS: Record<string, Command> = {
     run: async (f) => removeModerator(await moderatorByAddress(f.address)),
     render: (r) => renderRoster(r as InstanceModeration),
   },
-  'mode show': {
-    usage: 'mode show [--lang en|de]',
-    summary: 'Print the operating mode, its notice, and which switches the other mode would set.',
-    flags: { lang },
-    run: () => getOperatingMode(),
-    render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
-  },
-  'mode set': {
-    usage: 'mode set <private|organisation> [--accept-notice] [--lang en|de]',
-    summary: 'Set the operating mode and the switches its preset names. Your own assessment, not veyq’s: private needs --accept-notice. Turns neither reporting nor the moderators off.',
-    flags: {
-      'accept-notice': { describe: 'you have read the notice and choose private on your own responsibility', required: false, switch: true },
-      lang,
-    },
-    operand: { name: 'mode', describe: 'private or organisation' },
-    run: async (f, env) => {
-      const mode = MODES[f.mode]
-      if (!mode) throw new CliError(`mode set takes private or organisation (got '${f.mode}')`)
-      const locale = cliLocale(f, env)
-      if (needsAcceptance(mode) && f['accept-notice'] !== 'true') {
-        throw new CliError(`${noticeText(locale)}\n\n${OPERATING_MODE_NOTICE[locale].accept}\nPass --accept-notice to choose private; nothing was set.`)
-      }
-      return setOperatingMode(mode, f['accept-notice'] === 'true')
-    },
-    render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
-  },
   'guest-write-record show': {
     usage: 'guest-write-record show',
     summary:
-      'Print how many days a guest’s write keeps its IP address, source port and time (default 7, whether you set it). Whether anything is kept at all is the capability core.public-shares.guest-write-record.',
+      'Print how many days a guest’s write keeps its IP address, source port and time (default 7, whether you set it). The record has no switch: it is kept wherever a guest may write, which the capabilities core.public-shares.contribute and .drop-box decide.',
     flags: {},
     run: () => getGuestWriteRecord(),
     render: (r) => renderGuestWriteRecord(r as InstanceGuestWriteRecord),
@@ -749,9 +708,10 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator show': {
     usage: 'operator show',
-    summary: 'Print the instance contact, the provider identification, the supervisory authority and the notification address with its confirmation.',
+    summary: 'Print the instance contact, the provider identification, the supervisory authority, the privacy notice’s values and the notification address with its confirmation; a value not set is null, published as “not stated by this operator”.',
     flags: {},
     run: () => getOperator(),
+    render: (r) => renderOperator(r as InstanceOperator),
   },
   'operator set': {
     usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<hosting|object-storage|mail-relay|backup|other:<what they do>>|<country code, e.g. DE>; …\'] [--data-protection-officer <n>]',
@@ -774,7 +734,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator clear': {
     usage: 'operator clear',
-    summary: 'Clear every operator value, the notification address and its confirmation included. The operating mode stays.',
+    summary: 'Clear every operator value, the notification address and its confirmation included.',
     flags: {},
     run: () => clearOperator(),
   },

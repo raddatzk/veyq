@@ -4,13 +4,8 @@ import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsHandler
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsSliceTest
 import me.raddatz.veyq.core.admin.instance.InstanceMailUpdateOutcome
-import me.raddatz.veyq.core.platform.capabilities.CapabilityPreset
-import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
-import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
-import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
-import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import com.icegreen.greenmail.util.GreenMail
 import com.icegreen.greenmail.util.ServerSetup
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -32,15 +27,10 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.UUID
 
 /**
- * The operating mode and the operator details (uc.admin.operator-details; ADR 0093 §§ 11 and 14, ADR 0088 decision 14,
- * ADR 0035 decision 7, ADR 0097 decision 5), over the full HTTP stack on the admin channel and the public listener:
- *   - an instance where no mode was ever chosen reads as ORGANISATION;
- *   - a mode sets its preset's instance switches and nothing else — never a tenant's row, never an entry without a
- *     preset — and setting it again sets the preset again (against a preset built here, as `CapabilityRegistryTest`
- *     builds its own register, so the rules do not hang on what the catalog's presets are today);
+ * The operator details (uc.admin.operator-details; ADR 0093 §§ 11 and 14, ADR 0035 decision 7, ADR 0097 decision 5),
+ * over the full HTTP stack on the admin channel and the public listener:
  *   - the values are set and cleared, each may stay empty, an out-of-bounds one is refused with nothing stored;
  *   - the notification address is confirmed by a mailed code ([me.raddatz.veyq.core.admin.instance.CodeConfirmation]):
  *     a wrong code spends an attempt, a changed address unconfirms without a write to the confirmation, no code goes
@@ -56,9 +46,6 @@ class OperatorDetailsSliceTest {
 
     @Inject
     lateinit var instanceMail: InstanceMailSettingsHandler
-
-    @Inject
-    lateinit var modes: OperatingModeHandler
 
     private lateinit var mailbox: GreenMail
 
@@ -76,65 +63,6 @@ class OperatorDetailsSliceTest {
         clear()
     }
 
-    // --- the operating mode ------------------------------------------------------------------------------------
-
-    @Test
-    fun anInstanceWhereNoModeWasChosenReadsAsOrganisation() {
-        owner().`when`().get("$PATH/mode").then().statusCode(200)
-            .body("mode", equalTo("ORGANISATION")).body("chosen", equalTo(false))
-            // The catalog's one preset entry today, served with its value per mode and its own switch now.
-            .body("preset.id", equalTo(listOf("core.public-shares.guest-write-record")))
-            .body("preset[0].onInPrivate", equalTo(false)).body("preset[0].onInOrganisation", equalTo(true)).body("preset[0].off", equalTo(false))
-        // A row that holds values but no mode (operating_mode NULL) reads the same.
-        put("""{"providerName":"Example e. V."}""").statusCode(200).body("operatingMode", equalTo("ORGANISATION"))
-        assertNull(row()!!.operatingMode, "precondition: the row exists and holds no mode")
-        owner().`when`().get("$PATH/mode").then().body("mode", equalTo("ORGANISATION")).body("chosen", equalTo(false))
-
-        // Control: a chosen mode is read as chosen.
-        owner().contentType(ContentType.JSON).body("""{"mode":"PRIVATE"}""").`when`().put("$PATH/mode")
-            .then().statusCode(200).body("mode", equalTo("PRIVATE")).body("chosen", equalTo(true))
-        owner().`when`().get(PATH).then().body("operatingMode", equalTo("PRIVATE"))
-        owner().contentType(ContentType.JSON).body("""{"mode":"HOUSEHOLD"}""").`when`().put("$PATH/mode").then().statusCode(400)
-        owner().contentType(ContentType.JSON).body("""{}""").`when`().put("$PATH/mode").then().statusCode(400)
-    }
-
-    @Test
-    fun privateWritesTheInstanceRowOfAnEntryWhoseValueIsOffAndOrganisationDeletesIt() {
-        modes.set(OperatingMode.PRIVATE, PRESETS)
-        assertEquals(setOf(PRESET_OFF_IN_PRIVATE), instanceRows(), "the preset entry is off in private; the other preset entry stays on")
-        assertEquals(OperatingMode.PRIVATE, modes.read(PRESETS).mode)
-        assertTrue(modes.read(PRESETS).preset.single { it.id == PRESET_OFF_IN_PRIVATE }.off, "the read says it is off now")
-
-        modes.set(OperatingMode.ORGANISATION, PRESETS)
-        assertEquals(emptySet<String>(), instanceRows(), "organisation switches it back on: the row is deleted")
-    }
-
-    @Test
-    fun aModeNeverTouchesATenantsRowOrAnEntryWithoutAPreset() {
-        val tenantId = seedTenant()
-        QuarkusTransaction.requiringNew().run {
-            TenantCapabilitySwitchEntity().apply {
-                id = UUID.randomUUID().toString(); this.tenantId = tenantId; capabilityId = PRESET_OFF_IN_PRIVATE
-            }.persist()
-        }
-        CapabilitySwitchFixtures.with(NOT_IN_PRESET) {
-            modes.set(OperatingMode.PRIVATE, PRESETS)
-            modes.set(OperatingMode.ORGANISATION, PRESETS)
-            assertEquals(setOf(NOT_IN_PRESET), instanceRows(), "an entry without a preset keeps its own switch")
-            assertEquals(listOf(PRESET_OFF_IN_PRIVATE), tenantRows(tenantId), "a tenant's switch is never written")
-        }
-    }
-
-    @Test
-    fun settingAModeAgainSetsItsPresetAgain() {
-        modes.set(OperatingMode.PRIVATE, PRESETS)
-        // The Server Owner switches the preset entry back on by hand: an ordinary switch afterwards.
-        QuarkusTransaction.requiringNew().run { CapabilitySwitchEntity.deleteById(PRESET_OFF_IN_PRIVATE) }
-        assertEquals(emptySet<String>(), instanceRows())
-        modes.set(OperatingMode.PRIVATE, PRESETS)
-        assertEquals(setOf(PRESET_OFF_IN_PRIVATE), instanceRows())
-    }
-
     // --- the values ----------------------------------------------------------------------------------------------
 
     @Test
@@ -148,11 +76,9 @@ class OperatorDetailsSliceTest {
             .body("providerAddress", equalTo("Musterstraße 1\n12345 Musterstadt")).body("providerEmail", equalTo("info@example.org"))
             .body("providerRepresentative", equalTo("Erika Mustermann")).body("supervisoryAuthority", equalTo("LfD Musterland"))
             .body("notificationEmail", equalTo(NOTIFY))
-        owner().contentType(ContentType.JSON).body("""{"mode":"PRIVATE"}""").`when`().put("$PATH/mode").then().statusCode(200)
-
         owner().`when`().delete(PATH).then().statusCode(200)
             .body("contactEmail", nullValue()).body("notificationEmail", nullValue()).body("providerName", nullValue())
-            .body("notificationConfirmation", equalTo("NOT_SET")).body("operatingMode", equalTo("PRIVATE"))
+            .body("notificationConfirmation", equalTo("NOT_SET"))
         assertNull(row()!!.codeHash, "clearing drops an outstanding code with the address")
     }
 
@@ -245,8 +171,8 @@ class OperatorDetailsSliceTest {
     fun theOperationsAreTheServerOwnersOnTheAdminChannelOnly() {
         val member = givenAdminChannel().header("Authorization", bearer(MEMBER_ID))
         member.`when`().get(PATH).then().statusCode(403).body("code", equalTo("not_server_owner"))
-        givenAdminChannel().header("Authorization", bearer(MEMBER_ID)).contentType(ContentType.JSON).body("""{"mode":"PRIVATE"}""")
-            .`when`().put("$PATH/mode").then().statusCode(403)
+        givenAdminChannel().header("Authorization", bearer(MEMBER_ID)).contentType(ContentType.JSON).body("{}")
+            .`when`().put(PATH).then().statusCode(403)
         given().header("Authorization", bearer(OWNER_ID)).`when`().get(PATH).then().statusCode(404) // the public port
         owner().`when`().get(PATH).then().statusCode(200) // control
     }
@@ -262,12 +188,6 @@ class OperatorDetailsSliceTest {
 
     private fun row(): OperatorDetailsEntity? =
         QuarkusTransaction.requiringNew().call { OperatorDetailsEntity.findById(OperatorDetailsEntity.SINGLETON_ID) }
-
-    private fun instanceRows(): Set<String> =
-        QuarkusTransaction.requiringNew().call { CapabilitySwitchEntity.listAll().mapTo(mutableSetOf()) { it.id } }
-
-    private fun tenantRows(tenantId: String): List<String> =
-        QuarkusTransaction.requiringNew().call { TenantCapabilitySwitchEntity.list("tenantId", tenantId).map { it.capabilityId } }
 
     /** Instance mail against the in-JVM relay, confirmed with the code it mailed the Server Owner. */
     private fun readyInstanceMail() {
@@ -297,13 +217,8 @@ class OperatorDetailsSliceTest {
     private fun wrong(code: String): String = code.map { if (it == '9') '0' else it + 1 }.joinToString("")
 
     private fun clear() {
-        QuarkusTransaction.requiringNew().run {
-            OperatorDetailsEntity.deleteAll()
-            TenantCapabilitySwitchEntity.delete("capabilityId", PRESET_OFF_IN_PRIVATE)
-        }
-        CapabilitySwitchFixtures.clear()
+        QuarkusTransaction.requiringNew().run { OperatorDetailsEntity.deleteAll() }
         InstanceMailSettingsSliceTest.clear()
-        modes.afterCommit()
     }
 
     private companion object {
@@ -316,15 +231,6 @@ class OperatorDetailsSliceTest {
         const val OTHER_NOTIFY = "alerts-new@example.org"
         const val MAIL_PORT = 13970
         val CODE = Regex("""(?m)^\s+([0-9]{8})\s*$""")
-
-        /** A preset built here (the catalog carries none yet): one entry off in private, one on in both. */
-        const val PRESET_OFF_IN_PRIVATE = "core.public-shares.contribute"
-        const val PRESET_ON_IN_BOTH = "core.group-space"
-        const val NOT_IN_PRESET = "core.device-linking"
-        val PRESETS = mapOf(
-            PRESET_OFF_IN_PRIVATE to CapabilityPreset(onInPrivate = false, onInOrganisation = true),
-            PRESET_ON_IN_BOTH to CapabilityPreset(onInPrivate = true, onInOrganisation = true),
-        )
 
         val FULL = """
             {"contactEmail":"$CONTACT","contactLanguages":["de","en"],"statementEmail":"statements@example.org",

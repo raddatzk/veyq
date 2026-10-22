@@ -7,9 +7,6 @@ data class Texts(val en: String, val de: String) {
 
 enum class StatementLang { EN, DE }
 
-/** The form a statement takes by the operating mode (ADR 0093 § 14): `FULL` (organisation) or `REDUCED` (private). */
-enum class StatementForm { FULL, REDUCED }
-
 /**
  * Where the affected object (ADR 0093 § 7): in veyq, once, for a moderator's measure ([IN_APP]); to the instance contact
  * for a Server Owner's own step, whose recipient cannot sign in or enter the tenant ([BY_CONTACT]).
@@ -18,12 +15,13 @@ enum class ObjectionChannel { IN_APP, BY_CONTACT }
 
 data class MeasureTexts(val measure: Texts, val reach: Texts)
 
-/** One passage of the statement: left out of the reduced form when [full], and rendered only when its [condition] holds. */
-data class Passage(val id: String, val full: Boolean, val condition: String?, val text: Texts)
+/** One passage of the statement, rendered only when its [condition] holds (there is one form, ADR 0093 § 14). */
+data class Passage(val id: String, val condition: String?, val text: Texts)
 
 /**
  * The clear fields one statement is rendered from (ADR 0049): the template's own texts for the clear enums, the
- * [provision] the moderator or the Server Owner named, the instance [contact]. [mailFacts] is set only for a Server
+ * [provision] the moderator or the Server Owner named, the instance [contact] (null renders as the template's gap).
+ * [mailFacts] is set only for a Server
  * Owner's step — their own words, which its mail carries (owner decision Q24 of cr-statement-legal-gaps); a moderator's
  * measure's facts never reach a mail.
  */
@@ -100,47 +98,46 @@ object StatementTemplate {
         "TERMS_BREACH" to Texts("it breaches the terms of use that apply here", "es verstößt gegen die hier geltenden Nutzungsbedingungen"),
     )
     val ROLES_JOINER = Texts(" and ", " und ")
+    val GAP = Texts("not stated by this operator", "von der Betreiberseite nicht angegeben")
     val PASSAGES: List<Passage> = listOf(
-        Passage("measure", full = false, condition = null, text = Texts("On {date}, the people who run this veyq instance took a measure: {measure}. {reach}", "Am {date} wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: {measure}. {reach}")),
-        Passage("roles", full = false, condition = null, text = Texts("You are told as {roles}.", "Du erhältst diese Begründung als {roles}.")),
-        Passage("facts", full = false, condition = "facts", text = Texts("What they found:", "Was sie festgestellt haben:")),
-        Passage("basis", full = true, condition = null, text = Texts("The measure was taken after {basis}.", "Die Maßnahme wurde ergriffen nach {basis}.")),
-        Passage("automation", full = true, condition = null, text = Texts("No automated means found or decided it: a person did.", "Kein automatisiertes Verfahren hat das erkannt oder entschieden, sondern ein Mensch.")),
-        Passage("ground", full = false, condition = null, text = Texts("The ground: {ground}.", "Der Grund: {ground}.")),
-        Passage("provision", full = false, condition = "provision", text = Texts("It relies on {provision}.", "Sie stützt sich auf {provision}.")),
-        Passage("scope", full = true, condition = null, text = Texts("It applies wherever this veyq instance is reached, and lasts until it is lifted.", "Sie gilt überall, wo diese veyq-Instanz erreichbar ist, und dauert an, bis sie aufgehoben wird.")),
-        Passage("objection", full = false, condition = "inApp", text = Texts("If you disagree, you can object once, in veyq, where you see this statement. Another moderator reviews your objection where there is one.", "Wenn du nicht einverstanden bist, kannst du einmal widersprechen, in veyq, dort, wo du diese Begründung siehst. Eine andere Person aus der Moderation prüft deinen Widerspruch, sofern es eine gibt.")),
-        Passage("objectionByContact", full = false, condition = "byContact", text = Texts("If you disagree, write to {contact}: the people who run this instance look at it again.", "Wenn du nicht einverstanden bist, schreib an {contact}: Wer diese Instanz betreibt, prüft es erneut.")),
-        Passage("contact", full = false, condition = "contact", text = Texts("Questions go to {contact}.", "Fragen gehen an {contact}.")),
-        Passage("courts", full = true, condition = null, text = Texts("You can also go to court; you do not need to object first.", "Du kannst dich auch an ein Gericht wenden; ein Widerspruch vorher ist dafür nicht nötig.")),
+        Passage("measure", condition = null, text = Texts("On {date}, the people who run this veyq instance took a measure: {measure}. {reach}", "Am {date} wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: {measure}. {reach}")),
+        Passage("roles", condition = null, text = Texts("You are told as {roles}.", "Du erhältst diese Begründung als {roles}.")),
+        Passage("facts", condition = "facts", text = Texts("What they found:", "Was sie festgestellt haben:")),
+        Passage("basis", condition = null, text = Texts("The measure was taken after {basis}.", "Die Maßnahme wurde ergriffen nach {basis}.")),
+        Passage("automation", condition = null, text = Texts("No automated means found or decided it: a person did.", "Kein automatisiertes Verfahren hat das erkannt oder entschieden, sondern ein Mensch.")),
+        Passage("ground", condition = null, text = Texts("The ground: {ground}.", "Der Grund: {ground}.")),
+        Passage("provision", condition = "provision", text = Texts("It relies on {provision}.", "Sie stützt sich auf {provision}.")),
+        Passage("scope", condition = null, text = Texts("It applies wherever this veyq instance is reached, and lasts until it is lifted.", "Sie gilt überall, wo diese veyq-Instanz erreichbar ist, und dauert an, bis sie aufgehoben wird.")),
+        Passage("objection", condition = "inApp", text = Texts("If you disagree, you can object once, in veyq, where you see this statement. Another moderator reviews your objection where there is one.", "Wenn du nicht einverstanden bist, kannst du einmal widersprechen, in veyq, dort, wo du diese Begründung siehst. Eine andere Person aus der Moderation prüft deinen Widerspruch, sofern es eine gibt.")),
+        Passage("objectionByContact", condition = "byContact", text = Texts("If you disagree, write to {contact}: the people who run this instance look at it again.", "Wenn du nicht einverstanden bist, schreib an {contact}: Wer diese Instanz betreibt, prüft es erneut.")),
+        Passage("contact", condition = null, text = Texts("Questions go to {contact}.", "Fragen gehen an {contact}.")),
+        Passage("courts", condition = null, text = Texts("You can also go to court; you do not need to object first.", "Du kannst dich auch an ein Gericht wenden; ein Widerspruch vorher ist dafür nicht nötig.")),
     )
     val REPORTER_DECISION: List<Passage> = listOf(
-        Passage("again", full = false, condition = null, text = Texts("If you have more information, you can report it again.", "Wenn du weitere Informationen hast, kannst du es erneut melden.")),
-        Passage("contact", full = false, condition = "contact", text = Texts("Questions go to {contact}.", "Fragen gehen an {contact}.")),
-        Passage("courts", full = true, condition = null, text = Texts("You can also go to court.", "Du kannst dich auch an ein Gericht wenden.")),
-        Passage("coordinator", full = true, condition = null, text = Texts("You can also complain to the Digital Services Coordinator of the Member State where you live or are established.", "Du kannst dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist.")),
+        Passage("again", condition = null, text = Texts("If you have more information, you can report it again.", "Wenn du weitere Informationen hast, kannst du es erneut melden.")),
+        Passage("contact", condition = null, text = Texts("Questions go to {contact}.", "Fragen gehen an {contact}.")),
+        Passage("courts", condition = null, text = Texts("You can also go to court.", "Du kannst dich auch an ein Gericht wenden.")),
+        Passage("coordinator", condition = null, text = Texts("Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator of the Member State where you live or are established.", "Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt, kannst du dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist.")),
     )
     val MAIL_SUBJECT = Texts("veyq: a moderation decision concerns you", "veyq: eine Moderationsentscheidung betrifft dich")
     val MAIL_FACTS_IN_VEYQ = Texts("What they found is in veyq: sign in at {domain} to read it.", "Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen.")
 
-    /** Whether [p] is rendered in [form] where [has] answers its condition. */
-    private fun shown(p: Passage, form: StatementForm, has: (String) -> Boolean): Boolean =
-        !(p.full && form == StatementForm.REDUCED) && (p.condition == null || has(p.condition))
+    /** Whether [p] is rendered where [has] answers its condition. */
+    private fun shown(p: Passage, has: (String) -> Boolean): Boolean = p.condition == null || has(p.condition)
 
     /**
-     * The statement as the mail carries it, in [lang]: every passage of [form] whose condition holds, the facts passage
+     * The statement as the mail carries it, in [lang]: every passage whose condition holds, the facts passage
      * replaced by the line that they are in veyq at [domain] (the tenant's host) — or, for a Server Owner's step, followed
      * by the facts themselves ([StatementFields.mailFacts]).
      */
-    fun renderMail(lang: StatementLang, form: StatementForm, fields: StatementFields, domain: String): String =
+    fun renderMail(lang: StatementLang, fields: StatementFields, domain: String): String =
         PASSAGES.filter { p ->
-            shown(p, form) { c ->
+            shown(p) { c ->
                 when (c) {
                     "facts" -> fields.hasFacts
                     "provision" -> !fields.provision.isNullOrBlank()
-                    "contact" -> fields.contact != null
                     "inApp" -> fields.channel == ObjectionChannel.IN_APP
-                    "byContact" -> fields.channel == ObjectionChannel.BY_CONTACT && fields.contact != null
+                    "byContact" -> fields.channel == ObjectionChannel.BY_CONTACT
                     else -> error("a condition the template does not know: $c")
                 }
             }
@@ -153,13 +150,12 @@ object StatementTemplate {
         }
 
     /** The mail's body: the English statement, a rule, the German one. */
-    fun mailBody(form: StatementForm, fields: StatementFields, domain: String): String =
-        renderMail(StatementLang.EN, form, fields, domain) + "\n\n—\n\n" + renderMail(StatementLang.DE, form, fields, domain)
+    fun mailBody(fields: StatementFields, domain: String): String =
+        renderMail(StatementLang.EN, fields, domain) + "\n\n—\n\n" + renderMail(StatementLang.DE, fields, domain)
 
-    /** A reporter's redress in [lang] and [form] (DSA Art. 16(5)): the reduced form keeps "report again" and the contact. */
-    fun renderRedress(lang: StatementLang, form: StatementForm, contact: String?): String =
-        REPORTER_DECISION.filter { p -> shown(p, form) { c -> c == "contact" && contact != null } }
-            .joinToString(" ") { it.text.of(lang).replace("{contact}", contact ?: "") }
+    /** A reporter's redress in [lang] (DSA Art. 16(5)); an instance without a contact shows the gap in its place. */
+    fun renderRedress(lang: StatementLang, contact: String?): String =
+        REPORTER_DECISION.joinToString(" ") { it.text.of(lang).replace("{contact}", contact ?: GAP.of(lang)) }
 
     private fun fill(text: String, lang: StatementLang, f: StatementFields, domain: String): String {
         val measure = MEASURES.getValue(f.measureKind)
@@ -173,7 +169,7 @@ object StatementTemplate {
             .replace("{basis}", BASIS.getValue(f.basis.name).of(lang))
             .replace("{ground}", GROUNDS.getValue(f.ground.name).of(lang))
             .replace("{provision}", f.provision?.trim().orEmpty())
-            .replace("{contact}", f.contact ?: "")
+            .replace("{contact}", f.contact ?: GAP.of(lang))
             .replace("{domain}", domain)
     }
 }

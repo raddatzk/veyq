@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The operator section of the terms (ADR 0035 decision 6), as the member gate, the share gate, the space's terms panel
-// and the public page show it: after the space's own text, read-only. While the guest-write record is on, its passage is
-// a pointer to the record's Art. 13 information, which is the instance privacy notice's (ADR 0035 decision 8, Q27 of
+// and the public page show it: after the space's own text, read-only. The guest-write record's passage (always served:
+// the record is kept wherever a guest may write, ADR 0093 § 10) is a pointer to the record's Art. 13 information, which is the instance privacy notice's (ADR 0035 decision 8, Q27 of
 // cr-instance-privacy-notice), with a link there — in a tab of its own, so a share page's gate keeps its fragment key.
 // The markdown is the server's rendering of veyq's fixed text with values the Server Owner typed; `renderMarkdown`
 // escapes first (safe subset), so `v-html` is safe.
