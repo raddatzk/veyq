@@ -26,6 +26,21 @@ const SET_MARK_IMPORT = {
   message: 'setMark lowers a trust mark; only the user-confirmed reset (trustReset/trustReset.ts) may call it.',
 }
 
+// `veyq/ui-through-the-layer`: the component libraries live behind `src/shared/ui/` (ADR 0107 decision 2). No view,
+// composable, application or test imports one; the next time a library has to go, the change stays in one directory.
+// A constant because it joins every block that sets `no-restricted-imports` for a file under `src/` (flat config
+// resolves a rule by name, last block wins: a block of its own would replace `veyq/one-sign-out`'s patterns for every
+// `.vue` file, and `veyq/tests-use-the-real-catalog`'s would replace it for every test).
+const UI_LIBRARY_IMPORT = {
+  regex: '^(primevue|@primevue|@primeuix|primeicons|reka-ui|@lucide/vue)(/|$)',
+  message: 'A component library is reached through the layer in src/shared/ui/ (ADR 0107): import its Veyq* component instead.',
+}
+const UI_LAYER = 'src/shared/ui/**'
+const SESSION_END_IMPORT = {
+  regex: '(^|/)sessionEnd(\\.[jt]s)?$',
+  message: 'A screen signs out through features/account/login/signOut, never the session ending itself.',
+}
+
 // `veyq/seeders-use-the-generated-client` below.
 const SEEDER_NO_SHELL = ['node:child_process', 'child_process'].map((name) => ({
   name,
@@ -40,6 +55,15 @@ const REAL_CATALOG_SYNTAX = [
   {
     selector: "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.value='vue-i18n']",
     message: 'Do not mock vue-i18n; mount with realI18n() from src/test/i18n and assert through its t().',
+  },
+]
+
+// `veyq/tests-use-the-real-catalog` below, and its twin for the layer's own tests.
+const REAL_CATALOG_PATHS = [
+  {
+    name: 'vue-i18n',
+    importNames: ['createI18n'],
+    message: 'Mount with realI18n() from src/test/i18n — the real catalog, where a missing key fails the test.',
   },
 ]
 
@@ -134,20 +158,32 @@ export default defineConfigWithVueTs(
     // ending in `app/sessionEnd` — a screen that could reach the ending could assemble its own sign-out, and a
     // screen-level copy that skipped half the sequence is what this replaced. LIMIT: a `.ts` composable is not
     // covered, and neither is a screen that calls the session API's revoke directly and then navigates.
+    // It carries `veyq/ui-through-the-layer`'s pattern too (see UI_LIBRARY_IMPORT), which the next block lifts for the
+    // layer's own components.
     name: 'veyq/one-sign-out',
     files: ['**/*.vue'],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              regex: '(^|/)sessionEnd(\\.[jt]s)?$',
-              message: 'A screen signs out through features/account/login/signOut, never the session ending itself.',
-            },
-          ],
-        },
-      ],
+      'no-restricted-imports': ['error', { patterns: [SESSION_END_IMPORT, UI_LIBRARY_IMPORT] }],
+    },
+  },
+  {
+    // The layer's components may import a library; they still sign nobody out.
+    name: 'veyq/one-sign-out-in-the-layer',
+    files: [`${UI_LAYER}/*.vue`],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [SESSION_END_IMPORT] }],
+    },
+  },
+  {
+    // The library restriction for script modules (see UI_LIBRARY_IMPORT); `.vue` files get it from `veyq/one-sign-out`,
+    // tests from `veyq/tests-use-the-real-catalog`. LIMIT: a dynamic `import()` or a re-export through a module of the
+    // layer is not seen, and nothing stops the layer from re-exporting a library wholesale (ADR 0107 decision 3 forbids
+    // it; review holds it).
+    name: 'veyq/ui-through-the-layer',
+    files: ['src/**/*.ts'],
+    ignores: [UI_LAYER, 'src/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [UI_LIBRARY_IMPORT] }],
     },
   },
   {
@@ -233,16 +269,20 @@ export default defineConfigWithVueTs(
       'no-restricted-imports': [
         'error',
         {
-          paths: [
-            {
-              name: 'vue-i18n',
-              importNames: ['createI18n'],
-              message: 'Mount with realI18n() from src/test/i18n — the real catalog, where a missing key fails the test.',
-            },
-          ],
+          paths: REAL_CATALOG_PATHS,
+          // `veyq/ui-through-the-layer` (see UI_LIBRARY_IMPORT): a test mounts the layer, never a library.
+          patterns: [UI_LIBRARY_IMPORT],
         },
       ],
       'no-restricted-syntax': ['error', ...REAL_CATALOG_SYNTAX],
+    },
+  },
+  {
+    // The layer's own tests prove a wrapper against the library it wraps, so they may import it; the catalog rule stays.
+    name: 'veyq/tests-use-the-real-catalog-in-the-layer',
+    files: [`${UI_LAYER}/*.test.ts`],
+    rules: {
+      'no-restricted-imports': ['error', { paths: REAL_CATALOG_PATHS }],
     },
   },
   {

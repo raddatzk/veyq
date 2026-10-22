@@ -1,8 +1,4 @@
 import { createApp } from 'vue'
-import PrimeVue from 'primevue/config'
-import ToastService from 'primevue/toastservice'
-import Tooltip from 'primevue/tooltip'
-import Aura from '@primeuix/themes/aura'
 import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'
@@ -10,9 +6,10 @@ import { boot } from './app/boot'
 import { registerApplications } from './applications'
 import { registerApplicationMessages } from './applicationMessages'
 import { initializeTheme } from './shared/state/useThemeState'
-import { syncPrimeVueLocale } from './app/primeVueLocale'
 import './style.css'
-import 'primeicons/primeicons.css'
+// After style.css: the layer brings the icon font's sheet, whose `.pi` rules must come after the app's own (ui.css says
+// where two classes are needed to win against it).
+import { uiPlugin } from './shared/ui/plugin'
 
 async function bootstrap() {
   // Apply the stored theme before first paint (no flash of the wrong mode).
@@ -26,12 +23,9 @@ async function bootstrap() {
   await boot()
 
   const app = createApp(App)
-    .use(PrimeVue, { theme: { preset: Aura, options: { darkModeSelector: '.veyq-dark' } } })
-    .use(ToastService)
     .use(i18n)
+    .use(uiPlugin)
     .use(router)
-  app.directive('tooltip', Tooltip)
-  syncPrimeVueLocale(app)
 
   router.isReady().then(() => app.mount('#app'))
 }

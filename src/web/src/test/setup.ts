@@ -1,14 +1,13 @@
-// Vitest global setup. Components now route transient feedback through `useToast` (cr-0157/ADR 0039), which
-// injects PrimeVue's toast service. Install `ToastService` into the @vue/test-utils global config so every
-// mounted component satisfies the `usePrimeToast()` injection without each test having to register it (tests
-// that stub the shared `useToast` composable are unaffected).
+// Vitest global setup. Every mounted component gets the UI layer installed (`shared/ui/plugin`'s test twin): its
+// components work, and `useToast` (cr-0157/ADR 0039) finds the toast channel it injects, without each test having to
+// register it (tests that stub the shared `useToast` composable are unaffected).
 import { config, enableAutoUnmount } from '@vue/test-utils'
 import { beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
-import ToastService from 'primevue/toastservice'
+import { uiTestPlugin } from '../shared/ui/plugin'
 import { registerApplicationMessages } from '../applicationMessages'
 
-config.global.plugins.push(ToastService)
+config.global.plugins.push(uiTestPlugin)
 
 // The applications' strings (inbox #513): core's catalog holds core's namespaces only, and each application's arrive
 // through the composition root's catalog half, as in `main.ts` — for EVERY test file, the node-environment suites too

@@ -8,8 +8,8 @@ import PrimeVue, { type PrimeVueConfiguration } from 'primevue/config'
 import Dialog from 'primevue/dialog'
 import Password from 'primevue/password'
 import { syncPrimeVueLocale } from './primeVueLocale'
-import { realI18n } from '../test/i18n'
-import { i18n } from '../i18n'
+import { realI18n } from '../../test/i18n'
+import { i18n } from '../../i18n'
 
 const DialogHost = defineComponent(() => () => h(Dialog, { visible: true, header: 'x', modal: false }, () => 'body'))
 const PasswordHost = defineComponent(() => () => h(Password, { modelValue: '', feedback: false, toggleMask: true }))
