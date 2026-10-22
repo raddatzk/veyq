@@ -16,7 +16,8 @@
 ## Main flow
 
 1. The Server Owner opens **Server → Object store** in the admin console. With no store set, it says so, and says that
-   tenants cannot be created until a store has passed its check.
+   tenants cannot be created until a store has passed its check. Where the recipe passed a bundled-store hint, the
+   server has usually set the bundled store and checked it already (A8), and the page opens on that result.
 2. The Server Owner picks a **type**: *S3-compatible* (the default) or *Garage*. Where the recipe passed a
    bundled-store hint, the console also offers **Use the bundled store**.
 3. For *S3-compatible* they enter the endpoint, the public endpoint browsers reach, the bucket, the region, the
@@ -62,6 +63,15 @@
   sweep deletes it. The page shows those candidates, their age and the date the first will go; **pause** stops the
   deletion and keeps the counting, **resume** lets it go on. A restore or a rollback restarts every grace period and
   withdraws the confirmation, and so does a changed store setting. The sweep itself never deletes an object.
+- **A8 — The bundled store chooses itself** *(planned, `cr-bundled-store-adopts-itself`; ADR 0089 decision 3)*.
+  Where the recipe passed a bundled-store hint and the instance holds no store setting — none in use, none pending —
+  the server saves the bundled store as pending after its boot provisioning of the bundled Garage, and runs the
+  main flow's check (step 5) itself, retrying while the domain, the certificate or the proxy in front of the store
+  are still coming up. A pass puts it in use, exactly as the Server Owner's check would (step 6); a failure stays
+  pending with its step named (A1), for the Server Owner to check again. Nobody chooses or saves anything. A setting
+  the Server Owner saved first is never replaced, and a restore's setting wins. While the bundled store waits for
+  its check, the same-origin route to its bucket exists, so the check's probe can reach it through the public
+  endpoint ([uc.admin.tenant-reachability](uc.admin.tenant-reachability.md)).
 
 ## Quality notes
 

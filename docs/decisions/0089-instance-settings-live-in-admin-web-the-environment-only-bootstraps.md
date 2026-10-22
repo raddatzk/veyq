@@ -1,6 +1,7 @@
 # ADR 0089 — Instance settings live in admin-web; the environment only bootstraps
 
-- Status: Accepted; built for the object store (`cr-store-connection-in-admin-web`)
+- Status: Accepted; built for the object store (`cr-store-connection-in-admin-web`). Decision 3's second
+  paragraph (amended 2026-10-22) is not built yet (`cr-bundled-store-adopts-itself`)
 - Date: 2026-10-15
 
 ## Context
@@ -42,6 +43,20 @@ Garage, so using one means editing the compose file, and under Helm it is not po
    bundled store*; choosing it stores a reference to the hint, not a copy of its secrets. A restore onto a fresh
    install and a lost config-secret key therefore leave the bundled case untouched: it reads the hint of the install
    it runs on.
+
+   **Where the hint exists and the instance holds no store setting — none in use and none pending — the server
+   chooses the bundled store itself** *(amended 2026-10-22, owner: the bundled store is preconfigured, so it should
+   need no step of the Server Owner's)*. The hint exists only where the operator opted into the bundled
+   Garage (the Compose default, the chart's `garage.enabled`), so there is nothing left for the Server Owner to
+   decide, and a step they have to click is a step that only delays the first tenant. After its boot provisioning of
+   the bundled Garage has finished, the server saves the bundled store as the pending setting and runs **the same
+   check** the Server Owner's *Check store* runs; decision 5 is unchanged, so only a passing check puts it in use, and
+   a failing one stays pending, naming its step, for the Server Owner to check again. The check is kept, not skipped:
+   *preconfigured* says nobody has to type anything, not that the public endpoint, the certificate or the CORS rule
+   in front of the store work, and decision 6 still gates a tenant on it. The condition is read at every boot and
+   nothing marks it done, so a Server Owner who discarded a pending store of their own and left nothing saved gets
+   the bundled store back at the next start; a store of their own replaces it through A2 until the first blob fixes
+   it (decision 6). A restore replaces the setting wholesale while the app is stopped, so the restored setting wins.
 4. **Store credentials are sealed under the config-secret key** ([ADR 0050](0050-operator-config-secret-encryption.md)),
    as the tenants' SMTP passwords are, and each sealed value records the fingerprint of the key that sealed it.
    When the key is absent or is not the one that sealed a value, the console says which values cannot be opened and
@@ -83,7 +98,8 @@ Garage, so using one means editing the compose file, and under Helm it is not po
 - **Rejected:** keeping the store in environment variables (shell access to change, a restart to apply, a log to
   check, and no external store under Helm); keeping only the credentials in the environment and the rest in
   admin-web (two places for one setting); a mandatory store step right after the first login (the console has
-  more to offer than tenants, and only tenants need a store); a backup tool that asks the running app for presigned
+  more to offer than tenants, and only tenants need a store); a bundled store that is in use without a check
+  (decision 3's amendment: its public path is exactly what an operator's domain, proxy and certificate can break); a backup tool that asks the running app for presigned
   URLs (the capture is cold, so no app is running to sign); an admin endpoint that hands out store credentials
   (a surface whose only job is to leak a secret).
 
