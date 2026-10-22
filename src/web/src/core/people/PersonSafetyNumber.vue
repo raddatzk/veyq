@@ -13,8 +13,9 @@
 // Operator-blind: the only server call is the pin store's sealed write; who verified whom never leaves the device.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { getPin, foldTrust, markVerified, safetyNumberOfFingerprint, IdentityMovedError, type TrustState } from '../../features/account/identityPins'
 import { compareScan, fingerprintDigestB64 } from '../../features/account/safetyCode'
 import { TrustStateRefused, refusalMessageKey } from '../../features/account/trustMarks'
@@ -164,60 +165,60 @@ watch(() => props.userId, () => {
         <h2 id="person-safety-title">{{ t('safety.theirsTitle') }}</h2>
         <template v-if="ready">
           <span v-if="ready.state === 'verified'" class="veyq-badge success" data-testid="person-safety-state">
-            <i class="pi pi-verified" aria-hidden="true"></i>{{ t('safety.stateVerified') }}
+            <VeyqIcon name="verified" />{{ t('safety.stateVerified') }}
           </span>
           <span v-else-if="ready.state === 'changed'" class="veyq-badge changed" data-testid="person-safety-state">
-            <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ ready.pinVerified ? t('safety.badgeVerifiedChanged') : t('verify.badgeChanged') }}
+            <VeyqIcon name="exclamation-triangle" />{{ ready.pinVerified ? t('safety.badgeVerifiedChanged') : t('verify.badgeChanged') }}
           </span>
           <span v-else class="veyq-badge muted" data-testid="person-safety-state">{{ t('safety.stateUnverified') }}</span>
         </template>
       </div>
 
       <p v-if="view.kind === 'loading'" class="veyq-form-copy" role="status">{{ t('people.loading') }}</p>
-      <Message v-else-if="view.kind === 'refused'" severity="error" :closable="false">
+      <VeyqMessage v-else-if="view.kind === 'refused'" tone="error">
         {{ t(view.messageKey) }}
         <TrustResetLink />
-      </Message>
+      </VeyqMessage>
       <div v-else-if="view.kind === 'error'" role="alert">
         <p class="veyq-form-copy">{{ t('safety.loadError') }}</p>
-        <Button type="button" :label="t('people.retry')" severity="secondary" text size="small" @click="load" />
+        <VeyqButton :label="t('people.retry')" variant="secondary" appearance="text" size="small" @click="load" />
       </div>
 
       <template v-else-if="ready">
         <p class="veyq-form-copy">{{ t('safety.theirsIntro', { name }) }}</p>
-        <Message v-if="ready.number === null" severity="error" :closable="false">{{ t('safety.unreadable') }}</Message>
+        <VeyqMessage v-if="ready.number === null" tone="error">{{ t('safety.unreadable') }}</VeyqMessage>
         <template v-else>
           <SafetyDigits v-if="!comparing" :number="ready.number" />
 
-          <Message v-if="ready.state === 'changed'" severity="warn" :closable="false" data-testid="person-safety-changed">
+          <VeyqMessage v-if="ready.state === 'changed'" tone="warn" data-testid="person-safety-changed">
             {{ ready.pinVerified ? t('safety.changedVerifiedNote', { name }) : t('safety.changedNote', { name }) }}
             <div class="person-safety-inline">
-              <Button type="button" :label="t('verify.review')" icon="pi pi-exclamation-triangle" severity="warn" text size="small" data-testid="person-safety-review" @click="reviewOpen = true" />
+              <VeyqButton :label="t('verify.review')" icon="exclamation-triangle" variant="warn" appearance="text" size="small" data-testid="person-safety-review" @click="reviewOpen = true" />
             </div>
-          </Message>
+          </VeyqMessage>
 
           <div v-if="comparing" class="person-safety-compare" data-testid="person-safety-compare">
             <p class="veyq-form-copy">{{ t('safety.compareHint', { name }) }}</p>
             <SafetyDigits :number="ready.number" large />
             <div class="veyq-dialog-action-row">
-              <Button type="button" :label="t('safety.theyDiffer')" icon="pi pi-times" severity="secondary" outlined data-testid="person-safety-differ" @click="theyDiffer" />
-              <Button type="button" :label="t('safety.theyMatch')" icon="pi pi-check" :loading="verifying" data-testid="person-safety-match" @click="theyMatch" />
+              <VeyqButton :label="t('safety.theyDiffer')" icon="times" variant="secondary" appearance="outlined" data-testid="person-safety-differ" @click="theyDiffer" />
+              <VeyqButton :label="t('safety.theyMatch')" icon="check" :loading="verifying" data-testid="person-safety-match" @click="theyMatch" />
             </div>
           </div>
           <div v-else class="person-safety-actions">
-            <Button type="button" :label="t('safety.scan')" icon="pi pi-camera" severity="secondary" outlined size="small" :disabled="verifying" data-testid="person-safety-scan" @click="startScan" />
-            <Button type="button" :label="t('safety.compare')" icon="pi pi-list" severity="secondary" outlined size="small" :disabled="verifying" data-testid="person-safety-compare-start" @click="startCompare" />
+            <VeyqButton :label="t('safety.scan')" icon="camera" variant="secondary" appearance="outlined" size="small" :disabled="verifying" data-testid="person-safety-scan" @click="startScan" />
+            <VeyqButton :label="t('safety.compare')" icon="list" variant="secondary" appearance="outlined" size="small" :disabled="verifying" data-testid="person-safety-compare-start" @click="startCompare" />
           </div>
 
-          <Message v-if="outcome === 'verified'" severity="success" :closable="false" data-testid="person-safety-outcome">{{ t('safety.verified', { name }) }}</Message>
-          <Message v-else-if="outcome === 'mismatch'" severity="error" :closable="false" data-testid="person-safety-outcome">{{ t('safety.mismatch', { name }) }}</Message>
-          <Message v-else-if="outcome === 'foreign'" severity="warn" :closable="false" data-testid="person-safety-outcome">{{ t('safety.foreign') }}</Message>
-          <Message v-else-if="outcome === 'moved'" severity="warn" :closable="false" data-testid="person-safety-outcome">{{ t('safety.moved', { name }) }}</Message>
-          <Message v-else-if="outcome === 'refused'" severity="error" :closable="false" data-testid="person-safety-outcome">
+          <VeyqMessage v-if="outcome === 'verified'" tone="success" data-testid="person-safety-outcome">{{ t('safety.verified', { name }) }}</VeyqMessage>
+          <VeyqMessage v-else-if="outcome === 'mismatch'" tone="error" data-testid="person-safety-outcome">{{ t('safety.mismatch', { name }) }}</VeyqMessage>
+          <VeyqMessage v-else-if="outcome === 'foreign'" tone="warn" data-testid="person-safety-outcome">{{ t('safety.foreign') }}</VeyqMessage>
+          <VeyqMessage v-else-if="outcome === 'moved'" tone="warn" data-testid="person-safety-outcome">{{ t('safety.moved', { name }) }}</VeyqMessage>
+          <VeyqMessage v-else-if="outcome === 'refused'" tone="error" data-testid="person-safety-outcome">
             {{ t(outcomeRefusal) }}
             <TrustResetLink />
-          </Message>
-          <Message v-else-if="outcome === 'failed'" severity="error" :closable="false" data-testid="person-safety-outcome">{{ t('safety.failed') }}</Message>
+          </VeyqMessage>
+          <VeyqMessage v-else-if="outcome === 'failed'" tone="error" data-testid="person-safety-outcome">{{ t('safety.failed') }}</VeyqMessage>
         </template>
       </template>
     </template>

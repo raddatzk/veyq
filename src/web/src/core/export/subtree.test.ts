@@ -76,7 +76,7 @@ beforeEach(() => {
   })
   if (!registry.kind(FILE).supported) {
     registry.registerKind({
-      kind: FILE, icon: 'x', shareable: false, downloadsAsFile: true, contentSchema: { application: 't', version: 1 },
+      kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const bytes = contents.get(ctx.node.id)!
         const file = ctx.addPayload(ctx.node.name, { size: bytes.length, mediaType: 'text/plain', chunks: async function* () { yield bytes.subarray(0, 3); yield bytes.subarray(3) } })
@@ -92,7 +92,7 @@ beforeEach(() => {
       },
     })
     registry.registerKind({
-      kind: ALBUM, icon: 'x', shareable: false, contentSchema: { application: 't', version: 1 },
+      kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const files = albumFiles.map(([name, body]) => ctx.addPayload(name, { size: body.length, mediaType: 'text/plain', chunks: async function* () { yield text(body) } }))
         return { type: 't.album', schema: 1, files }
@@ -105,10 +105,10 @@ beforeEach(() => {
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
-    registry.registerKind({ kind: ODD, icon: 'x', shareable: false }) // no hooks: cannot be downloaded
+    registry.registerKind({ kind: ODD, icon: 'file', shareable: false }) // no hooks: cannot be downloaded
     // a container that downloads with a content of its own and imports as a plain folder (a Depot drop box's shape)
     registry.registerKind({
-      kind: BOX, icon: 'x', shareable: false, contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
+      kind: BOX, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
       exportContent: async () => ({ type: 't.box', schema: 1 }),
       validateContent: (c) => (Object.keys(c).every((k) => k === 'type' || k === 'schema') ? null : { code: 'invalid_manifest', message: 'a box with more' }),
     })

@@ -8,7 +8,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -52,12 +51,12 @@ function head(role: ShareRole, guestWriteRecordDays: number | null): PublicShare
   }
 }
 
-const stubs = { Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' } }
+const stubs = { VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' } }
 
 let router: Router
 async function mountPage(role: ShareRole, days: number | null) {
   vi.mocked(resolvePublicShare).mockResolvedValue(head(role, days))
-  const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } } })
+  const w = mount(ShareView, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
   await vi.waitFor(() => expect(w.find('.veyq-node-header').exists()).toBe(true))
   return w

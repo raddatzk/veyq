@@ -8,7 +8,6 @@
 // locale pick) + the REAL ShareView wiring (needsTerms/loadTerms/acceptTerms) — only the network resolve/terms
 // reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const SHARE_ID = 's1'
@@ -59,7 +58,7 @@ import type { OperatorSection } from '../core/terms/operatorSection'
 function mountShareView() {
   return mount(ShareView, {
     global: {
-      plugins: [realI18n(), PrimeVue],
+      plugins: [realI18n()],
       stubs: { MediaGrid: true, OptimisticTile: true },
     },
   })

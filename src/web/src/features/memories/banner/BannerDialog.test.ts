@@ -4,7 +4,6 @@
 // awaited, with its progress, its cancel and its failure said in words.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DOMWrapper, mount, flushPromises, type VueWrapper } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import { realI18n, t } from '../../../test/i18n'
 import BannerDialog from './BannerDialog.vue'
 import { BannerStaleError, MAX_BANNER_IMAGE_BYTES } from './bannerWrite'
@@ -18,7 +17,7 @@ const stored: Banner = {
 }
 
 let mounted: VueWrapper[] = []
-/** The dialog is teleported into the body (PrimeVue's portal): it is read there. */
+/** The dialog is teleported into the body (the dialog's portal): it is read there. */
 const page = () => new DOMWrapper(document.body)
 
 async function mountDialog(props: Record<string, unknown> = {}) {
@@ -26,7 +25,7 @@ async function mountDialog(props: Record<string, unknown> = {}) {
   const deriver = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn(async () => new Uint8Array([0xff, 0xd8])) } as unknown as MediaDeriver
   const wrapper = mount(BannerDialog, {
     props: { current: null, currentSrc: null, save, deriver, ...props },
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
     attachTo: document.body,
   })
   mounted.push(wrapper)

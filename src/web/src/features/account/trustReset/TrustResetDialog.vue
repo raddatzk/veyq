@@ -13,10 +13,10 @@
 // acknowledgement mirrors EmergencyKitSave's Checkbox row — the built screens are the design source.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { resetAccountDocument, type ResetOutcome } from './trustReset'
 import type { AccountDocument } from '../trustMarks'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -56,43 +56,42 @@ async function confirm() {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     v-model:visible="visible"
     :header="t(`trustReset.confirmTitle.${props.document}`)"
-    modal
     :closable="!busy"
     :close-on-escape="!busy"
   >
     <p class="dialog-copy" data-test="trust-reset-cost">{{ t(`trustReset.cost.${props.document}`) }}</p>
     <p class="dialog-copy">{{ t('trustReset.serverCanWait') }}</p>
     <label class="trust-reset-ack">
-      <Checkbox v-model="acknowledged" :binary="true" :disabled="busy" input-id="trust-reset-ack" data-test="trust-reset-ack" />
+      <VeyqCheckbox v-model="acknowledged" :disabled="busy" input-id="trust-reset-ack" data-test="trust-reset-ack" />
       <span>{{ t('trustReset.acknowledge') }}</span>
     </label>
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+    <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
     <div class="veyq-dialog-action-row">
-      <Button
+      <VeyqButton
         type="button"
         :label="t('common.cancel')"
-        icon="pi pi-times"
-        severity="secondary"
-        outlined
+        icon="times"
+        variant="secondary"
+        appearance="outlined"
         :disabled="busy"
         data-test="trust-reset-cancel"
         @click="visible = false"
       />
-      <Button
+      <VeyqButton
         type="button"
         :label="t('trustReset.confirm')"
-        icon="pi pi-refresh"
-        severity="danger"
+        icon="refresh"
+        variant="danger"
         :loading="busy"
         :disabled="!canConfirm"
         data-test="trust-reset-confirm"
         @click="confirm"
       />
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

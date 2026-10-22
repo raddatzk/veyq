@@ -15,11 +15,11 @@ const hooks = { exportContent: async () => null, importContent: async () => ({ n
 
 beforeAll(() => {
   if (!registry.kind('CP_STREAMS').supported) {
-    registry.registerKind({ kind: 'CP_STREAMS', icon: 'x', shareable: false, ...hooks, importStreams: true })
-    registry.registerKind({ kind: 'CP_WHOLE', icon: 'x', shareable: false, ...hooks }) // its import needs whole payloads
-    registry.registerKind({ kind: 'CP_AS_FOLDER', icon: 'x', shareable: false, exportContent: hooks.exportContent, importsAsFolder: true })
-    registry.registerKind({ kind: 'CP_NO_IMPORT', icon: 'x', shareable: false, exportContent: hooks.exportContent, importStreams: true })
-    registry.registerKind({ kind: 'CP_NONE', icon: 'x', shareable: false })
+    registry.registerKind({ kind: 'CP_STREAMS', icon: 'file', shareable: false, ...hooks, importStreams: true })
+    registry.registerKind({ kind: 'CP_WHOLE', icon: 'file', shareable: false, ...hooks }) // its import needs whole payloads
+    registry.registerKind({ kind: 'CP_AS_FOLDER', icon: 'file', shareable: false, exportContent: hooks.exportContent, importsAsFolder: true })
+    registry.registerKind({ kind: 'CP_NO_IMPORT', icon: 'file', shareable: false, exportContent: hooks.exportContent, importStreams: true })
+    registry.registerKind({ kind: 'CP_NONE', icon: 'file', shareable: false })
   }
 })
 
@@ -49,7 +49,7 @@ describe('canCopy', () => {
 })
 
 describe('the action', () => {
-  const app = (...ids: string[]): NodeHeaderAction[] => ids.map((id) => ({ id, label: id, icon: 'x', onClick: () => {} }))
+  const app = (...ids: string[]): NodeHeaderAction[] => ids.map((id) => ({ id, label: id, icon: 'file', onClick: () => {} }))
 
   it('is one "Copy to…" for header and row alike, placed right after the application\'s move, that calls back', () => {
     let called = 0
@@ -57,7 +57,7 @@ describe('the action', () => {
     const row = copyRowActions(t, unlocked, { id: 'n', kind: FOLDER_KIND }, () => called++)
     for (const [a, ...rest] of [header, row]) {
       expect(rest).toEqual([])
-      expect(a).toMatchObject({ id: 'copy', label: 'node.copy.action', icon: 'pi pi-copy', placement: { after: 'move' } })
+      expect(a).toMatchObject({ id: 'copy', label: 'node.copy.action', icon: 'copy', placement: { after: 'move' } })
       a.onClick()
     }
     expect(called).toBe(2)

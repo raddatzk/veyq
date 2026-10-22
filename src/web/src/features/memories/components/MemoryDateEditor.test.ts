@@ -5,21 +5,21 @@ import MemoryDateEditor from './MemoryDateEditor.vue'
 import type { MemoryDate } from '../memoryDate'
 import { realI18n } from '../../../test/i18n'
 
-// Stub the PrimeVue pieces so the editor's own logic (mode switch → fitting inputs, validation, buildDate) is
-// what's under test — not the DatePicker overlay, which happy-dom can't drive.
+// Stub the layer's pieces so the editor's own logic (mode switch → fitting inputs, validation, buildDate) is
+// what's under test — not the date field's calendar overlay, which happy-dom can't drive.
 const stubs = {
-  Dialog: { template: '<div class="dlg"><slot /></div>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Button: {
+  VeyqDialog: { template: '<div class="dlg"><slot /></div>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqButton: {
     props: ['type', 'label', 'disabled'],
     template: `<button :type="type || 'button'" :disabled="disabled" @click="$emit('click', $event)">{{ label }}</button>`,
   },
-  SelectButton: {
+  VeyqToggleGroup: {
     props: ['modelValue', 'options'],
     emits: ['update:modelValue'],
     template: `<div class="modes"><button v-for="o in options" :key="o.value" :data-mode="o.value" @click="$emit('update:modelValue', o.value)">{{ o.label }}</button></div>`,
   },
-  IsoDateField: {
+  VeyqDateField: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: `<input class="iso" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,

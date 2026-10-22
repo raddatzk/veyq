@@ -4,8 +4,8 @@
 // one line saying a check could not run. One component for the dialogs that choose a password, so the wording and
 // the control cannot drift apart between them.
 import { useI18n } from 'vue-i18n'
-import Message from 'primevue/message'
-import Checkbox from 'primevue/checkbox'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
 import type { BreachState } from './passwordWarning'
 
 defineProps<{
@@ -21,16 +21,16 @@ const { t } = useI18n()
 
 <template>
   <small class="field-hint">{{ t('password.pwnedNote') }}</small>
-  <Message v-if="state.kind === 'hit' || state.kind === 'accepted'" severity="warn" :closable="false">
+  <VeyqMessage v-if="state.kind === 'hit' || state.kind === 'accepted'" tone="warn">
     {{ t('password.pwnedWarning', { count: state.count }) }}
     <span class="checkbox-row breach-use-anyway">
-      <Checkbox v-model="useAnyway" :input-id="`${idPrefix}-use-anyway`" binary :disabled="disabled" />
+      <VeyqCheckbox v-model="useAnyway" :input-id="`${idPrefix}-use-anyway`" :disabled="disabled" />
       <label :for="`${idPrefix}-use-anyway`">{{ t('password.pwnedAnyway') }}</label>
     </span>
-  </Message>
-  <Message v-else-if="state.kind === 'unavailable'" severity="info" :closable="false">{{
+  </VeyqMessage>
+  <VeyqMessage v-else-if="state.kind === 'unavailable'" tone="info">{{
     t('password.pwnedUnavailable')
-  }}</Message>
+  }}</VeyqMessage>
 </template>
 
 <style scoped>

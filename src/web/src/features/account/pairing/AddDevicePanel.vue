@@ -31,9 +31,9 @@
 // the intended device answered, and offering "try again" on the same channel invites granting past it.
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import PairingCode from './PairingCode.vue'
 import KitScanner from '../emergencyKit/KitScanner.vue'
 import SlideToConfirm from '../../../shared/ui/SlideToConfirm.vue'
@@ -62,6 +62,7 @@ import { explainEnding } from '../../../app/endingNotice'
 import { readMarks } from '../trustMarks'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import type * as v1 from '@veyq/crypto/v1'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 // `sealed` is terminal on this device and says so: the collect that hands the grant over spends the channel
 // whoever calls it, so this side cannot look again to see whether the other device arrived (see the poll
@@ -279,19 +280,19 @@ onUnmounted(stopPairingAnswerPolling)
         <p class="pairing-copy">{{ t('pairing.intro') }}</p>
         <p class="pairing-copy">{{ t('pairing.scanIntro') }}</p>
         <div class="pairing-actions">
-          <Button
+          <VeyqButton
             type="button"
             :label="t('pairing.start')"
-            icon="pi pi-qrcode"
+            icon="qrcode"
             :loading="starting"
             @click="start"
           />
-          <Button
+          <VeyqButton
             type="button"
             :label="t('pairing.scanStart')"
-            icon="pi pi-camera"
-            severity="secondary"
-            outlined
+            icon="camera"
+            variant="secondary"
+            appearance="outlined"
             @click="openScan"
           />
         </div>
@@ -301,11 +302,11 @@ onUnmounted(stopPairingAnswerPolling)
         <p class="pairing-copy">{{ t('pairing.scanHint') }}</p>
         <PairingCode :payload="code" />
         <p class="pairing-waiting">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+          <VeyqIcon name="spinner" spin />
           <span>{{ t('pairing.waiting') }}</span>
         </p>
         <div class="pairing-actions">
-          <Button type="button" :label="t('common.cancel')" severity="secondary" text @click="reset" />
+          <VeyqButton type="button" :label="t('common.cancel')" variant="secondary" appearance="text" @click="reset" />
         </div>
       </template>
 
@@ -317,11 +318,11 @@ onUnmounted(stopPairingAnswerPolling)
         <p class="pairing-number" data-testid="pairing-code">{{ pairingCode }}</p>
         <p class="pairing-consequence">{{ t('pairing.consequence') }}</p>
         <p class="pairing-waiting">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+          <VeyqIcon name="spinner" spin />
           <span>{{ t('pairing.scanWaiting') }}</span>
         </p>
         <div class="pairing-actions">
-          <Button type="button" :label="t('common.cancel')" severity="secondary" text @click="reset" />
+          <VeyqButton type="button" :label="t('common.cancel')" variant="secondary" appearance="text" @click="reset" />
         </div>
       </template>
 
@@ -329,13 +330,13 @@ onUnmounted(stopPairingAnswerPolling)
            to accept — and the refusal arrives BEFORE the user has committed anything, which is the whole point
            of taking the gesture last. -->
       <template v-else-if="step === 'refused'">
-        <Message severity="warn" :closable="false">
+        <VeyqMessage tone="warn">
           {{ arm === 'scan' ? t('pairing.scanRefused') : t('pairing.answerRefused') }}
-        </Message>
+        </VeyqMessage>
         <p class="pairing-copy">{{ arm === 'scan' ? t('pairing.scanRefusedHint') : t('pairing.answerRefusedHint') }}</p>
         <div class="pairing-actions">
-          <Button v-if="arm === 'scan'" type="button" :label="t('pairing.again')" icon="pi pi-camera" @click="openScan" />
-          <Button v-else type="button" :label="t('pairing.again')" icon="pi pi-qrcode" @click="start" />
+          <VeyqButton v-if="arm === 'scan'" type="button" :label="t('pairing.again')" icon="camera" @click="openScan" />
+          <VeyqButton v-else type="button" :label="t('pairing.again')" icon="qrcode" @click="start" />
         </div>
       </template>
 
@@ -344,7 +345,7 @@ onUnmounted(stopPairingAnswerPolling)
         <p v-if="step === 'comparing'" class="pairing-number" data-testid="check-number">{{ number }}</p>
         <label class="pairing-label-field">
           {{ t('pairing.labelField') }}
-          <InputText v-model="label" :placeholder="t('sessions.renamePlaceholder')" fluid />
+          <VeyqInput v-model="label" :placeholder="t('sessions.renamePlaceholder')" fluid />
           <small class="field-hint">{{ t('pairing.labelHint') }}</small>
         </label>
         <!-- The consequence is in the gesture's own sentence, not in a paragraph above it: signing this device
@@ -357,13 +358,12 @@ onUnmounted(stopPairingAnswerPolling)
         />
         <p class="pairing-consequence">{{ t('pairing.consequence') }}</p>
         <div class="pairing-actions">
-          <Button
+          <VeyqButton
             type="button"
             :label="step === 'proven' ? t('common.cancel') : t('pairing.mismatch')"
-            :icon="step === 'proven' ? undefined : 'pi pi-times'"
-            :severity="step === 'proven' ? 'secondary' : 'danger'"
-            :outlined="step !== 'proven'"
-            :text="step === 'proven'"
+            :icon="step === 'proven' ? undefined : 'times'"
+            :variant="step === 'proven' ? 'secondary' : 'danger'"
+            :appearance="step === 'proven' ? 'text' : 'outlined'"
             :disabled="granting"
             @click="decline"
           />
@@ -371,21 +371,21 @@ onUnmounted(stopPairingAnswerPolling)
       </template>
 
       <template v-else-if="step === 'sealed'">
-        <Message severity="success" :closable="false">{{ t('pairing.sealed') }}</Message>
+        <VeyqMessage tone="success">{{ t('pairing.sealed') }}</VeyqMessage>
         <p class="pairing-copy">{{ t('pairing.sealedHint') }}</p>
         <div class="pairing-actions">
-          <Button type="button" :label="t('pairing.again')" severity="secondary" outlined @click="reset" />
+          <VeyqButton type="button" :label="t('pairing.again')" variant="secondary" appearance="outlined" @click="reset" />
         </div>
       </template>
 
       <template v-else>
-        <Message severity="warn" :closable="false">{{ t('pairing.gone') }}</Message>
+        <VeyqMessage tone="warn">{{ t('pairing.gone') }}</VeyqMessage>
         <div class="pairing-actions">
-          <Button type="button" :label="t('pairing.again')" icon="pi pi-qrcode" @click="start" />
+          <VeyqButton type="button" :label="t('pairing.again')" icon="qrcode" @click="start" />
         </div>
       </template>
 
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
     </section>
   </section>
   <!-- Reused as-is: it is decoder-agnostic and emits the raw string, so `accepts` is what lets this scanner

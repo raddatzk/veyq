@@ -97,6 +97,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
+import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
 
@@ -129,8 +130,8 @@ export interface KindDescriptor {
    *  folders and a Memory's new chapters arrive as rows, and a key re-derived from a re-read tree is the same object, so
    *  nothing keyed on it reloads. What lives beside the tree (a Memory's gallery, ADR 0033) the page polls itself. */
   detail?: Component
-  /** The PrimeIcons class core draws next to a node of this kind (e.g. the trash list). */
-  icon: string
+  /** The icon core draws next to a node of this kind (e.g. the trash list). */
+  icon: VeyqIconName
   /** The i18n key of the title core's delete dialog (`core/node/components/DeleteNodeDialog.vue`) shows for a node of
    *  this kind, e.g. Memories' "Delete Memory". Omitted: the neutral `node.delete`. Core serves every application's
    *  nodes and so names none in its own strings (inbox #375): a kind's noun comes from the kind. */
@@ -262,7 +263,7 @@ export interface LevelActionContext {
 export interface LevelMenuEntry {
   /** The i18n key of the entry's label, in the application's own namespace (core names none). */
   label: string
-  icon: string
+  icon: VeyqIconName
   order: number
   allowed(ctx: LevelActionContext): boolean
   enabled?(ctx: LevelActionContext): boolean
@@ -562,7 +563,7 @@ export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
     [FOLDER_KIND, {
-      kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
+      kind: FOLDER_KIND, icon: 'folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
     }],
   ])

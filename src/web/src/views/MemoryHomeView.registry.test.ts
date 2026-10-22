@@ -71,6 +71,7 @@ import { targetOf, type Access, type TreeSource } from '../core/access'
 import type { LevelRowsFactory } from '../core/node/levelRow'
 import { titlesOf } from '../test/levelRows'
 import { loadStatements } from '../features/moderation/statement/statements'
+import VeyqIcon from '../shared/ui/VeyqIcon.vue'
 
 // A detail renders whether a share is POSSIBLE for it, from what the host handed it: the instance's public links (the
 // access) AND its kind's descriptor (the rights target core builds from the registry) — every application's
@@ -81,7 +82,7 @@ const Detail = defineComponent({
 })
 // The smallest row factory: one plain row per node (core draws it as its `li.veyq-level-item`).
 const rows: LevelRowsFactory = () => ({
-  row: (n) => ({ icon: 'pi pi-images', title: n.name, meta: '', primary: { label: n.name, onClick: () => {} }, actions: [] }),
+  row: (n) => ({ icon: 'images', title: n.name, meta: '', primary: { label: n.name, onClick: () => {} }, actions: [] }),
 })
 const Share = defineComponent({ props: ['nodeId'], setup: (p) => () => h('div', { class: 'share' }, p.nodeId) })
 
@@ -94,8 +95,8 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
 function fullRegistry(): Registry {
   const r = createRegistry()
   const list = { rows }
-  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, list, shareDialog: Share })
-  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, list, shareDialog: Share })
+  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'images', shareable: true, list, shareDialog: Share })
+  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'images', shareable: true, list, shareDialog: Share })
   return r
 }
 
@@ -103,7 +104,7 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()], directives: { tooltip: {} } } })
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
   await flushPromises()
   return wrapper
 }
@@ -127,8 +128,8 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('a kind registered WITHOUT a detail shows the explicit unsupported state, not the level view', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true })
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: false }) // no detail
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'file', shareable: true })
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'file', shareable: false }) // no detail
     holder.reg = r
     const w = await mountAt('#~me/mem/chap')
     expect(w.text()).toContain(t('home.unsupportedKind'))
@@ -148,7 +149,7 @@ describe('MemoryHomeView fail-closed rules', () => {
   // (Before inbox #407 these were per-kind fallback sections with a heading; now they are rows of the one list.)
   it('no row factory registered: folders are still walkable, children of unlisted kinds show as unsupported rows', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true }) // no list
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'images', shareable: true }) // no list
     holder.reg = r
     treeStore.nodes = [
       node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
@@ -168,7 +169,7 @@ describe('MemoryHomeView fail-closed rules', () => {
       expect(f.find('.veyq-level-item-meta').text()).toContain(t('home.unsupportedKind'))
       expect(f.find('button').exists(), 'not clickable').toBe(false)
     }
-    expect(unsupported[0].find('.pi-images').exists(), 'a registered kind keeps its icon').toBe(true)
+    expect(unsupported[0].find('.veyq-level-item-visual').findComponent(VeyqIcon).props('name'), 'a registered kind keeps its icon').toBe('images')
   })
 
   // uc.moderation.take-a-measure: a node a moderator blocked does not open for a member — its page is the bare placeholder,
@@ -190,7 +191,7 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('shareable comes from the descriptor AND the right: a descriptor that says no wins over the right', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: false, shareDialog: Share })
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'file', shareable: false, shareDialog: Share })
     holder.reg = r
     const w = await mountAt('#~me/mem')
     expect(w.find('.detail').text()).toBe('Mem|false')
@@ -208,7 +209,7 @@ describe('MemoryHomeView fail-closed rules', () => {
   // offers no share — the host never shows a button whose dialog it cannot mount.
   it('a kind without a shareDialog offers no share, even when its descriptor says shareable', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true }) // no shareDialog
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'file', shareable: true }) // no shareDialog
     holder.reg = r
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
     holder.reg = fullRegistry() // control: the same kind with its dialog is shared, and the dialog is the kind's own

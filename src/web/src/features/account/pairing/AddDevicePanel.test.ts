@@ -77,14 +77,14 @@ const REFRESH_TOKEN = 'ZGVsZWdhdGVkLXJlZnJlc2gtdG9rZW4'
 const transport = mintTransportKey()
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue', 'placeholder', 'fluid'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Button: {
-    props: ['label', 'icon', 'severity', 'loading', 'disabled', 'outlined', 'text'],
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance', 'loading', 'disabled'],
     emits: ['click'],
     template: '<button :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },

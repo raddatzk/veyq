@@ -15,8 +15,8 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { getTenantTerms, updateTenantTerms, type LocalizedMarkdown } from './tenantTerms'
 import { TERMS_TEMPLATE } from './termsTemplate'
 import { listMyTenants } from '../spaces/scopes'
@@ -96,7 +96,7 @@ async function insertTemplate(loc: string) {
     header: t('terms.insertTemplate'),
     message: t(overwrites ? 'terms.insertTemplateOverwriteAsk' : 'terms.insertTemplateAsk', { lang }),
     acceptLabel: t('terms.insertTemplate'),
-    acceptIcon: 'pi pi-file-plus',
+    acceptIcon: 'file-plus',
   })
   if (!accepted) return
   terms.value = { ...terms.value, [loc]: TERMS_TEMPLATE[loc] }
@@ -118,7 +118,7 @@ function confirmRemove(loc: string): Promise<boolean> {
     header: t('localeEditor.removeLang', { lang }),
     message: t('terms.removeLangAsk', { lang }),
     acceptLabel: t('localeEditor.removeLang', { lang }),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
 }
 
@@ -162,11 +162,11 @@ async function save() {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('terms.loading') }}</p>
-      <Message v-else-if="loadError" severity="error" :closable="false">{{ t('terms.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError" tone="error">{{ t('terms.loadFailed') }}</VeyqMessage>
 
       <!-- Owner: the per-locale markdown editor + a live preview. Non-owner: the rendered terms, read-only. -->
       <template v-else-if="isOwner">
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
 
         <!-- One row per language that HAS terms, plus an explicit act to add one that does not. The starter
              template hangs in the row's own actions, because it fills that one language and asks first. -->
@@ -176,25 +176,24 @@ async function save() {
           :before-remove="confirmRemove"
         >
           <template #row-actions="{ locale: loc }">
-            <Button
+            <VeyqButton
               v-if="templated(loc)"
-              type="button"
               :label="t('terms.insertTemplate')"
-              icon="pi pi-file-plus"
-              text
-              severity="secondary"
+              icon="file-plus"
+              appearance="text"
+              variant="secondary"
               size="small"
               :disabled="saving"
               @click="insertTemplate(loc)"
             />
           </template>
         </LocaleMarkdownEditor>
-        <Message v-if="blankLocales.length" severity="warn" :closable="false">
+        <VeyqMessage v-if="blankLocales.length" tone="warn">
           {{ t('terms.blankLocaleWarning', { langs: blankLocaleNames }) }}
-        </Message>
+        </VeyqMessage>
         <small class="settings-muted">{{ t('terms.markdownHint', { contact: '{contact}' }) }}</small>
         <div class="terms-editor-actions">
-          <Button :label="t('terms.save')" icon="pi pi-save" :loading="saving" @click="save" />
+          <VeyqButton :label="t('terms.save')" icon="save" :loading="saving" @click="save" />
         </div>
 
         <div v-if="previewBody" class="terms-preview">
@@ -205,7 +204,7 @@ async function save() {
       </template>
 
       <template v-else>
-        <Message severity="info" :closable="false">{{ t('terms.readonlyNote') }}</Message>
+        <VeyqMessage tone="info">{{ t('terms.readonlyNote') }}</VeyqMessage>
         <!-- eslint-disable-next-line vue/no-v-html — renderMarkdown escapes first (safe subset). -->
         <div v-if="previewBody" class="markdown-body terms-readonly" v-html="renderedPreview"></div>
         <p v-else class="settings-muted">{{ t('terms.noneSet') }}</p>
@@ -284,6 +283,6 @@ async function save() {
   font-size: 0.85em;
 }
 .markdown-body :deep(a) {
-  color: var(--p-primary-color, inherit);
+  color: var(--app-primary, inherit);
 }
 </style>

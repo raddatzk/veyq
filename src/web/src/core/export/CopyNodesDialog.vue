@@ -10,10 +10,10 @@
 // walks or copies stops it.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
-import ProgressBar from 'primevue/progressbar'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqProgress from '../../shared/ui/VeyqProgress.vue'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from '../node/tree'
 import { registry } from '../applications/registry'
@@ -164,7 +164,7 @@ function close() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="title" modal :closable="!running" :close-on-escape="!running" class="copy-dialog" @update:visible="close">
+  <VeyqDialog :visible="true" :header="title" :closable="!running" :close-on-escape="!running" class="copy-dialog" @update:visible="close">
     <form class="veyq-form" data-testid="copy-dialog" @submit.prevent="submit">
       <p class="veyq-form-copy">{{ single ? t('node.copy.hint') : t('node.copy.many.hint') }}</p>
       <MoveBrowser v-model:place="place" :nodes="nodes" :access="access" :tree="tree" :root-label="rootLabel" :disabled="running" />
@@ -187,20 +187,20 @@ function close() {
             <li v-for="(line, i) in losses" :key="i">{{ line }}</li>
           </ul>
         </div>
-        <Message v-if="fits === false" severity="warn" :closable="false" role="alert" data-testid="copy-no-room">{{ t('node.copy.noRoom', { size }) }}</Message>
+        <VeyqMessage v-if="fits === false" tone="warn" role="alert" data-testid="copy-no-room">{{ t('node.copy.noRoom', { size }) }}</VeyqMessage>
         <p v-if="canCopy" class="veyq-form-copy copy-note">{{ t('node.copy.notice') }}</p>
         <template v-if="running">
           <p class="veyq-form-copy" role="status">{{ t('node.copy.copying', { done: progress.nodesDone, total: progress.nodesTotal }) }}</p>
-          <ProgressBar :value="Math.round((progress.nodesDone / Math.max(1, progress.nodesTotal)) * 100)" />
+          <VeyqProgress :value="Math.round((progress.nodesDone / Math.max(1, progress.nodesTotal)) * 100)" />
         </template>
       </template>
-      <Message v-if="error" severity="error" :closable="false" role="alert" data-testid="copy-error">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" role="alert" data-testid="copy-error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="running" data-testid="copy-cancel" @click="close" />
-        <Button
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="running" data-testid="copy-cancel" @click="close" />
+        <VeyqButton
           type="submit"
           :label="t('node.copy.submit')"
-          icon="pi pi-copy"
+          icon="copy"
           :loading="running"
           :disabled="step !== 'ready' || here !== null || !canCopy || fits === false"
           :aria-describedby="hereText ? 'copy-here-why' : undefined"
@@ -208,7 +208,7 @@ function close() {
         />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

@@ -20,12 +20,14 @@
 // same; `share.folder.*` only where a Memory sentence would be wrong for a folder.
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import SelectButton from 'primevue/selectbutton'
-import ToggleSwitch from 'primevue/toggleswitch'
-import DatePicker from 'primevue/datepicker'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
+import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
+import VeyqDateField from '../../shared/ui/VeyqDateField.vue'
+import { isoDateToLocalDate, localDateToIsoDate } from '../../shared/isoDate'
 import LocaleMarkdownEditor from '../../shared/ui/LocaleMarkdownEditor.vue'
 import { useConfirm } from '../../shared/state/useConfirm'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
@@ -178,7 +180,7 @@ async function onDelete(s: ManagedShare) {
     header: t('share.deleteTitle'),
     message: t(copyKey('deleteConfirm')),
     acceptLabel: t('share.delete'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!confirmed) return
   await rowAction(s, async () => {
@@ -193,7 +195,7 @@ async function onReissue(s: ManagedShare) {
     header: t('share.reissueTitle'),
     message: t(copyKey('reissueWarning')),
     acceptLabel: t('share.reissueSubmit'),
-    acceptIcon: 'pi pi-replay',
+    acceptIcon: 'replay',
   })
   if (!confirmed) return
   busyId.value = s.shareId
@@ -236,6 +238,15 @@ const minExpiry = new Date()
 const rules = linkRules()
 const maxExpiry = computed(() => lastExpiryDay(rules.maxDays, editing.value?.createdAt ?? new Date()))
 const expiryMissing = computed(() => rules.maxDays !== null && !expiresAt.value)
+// The date field binds a calendar day (`YYYY-MM-DD`); the dialog keeps the `Date` it sends (`endOfDay`).
+const expiryDay = computed<string>({
+  get: () => localDateToIsoDate(expiresAt.value),
+  set: (day) => {
+    expiresAt.value = isoDateToLocalDate(day)
+  },
+})
+const minExpiryDay = localDateToIsoDate(minExpiry)
+const maxExpiryDay = computed(() => (maxExpiry.value ? localDateToIsoDate(maxExpiry.value) : undefined))
 /** The server refused the link for a requirement (a rule set while the dialog was open). */
 const requirementRefused = ref(false)
 /** Turn on and fill what the requirements ask for: a password card, an end date within the limit. */
@@ -408,10 +419,9 @@ function onDialogVisible(visible: boolean) {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="header"
-    modal
     class="share-dialog folder-share-dialog"
     :closable="!creating"
     :close-on-escape="!creating"
@@ -421,23 +431,23 @@ function onDialogVisible(visible: boolean) {
     <div v-if="view === 'link'" class="veyq-form">
       <p class="veyq-form-copy">{{ t('share.linkReady') }}</p>
       <div class="folder-share-link-row">
-        <InputText
+        <VeyqInput
           :model-value="link"
           readonly
           class="folder-share-link"
           :aria-label="t('share.linkLabel')"
           @focus="($event.target as HTMLInputElement).select()"
         />
-        <Button
+        <VeyqButton
           :label="copiedLinkId === NEW_LINK ? t('share.copied') : t('share.copy')"
-          :icon="copiedLinkId === NEW_LINK ? 'pi pi-check' : 'pi pi-copy'"
-          severity="secondary"
+          :icon="copiedLinkId === NEW_LINK ? 'check' : 'copy'"
+          variant="secondary"
           @click="copy(link, NEW_LINK)"
         />
       </div>
       <div class="veyq-dialog-action-row">
         <div class="veyq-action-group">
-          <Button :label="t('common.done')" icon="pi pi-check" @click="view = 'list'" />
+          <VeyqButton :label="t('common.done')" icon="check" @click="view = 'list'" />
         </div>
       </div>
     </div>
@@ -446,29 +456,25 @@ function onDialogVisible(visible: boolean) {
     <div v-else-if="view === 'create' || view === 'edit'" class="veyq-form">
       <div class="veyq-form-field">
         <label for="folder-share-name">{{ t('share.name') }}</label>
-        <InputText id="folder-share-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="creating" />
+        <VeyqInput id="folder-share-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="creating" />
       </div>
 
       <div class="veyq-form-field">
         <label>{{ t('share.roleLabel') }}</label>
-        <SelectButton
+        <VeyqToggleGroup
           v-model="role"
           :options="roleOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
           :disabled="creating"
           class="folder-share-roles"
         />
         <p class="veyq-form-copy folder-share-hint">{{ roleHint }}</p>
         <template v-if="roleNeedsReissue">
           <p class="veyq-form-copy folder-share-hint">{{ t('share.roleNeedsReissue') }}</p>
-          <Button
-            type="button"
+          <VeyqButton
             :label="t('share.reissue')"
-            icon="pi pi-replay"
-            severity="secondary"
-            outlined
+            icon="replay"
+            variant="secondary"
+            appearance="outlined"
             size="small"
             :disabled="creating"
             @click="reissueFromEdit"
@@ -482,7 +488,7 @@ function onDialogVisible(visible: boolean) {
             <strong>{{ t('share.noteSection') }}</strong>
             <span class="veyq-form-copy folder-share-hint">{{ t('share.noteSectionHint') }}</span>
           </span>
-          <ToggleSwitch v-model="noteEnabled" :aria-label="t('share.noteSection')" :disabled="creating" />
+          <VeyqSwitch v-model="noteEnabled" :aria-label="t('share.noteSection')" :disabled="creating" />
         </div>
         <template v-if="noteEnabled">
           <LocaleMarkdownEditor v-model="note" :placeholder="t('share.notePlaceholder')" />
@@ -497,13 +503,13 @@ function onDialogVisible(visible: boolean) {
             <strong>{{ t('share.passwordSection') }}</strong>
             <span class="veyq-form-copy folder-share-hint">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</span>
           </span>
-          <ToggleSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="creating || rules.passwordRequired" />
+          <VeyqSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="creating || rules.passwordRequired" />
         </div>
         <span v-if="rules.passwordRequired" class="veyq-form-copy folder-share-hint">{{ t('share.passwordRequiredByRule') }}</span>
         <template v-if="passwordEnabled">
           <label for="folder-share-password">{{ t('share.passwordLabel') }}</label>
           <div class="folder-share-link-row">
-            <InputText
+            <VeyqInput
               id="folder-share-password"
               v-model="password"
               class="folder-share-link"
@@ -512,13 +518,12 @@ function onDialogVisible(visible: boolean) {
               :placeholder="t('share.passwordPlaceholder')"
               :disabled="creating"
             />
-            <Button
-              type="button"
+            <VeyqButton
               class="veyq-icon-button"
-              :icon="revealPw ? 'pi pi-eye-slash' : 'pi pi-eye'"
+              :icon="revealPw ? 'eye-slash' : 'eye'"
               :aria-label="revealPw ? t('common.hide') : t('common.show')"
-              severity="secondary"
-              text
+              variant="secondary"
+              appearance="text"
               :disabled="creating"
               @click="revealPw = !revealPw"
             />
@@ -535,21 +540,17 @@ function onDialogVisible(visible: boolean) {
             <strong>{{ t('share.expirySection') }}</strong>
             <span class="veyq-form-copy folder-share-hint">{{ t('share.expirySectionHint') }}</span>
           </span>
-          <ToggleSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="creating || rules.maxDays !== null" />
+          <VeyqSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="creating || rules.maxDays !== null" />
         </div>
         <span v-if="rules.maxDays !== null" class="veyq-form-copy folder-share-hint">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</span>
         <template v-if="expiryEnabled">
           <label for="folder-share-expiry">{{ t('share.expiryLabel') }}</label>
-          <DatePicker
-            id="folder-share-expiry"
-            v-model="expiresAt"
-            :min-date="minExpiry"
-            :max-date="maxExpiry ?? undefined"
-            date-format="yy-mm-dd"
-            show-icon
-            icon-display="input"
+          <VeyqDateField
+            v-model="expiryDay"
+            input-id="folder-share-expiry"
+            :min-date="minExpiryDay"
+            :max-date="maxExpiryDay"
             :disabled="creating"
-            fluid
           />
         </template>
       </div>
@@ -558,29 +559,28 @@ function onDialogVisible(visible: boolean) {
       <p v-else-if="view === 'create' && createError" class="veyq-form-error">{{ t('share.createFailed') }}</p>
       <p v-else-if="view === 'edit' && editError" class="veyq-form-error">{{ t('share.editFailed') }}</p>
       <div class="veyq-dialog-action-row">
-        <Button
-          type="button"
+        <VeyqButton
           :label="t('common.cancel')"
-          icon="pi pi-times"
-          severity="secondary"
-          outlined
+          icon="times"
+          variant="secondary"
+          appearance="outlined"
           :disabled="creating"
           @click="view = 'list'"
         />
-        <Button
+        <VeyqButton
           v-if="view === 'edit'"
           class="folder-share-save"
           :label="saving ? t('share.noteSaving') : t('common.save')"
-          icon="pi pi-check"
+          icon="check"
           :loading="saving"
           :disabled="creating || passwordTooShort || expiryMissing"
           @click="onSave"
         />
-        <Button
+        <VeyqButton
           v-else
           class="folder-share-create"
           :label="creating ? t('share.creating') : t('share.create')"
-          icon="pi pi-link"
+          icon="link"
           :loading="creating"
           :disabled="creating || passwordTooShort || expiryMissing"
           @click="onCreate"
@@ -591,21 +591,20 @@ function onDialogVisible(visible: boolean) {
     <!-- The list of the folder's links. -->
     <div v-else class="veyq-form">
       <p class="veyq-form-copy">{{ t(copyKey('intro')) }}</p>
-      <Button class="folder-share-new" :label="t('share.createNew')" icon="pi pi-plus" @click="openCreate" />
+      <VeyqButton class="folder-share-new" :label="t('share.createNew')" icon="plus" @click="openCreate" />
 
       <p v-if="loadError" class="veyq-form-error">{{ t('share.loadFailed') }}</p>
       <p v-else-if="!folderShares.length" class="veyq-empty veyq-empty-inline">{{ t('share.none') }}</p>
       <ul v-else class="veyq-list">
         <template v-for="section in sections" :key="section.key">
           <li v-if="section.foldable && section.shares.length">
-            <Button
-              type="button"
+            <VeyqButton
               class="folder-share-fold"
-              :icon="offOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+              :icon="offOpen ? 'chevron-down' : 'chevron-right'"
               :label="t('share.offCount', { count: section.shares.length }, section.shares.length)"
               :aria-expanded="offOpen"
-              severity="secondary"
-              text
+              variant="secondary"
+              appearance="text"
               size="small"
               @click="offOpen = !offOpen"
             />
@@ -622,7 +621,7 @@ function onDialogVisible(visible: boolean) {
                   <!-- An unnamed link's title is already its role (`titleFor`): the badge would say it twice (inbox #385). -->
                   <span v-if="decoded.get(share.shareId)?.name" class="veyq-badge success folder-share-role">{{ roleLabel(share.role) }}</span>
                   <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
-                  <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" />{{ t('share.passwordBadge') }}</span>
+                  <span v-if="share.passwordRequired" class="veyq-badge"><VeyqIcon name="lock" />{{ t('share.passwordBadge') }}</span>
                   <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>
                   <span v-if="!share.enabled" class="veyq-badge muted folder-share-off">{{ t('share.disabled') }}</span>
                   <span v-if="share.reissueRequired" class="veyq-badge warning" :title="t('share.reissueRequiredHint')">
@@ -641,75 +640,69 @@ function onDialogVisible(visible: boolean) {
                 />
               </div>
               <div class="folder-share-actions">
-                <Button
+                <VeyqButton
                   v-if="share.enabled && decoded.get(share.shareId)?.link"
-                  type="button"
                   class="veyq-icon-button"
-                  :icon="copiedLinkId === share.shareId ? 'pi pi-check' : 'pi pi-copy'"
+                  :icon="copiedLinkId === share.shareId ? 'check' : 'copy'"
                   :aria-label="t('share.copy')"
                   :title="copiedLinkId === share.shareId ? t('share.copied') : t('share.copy')"
-                  severity="secondary"
-                  text
+                  variant="secondary"
+                  appearance="text"
                   @click="copy(decoded.get(share.shareId)!.link!, share.shareId)"
                 />
-                <Button
+                <VeyqButton
                   v-if="canEdit(share)"
-                  type="button"
                   class="veyq-icon-button folder-share-edit"
-                  icon="pi pi-pencil"
+                  icon="pencil"
                   :aria-label="t('share.edit')"
                   :title="t('share.edit')"
-                  severity="secondary"
-                  text
+                  variant="secondary"
+                  appearance="text"
                   :disabled="busyId === share.shareId"
                   @click="openEdit(share)"
                 />
-                <Button
+                <VeyqButton
                   v-if="canReissue(share)"
-                  type="button"
                   class="veyq-icon-button"
-                  icon="pi pi-replay"
+                  icon="replay"
                   :aria-label="t('share.reissue')"
                   :title="t('share.reissue')"
-                  severity="secondary"
-                  text
+                  variant="secondary"
+                  appearance="text"
                   :disabled="busyId === share.shareId"
                   @click="onReissue(share)"
                 />
-                <Button
+                <VeyqButton
                   v-if="!share.enabled && !share.reissueRequired"
-                  type="button"
                   class="veyq-icon-button"
-                  icon="pi pi-refresh"
+                  icon="refresh"
                   :aria-label="t('share.reactivate')"
                   :title="t('share.reactivate')"
-                  severity="secondary"
-                  text
+                  variant="secondary"
+                  appearance="text"
                   :disabled="busyId === share.shareId"
                   @click="onReactivate(share)"
                 />
-                <Button
+                <VeyqButton
                   v-else-if="share.enabled && share.mine"
-                  type="button"
                   class="veyq-icon-button"
-                  icon="pi pi-ban"
+                  icon="ban"
                   :aria-label="t('share.revoke')"
                   :title="t('share.revoke')"
-                  severity="danger"
-                  text
+                  variant="danger"
+                  appearance="text"
                   :disabled="busyId === share.shareId"
                   @click="onRevoke(share)"
                 />
                 <!-- Delete only a switched-off link, and only where the server's gate lets it through (ADR 0029 §7). -->
-                <Button
+                <VeyqButton
                   v-if="!share.enabled && share.deletable"
-                  type="button"
                   class="veyq-icon-button"
-                  icon="pi pi-trash"
+                  icon="trash"
                   :aria-label="t('share.delete')"
                   :title="t('share.delete')"
-                  severity="danger"
-                  text
+                  variant="danger"
+                  appearance="text"
                   :disabled="busyId === share.shareId"
                   @click="onDelete(share)"
                 />
@@ -721,7 +714,7 @@ function onDialogVisible(visible: boolean) {
       <p v-if="alreadyReplaced" class="veyq-form-error">{{ t('share.reissueAlreadyReplaced') }}</p>
       <p v-else-if="actionError" class="veyq-form-error">{{ t('share.actionFailed') }}</p>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>
@@ -762,7 +755,7 @@ function onDialogVisible(visible: boolean) {
   display: flex;
   width: 100%;
 }
-.folder-share-roles :deep(.p-togglebutton) {
+.folder-share-roles :deep(.veyq-toggle-group__item) {
   flex: 1 1 0;
 }
 @media (max-width: 560px) {

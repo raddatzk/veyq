@@ -44,15 +44,15 @@ import * as v1 from '@veyq/crypto/v1'
 
 const EMAIL = 'member@acme.example'
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: {
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: {
     props: ['label', 'loading', 'disabled', 'type'],
     emits: ['click'],
     template: '<button :type="type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Password: { props: ['modelValue'], template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqPassword: { props: ['modelValue'], template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   SecretKeyField: { props: ['modelValue'], template: '<input class="secret-key" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
 }
 

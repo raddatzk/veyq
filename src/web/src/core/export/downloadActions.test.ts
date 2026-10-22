@@ -10,9 +10,9 @@ const t = (k: string) => k
 
 beforeAll(() => {
   if (!registry.kind('X_WITH').supported) {
-    registry.registerKind({ kind: 'X_WITH', icon: 'x', shareable: false, exportContent: async () => null })
-    registry.registerKind({ kind: 'X_WITHOUT', icon: 'x', shareable: false })
-    registry.registerKind({ kind: 'X_ONE_FILE', icon: 'x', shareable: false, exportContent: async () => null, downloadsAsFile: true })
+    registry.registerKind({ kind: 'X_WITH', icon: 'file', shareable: false, exportContent: async () => null })
+    registry.registerKind({ kind: 'X_WITHOUT', icon: 'file', shareable: false })
+    registry.registerKind({ kind: 'X_ONE_FILE', icon: 'file', shareable: false, exportContent: async () => null, downloadsAsFile: true })
   }
 })
 
@@ -49,7 +49,7 @@ describe('the action', () => {
     for (const make of [downloadHeaderActions, downloadRowActions]) {
       const [a, ...rest] = make(t, unlocked, { id: 'n', kind: FOLDER_KIND }, () => called++)
       expect(rest).toEqual([])
-      expect(a).toMatchObject({ id: 'download', label: 'export.action', icon: 'pi pi-download', placement: 'after' })
+      expect(a).toMatchObject({ id: 'download', label: 'export.action', icon: 'download', placement: 'after' })
       a.onClick()
     }
     expect(called).toBe(2)

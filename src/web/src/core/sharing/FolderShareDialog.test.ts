@@ -42,17 +42,17 @@ const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
 const FOLDER_KEY = new Uint8Array(32).fill(4)
 
 const stubs = {
-  Dialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h1 class="header">{{ header }}</h1><slot /></div>' },
-  SelectButton: {
+  VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h1 class="header">{{ header }}</h1><slot /></div>' },
+  VeyqToggleGroup: {
     props: ['options', 'modelValue'],
     emits: ['update:modelValue'],
     template:
       '<div class="select-button"><button v-for="o in options" :key="o.value" class="opt" :data-value="o.value" @click="$emit(\'update:modelValue\', o.value)">{{ o.label }}</button></div>',
   },
-  Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
-  InputText: { props: ['modelValue'], template: '<input class="input" :value="modelValue" />' },
-  ToggleSwitch: { props: ['modelValue'], emits: ['update:modelValue'], template: '<button v-bind="$attrs" @click="$emit(\'update:modelValue\', !modelValue)" />' },
-  DatePicker: true,
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqInput: { props: ['modelValue'], template: '<input class="input" :value="modelValue" />' },
+  VeyqSwitch: { props: ['modelValue'], emits: ['update:modelValue'], template: '<button v-bind="$attrs" @click="$emit(\'update:modelValue\', !modelValue)" />' },
+  VeyqDateField: true,
   LocaleMarkdownEditor: true,
 }
 

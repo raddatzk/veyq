@@ -4,7 +4,7 @@
 // The key is MY vault's (`myIdentityPublicKeyB64`), never a directory round-trip: the number I show is the one my own
 // device holds, which is exactly what the other side needs to compare against what the server served them.
 import { useI18n } from 'vue-i18n'
-import Message from 'primevue/message'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { myIdentityPublicKeyB64, safetyNumber } from '../../features/account/identityPins'
 import { safetyCodePayload } from '../../features/account/safetyCode'
 import PairingCode from '../../features/account/pairing/PairingCode.vue'
@@ -33,7 +33,7 @@ const mine = readMine()
       <SafetyDigits :number="mine.number" />
       <PairingCode class="my-safety-code" :payload="mine.payload" :alt="t('safety.qrAlt')" :failed-text="t('safety.qrFailed')" />
     </template>
-    <Message v-else severity="error" :closable="false">{{ t('safety.mineUnavailable') }}</Message>
+    <VeyqMessage v-else tone="error">{{ t('safety.mineUnavailable') }}</VeyqMessage>
   </section>
 </template>
 

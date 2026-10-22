@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The PDF half of the file viewer (inbox #412), mounted as the file page does: real DOM, real catalog, real PrimeVue, the
+// The PDF half of the file viewer (inbox #412), mounted as the file page does: real DOM, real catalog, real UI layer, the
 // PDF ENGINE mocked (happy-dom draws no canvas, and the real library is `pdfEngine.real.test.ts`'s). What is pinned here is
 // the wiring: the state machine (loading -> ready / protected / unreadable / too long / error), that pages are drawn only
 // while near the viewport (an IntersectionObserver stub), the zoom and page controls, that everything the viewer made is
@@ -7,7 +7,6 @@
 // puts nothing in the page that a PDF could use to act: no frame/object/embed, no link, no raw HTML.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -98,7 +97,7 @@ function mountViewer(tg: ViewerTarget | null, o: { canDownload?: boolean; name?:
   const w = mount(FileViewer, {
     props: { target: tg, name: o.name ?? 'Report.pdf', canDownload: o.canDownload ?? true },
     attachTo: document.body,
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
   })
   mounted.push(w)
   return w
@@ -159,7 +158,7 @@ describe('opening a PDF', () => {
     await flushPromises()
     expect(w.text()).toContain(t(`depot.viewer.unsupported.${key}`))
     expect(w.find('.pdf-viewer').exists()).toBe(false)
-    expect(w.find('.p-message-error').exists()).toBe(false)
+    expect(w.find('.veyq-message--error').exists()).toBe(false)
     await downloadButton(w).trigger('click')
     expect(w.emitted('download')).toHaveLength(1)
   })
@@ -178,7 +177,7 @@ describe('opening a PDF', () => {
     vi.mocked(openPdf).mockResolvedValue(fake.doc)
     const w = mountViewer(target(providerOf(PDF_BYTES)))
     await flushPromises()
-    expect(w.find('.p-message-error').text()).toContain(t('depot.viewer.error'))
+    expect(w.find('.veyq-message--error').text()).toContain(t('depot.viewer.error'))
     await w.findAll('button').find((b) => b.text() === t('depot.viewer.retry'))!.trigger('click')
     await flushPromises()
     expect(w.findAll('.pdf-page')).toHaveLength(2)
@@ -620,7 +619,7 @@ describe('a password-protected PDF asks for its password', () => {
     expect(input.attributes('aria-describedby')).toContain(`${input.attributes('id')}-hint`)
     expect(w.text()).toContain(t('depot.viewer.pdf.passwordHint'))
     expect(w.find('.pdf-viewer').exists()).toBe(false)
-    expect(w.find('.p-message-error').exists()).toBe(false)
+    expect(w.find('.veyq-message--error').exists()).toBe(false)
     // Submit needs a value; Cancel is always there.
     expect(w.find('button[type="submit"]').attributes('disabled')).toBeDefined()
     expect(w.find('button.file-viewer-password-cancel').exists()).toBe(true)

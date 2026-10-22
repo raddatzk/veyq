@@ -9,8 +9,8 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import {
   listMyGroupInvitations,
   acceptGroupInvitation,
@@ -72,11 +72,11 @@ const decline = (inv: InvitationRow) => runRowAction(inv, declineGroupInvitation
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('invitations.loading') }}</p>
-      <Message v-else-if="loadError" severity="error" :closable="false">{{ t('invitations.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError" tone="error">{{ t('invitations.loadFailed') }}</VeyqMessage>
       <p v-else-if="invitations.length === 0" class="settings-muted">{{ t('invitations.empty') }}</p>
 
       <template v-else>
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
         <div class="veyq-list management-list">
           <div class="veyq-list management-list-items">
             <div v-for="inv in invitations" :key="inv.scopeId" class="veyq-list-row member-row">
@@ -85,18 +85,18 @@ const decline = (inv: InvitationRow) => runRowAction(inv, declineGroupInvitation
                 <span class="veyq-row-subtitle">{{ t('invitations.addedBy', { user: inv.addedBy }) }}</span>
               </div>
               <div class="management-actions">
-                <Button
+                <VeyqButton
                   :label="t('invitations.accept')"
-                  icon="pi pi-check"
+                  icon="check"
                   size="small"
                   :loading="busy === inv.scopeId"
                   @click="accept(inv)"
                 />
-                <Button
+                <VeyqButton
                   :label="t('invitations.decline')"
-                  icon="pi pi-times"
-                  severity="secondary"
-                  outlined
+                  icon="times"
+                  variant="secondary"
+                  appearance="outlined"
                   size="small"
                   :disabled="busy === inv.scopeId"
                   @click="decline(inv)"

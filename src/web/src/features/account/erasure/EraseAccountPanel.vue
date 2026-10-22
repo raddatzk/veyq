@@ -9,10 +9,11 @@
 // rows SessionsPanel's veyq-list-row — the built panels are the design source.
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
-import Password from 'primevue/password'
-import Select from 'primevue/select'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
+import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { loadTenantPeople, type Person } from '../../../core/people/directory'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import {
@@ -91,7 +92,7 @@ async function submit() {
     header: t('erasure.confirmTitle'),
     message: t('erasure.confirmBody'),
     acceptLabel: t('erasure.action'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!accepted) return
   busy.value = true
@@ -115,19 +116,19 @@ async function submit() {
         </div>
       </div>
 
-      <Message v-if="loadFailed" severity="error" :closable="false">{{ t('erasure.loadFailed') }}</Message>
-      <Message v-else-if="preview?.kind === 'serverOwner'" severity="info" :closable="false" class="erasure-server-owner">
+      <VeyqMessage v-if="loadFailed" tone="error">{{ t('erasure.loadFailed') }}</VeyqMessage>
+      <VeyqMessage v-else-if="preview?.kind === 'serverOwner'" tone="info" class="erasure-server-owner">
         {{ t('erasure.serverOwner') }}
-      </Message>
+      </VeyqMessage>
 
       <template v-else-if="preview?.kind === 'ready'">
         <!-- What goes and what stays (ADR 0101 decisions 4, 5, 7) — before any field, as the rotation's facts are. -->
         <ul class="erasure-facts">
-          <li><i class="pi pi-trash" aria-hidden="true" /><span>{{ t('erasure.factGoes') }}</span></li>
-          <li><i class="pi pi-users" aria-hidden="true" /><span>{{ t('erasure.factSharedStays') }}</span></li>
-          <li><i class="pi pi-shield" aria-hidden="true" /><span>{{ t('erasure.factKept') }}</span></li>
-          <li><i class="pi pi-database" aria-hidden="true" /><span>{{ t('erasure.factBackups') }}</span></li>
-          <li><i class="pi pi-clock" aria-hidden="true" /><span>{{ t('erasure.factWindow') }}</span></li>
+          <li><VeyqIcon name="trash" /><span>{{ t('erasure.factGoes') }}</span></li>
+          <li><VeyqIcon name="users" /><span>{{ t('erasure.factSharedStays') }}</span></li>
+          <li><VeyqIcon name="shield" /><span>{{ t('erasure.factKept') }}</span></li>
+          <li><VeyqIcon name="database" /><span>{{ t('erasure.factBackups') }}</span></li>
+          <li><VeyqIcon name="clock" /><span>{{ t('erasure.factWindow') }}</span></li>
         </ul>
 
         <form class="veyq-form" @submit.prevent="submit">
@@ -137,12 +138,10 @@ async function submit() {
             <ul class="erasure-list">
               <li v-for="tn in choiceTenants" :key="tn.tenantId" class="veyq-list-row" :data-choice-tenant="tn.tenantId">
                 <label :for="`erasure-choice-${tn.tenantId}`">{{ tn.name }}</label>
-                <Select
+                <VeyqSelect
                   v-model="choices[tn.tenantId]"
                   :input-id="`erasure-choice-${tn.tenantId}`"
                   :options="optionsFor(tn)"
-                  option-label="label"
-                  option-value="value"
                   :placeholder="t('erasure.choicePlaceholder')"
                   :disabled="busy"
                 />
@@ -162,24 +161,22 @@ async function submit() {
 
           <div class="settings-field">
             <label for="erasure-password">{{ t('erasure.passwordLabel') }}</label>
-            <Password
+            <VeyqPassword
               v-model="password"
               input-id="erasure-password"
-              :feedback="false"
-              toggle-mask
               autocomplete="current-password"
               :disabled="busy"
             />
           </div>
 
-          <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+          <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
 
           <div class="erasure-action">
-            <Button
+            <VeyqButton
               type="submit"
               :label="t('erasure.action')"
-              icon="pi pi-trash"
-              severity="danger"
+              icon="trash"
+              variant="danger"
               :disabled="!canSubmit || busy"
               :loading="busy"
             />
@@ -203,7 +200,7 @@ async function submit() {
   align-items: start;
   gap: 0.5rem;
 }
-.erasure-facts .pi {
+.erasure-facts .veyq-icon {
   color: var(--app-muted);
   margin-top: 0.15rem;
 }

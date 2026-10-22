@@ -229,7 +229,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
       {
         id: 'cover',
         label: translate(store.declared.has(node.id) ? 'node.cover.change' : 'node.cover.set'),
-        icon: 'pi pi-image',
+        icon: 'image',
         placement: 'after',
         onClick: () => open(node),
       },

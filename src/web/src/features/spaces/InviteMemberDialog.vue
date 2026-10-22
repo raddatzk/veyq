@@ -7,10 +7,10 @@
 // cannot send is refused by the server before anything is minted.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { inviteMember, memberError } from './members'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 
@@ -66,38 +66,37 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" :header="t('members.invite')" modal class="tenant-dialog" :closable="!loading" :close-on-escape="!loading">
+  <VeyqDialog v-model:visible="visible" :header="t('members.invite')" class="tenant-dialog" :closable="!loading" :close-on-escape="!loading">
     <form v-if="!sentTo" class="veyq-form" @submit.prevent="submit">
       <p class="dialog-intro">{{ t('members.inviteIntro') }}</p>
       <label>
         {{ t('members.email') }}
-        <InputText v-model="email" type="email" autocomplete="email" required :disabled="loading" />
+        <VeyqInput v-model="email" type="email" autocomplete="email" required :disabled="loading" />
       </label>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button
-          type="button"
+        <VeyqButton
           :label="t('common.cancel')"
-          icon="pi pi-times"
-          severity="secondary"
-          outlined
+          icon="times"
+          variant="secondary"
+          appearance="outlined"
           :disabled="loading"
           @click="visible = false"
         />
-        <Button type="submit" :label="t('members.inviteSubmit')" icon="pi pi-send" :loading="loading" :disabled="!canSubmit" />
+        <VeyqButton type="submit" :label="t('members.inviteSubmit')" icon="send" :loading="loading" :disabled="!canSubmit" />
       </div>
     </form>
 
     <!-- One outcome only: a 201 means the mail was accepted. Anything else is an error on the form above, so
          there is no delivery state to branch on here any more (ADR 0055 §7). -->
     <div v-else class="veyq-form">
-      <Message severity="success" :closable="false">{{ t('members.inviteSentTo', { email: sentTo }) }}</Message>
+      <VeyqMessage tone="success">{{ t('members.inviteSentTo', { email: sentTo }) }}</VeyqMessage>
       <p class="dialog-intro">{{ t('members.inviteSentIntro') }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.done')" icon="pi pi-check" @click="visible = false" />
+        <VeyqButton :label="t('common.done')" icon="check" @click="visible = false" />
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

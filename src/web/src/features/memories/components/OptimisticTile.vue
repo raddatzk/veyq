@@ -12,6 +12,7 @@
 // clickable — the lightbox opens the real media once it lands.
 import { useI18n } from 'vue-i18n'
 import type { OptimisticTileVM } from '../useOptimisticTiles'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{
   tile: OptimisticTileVM
@@ -46,7 +47,7 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
          play badge marks a settled video. -->
     <img v-if="tile.url" class="media-grid-tile-media" :src="tile.url" :alt="tile.name" />
     <span v-if="tile.isVideo && tile.url && tile.status === 'done'" class="optimistic-tile-play" aria-hidden="true">
-      <span class="pi pi-play" />
+      <VeyqIcon name="play" />
     </span>
     <!-- cr-0102 uploader: a settled tile is the session-only own-view — no ring, just a delete affordance -->
     <div v-if="isDoneDeletable()" class="upload-tile-done">
@@ -57,18 +58,18 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
         :aria-label="t('share.deletePhoto')"
         @click.stop="emit('delete', tile.fileId)"
       >
-        <span :class="deleting ? 'pi pi-spin pi-spinner' : 'pi pi-trash'" />
+        <VeyqIcon :name="deleting ? 'spinner' : 'trash'" :spin="deleting" />
       </button>
     </div>
     <div v-else-if="isLinkFull()" class="upload-tile-state upload-tile-failed">
-      <span class="pi pi-exclamation-triangle" />
+      <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />
       <span class="upload-tile-failed-label">{{ t('media.uploadTileLinkFull') }}</span>
     </div>
     <div v-else-if="tile.status === 'failed'" class="upload-tile-state upload-tile-failed">
-      <span class="pi pi-exclamation-triangle" />
+      <VeyqIcon name="exclamation-triangle" class="upload-tile-failed-icon" />
       <span class="upload-tile-failed-label">{{ t('media.uploadTileFailed') }}</span>
       <button type="button" class="upload-tile-retry" @click.stop="emit('retry', tile.fileId)">
-        <span class="pi pi-refresh" />
+        <VeyqIcon name="refresh" />
         <span>{{ t('media.uploadRetry') }}</span>
       </button>
     </div>
@@ -167,7 +168,7 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
   color: #fff;
   pointer-events: none;
 }
-.optimistic-tile-play .pi {
+.optimistic-tile-play .veyq-icon {
   font-size: 1.1rem;
   margin-left: 0.15rem;
 }
@@ -213,7 +214,7 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
   color: #fff;
   background: color-mix(in srgb, var(--app-backdrop-strong) 55%, transparent);
 }
-.upload-tile-failed .pi-exclamation-triangle {
+.upload-tile-failed .upload-tile-failed-icon {
   font-size: 1.25rem;
 }
 .upload-tile-failed-label {

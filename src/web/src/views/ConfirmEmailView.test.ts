@@ -17,9 +17,9 @@ import { session } from '../app/session'
 import { realI18n, t } from '../test/i18n'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 // The view registers a window-level `hashchange` listener, so every mount is torn down after its test.

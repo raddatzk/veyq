@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 // The folder share page's breadcrumb, clicked through the DOM (cr-node-key-hierarchy 5b.4b; found in the browser,
 // 2026-10-07). `ShareTreePage.test.ts` stubs the Breadcrumb and the router, so it pins only the `push` arguments — it
-// cannot see that PrimeVue renders every crumb as an `<a href>` whose DEFAULT action still runs after the `command`:
+// cannot see that `VeyqBreadcrumb` renders every crumb as an `<a href>` whose DEFAULT action still runs after the `command`:
 // with `href="#"` the browser cleared the `#k=` fragment (the share key) and the pending push was cancelled. Here the
-// real PrimeVue Breadcrumb and the real vue-router render and route; the registry is a Proxy onto a fresh one, as there.
+// real `VeyqBreadcrumb` and the real vue-router render and route; the registry is a Proxy onto a fresh one, as there.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { guestAccessFor } from '../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -69,14 +68,14 @@ beforeEach(async () => {
 async function mountAtNested() {
   const w = mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head, reload: async () => {}, access: guestAccessFor(head) },
-    global: { plugins: [router, realI18n(), PrimeVue] },
+    global: { plugins: [router, realI18n()] },
   })
   await flushPromises()
   return w
 }
 /** Click the rendered crumb link as a user does; the event says whether its default action (following `href`) ran. */
 async function clickCrumb(w: Awaited<ReturnType<typeof mountAtNested>>, label: string) {
-  const link = w.findAll('a.p-breadcrumb-item-link').find((a) => a.text() === label)
+  const link = w.findAll('a.veyq-breadcrumb__link').find((a) => a.text() === label)
   expect(link, `a crumb link "${label}"`).toBeTruthy()
   const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
   link!.element.dispatchEvent(click)
@@ -87,7 +86,7 @@ async function clickCrumb(w: Awaited<ReturnType<typeof mountAtNested>>, label: s
 describe('ShareTreePage: a breadcrumb click keeps the share key', () => {
   it('renders each crumb as a real link to its node, the #k= fragment included', async () => {
     const w = await mountAtNested()
-    const links = w.findAll('a.p-breadcrumb-item-link')
+    const links = w.findAll('a.veyq-breadcrumb__link')
     expect(links.map((a) => a.text())).toEqual(['Familie', 'Briefe', 'Feldpost'])
     expect(links[0].attributes('href')).toBe(`/s/${SHARE_ID}${HASH}`)
     expect(links[1].attributes('href')).toBe(`/s/${SHARE_ID}?node=${LETTERS}${HASH}`)
@@ -113,7 +112,7 @@ describe('ShareTreePage: a breadcrumb click keeps the share key', () => {
 
   it('a modified click is left to the browser (open the real href elsewhere): not prevented, no navigation here', async () => {
     const w = await mountAtNested()
-    const link = w.findAll('a.p-breadcrumb-item-link').find((a) => a.text() === 'Briefe')!
+    const link = w.findAll('a.veyq-breadcrumb__link').find((a) => a.text() === 'Briefe')!
     const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, metaKey: true })
     link.element.dispatchEvent(click)
     await flushPromises()

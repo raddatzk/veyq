@@ -44,7 +44,6 @@ vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import MemoryHomeView from './MemoryHomeView.vue'
 import { loadTree, resetTree, treeStore } from '../core/node/treeStore'
@@ -153,7 +152,7 @@ async function openRome() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash: hashForNode(treeStore.nodes, ROME, '~me') })
   await router.isReady()
-  const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
   for (let i = 0; i < 5; i++) {
     await settle(100)
     await flushPromises()

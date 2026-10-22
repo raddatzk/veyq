@@ -35,14 +35,14 @@ const READY_VIEW: TenantMailSettings = {
 }
 
 const stubs = {
-  Button: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqButton: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue', 'type', 'placeholder'],
     emits: ['update:modelValue'],
     template: '<input :type="type || \'text\'" :placeholder="placeholder" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  ToggleSwitch: {
+  VeyqSwitch: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',

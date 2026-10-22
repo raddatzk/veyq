@@ -4,7 +4,7 @@
 // (`../levelRow.ts`): a leading visual (the kind's icon, or the application's cover component), the name, one meta line,
 // a primary click and the actions. The application supplies the data and its rights answers; core owns the look, the
 // keyboard (every control is a real, labelled `<button>`), the dark mode (tokens) and the split of the actions: at most two
-// FIRST-CLASS buttons on the item, every other shown action in ONE "more" menu (a PrimeVue `Menu`, a real menu: arrow
+// FIRST-CLASS buttons on the item, every other shown action in ONE "more" menu (a `VeyqMenu`, a real menu: arrow
 // keys, Escape). Core's own actions (the future favourite heart, inbox #409) plug in as `coreActions`, merged around the
 // application's list by `mergeRowActions`.
 //
@@ -15,9 +15,11 @@
 // opens the node: selecting is the checkbox's alone.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Menu from 'primevue/menu'
-import type { MenuItem } from 'primevue/menuitem'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip'
+import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import { levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
 
 const props = withDefaults(
@@ -46,8 +48,8 @@ const { t } = useI18n()
 const details = computed(() => levelRowDetails(props.row))
 
 const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, props.row.actions)))
-const menu = ref<InstanceType<typeof Menu> | null>(null)
-const menuItems = computed<MenuItem[]>(() =>
+const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
+const menuItems = computed<VeyqMenuItem[]>(() =>
   split.value.menu.map((a: LevelRowAction) => ({
     label: a.label,
     icon: a.icon,
@@ -56,7 +58,7 @@ const menuItems = computed<MenuItem[]>(() =>
     command: () => a.onClick(),
   })),
 )
-const severityOf = (a: LevelRowAction) => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? undefined : 'secondary')
+const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? 'primary' : 'secondary')
 </script>
 
 <template>
@@ -67,10 +69,10 @@ const severityOf = (a: LevelRowAction) => (a.severity === 'danger' ? 'danger' : 
   >
     <label v-if="selected !== undefined" class="veyq-level-item-check" :class="{ 'is-on': selected }">
       <input type="checkbox" :checked="selected" :aria-label="row.title" @change="emit('toggleSelect')" />
-      <span class="pi pi-check" aria-hidden="true" />
+      <VeyqIcon name="check" />
     </label>
     <div v-if="unsupported" class="veyq-level-item-main">
-      <span class="veyq-level-item-visual" aria-hidden="true"><span class="veyq-level-item-icon" :class="row.icon" /></span>
+      <span class="veyq-level-item-visual" aria-hidden="true"><VeyqIcon class="veyq-level-item-icon" :name="row.icon" /></span>
       <span class="veyq-level-item-text">
         <strong class="veyq-level-item-title">{{ row.title }}</strong>
         <small class="veyq-level-item-meta">{{ row.meta }}</small>
@@ -86,7 +88,7 @@ const severityOf = (a: LevelRowAction) => (a.severity === 'danger' ? 'danger' : 
     >
       <span class="veyq-level-item-visual" aria-hidden="true">
         <component :is="row.leading.component" v-if="row.leading" v-bind="row.leading.props" />
-        <span v-else class="veyq-level-item-icon" :class="row.icon" />
+        <VeyqIcon v-else class="veyq-level-item-icon" :name="row.icon" />
       </span>
       <span class="veyq-level-item-text">
         <strong class="veyq-level-item-title">{{ row.title }}</strong>
@@ -99,38 +101,36 @@ const severityOf = (a: LevelRowAction) => (a.severity === 'danger' ? 'danger' : 
       </span>
     </button>
     <span v-if="split.buttons.length || split.menu.length" class="veyq-level-item-actions">
-      <Button
-        v-for="a in split.buttons"
-        :key="a.id"
-        v-tooltip.bottom="a.label"
-        type="button"
-        class="veyq-icon-button veyq-prime-icon-button veyq-level-item-action"
-        :class="[a.class, { 'veyq-danger-action': a.severity === 'danger', 'is-pressed': a.pressed === true }]"
-        :data-action="a.id"
-        :icon="a.icon"
-        :aria-label="a.label"
-        :aria-pressed="a.pressed === undefined ? undefined : a.pressed"
-        :severity="severityOf(a)"
-        outlined
-        size="small"
-        :loading="a.loading"
-        :disabled="a.disabled"
-        @click="a.onClick()"
-      />
-      <template v-if="split.menu.length">
-        <Button
-          v-tooltip.bottom="t('node.rowMore', { name: row.title })"
-          type="button"
-          class="veyq-icon-button veyq-prime-icon-button veyq-level-item-more"
-          icon="pi pi-ellipsis-h"
-          :aria-label="t('node.rowMore', { name: row.title })"
-          aria-haspopup="menu"
-          severity="secondary"
-          outlined
+      <VeyqTooltip v-for="a in split.buttons" :key="a.id" :text="a.label">
+        <VeyqButton
+          class="veyq-icon-button veyq-prime-icon-button veyq-level-item-action"
+          :class="[a.class, { 'veyq-danger-action': a.severity === 'danger', 'is-pressed': a.pressed === true }]"
+          :data-action="a.id"
+          :icon="a.icon"
+          :aria-label="a.label"
+          :aria-pressed="a.pressed === undefined ? undefined : a.pressed"
+          :variant="variantOf(a)"
+          appearance="outlined"
           size="small"
-          @click="menu?.toggle($event)"
+          :loading="a.loading"
+          :disabled="a.disabled"
+          @click="a.onClick()"
         />
-        <Menu ref="menu" :model="menuItems" popup />
+      </VeyqTooltip>
+      <template v-if="split.menu.length">
+        <VeyqTooltip :text="t('node.rowMore', { name: row.title })">
+          <VeyqButton
+            class="veyq-icon-button veyq-prime-icon-button veyq-level-item-more"
+            icon="ellipsis-h"
+            :aria-label="t('node.rowMore', { name: row.title })"
+            aria-haspopup="menu"
+            variant="secondary"
+            appearance="outlined"
+            size="small"
+            @click="menu?.toggle($event)"
+          />
+        </VeyqTooltip>
+        <VeyqMenu ref="menu" :items="menuItems" />
       </template>
     </span>
   </li>

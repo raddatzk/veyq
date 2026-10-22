@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // A SINGLE-FILE share, as its guest sees it (inbox #378, #401): core's page of a READ or READ_WRITE link
-// (`ShareTreePage`, the real one — real router, real registry with Depot registered, real PrimeVue) rooted at a `FILE`,
+// (`ShareTreePage`, the real one — real router, real registry with Depot registered, real UI layer) rooted at a `FILE`,
 // which renders FILE's registered `detail`, the member's `FileDetail`, handed the guest's access and the tree the link
 // opened (`guestTreeSource` over real crypto). No guest-only page exists: the file's facts, its download and — for a
 // contributor — its replace are the member view with the functions the matrix removes (`depotRights`).
@@ -13,7 +13,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -65,6 +64,7 @@ import { stubApi } from '../../../test/apiMock'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
 import { guestAccessFor } from '../../../test/models'
 import { authenticatedCalls } from '../../../test/guestMode'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_6'
@@ -101,7 +101,7 @@ async function mountPage(role: ShareRole, o: { requestGuest?: () => Promise<Gues
       shareId: SHARE, fragmentKey: b64url(K_SHARE), pwToken: PW, head: h0, reload: o.reload ?? (async () => {}),
       access: guestAccessFor(h0, { pwToken: PW, requestGuest: o.requestGuest ?? (async () => GUEST), reload: o.reload }),
     },
-    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [router, realI18n()] },
   })
   await flushPromises()
   return w
@@ -110,6 +110,8 @@ type Page = Awaited<ReturnType<typeof mountPage>>
 // The viewer's own controls are `FileViewer.test.ts`'s; this counts the page's.
 const labels = (w: Page) => w.findAll('button').filter((b) => !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label') ?? b.text())
 const downloadButton = (w: Page) => w.find('button.file-detail-download')
+/** Every icon a button of the page draws (the layer's icon names). */
+const buttonIcons = (w: Page) => w.findAllComponents(VeyqButton).map((b) => b.props('icon'))
 /** Pick `name` into the page's one replace input (the real change event). */
 async function pick(w: Page, name: string) {
   await w.find('button.file-detail-replace').trigger('click')
@@ -242,7 +244,7 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     const w = await mountPage(ShareRole.Read)
     expect(labels(w)).toEqual([t('depot.download', { name: 'Report.pdf' })])
     expect(w.find('input[type="file"]').exists()).toBe(false)
-    for (const icon of ['.pi-pencil', '.pi-trash', '.pi-share-alt', '.pi-file-export', '.pi-sync']) expect(w.find(icon).exists(), icon).toBe(false)
+    for (const icon of ['pencil', 'trash', 'share-alt', 'file-export', 'sync']) expect(buttonIcons(w), icon).not.toContain(icon)
     expectNoMemberWorld()
   })
 
@@ -282,7 +284,7 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     expect(w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('data-action'))).toEqual(['download', 'replace'])
     expect(w.find('.file-detail .veyq-form-copy').exists(), 'no standing sentence about the replace').toBe(false)
     expect(w.text()).not.toMatch(/owner too|cannot be restored/)
-    for (const icon of ['.pi-pencil', '.pi-trash', '.pi-share-alt', '.pi-file-export']) expect(w.find(icon).exists(), icon).toBe(false)
+    for (const icon of ['pencil', 'trash', 'share-alt', 'file-export']) expect(buttonIcons(w), icon).not.toContain(icon)
 
     await pick(w, 'new.pdf')
     expect(dialog.text()).toContain(t('depot.guest.replaceFileConfirm', { name: 'Report.pdf', file: 'new.pdf' }))

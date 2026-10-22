@@ -28,11 +28,11 @@ const KIT: KitData = { email: 'kevin@example.com', secretKey: 'ERERERERERERERERE
 const stubs = {
   // `name`, `type`, `id` and the rest fall through as attributes — which is how every host's test finds this
   // field by `input[name="secret-key"]`.
-  InputText: {
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
   KitScanner: true,
 }
 
@@ -100,7 +100,7 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
     const shown = messages(w)
     expect(shown).toHaveLength(1)
     expect(shown[0].text()).toBe(t('unlock.kitUnreadable'))
-    expect(shown[0].attributes('data-severity')).toBe('error')
+    expect(shown[0].attributes('data-tone')).toBe('error')
     // Nothing was guessed into the field, and nothing was handed up.
     expect(w.emitted('update:modelValue')).toBeUndefined()
     expect(w.emitted('kit')).toBeUndefined()
@@ -139,7 +139,7 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
 
     const shown = messages(w)
     expect(shown).toHaveLength(1)
-    expect(shown[0].attributes('data-severity')).toBe('warn')
+    expect(shown[0].attributes('data-tone')).toBe('warn')
     expect(shown[0].text()).toContain(KIT.email)
     expect(shown[0].text()).toContain('someone.else@example.com')
     // The part that makes it a warning rather than a check: the key is still applied and still handed up, so

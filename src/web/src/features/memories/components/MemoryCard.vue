@@ -5,12 +5,13 @@
 // favorite heart is core's action (inbox #409) and a chapter's lives in its own header.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Card from 'primevue/card'
 import type { TreeNode } from '../../../core/node/tree'
 import type { MemoryDate } from '../memoryDate'
 import type { CoverCrop } from '../memoryCover'
 import { formatClosedRange, formatDay } from '../memoryDateRange'
 import MemoryCoverImage from './MemoryCoverImage.vue'
+import VeyqCard from '../../../shared/ui/VeyqCard.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 // `date` is the node's sealed range (already unsealed by the parent), or null when it carries none. `coverSrc` +
 // `coverCrop` are the node's chosen cover (a decrypted thumbnail URL + its crop, resolved by the parent, cr-0072);
@@ -37,27 +38,25 @@ const dateLabel = computed(() => {
 </script>
 
 <template>
-  <Card class="veyq-card veyq-card-interactive memory-card">
-    <template #content>
-      <button class="memory-card-main" type="button" @click="$emit('open', memory)">
-        <span class="memory-card-cover">
-          <MemoryCoverImage :src="coverSrc" :crop="coverCrop" :alt="memory.name">
-            <template #placeholder>
-              <span class="memory-card-icon pi pi-images" />
-            </template>
-          </MemoryCoverImage>
-        </span>
-        <span class="memory-card-text">
-          <strong>{{ memory.name }}</strong>
-          <small v-if="dateLabel" class="memory-card-date">{{ dateLabel }}</small>
-        </span>
-      </button>
-    </template>
-  </Card>
+  <VeyqCard class="veyq-card veyq-card-interactive memory-card">
+    <button class="memory-card-main" type="button" @click="$emit('open', memory)">
+      <span class="memory-card-cover">
+        <MemoryCoverImage :src="coverSrc" :crop="coverCrop" :alt="memory.name">
+          <template #placeholder>
+            <VeyqIcon name="images" class="memory-card-icon" />
+          </template>
+        </MemoryCoverImage>
+      </span>
+      <span class="memory-card-text">
+        <strong>{{ memory.name }}</strong>
+        <small v-if="dateLabel" class="memory-card-date">{{ dateLabel }}</small>
+      </span>
+    </button>
+  </VeyqCard>
 </template>
 
 <style scoped>
-.memory-card :deep(.p-card-content) {
+.memory-card :deep(.veyq-card-frame__content) {
   position: relative;
 }
 /* The sealed date range under the title (cr-0067) — muted, single line, ellipsized. */

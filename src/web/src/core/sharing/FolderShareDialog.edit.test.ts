@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
 // inbox #364: a member edits an existing folder link in place — label, role, note, password, expiry — with
 // `updateShare` on the same link, offered on its own links only (the server lets only a link's owner edit it, ADR 0036
-// point 3). The real PrimeVue buttons, inputs and switches are mounted and clicked with real DOM clicks (src/web/CLAUDE.md:
+// point 3). The real layer buttons, inputs and switches are mounted and clicked with real DOM clicks (src/web/CLAUDE.md:
 // a test that asserts what a handler calls has not clicked anything); only the Dialog (it teleports), the date picker
 // and the note editor are stubbed. The data layer is stubbed as in `FolderShareDialog.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('./shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn() }))
 vi.mock('./manageShares', () => ({
@@ -54,10 +53,10 @@ function mountDialog(extra: { contribute?: boolean } = { contribute: true }) {
     attachTo: document.body,
     props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: {
-      plugins: [realI18n(), PrimeVue],
+      plugins: [realI18n()],
       stubs: {
-        Dialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h1 class="header">{{ header }}</h1><slot /></div>' },
-        DatePicker: { props: ['modelValue'], template: '<input class="datepicker" :value="modelValue ? modelValue.toISOString() : \'\'" />' },
+        VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h1 class="header">{{ header }}</h1><slot /></div>' },
+        VeyqDateField: { props: ['modelValue'], template: '<input class="datepicker" :value="modelValue" />' },
         LocaleMarkdownEditor: true,
       },
     },
@@ -67,7 +66,7 @@ type W = ReturnType<typeof mountDialog>
 const click = (el: Element) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
 const byLabel = (w: W, label: string) => w.findAll(`button[aria-label="${label}"]`)
 const byText = (w: W, text: string) => w.findAll('button').find((b) => b.text() === text)
-/** A PrimeVue ToggleSwitch is a checkbox input carrying the switch's aria-label. */
+/** A `VeyqSwitch` is a checkbox input carrying the switch's aria-label. */
 const toggle = (w: W, label: string) => w.find(`input[role="switch"][aria-label="${label}"]`)
 
 beforeEach(() => {

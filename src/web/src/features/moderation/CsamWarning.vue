@@ -4,7 +4,7 @@
 // and a file or a screenshot is the thing never to make. Its words are ADR 0093 § 13's, a DRAFT until a qualified legal
 // review, which the page says. Nothing opens until the moderator continues.
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
 
 const emit = defineEmits<{ continue: []; back: [] }>()
 const { t } = useI18n()
@@ -21,8 +21,8 @@ const { t } = useI18n()
       <li>{{ t('moderation.csam.inform') }}</li>
     </ul>
     <div class="veyq-action-group">
-      <Button severity="secondary" class="moderation-csam-back" icon="pi pi-arrow-left" :label="t('moderation.csam.back')" @click="emit('back')" />
-      <Button severity="danger" class="moderation-csam-continue" icon="pi pi-exclamation-triangle" :label="t('moderation.csam.continue')" @click="emit('continue')" />
+      <VeyqButton variant="secondary" class="moderation-csam-back" icon="arrow-left" :label="t('moderation.csam.back')" @click="emit('back')" />
+      <VeyqButton variant="danger" class="moderation-csam-continue" icon="exclamation-triangle" :label="t('moderation.csam.continue')" @click="emit('continue')" />
     </div>
   </div>
 </template>

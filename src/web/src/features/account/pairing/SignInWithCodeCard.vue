@@ -22,15 +22,16 @@
 // sent and why the terminal copy says *start again* rather than *keep waiting* (uc.account.onboard-device E2).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import InputText from 'primevue/inputtext'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import GrantReceiverOutcome from './GrantReceiverOutcome.vue'
 import PairingCode from './PairingCode.vue'
 import { mintPairingSecret, channelKeys, signInPayload, signInAnswer, type PairingChannelKeys } from './pairing'
 import { openPairingChannel, answerPairingChannel } from './pairingChannel'
 import { useGrantReceiver } from './useGrantReceiver'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const emit = defineEmits<{
   /** The tail completed: this device holds its own session and an open vault. The caller routes into the shell. */
@@ -106,7 +107,7 @@ void runOpen()
   <div class="veyq-form sign-in-code">
     <template v-if="step === 'opening'">
       <p class="join-status">
-        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <VeyqIcon name="spinner" spin />
         <span>{{ t('pairing.signInOpening') }}</span>
       </p>
     </template>
@@ -121,7 +122,7 @@ void runOpen()
              and no way for the other device to say "wrong, try again" (ADR 0059 §6). -->
         <label class="sign-in-code-field">
           {{ t('pairing.signInCodeField') }}
-          <InputText
+          <VeyqInput
             v-model="code"
             id="sign-in-code"
             inputmode="numeric"
@@ -135,17 +136,17 @@ void runOpen()
 
         <!-- Answered before the first call, not at the end: adoption fixes the refresh lifetime for good. -->
         <div v-if="staySupported" class="checkbox-row">
-          <Checkbox v-model="stay" input-id="sign-in-stay" binary />
+          <VeyqCheckbox v-model="stay" input-id="sign-in-stay" />
           <label for="sign-in-stay">
             {{ t('login.rememberMe') }}
             <small class="field-hint">{{ t('pairing.joinStayHint') }}</small>
           </label>
         </div>
 
-        <Button
+        <VeyqButton
           type="button"
           :label="t('pairing.signInSend')"
-          icon="pi pi-check"
+          icon="check"
           :disabled="!canSend || sending"
           :loading="sending"
           @click="send"
@@ -153,15 +154,15 @@ void runOpen()
       </template>
 
       <p v-else class="join-status">
-        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <VeyqIcon name="spinner" spin />
         <span>{{ step === 'finishing' ? t('pairing.joinFinishing') : t('pairing.signInWaiting') }}</span>
       </p>
 
-      <Button
+      <VeyqButton
         type="button"
         :label="t('common.cancel')"
-        severity="secondary"
-        text
+        variant="secondary"
+        appearance="text"
         :disabled="settling"
         @click="emit('cancel')"
       />

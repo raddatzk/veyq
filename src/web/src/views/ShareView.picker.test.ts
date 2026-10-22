@@ -15,7 +15,6 @@
 // `MemoryDetail.optimistic.test.ts` is the reference for the module-mock shape: `mergeFiles` / `isSupportedMediaFile` stay REAL through `...actual`, only `enqueueUploads`
 // is a spy, so what is exercised is the picker's own de-dupe rather than a stub of it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import PrimeVue from 'primevue/config'
 
 const SHARE_ID = 's1'
 const SESSION_KEY = `veyq:share-contributor:${SHARE_ID}`
@@ -57,7 +56,7 @@ import { realI18n } from '../test/i18n'
 
 function mountShareView() {
   return mount(ShareView, {
-    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true } },
+    global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true } },
   })
 }
 

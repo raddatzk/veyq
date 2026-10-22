@@ -17,6 +17,8 @@
 // keeps its batches, each with its own hooks and `extra`, and merging those would merge what different enqueues own.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import type { VeyqIconName } from '../../shared/ui/icons'
 import {
   useUploadQueue,
   cancelFile,
@@ -82,12 +84,13 @@ const listFinished = (list: TrayList) => list.batches.every((b) => b.finishedAt 
 function closeList(list: TrayList) {
   for (const b of list.batches) acknowledgeBatch(b.id)
 }
-function statusIcon(f: UploadItem): string {
-  if (f.status === 'done') return 'pi pi-check'
-  if (f.status === 'failed') return 'pi pi-times'
-  if (f.status === 'cancelled') return 'pi pi-ban'
-  if (f.status === 'preparing' || f.status === 'uploading') return 'pi pi-spin pi-spinner' // both are active work
-  return 'pi pi-clock'
+const isActive = (f: UploadItem) => f.status === 'preparing' || f.status === 'uploading' // both are active work
+function statusIcon(f: UploadItem): VeyqIconName {
+  if (f.status === 'done') return 'check'
+  if (f.status === 'failed') return 'times'
+  if (f.status === 'cancelled') return 'ban'
+  if (isActive(f)) return 'spinner'
+  return 'clock'
 }
 
 onMounted(() => {
@@ -113,7 +116,7 @@ onBeforeUnmount(() => {
       aria-controls="uploads-panel"
       @click="toggle"
     >
-      <span class="pi" :class="activeFileCount > 0 ? 'pi-spin pi-spinner' : 'pi-list'" aria-hidden="true" />
+      <VeyqIcon :name="activeFileCount > 0 ? 'spinner' : 'list'" :spin="activeFileCount > 0" />
       <span v-if="activeFileCount" class="uploads-badge">{{ activeFileCount }}</span>
     </button>
 
@@ -141,7 +144,7 @@ onBeforeUnmount(() => {
         </div>
         <ul class="uploads-files">
           <li v-for="file in list.files" :key="file.id" class="uploads-file" :class="`is-${file.status}`">
-            <span class="uploads-file-icon" :class="statusIcon(file)" aria-hidden="true" />
+            <VeyqIcon class="uploads-file-icon" :name="statusIcon(file)" :spin="isActive(file)" />
             <span class="uploads-file-name">{{ file.name }}</span>
             <span class="uploads-file-status">{{ t(`upload.status.${file.status}`) }}</span>
             <button
@@ -152,7 +155,7 @@ onBeforeUnmount(() => {
               :title="t('upload.cancel')"
               @click="cancelFile(file.id)"
             >
-              <span class="pi pi-times" aria-hidden="true" />
+              <VeyqIcon name="times" />
             </button>
             <button
               v-else-if="file.status === 'failed' && isRetryable(file)"
@@ -162,7 +165,7 @@ onBeforeUnmount(() => {
               :title="t('upload.retry')"
               @click="retryFile(file.id)"
             >
-              <span class="pi pi-refresh" aria-hidden="true" />
+              <VeyqIcon name="refresh" />
             </button>
             <!-- A refusal for lack of room says why, and offers no retry: none can help (ADR 0073 §6). -->
             <span v-if="file.status === 'failed' && file.error === QUOTA_EXCEEDED" class="uploads-file-reason">
@@ -197,7 +200,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .uploads-trigger:hover {
-  background: var(--p-content-hover-background, rgba(127, 127, 127, 0.08));
+  background: var(--app-hover);
 }
 .uploads-badge {
   position: absolute;
@@ -307,11 +310,11 @@ onBeforeUnmount(() => {
 .uploads-file.is-failed .uploads-file-status {
   color: var(--app-danger);
 }
-.uploads-file-icon.pi-check {
+.uploads-file.is-done .uploads-file-icon {
   color: var(--app-accent);
 }
-.uploads-file-icon.pi-times,
-.uploads-file-icon.pi-ban {
+.uploads-file.is-failed .uploads-file-icon,
+.uploads-file.is-cancelled .uploads-file-icon {
   color: var(--app-danger);
 }
 .uploads-file-action {

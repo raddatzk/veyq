@@ -34,10 +34,10 @@ const row = (id: string, parentId: string | null, kind: string, kek: Uint8Array,
 })
 
 const stubs = {
-  Dialog: { template: '<div><slot /></div>' },
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Button: { props: ['type', 'label'], template: '<button :type="type || \'button\'">{{ label }}</button>' },
-  Message: { template: '<div><slot /></div>' },
+  VeyqDialog: { template: '<div><slot /></div>' },
+  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqButton: { props: ['type', 'label'], template: '<button :type="type || \'button\'">{{ label }}</button>' },
+  VeyqMessage: { template: '<div><slot /></div>' },
 }
 
 afterEach(() => vi.unstubAllGlobals())

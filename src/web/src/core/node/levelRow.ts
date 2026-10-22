@@ -16,7 +16,7 @@
 // {@link mergeRowActions}): the favourite heart of inbox #409 will be one, with no change to any application.
 //
 // **Visible and overflow.** At most {@link MAX_FIRST_ACTIONS} actions the kind marks `first` are real buttons on the row;
-// every other shown action sits in ONE "more" menu (a PrimeVue `Menu`), so a row stays readable at every width and no
+// every other shown action sits in ONE "more" menu (a `VeyqMenu`), so a row stays readable at every width and no
 // action is hidden by a media query (a width-hidden button is a lost action).
 import type { Component, Ref } from 'vue'
 import type { TreeNode } from './tree'
@@ -27,6 +27,7 @@ import { placeCoreActions, type CoreActionPlacement, type CoreHeaderAction, type
 import type { LevelActionHandler } from './levelActions'
 import type { LoadedCover } from './cover/coverModel'
 import type { DirectoryInput } from '../export/importSource'
+import type { VeyqIconName } from '../../shared/ui/icons'
 
 /** How many `first` actions a row shows as buttons; further ones fall into the overflow menu. */
 export const MAX_FIRST_ACTIONS = 2
@@ -64,8 +65,8 @@ export function levelRowDetails(row: Pick<LevelRow, 'details'>): LevelRowDetail[
 
 /** What core draws for one node. */
 export interface LevelRow {
-  /** The PrimeIcons class drawn when there is no `leading`. */
-  icon: string
+  /** The icon drawn when there is no `leading`. */
+  icon: VeyqIconName
   leading?: LevelRowLeading
   title: string
   /** The kind line of the meta ("File", "Memory"), already translated. The row's details follow it on the same line. */

@@ -7,17 +7,17 @@
 // It names no URL: where the admin surface is reachable is the operator's deploy-time choice, and this app is
 // never told it.
 import { useI18n } from 'vue-i18n'
-import Card from 'primevue/card'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
 
 const { t } = useI18n()
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>{{ t('notSetUp.title') }}</template>
-    <template #content>
+    <template #default>
       <p class="veyq-form-copy">{{ t('notSetUp.sub') }}</p>
       <p class="veyq-form-copy">{{ t('notSetUp.operator') }}</p>
     </template>
-  </Card>
+  </VeyqCard>
 </template>

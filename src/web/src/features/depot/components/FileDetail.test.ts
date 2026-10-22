@@ -56,6 +56,7 @@ import { SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -87,7 +88,7 @@ function mountDetail(o: { pending?: boolean; publicShares?: boolean; identityFol
       access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: o.pending ?? false, publicShares: o.publicShares ?? true }),
       tree: { ...tree, inIdentityFolder: () => o.identityFolder ?? false },
     },
-    global: { plugins: [realI18n()], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 type Wrapper = ReturnType<typeof mountDetail>
@@ -248,8 +249,9 @@ describe('an opened file: its page for a member', () => {
     expect(w.emitted('share')).toHaveLength(1)
     expect(w.emitted('rename')).toHaveLength(1)
     expect(w.emitted('delete')).toHaveLength(1)
-    const move = w.find('.veyq-node-header-actions button .pi-file-export')
-    await move.element.closest('button')!.click()
+    const move = w.find('.veyq-node-header-actions button[data-action="move"]')
+    expect(move.findComponent(VeyqButton).props('icon')).toBe('file-export')
+    await (move.element as HTMLButtonElement).click()
     expect((w.emitted('move') as TreeNode[][]).map(([n]) => n.id)).toEqual([R])
   })
 

@@ -17,8 +17,8 @@ import { fakeApi, stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /><slot name="footer" /></div>' },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /><slot name="footer" /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
 }
 
 const NO_DETAILS = {

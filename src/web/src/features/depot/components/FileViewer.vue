@@ -21,9 +21,10 @@
 // The same component serves the member and the share guest (inbox #401): it gets a reader and the facts, whoever opened it.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { formatBytes } from '../../../shared/formatBytes'
 import { useFileViewer, type ViewerTarget } from '../useFileViewer'
 import PdfPages from './PdfPages.vue'
@@ -178,9 +179,9 @@ onBeforeUnmount(() => {
   <div v-if="state.status !== 'idle'" ref="root" class="file-viewer" :class="{ 'file-viewer-full': full }" role="region" :aria-label="t('depot.viewer.label', { name })">
     <div class="file-viewer-stage" :aria-busy="state.status === 'loading'">
       <div v-if="state.status === 'loading'" class="file-viewer-status" role="status">
-        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <VeyqIcon name="spinner" spin />
         <span>{{ t('depot.viewer.loading') }}<template v-if="percent > 0"> {{ percent }} %</template></span>
-        <Button type="button" :label="t('depot.viewer.stop')" size="small" severity="secondary" text @click="cancel" />
+        <VeyqButton :label="t('depot.viewer.stop')" size="small" variant="secondary" appearance="text" @click="cancel" />
       </div>
 
       <img
@@ -192,26 +193,24 @@ onBeforeUnmount(() => {
       />
       <template v-else-if="ready?.kind === 'text'">
         <div class="file-viewer-text-tools" role="toolbar" :aria-label="t('depot.viewer.text.toolbar')">
-          <Button
-            type="button"
+          <VeyqButton
             class="file-viewer-text-copy"
-            icon="pi pi-copy"
+            icon="copy"
             :label="t('depot.viewer.text.copy')"
             :aria-label="ready.truncated ? t('depot.viewer.text.copyShown') : t('depot.viewer.text.copy')"
             size="small"
-            severity="secondary"
-            outlined
+            variant="secondary"
+            appearance="outlined"
             @click="copyText(ready.text, ready.truncated)"
           />
-          <Button
-            type="button"
+          <VeyqButton
             class="file-viewer-text-wrap"
-            icon="pi pi-align-left"
+            icon="align-left"
             :label="t('depot.viewer.text.wrap')"
             :aria-pressed="wrap"
             size="small"
-            severity="secondary"
-            :outlined="!wrap"
+            variant="secondary"
+            :appearance="wrap ? 'filled' : 'outlined'"
             @click="wrap = !wrap"
           />
           <span v-if="copyNote" class="file-viewer-text-note" role="status">{{ t(copyNote) }}</span>
@@ -254,7 +253,7 @@ onBeforeUnmount(() => {
       >
         <p class="file-viewer-password-title">{{ t('depot.viewer.pdf.passwordTitle', { name }) }}</p>
         <label class="file-viewer-password-label" :for="passwordFieldId">{{ t('depot.viewer.pdf.passwordLabel') }}</label>
-        <InputText
+        <VeyqInput
           :id="passwordFieldId"
           ref="passwordInput"
           v-model="password"
@@ -271,57 +270,55 @@ onBeforeUnmount(() => {
         <p v-if="passwordWrong" :id="passwordFieldId + '-error'" class="file-viewer-password-error" role="alert">{{ t('depot.viewer.pdf.passwordWrong') }}</p>
         <p :id="passwordFieldId + '-hint'" class="file-viewer-hint">{{ passwordBusy ? t('depot.viewer.pdf.passwordChecking') : t('depot.viewer.pdf.passwordHint') }}</p>
         <span class="file-viewer-password-actions">
-          <Button type="submit" class="file-viewer-password-open" :label="t('depot.viewer.pdf.passwordOpen')" size="small" :disabled="!password || passwordBusy" />
-          <Button type="button" class="file-viewer-password-cancel" :label="t('depot.viewer.pdf.passwordCancel')" size="small" severity="secondary" outlined :disabled="passwordBusy" @click="cancelPassword" />
+          <VeyqButton type="submit" class="file-viewer-password-open" :label="t('depot.viewer.pdf.passwordOpen')" size="small" :disabled="!password || passwordBusy" />
+          <VeyqButton class="file-viewer-password-cancel" :label="t('depot.viewer.pdf.passwordCancel')" size="small" variant="secondary" appearance="outlined" :disabled="passwordBusy" @click="cancelPassword" />
         </span>
       </form>
-      <Message v-else-if="state.status === 'error'" severity="error" :closable="false" class="file-viewer-message">
+      <VeyqMessage v-else-if="state.status === 'error'" tone="error" class="file-viewer-message">
         <span class="file-viewer-note">
           <span>{{ t('depot.viewer.error') }}</span>
-          <Button type="button" :label="t('depot.viewer.retry')" size="small" severity="secondary" outlined @click="retry" />
+          <VeyqButton :label="t('depot.viewer.retry')" size="small" variant="secondary" appearance="outlined" @click="retry" />
         </span>
-      </Message>
-      <Message v-else-if="state.status === 'cancelled'" severity="info" :closable="false" class="file-viewer-message">
+      </VeyqMessage>
+      <VeyqMessage v-else-if="state.status === 'cancelled'" tone="info" class="file-viewer-message">
         <span class="file-viewer-note">
           <span>{{ t('depot.viewer.cancelled') }}</span>
-          <Button type="button" :label="t('depot.viewer.retry')" size="small" severity="secondary" outlined @click="retry" />
+          <VeyqButton :label="t('depot.viewer.retry')" size="small" variant="secondary" appearance="outlined" @click="retry" />
         </span>
-      </Message>
-      <Message v-else-if="state.status === 'too-large' || state.status === 'unsupported'" severity="info" :closable="false" class="file-viewer-message">
+      </VeyqMessage>
+      <VeyqMessage v-else-if="state.status === 'too-large' || state.status === 'unsupported'" tone="info" class="file-viewer-message">
         <span class="file-viewer-note">
           <span v-if="state.status === 'too-large'">{{ t('depot.viewer.tooLarge', { limit: formatBytes(state.limit, locale) }) }}</span>
           <span v-else>{{ t(unsupportedKey) }}</span>
-          <Button
+          <VeyqButton
             v-if="canDownload"
-            type="button"
             class="file-viewer-download"
-            icon="pi pi-download"
+            icon="download"
             :label="t('depot.detail.download')"
             :aria-label="t('depot.download', { name })"
             size="small"
-            severity="secondary"
-            outlined
+            variant="secondary"
+            appearance="outlined"
             @click="emit('download')"
           />
         </span>
-      </Message>
+      </VeyqMessage>
 
       <p v-if="ready?.kind === 'text' && ready.truncated" class="file-viewer-hint" role="note">
         {{ t('depot.viewer.textTruncated', { shown: formatBytes(TEXT_CAP, locale) }) }}
       </p>
     </div>
 
-    <Button
+    <VeyqButton
       v-if="ready"
-      type="button"
       class="file-viewer-fullscreen"
-      :icon="full ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"
+      :icon="full ? 'window-minimize' : 'window-maximize'"
       :label="full ? t('depot.viewer.exitFullscreen') : t('depot.viewer.fullscreen')"
       :aria-label="full ? t('depot.viewer.exitFullscreen') : t('depot.viewer.fullscreen')"
       :aria-pressed="full"
       size="small"
-      severity="secondary"
-      outlined
+      variant="secondary"
+      appearance="outlined"
       @click="toggleFullscreen"
     />
   </div>

@@ -11,10 +11,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
-import InputText from 'primevue/inputtext'
-import ToggleSwitch from 'primevue/toggleswitch'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
 import { getTenantMailSettings, updateTenantMailSettings, type TenantMailSettings, type TenantMailSettingsUpdate } from './tenantMailSettings'
 import { activeSpace } from '../../app/activeSpace'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -176,63 +176,63 @@ async function save() {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('mail.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('mail.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('mail.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('mail.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('mail.loadFailed') }}</VeyqMessage>
 
       <template v-else>
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
 
         <!-- Config-secret KEK state (ADR 0050 amendment) dominates the readiness view when not OK — but ONLY for an
              AUTHENTICATING host: a changed key (MISMATCH) or an absent one means the stored password can't be used.
              An auth-less host (no username) has no password to unseal, so the KEK is irrelevant and it falls through
              to the send-readiness view below (mirrors the backend gate, which keys auth on `username`). -->
-        <Message v-if="needsAuth && configSecretState === 'MISMATCH'" severity="error" :closable="false" class="mail-readiness">{{ t('mail.keyMismatch') }}</Message>
-        <Message v-else-if="needsAuth && configSecretState === 'ABSENT'" severity="warn" :closable="false" class="mail-readiness">{{ t('mail.kekUnavailable') }}</Message>
+        <VeyqMessage v-if="needsAuth && configSecretState === 'MISMATCH'" tone="error" class="mail-readiness">{{ t('mail.keyMismatch') }}</VeyqMessage>
+        <VeyqMessage v-else-if="needsAuth && configSecretState === 'ABSENT'" tone="warn" class="mail-readiness">{{ t('mail.kekUnavailable') }}</VeyqMessage>
         <template v-else>
           <!-- Send-readiness (the brief's point 2): `enabled` alone doesn't send — make what's still missing visible. -->
-          <Message v-if="sendReady" severity="success" :closable="false" class="mail-readiness">{{ t('mail.sendReady') }}</Message>
-          <Message v-else severity="warn" :closable="false" class="mail-readiness">
+          <VeyqMessage v-if="sendReady" tone="success" class="mail-readiness">{{ t('mail.sendReady') }}</VeyqMessage>
+          <VeyqMessage v-else tone="warn" class="mail-readiness">
             <div>{{ t('mail.notSendReady') }}</div>
             <ul class="mail-missing">
               <li v-for="item in missing" :key="item">{{ item }}</li>
             </ul>
-          </Message>
+          </VeyqMessage>
         </template>
 
         <!-- SMTP transport -->
         <label>
           <span>{{ t('mail.host') }}</span>
-          <InputText v-model="host" :placeholder="t('mail.hostPlaceholder')" autocomplete="off" />
+          <VeyqInput v-model="host" :placeholder="t('mail.hostPlaceholder')" autocomplete="off" />
         </label>
         <div class="mail-field-row">
           <label>
             <span>{{ t('mail.port') }}</span>
-            <InputText v-model="port" inputmode="numeric" :placeholder="t('mail.portPlaceholder')" autocomplete="off" />
+            <VeyqInput v-model="port" inputmode="numeric" :placeholder="t('mail.portPlaceholder')" autocomplete="off" />
           </label>
           <label>
             <span>{{ t('mail.from') }}</span>
-            <InputText v-model="from" :placeholder="t('mail.fromPlaceholder')" autocomplete="off" />
+            <VeyqInput v-model="from" :placeholder="t('mail.fromPlaceholder')" autocomplete="off" />
           </label>
         </div>
         <label>
           <span>{{ t('mail.username') }}</span>
-          <InputText v-model="username" autocomplete="off" />
+          <VeyqInput v-model="username" autocomplete="off" />
         </label>
         <label>
           <span>{{ t('mail.password') }}</span>
-          <InputText v-model="password" type="password" autocomplete="new-password" :placeholder="passwordSet ? t('mail.passwordKeepPlaceholder') : ''" />
+          <VeyqInput v-model="password" type="password" autocomplete="new-password" :placeholder="passwordSet ? t('mail.passwordKeepPlaceholder') : ''" />
           <small class="field-hint">{{ passwordSet ? t('mail.passwordSetHint') : t('mail.passwordHint') }}</small>
         </label>
 
         <div class="mail-toggle-row">
-          <ToggleSwitch v-model="tls" input-id="mail-tls" />
+          <VeyqSwitch v-model="tls" input-id="mail-tls" />
           <label class="mail-toggle-label" for="mail-tls">
             <span>{{ t('mail.tls') }}</span>
             <small class="field-hint">{{ t('mail.tlsHint') }}</small>
           </label>
         </div>
         <div class="mail-toggle-row">
-          <ToggleSwitch v-model="enabled" input-id="mail-enabled" />
+          <VeyqSwitch v-model="enabled" input-id="mail-enabled" />
           <label class="mail-toggle-label" for="mail-enabled">
             <span>{{ t('mail.enabled') }}</span>
             <small class="field-hint">{{ t('mail.enabledHint') }}</small>
@@ -244,7 +244,7 @@ async function save() {
         <small class="field-hint">{{ t('mail.templateVarsHint', { vars: TEMPLATE_VARS }) }}</small>
         <label>
           <span>{{ t('mail.subject') }}</span>
-          <InputText v-model="subjectTemplate" :placeholder="t('mail.subjectPlaceholder', TEMPLATE_TOKENS)" />
+          <VeyqInput v-model="subjectTemplate" :placeholder="t('mail.subjectPlaceholder', TEMPLATE_TOKENS)" />
         </label>
         <label>
           <span>{{ t('mail.body') }}</span>
@@ -252,15 +252,15 @@ async function save() {
         </label>
 
         <div class="mail-actions">
-          <Button :label="t('mail.save')" icon="pi pi-save" :loading="saving" @click="save" />
+          <VeyqButton :label="t('mail.save')" icon="save" :loading="saving" @click="save" />
         </div>
 
         <div v-if="confirmOffer === 'offered'" class="mail-confirm-offer" data-testid="mail-confirm-offer">
           <p>{{ t('emailConfirm.mailOffer') }}</p>
-          <Message v-if="confirmError" severity="error" :closable="false">{{ confirmError }}</Message>
-          <Button :label="t('emailConfirm.send')" icon="pi pi-envelope" severity="secondary" :loading="confirming" @click="sendConfirmation()" />
+          <VeyqMessage v-if="confirmError" tone="error">{{ confirmError }}</VeyqMessage>
+          <VeyqButton :label="t('emailConfirm.send')" icon="envelope" variant="secondary" :loading="confirming" @click="sendConfirmation()" />
         </div>
-        <Message v-else-if="confirmOffer === 'sent'" severity="info" :closable="false">{{ t('emailConfirm.mailOfferSent') }}</Message>
+        <VeyqMessage v-else-if="confirmOffer === 'sent'" tone="info">{{ t('emailConfirm.mailOfferSent') }}</VeyqMessage>
       </template>
     </section>
   </section>

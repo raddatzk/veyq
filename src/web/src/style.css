@@ -41,7 +41,7 @@
   position: relative;
   min-width: 0;
 }
-.secret-field .p-inputtext {
+.secret-field .veyq-input {
   width: 100%;
   padding-right: calc(var(--secret-icons, 2) * 2.25rem + 0.25rem);
 }

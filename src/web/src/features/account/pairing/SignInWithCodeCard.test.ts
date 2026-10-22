@@ -63,19 +63,19 @@ const GRANT: PairingGrant = {
 
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  Button: {
-    props: ['label', 'icon', 'severity', 'loading', 'disabled', 'text'],
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance', 'loading', 'disabled'],
     emits: ['click'],
     template: '<button :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Checkbox: {
-    props: ['modelValue', 'inputId', 'binary', 'disabled'],
+  VeyqCheckbox: {
+    props: ['modelValue', 'inputId', 'disabled'],
     emits: ['update:modelValue'],
     template:
       '<input type="checkbox" :id="inputId" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },
-  InputText: {
+  VeyqInput: {
     props: ['modelValue', 'fluid', 'maxlength', 'inputmode', 'autocomplete', 'spellcheck'],
     emits: ['update:modelValue'],
     template: '<input :id="$attrs.id" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',

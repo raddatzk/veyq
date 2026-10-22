@@ -47,7 +47,6 @@ import { MEMORY_KIND } from '../features/memories/kinds'
 import { treeNode } from '../test/models'
 import { titlesOf } from '../test/levelRows'
 import { realI18n } from '../test/i18n'
-import PrimeVue from 'primevue/config'
 
 const UID = '3f2c9e1a-0000-4000-8000-00000000abcd'
 const mounted: { unmount(): void }[] = []
@@ -55,7 +54,7 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
   mounted.push(wrapper)
   await flushPromises()
   return wrapper

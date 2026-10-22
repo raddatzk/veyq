@@ -18,15 +18,15 @@ import { setTenantCapabilities } from '../../../shared/state/useCapabilities'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
-  Dialog: { template: '<div><slot /></div>' },
-  Button: { props: ['label', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div><slot /></div>' },
-  InputText: {
+  VeyqDialog: { template: '<div><slot /></div>' },
+  VeyqButton: { props: ['label', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input class="input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  DatePicker: { props: ['modelValue'], template: '<input class="datepicker" />' },
+  VeyqDateField: { props: ['modelValue'], template: '<input class="datepicker" />' },
 }
 
 function mountDialog() {

@@ -47,8 +47,8 @@ const statement = (over: Partial<ModerationStatement> = {}): ModerationStatement
 })
 
 const stubs = {
-  Button: { props: ['label'], template: '<button :class="$attrs.class" :type="$attrs.type ?? \'button\'">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqButton: { props: ['label'], template: '<button :class="$attrs.class" :type="$attrs.type ?? \'button\'">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 async function mountNotice(props: Record<string, string>): Promise<VueWrapper> {

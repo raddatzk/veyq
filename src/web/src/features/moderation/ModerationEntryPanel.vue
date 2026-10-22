@@ -9,7 +9,7 @@
 // Markup mirrors TrustResetPanel (veyq-surface + settings-form + settings-section-header).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import { MODERATION_PATH } from '../../app/moderationPath'
 import { ModeratorAppointmentStateEnum, type ModeratorAppointment } from '../../api/generated/moderation'
 
@@ -31,14 +31,13 @@ const pageUrl = `${globalThis.location?.origin ?? ''}${MODERATION_PATH}`
       </div>
 
       <p class="moderation-entry-copy">{{ t('moderation.entry.separate') }}</p>
-      <Button
-        as="a"
+      <VeyqButton
         class="moderation-entry-open"
         data-test="moderation-entry-open"
         :href="MODERATION_PATH"
         target="_blank"
         rel="noopener"
-        icon="pi pi-external-link"
+        icon="external-link"
         :label="pending ? t('moderation.entry.openPending') : t('moderation.entry.open')"
       />
       <p class="moderation-entry-address">{{ t('moderation.entry.address', { url: pageUrl, path: MODERATION_PATH }) }}</p>

@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
 // Inbox #385 (c): the undo after a delete into the trash, through the app's REAL undo toast — App.vue's undo group
-// (AppShell stubbed), PrimeVue's real Toast and ToastService — clicked in the DOM: the Undo button runs the caller's
+// (AppShell stubbed), the real `VeyqToaster` — clicked in the DOM: the Undo button runs the caller's
 // restore; a failed restore says so and points at the trash.
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../../components/app/AppShell.vue', () => ({ default: { render: () => null } }))
 
@@ -23,7 +22,7 @@ function mountWithApp() {
   })
   mount(defineComponent({ render: () => [h(App), h(Harness)] }), {
     attachTo: document.body,
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
   })
   return (name: string, restore: () => Promise<void>) => offer(name, restore)
 }

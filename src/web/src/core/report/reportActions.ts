@@ -57,7 +57,7 @@ export function reportNodes(access: Access, tree: TreeSource, nodes: readonly Tr
 
 function action(t: Translate, offered: boolean, access: Access, node: TreeNode | null, onReport: () => void): (CoreRowAction & CoreHeaderAction)[] {
   if (!offered || !node || !canReport(access)) return []
-  return [{ id: 'report', label: t('report.action'), icon: 'pi pi-flag', placement: 'after', onClick: onReport }]
+  return [{ id: 'report', label: t('report.action'), icon: 'flag', placement: 'after', onClick: onReport }]
 }
 
 export function reportHeaderActions(t: Translate, offered: boolean, access: Access, node: TreeNode | null, onReport: () => void): CoreHeaderAction[] {

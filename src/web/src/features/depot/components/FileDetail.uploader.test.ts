@@ -74,7 +74,7 @@ async function mountDetail(
       node, scopeId: SCOPE, epochs, contentKey: v1.randomBytes(32), children: { folders: [], byKind: new Map() },
       access: memberAccessOf({ scopeId: SCOPE, epochs }), tree,
     },
-    global: { plugins: [router, realI18n()], directives: { tooltip: {} } },
+    global: { plugins: [router, realI18n()] },
   })
   await flushPromises()
   return w
@@ -101,7 +101,7 @@ describe('an opened file names who uploaded its current content (ADR 0083 Decisi
     expect(line.exists()).toBe(true)
     expect(spoken(w)).toBe(`${t('depot.detail.uploadedBy')} Anna Meyer`)
     expect(loadScopePeople).toHaveBeenCalledWith(SCOPE)
-    expect(line.find('.p-avatar').exists()).toBe(true)
+    expect(line.find('.veyq-avatar').exists()).toBe(true)
     const link = line.get('a')
     expect(link.attributes('href')).toBe(`/${personHash(ANNA)}`)
     await link.trigger('click')

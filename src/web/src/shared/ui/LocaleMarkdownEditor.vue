@@ -16,8 +16,8 @@
 // `share.ts`) or public operational content (the tenant terms) is the caller's business, never this file's.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import VeyqButton from './VeyqButton.vue'
+import VeyqDialog from './VeyqDialog.vue'
 import { SUPPORTED_LOCALES } from '../../i18n'
 import { localeLabel, type LocaleMap } from './localeMap'
 
@@ -95,20 +95,18 @@ function cancelEdit() {
       <span class="locale-md-lang">{{ localeLabel(loc) }}</span>
       <div class="locale-md-row-actions">
         <slot name="row-actions" :locale="loc" />
-        <Button
-          type="button"
+        <VeyqButton
           :label="t('localeEditor.edit')"
-          icon="pi pi-pencil"
-          text
-          severity="secondary"
+          icon="pencil"
+          appearance="text"
+          variant="secondary"
           size="small"
           @click="openEdit(loc)"
         />
-        <Button
-          type="button"
-          icon="pi pi-trash"
-          text
-          severity="danger"
+        <VeyqButton
+          icon="trash"
+          appearance="text"
+          variant="danger"
           size="small"
           :aria-label="t('localeEditor.removeLang', { lang: localeLabel(loc) })"
           @click="removeLocale(loc)"
@@ -118,25 +116,23 @@ function cancelEdit() {
 
     <!-- Adding a language: one button per language that could be added, each naming it. Gone once none are. -->
     <div v-if="addable.length" class="locale-md-add">
-      <Button
+      <VeyqButton
         v-for="loc in addable"
         :key="loc"
-        type="button"
         :label="t('localeEditor.addLanguage', { lang: localeLabel(loc) })"
-        icon="pi pi-plus"
-        severity="secondary"
-        outlined
+        icon="plus"
+        variant="secondary"
+        appearance="outlined"
         size="small"
         @click="addLocale(loc)"
       />
     </div>
 
     <!-- The per-locale edit modal: a large markdown textarea, committed on Save. -->
-    <Dialog
+    <VeyqDialog
       v-if="editing"
       :visible="true"
       :header="t('localeEditor.editTitle', { lang: localeLabel(editing) })"
-      modal
       class="locale-md-dialog"
       @update:visible="cancelEdit"
     >
@@ -149,10 +145,10 @@ function cancelEdit() {
         :placeholder="placeholder"
       ></textarea>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="cancelEdit" />
-        <Button type="button" :label="t('common.save')" icon="pi pi-save" @click="saveEdit" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="cancelEdit" />
+        <VeyqButton :label="t('common.save')" icon="save" @click="saveEdit" />
       </div>
-    </Dialog>
+    </VeyqDialog>
   </div>
 </template>
 

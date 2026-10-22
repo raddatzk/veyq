@@ -21,7 +21,6 @@ vi.mock('../../../core/node/treeStore', async () => {
 vi.mock('../../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
 
 import DropBoxDetail from './DropBoxDetail.vue'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { resetCovers } from '../../../core/node/cover/coverStore'
@@ -37,6 +36,7 @@ import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => treeNode({
@@ -135,7 +135,7 @@ describe('DropBoxDetail', () => {
     // inbox #385 (b): both sit on core's header card, the one a folder opens with — the drop box's icon and name on it
     const card = w.find('.veyq-node-header')
     expect(card.find('.veyq-node-header-title').text()).toBe(BOX.name)
-    expect(card.find('.pi-inbox').exists()).toBe(true)
+    expect(card.findComponent(VeyqIcon).props('name')).toBe('inbox')
     await card.find('button[aria-label="Share link"]').trigger('click')
     await card.find('button[aria-label="Delete drop box"]').trigger('click')
     expect(w.emitted('share')).toEqual([[{ contribute: false }]]) // a drop box's dialog has no role to offer
@@ -182,7 +182,7 @@ describe('DropBoxDetail - its cover', () => {
       access: memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), ...over }),
       tree: { ...memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }), keyOf: () => KEY },
     },
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
   })
   beforeEach(() => {
     resetCovers()
@@ -194,7 +194,8 @@ describe('DropBoxDetail - its cover', () => {
     await flushPromises()
     expect(plain.find('.veyq-node-header-actions button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.set'))
     expect(plain.find('.veyq-node-header-actions button[data-action="cover-remove"]').exists()).toBe(false)
-    expect(plain.find('.veyq-node-header-icon.pi-inbox').exists()).toBe(true)
+    expect(plain.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
+    expect(plain.findComponent(VeyqIcon).props('name')).toBe('inbox')
 
     const covered = mountWith(withCover())
     await flushPromises()

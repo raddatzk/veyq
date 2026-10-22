@@ -20,9 +20,9 @@ import KitScanner from './KitScanner.vue'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  Button: {
-    props: ['label', 'icon', 'severity', 'text'],
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance'],
     emits: ['click'],
     template: '<button @click="$emit(\'click\')">{{ label }}</button>',
   },

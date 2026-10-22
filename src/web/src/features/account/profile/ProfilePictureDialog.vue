@@ -6,9 +6,9 @@
 // has a picture. A file the browser cannot decode is refused here with a message and nothing is kept (E1).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import ImageCropper from '../../../shared/ui/ImageCropper.vue'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { createBrowserDeriver } from '../../../shared/image/mediaDeriver'
@@ -75,26 +75,26 @@ async function use() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('profilePicture.dialogTitle')" modal @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('profilePicture.dialogTitle')" @update:visible="emit('close')">
     <div class="veyq-form profile-picture-dialog" data-testid="profile-picture-dialog">
       <p class="profile-picture-copy">{{ t('profilePicture.dialogIntro') }}</p>
 
       <div class="profile-picture-sources">
-        <Button type="button" :label="t('profilePicture.choose')" icon="pi pi-upload" severity="secondary" outlined @click="chooseUpload" />
-        <Button v-if="props.hasPicture" type="button" :label="t('profilePicture.remove')" icon="pi pi-trash" severity="danger" text data-testid="profile-picture-remove" @click="emit('remove')" />
+        <VeyqButton type="button" :label="t('profilePicture.choose')" icon="upload" variant="secondary" appearance="outlined" @click="chooseUpload" />
+        <VeyqButton v-if="props.hasPicture" type="button" :label="t('profilePicture.remove')" icon="trash" variant="danger" appearance="text" data-testid="profile-picture-remove" @click="emit('remove')" />
         <input ref="fileInput" type="file" accept="image/*" class="profile-picture-file" :aria-label="t('profilePicture.choose')" data-testid="profile-picture-file" @change="onFilePicked" />
       </div>
 
       <ImageCropper v-if="sourceUrl" ref="cropper" :src="sourceUrl" :aspect="1" @load="loaded = true" @error="onUndecodable" />
 
-      <Message v-if="error" severity="error" :closable="false" role="alert">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" role="alert">{{ error }}</VeyqMessage>
 
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="rendering" @click="emit('close')" />
-        <Button type="button" :label="t('profilePicture.use')" icon="pi pi-check" :loading="rendering" :disabled="!canUse" data-testid="profile-picture-use" @click="use" />
+        <VeyqButton type="button" :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="rendering" @click="emit('close')" />
+        <VeyqButton type="button" :label="t('profilePicture.use')" icon="check" :loading="rendering" :disabled="!canUse" data-testid="profile-picture-use" @click="use" />
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

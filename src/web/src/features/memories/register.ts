@@ -12,7 +12,7 @@
 // `topbarTray` list.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { LevelActionContext, Registry } from '../../core/applications/registry'
+import type { LevelActionContext, LevelMenuEntry, Registry } from '../../core/applications/registry'
 import { MEMORY_VIEWS } from './memoryViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import { memoryRows } from './levelRows'
@@ -48,7 +48,7 @@ export function registerMemories(registry: Registry): void {
   // tab while it has nothing.
   const list = { rows: memoryRows, tabLabel: 'memory.memories', views: MEMORY_VIEWS, emptyText: () => 'memory.memoryEmpty' }
   const memories = {
-    detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
+    detail: MemoryDetailHost, icon: 'images' as const, shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
     // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
     cover: { findStored: findStoredCover },
@@ -65,8 +65,8 @@ export function registerMemories(registry: Registry): void {
   // root or in a folder, a chapter only directly in a Memory.
   // Only a Memory is created from a level (core's "New" menu, inbox #406): the entry shows where Memories' rights
   // matrix lets a Memory be created, and is greyed while the scope's keys are locked. A chapter is created inside its Memory.
-  const newMemory = {
-    label: 'memory.create', icon: 'pi pi-images', order: 10,
+  const newMemory: LevelMenuEntry = {
+    label: 'memory.create', icon: 'images', order: 10,
     allowed: (ctx: LevelActionContext) => memoryRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
     enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
   }

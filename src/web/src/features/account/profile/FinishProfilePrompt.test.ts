@@ -3,7 +3,6 @@
 // nor a picture is set; dismissed per user (the flag only - never an image) and then never again, not even after a reload.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { memberProfile } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
@@ -23,7 +22,7 @@ const KEY = 'veyq.finishProfileDismissed'
 let user = 0
 
 async function mountPrompt() {
-  const w = mount(FinishProfilePrompt, { global: { plugins: [realI18n(), PrimeVue] } })
+  const w = mount(FinishProfilePrompt, { global: { plugins: [realI18n()] } })
   await flushPromises()
   return w
 }

@@ -6,7 +6,7 @@
 import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
 
 /** The places map (cr-0071): Memories' own presentation. */
-export const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
+export const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'map', label: 'memory.viewMap' }
 
 /** What a list of Memories offers: tiles, rows and the map, in the toolbar's order. */
 export const MEMORY_VIEWS: readonly LevelViewOption[] = [GRID_VIEW, LIST_VIEW, MAP_VIEW]

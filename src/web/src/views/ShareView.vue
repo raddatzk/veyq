@@ -63,6 +63,7 @@ import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
 import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
 import { pairKey, pairOf, type OperatorSection } from '../core/terms/operatorSection'
+import VeyqIcon from '../shared/ui/VeyqIcon.vue'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -337,12 +338,12 @@ onMounted(() => {
   <ShareReview v-if="moderation" :case-id="shareId" />
   <div v-else class="share-view">
     <div v-if="status === 'loading'" class="share-view-state">
-      <span class="pi pi-spin pi-spinner" />
+      <VeyqIcon name="spinner" spin />
       <span>{{ t('share.loading') }}</span>
     </div>
 
     <div v-else-if="status === 'unavailable'" class="share-view-state share-view-unavailable">
-      <span class="pi pi-lock" />
+      <VeyqIcon name="lock" />
       <h1>{{ t('share.unavailable') }}</h1>
       <p>{{ t('share.unavailableHint') }}</p>
       <!-- TCO Art. 11: a guest uploader whose upload an authority's removal order took down is told so here, on its own
@@ -354,7 +355,7 @@ onMounted(() => {
          the password, derive the Argon2id token on device, and re-resolve with it. -->
     <div v-else-if="status === 'locked'" class="share-view-state share-name-gate">
       <form class="veyq-surface share-name-card" @submit.prevent="submitPassword">
-        <span class="pi pi-lock share-password-icon" />
+        <VeyqIcon name="lock" class="share-password-icon" />
         <h1>{{ t('share.passwordTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.passwordIntro') }}</p>
         <label for="share-password-input">{{ t('share.passwordLabel') }}</label>
@@ -380,7 +381,7 @@ onMounted(() => {
          not police access. renderMarkdown escapes first (safe subset), so v-html is safe. -->
     <div v-else-if="needsTerms" class="share-view-state share-name-gate">
       <div class="veyq-surface share-name-card share-terms-card">
-        <span class="pi pi-file-check share-terms-icon" />
+        <VeyqIcon name="file-check" class="share-terms-icon" />
         <h1>{{ t('share.termsTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.termsIntro') }}</p>
         <div class="share-terms-body">
@@ -397,7 +398,7 @@ onMounted(() => {
          (safe subset), so v-html is safe. -->
     <div v-else-if="needsNote" class="share-view-state share-name-gate">
       <div class="veyq-surface share-name-card share-terms-card" data-testid="share-note-gate">
-        <span class="pi pi-envelope share-terms-icon" />
+        <VeyqIcon name="envelope" class="share-terms-icon" />
         <h1>{{ t('share.noteGateTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.noteGateIntro') }}</p>
         <!-- eslint-disable-next-line vue/no-v-html -->
@@ -462,7 +463,7 @@ onMounted(() => {
 .share-view-identity {
   margin-bottom: 0.75rem;
 }
-.share-view-unavailable .pi {
+.share-view-unavailable .veyq-icon {
   font-size: 2rem;
 }
 .share-view-unavailable h1 {

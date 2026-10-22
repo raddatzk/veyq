@@ -14,19 +14,19 @@ import { realI18n, t } from '../../../test/i18n'
 import { i18n } from '../../../i18n'
 
 const stubs = {
-  Dialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h3>{{ header }}</h3><slot /></div>' },
-  Checkbox: {
+  VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h3>{{ header }}</h3><slot /></div>' },
+  VeyqCheckbox: {
     props: ['modelValue', 'disabled'],
     emits: ['update:modelValue'],
     template:
       '<input type="checkbox" data-test="trust-reset-ack" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },
-  Button: {
+  VeyqButton: {
     props: ['type', 'label', 'disabled', 'loading'],
     emits: ['click'],
     template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',
   },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 const mountDialog = (document: 'pins' | 'register' = 'pins') =>
@@ -74,7 +74,7 @@ describe('TrustResetDialog — the one door to the reset', () => {
         // attribute and the click never fires — the bypass would be a no-op and this test green for nothing.
         stubs: {
           ...stubs,
-          Button: {
+          VeyqButton: {
             props: ['label'],
             emits: ['click'],
             inheritAttrs: false,

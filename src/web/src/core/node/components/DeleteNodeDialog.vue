@@ -6,9 +6,9 @@
 // the kind's `deleteCopy` (a drop box names its guests' folders and links, inbox #395), else the neutral one.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { deleteNode, type TreeNode } from '../tree'
 import { FOLDER_KIND } from '../kind'
 import { registry } from '../../applications/registry'
@@ -48,14 +48,14 @@ async function confirm() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="header" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="header" :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
     <p class="dialog-copy">{{ copy }}</p>
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+    <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
     <div class="veyq-dialog-action-row">
-      <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="loading" @click="emit('close')" />
-      <Button type="button" :label="t('node.delete')" icon="pi pi-trash" severity="danger" :loading="loading" @click="confirm" />
+      <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="loading" @click="emit('close')" />
+      <VeyqButton :label="t('node.delete')" icon="trash" variant="danger" :loading="loading" @click="confirm" />
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

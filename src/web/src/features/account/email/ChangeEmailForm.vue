@@ -6,10 +6,10 @@
 // mailed to the new address is opened (ConfirmEmailChangeView).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Password from 'primevue/password'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import { requestEmailChange, requestErrorKey } from './emailChange'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -67,12 +67,12 @@ function close() {
 
 <template>
   <div class="change-email">
-    <Button
+    <VeyqButton
       v-if="phase === 'closed'"
       :label="t('emailChange.action')"
-      icon="pi pi-pencil"
-      severity="secondary"
-      outlined
+      icon="pencil"
+      variant="secondary"
+      appearance="outlined"
       data-testid="change-email-open"
       @click="phase = 'form'"
     />
@@ -81,11 +81,11 @@ function close() {
       <p class="settings-muted">{{ t('emailChange.formSub') }}</p>
       <label class="settings-field">
         {{ t('emailChange.newEmailLabel') }}
-        <InputText v-model="newEmail" type="email" name="new-email" autocomplete="email" :disabled="busy" />
+        <VeyqInput v-model="newEmail" type="email" name="new-email" autocomplete="email" :disabled="busy" />
       </label>
       <label class="settings-field">
         {{ t('emailChange.passwordLabel') }}
-        <Password v-model="password" :feedback="false" toggle-mask autocomplete="current-password" :disabled="busy" />
+        <VeyqPassword v-model="password" autocomplete="current-password" :disabled="busy" />
       </label>
       <label class="settings-field">
         {{ t('emailChange.secretKeyLabel') }}
@@ -93,22 +93,22 @@ function close() {
         <small>{{ t('emailChange.secretKeyHint') }}</small>
       </label>
 
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
 
       <div class="change-email-actions">
-        <Button
+        <VeyqButton
           type="submit"
           :label="busy ? t('emailChange.submitting') : t('emailChange.submit')"
-          icon="pi pi-envelope"
+          icon="envelope"
           :disabled="!canSubmit || busy"
           :loading="busy"
         />
-        <Button type="button" :label="t('emailChange.cancel')" severity="secondary" text :disabled="busy" @click="close" />
+        <VeyqButton type="button" :label="t('emailChange.cancel')" variant="secondary" appearance="text" :disabled="busy" @click="close" />
       </div>
     </form>
 
     <template v-else>
-      <Message severity="info" :closable="false" data-testid="change-email-sent">{{ t('emailChange.sent', { email: sentTo }) }}</Message>
+      <VeyqMessage tone="info" data-testid="change-email-sent">{{ t('emailChange.sent', { email: sentTo }) }}</VeyqMessage>
     </template>
   </div>
 </template>

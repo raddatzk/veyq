@@ -1,14 +1,13 @@
 // The app's real confirmation dialog (`shared/ui/ConfirmDialog.vue`, mounted once in App.vue), for a suite that must
-// prove a question is ASKED and ANSWERED through the DOM — not only that `ask()` was called: the real PrimeVue Dialog
+// prove a question is ASKED and ANSWERED through the DOM — not only that `ask()` was called: the real VeyqDialog
 // teleported to `document.body`, its buttons clicked with a real `click` event. Unmounted by `setup.ts`'s
 // `enableAutoUnmount`; a request still open after a test is the suite's to settle (`settleConfirm(false)`).
 import { mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import ConfirmDialog from '../shared/ui/ConfirmDialog.vue'
 import { realI18n } from './i18n'
 
 export function mountConfirmDialog() {
-  mount(ConfirmDialog, { attachTo: document.body, global: { plugins: [realI18n(), PrimeVue] } })
+  mount(ConfirmDialog, { attachTo: document.body, global: { plugins: [realI18n()] } })
   const dialog = () => document.body.querySelector<HTMLElement>('.veyq-confirm-dialog')
   return {
     /** Whether the dialog is on screen. */

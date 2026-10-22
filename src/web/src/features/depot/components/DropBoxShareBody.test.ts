@@ -9,7 +9,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 
 vi.mock('../dropBox', async (importOriginal) => ({
@@ -35,6 +34,7 @@ import { realI18n } from '../../../test/i18n'
 import { formatBytes } from '../../../shared/formatBytes'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const { t } = realI18n().global
 const SHARE = 'Dr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0p-_1'
@@ -81,7 +81,7 @@ beforeEach(() => {
 function mountPage(reload: () => Promise<void> = async () => {}, head: PublicShareHead = HEAD) {
   return mount(DropBoxShareBody, {
     props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head, reload, access: guestAccessFor(head) },
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
   })
 }
 type Page = ReturnType<typeof mountPage>
@@ -116,7 +116,8 @@ describe('DropBoxShareBody: what became of every file (inbox #381)', () => {
     await settled(w, 1)
     expect(rows(w)).toEqual([{ name: long, title: long, status: 'done', detail: t('depot.dropBox.guestDone', { size: formatBytes(2048, 'en') }), retry: false }])
     const row = w.find('.dropbox-guest-row')
-    expect(row.element.firstElementChild?.className, 'the check mark is the row\'s first item, before the name').toContain('pi-check')
+    expect(row.element.firstElementChild?.className, 'the check mark is the row\'s first item, before the name').toContain('veyq-icon')
+    expect(row.findComponent(VeyqIcon).props('name')).toBe('check')
   })
 
   it('a revoke (the create\'s 404 share_not_found) lists the file as not sent and the page as gone — no picker, no retry', async () => {

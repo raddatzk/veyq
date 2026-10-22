@@ -27,13 +27,13 @@ import { treeStore } from './treeStore'
 import { treeNode } from '../../test/models'
 
 const stubs = {
-  Dialog: { name: 'Dialog', props: ['header'], emits: ['show'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
-  InputText: {
+  VeyqDialog: { name: 'VeyqDialog', props: ['header'], emits: ['show'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'input\', $event)" />',
   },
-  Button: { props: ['type', 'label'], template: '<button :type="type || \'button\'" @click="$emit(\'click\', $event)">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqButton: { props: ['type', 'label'], template: '<button :type="type || \'button\'" @click="$emit(\'click\', $event)">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 const SCOPE = '11111111-1111-1111-1111-111111111111'
@@ -191,7 +191,7 @@ describe('FolderNameDialog', () => {
       const w = mountDialog({ mode: 'rename', node: { ...nodeOf(kind), name } })
       const input = w.find('input').element as HTMLInputElement
       input.setSelectionRange(name.length, name.length)
-      w.findComponent({ name: 'Dialog' }).vm.$emit('show')
+      w.findComponent({ name: 'VeyqDialog' }).vm.$emit('show')
       await w.vm.$nextTick()
       return [input.selectionStart, input.selectionEnd]
     }

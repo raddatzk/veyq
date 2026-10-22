@@ -147,7 +147,7 @@ describe('the member\'s covers', () => {
 
 describe('which nodes carry a cover, and how a source core cannot open is read', () => {
   const kindWith = (cover: object | undefined) =>
-    vi.spyOn(registry, 'kind').mockReturnValue({ supported: true, kind: 'X', icon: 'pi pi-x', shareable: false, ...(cover ? { cover } : {}) } as unknown as ReturnType<typeof registry.kind>)
+    vi.spyOn(registry, 'kind').mockReturnValue({ supported: true, kind: 'X', icon: 'times', shareable: false, ...(cover ? { cover } : {}) } as unknown as ReturnType<typeof registry.kind>)
 
   it('a kind that did not opt in has no cover: nothing is read for it', async () => {
     kindWith(undefined)

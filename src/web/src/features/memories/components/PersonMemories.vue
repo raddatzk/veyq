@@ -104,7 +104,7 @@ const rows = computed<{ m: ParticipatedMemory; row: LevelRow }[]>(() => {
     return {
       m,
       row: {
-        icon: 'pi pi-images',
+        icon: 'images',
         leading: { component: MemoryRowCover, props: { src: cover?.url ?? null, crop: cover?.crop ?? null, alt: m.node.name } },
         title: m.node.name,
         meta: t('memory.kindMemory'),

@@ -7,7 +7,7 @@
 // context beside it.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Message from 'primevue/message'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { guestAccess } from '../../../core/sharing/guestAccess'
 import { beginReview } from '../../../core/sharing/review'
@@ -66,7 +66,7 @@ const when = (d: Date) => d.toLocaleString(locale.value)
   <div class="moderation-review">
     <h3>{{ t('moderationReview.title') }}</h3>
     <p class="veyq-form-copy">{{ t('moderationReview.readOnly') }}</p>
-    <Message v-if="error" severity="warn" :closable="false" class="form-message moderation-review-error">{{ error }}</Message>
+    <VeyqMessage v-if="error" tone="warn" class="form-message moderation-review-error">{{ error }}</VeyqMessage>
     <p v-else-if="loading" class="veyq-form-copy">{{ t('moderationReview.loading') }}</p>
 
     <template v-if="opened">

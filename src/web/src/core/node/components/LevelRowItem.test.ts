@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 // Core's one list item (inbox #407) with a STUB row: what it draws, and that every action is reachable by a REAL click -
-// a first-class one on its button, the rest through the real "more" menu (PrimeVue `Menu`, teleported to the body).
+// a first-class one on its button, the rest through the real "more" menu (`VeyqMenu`, teleported to the body).
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import LevelRowItem from './LevelRowItem.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { realI18n, t } from '../../../test/i18n'
 import type { LevelRow, LevelRowAction } from '../levelRow'
 
@@ -17,18 +18,18 @@ afterEach(() => {
 })
 
 const act = (id: string, over: Partial<LevelRowAction> = {}): LevelRowAction => ({
-  id, label: `${id} thing`, icon: 'pi pi-x', onClick: () => calls.push(id), ...over,
+  id, label: `${id} thing`, icon: 'times', onClick: () => calls.push(id), ...over,
 })
 function row(over: Partial<LevelRow> = {}): LevelRow {
   return {
-    icon: 'pi pi-file', title: 'report.pdf', meta: 'File · 157 B',
+    icon: 'file', title: 'report.pdf', meta: 'File · 157 B',
     primary: { label: 'Open report.pdf', onClick: () => calls.push('primary') },
     actions: [act('download', { first: true }), act('rename'), act('delete', { severity: 'danger' })],
     ...over,
   }
 }
 function mountItem(r: LevelRow, mode: 'grid' | 'list' = 'list', extra: Record<string, unknown> = {}) {
-  const w = mount(LevelRowItem, { props: { row: r, mode, ...extra }, global: { plugins: [realI18n()], directives: { tooltip: {} } } })
+  const w = mount(LevelRowItem, { props: { row: r, mode, ...extra }, global: { plugins: [realI18n()] } })
   mounted.push(w)
   return w
 }
@@ -37,7 +38,7 @@ function mountItem(r: LevelRow, mode: 'grid' | 'list' = 'list', extra: Record<st
 async function openMore(w: VueWrapper): Promise<HTMLElement[]> {
   await w.find('.veyq-level-item-more').trigger('click')
   await flushPromises()
-  return [...document.body.querySelectorAll<HTMLElement>('li.p-menu-item')]
+  return [...document.body.querySelectorAll<HTMLElement>('.veyq-menu__item')]
 }
 
 describe('LevelRowItem', () => {
@@ -46,7 +47,7 @@ describe('LevelRowItem', () => {
     expect(w.find('.veyq-level-item-title').text()).toBe('report.pdf')
     expect(w.find('.veyq-level-item-meta').text()).toBe('File · 157 B')
     expect(w.find('.veyq-level-item-visual').attributes('aria-hidden')).toBe('true')
-    expect(w.find('.veyq-level-item-visual .pi-file').exists()).toBe(true)
+    expect(w.find('.veyq-level-item-visual').findComponent(VeyqIcon).props('name')).toBe('file')
   })
 
   it('is a row in list mode and a tile in grid mode, from the same data', () => {
@@ -87,11 +88,11 @@ describe('LevelRowItem', () => {
     expect(items.map((i) => i.textContent?.trim())).toEqual(['rename thing', 'delete thing'])
     expect(items.every((i) => i.getAttribute('role') === 'menuitem')).toBe(true)
     expect(items[1].classList.contains('is-danger')).toBe(true)
-    items[0].querySelector<HTMLElement>('.p-menu-item-content')!.click()
+    items[0].querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
     await flushPromises()
     expect(calls).toEqual(['rename'])
     const again = await openMore(w)
-    again.find((i) => i.classList.contains('veyq-row-action-delete'))!.querySelector<HTMLElement>('.p-menu-item-content')!.click()
+    again.find((i) => i.classList.contains('veyq-row-action-delete'))!.querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
     await flushPromises()
     expect(calls).toEqual(['rename', 'delete'])
   })
@@ -116,8 +117,8 @@ describe('LevelRowItem', () => {
     expect(b.attributes('disabled')).toBeDefined()
     await b.trigger('click')
     const items = await openMore(w)
-    expect(items[0].getAttribute('data-p-disabled')).toBe('true')
-    items[0].querySelector<HTMLElement>('.p-menu-item-content')!.click()
+    expect(items[0].getAttribute('aria-disabled')).toBe('true')
+    items[0].querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
     await flushPromises()
     expect(calls).toEqual([])
   })
@@ -139,7 +140,7 @@ describe('LevelRowItem', () => {
   })
 
   it('an unsupported item is not a button: it says so and cannot be clicked', () => {
-    const w = mountItem(row({ icon: 'pi pi-question-circle', meta: 'unsupported', actions: [] }), 'list', { unsupported: true })
+    const w = mountItem(row({ icon: 'question-circle', meta: 'unsupported', actions: [] }), 'list', { unsupported: true })
     expect(w.find('button').exists()).toBe(false)
     expect(w.classes()).toContain('is-unsupported')
     expect(w.text()).toContain('unsupported')

@@ -21,8 +21,9 @@
 // generic AEAD failure telling the person their password might be wrong when they picked up the wrong kit.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqInput from './VeyqInput.vue'
+import VeyqMessage from './VeyqMessage.vue'
+import VeyqIcon from './VeyqIcon.vue'
 import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
 import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../../features/account/emergencyKit/KitScanner.vue'
@@ -121,7 +122,7 @@ watch(model, (value) => {
 
 <template>
   <div class="secret-field" :style="{ '--secret-icons': iconCount }">
-    <InputText
+    <VeyqInput
       v-model="model"
       :id="inputId"
       :type="showSecret ? 'text' : 'password'"
@@ -141,7 +142,7 @@ watch(model, (value) => {
         :disabled="disabled"
         @click="triggerUpload"
       >
-        <i class="pi pi-upload" aria-hidden="true" />
+        <VeyqIcon name="upload" />
       </button>
       <button
         v-if="scanSupported"
@@ -152,7 +153,7 @@ watch(model, (value) => {
         :disabled="disabled"
         @click="scanOpen = true"
       >
-        <i class="pi pi-qrcode" aria-hidden="true" />
+        <VeyqIcon name="qrcode" />
       </button>
       <button
         type="button"
@@ -162,14 +163,14 @@ watch(model, (value) => {
         :disabled="disabled"
         @click="showSecret = !showSecret"
       >
-        <i :class="showSecret ? 'pi pi-eye-slash' : 'pi pi-eye'" aria-hidden="true" />
+        <VeyqIcon :name="showSecret ? 'eye-slash' : 'eye'" />
       </button>
     </span>
   </div>
-  <Message v-if="unreadable" severity="error" :closable="false">{{ t('unlock.kitUnreadable') }}</Message>
-  <Message v-if="mismatchedEmail" severity="warn" :closable="false">
+  <VeyqMessage v-if="unreadable" tone="error">{{ t('unlock.kitUnreadable') }}</VeyqMessage>
+  <VeyqMessage v-if="mismatchedEmail" tone="warn">
     {{ t('unlock.kitEmailMismatch', { kitEmail: mismatchedEmail, expected: expectedEmail }) }}
-  </Message>
+  </VeyqMessage>
   <input ref="fileInput" type="file" accept="application/pdf,image/*" class="visually-hidden" @change="onUpload" />
   <!-- Teleported: the overlay owns the whole screen, and every host renders this control inside a <label>,
        where a click anywhere in the overlay would also re-focus the input behind it. -->

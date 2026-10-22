@@ -80,18 +80,18 @@ const CURRENT = { id: 'aaaaaaaa-1111-4111-8111-111111111111', createdAt: new Dat
 const OTHER = { id: 'bbbbbbbb-2222-4222-8222-222222222222', createdAt: new Date('2026-07-03T18:30:00Z'), lastUsedAt: new Date('2026-08-10T21:02:00Z'), current: false }
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
   // The forget action owns its own dialog (the styleguide's third mechanism — it carries the mutation, its busy
   // state and its inline error) where the session actions ask through the shared one. The two acts do not look
   // alike, and this stub keeps that difference visible to the tests below.
-  Dialog: { props: ['visible', 'header'], template: '<div class="dialog" v-if="visible">{{ header }}<slot /></div>' },
-  InputText: {
+  VeyqDialog: { props: ['visible', 'header'], template: '<div class="dialog" v-if="visible">{{ header }}<slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Button: {
-    props: ['label', 'icon', 'severity', 'loading', 'ariaLabel', 'title'],
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance', 'loading', 'ariaLabel', 'title'],
     // `emits` is load-bearing: without it Vue also passes the parent's @click through as a native fallthrough
     // listener, so one trigger fires the handler twice and every call-count assertion below reads double.
     emits: ['click'],

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // A member's rename through the personal-space host, over the REAL registry (Memories and Depot, as `main.ts` fills it),
-// the real router, PrimeVue, core's real level view, overview card and name dialog — every step a DOM click. The position
+// the real router, the UI layer, core's real level view, overview card and name dialog — every step a DOM click. The position
 // lives in the #fragment as a slug path derived from the names (ADR 0015), so a rename of the node on screen changes its
 // own path — and a restore of an older sibling of one plain segment renumbers it: the URL must follow it, or the old path
 // resolves to nothing and the view collapses to the scope root (found by the read-only assessment of inbox #328). The
@@ -10,7 +10,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../app/activeSpace', async () => {
   const { reactive } = await import('vue')
@@ -95,7 +94,7 @@ async function mountAt(hash: string) {
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, { attachTo: document.body, global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  const w = mount(MemoryHomeView, { attachTo: document.body, global: { plugins: [router, realI18n()] } })
   await flushPromises()
   return w
 }

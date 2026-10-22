@@ -5,7 +5,6 @@
 // never the link's), its preview opened with that preview blob's key, and its original on request. Read-only.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
 import type { ItemReviewProps } from '../../../core/applications/registry'
@@ -13,6 +12,8 @@ import { activeReview } from '../../../core/sharing/review'
 import { openBlobWithKey } from '../../../core/blob/transport'
 import type { ShareMedia } from '../../../api/generated/share-media'
 import { caseMediaApi } from '../api'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<ItemReviewProps>()
 const { t } = useI18n()
@@ -89,12 +90,12 @@ async function downloadOriginal() {
     <div class="media-lightbox-stage medium-review-stage">
       <img v-if="previewUrl" :src="previewUrl" :alt="meta?.name ?? ''" />
       <p v-else-if="failed" class="media-lightbox-error">{{ t('media.loadError') }}</p>
-      <span v-else class="pi pi-file" aria-hidden="true" />
+      <VeyqIcon v-else name="file" />
     </div>
-    <Button
+    <VeyqButton
       class="medium-review-download"
-      severity="secondary"
-      icon="pi pi-download"
+      variant="secondary"
+      icon="download"
       :label="t('media.download')"
       :loading="downloading"
       @click="downloadOriginal"

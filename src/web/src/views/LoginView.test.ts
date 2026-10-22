@@ -95,27 +95,27 @@ import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWOR
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
   // `emits: ['click']` is load-bearing: without it the parent's @click also arrives as a native fallthrough
   // listener, so one trigger fires the handler twice and every call count reads double.
-  Button: {
-    props: ['label', 'icon', 'severity', 'loading', 'disabled', 'type'],
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance', 'loading', 'disabled', 'type'],
     emits: ['click'],
-    template: '<button :type="type" :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
+    template: '<button :type="type ?? \'button\'" :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue', 'type'],
     emits: ['update:modelValue'],
     template: '<input :type="type" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Password: {
+  VeyqPassword: {
     props: ['modelValue', 'inputId'],
     emits: ['update:modelValue'],
     template: '<input type="password" :id="inputId" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Checkbox: {
-    props: ['modelValue', 'inputId', 'binary'],
+  VeyqCheckbox: {
+    props: ['modelValue', 'inputId'],
     emits: ['update:modelValue'],
     template: '<input type="checkbox" :id="inputId" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },

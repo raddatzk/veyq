@@ -4,7 +4,7 @@
 // thumb already is.
 //
 // Built from pointer events and a progress track rather than wrapped around something existing — measured, the
-// client has no slide/swipe control anywhere and PrimeVue's imported set carries none. The ordinary destructive
+// client has no slide/swipe control anywhere and the component layer carries none. The ordinary destructive
 // confirm was `window.confirm` when this was written and is the app's own dialog today (`useConfirm`,
 // cr-web-own-confirm-dialog) — either way one tap, which is the thing this control exists to refuse.
 //
@@ -13,6 +13,7 @@
 // the end is the tap this whole component exists to refuse. Ten steps is the same order of deliberateness as
 // the drag.
 import { computed, ref } from 'vue'
+import VeyqIcon from './VeyqIcon.vue'
 
 const props = defineProps<{ label: string; doneLabel: string; disabled?: boolean }>()
 const emit = defineEmits<{ confirmed: [] }>()
@@ -104,7 +105,7 @@ function onKeydown(e: KeyboardEvent) {
     <div class="slide-confirm-fill" :style="{ width: `${percent}%` }" aria-hidden="true" />
     <span class="slide-confirm-label">{{ done ? doneLabel : label }}</span>
     <span class="slide-confirm-knob" :style="{ left: `${percent}%` }" aria-hidden="true">
-      <i class="pi" :class="done ? 'pi-check' : 'pi-angle-double-right'" />
+      <VeyqIcon :name="done ? 'check' : 'angle-double-right'" />
     </span>
   </div>
 </template>

@@ -64,7 +64,7 @@ const ctx = () => ({ onProgress: () => {}, signal: new AbortController().signal 
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Depot's
   // `register.ts` registers it, so the guest's slug is the one the page computes.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
 })
 
 describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {

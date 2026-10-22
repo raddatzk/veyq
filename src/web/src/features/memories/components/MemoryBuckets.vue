@@ -10,10 +10,11 @@
 // server's lazy ensurePrimaryBucket). Names are sealed under K_node — the client unseals; the server never sees one.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Select from 'primevue/select'
-import Menu from 'primevue/menu'
-import type { MenuItem } from 'primevue/menuitem'
-import Dialog from 'primevue/dialog'
+import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
+import type { VeyqMenuItem } from '../../../shared/ui/menu'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
@@ -74,7 +75,7 @@ const activeBucketId = ref('')
 const selected = ref<Set<string>>(new Set())
 
 // The per-tile 3-dot is the only ellipsis menu left — the bucket + selection menus are now explicit buttons (cr-0122).
-const mediaMenu = ref<InstanceType<typeof Menu> | null>(null)
+const mediaMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const menuMediaId = ref<string | null>(null)
 
 const bucketDialog = ref<{ open: boolean; mode: 'create' | 'rename'; name: string; saving: boolean; error: string }>(
@@ -190,9 +191,12 @@ watch(bucketRows, (rows) => {
   if (!rows.some((r) => r.id === activeBucketId.value)) activeBucketId.value = preferredBucketId(rows)
 }, { immediate: true })
 
-const selectOptions = computed(() =>
-  bucketRows.value.map((b) => ({ value: b.id, displayName: b.displayName, mediaCount: b.mediaCount, isPrimary: b.isPrimary, depth: b.depth })),
-)
+const selectOptions = computed(() => bucketRows.value.map((b) => ({ label: b.displayName, value: b.id })))
+// The picker's options are `{ label, value }`; an entry's icon, count and depth are read from its row by id.
+const bucketRowsById = computed(() => new Map(bucketRows.value.map((b) => [b.id, b])))
+function optionRow(id: string): BucketRow | undefined {
+  return bucketRowsById.value.get(id)
+}
 
 // media of the active bucket: a materialized bucket by bucketId; the virtual primary = your unbucketed media.
 const filteredMedia = computed<MediaItem[]>(() => {
@@ -314,9 +318,9 @@ function toggleSelectAll() {
 const selectedLabel = computed(() => t('memory.buckets.selected', { selected: selected.value.size, visible: filteredMedia.value.length }))
 
 function openMediaMenu(event: Event, id: string) { menuMediaId.value = id; mediaMenu.value?.toggle(event) }
-const mediaMenuItems = computed<MenuItem[]>(() => [
-  { label: t('memory.buckets.moveMedia'), icon: 'pi pi-arrow-right-arrow-left', disabled: !moveTargets.value.length, command: () => { if (menuMediaId.value) { selected.value = new Set([menuMediaId.value]); openMove() } } },
-  { label: t('memory.buckets.deleteMediaAction'), icon: 'pi pi-trash', command: () => { if (menuMediaId.value) { selected.value = new Set([menuMediaId.value]); void deleteSelected() } } },
+const mediaMenuItems = computed<VeyqMenuItem[]>(() => [
+  { label: t('memory.buckets.moveMedia'), icon: 'arrow-right-arrow-left', disabled: !moveTargets.value.length, command: () => { if (menuMediaId.value) { selected.value = new Set([menuMediaId.value]); openMove() } } },
+  { label: t('memory.buckets.deleteMediaAction'), icon: 'trash', command: () => { if (menuMediaId.value) { selected.value = new Set([menuMediaId.value]); void deleteSelected() } } },
 ])
 
 function openMove() {
@@ -407,7 +411,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
 <template>
   <div class="veyq-bucket-organizer">
     <div v-if="status === 'loading'" class="media-grid-placeholder">
-      <span class="pi pi-spin pi-spinner" /><span>{{ t('media.loading') }}</span>
+      <VeyqIcon name="spinner" spin /><span>{{ t('media.loading') }}</span>
     </div>
     <p v-else-if="status === 'error'" class="veyq-empty">{{ t('media.unavailable') }}</p>
 
@@ -423,43 +427,41 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
       <!-- One row: the bucket picker + its action buttons on the left, the media selection bar on the right (cr-0122). -->
       <div class="bucket-action-row">
         <div class="bucket-picker">
-          <Select
+          <VeyqSelect
             class="bucket-select"
             :model-value="activeBucket?.id ?? ''"
             :options="selectOptions"
-            option-label="displayName"
-            option-value="value"
             :aria-label="t('memory.buckets.title')"
-            @update:model-value="chooseBucket"
+            @update:model-value="(id) => chooseBucket(id ?? '')"
           >
             <template #value>
               <span v-if="activeBucket" class="bucket-select-value">
-                <span class="pi" :class="activeBucket.isPrimary ? 'pi-user' : 'pi-folder'" />
+                <VeyqIcon :name="activeBucket.isPrimary ? 'user' : 'folder'" />
                 <span>{{ activeBucket.displayName }}</span>
                 <small>{{ activeBucket.mediaCount }}</small>
               </span>
             </template>
             <template #option="{ option }">
-              <span class="bucket-select-option" :style="{ paddingLeft: `${option.depth * 1.1}rem` }">
-                <span v-if="option.depth > 0" class="bucket-select-branch" aria-hidden="true">↳</span>
-                <span class="pi" :class="option.isPrimary ? 'pi-user' : 'pi-folder'" />
-                <span class="bucket-select-name">{{ option.displayName }}</span>
-                <small>{{ option.mediaCount }}</small>
+              <span class="bucket-select-option" :style="{ paddingLeft: `${(optionRow(option.value)?.depth ?? 0) * 1.1}rem` }">
+                <span v-if="(optionRow(option.value)?.depth ?? 0) > 0" class="bucket-select-branch" aria-hidden="true">↳</span>
+                <VeyqIcon :name="optionRow(option.value)?.isPrimary ? 'user' : 'folder'" />
+                <span class="bucket-select-name">{{ option.label }}</span>
+                <small>{{ optionRow(option.value)?.mediaCount }}</small>
               </span>
             </template>
-          </Select>
+          </VeyqSelect>
           <!-- Bucket actions — shown only where they apply (was the 3-dot menu). -->
           <button v-if="activeBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.upload')" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
-            <span class="pi pi-upload" />
+            <VeyqIcon name="upload" />
           </button>
           <button v-if="canCreateSub" type="button" class="bucket-action-button" :title="t('memory.buckets.createBucket')" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
-            <span class="pi pi-folder-plus" />
+            <VeyqIcon name="folder-plus" />
           </button>
           <button v-if="canRenameBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.rename')" :aria-label="t('memory.buckets.rename')" @click="openRename">
-            <span class="pi pi-pencil" />
+            <VeyqIcon name="pencil" />
           </button>
           <button v-if="canDeleteBucket" type="button" class="bucket-action-button bucket-action-danger" :title="t('memory.buckets.delete')" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
-            <span class="pi pi-trash" />
+            <VeyqIcon name="trash" />
           </button>
         </div>
 
@@ -470,17 +472,17 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
             {{ allSelected ? t('memory.buckets.deselectAll') : t('memory.buckets.selectAllVisible') }}
           </button>
           <button type="button" class="bucket-action-button" :disabled="!selected.size || !moveTargets.length" :title="t('memory.buckets.moveTitle')" @click="openMove">
-            <span class="pi pi-arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
+            <VeyqIcon name="arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
           </button>
           <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selected.size" :title="t('memory.buckets.deleteMediaAction')" @click="deleteSelected">
-            <span class="pi pi-trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>
+            <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>
           </button>
         </div>
       </div>
 
       <!-- dropzone banner -->
       <div v-if="dropActive && activeBucket" class="bucket-dropzone">
-        <span class="pi pi-cloud-upload" />
+        <VeyqIcon name="cloud-upload" />
         <div>
           <strong>{{ t('memory.buckets.dropTitle', { bucket: activeBucket.displayName }) }}</strong>
           <small>{{ t('memory.buckets.dropCopy') }}</small>
@@ -511,54 +513,54 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
             <template #overlay>
               <label class="media-tile-check" :class="{ 'is-on': selected.has(item.media.mediaId) }">
                 <input type="checkbox" :checked="selected.has(item.media.mediaId)" :aria-label="t('media.openItem', { index: item.index + 1 })" @click.stop @change="toggleSelect(item.media.mediaId)" />
-                <span class="pi pi-check" aria-hidden="true" />
+                <VeyqIcon name="check" />
               </label>
               <button type="button" class="media-tile-menu" :aria-label="t('memory.buckets.options')" @click.stop="openMediaMenu($event, item.media.mediaId)">
-                <span class="pi pi-ellipsis-v" />
+                <VeyqIcon name="ellipsis-v" />
               </button>
             </template>
           </MediaTile>
         </template>
       </MediaGrid>
-      <Menu ref="mediaMenu" :model="mediaMenuItems" popup />
+      <VeyqMenu ref="mediaMenu" :items="mediaMenuItems" />
     </div>
 
     <!-- create / rename dialog -->
-    <Dialog v-model:visible="bucketDialog.open" :header="bucketDialog.mode === 'create' ? t('memory.buckets.bucketDialogCreate') : t('memory.buckets.bucketDialogRename')" modal class="veyq-dialog-panel">
+    <VeyqDialog v-model:visible="bucketDialog.open" :header="bucketDialog.mode === 'create' ? t('memory.buckets.bucketDialogCreate') : t('memory.buckets.bucketDialogRename')" class="veyq-dialog-panel">
       <form class="veyq-form bucket-dialog-form" @submit.prevent="submitBucketDialog">
         <label for="bucket-name">{{ t('memory.buckets.bucketName') }}</label>
         <input id="bucket-name" v-model="bucketDialog.name" type="text" autocomplete="off" />
         <p v-if="bucketDialog.error" class="veyq-form-error">{{ bucketDialog.error }}</p>
         <div class="veyq-dialog-action-row">
           <button class="veyq-dialog-button veyq-dialog-button-secondary" type="button" :disabled="bucketDialog.saving" @click="bucketDialog.open = false">
-            <span class="pi pi-times" /><span>{{ t('common.cancel') }}</span>
+            <VeyqIcon name="times" /><span>{{ t('common.cancel') }}</span>
           </button>
           <button class="veyq-dialog-button veyq-dialog-button-primary" type="submit" :disabled="!bucketDialog.name.trim() || bucketDialog.saving">
-            <span class="pi pi-save" /><span>{{ t('common.save') }}</span>
+            <VeyqIcon name="save" /><span>{{ t('common.save') }}</span>
           </button>
         </div>
       </form>
-    </Dialog>
+    </VeyqDialog>
 
     <!-- delete-bucket dialog (type-the-name) — a whole bucket is the destructive one, so it keeps its confirm -->
-    <Dialog v-model:visible="deleteBucketDialog.open" :header="t('memory.buckets.deleteBucketTitle')" modal class="veyq-dialog-panel">
+    <VeyqDialog v-model:visible="deleteBucketDialog.open" :header="t('memory.buckets.deleteBucketTitle')" class="veyq-dialog-panel">
       <form class="veyq-form bucket-dialog-form" @submit.prevent="confirmDeleteBucket">
         <p class="bucket-dialog-copy">{{ t('memory.buckets.deleteBucketCopy', { bucket: activeBucket?.displayName }) }}</p>
         <label for="bucket-del-name">{{ t('memory.buckets.deleteBucketNameLabel') }}</label>
         <input id="bucket-del-name" v-model="deleteBucketDialog.typed" type="text" autocomplete="off" :placeholder="activeBucket?.displayName" />
         <div class="veyq-dialog-action-row">
           <button class="veyq-dialog-button veyq-dialog-button-secondary" type="button" :disabled="deleteBucketDialog.saving" @click="deleteBucketDialog.open = false">
-            <span class="pi pi-times" /><span>{{ t('common.cancel') }}</span>
+            <VeyqIcon name="times" /><span>{{ t('common.cancel') }}</span>
           </button>
           <button class="veyq-dialog-button veyq-dialog-button-danger" type="submit" :disabled="!canConfirmDeleteBucket || deleteBucketDialog.saving">
-            <span class="pi pi-trash" /><span>{{ t('memory.buckets.deleteBucketConfirm') }}</span>
+            <VeyqIcon name="trash" /><span>{{ t('memory.buckets.deleteBucketConfirm') }}</span>
           </button>
         </div>
       </form>
-    </Dialog>
+    </VeyqDialog>
 
     <!-- move dialog -->
-    <Dialog v-model:visible="moveDialog.open" :header="t('memory.buckets.moveTitle')" modal class="veyq-dialog-panel">
+    <VeyqDialog v-model:visible="moveDialog.open" :header="t('memory.buckets.moveTitle')" class="veyq-dialog-panel">
       <form class="veyq-form bucket-dialog-form" @submit.prevent="submitMove">
         <label for="bucket-move-target">{{ t('memory.buckets.moveTarget') }}</label>
         <p v-if="!moveTargets.length" class="bucket-dialog-copy">{{ t('memory.buckets.moveEmpty') }}</p>
@@ -567,14 +569,14 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
         </select>
         <div class="veyq-dialog-action-row">
           <button class="veyq-dialog-button veyq-dialog-button-secondary" type="button" :disabled="moveDialog.saving" @click="moveDialog.open = false">
-            <span class="pi pi-times" /><span>{{ t('common.cancel') }}</span>
+            <VeyqIcon name="times" /><span>{{ t('common.cancel') }}</span>
           </button>
           <button class="veyq-dialog-button veyq-dialog-button-primary" type="submit" :disabled="!moveDialog.target || moveDialog.saving">
-            <span class="pi pi-arrow-right-arrow-left" /><span>{{ t('memory.buckets.move') }}</span>
+            <VeyqIcon name="arrow-right-arrow-left" /><span>{{ t('memory.buckets.move') }}</span>
           </button>
         </div>
       </form>
-    </Dialog>
+    </VeyqDialog>
   </div>
 </template>
 

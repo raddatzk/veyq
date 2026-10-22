@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The viewer of an opened file (inbox #412), mounted as the file page does (`FileViewer`, real DOM, real catalog, real
-// PrimeVue): what each kind of file shows, what it never shows (markup as markup, an image the bytes do not prove), what
+// UI layer): what each kind of file shows, what it never shows (markup as markup, an image the bytes do not prove), what
 // is undone when the page goes (object URL, playback handle, the read in flight), and the full-screen toggle. The decrypt
 // is `transport.ts`'s; the page's reader is a fake over plain bytes (`test/fileChunks.ts`), and the service worker is the
 // same stub Memories' lightbox tests use (there is no worker in the test environment).
@@ -299,7 +299,7 @@ describe('loading, stopping, failing', () => {
     }
     const w = mountViewer(target(p, {}))
     await flushPromises()
-    expect(w.find('.p-message-error').text()).toContain(t('depot.viewer.error'))
+    expect(w.find('.veyq-message--error').text()).toContain(t('depot.viewer.error'))
     fail = false
     await w.findAll('button').find((b) => b.text() === t('depot.viewer.retry'))!.trigger('click')
     await flushPromises()

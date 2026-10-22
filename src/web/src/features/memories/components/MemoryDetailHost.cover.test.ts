@@ -13,7 +13,6 @@ vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() 
 vi.mock('../../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import MemoryDetailHost from './MemoryDetailHost.vue'
@@ -31,6 +30,7 @@ import { fakeApi, stubApi } from '../../../test/apiMock'
 import { authenticatedCalls } from '../../../test/guestMode'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
@@ -68,7 +68,7 @@ async function mountHost(access: NodeDetailProps['access'], wrappedMeta: string 
   const tree = { ...memberTreeOf(() => [node], { scopeId: SCOPE }), keyOf: () => KEY }
   const w = mount(MemoryDetailHost, {
     props: { node, scopeId: SCOPE, epochs: null, contentKey: KEY, children: { folders: [], byKind: new Map() }, access, tree } as unknown as NodeDetailProps,
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
   await flushPromises()
   await flushPromises()
@@ -97,7 +97,7 @@ describe('the Memory page\'s cover action opens core\'s dialog', () => {
   it('"Set cover" opens it; the dialog offers choosing an image - no other source - and nothing to remove', async () => {
     const w = await mountHost(writer())
     expect(action(w, 'cover').attributes('aria-label')).toBe(t('node.cover.set'))
-    expect(action(w, 'cover').find('.pi-image').exists()).toBe(true)
+    expect(w.findAllComponents(VeyqButton).find((b) => b.element === action(w, 'cover').element)?.props('icon')).toBe('image')
     expect(dialog()).toBeNull()
     await action(w, 'cover').trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())

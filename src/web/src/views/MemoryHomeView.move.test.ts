@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // A member's move through the personal-space host (inbox #358) - and a level's selection moved and deleted (inbox #421) - over the REAL registry (Memories and Depot, as `main.ts`
-// fills it), the real router, PrimeVue, core's real level view, move dialog and confirmation dialog, Depot's real drop-box
+// fills it), the real router, the UI layer, core's real level view, move dialog and confirmation dialog, Depot's real drop-box
 // detail and Memories' real detail adapter — every step a DOM click. The placement write is a recorder (`moveNode`): its
 // wire is `core/node/move.wire.test.ts`'s. Only the heavy Memories detail view is a stub that exposes the events the host
 // listens to; the level's rows (inbox #407: one list, the applications' real row factories) are real, Depot's blob
@@ -8,7 +8,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../app/activeSpace', async () => {
   const { reactive } = await import('vue')
@@ -85,7 +84,7 @@ async function mountAt(hash: string) {
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, { attachTo: document.body, global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  const w = mount(MemoryHomeView, { attachTo: document.body, global: { plugins: [router, realI18n()] } })
   await flushPromises()
   return w
 }

@@ -13,11 +13,13 @@
 // NOT silently rename, and it does not refuse forever.
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import ProgressSpinner from 'primevue/progressspinner'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqSpinner from '../../../shared/ui/VeyqSpinner.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import type { VeyqIconName } from '../../../shared/ui/icons'
 import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree'
 import type { NodeKind } from '../kind'
 import { registry } from '../../applications/registry'
@@ -66,9 +68,9 @@ function day(d: Date): string {
 
 // The icon is the kind's own, from the registry (ADR 0079): core names no application kind. A kind nobody
 // registered (a newer server) gets a neutral icon rather than a blank one.
-function icon(kind: NodeKind): string {
+function icon(kind: NodeKind): VeyqIconName {
   const info = registry.kind(kind)
-  return info.supported ? info.icon : 'pi pi-file'
+  return info.supported ? info.icon : 'file'
 }
 
 /** The note a row carries when its kind's content is its attachment and it holds none (inbox #391): restoring brings back
@@ -110,64 +112,62 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="t('node.trash.title')"
-    modal
     :style="{ width: 'min(38rem, 92vw)' }"
     @update:visible="emit('close')"
   >
     <p class="dialog-copy">{{ t('node.trash.hint') }}</p>
 
-    <div v-if="loading" class="trash-state"><ProgressSpinner style="width: 2rem; height: 2rem" /></div>
-    <Message v-else-if="loadFailed" severity="error" :closable="false">{{ t('node.trash.loadFailed') }}</Message>
+    <div v-if="loading" class="trash-state"><VeyqSpinner /></div>
+    <VeyqMessage v-else-if="loadFailed" tone="error">{{ t('node.trash.loadFailed') }}</VeyqMessage>
     <p v-else-if="rows.length === 0" class="trash-state">{{ t('node.trash.empty') }}</p>
 
     <div v-else class="veyq-list">
       <div v-for="row in rows" :key="row.id" class="veyq-list-row trash-row">
         <div class="veyq-row-main">
-          <strong class="veyq-row-title"><i :class="icon(row.kind)" aria-hidden="true"></i> {{ row.name }}</strong>
+          <strong class="veyq-row-title"><VeyqIcon :name="icon(row.kind)" /> {{ row.name }}</strong>
           <span class="veyq-row-subtitle">
             {{ t('node.trash.deletedOn', { day: day(row.deletedAt) }) }} ·
             {{ t('node.trash.purgeOn', { day: day(row.purgeAfter) }) }}
           </span>
           <span v-if="emptyNote(row)" class="veyq-row-subtitle trash-row-empty">{{ emptyNote(row) }}</span>
-          <Message
+          <VeyqMessage
             v-if="rowError && rowError.id === row.id"
-            severity="error"
-            :closable="false"
+            tone="error"
             class="trash-row-error"
-          >{{ rowError.message }}</Message>
+          >{{ rowError.message }}</VeyqMessage>
         </div>
 
         <div v-if="renaming === row.id" class="trash-actions">
-          <InputText
+          <VeyqInput
             v-model="retryName"
             :aria-label="t('node.trash.retryName')"
             :disabled="busy === row.id"
             @keyup.enter="restore(row, retryName)"
           />
-          <Button
+          <VeyqButton
             :label="t('node.trash.restore')"
-            icon="pi pi-undo"
+            icon="undo"
             size="small"
             :loading="busy === row.id"
             :disabled="!retryName.trim()"
             @click="restore(row, retryName)"
           />
-          <Button
+          <VeyqButton
             :label="t('common.cancel')"
-            severity="secondary"
-            outlined
+            variant="secondary"
+            appearance="outlined"
             size="small"
             :disabled="busy === row.id"
             @click="renaming = null"
           />
         </div>
         <div v-else class="trash-actions">
-          <Button
+          <VeyqButton
             :label="t('node.trash.restore')"
-            icon="pi pi-undo"
+            icon="undo"
             size="small"
             :loading="busy === row.id"
             @click="restore(row)"
@@ -177,9 +177,9 @@ onMounted(() => void load())
     </div>
 
     <div class="veyq-dialog-action-row">
-      <Button type="button" :label="t('common.done')" severity="secondary" outlined @click="emit('close')" />
+      <VeyqButton :label="t('common.done')" variant="secondary" appearance="outlined" @click="emit('close')" />
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

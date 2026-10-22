@@ -42,18 +42,18 @@ const stubs = {
   // The panel's only route link — recovery, where a forgotten password goes now that this screen refuses to
   // mint a credential without one.
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
-  Button: { props: ['label', 'loading', 'disabled'], template: '<button :disabled="disabled">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqButton: { props: ['label', 'loading', 'disabled'], template: '<button :disabled="disabled">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Password: {
+  VeyqPassword: {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
-  Checkbox: {
+  VeyqCheckbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },

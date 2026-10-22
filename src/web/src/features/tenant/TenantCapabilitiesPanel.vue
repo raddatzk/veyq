@@ -15,9 +15,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
-import InputText from 'primevue/inputtext'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import {
   clearTenantCapabilityRequirement,
   hasDescendants,
@@ -82,7 +82,7 @@ async function changeRequirement(entry: TenantCapabilitySwitch, r: TenantCapabil
       header: t('tenantCapabilities.requirementConfirmTitle', { title }),
       message: words(r.whenSet),
       acceptLabel: t('tenantCapabilities.requirementSet'),
-      acceptIcon: 'pi pi-lock',
+      acceptIcon: 'lock',
     })
     if (!accepted) return
   }
@@ -122,7 +122,7 @@ async function toggle(entry: TenantCapabilitySwitch) {
       header: t('tenantCapabilities.confirmTitle', { title }),
       message: words(entry.whenOff),
       acceptLabel: t('tenantCapabilities.switchOff'),
-      acceptIcon: 'pi pi-power-off',
+      acceptIcon: 'power-off',
     })
     if (!accepted) return
   }
@@ -156,11 +156,11 @@ async function toggle(entry: TenantCapabilitySwitch) {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('tenantCapabilities.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('tenantCapabilities.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('tenantCapabilities.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('tenantCapabilities.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('tenantCapabilities.loadFailed') }}</VeyqMessage>
 
       <template v-else>
-        <Message v-if="error" severity="error" :closable="false" class="capability-error">{{ error }}</Message>
+        <VeyqMessage v-if="error" tone="error" class="capability-error">{{ error }}</VeyqMessage>
         <ul class="capability-tree">
           <li
             v-for="node in tree"
@@ -179,7 +179,7 @@ async function toggle(entry: TenantCapabilitySwitch) {
                   <span class="veyq-badge requirement__state">{{ requirementState(r) }}</span>
                   <span class="requirement__controls">
                     <template v-if="r.kind === 'days'">
-                      <InputText
+                      <VeyqInput
                         v-model="daysTyped[r.name]"
                         class="requirement__days"
                         inputmode="numeric"
@@ -187,35 +187,32 @@ async function toggle(entry: TenantCapabilitySwitch) {
                         :aria-label="words(r.title)"
                         :disabled="switching !== null"
                       />
-                      <Button
-                        type="button"
+                      <VeyqButton
                         class="requirement__set"
                         :label="t('tenantCapabilities.requirementSet')"
-                        severity="secondary"
-                        outlined
+                        variant="secondary"
+                        appearance="outlined"
                         size="small"
                         :disabled="switching !== null"
                         @click="saveDays(node.entry, r)"
                       />
                     </template>
-                    <Button
+                    <VeyqButton
                       v-else-if="r.value === null || r.value === undefined"
-                      type="button"
                       class="requirement__set"
                       :label="t('tenantCapabilities.requirementSet')"
-                      severity="secondary"
-                      outlined
+                      variant="secondary"
+                      appearance="outlined"
                       size="small"
                       :disabled="switching !== null"
                       @click="changeRequirement(node.entry, r, 1)"
                     />
-                    <Button
+                    <VeyqButton
                       v-if="r.value !== null && r.value !== undefined"
-                      type="button"
                       class="requirement__clear"
                       :label="t('tenantCapabilities.requirementClear')"
-                      severity="secondary"
-                      text
+                      variant="secondary"
+                      appearance="text"
                       size="small"
                       :disabled="switching !== null"
                       @click="changeRequirement(node.entry, r, null)"
@@ -224,12 +221,11 @@ async function toggle(entry: TenantCapabilitySwitch) {
                 </li>
               </ul>
             </div>
-            <Button
-              type="button"
+            <VeyqButton
               :label="node.entry.off ? t('tenantCapabilities.switchOn') : t('tenantCapabilities.switchOff')"
-              :icon="node.entry.off ? 'pi pi-play' : 'pi pi-power-off'"
-              severity="secondary"
-              outlined
+              :icon="node.entry.off ? 'play' : 'power-off'"
+              variant="secondary"
+              appearance="outlined"
               size="small"
               :loading="switching === node.entry.id"
               :disabled="switching !== null"

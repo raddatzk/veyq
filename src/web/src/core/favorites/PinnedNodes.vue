@@ -21,6 +21,7 @@ import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
 import { nodeContentKey } from '../node/tree'
 import { memberCoverStore } from '../node/cover/coverStore'
 import NodeCoverImage from '../node/cover/components/NodeCoverImage.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 
 defineProps<SidebarPinsProps>()
 const emit = defineEmits<SidebarPinsEmits>()
@@ -74,7 +75,7 @@ const coverOf = (id: string) => memberCoverStore.covers.value.get(id) ?? null
     >
       <span class="sidebar-favorite-cover">
         <NodeCoverImage v-if="coverOf(node.id)" :src="coverOf(node.id)!.url" :crop="coverOf(node.id)!.crop" />
-        <span v-else :class="node.icon" aria-hidden="true" />
+        <VeyqIcon v-else :name="node.icon" />
       </span>
       <span><strong>{{ node.name }}</strong></span>
     </RouterLink>
@@ -93,7 +94,7 @@ const coverOf = (id: string) => memberCoverStore.covers.value.get(id) ?? null
       >
         <span class="sidebar-favorite-cover">
           <NodeCoverImage v-if="coverOf(node.id)" :src="coverOf(node.id)!.url" :crop="coverOf(node.id)!.crop" />
-          <span v-else :class="node.icon" aria-hidden="true" />
+          <VeyqIcon v-else :name="node.icon" />
         </span><span><strong>{{ node.name }}</strong></span>
       </RouterLink>
     </div>

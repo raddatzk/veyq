@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MemoryCard from './MemoryCard.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { MEMORY_KIND } from '../kinds'
 import type { TreeNode } from '../../../core/node/tree'
 import type { MemoryDate } from '../memoryDate'
@@ -12,11 +13,14 @@ import { treeNode } from '../../../test/models'
 const memory: TreeNode = treeNode({ id: 'm1', kind: MEMORY_KIND, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 
 const mountCard = () => mount(MemoryCard, { props: { memory }, global: { plugins: [realI18n()] } })
+/** The names of the icons the card draws (`VeyqIcon`'s `name`), optionally only those carrying [cls]. */
+const iconNames = (w: ReturnType<typeof mountCard>, cls?: string) =>
+  w.findAllComponents(VeyqIcon).filter((i) => !cls || i.classes().includes(cls)).map((i) => i.props('name'))
 
 describe('MemoryCard', () => {
   it('carries no favorite pin: the heart is core\'s action (inbox #409), a chapter\'s lives in its header', () => {
     expect(mountCard().find('.memory-card-pin').exists()).toBe(false)
-    expect(mountCard().find('.pi-heart').exists()).toBe(false)
+    expect(iconNames(mountCard())).not.toContain('heart')
   })
 
   it('opens the Memory on the card body click', async () => {
@@ -29,7 +33,8 @@ describe('MemoryCard', () => {
 describe('MemoryCard cover (cr-0072)', () => {
   it('shows the placeholder images tile when no cover is set', () => {
     const w = mount(MemoryCard, { props: { memory }, global: { plugins: [realI18n()] } })
-    expect(w.find('.memory-card-cover .memory-card-icon.pi-images').exists()).toBe(true)
+    expect(w.find('.memory-card-cover .memory-card-icon').exists()).toBe(true)
+    expect(iconNames(w, 'memory-card-icon')).toEqual(['images'])
     expect(w.find('.memory-card-cover img').exists()).toBe(false)
   })
 
@@ -42,7 +47,7 @@ describe('MemoryCard cover (cr-0072)', () => {
     expect(img.exists()).toBe(true)
     expect(img.attributes('src')).toBe('blob:cover')
     expect(img.attributes('style') ?? '').toContain(`width: ${100 / 0.8}%`)
-    expect(w.find('.memory-card-cover .memory-card-icon.pi-images').exists()).toBe(false)
+    expect(w.find('.memory-card-cover .memory-card-icon').exists()).toBe(false)
   })
 })
 

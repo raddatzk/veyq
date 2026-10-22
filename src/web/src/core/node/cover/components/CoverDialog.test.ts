@@ -2,11 +2,10 @@
 // Core's cover dialog (inbox #411): the ONE dialog every node that takes a cover opens. It crops a source with the shared 16:9
 // cropper and emits a `CoverSaveIntent`; this pins every source and intent (upload, keep, the application's own `media`, remove),
 // the crop it restores from a stored cover, what it refuses (a non-image, an oversize file) and its a11y (a labelled modal dialog,
-// focus inside it, Escape closes). The real PrimeVue Dialog is mounted in the body: the semantics are the library's, the wiring ours.
+// focus inside it, Escape closes). The real `VeyqDialog` is mounted in the body: the semantics are the layer's, the wiring ours.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
-import Dialog from 'primevue/dialog'
+import VeyqDialog from '../../../../shared/ui/VeyqDialog.vue'
 import CoverDialog from './CoverDialog.vue'
 import type { CoverCrop, CoverSaveIntent } from '../coverModel'
 import { realI18n, t } from '../../../../test/i18n'
@@ -18,7 +17,7 @@ async function mountDialog(p: Partial<Props> = {}) {
   const w = mount(CoverDialog, {
     props: { cover: null, existingSrc: null, source: null, hint: null, ...p },
     attachTo: document.body,
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
   })
   wrappers.push(w)
   await vi.waitFor(() => expect(dialog(), 'the dialog renders').not.toBeNull())
@@ -206,12 +205,12 @@ describe('cancel and a11y', () => {
 
   it('closes without saving on what the dialog reports as its close (Escape, the X, the mask)', async () => {
     const w = await mountDialog({ cover: { crop: { x: 0, y: 0, width: 1, height: 1 } }, existingSrc: 'blob:existing' })
-    const library = w.findComponent(Dialog)
-    // Escape is PrimeVue's own document listener (bound when its enter transition runs, which happy-dom does not drive); what
+    const library = w.findComponent(VeyqDialog)
+    // Escape is the dialog's own document listener (bound when its enter transition runs, which happy-dom does not drive); what
     // is ours is that the dialog leaves it ON and that its close event is the dialog's close.
     expect(library.props('closeOnEscape'), 'Escape closes').not.toBe(false)
     expect(library.props('closable'), 'the X closes').not.toBe(false)
-    expect(library.props('modal')).toBe(true)
+    expect(dialog()!.getAttribute('aria-modal'), 'always modal').toBe('true')
     library.vm.$emit('update:visible', false)
     expect(w.emitted('close')).toBeTruthy()
     expect(w.emitted('save')).toBeUndefined()

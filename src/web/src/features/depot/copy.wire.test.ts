@@ -51,7 +51,7 @@ const originalBlob = {
 beforeAll(() => {
   if (!registry.kind(FILE_KIND).supported) {
     registry.registerKind({
-      kind: FILE_KIND, icon: 'pi pi-file', shareable: false, slug: fileNameSlug, downloadsAsFile: true,
+      kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug, downloadsAsFile: true,
       exportContent: exportFile, importContent: importFile, importStreams: true,
     })
   }

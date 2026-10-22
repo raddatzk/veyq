@@ -56,6 +56,7 @@ import { personHash } from '../../../core/node/location'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
 import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightboxZoom'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{
   memoryKey: Uint8Array
@@ -716,7 +717,7 @@ onBeforeUnmount(() => {
           :disabled="!playing && !canNext"
           @click="toggleSlideshow"
         >
-          <span class="pi" :class="playing ? 'pi-pause' : 'pi-play'" />
+          <VeyqIcon :name="playing ? 'pause' : 'play'" />
         </button>
         <button
           v-if="!item?.blocked"
@@ -727,7 +728,7 @@ onBeforeUnmount(() => {
           :disabled="downloading"
           @click="download"
         >
-          <span class="pi" :class="downloading ? 'pi-spin pi-spinner' : 'pi-download'" />
+          <VeyqIcon :name="downloading ? 'spinner' : 'download'" :spin="downloading" />
         </button>
         <button
           v-if="item && canReport"
@@ -737,7 +738,7 @@ onBeforeUnmount(() => {
           :title="t('report.action')"
           @click="emit('report', item)"
         >
-          <span class="pi pi-flag" />
+          <VeyqIcon name="flag" />
         </button>
         <button
           v-if="item && canDelete(item)"
@@ -747,7 +748,7 @@ onBeforeUnmount(() => {
           :title="t('media.delete')"
           @click="emitDelete"
         >
-          <span class="pi pi-trash" />
+          <VeyqIcon name="trash" />
         </button>
         <button
           class="veyq-icon-button lightbox-icon-button"
@@ -755,7 +756,7 @@ onBeforeUnmount(() => {
           :aria-label="t('media.close')"
           @click="close()"
         >
-          <span class="pi pi-times" />
+          <VeyqIcon name="times" />
         </button>
       </div>
     </div>
@@ -769,7 +770,7 @@ onBeforeUnmount(() => {
           :disabled="!canPrev"
           @click="prev"
         >
-          <span class="pi pi-chevron-left" />
+          <VeyqIcon name="chevron-left" />
         </button>
 
         <div
@@ -806,7 +807,7 @@ onBeforeUnmount(() => {
               :title="t('media.playVideo')"
               @click="playVideo"
             >
-              <span class="pi" :class="videoLoading ? 'pi-spin pi-spinner' : 'pi-play'" />
+              <VeyqIcon :name="videoLoading ? 'spinner' : 'play'" :spin="videoLoading" />
             </button>
           </div>
           <img
@@ -818,7 +819,7 @@ onBeforeUnmount(() => {
             draggable="false"
           />
           <span v-else-if="loading" class="media-original-loading">
-            <span class="pi pi-spin pi-spinner" />
+            <VeyqIcon name="spinner" spin />
             <span>{{ t('media.loading') }}</span>
           </span>
           <button
@@ -828,7 +829,7 @@ onBeforeUnmount(() => {
             :disabled="downloading"
             @click="download"
           >
-            <span class="pi pi-file" />
+            <VeyqIcon name="file" />
             <span>{{ t('media.download') }}</span>
           </button>
         </div>
@@ -840,7 +841,7 @@ onBeforeUnmount(() => {
           :disabled="!canNext"
           @click="next"
         >
-          <span class="pi pi-chevron-right" />
+          <VeyqIcon name="chevron-right" />
         </button>
       </section>
 
@@ -865,7 +866,7 @@ onBeforeUnmount(() => {
               :title="t('media.editCapturedAt')"
               @click="startCapturedAtEdit"
             >
-              <span class="pi pi-pencil" />
+              <VeyqIcon name="pencil" />
             </button>
           </div>
         </div>
@@ -943,7 +944,7 @@ onBeforeUnmount(() => {
               :style="{ transform: `rotate(${viewDirection}deg)` }"
               :aria-label="formatDirection(viewDirection, exif?.imgDirectionRef)"
             >
-              <span class="pi pi-arrow-up" aria-hidden="true" />
+              <VeyqIcon name="arrow-up" />
             </span>
           </div>
           <!-- Only when nothing at all is known: it hung off the map's v-if before, so every photo without a coordinate
@@ -1048,7 +1049,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   cursor: pointer;
 }
-.media-lightbox-file-fallback .pi {
+.media-lightbox-file-fallback .veyq-icon {
   font-size: 2rem;
 }
 /* A video's poster (the PREVIEW tier) with a centered play affordance over it (#104). The poster <img> keeps the
@@ -1084,7 +1085,7 @@ onBeforeUnmount(() => {
   cursor: default;
   opacity: 0.8;
 }
-.media-lightbox-play .pi {
+.media-lightbox-play .veyq-icon {
   margin-left: 0.2rem; /* optically center the play triangle */
 }
 </style>

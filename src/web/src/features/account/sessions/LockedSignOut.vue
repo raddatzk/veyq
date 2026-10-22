@@ -22,8 +22,8 @@
 // the server — then the card comes back signed in, and its own sign-out is the visible fallback.
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { revokeOtherSessionFamilies } from './sessions'
 import { signOut } from '../login/signOut'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -60,7 +60,7 @@ async function signOutEverywhere() {
     header: t('sessions.lockedConfirmTitle'),
     message: t('sessions.lockedConfirm'),
     acceptLabel: t('sessions.lockedAction'),
-    acceptIcon: 'pi pi-sign-out',
+    acceptIcon: 'sign-out',
   })
   if (!accepted) return
   error.value = ''
@@ -75,25 +75,25 @@ async function signOutEverywhere() {
          is forced off here. Saying nothing would leave a visible control lying. -->
     <p class="field-hint">{{ t('sessions.lockedScopeNote') }}</p>
 
-    <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
+    <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
 
-    <Button
+    <VeyqButton
       type="button"
       :label="t('sessions.lockedAction')"
-      icon="pi pi-sign-out"
-      severity="danger"
+      icon="sign-out"
+      variant="danger"
       :loading="pending"
       @click="signOutEverywhere"
     />
 
     <!-- The way back, for the person whose kit was in their bag after all. It re-uses the form's own Secret-Key
          path but persists nothing at any tier — the caller owns that flag, because the enrolment lives there. -->
-    <Button
+    <VeyqButton
       type="button"
       :label="t('sessions.lockedBack')"
-      icon="pi pi-key"
-      severity="secondary"
-      text
+      icon="key"
+      variant="secondary"
+      appearance="text"
       :disabled="pending"
       @click="emit('unlock')"
     />

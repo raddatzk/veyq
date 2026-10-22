@@ -11,7 +11,6 @@ vi.mock('../api', () => ({ mediaApi: vi.fn(), itemFavoritesApi: vi.fn(), ownItem
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
@@ -78,7 +77,7 @@ async function mountWithBanner(opts: { digest?: boolean } = {}) {
   const confirm = mountConfirmDialog()
   const w = mount(MemoryDetail, {
     props: { source, node, scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights() },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub } },
+    global: { plugins: [realI18n()], stubs: { MediaLightbox: LightboxStub } },
     attachTo: document.body,
   })
   await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))

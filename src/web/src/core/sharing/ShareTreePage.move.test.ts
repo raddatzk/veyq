@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // A share guest's move (inbox #358) on core's page of a public link: the member's level view, core's move dialog and the
 // guest's door (`placeShareNodeAsGuest` after the page's naming flow) — real crypto for the subtree, the real router and
-// PrimeVue, the clients guarded (`test/guestMode.ts`: an authenticated one throws and is recorded), every step a DOM
+// the clients guarded (`test/guestMode.ts`: an authenticated one throws and is recorded), every step a DOM
 // click. The registry is a fresh one (FOLDER is core's) with one kind "an application" registers, its row factory exposing
 // a move action per node where its right says (as Depot's rows do; inbox #407: a folder's own move is its NodeHeader
 // action once it is open, not an action on its list item). Pinned: a READ_WRITE guest moves within its subtree only, through its link, the
@@ -9,7 +9,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 
@@ -84,8 +83,8 @@ const moveRows: LevelRowsFactory = (ctx, host) => {
   const contributes = () => ctx.value.access.mode === 'guest' && ctx.value.access.role === ShareRole.ReadWrite
   return {
     row: (node) => ({
-      icon: 'pi pi-file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open(node) },
-      actions: [{ id: 'move', label: 'Move', icon: 'pi pi-arrows-alt', shown: contributes(), onClick: () => host.move(node) }],
+      icon: 'file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open(node) },
+      actions: [{ id: 'move', label: 'Move', icon: 'arrows-h', shown: contributes(), onClick: () => host.move(node) }],
       selection: { move: contributes(), delete: false },
     }),
   }
@@ -99,7 +98,7 @@ async function mountAt(role: ShareRole, node?: string, o: { requestGuest?: () =>
   const w = mount(ShareTreePage, {
     attachTo: document.body,
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h0, reload: o.reload ?? (async () => {}), access },
-    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [router, realI18n()] },
   })
   await flushPromises()
   return w
@@ -115,7 +114,7 @@ beforeEach(async () => {
   authenticatedCalls.length = 0
   for (const f of Object.values(toast)) f.mockClear()
   const r = createRegistry()
-  r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: false, list: { rows: moveRows }, placement: { root: true, parents: [FOLDER_KIND] } })
+  r.registerKind({ kind: NOTE_KIND, icon: 'file', shareable: false, list: { rows: moveRows }, placement: { root: true, parents: [FOLDER_KIND] } })
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await router.push(`/s/${SHARE_ID}${HASH}`)
@@ -169,7 +168,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
     await mountAt(ShareRole.ReadWrite, NESTED, { requestGuest: async () => guest })
     await click(moveCardButton()!)
     await moveHere('Familie')
-    expect(document.body.querySelector('.p-message-error')!.textContent!.trim()).toBe(t('node.move.refused.illegal_scope'))
+    expect(document.body.querySelector('.veyq-message--error')!.textContent!.trim()).toBe(t('node.move.refused.illegal_scope'))
   })
 
   // (A guest's identity folder offers none either — `access.test.ts`' matrix; its entry opens only through a drop box's

@@ -33,11 +33,11 @@ const KEY = new Uint8Array(32)
 const item = (id: string): MediaItem => mediaItem({ mediaId: id })
 
 /** Pick the tile menu's Restore for [mediaId] as the rendered menu does: open it on the tile, run the entry, and do
- *  not await it (PrimeVue's `command` returns nothing). */
+ *  not await it (the menu's `command` returns nothing). */
 function restoreFromTileMenu(vm: UnwrapRef<ReturnType<typeof useMediaTrash>>, mediaId: string) {
   vm.openTrashMenu(new Event('click'), mediaId)
   const restore = vm.trashMenuModel[0]
-  restore.command!({ originalEvent: new Event('click'), item: restore })
+  restore.command!(new Event('click'))
 }
 
 /** Mount a harness that exposes the composable's return + the two host callbacks as spies. */

@@ -54,7 +54,6 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../test/i18n'
 import { chooseNew } from '../test/newMenu'
-import PrimeVue from 'primevue/config'
 import { sealName, wrapContentKey, type NodeAddress } from '../core/node/tree'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../core/sharing/dropKey'
 import { hashForNode } from '../core/node/location'
@@ -103,7 +102,7 @@ async function mountLevel(hash = '#~me') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
   await settle(0)
   return w
 }

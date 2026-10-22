@@ -5,8 +5,8 @@
 // state and answer. It names the host, never the moderator.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { loadStatements, objectionFailure, objectTo, openFacts, statementFor } from './statements'
 import { renderStatement } from './template'
 
@@ -74,8 +74,8 @@ onMounted(() => loadStatements())
       <p v-if="p.id === 'facts'" class="veyq-form-copy statement-facts">{{ facts ?? t('statement.factsUnopened') }}</p>
     </template>
 
-    <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
-    <Message v-if="sent" severity="success" :closable="false" class="form-message">{{ t('statement.objectSent') }}</Message>
+    <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
+    <VeyqMessage v-if="sent" tone="success" class="form-message">{{ t('statement.objectSent') }}</VeyqMessage>
 
     <template v-if="statement.objection">
       <p v-if="!statement.objection.outcome" class="veyq-form-copy statement-objection-state">
@@ -92,7 +92,7 @@ onMounted(() => loadStatements())
       <label :for="`statement-objection-${statement.id}`">{{ t('statement.objectLabel') }}</label>
       <textarea :id="`statement-objection-${statement.id}`" v-model="text" class="statement-objection-text" rows="4" maxlength="2000" :disabled="busy" />
       <span class="veyq-form-copy">{{ t('statement.objectHint') }}</span>
-      <Button type="submit" class="statement-objection-submit" icon="pi pi-send" :label="t('statement.objectSubmit')" :loading="busy" />
+      <VeyqButton type="submit" class="statement-objection-submit" icon="send" :label="t('statement.objectSubmit')" :loading="busy" />
     </form>
     <p v-else-if="statement.liftedAt" class="veyq-form-copy statement-lifted">
       {{ t(statement.endedWithTarget ? 'statement.endedWithTarget' : 'statement.liftedAt', { time: day(statement.liftedAt) }) }}

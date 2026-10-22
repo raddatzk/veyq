@@ -44,7 +44,7 @@ vi.mock('../../../sw/register', () => ({
 // A share guest's tier reads (the zoom's guest case): recorded at the share helpers, the link's gated presign behind them.
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), openShareLightbox: vi.fn(), openShareOriginal: vi.fn() }))
 
-// The toast channel (PrimeVue's ToastService is not installed here): the too-large download reports through it.
+// The toast channel (the layer's `shared/ui/toast.ts`, mocked here at `useToast`): the too-large download reports through it.
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),

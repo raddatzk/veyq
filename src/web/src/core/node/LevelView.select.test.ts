@@ -6,7 +6,6 @@
 // hosts' (`MoveNodesDialog`, `DeleteNodesDialog`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 const holder = vi.hoisted(() => ({ reg: null as null | import('../applications/registry').Registry }))
 vi.mock('../applications/registry', async (importOriginal) => {
@@ -60,15 +59,15 @@ beforeEach(() => {
   remove.mockClear()
   const a = stubRows('a', { selection: (n) => ALLOWS[n.kind] })
   const b = stubRows('b', { selection: (n) => (n.name === 'b-del' ? { move: false, delete: true, remove } : ALLOWS[n.kind]) })
-  holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, tabLabel: LABEL_A } })
-  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: b.factory, tabLabel: LABEL_B } })
+  holder.reg.registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, tabLabel: LABEL_A } })
+  holder.reg.registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory, tabLabel: LABEL_B } })
 })
 
 const TREE = [
   TRIPS, OTHER, node('Sub', FOLDER_KIND), node('a1', 'ALPHA'), node('a2', 'ALPHA'), node('b1', 'BETA'), node('b-del', 'BETA'),
   node('o1', 'ALPHA', 'Other'),
 ]
-const PLUGINS = { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } }
+const PLUGINS = { plugins: [realI18n()] }
 function mountLevel(tree: TreeNode[] = TREE, access: Access = memberAccessOf({}), folder: TreeNode | null = TRIPS) {
   return mount(LevelView, {
     props: { folder, level: childrenOf(tree, folder?.id ?? null), access, tree: memberTreeOf(() => tree) },
@@ -180,9 +179,9 @@ describe('LevelView: Select', () => {
 
   it('no Select in an application\'s own presentation (the map has no rows); switching to it leaves the mode', async () => {
     holder.reg = createRegistry()
-    const MAP = { mode: 'map', icon: 'pi pi-map', label: 'node.folders' } as const
+    const MAP = { mode: 'map', icon: 'map', label: 'node.folders' } as const
     const a = stubRows('a', { presentationFor: 'map', selection: () => ({ move: true, delete: true }) })
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
     const tree = [TRIPS, node('a1', 'ALPHA')]
     const w = mountLevel(tree)
     await startSelecting(w)
@@ -200,7 +199,7 @@ describe('LevelView: Select', () => {
     // a READ guest's sub-folders: core's matrix grants it nothing
     expect(selectButton(mountLevel([TRIPS, node('Sub', FOLDER_KIND)], guestAccessOf(ShareRole.Read))).exists()).toBe(false)
     holder.reg = createRegistry()
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: stubRows('a').factory } })
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: stubRows('a').factory } })
     expect(selectButton(mountLevel([TRIPS, node('a1', 'ALPHA')], memberAccessOf({ readonly: true }))).exists()).toBe(false)
     // control: the same rows for a member who writes - a sub-folder moves
     expect(selectButton(mountLevel([TRIPS, node('Sub', FOLDER_KIND), node('a1', 'ALPHA')])).exists()).toBe(true)

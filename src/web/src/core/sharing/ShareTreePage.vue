@@ -37,8 +37,9 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Breadcrumb from 'primevue/breadcrumb'
-import type { MenuItem } from 'primevue/menuitem'
+import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import type { VeyqMenuItem } from '../../shared/ui/menu'
 import { registry } from '../applications/registry'
 import type { GuestAccess } from '../access'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
@@ -122,22 +123,22 @@ function go(id: string) {
   if (tree.value) void router.push(tree.value.linkTo(id))
 }
 /** A crumb is a real link to its node (a modified click opens it elsewhere, key included) whose plain click the router
- *  handles. PrimeVue renders every crumb as an `<a>` and only CALLS `command`, so the anchor's default action still
+ *  handles. `VeyqBreadcrumb` renders every crumb as an `<a>` and only CALLS `command`, so the anchor's default action still
  *  runs unless prevented: without a `url` that is `href="#"`, which — measured in the browser, 2026-10-07 — cleared the
  *  `#k=` fragment AND cancelled the push (`?node=` stayed), leaving a reload keyless and every guest write refused. */
-function crumb(tr: GuestTreeSource, id: string): MenuItem {
+function crumb(tr: GuestTreeSource, id: string): VeyqMenuItem {
   return {
     label: tr.nameOf(id),
     url: router.resolve(tr.linkTo(id)).href,
-    command: ({ originalEvent: e }) => {
+    command: (e) => {
       if (e instanceof MouseEvent && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return // the browser opens the href
       e.preventDefault()
       go(id)
     },
   }
 }
-const home = computed<MenuItem>(() => (tree.value ? crumb(tree.value, tree.value.rootId) : { label: props.head.name }))
-const crumbs = computed<MenuItem[]>(() => {
+const home = computed<VeyqMenuItem>(() => (tree.value ? crumb(tree.value, tree.value.rootId) : { label: props.head.name }))
+const crumbs = computed<VeyqMenuItem[]>(() => {
   const tr = tree.value
   return tr ? trail.value.slice(1).map((id) => crumb(tr, id)) : []
 })
@@ -202,12 +203,12 @@ function createError(e: unknown): string {
 
 <template>
   <p v-if="!tree" class="veyq-empty">
-    <span class="pi pi-spin pi-spinner" />
+    <VeyqIcon name="spinner" spin />
     <span>{{ t('share.folder.loading') }}</span>
   </p>
   <section v-else class="veyq-section">
     <div class="share-folder-bar">
-      <Breadcrumb :home="home" :model="crumbs" class="app-breadcrumb" :aria-label="t('share.folder.breadcrumbRoot')" />
+      <VeyqBreadcrumb :home="home" :items="crumbs" class="app-breadcrumb" :aria-label="t('share.folder.breadcrumbRoot')" />
       <span class="share-folder-badge">{{ badge }}</span>
     </div>
     <!-- The share's note (the curator's), once for the whole page. Safe markdown (escape-first), so v-html is safe. -->

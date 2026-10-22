@@ -122,13 +122,13 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
 })
 
 const stubs = {
-  Button: {
+  VeyqButton: {
     props: ['label'],
     emits: ['click'],
     template: '<button :class="$attrs.class" :type="$attrs.type ?? \'button\'" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  DatePicker: { name: 'DatePicker', props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="datepicker" />' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqDateField: { name: 'VeyqDateField', props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="datepicker" />' },
   AuthoritySection: { props: ['current', 'busy'], template: '<div class="authority-section-stub" />' },
 }
 
@@ -235,10 +235,11 @@ describe('CaseDetail', () => {
   })
 
   it('extends the hold with a new end and a reason', async () => {
-    const until = new Date('2027-03-01T00:00:00Z')
+    // The date field binds an ISO day; the page sends that day's local midnight.
+    const until = new Date(2027, 2, 1)
     vi.mocked(extendHold).mockResolvedValue(caseOf({ hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: undefined } }))
     const w = await mountCase()
-    w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', until)
+    w.findComponent({ name: 'VeyqDateField' }).vm.$emit('update:modelValue', '2027-03-01')
     await w.find('.moderation-extend-reason').setValue('an authority asked')
     await w.find('.moderation-extend').trigger('submit')
     await flushPromises()
@@ -247,12 +248,12 @@ describe('CaseDetail', () => {
   })
 
   it('on a child-sexual-abuse case the extension names an authority or an Art. 18 report, and nothing else is offered', async () => {
-    const until = new Date('2027-03-01T00:00:00Z')
+    const until = new Date(2027, 2, 1)
     vi.mocked(extendHold).mockResolvedValue(caseOf({ category: 'CHILD_SEXUAL_ABUSE', hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: undefined } }))
     const w = await mountCase(caseOf({ category: 'CHILD_SEXUAL_ABUSE' }))
     const offered = w.findAll('.moderation-extend-type option').map((o) => o.attributes('value')).filter((v) => v)
     expect(offered).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS'])
-    w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', until)
+    w.findComponent({ name: 'VeyqDateField' }).vm.$emit('update:modelValue', '2027-03-01')
     await w.find('.moderation-extend-reason').setValue('BKA asked to keep it')
     // Without the kind it is not sent, and says why.
     await w.find('.moderation-extend').trigger('submit')
@@ -273,7 +274,7 @@ describe('CaseDetail', () => {
 
   it('an extension without a reason is not sent', async () => {
     const w = await mountCase()
-    w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', new Date('2027-03-01T00:00:00Z'))
+    w.findComponent({ name: 'VeyqDateField' }).vm.$emit('update:modelValue', '2027-03-01')
     await w.find('.moderation-extend').trigger('submit')
     await flushPromises()
     expect(extendHold).not.toHaveBeenCalled()
@@ -288,7 +289,7 @@ describe('CaseDetail', () => {
   ])('an extension refused with %i %s says so', async (status, code, key) => {
     vi.mocked(extendHold).mockRejectedValue(httpError(status, code))
     const w = await mountCase()
-    w.findComponent({ name: 'DatePicker' }).vm.$emit('update:modelValue', new Date('2027-03-01T00:00:00Z'))
+    w.findComponent({ name: 'VeyqDateField' }).vm.$emit('update:modelValue', '2027-03-01')
     await w.find('.moderation-extend-reason').setValue('an authority asked')
     await w.find('.moderation-extend').trigger('submit')
     await flushPromises()
@@ -512,11 +513,12 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     vi.mocked(reporterNoticesOf).mockReturnValue([])
   })
 
-  const picker = (w: VueWrapper, id: string) => w.findAllComponents({ name: 'DatePicker' }).find((c) => c.attributes('input-id') === id)!
+  const picker = (w: VueWrapper, id: string) => w.findAllComponents({ name: 'VeyqDateField' }).find((c) => c.attributes('input-id') === id)!
 
   it('a block carries the authority’s deferral only when asked for, with its end and its request', async () => {
     vi.mocked(takeMeasure).mockResolvedValue(caseOf({ state: 'DECIDED' }))
-    const until = new Date('2026-11-20T00:00:00Z')
+    // The date field binds an ISO day; the page keeps that day's local midnight.
+    const until = new Date(2026, 10, 20)
     const w = await mountCase()
     await w.find('.moderation-statement-facts').setValue('the facts')
     await w.find('.moderation-statement-provision').setValue('Space terms, clause 4')
@@ -525,7 +527,7 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     await click(w, '.moderation-block-content')
     expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.reasonRequired'))
     expect(takeMeasure).not.toHaveBeenCalled()
-    picker(w, 'moderation-defer-until').vm.$emit('update:modelValue', until)
+    picker(w, 'moderation-defer-until').vm.$emit('update:modelValue', '2026-11-20')
     await w.find('.moderation-defer-reason').setValue('BKA: not before 20 November')
     await click(w, '.moderation-block-content')
     expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', {
@@ -543,8 +545,8 @@ describe('CaseDetail — an authority (uc.moderation.authority-order, uc.moderat
     )
     const w = await mountCase(deferred)
     expect(w.find('.moderation-measure-statement').text()).toContain(t('moderation.deferral.deferredUntil', { time: held.toLocaleString('en') }))
-    const until = new Date('2026-12-20T00:00:00Z')
-    picker(w, `moderation-renew-until-${STATEMENT}`).vm.$emit('update:modelValue', until)
+    const until = new Date(2026, 11, 20)
+    picker(w, `moderation-renew-until-${STATEMENT}`).vm.$emit('update:modelValue', '2026-12-20')
     await w.find('.moderation-renew-reason').setValue('BKA renewed')
     await w.find('.moderation-renew').trigger('submit')
     await flushPromises()

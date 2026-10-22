@@ -28,14 +28,14 @@ const MapStub = {
 }
 const stubs = {
   MemoryMap: MapStub,
-  Dialog: { template: '<div class="dlg"><slot /></div>' },
-  Button: { props: ['type', 'label', 'disabled'], template: `<button :type="type || 'button'" :disabled="disabled" @click="$emit('click', $event)">{{ label }}</button>` },
-  InputText: {
+  VeyqDialog: { template: '<div class="dlg"><slot /></div>' },
+  VeyqButton: { props: ['type', 'label', 'disabled'], template: `<button :type="type || 'button'" :disabled="disabled" @click="$emit('click', $event)">{{ label }}</button>` },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: `<input class="name-input" :value="modelValue" @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)" />`,
   },
-  Select: {
+  VeyqSelect: {
     props: ['modelValue', 'options'],
     emits: ['update:modelValue'],
     template: `<select class="level-select" :value="modelValue" @change="$emit('update:modelValue', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>`,

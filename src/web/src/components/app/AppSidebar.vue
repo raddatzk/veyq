@@ -12,10 +12,11 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import Dialog from 'primevue/dialog'
-import Popover from 'primevue/popover'
-import Menu from 'primevue/menu'
-import type { MenuItem } from 'primevue/menuitem'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqPopover from '../../shared/ui/VeyqPopover.vue'
+import VeyqMenu from '../../shared/ui/VeyqMenu.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import type { VeyqMenuItem } from '../../shared/ui/menu'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import logoDarkUrl from '../../assets/brand/logo-dark.svg'
 import logoLightUrl from '../../assets/brand/logo-light.svg'
@@ -65,7 +66,7 @@ const personalActive = computed(() => isPersonalScope(activeScope.value))
 // ciphertext). A group is entered via the `#@<id>` fragment; the active one is highlighted from the leading token.
 const groups = ref<GroupSpace[]>([])
 // Each group's decrypted icon as an owned object URL keyed by scopeId (uc.spaces.set-space-icon, GROUP slice) —
-// opened on-device by listMyGroups (peeling the epoch chain). Absent → the pi-users glyph.
+// opened on-device by listMyGroups (peeling the epoch chain). Absent → the users glyph.
 const groupIcons = useObjectUrls()
 function groupIcon(scopeId: string): string | undefined {
   return groupIcons.get(scopeId) ?? undefined
@@ -139,7 +140,7 @@ async function onGroupCreated(scopeId: string) {
 // At the compact width the groups become a horizontal strip; only as many links as physically fit are shown, and
 // the rest collapse into a "＋N" chevron menu (with a trailing "create group"). Widths are measured off-screen via
 // a hidden clone (`.compact-group-measure`), re-measured on resize + when the group list changes.
-const groupMenu = ref<InstanceType<typeof Menu> | null>(null)
+const groupMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const compactGroupLinks = ref<HTMLElement | null>(null)
 const compactGroupMeasure = ref<HTMLElement | null>(null)
 const compactGroupLinksWidth = ref(0)
@@ -168,10 +169,10 @@ const overflowCompactGroups = computed<GroupSpace[]>(() => {
 })
 // The "＋N" menu lists only the groups that didn't fit; creation stays on the always-present "＋" in the heading
 // (so it isn't duplicated here). The chevron shows only when something actually overflowed.
-const groupMenuItems = computed<MenuItem[]>(() =>
+const groupMenuItems = computed<VeyqMenuItem[]>(() =>
   overflowCompactGroups.value.map((g) => ({
     label: g.name,
-    icon: 'pi pi-users',
+    icon: 'users',
     command: () => void router.push({ name: 'home', hash: groupHash(g) }),
   })),
 )
@@ -215,7 +216,7 @@ const activeTenant = computed(
 
 // The all-tenants overview (cr-0108): a chevron on the active row toggles this popup; it lists every tenant the
 // member belongs to and switches on select. Shown only when there is more than one tenant to switch between.
-const tenantOverview = ref<InstanceType<typeof Popover> | null>(null)
+const tenantOverview = ref<InstanceType<typeof VeyqPopover> | null>(null)
 
 // What the applications pinned into the rail, in their `order`; none → no section, no gap.
 const sidebarPins = registry.slotItems('sidebarPins')
@@ -317,10 +318,10 @@ function closeMobileMenu() {
             aria-haspopup="menu"
             @click="tenantOverview?.toggle($event)"
           >
-            <span class="pi pi-chevron-down" />
+            <VeyqIcon name="chevron-down" />
           </button>
         </div>
-        <Popover ref="tenantOverview" class="sidebar-tenant-overview">
+        <VeyqPopover ref="tenantOverview" class="sidebar-tenant-overview">
           <p class="sidebar-tenant-overview-label">{{ t('shell.tenantSwitch') }}</p>
           <div class="sidebar-tenant-overview-list">
             <button
@@ -339,10 +340,10 @@ function closeMobileMenu() {
                 <small v-if="isOffline(tenant)" class="sidebar-tenant-offline">{{ t('shell.tenantOffline') }}</small>
                 <small v-else>{{ tenant.domain }}</small>
               </span>
-              <span v-if="isActive(tenant)" class="pi pi-check sidebar-tenant-current" aria-hidden="true" />
+              <VeyqIcon v-if="isActive(tenant)" name="check" class="sidebar-tenant-current" />
             </button>
           </div>
-        </Popover>
+        </VeyqPopover>
       </div>
     </section>
 
@@ -357,7 +358,7 @@ function closeMobileMenu() {
           :class="{ 'router-link-active': personalActive }"
           @click="navigate"
         >
-          <span class="pi pi-user" />
+          <VeyqIcon name="user" />
           <span>{{ t('shell.personal') }}</span>
         </a>
       </RouterLink>
@@ -381,7 +382,7 @@ function closeMobileMenu() {
           :aria-label="t('shell.groupCreate')"
           @click="createGroupOpen = true"
         >
-          <span class="pi pi-plus" />
+          <VeyqIcon name="plus" />
         </button>
       </div>
       <RouterLink
@@ -398,7 +399,7 @@ function closeMobileMenu() {
           @click="navigate"
         >
           <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" />
-          <span v-else class="sidebar-scope-icon pi pi-users" />
+          <VeyqIcon v-else name="users" class="sidebar-scope-icon" />
           <!-- An owner's mark beside the name: a compromise rotation queued here needs an owner (stalled or failed,
                uc.spaces.complete-queued-rotation) — the member panel says which and offers what fits. -->
           <span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
@@ -421,7 +422,7 @@ function closeMobileMenu() {
               @click="navigate"
             >
               <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" />
-              <span v-else class="sidebar-scope-icon pi pi-users" />
+              <VeyqIcon v-else name="users" class="sidebar-scope-icon" />
               <span><strong>{{ group.name }}</strong></span>
             </a>
           </RouterLink>
@@ -433,7 +434,7 @@ function closeMobileMenu() {
             aria-haspopup="menu"
             @click="toggleGroupMenu"
           >
-            <span class="pi pi-chevron-down" />
+            <VeyqIcon name="chevron-down" />
           </button>
         </div>
       </div>
@@ -445,14 +446,14 @@ function closeMobileMenu() {
           class="sidebar-scope-link compact-group-link"
           :data-compact-group-id="group.scopeId"
         >
-          <span class="sidebar-scope-icon pi pi-users" />
+          <VeyqIcon name="users" class="sidebar-scope-icon" />
           <span><strong>{{ group.name }}</strong></span>
         </span>
         <button class="compact-group-overflow-button" type="button" tabindex="-1" data-compact-group-overflow>
-          <span class="pi pi-chevron-down" />
+          <VeyqIcon name="chevron-down" />
         </button>
       </div>
-      <Menu ref="groupMenu" :model="groupMenuItems" popup />
+      <VeyqMenu ref="groupMenu" :items="groupMenuItems" />
     </section>
 
     <section class="sidebar-section sidebar-profile">
@@ -462,10 +463,10 @@ function closeMobileMenu() {
     <!-- Mobile: the inline nav is CSS-hidden below the compact threshold — this hamburger opens the full nav
          as a bottom sheet (cr-0084, ported from the legacy design source; the styles were already vendored). -->
     <button class="mobile-navigation-button" type="button" :aria-label="t('shell.menuOpen')" @click="mobileMenuOpen = true">
-      <span class="pi pi-bars" />
+      <VeyqIcon name="bars" />
     </button>
 
-    <Dialog v-model:visible="mobileMenuOpen" modal position="bottom" class="tenant-dialog mobile-nav-dialog" :header="t('shell.menu')">
+    <VeyqDialog v-model:visible="mobileMenuOpen" position="bottom" class="tenant-dialog mobile-nav-dialog" :header="t('shell.menu')">
       <div class="mobile-nav-sheet">
         <!-- One BEREICHE group (cr-0108): the active tenant row enters the shared Tenant home (the old separate
              "Gemeinsam" entry, folded in), other tenants switch, and Personal follows — mirroring the desktop
@@ -510,7 +511,7 @@ function closeMobileMenu() {
               :class="{ 'mobile-nav-item-active': personalActive }"
               @click="closeMobileMenu"
             >
-              <span class="sidebar-scope-icon pi pi-user" /><span>{{ t('shell.personal') }}</span>
+              <VeyqIcon name="user" class="sidebar-scope-icon" /><span>{{ t('shell.personal') }}</span>
             </RouterLink>
           </div>
         </section>
@@ -526,10 +527,10 @@ function closeMobileMenu() {
               :class="{ 'mobile-nav-item-active': groupActive(group.scopeId) }"
               @click="closeMobileMenu"
             >
-              <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" /><span v-else class="sidebar-scope-icon pi pi-users" /><span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
+              <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" /><VeyqIcon v-else name="users" class="sidebar-scope-icon" /><span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
             </RouterLink>
             <button v-if="canCreateGroup" class="mobile-nav-item" type="button" @click="createGroupOpen = true; closeMobileMenu()">
-              <span class="sidebar-scope-icon pi pi-plus" /><span>{{ t('shell.groupCreate') }}</span>
+              <VeyqIcon name="plus" class="sidebar-scope-icon" /><span>{{ t('shell.groupCreate') }}</span>
             </button>
           </div>
         </section>
@@ -537,7 +538,7 @@ function closeMobileMenu() {
         <PinnedNodes variant="sheet" @navigate="closeMobileMenu" />
         <component :is="pin.component" v-for="pin in sidebarPins" :key="pin.id" variant="sheet" @navigate="closeMobileMenu" />
       </div>
-    </Dialog>
+    </VeyqDialog>
 
     <CreateGroupDialog v-if="createGroupOpen" @done="onGroupCreated" @close="createGroupOpen = false" />
   </aside>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 // The one media tile shared by the Galerie, Papierkorb and Beiträge grids (cr-0125). A positioned wrapper with a
 // single clickable image button (emits `open`) + an optional `#overlay` slot (a selection check + a 3-dot menu).
 // Renders the decrypted thumbnail, a file icon (non-derivable), or the shimmer placeholder — with the image FIT
@@ -46,13 +47,13 @@ const { t } = useI18n()
 <template>
   <div class="media-tile" :class="{ 'is-selected': selected }">
     <button type="button" class="media-tile-open" :aria-label="openLabel" @click="$emit('open')">
-      <span v-if="blocked" class="media-tile-blocked"><span class="pi pi-ban" aria-hidden="true" />{{ t('node.blockedByOperator') }}</span>
+      <span v-if="blocked" class="media-tile-blocked"><VeyqIcon name="ban" />{{ t('node.blockedByOperator') }}</span>
       <img v-else-if="src" class="media-tile-img" :src="src" alt="" />
-      <span v-else-if="!hasDerivatives" class="media-grid-icon pi pi-file" aria-hidden="true" />
-      <span v-else-if="failed" class="media-tile-failed"><span class="pi pi-exclamation-triangle" aria-hidden="true" />{{ t('media.thumbnailFailed') }}</span>
+      <VeyqIcon v-else-if="!hasDerivatives" name="file" class="media-grid-icon" />
+      <span v-else-if="failed" class="media-tile-failed"><VeyqIcon name="exclamation-triangle" />{{ t('media.thumbnailFailed') }}</span>
       <span v-else class="media-grid-tile-placeholder" aria-hidden="true" />
     </button>
-    <span v-if="isVideo" class="media-tile-play" aria-hidden="true"><span class="pi pi-play" /></span>
+    <span v-if="isVideo" class="media-tile-play" aria-hidden="true"><VeyqIcon name="play" /></span>
     <button
       v-if="markable"
       type="button"
@@ -62,7 +63,7 @@ const { t } = useI18n()
       :aria-pressed="markedByMe === true"
       @click.stop="$emit('toggle-mark')"
     >
-      <span :class="markedByMe ? 'pi pi-heart-fill' : 'pi pi-heart'" aria-hidden="true" />
+      <VeyqIcon :name="markedByMe ? 'heart-fill' : 'heart'" />
       <span v-if="(markCount ?? 0) > 0" class="media-tile-mark-count">{{ markCount }}</span>
     </button>
     <slot name="overlay" />
@@ -162,7 +163,7 @@ const { t } = useI18n()
   color: #fff;
   pointer-events: none; /* the tile's open button owns the click */
 }
-.media-tile-play .pi {
+.media-tile-play .veyq-icon {
   font-size: 1.1rem;
   margin-left: 0.15rem; /* optically center the play triangle */
 }

@@ -12,13 +12,15 @@
 // Memory. Collapse is delayed so the pointer can travel from the badge to a member without the fan snapping shut.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useMapConfig, setMapsConsent } from '../../../shared/state/useMapConfig'
 import { clusterPins, sortPinsByStartDate, type LocatedPin, type PinCluster } from '../spaceMap'
 import { coverImageStyle, type LoadedCover } from '../memoryCover'
 import { formatClosedRange, formatDay } from '../memoryDateRange'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import { createIconElement } from '../../../shared/ui/iconElement'
 
 // `covers` maps a node id → the node's chosen cover (a decrypted thumbnail URL + its crop, loaded by the host,
 // cr-0072); a pin with one shows that cropped cover via the shared `coverImageStyle` formula, the rest fall back to
@@ -80,9 +82,7 @@ function cardEl(pin: LocatedPin): HTMLElement {
     thumb.appendChild(img)
   } else {
     thumb.classList.add('veyq-space-card-thumb-ph')
-    const icon = document.createElement('span')
-    icon.className = 'pi pi-images'
-    thumb.appendChild(icon)
+    thumb.appendChild(createIconElement('images'))
   }
   card.appendChild(thumb)
 
@@ -177,7 +177,7 @@ function expand(cluster: PinCluster, key: string) {
   members.forEach((pin, i) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * i) / n // start at 12 o'clock, go clockwise
     const at = map!.layerPointToLatLng([center.x + radius * Math.cos(angle), center.y + radius * Math.sin(angle)])
-    const leg = L.polyline([[cluster.lat, cluster.lng], at], { color: 'var(--p-primary-color, #6d5ae6)', weight: 1.5, opacity: 0.6 })
+    const leg = L.polyline([[cluster.lat, cluster.lng], at], { color: 'var(--app-primary)', weight: 1.5, opacity: 0.6 })
     if (!coarsePointer) {
       leg.on('mouseover', cancelCollapse)
       leg.on('mouseout', scheduleCollapse)
@@ -285,19 +285,19 @@ function enableMaps() {
     <!-- consent off: the same coupled tiles+geocoding opt-in copy as the editor, not a broken map -->
     <!-- no map service on this server (memories.map): nothing to consent to, so nothing is offered -->
     <div v-if="!mapsOffered" class="space-map-panel">
-      <span class="pi pi-map space-map-panel-icon" aria-hidden="true" />
+      <VeyqIcon name="map" class="space-map-panel-icon" />
       <p>{{ t('memory.place.mapsNotOffered') }}</p>
     </div>
     <div v-else-if="!mapsAvailable" class="space-map-panel">
-      <span class="pi pi-map space-map-panel-icon" aria-hidden="true" />
+      <VeyqIcon name="map" class="space-map-panel-icon" />
       <h3>{{ t('memory.place.consentTitle') }}</h3>
       <p>{{ t('memory.place.consentBody') }}</p>
-      <Button type="button" :label="t('memory.place.consentEnable')" icon="pi pi-map" @click="enableMaps" />
+      <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />
     </div>
 
     <!-- consented but nothing located in this subtree yet -->
     <div v-else-if="pins.length === 0" class="space-map-panel">
-      <span class="pi pi-map-marker space-map-panel-icon" aria-hidden="true" />
+      <VeyqIcon name="map-marker" class="space-map-panel-icon" />
       <h3>{{ t('memory.map.empty') }}</h3>
       <p>{{ t('memory.map.emptyHint') }}</p>
     </div>
@@ -350,7 +350,7 @@ function enableMaps() {
   width: 40px;
   height: 40px;
   border-radius: 999px;
-  background: var(--p-primary-color, #6d5ae6);
+  background: var(--app-primary);
   color: var(--app-on-fill);
   font-weight: 800;
   font-size: 0.95rem;
@@ -425,7 +425,7 @@ function enableMaps() {
   background: var(--app-accent-soft);
   color: var(--app-accent);
 }
-:deep(.veyq-space-card-thumb-ph .pi) {
+:deep(.veyq-space-card-thumb-ph .veyq-icon) {
   font-size: 0.95rem;
 }
 :deep(.veyq-space-card-body) {

@@ -10,9 +10,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
-import InputText from 'primevue/inputtext'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import { getTenantStorage, updateTenantStorage, formatGib, GIB, type TenantStorage } from './tenantStorage'
 import { activeSpace } from '../../app/activeSpace'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -93,11 +93,11 @@ async function save() {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('storage.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('storage.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('storage.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('storage.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('storage.loadFailed') }}</VeyqMessage>
 
       <template v-else>
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
 
         <p class="storage-used">
           <span>{{ t('storage.used') }}</span>
@@ -113,12 +113,12 @@ async function save() {
 
         <label>
           <span>{{ t('storage.linkLimit') }}</span>
-          <InputText v-model="limitGib" inputmode="decimal" autocomplete="off" />
+          <VeyqInput v-model="limitGib" inputmode="decimal" autocomplete="off" />
           <small class="field-hint">{{ t('storage.linkLimitHint') }}</small>
         </label>
 
         <div class="storage-actions">
-          <Button :label="t('storage.save')" icon="pi pi-save" :loading="saving" @click="save" />
+          <VeyqButton :label="t('storage.save')" icon="save" :loading="saving" @click="save" />
         </div>
       </template>
     </section>

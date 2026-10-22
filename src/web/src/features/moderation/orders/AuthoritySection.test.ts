@@ -35,7 +35,7 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
 })
 
 const stubs = {
-  Button: { props: ['label'], emits: ['click'], template: '<button :class="$attrs.class" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button :class="$attrs.class" @click="$emit(\'click\')">{{ label }}</button>' },
 }
 
 function mountSection(c: ModerationCase = caseOf()) {

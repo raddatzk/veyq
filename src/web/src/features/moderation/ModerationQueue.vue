@@ -6,8 +6,8 @@
 // list (`OrderForm`), and a statement an authority deferred is reminded of on its row until it goes out.
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import type { ModerationCaseSummary } from '../../api/generated/moderation'
 import { listCases } from './cases'
 import { caseFailureKey } from './caseFailure'
@@ -76,17 +76,17 @@ onMounted(load)
       <div class="veyq-section-header">
         <h3>{{ t('moderation.queue') }}</h3>
         <div class="veyq-action-group">
-          <Button
-            severity="secondary"
+          <VeyqButton
+            variant="secondary"
             class="moderation-queue-filter"
             :label="showClosed ? t('moderation.queueShowOpen') : t('moderation.queueShowClosed')"
             :disabled="loading"
             @click="toggleClosed"
           />
-          <Button severity="secondary" class="moderation-queue-refresh" :label="t('moderation.queueRefresh')" icon="pi pi-refresh" :loading="loading" @click="load" />
+          <VeyqButton variant="secondary" class="moderation-queue-refresh" :label="t('moderation.queueRefresh')" icon="refresh" :loading="loading" @click="load" />
         </div>
       </div>
-      <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
       <template v-if="cases">
         <p v-if="cases.length === 0" class="veyq-form-copy moderation-queue-empty">
           {{ showClosed ? t('moderation.queueClosedEmpty') : t('moderation.queueEmpty') }}
@@ -115,7 +115,7 @@ onMounted(load)
                 </span>
               </div>
             </div>
-            <Button class="moderation-case-open" :label="t('moderation.openCase')" icon="pi pi-folder-open" @click="openCase(c)" />
+            <VeyqButton class="moderation-case-open" :label="t('moderation.openCase')" icon="folder-open" @click="openCase(c)" />
           </div>
         </div>
       </template>

@@ -17,17 +17,17 @@ import { inviteMember, memberError } from './members'
 import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
-  Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
-  InputText: {
+  VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Button: {
+  VeyqButton: {
     props: ['type', 'label', 'disabled'],
     emits: ['click'], // declare it so the parent's @click fires once (not native-fallthrough + emit = twice)
     template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',
   },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 const mountDialog = () =>

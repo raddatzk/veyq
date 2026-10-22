@@ -7,10 +7,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { getMyProfile, updateMyProfile } from './profile'
 import NamePictureFields from './NamePictureFields.vue'
 import { useNameAndPicture } from './useNameAndPicture'
@@ -90,18 +90,18 @@ async function save() {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('profile.loading') }}</p>
-      <Message v-else-if="loadError" severity="error" :closable="false">{{ t('profile.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError" tone="error">{{ t('profile.loadFailed') }}</VeyqMessage>
 
       <form v-else class="veyq-form" @submit.prevent="save">
         <label>{{ t('profile.username') }}
-          <InputText v-model="username" name="username" autocomplete="username" required />
+          <VeyqInput v-model="username" name="username" autocomplete="username" required />
           <small class="field-hint">{{ t('profile.usernameHint') }}</small>
         </label>
         <NamePictureFields :model="identity" :display-name="`${identity.firstName} ${identity.lastName}`.trim() || username" />
 
         <!-- Account-global consent preference (cr-0094). Applies in every space you belong to. -->
         <div class="consent-row">
-          <Checkbox v-model="requireGroupAddConsent" input-id="require-group-add-consent" binary />
+          <VeyqCheckbox v-model="requireGroupAddConsent" input-id="require-group-add-consent" />
           <label class="consent-label" for="require-group-add-consent">
             <span>{{ t('profile.consentGroupAdd') }}</span>
             <small class="field-hint">{{ t('profile.consentGroupAddHint') }}</small>
@@ -109,9 +109,9 @@ async function save() {
           </label>
         </div>
 
-        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+        <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
         <div class="veyq-dialog-action-row">
-          <Button type="submit" :label="t('profile.save')" icon="pi pi-check" :loading="saving" :disabled="!username.trim()" />
+          <VeyqButton type="submit" :label="t('profile.save')" icon="check" :loading="saving" :disabled="!username.trim()" />
         </div>
       </form>
     </section>

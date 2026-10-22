@@ -73,16 +73,16 @@ const seen = vi.hoisted(() => ({ props: null as null | LevelRowsContext }))
 const stubRows: LevelRowsFactory = (ctx) => ({
   row: (node) => {
     seen.props = ctx.value
-    return { icon: 'pi pi-file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => {} }, actions: [] }
+    return { icon: 'file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => {} }, actions: [] }
   },
 })
 
 const stubs = {
-  Breadcrumb: { props: ['home', 'model'], template: '<nav />' },
-  Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
-  Button: { props: ['label', 'type', 'disabled'], emits: ['click'], template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
-  InputText: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="name-input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Message: { template: '<p class="message"><slot /></p>' },
+  VeyqBreadcrumb: { props: ['home', 'items'], template: '<nav />' },
+  VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
+  VeyqButton: { props: ['label', 'type', 'disabled'], emits: ['click'], template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqInput: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="name-input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqMessage: { template: '<p class="message"><slot /></p>' },
 }
 
 function mountBody(h0: PublicShareHead, access = guestAccessFor(h0)) {
@@ -99,7 +99,7 @@ beforeEach(() => {
   localStorage.clear()
   seen.props = null
   const r = createRegistry()
-  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, list: { rows: stubRows } })
+  r.registerKind({ kind: DOC_KIND, icon: 'file', shareable: false, list: { rows: stubRows } })
   holder.reg = r
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })

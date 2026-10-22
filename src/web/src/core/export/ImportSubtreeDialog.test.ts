@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('./importSubtree', async (orig) => ({ ...(await orig<typeof import('./importSubtree')>()), openExport: vi.fn(), importSubtree: vi.fn() }))
 vi.mock('../../features/tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
@@ -28,7 +27,7 @@ const input: ImportInput = { kind: 'zip', file: new File(['x'], 'trip.zip') }
 async function mountDialog(uploadAsFile?: () => void) {
   const w = mount(ImportSubtreeDialog, {
     props: { input, access: memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) }), parent: null, targetName: 'Home', uploadAsFile },
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
     attachTo: document.body,
   })
   await flushPromises()

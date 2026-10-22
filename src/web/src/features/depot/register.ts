@@ -65,7 +65,7 @@ export function registerDepot(registry: Registry): void {
   // into every stored slug token from the first `FILE` on, and pinned by `name_folding` in `contracts/crypto/vectors/v1.json`.
   registry.registerKind({
     kind: FILE_KIND,
-    icon: 'pi pi-file',
+    icon: 'file',
     shareable: true,
     detail: FileDetail,
     shareDialog: FileShareDialog,
@@ -92,10 +92,10 @@ export function registerDepot(registry: Registry): void {
     // "Upload folder…" beside it (inbox #424): a picked or dropped directory, uploaded as its tree of folders and files - or,
     // a download unpacked, the member's import (core decides that, by its content).
     levelActions: [{
-      id: UPLOAD_ACTION, label: 'depot.upload', icon: 'pi pi-upload', order: NEW_UPLOAD_ORDER, acceptsDrop: true,
+      id: UPLOAD_ACTION, label: 'depot.upload', icon: 'upload', order: NEW_UPLOAD_ORDER, acceptsDrop: true,
       allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).upload,
     }, {
-      id: UPLOAD_FOLDER_ACTION, label: 'depot.uploadFolder', icon: 'pi pi-folder-open', order: NEW_UPLOAD_FOLDER_ORDER, acceptsDrop: true,
+      id: UPLOAD_FOLDER_ACTION, label: 'depot.uploadFolder', icon: 'folder-open', order: NEW_UPLOAD_FOLDER_ORDER, acceptsDrop: true,
       allowed: (ctx: LevelActionContext) => canUploadFolder(ctx.access, targetOf(ctx.tree, ctx.folder)),
     }],
     // Where it may be moved (core's move dialog, inbox #358): the backend's `DepotNodeKindRules`.
@@ -104,7 +104,7 @@ export function registerDepot(registry: Registry): void {
   // Shared WRITE_ONLY only (the backend's `DepotShareRoots`); its name folds as a container's (`slugify`, the default).
   registry.registerKind({
     kind: DROPBOX_KIND,
-    icon: 'pi pi-inbox',
+    icon: 'inbox',
     // A drop box carries a cover (inbox #411: core's action, picker, upload and display); a file does not.
     cover: {},
     shareable: true,
@@ -117,7 +117,7 @@ export function registerDepot(registry: Registry): void {
     list: { rows: depotRows, tabLabel: 'depot.dropBox.section', emptyText: () => 'depot.dropBox.sectionEmpty' },
     createDialog: DropBoxCreateDialog,
     createEntry: {
-      label: 'depot.dropBox.create', icon: 'pi pi-inbox', order: NEW_DROPBOX_ORDER,
+      label: 'depot.dropBox.create', icon: 'inbox', order: NEW_DROPBOX_ORDER,
       allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
       enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
     },

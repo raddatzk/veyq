@@ -8,8 +8,8 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Card from 'primevue/card'
-import Message from 'primevue/message'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { loadPublicOperatorSection, type OperatorSection } from '../core/terms/operatorSection'
@@ -32,11 +32,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <Card class="operator-terms-card">
+  <VeyqCard class="operator-terms-card">
     <template #title>{{ t('operatorTerms.title') }}</template>
-    <template #content>
+    <template #default>
       <p v-if="phase === 'loading'" class="operator-terms-muted">{{ t('operatorTerms.loading') }}</p>
-      <Message v-else-if="phase === 'failed'" severity="error" :closable="false">{{ t('operatorTerms.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="phase === 'failed'" tone="error">{{ t('operatorTerms.loadFailed') }}</VeyqMessage>
       <template v-else-if="section">
         <p class="veyq-form-copy">{{ t('operatorTerms.intro') }}</p>
         <OperatorSectionView :section="section" />
@@ -47,7 +47,7 @@ onMounted(async () => {
         <OperatorIdentification />
       </div>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>

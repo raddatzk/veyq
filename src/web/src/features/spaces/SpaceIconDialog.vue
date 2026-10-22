@@ -6,9 +6,9 @@
 // + pixels only — no crypto, no network (the parent owns those).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import ImageCropper from '../../shared/ui/ImageCropper.vue'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { createBrowserDeriver } from '../../shared/image/mediaDeriver'
@@ -63,25 +63,25 @@ async function save() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('spaceIcon.dialogTitle')" modal @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('spaceIcon.dialogTitle')" @update:visible="emit('close')">
     <div class="veyq-form space-icon-dialog">
       <p class="space-icon-copy">{{ t('spaceIcon.dialogIntro') }}</p>
 
       <div class="space-icon-sources">
-        <Button type="button" :label="t('spaceIcon.upload')" icon="pi pi-upload" severity="secondary" outlined @click="chooseUpload" />
+        <VeyqButton :label="t('spaceIcon.upload')" icon="upload" variant="secondary" appearance="outlined" @click="chooseUpload" />
         <input ref="fileInput" type="file" accept="image/*" class="space-icon-file" @change="onFilePicked" />
       </div>
 
       <ImageCropper v-if="hasSource" ref="cropper" :src="sourceUrl" :aspect="1" @load="loaded = true" />
 
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
 
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="rendering || busy" @click="emit('close')" />
-        <Button type="button" :label="t('spaceIcon.save')" icon="pi pi-check" :loading="rendering || busy" :disabled="!canSave" @click="save" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="rendering || busy" @click="emit('close')" />
+        <VeyqButton :label="t('spaceIcon.save')" icon="check" :loading="rendering || busy" :disabled="!canSave" @click="save" />
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

@@ -14,9 +14,9 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Card from 'primevue/card'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import { confirmEmailChange, confirmRefusal, type ConfirmRefusal } from '../features/account/email/emailChange'
 import { getAccountEmail } from '../features/account/email/emailConfirmation'
 import { account, setAccount } from '../app/account'
@@ -24,7 +24,7 @@ import { readdressRemembered } from '../features/account/rememberMe/deviceKeyWra
 import { readdressSessionVault } from '../features/account/rememberMe/sessionVault'
 import { session } from '../app/session'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
-import Password from 'primevue/password'
+import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import { ColdCredentialRefused, checkColdCredential } from '../features/account/coldCredential'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
@@ -103,14 +103,14 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>{{ t('emailChange.pageTitle') }}</template>
-    <template #content>
+    <template #default>
       <p v-if="phase === 'noLink'" class="veyq-form-copy">{{ t('emailChange.noLink') }}</p>
       <p v-if="phase === 'confirming'" class="veyq-form-copy">{{ t('emailChange.confirming') }}</p>
 
       <template v-if="phase === 'done'">
-        <Message severity="success" :closable="false" class="form-message" data-testid="change-email-done">{{ t('emailChange.done') }}</Message>
+        <VeyqMessage tone="success" class="form-message" data-testid="change-email-done">{{ t('emailChange.done') }}</VeyqMessage>
         <p class="veyq-form-copy">{{ t('emailChange.doneNote') }}</p>
 
         <section v-if="newEmail" class="kit-offer" data-testid="change-email-kit">
@@ -119,19 +119,19 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
           <form class="veyq-form" data-testid="change-email-kit-check" @submit.prevent="checkKit()">
             <label class="settings-field">
               {{ t('emailChange.passwordLabel') }}
-              <Password v-model="kitPassword" :feedback="false" toggle-mask autocomplete="current-password" :disabled="checking" />
+              <VeyqPassword v-model="kitPassword" autocomplete="current-password" :disabled="checking" />
             </label>
             <label class="settings-field">
               {{ t('emailChange.secretKeyLabel') }}
               <SecretKeyField :model-value="secretKey" :disabled="checking" @update:model-value="onKeyInput" />
             </label>
-            <Message v-if="kitError" severity="error" :closable="false" data-testid="change-email-kit-error">{{ kitError }}</Message>
-            <Button
+            <VeyqMessage v-if="kitError" tone="error" data-testid="change-email-kit-error">{{ kitError }}</VeyqMessage>
+            <VeyqButton
               v-if="!checkedKey"
               type="submit"
               :label="t('emailChange.kitCheck')"
-              icon="pi pi-check"
-              severity="secondary"
+              icon="check"
+              variant="secondary"
               :disabled="!kitPassword || !secretKey.trim() || checking"
               :loading="checking"
             />
@@ -139,20 +139,20 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
           <EmergencyKitSave v-if="checkedKey" v-model="kitReady" :email="newEmail" :secret-key="checkedKey" />
         </section>
 
-        <Button :label="t('emailConfirm.toSettings')" icon="pi pi-cog" @click="router.push('/settings/security')" />
+        <VeyqButton :label="t('emailConfirm.toSettings')" icon="cog" @click="router.push('/settings/security')" />
       </template>
 
       <template v-if="phase === 'signInFirst'">
-        <Message severity="info" :closable="false" class="form-message">{{ t('emailConfirm.signInFirst') }}</Message>
-        <Button :label="t('emailConfirm.toSignIn')" icon="pi pi-sign-in" @click="router.push({ name: 'login' })" />
+        <VeyqMessage tone="info" class="form-message">{{ t('emailConfirm.signInFirst') }}</VeyqMessage>
+        <VeyqButton :label="t('emailConfirm.toSignIn')" icon="sign-in" @click="router.push({ name: 'login' })" />
       </template>
 
-      <Message v-if="phase === 'invalid'" severity="error" :closable="false" class="form-message">{{ t('emailChange.invalid') }}</Message>
-      <Message v-if="phase === 'notMember'" severity="error" :closable="false" class="form-message">{{ t('emailConfirm.notMember') }}</Message>
-      <Message v-if="phase === 'mailUnavailable'" severity="error" :closable="false" class="form-message">{{ t('emailChange.mailUnavailable') }}</Message>
-      <Message v-if="phase === 'failed'" severity="error" :closable="false" class="form-message">{{ t('emailChange.failed') }}</Message>
+      <VeyqMessage v-if="phase === 'invalid'" tone="error" class="form-message">{{ t('emailChange.invalid') }}</VeyqMessage>
+      <VeyqMessage v-if="phase === 'notMember'" tone="error" class="form-message">{{ t('emailConfirm.notMember') }}</VeyqMessage>
+      <VeyqMessage v-if="phase === 'mailUnavailable'" tone="error" class="form-message">{{ t('emailChange.mailUnavailable') }}</VeyqMessage>
+      <VeyqMessage v-if="phase === 'failed'" tone="error" class="form-message">{{ t('emailChange.failed') }}</VeyqMessage>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>

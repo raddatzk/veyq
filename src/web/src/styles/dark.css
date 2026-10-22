@@ -13,8 +13,7 @@
     box-shadow: var(--app-shadow-sm);
   }
 
-  .app-breadcrumb.p-breadcrumb,
-  .app-breadcrumb .p-breadcrumb {
+  .app-breadcrumb.veyq-breadcrumb {
     border: 0;
     background: transparent;
     box-shadow: none;
@@ -104,7 +103,7 @@
     border-color: var(--app-line);
   }
 
-  .tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
+  .tenant-dialog .veyq-dialog__close:focus-visible {
     outline-color: var(--app-focus);
   }
 }

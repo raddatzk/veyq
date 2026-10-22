@@ -39,8 +39,8 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
@@ -179,13 +179,13 @@ const empty = computed(() => blob.value === null)
  *  page's call to action; it runs inside the click (the save picker needs its activation). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
   {
-    id: 'download', label: t('depot.download', { name: props.node.name }), icon: 'pi pi-download', severity: 'primary',
+    id: 'download', label: t('depot.download', { name: props.node.name }), icon: 'download', severity: 'primary',
     class: 'file-detail-download', shown: rights.value.download, disabled: !blob.value || !key.value || downloading.value,
     onClick: () => void download(),
   },
   {
     id: 'replace', label: t(empty.value ? 'depot.uploadInto' : 'depot.replace', { name: props.node.name }),
-    icon: empty.value ? 'pi pi-upload' : 'pi pi-sync', class: 'file-detail-replace', shown: rights.value.replace,
+    icon: empty.value ? 'upload' : 'sync', class: 'file-detail-replace', shown: rights.value.replace,
     disabled: !writeReady.value, onClick: () => picker.value?.click(),
   },
   ...standardNodeActions(
@@ -252,7 +252,7 @@ async function startReplace(file: File, confirmed = false): Promise<void> {
       header: t('depot.replaceTitle'),
       message: t(guest ? 'depot.guest.replaceFileConfirm' : 'depot.replaceRowConfirm', { name: props.node.name, file: file.name }),
       acceptLabel: t('depot.replaceAccept'),
-      acceptIcon: 'pi pi-upload',
+      acceptIcon: 'upload',
     })
     if (!accepted) return
   }
@@ -303,7 +303,7 @@ async function replaceAnyway(n: Notice) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="pi pi-file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
+    <NodeHeader icon="file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
       <template v-if="uploader" #meta>
         <p class="file-detail-uploader" data-testid="file-uploader">
           <!-- The space is real text, so the line reads "Uploaded by Anna" to assistive technology too; the avatar is decorative. -->
@@ -323,23 +323,22 @@ async function replaceAnyway(n: Notice) {
       </template>
     </NodeHeader>
     <section class="veyq-section file-detail">
-      <Message v-for="n in notices" :key="n.key" severity="error" :closable="false" class="files-notice">
+      <VeyqMessage v-for="n in notices" :key="n.key" tone="error" class="files-notice">
         <span class="file-detail-notice">
           <span>{{ n.text }}</span>
           <span class="veyq-action-group">
-            <Button
+            <VeyqButton
               v-if="n.replaceAnyway && rights.replace"
-              type="button"
               :label="t('depot.replaceAnyway')"
               size="small"
-              severity="secondary"
-              outlined
+              variant="secondary"
+              appearance="outlined"
               @click="replaceAnyway(n)"
             />
-            <Button type="button" :label="t('depot.dismiss')" size="small" severity="secondary" text @click="removeFile(n.item.id)" />
+            <VeyqButton :label="t('depot.dismiss')" size="small" variant="secondary" appearance="text" @click="removeFile(n.item.id)" />
           </span>
         </span>
-      </Message>
+      </VeyqMessage>
 
       <!-- The file itself, above its facts (inbox #412). -->
       <FileViewer v-if="!empty" :target="viewTarget" :name="node.name" :can-download="rights.download" @download="download" />
@@ -405,7 +404,7 @@ a.file-detail-uploader-person:focus-visible {
   font-weight: 500;
   font-style: italic;
 }
-.file-detail-uploader-person.is-former :deep(.p-avatar) {
+.file-detail-uploader-person.is-former :deep(.veyq-avatar) {
   opacity: 0.6;
 }
 .file-detail-notice {

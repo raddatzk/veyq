@@ -14,9 +14,9 @@
 // (`moveRefusalOf`), else it closes.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { registry } from '../applications/registry'
@@ -91,7 +91,7 @@ async function submit() {
       header: t('node.move.identityTitle'),
       message: t('node.move.many.identityConfirm', { names: quoted(identities) }),
       acceptLabel: t('node.move.identityAccept'),
-      acceptIcon: 'pi pi-file-export',
+      acceptIcon: 'file-export',
     })
     if (!accepted) return
   }
@@ -149,10 +149,9 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="t('node.move.many.title', { count: nodes.length })"
-    modal
     :closable="!busy"
     :close-on-escape="!busy"
     class="move-dialog"
@@ -165,27 +164,27 @@ async function submit() {
         <li v-for="(line, i) in summary.lines" :key="i">{{ line }}</li>
       </ul>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.close')" icon="pi pi-check" @click="emit('close')" />
+        <VeyqButton :label="t('common.close')" icon="check" @click="emit('close')" />
       </div>
     </div>
     <form v-else class="veyq-form" @submit.prevent="submit">
       <p class="veyq-form-copy">{{ t('node.move.many.hint') }}</p>
       <MoveBrowser v-model:place="place" :nodes="nodes" :access="access" :tree="tree" :root-label="rootLabel" :disabled="busy" />
       <p v-if="hereText" id="move-many-here-why" class="move-here-why">{{ hereText }}</p>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
-        <Button
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="emit('close')" />
+        <VeyqButton
           type="submit"
           :label="t('node.move.submit')"
-          icon="pi pi-file-export"
+          icon="file-export"
           :loading="busy"
           :disabled="here !== null || busy"
           :aria-describedby="hereText ? 'move-many-here-why' : undefined"
         />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

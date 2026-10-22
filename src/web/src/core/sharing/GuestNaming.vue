@@ -18,10 +18,10 @@
 //   random id, client-minted, and says nothing else.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useConfirm } from '../../shared/state/useConfirm'
 import type { GuestIdentity } from './guestIdentity'
@@ -96,7 +96,7 @@ async function notYou() {
       header: t('share.guest.notYouTitle'),
       message: named.value ? t('share.guest.notYouConfirm', { name: named.value }) : t('share.guest.notYouConfirmUnnamed'),
       acceptLabel: t('share.guest.notYouAccept'),
-      acceptIcon: 'pi pi-refresh',
+      acceptIcon: 'refresh',
     })
     if (!accepted) return
   }
@@ -105,11 +105,10 @@ async function notYou() {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     v-if="dialog"
     :visible="true"
     :header="title"
-    modal
     :closable="!saving"
     :close-on-escape="!saving"
     class="guest-naming"
@@ -118,29 +117,28 @@ async function notYou() {
     <form class="veyq-form" @submit.prevent="submit">
       <label>
         {{ t('share.yourName') }}
-        <InputText v-model="name" class="guest-naming-input" autocomplete="name" required autofocus :disabled="saving" />
+        <VeyqInput v-model="name" class="guest-naming-input" autocomplete="name" required autofocus :disabled="saving" />
       </label>
       <p v-if="hint" class="veyq-form-copy">{{ hint }}</p>
       <GuestWriteRecordNotice :days="recordDays" />
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="saving" @click="emit('close')" />
-        <Button type="submit" class="guest-naming-submit" :label="submitLabel ?? t('share.join')" icon="pi pi-check" :loading="saving" :disabled="!canSubmit" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="saving" @click="emit('close')" />
+        <VeyqButton type="submit" class="guest-naming-submit" :label="submitLabel ?? t('share.join')" icon="check" :loading="saving" :disabled="!canSubmit" />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 
   <div v-else-if="current" class="guest-naming">
     <p class="guest-naming-identity">
       <span>{{ named ? t('share.guest.as', { name: named }) : t('share.guest.asUnnamed') }}</span>
-      <Button
+      <VeyqButton
         v-if="forget"
-        type="button"
         class="guest-naming-not-you"
         :label="forgetLabel ?? t('share.guest.notYou')"
         size="small"
-        severity="secondary"
-        text
+        variant="secondary"
+        appearance="text"
         :disabled="forgetDisabled"
         :loading="forgetBusy"
         @click="notYou"
@@ -150,14 +148,13 @@ async function notYou() {
     <p v-if="guestId" class="guest-naming-guest-id" data-testid="guest-naming-guest-id">
       <span>{{ t('share.guest.guestId') }}</span>
       <code class="guest-naming-guest-id-value">{{ guestId }}</code>
-      <Button
-        type="button"
+      <VeyqButton
         class="guest-naming-copy-id"
         :label="copied ? t('share.guest.guestIdCopied') : t('share.guest.copyGuestId')"
-        :icon="copied ? 'pi pi-check' : 'pi pi-copy'"
+        :icon="copied ? 'check' : 'copy'"
         size="small"
-        severity="secondary"
-        text
+        variant="secondary"
+        appearance="text"
         @click="copyGuestId"
       />
     </p>
@@ -166,7 +163,7 @@ async function notYou() {
   <form v-else class="veyq-form guest-naming" @submit.prevent="submit">
     <label>
       {{ t('share.yourName') }}
-      <InputText
+      <VeyqInput
         v-model="name"
         class="guest-naming-input"
         autocomplete="name"
@@ -177,13 +174,13 @@ async function notYou() {
       <small v-if="hint">{{ hint }}</small>
     </label>
     <GuestWriteRecordNotice :days="recordDays" />
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+    <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
     <div class="veyq-dialog-action-row">
-      <Button
+      <VeyqButton
         type="submit"
         class="guest-naming-submit"
         :label="submitLabel ?? t('share.join')"
-        icon="pi pi-arrow-right"
+        icon="arrow-right"
         :loading="saving"
         :disabled="!canSubmit"
       />

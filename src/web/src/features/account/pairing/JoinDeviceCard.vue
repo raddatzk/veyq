@@ -15,12 +15,13 @@
 // the channel key is what keeps it from answering with a bundle ground to match (ADR 0059 §11).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
 import GrantReceiverOutcome from './GrantReceiverOutcome.vue'
 import { channelKeys, transportAnswer, checkNumber } from './pairing'
 import { answerPairingChannel } from './pairingChannel'
 import { useGrantReceiver } from './useGrantReceiver'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{ secret: string }>()
 
@@ -64,7 +65,7 @@ void begin()
 
       <!-- Answered before the first call, not at the end: adoption fixes the refresh lifetime for good. -->
       <div v-if="staySupported" class="checkbox-row">
-        <Checkbox v-model="stay" input-id="join-stay" binary :disabled="settling" />
+        <VeyqCheckbox v-model="stay" input-id="join-stay" :disabled="settling" />
         <label for="join-stay">
           {{ t('login.rememberMe') }}
           <small class="field-hint">{{ t('pairing.joinStayHint') }}</small>
@@ -72,15 +73,15 @@ void begin()
       </div>
 
       <p class="join-status">
-        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <VeyqIcon name="spinner" spin />
         <span>{{ step === 'finishing' ? t('pairing.joinFinishing') : t('pairing.joinWaiting') }}</span>
       </p>
 
-      <Button
+      <VeyqButton
         type="button"
         :label="t('common.cancel')"
-        severity="secondary"
-        text
+        variant="secondary"
+        appearance="text"
         :disabled="settling"
         @click="emit('cancel')"
       />

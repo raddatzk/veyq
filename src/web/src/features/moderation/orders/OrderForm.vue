@@ -8,8 +8,9 @@
 //     qualified legal review, which its banner says); the recorded orders below open their references here.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { caseFailureKey } from '../caseFailure'
 import { enterOrder, listOrders, openReferenceOf, type AuthorityOrder, type AuthorityOrderKind } from './orders'
@@ -79,7 +80,7 @@ async function submit() {
     header: t('moderation.orders.title'),
     message: kind.value === 'REMOVAL' ? t('moderation.orders.confirmRemoval') : t('moderation.orders.confirmHold'),
     acceptLabel: t('moderation.orders.submit'),
-    acceptIcon: 'pi pi-ban',
+    acceptIcon: 'ban',
   })
   if (!accepted) return
   busy.value = true
@@ -115,56 +116,56 @@ async function copy() {
   <div class="veyq-section moderation-orders">
     <div class="veyq-section-header">
       <h3>{{ t('moderation.orders.title') }}</h3>
-      <Button
-        severity="secondary"
+      <VeyqButton
+        variant="secondary"
         class="moderation-orders-toggle"
-        icon="pi pi-file-edit"
+        icon="file-edit"
         :label="shown ? t('moderation.orders.close') : t('moderation.orders.open')"
         @click="toggle"
       />
     </div>
     <template v-if="shown">
       <p class="veyq-form-copy">{{ t('moderation.orders.copy') }}</p>
-      <Message v-if="error" severity="error" :closable="false" class="form-message moderation-orders-error">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" class="form-message moderation-orders-error">{{ error }}</VeyqMessage>
       <form class="veyq-form moderation-order-form" @submit.prevent="submit">
         <label for="moderation-order-kind">{{ t('moderation.orders.kind') }}</label>
         <select id="moderation-order-kind" v-model="kind" class="moderation-order-kind" :disabled="busy">
           <option v-for="k in KINDS" :key="k" :value="k">{{ t(`moderation.orders.kinds.${k}`) }}</option>
         </select>
         <label for="moderation-order-share">{{ t('moderation.orders.share') }}</label>
-        <input id="moderation-order-share" v-model="share" class="p-inputtext moderation-order-share" autocomplete="off" spellcheck="false" :disabled="busy" />
+        <VeyqInput id="moderation-order-share" v-model="share" class="moderation-order-share" autocomplete="off" spellcheck="false" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.orders.shareHint') }}</span>
         <label for="moderation-order-reference">{{ t('moderation.orders.reference') }}</label>
-        <input id="moderation-order-reference" v-model="reference" class="p-inputtext moderation-order-reference" autocomplete="off" :disabled="busy" />
+        <VeyqInput id="moderation-order-reference" v-model="reference" class="moderation-order-reference" autocomplete="off" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.orders.referenceHint') }}</span>
         <label for="moderation-order-received">{{ t('moderation.orders.receivedAt') }}</label>
-        <input id="moderation-order-received" v-model="receivedAt" type="datetime-local" class="p-inputtext moderation-order-received" :disabled="busy" />
+        <VeyqInput id="moderation-order-received" v-model="receivedAt" type="datetime-local" class="moderation-order-received" :disabled="busy" />
         <template v-if="kind === 'INFORMATION'">
           <label for="moderation-order-hold-days">{{ t('moderation.orders.holdDays') }}</label>
-          <input id="moderation-order-hold-days" v-model="holdDays" class="p-inputtext moderation-order-hold-days" inputmode="numeric" :disabled="busy" />
+          <VeyqInput id="moderation-order-hold-days" v-model="holdDays" class="moderation-order-hold-days" inputmode="numeric" :disabled="busy" />
         </template>
         <template v-if="kind === 'REMOVAL'">
           <label for="moderation-order-defer">{{ t('moderation.orders.deferUntil') }}</label>
-          <input id="moderation-order-defer" v-model="deferUntil" type="datetime-local" class="p-inputtext moderation-order-defer" :disabled="busy" />
+          <VeyqInput id="moderation-order-defer" v-model="deferUntil" type="datetime-local" class="moderation-order-defer" :disabled="busy" />
         </template>
-        <Button type="submit" severity="danger" class="moderation-order-submit" icon="pi pi-ban" :label="t('moderation.orders.submit')" :loading="busy" />
+        <VeyqButton type="submit" variant="danger" class="moderation-order-submit" icon="ban" :label="t('moderation.orders.submit')" :loading="busy" />
       </form>
 
       <div v-if="result" class="moderation-order-result">
-        <Message v-if="!result.found" severity="warn" :closable="false" class="form-message moderation-order-not-found">{{ t('moderation.orders.notFound') }}</Message>
+        <VeyqMessage v-if="!result.found" tone="warn" class="form-message moderation-order-not-found">{{ t('moderation.orders.notFound') }}</VeyqMessage>
         <template v-else>
-          <Message v-if="result.blockedAt" severity="success" :closable="false" class="form-message moderation-order-blocked">
+          <VeyqMessage v-if="result.blockedAt" tone="success" class="form-message moderation-order-blocked">
             {{ t('moderation.orders.blocked', { time: formTime(result.blockedAt) }) }}
-          </Message>
+          </VeyqMessage>
           <p v-if="result.holdUntil" class="veyq-form-copy">{{ t('moderation.orders.held', { time: formTime(result.holdUntil) }) }}</p>
           <p v-if="result.statementDeferredUntil" class="veyq-form-copy">{{ t('moderation.orders.deferred', { time: formTime(result.statementDeferredUntil) }) }}</p>
         </template>
         <template v-if="form">
           <strong>{{ t(`moderation.orders.${form.which}`) }}</strong>
           <textarea class="moderation-order-text" :value="form.text" rows="12" readonly />
-          <Button severity="secondary" class="moderation-order-copy" icon="pi pi-copy" :label="copied ? t('moderation.orders.copied') : t('moderation.orders.copyText')" @click="copy" />
+          <VeyqButton variant="secondary" class="moderation-order-copy" icon="copy" :label="copied ? t('moderation.orders.copied') : t('moderation.orders.copyText')" @click="copy" />
         </template>
-        <Button v-if="result.caseId" severity="secondary" class="moderation-order-case" icon="pi pi-folder-open" :label="t('moderation.orders.openCase')" @click="emit('openCase', result.caseId)" />
+        <VeyqButton v-if="result.caseId" variant="secondary" class="moderation-order-case" icon="folder-open" :label="t('moderation.orders.openCase')" @click="emit('openCase', result.caseId)" />
       </div>
 
       <h4>{{ t('moderation.orders.recorded') }}</h4>
@@ -178,7 +179,7 @@ async function copy() {
               <span class="veyq-badge" :class="{ muted: !o.found }">{{ o.found ? t('moderation.orders.found') : t('moderation.orders.notFoundShort') }}</span>
             </div>
           </div>
-          <Button v-if="o.caseId" severity="secondary" class="moderation-order-row-case" icon="pi pi-folder-open" :label="t('moderation.orders.openCase')" @click="emit('openCase', o.caseId)" />
+          <VeyqButton v-if="o.caseId" variant="secondary" class="moderation-order-row-case" icon="folder-open" :label="t('moderation.orders.openCase')" @click="emit('openCase', o.caseId)" />
         </div>
       </div>
     </template>

@@ -12,11 +12,12 @@
 // lifetime is replaced by a new one from the form below, since no end date fits it.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import DatePicker from 'primevue/datepicker'
-import Message from 'primevue/message'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import { isoDateToLocalDate, localDateToIsoDate } from '../../../shared/isoDate'
 import type { NodeShareDialogProps } from '../../../core/applications/registry'
 import {
   deleteShare, isReissueRequired, listSharesFor, reactivateShare, readShareName, readShareNote, revokeShare, updateShare,
@@ -45,8 +46,14 @@ const MIN_PW = 10
 const rules = linkRules()
 const password = ref('')
 const expiresAt = ref<Date | null>(lastExpiryDay(rules.maxDays))
-const minExpiry = new Date()
 const maxExpiry = lastExpiryDay(rules.maxDays)
+/** The date fields' ISO-day views of the `Date`s the form keeps (`VeyqDateField` binds a `YYYY-MM-DD` day). */
+const minExpiryIso = localDateToIsoDate(new Date())
+const maxExpiryIso = localDateToIsoDate(maxExpiry)
+const expiresAtIso = computed({
+  get: () => localDateToIsoDate(expiresAt.value),
+  set: (v: string) => (expiresAt.value = isoDateToLocalDate(v)),
+})
 /** What the space requires and the form does not carry yet: the create waits for it. */
 const missing = computed(() =>
   (rules.passwordRequired && password.value.trim().length < MIN_PW) || (rules.maxDays !== null && !expiresAt.value),
@@ -94,7 +101,7 @@ async function remove(shareId: string) {
     header: t('depot.dropBox.shareDelete'),
     message: t('depot.dropBox.shareDeleteConfirm'),
     acceptLabel: t('depot.dropBox.shareDelete'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (confirmed) await run(() => deleteShare(shareId))
 }
@@ -105,7 +112,7 @@ async function switchOff(shareId: string) {
     header: t('depot.dropBox.shareRevoke'),
     message: t('depot.dropBox.shareRevokeConfirm'),
     acceptLabel: t('depot.dropBox.shareRevoke'),
-    acceptIcon: 'pi pi-power-off',
+    acceptIcon: 'power-off',
   })
   if (confirmed) await run(() => revokeShare(shareId))
 }
@@ -141,6 +148,11 @@ const fixMaxExpiry = computed(() => (fixing.value ? lastExpiryDay(fixDays.value,
 const fixMissing = computed(
   () => (fixNeedsPassword.value && fixPassword.value.trim().length < MIN_PW) || (fixNeedsExpiry.value && !fixExpiresAt.value),
 )
+const fixMaxExpiryIso = computed(() => localDateToIsoDate(fixMaxExpiry.value))
+const fixExpiresAtIso = computed({
+  get: () => localDateToIsoDate(fixExpiresAt.value),
+  set: (v: string) => (fixExpiresAt.value = isoDateToLocalDate(v)),
+})
 function openFix(s: ManagedShare) {
   fixing.value = s
   fixPassword.value = ''
@@ -177,12 +189,12 @@ async function copy(text: string, id: string) {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('depot.dropBox.shareTitle')" modal @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('depot.dropBox.shareTitle')" @update:visible="emit('close')">
     <div class="veyq-form">
       <p>{{ t('depot.dropBox.shareHint') }}</p>
       <div v-if="fresh" class="dropbox-link">
-        <InputText :model-value="fresh" readonly :aria-label="t('depot.dropBox.shareCopy')" />
-        <Button type="button" icon="pi pi-copy" :label="copied === 'fresh' ? t('depot.dropBox.shareCopied') : t('depot.dropBox.shareCopy')" @click="copy(fresh, 'fresh')" />
+        <VeyqInput :model-value="fresh" readonly :aria-label="t('depot.dropBox.shareCopy')" />
+        <VeyqButton icon="copy" :label="copied === 'fresh' ? t('depot.dropBox.shareCopied') : t('depot.dropBox.shareCopy')" @click="copy(fresh, 'fresh')" />
       </div>
       <p v-if="!links.length" class="veyq-empty veyq-empty-inline">{{ t('depot.dropBox.shareNone') }}</p>
       <ul v-else class="veyq-list">
@@ -205,48 +217,44 @@ async function copy(text: string, id: string) {
             />
           </span>
           <span class="veyq-action-group veyq-action-group-icons">
-            <Button
+            <VeyqButton
               v-if="row.link && row.share.enabled"
-              type="button"
               class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-copy"
+              icon="copy"
               :aria-label="t('depot.dropBox.shareCopy')"
-              severity="secondary"
-              outlined
+              variant="secondary"
+              appearance="outlined"
               size="small"
               @click="copy(row.link, row.share.shareId)"
             />
-            <Button
+            <VeyqButton
               v-if="row.share.enabled"
-              type="button"
               class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-power-off"
+              icon="power-off"
               :aria-label="t('depot.dropBox.shareRevoke')"
-              severity="secondary"
-              outlined
+              variant="secondary"
+              appearance="outlined"
               size="small"
               :disabled="busy"
               @click="switchOff(row.share.shareId)"
             />
-            <Button
+            <VeyqButton
               v-else-if="!row.share.reissueRequired"
-              type="button"
               class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-refresh"
+              icon="refresh"
               :aria-label="t('depot.dropBox.shareReactivate')"
-              severity="secondary"
-              outlined
+              variant="secondary"
+              appearance="outlined"
               size="small"
               :disabled="busy"
               @click="switchOn(row.share.shareId)"
             />
-            <Button
-              type="button"
+            <VeyqButton
               class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-trash"
+              icon="trash"
               :aria-label="t('depot.dropBox.shareDelete')"
-              severity="danger"
-              outlined
+              variant="danger"
+              appearance="outlined"
               size="small"
               :disabled="busy"
               @click="remove(row.share.shareId)"
@@ -258,56 +266,48 @@ async function copy(text: string, id: string) {
         <strong>{{ t('share.guestStops.fixTitle') }}</strong>
         <template v-if="fixNeedsPassword">
           <label for="dropbox-fix-password">{{ t('share.passwordLabel') }}</label>
-          <InputText id="dropbox-fix-password" v-model="fixPassword" type="password" autocomplete="new-password" :disabled="busy" />
+          <VeyqInput id="dropbox-fix-password" v-model="fixPassword" type="password" autocomplete="new-password" :disabled="busy" />
           <small class="veyq-form-copy">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</small>
         </template>
         <template v-if="fixNeedsExpiry">
           <label for="dropbox-fix-expiry">{{ t('share.expiryLabel') }}</label>
-          <DatePicker
-            id="dropbox-fix-expiry"
-            v-model="fixExpiresAt"
-            :min-date="minExpiry"
-            :max-date="fixMaxExpiry ?? undefined"
-            date-format="yy-mm-dd"
-            show-icon
-            icon-display="input"
+          <VeyqDateField
+            v-model="fixExpiresAtIso"
+            input-id="dropbox-fix-expiry"
+            :min-date="minExpiryIso"
+            :max-date="fixMaxExpiryIso || undefined"
             :disabled="busy"
-            fluid
           />
         </template>
         <div class="veyq-dialog-action-row">
-          <Button type="button" :label="t('common.cancel')" severity="secondary" outlined :disabled="busy" @click="fixing = null" />
-          <Button type="button" class="dropbox-fix-save" :label="t('common.save')" icon="pi pi-check" :loading="busy" :disabled="fixMissing" @click="saveFix" />
+          <VeyqButton :label="t('common.cancel')" variant="secondary" appearance="outlined" :disabled="busy" @click="fixing = null" />
+          <VeyqButton class="dropbox-fix-save" :label="t('common.save')" icon="check" :loading="busy" :disabled="fixMissing" @click="saveFix" />
         </div>
       </div>
       <template v-if="rules.passwordRequired">
         <label for="dropbox-share-password">{{ t('share.passwordLabel') }}</label>
-        <InputText id="dropbox-share-password" v-model="password" type="password" autocomplete="new-password" :disabled="busy" />
+        <VeyqInput id="dropbox-share-password" v-model="password" type="password" autocomplete="new-password" :disabled="busy" />
         <small class="veyq-form-copy">{{ t('share.passwordRequiredByRule') }} {{ t('share.passwordSectionHint', { min: MIN_PW }) }}</small>
       </template>
       <template v-if="rules.maxDays !== null">
         <label for="dropbox-share-expiry">{{ t('share.expiryLabel') }}</label>
-        <DatePicker
-          id="dropbox-share-expiry"
-          v-model="expiresAt"
-          :min-date="minExpiry"
-          :max-date="maxExpiry ?? undefined"
-          date-format="yy-mm-dd"
-          show-icon
-          icon-display="input"
+        <VeyqDateField
+          v-model="expiresAtIso"
+          input-id="dropbox-share-expiry"
+          :min-date="minExpiryIso"
+          :max-date="maxExpiryIso || undefined"
           :disabled="busy"
-          fluid
         />
         <small class="veyq-form-copy">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</small>
       </template>
-      <Message v-if="reissueRefused" severity="warn" :closable="false">{{ t('depot.dropBox.shareReissueHint') }}</Message>
-      <Message v-else-if="failed" severity="error" :closable="false">{{ t('depot.dropBox.shareFailed') }}</Message>
+      <VeyqMessage v-if="reissueRefused" tone="warn">{{ t('depot.dropBox.shareReissueHint') }}</VeyqMessage>
+      <VeyqMessage v-else-if="failed" tone="error">{{ t('depot.dropBox.shareFailed') }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('depot.dropBox.close')" severity="secondary" outlined @click="emit('close')" />
-        <Button type="button" :label="t('depot.dropBox.shareCreate')" icon="pi pi-plus" :loading="busy" :disabled="missing" @click="create" />
+        <VeyqButton :label="t('depot.dropBox.close')" variant="secondary" appearance="outlined" @click="emit('close')" />
+        <VeyqButton :label="t('depot.dropBox.shareCreate')" icon="plus" :loading="busy" :disabled="missing" @click="create" />
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

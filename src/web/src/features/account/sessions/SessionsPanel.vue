@@ -43,9 +43,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import {
   listSessionFamilies,
   revokeOtherSessionFamilies,
@@ -231,7 +231,7 @@ async function revoke(family: SessionFamily) {
     header: self ? t('sessions.revokeSelfConfirmTitle') : t('sessions.revokeConfirmTitle'),
     message: self ? t('sessions.revokeSelfConfirm') : t('sessions.revokeConfirm'),
     acceptLabel: self ? t('sessions.revokeSelf') : t('sessions.revoke'),
-    acceptIcon: 'pi pi-sign-out',
+    acceptIcon: 'sign-out',
   })
   if (!accepted) return
   actionError.value = ''
@@ -243,7 +243,7 @@ async function revokeOthers() {
     header: t('sessions.revokeOthersConfirmTitle'),
     message: t('sessions.revokeOthersConfirm'),
     acceptLabel: t('sessions.revokeOthers'),
-    acceptIcon: 'pi pi-sign-out',
+    acceptIcon: 'sign-out',
   })
   if (!accepted) return
   actionError.value = ''
@@ -283,7 +283,7 @@ async function escalate(family: SessionFamily) {
     message: t('sessions.escalateConfirm'),
     // The label of the button that opened it — the short, visible one, not the accessible sentence.
     acceptLabel: t('sessions.escalateShort'),
-    acceptIcon: 'pi pi-shield',
+    acceptIcon: 'shield',
   })
   if (!accepted) return
   actionError.value = ''
@@ -321,7 +321,7 @@ async function removeKeyOf(device: SavedKeyDevice) {
     header: t('sessions.removeKeyConfirmTitle'),
     message: t('sessions.removeKeyConfirm', { device: device.label }),
     acceptLabel: t('sessions.removeKey'),
-    acceptIcon: 'pi pi-key',
+    acceptIcon: 'key',
   })
   if (!accepted) return
   actionError.value = ''
@@ -344,7 +344,7 @@ async function removeOtherKeys() {
     header: t('sessions.removeOtherKeysConfirmTitle'),
     message: t('sessions.removeOtherKeysConfirm'),
     acceptLabel: t('sessions.removeOtherKeys'),
-    acceptIcon: 'pi pi-key',
+    acceptIcon: 'key',
   })
   if (!accepted) return
   actionError.value = ''
@@ -360,28 +360,28 @@ async function removeOtherKeys() {
           <h2>{{ t('sessions.title') }}</h2>
           <p>{{ t('sessions.sub') }}</p>
         </div>
-        <Button
+        <VeyqButton
           v-if="hasOthers"
           :label="t('sessions.revokeOthers')"
-          icon="pi pi-sign-out"
-          severity="danger"
-          outlined
+          icon="sign-out"
+          variant="danger"
+          appearance="outlined"
           size="small"
           :loading="busyOthers"
           @click="revokeOthers"
         />
       </div>
 
-      <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-      <Message v-if="registerRefusal" severity="warn" :closable="false">
+      <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
+      <VeyqMessage v-if="registerRefusal" tone="warn">
         {{ t(registerRefusal) }}
         <TrustResetLink />
-      </Message>
+      </VeyqMessage>
 
       <p v-if="loading" class="settings-muted">{{ t('sessions.loading') }}</p>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">
         {{ t('sessions.loadFailed') }}
-      </Message>
+      </VeyqMessage>
       <p v-else-if="families.length === 0" class="settings-muted">{{ t('sessions.empty') }}</p>
 
       <div v-else class="veyq-list management-list">
@@ -389,7 +389,7 @@ async function removeOtherKeys() {
           <div v-for="family in families" :key="family.id" class="veyq-list-row session-row">
             <div class="veyq-row-main">
               <template v-if="renamingFamily === family.id">
-                <InputText
+                <VeyqInput
                   v-model="nameDraft"
                   class="session-name-input"
                   autocomplete="off"
@@ -414,11 +414,11 @@ async function removeOtherKeys() {
             </div>
             <div class="management-actions">
               <template v-if="renamingFamily === family.id">
-                <Button :label="t('common.save')" icon="pi pi-check" size="small" :loading="renameBusy" @click="saveRename" />
-                <Button
+                <VeyqButton :label="t('common.save')" icon="check" size="small" :loading="renameBusy" @click="saveRename" />
+                <VeyqButton
                   :label="t('common.cancel')"
-                  severity="secondary"
-                  outlined
+                  variant="secondary"
+                  appearance="outlined"
                   size="small"
                   :disabled="renameBusy"
                   @click="renamingFamily = null"
@@ -426,10 +426,10 @@ async function removeOtherKeys() {
               </template>
               <!-- Renaming needs the register open, and there must be a device to rename: a family the register
                    cannot name has none. Its absence is a naming gap, never a reason to hide the revoke. -->
-              <Button
+              <VeyqButton
                 v-else-if="view.names[family.id]"
-                icon="pi pi-pencil"
-                text
+                icon="pencil"
+                appearance="text"
                 size="small"
                 :aria-label="t('sessions.rename')"
                 :title="t('sessions.rename')"
@@ -437,11 +437,11 @@ async function removeOtherKeys() {
               />
               <!-- Never disabled by the vault: this is the action the screen exists for, and a locked device is
                    exactly the device that needs it. -->
-              <Button
+              <VeyqButton
                 v-if="renamingFamily !== family.id"
-                icon="pi pi-sign-out"
-                severity="danger"
-                outlined
+                icon="sign-out"
+                variant="danger"
+                appearance="outlined"
                 size="small"
                 :loading="busy"
                 :aria-label="family.current ? t('sessions.revokeSelf') : t('sessions.revoke')"
@@ -454,12 +454,12 @@ async function removeOtherKeys() {
                    "Separately named" is kept VISIBLY: the short label is on the button, the full sentence stays
                    the accessible name and the dialog's subject. An icon-only escalation named the action only to
                    a screen reader, while the hint below quoted a label nobody could see. -->
-              <Button
+              <VeyqButton
                 v-if="renamingFamily !== family.id && wrapsOf(family).length > 0"
                 class="session-escalate"
                 :label="t('sessions.escalateShort')"
-                icon="pi pi-shield"
-                severity="danger"
+                icon="shield"
+                variant="danger"
                 size="small"
                 :loading="escalating"
                 :aria-label="t('sessions.escalate')"
@@ -486,11 +486,11 @@ async function removeOtherKeys() {
         </div>
         <!-- Defined by EXCLUDING this device's own saved key, never by a claim about the others (ADR 0058 §5).
              Its consequence is in the confirmation, not in a tooltip. -->
-        <Button
+        <VeyqButton
           :label="t('sessions.removeOtherKeys')"
-          icon="pi pi-key"
-          severity="danger"
-          outlined
+          icon="key"
+          variant="danger"
+          appearance="outlined"
           size="small"
           :loading="removingOthers"
           @click="removeOtherKeys"
@@ -505,10 +505,10 @@ async function removeOtherKeys() {
               <span class="veyq-row-subtitle">{{ t('sessions.savedKeyRowHint') }}</span>
             </div>
             <div class="management-actions">
-              <Button
-                icon="pi pi-key"
-                severity="danger"
-                outlined
+              <VeyqButton
+                icon="key"
+                variant="danger"
+                appearance="outlined"
                 size="small"
                 :loading="removingKey"
                 :aria-label="t('sessions.removeKey')"

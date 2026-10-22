@@ -44,7 +44,7 @@ beforeEach(() => {
   setViewMode('list')
   holder.reg = createRegistry()
   holder.reg.registerKind({
-    kind: 'ALPHA', icon: 'pi pi-a', shareable: false,
+    kind: 'ALPHA', icon: 'images', shareable: false,
     list: { rows: stubRows('a').factory }, // its rows carry a rename: the placeholder drops it
   })
 })
@@ -52,7 +52,7 @@ beforeEach(() => {
 const mountAs = (access: ReturnType<typeof memberAccessOf> | ReturnType<typeof guestAccessOf>) =>
   mount(LevelView, {
     props: { folder: TRIPS, level: childrenOf(tree, TRIPS.id), access, tree: memberTreeOf(() => tree) },
-    global: { plugins: [realI18n()], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 
 describe('a blocked node in the level', () => {

@@ -7,11 +7,11 @@
 // is what the moderator came for, shown once this account holds the current epoch's key.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Card from 'primevue/card'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Password from 'primevue/password'
+import VeyqCard from '../../shared/ui/VeyqCard.vue'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqPassword from '../../shared/ui/VeyqPassword.vue'
 import SecretKeyField from '../../shared/ui/SecretKeyField.vue'
 import { LoginVerifyRequestSessionScopeEnum } from '../../api/generated/auth'
 import { session } from '../../app/session'
@@ -149,21 +149,21 @@ onUnmounted(clearModerationKeys)
 </script>
 
 <template>
-  <Card class="login-card moderation-card" :class="{ 'moderation-card-wide': wide }">
+  <VeyqCard class="login-card moderation-card" :class="{ 'moderation-card-wide': wide }">
     <template #title>{{ t('moderation.title') }}</template>
-    <template #content>
-      <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
-      <Message v-if="notice" severity="success" :closable="false" class="form-message">{{ notice }}</Message>
+    <template #default>
+      <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
+      <VeyqMessage v-if="notice" tone="success" class="form-message">{{ notice }}</VeyqMessage>
 
       <p v-if="loading" class="veyq-form-copy moderation-loading">{{ t('moderation.loading') }}</p>
 
       <!-- Signed out: sign in here, never through the member login (it would open a device wrap). -->
       <form v-else-if="!signedIn" class="veyq-form moderation-sign-in-form" @submit.prevent="signIn">
         <p class="veyq-form-copy">{{ t('moderation.signInCopy') }}</p>
-        <label>{{ t('common.email') }}<InputText v-model="email" type="email" autocomplete="username" required /></label>
+        <label>{{ t('common.email') }}<VeyqInput v-model="email" type="email" autocomplete="username" required /></label>
         <label for="moderation-sign-in-password">{{ t('moderation.password') }}</label>
-        <Password v-model="password" input-id="moderation-sign-in-password" :feedback="false" toggle-mask fluid :input-props="{ autocomplete: 'current-password' }" />
-        <Button type="submit" class="moderation-sign-in" :label="t('moderation.signIn')" icon="pi pi-sign-in" :loading="busy" />
+        <VeyqPassword v-model="password" input-id="moderation-sign-in-password" fluid autocomplete="current-password" />
+        <VeyqButton type="submit" class="moderation-sign-in" :label="t('moderation.signIn')" icon="sign-in" :loading="busy" />
       </form>
 
       <p v-else-if="state === 'NONE'" class="veyq-form-copy moderation-none">{{ t('moderation.notAppointed') }}</p>
@@ -173,18 +173,18 @@ onUnmounted(clearModerationKeys)
         <p class="veyq-form-copy">{{ t('moderation.acceptIntro') }}</p>
         <p class="veyq-form-copy">{{ t('moderation.acceptCsam') }}</p>
         <p class="veyq-form-copy">{{ t('moderation.acceptLogged') }}</p>
-        <Button class="moderation-accept-button" :label="t('moderation.accept')" icon="pi pi-check" :loading="busy" @click="accept" />
+        <VeyqButton class="moderation-accept-button" :label="t('moderation.accept')" icon="check" :loading="busy" @click="accept" />
       </div>
 
       <template v-else-if="state === 'ACCEPTED'">
         <!-- The address the instance mail reaches (ADR 0097 decision 5). -->
         <form v-if="appointment!.confirmation !== 'CONFIRMED'" class="veyq-form moderation-address" @submit.prevent="confirm">
           <p class="veyq-form-copy">{{ t('moderation.addressCopy', { address: appointment!.address }) }}</p>
-          <Message v-if="appointment!.confirmation === 'SEND_FAILED'" severity="warn" :closable="false" class="form-message">{{ t('moderation.codeSendFailed') }}</Message>
-          <label>{{ t('moderation.code') }}<InputText v-model="code" class="moderation-code" inputmode="numeric" autocomplete="one-time-code" required /></label>
+          <VeyqMessage v-if="appointment!.confirmation === 'SEND_FAILED'" tone="warn" class="form-message">{{ t('moderation.codeSendFailed') }}</VeyqMessage>
+          <label>{{ t('moderation.code') }}<VeyqInput v-model="code" class="moderation-code" inputmode="numeric" autocomplete="one-time-code" required /></label>
           <div class="moderation-actions">
-            <Button type="submit" :label="t('moderation.confirm')" icon="pi pi-check" :loading="busy" />
-            <Button type="button" severity="secondary" :label="t('moderation.resend')" icon="pi pi-send" :disabled="busy" @click="resend" />
+            <VeyqButton type="submit" :label="t('moderation.confirm')" icon="check" :loading="busy" />
+            <VeyqButton variant="secondary" :label="t('moderation.resend')" icon="send" :disabled="busy" @click="resend" />
           </div>
         </form>
 
@@ -192,23 +192,23 @@ onUnmounted(clearModerationKeys)
         <form v-if="unlocked === null" class="veyq-form moderation-unlock" @submit.prevent="unlock">
           <p class="veyq-form-copy">{{ t('moderation.unlockCopy') }}</p>
           <label for="moderation-password">{{ t('moderation.password') }}</label>
-          <Password v-model="password" input-id="moderation-password" :feedback="false" toggle-mask fluid :input-props="{ autocomplete: 'current-password' }" />
+          <VeyqPassword v-model="password" input-id="moderation-password" fluid autocomplete="current-password" />
           <label for="moderation-secret-key">{{ t('moderation.secretKey') }}</label>
           <SecretKeyField v-model="secretKey" input-id="moderation-secret-key" required :expected-email="appointment!.address" />
           <small class="field-hint">{{ t('moderation.noTrustedDevice') }}</small>
-          <Button type="submit" class="moderation-unlock-button" :label="t('moderation.unlock')" icon="pi pi-lock-open" :loading="busy" />
+          <VeyqButton type="submit" class="moderation-unlock-button" :label="t('moderation.unlock')" icon="lock-open" :loading="busy" />
         </form>
 
         <template v-else>
           <p v-if="!unlocked.holdsCurrent" class="veyq-form-copy moderation-awaiting">{{ t('moderation.awaitingKey') }}</p>
           <section v-else class="moderation-queue">
             <slot />
-            <Button v-if="!review" severity="secondary" class="moderation-step-down" :label="t('moderation.stepDown')" icon="pi pi-sign-out" :loading="busy" @click="leave" />
+            <VeyqButton v-if="!review" variant="secondary" class="moderation-step-down" :label="t('moderation.stepDown')" icon="sign-out" :loading="busy" @click="leave" />
           </section>
         </template>
       </template>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>

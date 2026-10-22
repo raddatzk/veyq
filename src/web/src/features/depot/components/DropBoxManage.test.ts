@@ -3,10 +3,9 @@
 // what a drop box is before it asks a name, and submits with "Create"; the drop-box tab with no drop box says what one
 // is (inbox #407: the application's `emptyText` on core's unified level list, which replaced the drop-box section), and
 // a drop box is a core item whose row data is Depot's; deleting a link asks first, as core's folder share dialog does (declined → nothing deleted). The data layer
-// (`dropBox.ts`, core's `manageShares`/`shareLink`) is stubbed; the real i18n catalog and PrimeVue render.
+// (`dropBox.ts`, core's `manageShares`/`shareLink`) is stubbed; the real i18n catalog and UI layer render.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../dropBox', () => ({ createDropBox: vi.fn(), mintDropBoxLink: vi.fn() }))
@@ -34,7 +33,7 @@ import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(1))
-const global = { plugins: [realI18n(), PrimeVue], stubs: { Dialog: { props: ['header'], template: '<div class="dialog"><h1>{{ header }}</h1><slot /></div>' } } }
+const global = { plugins: [realI18n()], stubs: { VeyqDialog: { props: ['header'], template: '<div class="dialog"><h1>{{ header }}</h1><slot /></div>' } } }
 
 beforeEach(() => {
   vi.clearAllMocks()

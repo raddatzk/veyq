@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // A link rooted at a MEMORY or a CHAPTER, through the whole share page (inbox #401 S5): the shell (`ShareView`) with the
-// app's REAL registry, the real vue-router and PrimeVue, every step a DOM click on the rendered element. Such a link is
+// app's REAL registry, the real vue-router and the UI layer, every step a DOM click on the rendered element. Such a link is
 // the member's view with functions removed: core's page (`ShareTreePage`) renders the kind's member detail
 // (`MemoryDetailHost` → `MemoryDetail`) at the link's root, with the guest's breadcrumb, the curator's note and the role
 // badge; a guest names itself through the shell's one dialog; a WRITE_ONLY link alone gets Memories' drop page.
@@ -19,7 +19,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 import { blobKeyContext } from '../core/blob/keys'
@@ -125,8 +124,8 @@ function head(role: ShareRole, o: { chapterRoot?: boolean; recordDays?: number }
 // No derivatives: the tiles draw the file icon, so no thumbnail is fetched.
 const row = (mediaId: string, nodeId: string): ShareMedia => ({ blockedByOperator: false, mediaId, nodeId, blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==' })
 
-// PrimeVue's Dialog teleports; rendered in place so the test reads the shell's naming dialog.
-const stubs = { Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' } }
+// The dialog teleports; rendered in place so the test reads the shell's naming dialog.
+const stubs = { VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' } }
 
 let router: Router
 beforeEach(async () => {
@@ -157,7 +156,7 @@ afterEach(() => {
 
 async function mountPage(h: PublicShareHead) {
   vi.mocked(resolvePublicShare).mockResolvedValue(h)
-  const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } }, attachTo: document.body })
+  const w = mount(ShareView, { global: { plugins: [router, realI18n()], stubs }, attachTo: document.body })
   await flushPromises()
   return w
 }
@@ -202,7 +201,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       expect(w.find('.memory-detail .veyq-node-header-title').text()).toBe('Rom 2026')
       expect(w.find('.markdown-body').text()).toContain('Curator note')
       expect(w.find('.share-folder-badge').text()).toBe(t(role === ShareRole.Read ? 'share.readonly' : 'share.contributorBadge'))
-      expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Rom 2026'])
+      expect(w.findAll('a.veyq-breadcrumb__link').map((a) => a.text())).toEqual(['Rom 2026'])
       expect(uploadButton(w).exists(), 'upload').toBe(role === ShareRole.ReadWrite)
       expectGuestOnly(w)
       w.unmount()
@@ -216,7 +215,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
       await vi.waitFor(() => expect(tiles(w)).toEqual(['c-1']))
       expect(uploadButton(w).exists(), 'upload in the chapter').toBe(role === ShareRole.ReadWrite)
-      const crumbs = w.findAll('a.p-breadcrumb-item-link')
+      const crumbs = w.findAll('a.veyq-breadcrumb__link')
       expect(crumbs.map((a) => a.text())).toEqual(['Rom 2026', 'Tag 1'])
       click(crumbs[0].element)
       await flushPromises()

@@ -9,8 +9,8 @@
 // its windowed grid announces, nearest first, through the same read scheduler — never every one of a long trash at once.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Menu from 'primevue/menu'
-import type { MenuItem } from 'primevue/menuitem'
+import type VeyqMenu from '../../shared/ui/VeyqMenu.vue'
+import type { VeyqMenuItem } from '../../shared/ui/menu'
 import { hasDerivatives, type MediaItem } from './media'
 import { openListing, openedMeta } from './openedListing'
 import type { MemorySource } from './source'
@@ -52,7 +52,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   const trashStatus = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   // Trash tab (cr-0111): batch selection + the per-tile overflow menu + the irreversible-purge confirm.
   const selectedTrash = ref<Set<string>>(new Set())
-  const trashMenu = ref<InstanceType<typeof Menu> | null>(null)
+  const trashMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
   const menuTargetId = ref<string | null>(null)
   const purgeConfirm = ref<{ ids: string[] } | null>(null)
 
@@ -161,14 +161,14 @@ export function useMediaTrash(ctx: MediaTrashContext) {
     menuTargetId.value = mediaId
     trashMenu.value?.toggle(event)
   }
-  const trashMenuModel = computed<MenuItem[]>(() => {
+  const trashMenuModel = computed<VeyqMenuItem[]>(() => {
     const id = menuTargetId.value
     return [
       // A medium a moderator blocked is deleted, never restored (uc.moderation.take-a-measure): its menu offers no restore.
       ...(trashedItems.value.find((it) => it.mediaId === id)?.blocked
         ? []
-        : [{ label: t('memory.trash.restore'), icon: 'pi pi-replay', command: () => { if (id) void onRestoreFromTrash(id) } }]),
-      { label: t('memory.trash.purge'), icon: 'pi pi-trash', command: () => { if (id) requestPurge([id]) } },
+        : [{ label: t('memory.trash.restore'), icon: 'replay' as const, command: () => { if (id) void onRestoreFromTrash(id) } }]),
+      { label: t('memory.trash.purge'), icon: 'trash', command: () => { if (id) requestPurge([id]) } },
     ]
   })
 

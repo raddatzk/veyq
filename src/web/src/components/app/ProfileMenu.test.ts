@@ -7,7 +7,6 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('../../features/account/login/signOut', () => ({ signOut: vi.fn() }))
 
 import { mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import ProfileMenu from './ProfileMenu.vue'
 import { signOut } from '../../features/account/login/signOut'
 import { useThemeState, setThemePreference } from '../../shared/state/useThemeState'
@@ -15,19 +14,19 @@ import { localePreference, setLocalePreference } from '../../i18n'
 import { realI18n, t } from '../../test/i18n'
 
 
-// A pass-through stub for the teleporting PrimeVue TieredMenu: renders the model's top rows and, one level
+// A pass-through stub for the teleporting VeyqMenu: renders the items' top rows and, one level
 // down, each row's submenu items as buttons that run `command`. `toggle` stands in for the popup so the
 // trigger's wiring is observable.
 const toggle = vi.fn()
-const TieredMenuStub = {
-  props: ['model'],
+const MenuStub = {
+  props: ['items'],
   methods: { toggle },
   template: `<ul>
-    <li v-for="(it, i) in model" :key="i">
+    <li v-for="(it, i) in items" :key="i">
       <button class="menu-item" @click="it.command && it.command()">{{ it.label }}</button>
       <ul v-if="it.items">
         <li v-for="(sub, j) in it.items" :key="j">
-          <button class="sub-item" :class="sub.icon" :data-parent="it.label" @click="sub.command && sub.command()">
+          <button class="sub-item" :data-icon="sub.icon" :data-parent="it.label" @click="sub.command && sub.command()">
             {{ sub.label }}
           </button>
         </li>
@@ -37,7 +36,7 @@ const TieredMenuStub = {
 }
 
 const mountMenu = () =>
-  mount(ProfileMenu, { global: { plugins: [realI18n(), PrimeVue], stubs: { TieredMenu: TieredMenuStub } } })
+  mount(ProfileMenu, { global: { plugins: [realI18n()], stubs: { VeyqMenu: MenuStub } } })
 
 const subItemsOf = (w: ReturnType<typeof mountMenu>, parent: string) =>
   w.findAll(`.sub-item[data-parent="${parent}"]`)
@@ -60,7 +59,7 @@ describe('ProfileMenu appearance quick-picker', () => {
   it('marks the active entry with a check, so the submenu says which mode is on', async () => {
     setThemePreference('light')
     const w = mountMenu()
-    const checked = subItemsOf(w, t('shell.theme')).filter((i) => i.classes('pi-check'))
+    const checked = subItemsOf(w, t('shell.theme')).filter((i) => i.attributes('data-icon') === 'check')
     expect(checked.map((i) => i.text())).toEqual([t('shell.themeLight')])
     setThemePreference('system')
   })

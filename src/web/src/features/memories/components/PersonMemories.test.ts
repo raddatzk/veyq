@@ -9,7 +9,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('leaflet', () => ({ default: {} }))
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../participantIndex', async (orig) => ({ ...(await orig<typeof import('../participantIndex')>()), loadParticipantIndex: vi.fn() }))
 vi.mock('../../../core/node/cover/coverStore', async (orig) => ({
@@ -61,7 +60,7 @@ async function mountSection(userId = ANNA, name = 'Anna', { realMap = false } = 
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
   await router.push('/')
   const stubs: Record<string, typeof SpaceMapStub> = realMap ? {} : { SpaceMap: SpaceMapStub }
-  const w = mount(PersonMemories, { props: { userId, name }, global: { plugins: [realI18n(), PrimeVue, router], directives: { tooltip: {} }, stubs } })
+  const w = mount(PersonMemories, { props: { userId, name }, global: { plugins: [realI18n(), router], stubs } })
   await flushPromises()
   return { w, router }
 }

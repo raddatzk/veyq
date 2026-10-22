@@ -21,9 +21,9 @@ import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
-  Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
-  Button: { props: ['label', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
+  VeyqButton: { props: ['label', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
   TrustResetLink: true,
 }
 

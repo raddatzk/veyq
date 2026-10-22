@@ -11,8 +11,8 @@
 // shows theirs with the compare that marks them verified (`PersonSafetyNumber`). A former member's page shows neither.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { registry } from '../applications/registry'
 import { loadTenantPeople, personNow, refreshPeopleDirectory, type Person } from './directory'
 import PersonAvatar from './PersonAvatar.vue'
@@ -95,27 +95,26 @@ watch(() => props.userId, () => { editing.value = false; identity.discard() })
           <p v-if="person && person.realName" class="person-username">~{{ person.username }}</p>
           <p v-else-if="!person" class="person-username">{{ t('people.formerMemberHint') }}</p>
         </div>
-        <Button
+        <VeyqButton
           v-if="isMe && !editing"
-          type="button"
           class="person-edit"
           :label="t('profilePicture.editProfile')"
-          icon="pi pi-pencil"
-          severity="secondary"
-          outlined
+          icon="pencil"
+          variant="secondary"
+          appearance="outlined"
           size="small"
           :loading="loadingOwn"
           data-testid="person-edit"
           @click="startEdit"
         />
       </header>
-      <Message v-if="isMe && !editing && editError" severity="error" :closable="false" role="alert">{{ editError }}</Message>
+      <VeyqMessage v-if="isMe && !editing && editError" tone="error" role="alert">{{ editError }}</VeyqMessage>
       <form v-if="isMe && editing" class="veyq-form person-edit-form" data-testid="person-edit-form" @submit.prevent="runSaveOwn()">
         <NamePictureFields :model="identity" :display-name="title" />
-        <Message v-if="editError" severity="error" :closable="false" role="alert">{{ editError }}</Message>
+        <VeyqMessage v-if="editError" tone="error" role="alert">{{ editError }}</VeyqMessage>
         <div class="veyq-dialog-action-row">
-          <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="savingOwn" @click="cancelEdit" />
-          <Button type="submit" :label="t('profile.save')" icon="pi pi-check" :loading="savingOwn" />
+          <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="savingOwn" @click="cancelEdit" />
+          <VeyqButton type="submit" :label="t('profile.save')" icon="check" :loading="savingOwn" />
         </div>
       </form>
       <MySafetyNumber v-if="isMe" />

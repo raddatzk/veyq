@@ -4,7 +4,6 @@
 // `MemoryDetail` (inbox #401 S5). Only the network reads are stubbed (the resolve, the terms, Memories' media read; every
 // authenticated client throws, `test/guestMode.ts`); the subtree is real crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
@@ -58,7 +57,7 @@ function folderHead(): PublicShareHead {
 }
 
 function mountShareView() {
-  return mount(ShareView, { global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true }, directives: { tooltip: {} } } })
+  return mount(ShareView, { global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true } } })
 }
 
 beforeEach(() => {

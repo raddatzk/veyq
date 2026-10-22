@@ -4,10 +4,9 @@
 // name is needed; above 100 items the dialog offers the enclosing node instead. And the action itself: shown only to
 // whoever sees the node, and only while the instance publishes a moderation key.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import PrimeVue from 'primevue/config'
-import Select from 'primevue/select'
-import Checkbox from 'primevue/checkbox'
-import SelectButton from 'primevue/selectbutton'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
+import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('./report', async (orig) => ({ ...(await orig<typeof import('./report')>()), submitReport: vi.fn() }))
@@ -26,7 +25,7 @@ const member = { mode: 'member', scopeId: 's', epochs: { current: 0, keys: new M
 const target = (i: number): ReportTarget => ({ kind: 'NODE', id: `5c09e000-0000-4000-8000-${String(i).padStart(12, '0')}`, keys: () => null })
 
 function mountDialog() {
-  return mount(ReportDialog, { attachTo: document.body, global: { plugins: [realI18n(), PrimeVue] } })
+  return mount(ReportDialog, { attachTo: document.body, global: { plugins: [realI18n()] } })
 }
 const send = () => document.body.querySelector<HTMLButtonElement>('.veyq-report-send')
 
@@ -43,7 +42,7 @@ describe('ReportDialog', () => {
     openReport({ access: member, scopeId: 's', targets: [target(1)] })
     await flushPromises()
     expect(send()!.disabled).toBe(true)
-    w.findComponent(Select).vm.$emit('update:modelValue', ReportCategory.IllegalContent)
+    w.findComponent(VeyqSelect).vm.$emit('update:modelValue', ReportCategory.IllegalContent)
     await flushPromises()
     expect(send()!.disabled, 'no reason').toBe(true)
     const reason = document.body.querySelector<HTMLTextAreaElement>('#veyq-report-reason')!
@@ -51,7 +50,7 @@ describe('ReportDialog', () => {
     reason.dispatchEvent(new Event('input'))
     await flushPromises()
     expect(send()!.disabled, 'no good-faith tick').toBe(true)
-    w.findComponent(Checkbox).vm.$emit('update:modelValue', true)
+    w.findComponent(VeyqCheckbox).vm.$emit('update:modelValue', true)
     await flushPromises()
     expect(send()!.disabled).toBe(false)
     send()!.click()
@@ -79,7 +78,7 @@ describe('ReportDialog', () => {
     openReport({ access: member, scopeId: 's', targets: [target(1)] })
     await flushPromises()
     expect(document.body.querySelector('.veyq-report-csam')).toBeNull()
-    w.findComponent(Select).vm.$emit('update:modelValue', ReportCategory.ChildSexualAbuse)
+    w.findComponent(VeyqSelect).vm.$emit('update:modelValue', ReportCategory.ChildSexualAbuse)
     await flushPromises()
     expect(document.body.querySelector('.veyq-report-csam')!.textContent).toBe(t('report.csamNote'))
     w.unmount()
@@ -103,11 +102,11 @@ describe('ReportDialog', () => {
 describe('a name reported on its own (ADR 0093 § 9)', () => {
   /** Fill the form so that only the choice decides what is sent. */
   async function fill(w: ReturnType<typeof mountDialog>) {
-    w.findComponent(Select).vm.$emit('update:modelValue', ReportCategory.TermsBreach)
+    w.findComponent(VeyqSelect).vm.$emit('update:modelValue', ReportCategory.TermsBreach)
     const reason = document.body.querySelector<HTMLTextAreaElement>('#veyq-report-reason')!
     reason.value = 'the name'
     reason.dispatchEvent(new Event('input'))
-    w.findComponent(Checkbox).vm.$emit('update:modelValue', true)
+    w.findComponent(VeyqCheckbox).vm.$emit('update:modelValue', true)
     await flushPromises()
   }
   const name: ReportTarget = { kind: 'NAME', id: '5c09e000-0000-4000-8000-000000000001', keys: () => null }
@@ -119,7 +118,7 @@ describe('a name reported on its own (ADR 0093 § 9)', () => {
     await flushPromises()
     expect(document.body.querySelector('.veyq-report-scope')!.textContent).toContain(t('report.scopeName'))
     await fill(w)
-    w.findComponent(SelectButton).vm.$emit('update:modelValue', 'name')
+    w.findComponent(VeyqToggleGroup).vm.$emit('update:modelValue', 'name')
     await flushPromises()
     expect(document.body.textContent).toContain(t('report.scopeNameHint'))
     send()!.click()

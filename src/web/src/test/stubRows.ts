@@ -8,6 +8,11 @@ import type { LevelActionHandler } from '../core/node/levelActions'
 import type { LevelNotice, LevelRowSelection, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
 import type { TreeNode } from '../core/node/tree'
 import type { ViewMode } from '../shared/state/useViewMode'
+import type { VeyqIconName } from '../shared/ui/icons'
+
+/** The icon every stub row draws, whatever its `name` (a made-up token is no icon name): a test that asserts the row
+ *  draws the factory's icon asserts this one. */
+export const STUB_ROW_ICON: VeyqIconName = 'tag'
 
 export interface StubRows {
   factory: LevelRowsFactory
@@ -45,11 +50,11 @@ export function stubRows(
     if (opts.action) host.registerAction(opts.action.id, opts.action.handler)
     return {
       row: (node) => ({
-        icon: `pi pi-${name}`,
+        icon: STUB_ROW_ICON,
         title: node.name,
         meta: `${name} meta`,
         primary: { label: `open ${node.name}`, onClick: () => host.open(node) },
-        actions: [{ id: 'rename', label: `rename ${node.name}`, icon: 'pi pi-pencil', shown: opts.shownActions ?? true, onClick: () => host.rename(node) }],
+        actions: [{ id: 'rename', label: `rename ${node.name}`, icon: 'pencil', shown: opts.shownActions ?? true, onClick: () => host.rename(node) }],
         ...(opts.selection ? { selection: opts.selection(node) } : {}),
       }),
       notices: computed(() => notices.value),

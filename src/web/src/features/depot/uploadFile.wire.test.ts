@@ -37,7 +37,7 @@ const MODIFIED = 1_700_000_000_000
 // This node-environment suite gets no application registry (`src/test/setup.ts`), so it registers FILE with its own
 // folding on the app's registry, as Depot's `register.ts` does.
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
   session.accessToken = 'access-token'
 })
 afterEach(() => {

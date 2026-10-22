@@ -9,7 +9,7 @@
 // are opened from the listed blob with the real crypto), core's `deleteNode`/`nodeContentKey` (a fixed key per node
 // instead of a key chain) and `loadTree`.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import type { FileListPage } from '../../api/generated/depot'
 
@@ -62,6 +62,10 @@ import { treeNode, memberAccessOf, memberTreeOf } from '../../test/models'
 import { mountConfirmDialog } from '../../test/confirmDialog'
 import { actionDisabled, actionIdsOf, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
 import type { LevelRowsHost } from '../../core/node/levelRow'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+
+/** The icons a row draws (the layer's names). */
+const iconsOf = (row: DOMWrapper<Element>) => (row.findAllComponents(VeyqIcon) as VueWrapper<InstanceType<typeof VeyqIcon>>[]).map((i) => i.props('name'))
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -187,7 +191,7 @@ describe('Depot rows', () => {
     await flushPromises()
     expect(listFiles).toHaveBeenCalledWith({ scopeId: SCOPE, parentId: D })
     expect(titlesOf(h.w)).toEqual(['notes.txt', 'pending.bin', 'Report.pdf']) // core's order: by name
-    expect(h.w.findAll('li.veyq-level-item').every((r) => r.find('.pi-file').exists())).toBe(true)
+    expect(h.w.findAll('li.veyq-level-item').every((r) => iconsOf(r).includes('file'))).toBe(true)
     // the size from the blob's sealed size, the date from the blob's sealed meta
     expect(metaOf(h, 'Report.pdf')).toBe(fileMeta(`${formatBytes(123_456, 'en')} · ${t('depot.modified', { date: dateOf(MODIFIED) })}`))
     // a blob without meta: the plaintext size the sealed size gives exactly (2 frames of overhead off), no date
@@ -783,7 +787,7 @@ describe('Drop box rows', () => {
     const h = mountBoxes({ siblings: [GUEST_A, GUEST_B] })
     await flushPromises()
     expect(titlesOf(h.w)).toEqual(['Inbox'])
-    expect(rowOf(h.w, 'Inbox').find('.pi-inbox').exists()).toBe(true)
+    expect(iconsOf(rowOf(h.w, 'Inbox')).includes('inbox')).toBe(true)
     expect(metaOf(h, 'Inbox')).toBe(`${t('depot.dropBox.kind')} · 2 people`)
     await rowOf(h.w, 'Inbox').find('button.veyq-level-item-main').trigger('click')
     expect(h.events.open.map((n) => n.id)).toEqual([BOX.id])

@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
 // Core's delete question for a level's selection (inbox #421) over the REAL registry (Memories and Depot, filled by
-// `src/test/setup.ts`) and the real PrimeVue Dialog, every step a DOM click. Core's `deleteNode` / `restoreNode` and the tree
+// `src/test/setup.ts`) and the real `VeyqDialog`, every step a DOM click. Core's `deleteNode` / `restoreNode` and the tree
 // re-read are recorders. Pinned: ONE question naming how many go and of which kinds (each kind's own noun); each node
 // through its door (core's, or the kind's own `remove`); a failure named in one summary while the rest is deleted; one toast
 // whose Undo restores exactly what went.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 const calls = vi.hoisted(() => ({ deleteNode: vi.fn(), restoreNode: vi.fn(), loadTree: vi.fn() }))
 vi.mock('../tree', async (o) => ({ ...(await o<typeof import('../tree')>()), deleteNode: calls.deleteNode, restoreNode: calls.restoreNode }))
@@ -39,7 +38,7 @@ function mountDialog(items: SelectedForDelete[], afterUndo?: () => void) {
   return mount(DeleteNodesDialog, {
     attachTo: document.body,
     props: { scopeId: SCOPE, epochs: EPOCHS, items, afterUndo },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 async function click(label: string) {

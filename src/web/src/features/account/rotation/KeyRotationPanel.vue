@@ -23,12 +23,12 @@
 // nothing compiles it.)
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import { account } from '../../../app/account'
-import Password from 'primevue/password'
-import Message from 'primevue/message'
+import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
 import { listMyScopes, listMyTenants } from '../../spaces/scopes'
 import { groupNameSeen } from '../../spaces/groupNamesSeen'
@@ -38,6 +38,7 @@ import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
 import TrustResetLink from '../trustReset/TrustResetLink.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const { t } = useI18n()
 
@@ -181,33 +182,31 @@ async function confirm() {
           <div>
             <h3>{{ t('rotation.afterTitle') }}</h3>
             <ul class="rotation-facts">
-              <li><i class="pi pi-id-card" aria-hidden="true" /><span>{{ t('rotation.factIdentity') }}</span></li>
-              <li><i class="pi pi-users" aria-hidden="true" /><span>{{ t('rotation.factSharedSpaces') }}</span></li>
-              <li><i class="pi pi-sign-out" aria-hidden="true" /><span>{{ t('rotation.factSignsOut') }}</span></li>
-              <li><i class="pi pi-envelope" aria-hidden="true" /><span>{{ t('rotation.factInvites') }}</span></li>
-              <li><i class="pi pi-history" aria-hidden="true" /><span>{{ t('rotation.factNotRepair') }}</span></li>
+              <li><VeyqIcon name="id-card" /><span>{{ t('rotation.factIdentity') }}</span></li>
+              <li><VeyqIcon name="users" /><span>{{ t('rotation.factSharedSpaces') }}</span></li>
+              <li><VeyqIcon name="sign-out" /><span>{{ t('rotation.factSignsOut') }}</span></li>
+              <li><VeyqIcon name="envelope" /><span>{{ t('rotation.factInvites') }}</span></li>
+              <li><VeyqIcon name="history" /><span>{{ t('rotation.factNotRepair') }}</span></li>
             </ul>
           </div>
           <ul class="rotation-facts">
-            <li><i class="pi pi-crown" aria-hidden="true" /><span>{{ t('rotation.soleOwner') }}</span></li>
-            <li><i class="pi pi-key" aria-hidden="true" /><span>{{ t('rotation.factNeedsKit') }}</span></li>
+            <li><VeyqIcon name="crown" /><span>{{ t('rotation.soleOwner') }}</span></li>
+            <li><VeyqIcon name="key" /><span>{{ t('rotation.factNeedsKit') }}</span></li>
           </ul>
         </div>
 
         <!-- E1. This session did not prove the Secret Key when it unlocked, so say why it is being asked for
              now — rather than letting the field read as an unexplained extra hurdle. -->
-        <Message v-if="!coldUnlock" severity="info" :closable="false">{{ t('rotation.gateNotCold') }}</Message>
+        <VeyqMessage v-if="!coldUnlock" tone="info">{{ t('rotation.gateNotCold') }}</VeyqMessage>
 
         <!-- `veyq-form` for the field widths and spacing its siblings get (ChangePasswordPanel), on a div: a
              <form> would let Enter submit past the confirm dialog. -->
         <div class="veyq-form">
           <div class="settings-field">
             <label for="rotation-password">{{ t('rotation.passwordLabel') }}</label>
-            <Password
+            <VeyqPassword
               id="rotation-password"
               v-model="password"
-              :feedback="false"
-              toggle-mask
               autocomplete="current-password"
               :disabled="busy"
             />
@@ -220,18 +219,18 @@ async function confirm() {
           </div>
         </div>
 
-        <Message v-if="error" severity="error" :closable="false">
+        <VeyqMessage v-if="error" tone="error">
           {{ error }}
           <TrustResetLink v-if="trustRefused" />
-        </Message>
+        </VeyqMessage>
 
         <div class="rotation-action">
-          <Button
+          <VeyqButton
             type="button"
             :label="t('rotation.action')"
-            icon="pi pi-refresh"
-            severity="danger"
-            outlined
+            icon="refresh"
+            variant="danger"
+            appearance="outlined"
             :disabled="!canSubmit || busy"
             @click="confirmOpen = true"
           />
@@ -240,7 +239,7 @@ async function confirm() {
 
       <!-- Step 9: an honest per-scope status for what this device re-keyed alone (step 6). -->
       <template v-else>
-        <Message severity="info" :closable="false">{{ t('rotation.doneNotRepair') }}</Message>
+        <VeyqMessage tone="info">{{ t('rotation.doneNotRepair') }}</VeyqMessage>
         <ul class="rotation-results">
           <li v-for="s in result.scopes" :key="s.scopeId" class="veyq-list-row" :data-alone-scope="s.scopeId">
             <span v-if="tenantNames[s.scopeId]">{{ tenantNames[s.scopeId] }}</span>
@@ -272,54 +271,53 @@ async function confirm() {
             <span v-else class="rotation-name-stale">{{ t('rotation.groupNameUnavailable') }}</span>
             <span class="veyq-badge" :class="`is-${q.state}`">{{ t(`rotation.status.${q.state}`) }}</span>
             <small>{{ t(`rotation.queuedHint.${q.state}`) }}</small>
-            <Button
+            <VeyqButton
               v-if="q.state === 'failed'"
               type="button"
               :label="t('rotation.requeue')"
-              icon="pi pi-replay"
+              icon="replay"
               size="small"
-              outlined
+              appearance="outlined"
               :loading="requeueing === q.scopeId"
               @click="requeue(q.scopeId)"
             />
           </li>
         </ul>
-        <Message v-if="requeueError" severity="error" :closable="false">{{ requeueError }}</Message>
+        <VeyqMessage v-if="requeueError" tone="error">{{ requeueError }}</VeyqMessage>
       </section>
     </section>
 
-    <Dialog
+    <VeyqDialog
       v-model:visible="confirmOpen"
       :header="t('rotation.confirmTitle')"
-      modal
       :closable="!busy"
       :close-on-escape="!busy"
     >
       <p class="dialog-copy">{{ t('rotation.confirmBody') }}</p>
-      <Message v-if="error" severity="error" :closable="false">
+      <VeyqMessage v-if="error" tone="error">
         {{ error }}
         <TrustResetLink v-if="trustRefused" />
-      </Message>
+      </VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button
+        <VeyqButton
           type="button"
           :label="t('common.cancel')"
-          icon="pi pi-times"
-          severity="secondary"
-          outlined
+          icon="times"
+          variant="secondary"
+          appearance="outlined"
           :disabled="busy"
           @click="confirmOpen = false"
         />
-        <Button
+        <VeyqButton
           type="button"
           :label="t('rotation.action')"
-          icon="pi pi-refresh"
-          severity="danger"
+          icon="refresh"
+          variant="danger"
           :loading="busy"
           @click="confirm"
         />
       </div>
-    </Dialog>
+    </VeyqDialog>
   </section>
 </template>
 
@@ -344,7 +342,7 @@ async function confirm() {
   align-items: start;
   gap: 0.5rem;
 }
-.rotation-facts .pi {
+.rotation-facts .veyq-icon {
   color: var(--app-muted);
   margin-top: 0.15rem;
 }

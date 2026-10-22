@@ -61,12 +61,12 @@ const BORN_KEY = new Uint8Array(32).fill(3)
 const TENANT_ID = '5c09e000-0000-4000-8000-0000000000e1'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label', 'loading', 'disabled', 'type'], template: '<button :type="type" :disabled="disabled">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Password: { props: ['modelValue'], template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Checkbox: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label', 'loading', 'disabled', 'type'], template: '<button :type="type ?? \'button\'" :disabled="disabled">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqPassword: { props: ['modelValue'], template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqCheckbox: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
 }
 
 async function registerThrough(role: InviteRole, pickPicture: boolean) {

@@ -5,25 +5,27 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import NodeHeader from './NodeHeader.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { mergeHeaderActions, standardNodeActions, type NodeHeaderAction } from '../nodeHeader'
 import { realI18n, t } from '../../../test/i18n'
 
 const mountHeader = (props: InstanceType<typeof NodeHeader>['$props'], slots: Record<string, string> = {}) =>
-  mount(NodeHeader, { props, slots, global: { plugins: [realI18n()], directives: { tooltip: {} } } })
-const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: `L-${id}`, icon: 'pi pi-star', onClick: () => {}, ...over })
+  mount(NodeHeader, { props, slots, global: { plugins: [realI18n()] } })
+const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: `L-${id}`, icon: 'heart', onClick: () => {}, ...over })
 const labels = (w: ReturnType<typeof mountHeader>) => w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('aria-label'))
 
 describe('NodeHeader', () => {
   it('draws the title at the asked heading level, the subtitle and the kind icon', () => {
-    const w = mountHeader({ title: 'Trips', subtitle: '3 items', icon: 'pi pi-folder', level: 1 })
+    const w = mountHeader({ title: 'Trips', subtitle: '3 items', icon: 'folder', level: 1 })
     expect(w.find('h1.veyq-node-header-title').text()).toBe('Trips')
     expect(w.find('.veyq-node-header-subtitle').text()).toBe('3 items')
-    expect(w.find('.veyq-node-header-icon.pi-folder').exists()).toBe(true)
+    expect(w.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
+    expect(w.findComponent(VeyqIcon).props('name')).toBe('folder')
     expect(mountHeader({ title: 'T' }).find('h2.veyq-node-header-title').exists()).toBe(true)
   })
 
   it('the leading slot replaces the icon (a cover), the meta slot sits under the name', () => {
-    const w = mountHeader({ title: 'Rome', icon: 'pi pi-images' }, { leading: '<img class="cover">', meta: '<i class="chips" />' })
+    const w = mountHeader({ title: 'Rome', icon: 'images' }, { leading: '<img class="cover">', meta: '<i class="chips" />' })
     expect(w.find('.veyq-node-header-leading .cover').exists()).toBe(true)
     expect(w.find('.veyq-node-header-icon').exists()).toBe(false)
     expect(w.find('.veyq-node-header').classes()).toContain('has-visual')

@@ -37,11 +37,11 @@ const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09
 const STORED = { username: 'kevin', sealedName: sealName(K_TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false }
 
 const stubs = {
-  Button: { props: ['label', 'loading'], template: '<button type="submit">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Checkbox: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
+  VeyqButton: { props: ['label', 'loading'], template: '<button type="submit">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqCheckbox: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
   // `disabled` is not a prop here, so it falls through to the <input> exactly as the panel binds it.
-  InputText: {
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
