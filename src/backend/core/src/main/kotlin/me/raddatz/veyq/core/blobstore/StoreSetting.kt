@@ -19,6 +19,7 @@ import jakarta.persistence.EntityManager
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
+import org.jboss.logging.Logger
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 
@@ -380,10 +381,23 @@ class StoreSettings(
         return resolve(current).also { cached = it }
     }
 
-    /** Forget the cached resolution. Call after the transaction that changed the setting has COMMITTED — before it,
-     *  a reader could resolve and cache the old row under the new generation. */
+    /**
+     * Forget the cached resolution and resolve the committed setting again, here. Call after the transaction that
+     * changed the setting has COMMITTED — before it, a reader could resolve and cache the old row under the new
+     * generation.
+     *
+     * **Resolved again here, not on the next read**, because the next read may be on a Vert.x IO thread: the app shell
+     * reads the store origin there for its policy header (`AppShellRoutes`), and Quarkus refuses a database read on that
+     * thread — the page's response is then never written (`AppShellStoreOriginSliceTest`). Every caller is a worker
+     * thread after its commit. Should the read fail, the cache stays forgotten and the next worker-thread read resolves.
+     */
     fun invalidate() {
         generation.incrementAndGet()
+        try {
+            resolved()
+        } catch (e: Exception) {
+            log.warn("The store setting could not be resolved again after a change; the next read retries", e)
+        }
     }
 
     /** [pendingBundled] is the pending setting's resolution only while that one is the bundled store, else null — all
@@ -447,6 +461,8 @@ class StoreSettings(
     private fun open(value: SealedValue): String = seal.unseal(SealedSecret(value.ciphertext, value.nonce))
 
     companion object {
+        private val log = Logger.getLogger(StoreSettings::class.java)
+
         /**
          * The bundled store's bucket while it is the store in use and ready — else while it is the [pending] setting and
          * ready — else none (ADR 0064 § the bundled store is opt-in): only the bundled store sits behind this
