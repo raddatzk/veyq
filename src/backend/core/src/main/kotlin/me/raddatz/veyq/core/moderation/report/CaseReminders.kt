@@ -88,14 +88,14 @@ class CaseReminders(private val notices: ModeratorNotices) {
                 |These moderation cases on this veyq instance still wait for a decision:
                 |$en
                 |
-                |Open the moderation page on any space you can sign in to, to decide them. A case is never closed on its own.
+                |Open the moderation page to decide them: ${ModeratorNotices.PAGE_EN}. A case is never closed on its own.
                 |
                 |—
                 |
                 |Diese Moderationsfälle auf dieser veyq-Instanz warten noch auf eine Entscheidung:
                 |$de
                 |
-                |Öffne die Moderationsseite in einem beliebigen Bereich, in dem du dich anmelden kannst, um sie zu entscheiden.
+                |Öffne die Moderationsseite, um sie zu entscheiden: ${ModeratorNotices.PAGE_DE}.
                 |Ein Fall wird nie von selbst geschlossen.
             """.trimMargin()
         }

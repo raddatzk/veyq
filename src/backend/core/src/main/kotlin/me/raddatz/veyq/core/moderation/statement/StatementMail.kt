@@ -251,14 +251,14 @@ class StatementMail(
         }
 
         val OBJECTION_BODY = """
-            |Someone objected to a moderation decision on this veyq instance. Open the moderation page on any space you can
-            |sign in to, to see it; another moderator than the one who decided reviews it.
+            |Someone objected to a moderation decision on this veyq instance. Open the moderation page to see it:
+            |${ModeratorNotices.PAGE_EN}. Another moderator than the one who decided reviews it.
             |
             |—
             |
-            |Gegen eine Moderationsentscheidung auf dieser veyq-Instanz wurde Widerspruch eingelegt. Öffne die Moderationsseite
-            |in einem beliebigen Bereich, in dem du dich anmelden kannst, um ihn zu sehen; geprüft wird er von einer anderen
-            |Person aus der Moderation als der, die entschieden hat.
+            |Gegen eine Moderationsentscheidung auf dieser veyq-Instanz wurde Widerspruch eingelegt. Öffne die Moderationsseite,
+            |um ihn zu sehen: ${ModeratorNotices.PAGE_DE}. Geprüft wird er von einer anderen Person aus der Moderation als
+            |der, die entschieden hat.
         """.trimMargin()
 
         val ANSWER_BODY = """

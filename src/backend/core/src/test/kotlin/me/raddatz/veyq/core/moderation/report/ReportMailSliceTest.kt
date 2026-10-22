@@ -116,6 +116,7 @@ class ReportMailSliceTest {
             assertFalse(text.contains(secret), "the mail names an id: $secret")
         }
         assertFalse(Regex("https?://|www\\.").containsMatchIn(text), "the mail carries a link:\n$text")
+        assertNamesThePage(text)
         assertEquals(listOf(deputyAddress), mailbox.receivedMessages.flatMap { m2 -> m2.allRecipients.map { it.toString() } }, "the confirmed moderator alone")
         assertEquals(null, openCase("NODE", folder)!!.noticeDue, "mailed once")
     }
@@ -140,6 +141,7 @@ class ReportMailSliceTest {
         assertTrue(text.contains("a breach of the terms, reported 31 days ago"), text)
         for (secret in listOf(case.id, open, decided, m.scopeId, m.userId)) assertFalse(text.contains(secret), "the mail names an id: $secret")
         assertFalse(Regex("https?://|www\\.").containsMatchIn(text), "the mail carries a link:\n$text")
+        assertNamesThePage(text)
         assertEquals(0, reminders.remind(reported.plus(Duration.ofDays(40))), "each reminder once")
         assertEquals(1, reminders.remind(reported.plus(Duration.ofDays(76))))
         // The queue marks it overdue only past 90 days; the reminder at 90 is the last.
@@ -228,6 +230,12 @@ class ReportMailSliceTest {
     private fun mailsTo(to: String): List<MimeMessage> {
         mailbox.waitForIncomingEmail(2_000, 1)
         return mailbox.receivedMessages.filter { m -> m.allRecipients.any { it.toString().equals(to, ignoreCase = true) } }
+    }
+
+    /** Where the moderation page is, as plain text in both languages: the settings entry and the path, never a host (owner 2026-10-22). */
+    private fun assertNamesThePage(text: String) {
+        assertTrue(text.contains("Settings → Moderation") && text.contains("Einstellungen → Moderation"), "the mail names no settings entry:\n$text")
+        assertTrue(text.contains(" /moderation "), "the mail names no path:\n$text")
     }
 
     private fun textOf(mail: MimeMessage): String = partsOf(mail).first { it.isMimeType("text/plain") }.content as String

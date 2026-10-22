@@ -82,7 +82,7 @@ class CaseNotices(private val notices: ModeratorNotices) {
             ReportCategory.TERMS_BREACH to "Verstoß gegen die Nutzungsbedingungen",
         )
 
-        /** The mail's text: the new cases per category, most urgent first — nothing else (ADR 0093 § 2). */
+        /** The mail's text: the new cases per category, most urgent first, and where the page is — nothing else (ADR 0093 § 2). */
         fun body(counts: Map<ReportCategory, Int>): String {
             val ordered = ReportCategory.entries.filter { (counts[it] ?: 0) > 0 }
             val en = ordered.joinToString("\n") { "  ${counts.getValue(it)} × ${EN.getValue(it)}" }
@@ -91,14 +91,14 @@ class CaseNotices(private val notices: ModeratorNotices) {
                 |New moderation cases were reported on this veyq instance:
                 |$en
                 |
-                |Open the moderation page on any space you can sign in to, to see them.
+                |Open the moderation page to see them: ${ModeratorNotices.PAGE_EN}.
                 |
                 |—
                 |
                 |Auf dieser veyq-Instanz wurden neue Moderationsfälle gemeldet:
                 |$de
                 |
-                |Öffne die Moderationsseite in einem beliebigen Bereich, in dem du dich anmelden kannst, um sie zu sehen.
+                |Öffne die Moderationsseite, um sie zu sehen: ${ModeratorNotices.PAGE_DE}.
             """.trimMargin()
         }
     }

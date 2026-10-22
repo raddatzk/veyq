@@ -15,7 +15,8 @@ import java.util.Locale
  * moderator whose address is **confirmed** — by the code typed into the moderation surface — and the instance contact's
  * notification address once the Server Owner confirmed it, and nobody else. The recipients are read from the roster, each
  * account's own address and the operator details at the moment of sending, never from a request; the text names no case
- * content and no link (ADR 0093 § 2: category and "new case" only — `CaseNotices` writes it).
+ * content and no link (ADR 0093 § 2: category and "new case" only — `CaseNotices` writes it). Where the moderation page is
+ * goes in as plain text ([PAGE_EN], [PAGE_DE]): a path and a settings entry, never a host — a mail client links a URL.
  */
 @ApplicationScoped
 class ModeratorNotices(
@@ -33,6 +34,12 @@ class ModeratorNotices(
      */
     fun mailModerationNotice(subject: String, body: String): Int =
         recipients(withContact = true).count { mailer.mailTo(it, subject, body, "a moderation notice") == DeliveryResult.SENT }
+
+    companion object {
+        /** Where a moderator opens the moderation page, as every moderation notice names it: plain text, no host, no link (owner 2026-10-22). */
+        const val PAGE_EN = "Settings → Moderation in veyq, or /moderation on the address of any space you can sign in to"
+        const val PAGE_DE = "Einstellungen → Moderation in veyq, oder /moderation auf der Adresse eines Bereichs, in dem du dich anmelden kannst"
+    }
 
     private fun recipients(withContact: Boolean): List<String> = QuarkusTransaction.requiringNew().call {
         val moderators = ModeratorEntity.list("removedAt is null and acceptedAt is not null").mapNotNull { m ->
