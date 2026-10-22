@@ -65,8 +65,9 @@ export async function signIn(email: string, password: string): Promise<string> {
 }
 
 /** The object store is a Server-Owner setting with a passed check (ADR 0089): the server refuses a tenant (409
- *  `store_not_ready`) until one has passed. A fresh instance has none, so choose the deployment's bundled store and
- *  check it. Returns whether it had to do anything. */
+ *  `store_not_ready`) until one has passed. The backend sets the bundled store and checks it itself after its start
+ *  (decision 3), so this usually finds it passed; where it has not (yet), it saves the bundled store — re-saving it
+ *  while pending is an equal row — and checks it. Returns whether it had to do anything. */
 export async function ensureBundledStore(token: string): Promise<boolean> {
   type StoreState = { bundledAvailable?: boolean; setting?: unknown; lastCheck?: { passed?: boolean } | null }
   const storeNow = await adminCall<StoreState>(token, 'GET', '/api/instance/store')

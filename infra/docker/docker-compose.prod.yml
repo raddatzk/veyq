@@ -159,9 +159,9 @@ services:
       # turn it off. Traefik adds nothing: the app sends its own headers.
       VEYQ_HTTP_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
       # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where this stack's
-      # Garage is and its admin token. The Server Owner then chooses "Use the bundled store" in the admin console
-      # (or `veyq-admin store set --bundled`) and enters nothing else: the S3 key pair is DERIVED from the token,
-      # so no key pair lives in this file. The store is reached INTERNALLY; presigned URLs are SIGNED for the
+      # Garage is and its admin token. With no store saved, the app sets the bundled store itself after its boot
+      # provisioning and checks it (ADR 0089 decision 3), so nobody enters anything: the S3 key pair is DERIVED from
+      # the token, so no key pair lives in this file. The store is reached INTERNALLY; presigned URLs are SIGNED for the
       # public origin so a browser fetches them same-origin, with no CORS (ADR 0013 §4) — both must be set.
       # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) — layout, bucket, key, grant
       # and CORS policy — which is why this recipe has no init sidecar and builds nothing. It runs in the

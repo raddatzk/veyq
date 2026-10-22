@@ -103,11 +103,21 @@ the kit: it carries the Secret Key, the server holds no key material, and there 
 
 Media are stored in an S3-compatible object store, and the store is a setting of the console, not of the
 environment ([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
-**A tenant cannot be created until a store is set and has passed its check.** Open **Server → Object store**:
+**A tenant cannot be created until a store is set and has passed its check.**
+
+**Where the deployment brings its Garage** (on Compose unless your override leaves it out, on Kubernetes with
+`garage.enabled`), **there is nothing to do.** With no store saved, the server sets the bundled store itself once
+it has set Garage up after its start, and runs the check below on it; it tries the check again for about ten
+minutes while the upload, the read-back or the browser access still fail — the steps a domain, a certificate or a
+proxy that is still coming up can fail. **Server → Object store** then opens on the bundled store in use with its
+check passed. If the check still fails, the page names the step: fix it and run **Check store**, or restart the
+application, which checks the bundled store again. A store you saved yourself is never replaced, and a restored
+setting wins.
+
+**To use a store of your own instead**, or to return to the bundled one, open **Server → Object store**:
 
 1. Choose the **Store**:
-   - **Use the bundled store** — the Garage the recipe brings (offered when the deployment provides it: on Compose
-     unless your override leaves it out, on Kubernetes with `garage.enabled`). There is
+   - **Use the bundled store** — the Garage the recipe brings (offered when the deployment provides it). There is
      nothing to enter.
    - **S3-compatible store** — one you run or rent: **Endpoint**, **Public endpoint** (only if browsers reach the
      store at another address than the server does), **Bucket** (it must exist already: veyq never creates a bucket
@@ -244,7 +254,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `release` | Print the running release |
 | `config-secret` | Print the config-secret key's state (`OK`, `ABSENT` or `MISMATCH`); changes nothing |
 | `store show` | Print the store setting in use and its last check, a saved change still waiting for its check, and whether a bundled store is offered; never a secret |
-| `store set --bundled` | Save the bundled store; `store check` puts it in use |
+| `store set --bundled` | Save the bundled store, to return to it from a store of your own (a fresh instance sets it itself); `store check` puts it in use |
 | `store set --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3\|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]` | Save a store of your own; `store check` puts it in use. The secret key comes from `VEYQ_STORE_SECRET_KEY` and the Garage token from `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never from a flag |
 | `store check` | Check the saved change (else the store in use) and print every step; a passing saved change is put in use; exits `1` if it failed |
 | `store discard` | Drop a saved change that has not passed its check; the store in use stays |

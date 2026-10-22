@@ -18,7 +18,7 @@ acceptanceCriteria:
         reason: >-
           No backend test drives a PASSING check through the endpoint against a live store: the passing path is proven
           against local stub HTTP servers (`StoreCheckTest`, and `InstanceStoreSliceTest`'s fake S3 through the
-          endpoint), which ignore the signature. The real one is the web e2e suites' `birthInstance` (bundled store chosen and checked against Garage), which
+          endpoint), which ignore the signature. The real one is the web e2e suites' `birthInstance` (it waits for the bundled store the server adopted and checked against Garage itself, A8), which
           `run_web_e2e.py` runs and no backend ref names. "Without a restart" is the setting-follows-the-store
           wiring (`SwitchingBlobStore`) that `AppShellStoreOriginSliceTest` and `StoreOriginPresignSliceTest` observe
           through the CSP and the signed URL.
@@ -157,7 +157,7 @@ gaps:
     The web client has no part in configuring the store; it only uploads to whatever store the backend signs for.
     Its upload refusal (no-store-refuses-uploads-with-a-reason) is reached through the backend's response.
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/setup/first-run.setup.ts`) drives `server-owner-sets-and-checks-the-store`
+    Lane L1's browser suite (`tests/e2e/tests/setup/first-run.setup.ts`) drives `the-bundled-store-is-adopted-and-checked-without-a-click`
     in Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged
     with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` →
     `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the

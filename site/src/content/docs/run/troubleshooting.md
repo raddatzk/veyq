@@ -21,10 +21,12 @@ needs it, not the whole instance. Start with the admin console's **Server** sect
 | `budget_exceeded` | A single file over 20 GiB | — |
 | Uploads fail right after a start | A Garage store is still being set up | Wait for the **Object store** panel to show it ready |
 | The store's set-up failed | Garage could not be reached or refused a step; the log names it | Make the store reachable, then run **Check store** |
+| The bundled store stays a saved setting, its check failing at **Upload a test object**, **Read it back** or **Browser access (CORS)** | The domain, its certificate or the proxy was not ready in the ten minutes the server kept checking it after its start | Fix that, then run **Check store**, or restart the application, which checks it again |
 | Uploads fail in the browser, with a CORS error | A store of your own without a CORS rule for the domain the user is on | Allow that origin in the bucket's CORS rule ([Storage and email](/veyq/run/storage-and-email/#the-object-store)) |
 
-**A tenant cannot be created** (`store_not_ready`): no store has passed its check yet. Open **Server → Object store**,
-save it, and run **Check store**; the step that failed is named
+**A tenant cannot be created** (`store_not_ready`): no store has passed its check yet. Open **Server → Object store**:
+where the deployment brings its Garage the server has set the bundled store and checked it itself, and the page names
+the step that failed; otherwise save a store of your own. Fix the named step and run **Check store**
 ([uc.admin.configure-object-store](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.configure-object-store.md)).
 
 ## A certificate does not come

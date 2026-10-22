@@ -43,7 +43,7 @@ acceptanceCriteria:
         integration: [TenantIngressBucketRouteTest.onlyTheBundledStoreInUseIsRoutedAndAtItsBucketsPathAlone]
       # No web surface, for the reason domain-actually-routes states: routing has no client half.
   - id: a-pending-bundled-store-is-routed-for-its-check
-    # cr-bundled-store-adopts-itself decision 1 (ADR 0089 decision 3). The check of a pending setting uploads its
+    # ADR 0089 decision 3 (built 2026-10-22). The check of a pending setting uploads its
     # probe through the public endpoint, which on Compose is the instance's own domain: with the route only for the
     # store IN USE, a first bundled store's check could never pass. The integration ref drives the Server Owner's own
     # save and discard through the admin channel and calls no regenerate of its own after its baseline, so a write that

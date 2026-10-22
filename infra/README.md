@@ -101,8 +101,9 @@ the **backend** closes that gap on its first start, from the **bundled-store hin
 endpoint, the admin endpoint and the admin token; [ADR 0089](../docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
 It assigns a single-node layout, creates the bucket `veyq.bundled-store.bucket` names (`blobs` by default), imports the key
 pair **derived from the admin token** (so the e2e, a dev backend and the backup tool agree on one pair without any being
-told it), grants it, and writes the bucket CORS policy. **A fresh instance must also choose the bundled store** — admin-web's
-Server → Store page, `veyq-admin store set --bundled`, or `npm run bootstrap:user` — before an upload works. Every step is idempotent on
+told it), grants it, and writes the bucket CORS policy. **On a fresh instance the backend then sets the bundled store itself**
+and runs its check, so the first upload works without a step of yours (ADR 0089 decision 3); a store saved in admin-web's
+Server → Object store first is never replaced. Every step is idempotent on
 its own, so a later start repairs a missing piece rather than skipping the lot, and a `down -v` wipe self-heals on
 the next start.
 
