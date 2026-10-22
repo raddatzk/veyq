@@ -47,8 +47,9 @@ Anyone who sees something — a member of a space or a guest of a link — can c
   days after the report, and for child sexual abuse material never longer than that unless extended (below) ([en.moderation.hold](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.hold.md)).
   You store those bytes, and a backup includes them; the tenant's quota falls as its members expect. A space's erasure
   leaves the report and the copy.
-- **Moderators are mailed** the category and "new case", with no id and no link: child sexual abuse material, terrorist
-  content and a threat to life at once, the rest in one mail a day. The instance contact's notification address is
+- **Moderators are mailed** the category and "new case", and where the moderation page is as plain text (Settings →
+  Moderation, or `/moderation` on a space's address), with no id, no host and no link: child sexual abuse material,
+  terrorist content and a threat to life at once, the rest in one mail a day. The instance contact's notification address is
   mailed too once confirmed. A reporter who left an address gets a receipt, and the case's log records that it went.
 - **Nothing is blocked.** The item stays where it was until a person decides.
 
