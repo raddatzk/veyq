@@ -780,6 +780,17 @@ const en = {
     steppedDown: 'You are no longer a moderator.',
     stepDownFailed: 'Stepping down did not work. Try again.',
     lastHolder: 'You are the only moderator who holds the key. Another moderator must hold it before you can step down.',
+    // the settings hub's way in (features/moderation/ModerationEntryPanel.vue), shown to an appointed account only
+    entry: {
+      navTitle: 'Moderation',
+      title: 'Moderation',
+      pending: 'The Server Owner has asked you to moderate this instance. You take it up on the moderation page.',
+      accepted: 'You moderate this instance. What people report, in every space on it, is waiting on the moderation page.',
+      separate: 'The moderation page opens in a new tab and asks for your password and your Secret Key every time. It holds the moderation key and nothing else of your account, so what was reported never shares a page with what is yours.',
+      open: 'Open the moderation page',
+      openPending: 'Open the moderation page to accept',
+      address: 'Its address is {url}. It is {path} on the address of every space you can sign in to.',
+    },
     // the queue and a case (features/moderation/ModerationQueue.vue, CaseDetail.vue; uc.moderation.review-a-case)
     queueRefresh: 'Refresh',
     queueShowClosed: 'Show closed cases',
@@ -2719,6 +2730,17 @@ const de: typeof en = {
     steppedDown: 'Du moderierst nicht mehr.',
     stepDownFailed: 'Das Niederlegen hat nicht geklappt. Versuch es noch einmal.',
     lastHolder: 'Nur du hältst den Schlüssel. Eine andere moderierende Person muss ihn halten, bevor du niederlegen kannst.',
+    // the settings hub's way in (features/moderation/ModerationEntryPanel.vue), shown to an appointed account only
+    entry: {
+      navTitle: 'Moderation',
+      title: 'Moderation',
+      pending: 'Die Person, die den Server betreibt, bittet dich, diese Instanz zu moderieren. Du nimmst das auf der Moderationsseite an.',
+      accepted: 'Du moderierst diese Instanz. Was in einem ihrer Bereiche gemeldet wird, wartet auf der Moderationsseite.',
+      separate: 'Die Moderationsseite öffnet sich in einem neuen Tab und fragt jedes Mal nach deinem Passwort und deinem Secret Key. Sie hält den Moderationsschlüssel und sonst nichts von deinem Konto, damit Gemeldetes nie eine Seite mit deinen eigenen Inhalten teilt.',
+      open: 'Moderationsseite öffnen',
+      openPending: 'Moderationsseite öffnen und annehmen',
+      address: 'Ihre Adresse ist {url}. Sie liegt unter {path} auf der Adresse jedes Bereichs, in dem du dich anmelden kannst.',
+    },
     // the queue and a case (features/moderation/ModerationQueue.vue, CaseDetail.vue; uc.moderation.review-a-case)
     queueRefresh: 'Aktualisieren',
     queueShowClosed: 'Abgeschlossene Fälle zeigen',

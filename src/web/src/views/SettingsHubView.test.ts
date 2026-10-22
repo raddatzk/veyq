@@ -18,10 +18,13 @@ vi.mock('../features/account/pairing/AddDevicePanel.vue', () => ({ default: { te
 vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
 vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
 vi.mock('../features/account/erasure/EraseAccountPanel.vue', () => ({ default: { template: '<div class="stub-erase" />' } }))
+vi.mock('../features/moderation/ModerationEntryPanel.vue', () => ({ default: { template: '<div class="stub-moderation" />' } }))
+vi.mock('../features/moderation/appointment', () => ({ myAppointment: vi.fn() }))
 
 import SettingsHubView from './SettingsHubView.vue'
 import { listMyGroups, listMyTenants } from '../features/spaces/scopes'
 import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
+import { myAppointment, type ModeratorAppointment } from '../features/moderation/appointment'
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { realI18n, t } from '../test/i18n'
@@ -40,6 +43,13 @@ async function mountHub(path = '/settings') {
   return wrapper
 }
 
+const appointmentIn = (state: ModeratorAppointment['state']): ModeratorAppointment => ({
+  state,
+  address: 'deputy@example.com',
+  confirmation: 'NOT_SENT',
+  awaitingKey: false,
+})
+
 const navText = (w: Awaited<ReturnType<typeof mountHub>>) => w.get('.settings-nav').text()
 
 /** Stub the viewport so the wide-only /settings→section redirect is deterministic (happy-dom's default is wide). */
@@ -57,6 +67,7 @@ beforeEach(() => {
   vi.mocked(listMyGroups).mockResolvedValue([]) // clearAllMocks keeps impls; reset the defaults per test
   vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' } as unknown as Awaited<ReturnType<typeof listMyTenants>>[number]])
   vi.mocked(refusedDocuments).mockResolvedValue([])
+  vi.mocked(myAppointment).mockResolvedValue(appointmentIn('NONE'))
   stubMatchMedia(false) // narrow by default → /settings stays the list; the wide-redirect case opts in
 })
 afterEach(() => {
@@ -80,6 +91,30 @@ describe('SettingsHubView — starting a refused trust list over (ADR 0028 Decis
 })
 
 const pathOf = (w: Awaited<ReturnType<typeof mountHub>>) => w.vm.$router.currentRoute.value.path
+
+describe('SettingsHubView — the way into moderation (uc.moderation.serve-as-moderator)', () => {
+  it.each(['PENDING', 'ACCEPTED'] as const)('an account whose appointment is %s finds the section and its panel', async (state) => {
+    vi.mocked(myAppointment).mockResolvedValue(appointmentIn(state))
+    const w = await mountHub('/settings/moderation')
+    expect(navText(w)).toContain(t('moderation.entry.navTitle'))
+    expect(pathOf(w)).toBe('/settings/moderation')
+    expect(w.find('.stub-moderation').exists()).toBe(true)
+  })
+
+  it('control: an account that is not appointed has no section, and its address leads back to /settings', async () => {
+    const w = await mountHub('/settings/moderation')
+    expect(navText(w)).not.toContain(t('moderation.entry.navTitle'))
+    expect(pathOf(w)).toBe('/settings')
+    expect(w.find('.stub-moderation').exists()).toBe(false)
+  })
+
+  it('an appointment that cannot be read is no appointment: the section stays out of the rail', async () => {
+    vi.mocked(myAppointment).mockRejectedValue(new Error('offline'))
+    const w = await mountHub('/settings/moderation')
+    expect(navText(w)).not.toContain(t('moderation.entry.navTitle'))
+    expect(pathOf(w)).toBe('/settings')
+  })
+})
 
 describe('SettingsHubView — a section the caller may not see leads back to /settings', () => {
   beforeEach(() => {

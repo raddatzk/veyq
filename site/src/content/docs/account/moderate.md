@@ -17,8 +17,11 @@ take up the role, so that you hold that key; then you review cases and decide.
 
 ## Accept
 
-1. Sign in on the address of a space you belong to, and open `/moderation` there, for example
-   `https://photos.example.com/moderation`. The page signs you in itself.
+1. Open the moderation page: in veyq, go to **Settings → Moderation** and choose **Open the moderation page to
+   accept**. That section is there only once you were appointed. The page opens in a new tab of its own, so that what
+   was reported never shares a page with your account's own content. You can also open it yourself: it is
+   `/moderation` on the address of any space you belong to, for example `https://photos.example.com/moderation`. The
+   page signs you in itself.
 2. If you were appointed, the page says what moderating means:
    - you will see what was reported, and that can include child sexual abuse material;
    - every time you open a report, the **moderation log** records it with your account.

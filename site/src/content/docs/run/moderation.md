@@ -58,7 +58,8 @@ Someone rotating addresses can still send many; each costs you a moderator's loo
 
 ## Review a case
 
-The moderators — you among them — review reports on `/moderation`, on the address of any space they sign in on
+The moderators — you among them — review reports on `/moderation`, on the address of any space they sign in on (an
+appointed account finds it under **Settings → Moderation**)
 ([uc.moderation.review-a-case](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.review-a-case.md)).
 Every list and every step there carries a signature with the moderation key, so a moderator's session alone opens
 none of it.
@@ -508,7 +509,8 @@ docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env e
 ```
 
 Someone who has no account yet is first invited into a space. The appointment stays **pending** until that person
-opens `/moderation` on a space's address they sign in on, reads what accepting means and accepts. Accepting mails them
+opens the moderation page — **Settings → Moderation** in veyq, which an appointed account sees, or `/moderation` on a
+space's address they sign in on — reads what accepting means and accepts. Accepting mails them
 a code through the instance mail (Server → Mail must be set up) to confirm their address for notices. The key reaches
 them from a moderator who holds it, the next time that moderator opens `/moderation`; the roster then shows they hold
 it. `veyq-admin moderator list` prints the roster.

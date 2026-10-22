@@ -18,7 +18,10 @@ dann prüfst du Fälle und entscheidest.
 
 ## Annehmen
 
-1. Melde dich unter der Adresse eines Bereichs an, zu dem du gehörst, und öffne dort `/moderation`, zum Beispiel
+1. Öffne die Moderationsseite: Geh in veyq zu **Einstellungen → Moderation** und wähle **Moderationsseite öffnen und
+   annehmen**. Diesen Abschnitt gibt es erst, wenn du ernannt wurdest. Die Seite öffnet sich in einem eigenen neuen Tab,
+   damit Gemeldetes nie eine Seite mit den eigenen Inhalten deines Kontos teilt. Du kannst sie auch selbst öffnen: Sie
+   liegt unter `/moderation` auf der Adresse jedes Bereichs, zu dem du gehörst, zum Beispiel
    `https://photos.example.com/moderation`. Die Seite meldet dich selbst an.
 2. Wenn du ernannt wurdest, sagt die Seite, was Moderieren bedeutet:
    - du siehst, was gemeldet wurde, und das kann Darstellungen sexuellen Missbrauchs von Kindern einschließen;
