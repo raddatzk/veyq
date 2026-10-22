@@ -171,7 +171,7 @@ class InstanceStoreSliceTest {
     }
 
     /**
-     * Two checks of one pending setting put it in use once (cr-bundled-store-adopts-itself decision 4): the boot's
+     * Two checks of one pending setting put it in use once (ADR 0089 decision 3 adds a second checker): the boot's
      * check of an adopted bundled store and the Server Owner's own can overlap. The held side is the first check's
      * promotion ([StoreHandler.settle], in the transaction the hold keeps open); the overlapping side is a whole second
      * check, whose read saw the setting still pending. It waits on the instance singleton's lock, then finds nothing

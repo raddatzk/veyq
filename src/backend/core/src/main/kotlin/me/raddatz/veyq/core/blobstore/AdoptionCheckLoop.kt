@@ -16,7 +16,7 @@ import java.time.Instant
  * act is the one that counts. Each attempt is the ordinary check ([run]'s `check`), so the console shows the latest
  * attempt exactly as an owner's check would; when the budget runs out, *Check store* is how to try again.
  *
- * One log line per finished check (decision 6): the pass, or the step that failed and whether it is tried again.
+ * One log line per finished check, and none per wait: the pass, or the step that failed and whether it is tried again.
  *
  * A class of its own whose clock and sleep are injected, so `AdoptionCheckLoopTest` runs every ending without a
  * store, a boot or the real schedule — the boot worker that calls it does not run under `%test`.
@@ -91,7 +91,7 @@ class AdoptionCheckLoop(
         val RETRYABLE = setOf(StoreCheckStep.PROBE_PUT, StoreCheckStep.PROBE_GET, StoreCheckStep.CORS)
 
         /**
-         * About ten minutes (cr-bundled-store-adopts-itself Q2): ACME's first certificate and Traefik's file watch
+         * About ten minutes (owner, 2026-10-22): ACME's first certificate and Traefik's file watch
          * normally take seconds to a minute, DNS still propagating can take longer. The provisioning's own two minutes
          * are too short for a certificate.
          */

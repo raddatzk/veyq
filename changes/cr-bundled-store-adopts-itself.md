@@ -1,7 +1,7 @@
 ---
 id: cr-bundled-store-adopts-itself
 title: Where the deployment brings its Garage, the server sets and checks the bundled store itself, and the check can reach it
-status: planned
+status: done
 satisfies: ["uc.admin.configure-object-store", "uc.admin.tenant-reachability"]
 adrs: ["0089", "0013", "0064", "0067"]
 invariants:
@@ -152,7 +152,7 @@ check can never pass. Phase 1 fixes this first.
 
 ## Phases
 
-- [ ] **1 route (backend)**: decision 1 and decision 4.
+- [x] **1 route (backend)**: decision 1 and decision 4.
   - Bite first: a `TraefikFileBlobsRouteTest` case (pure, no hint needed) where the resolution in use is
     `NotSet` and the pending one is a ready bundled connection must render the `-blobs` routers. It is red on the
     untouched tree.
@@ -163,7 +163,7 @@ check can never pass. Phase 1 fixes this first.
     uc.admin.tenant-reachability's criterion for the pending route written beside its tests; and
     `git grep -n "routeBucket\|bundledRouteBucket" -- src/backend` shows no other reader left on the old meaning.
   - Commit before phase 2: phase 2 edits `StoreHandler.kt` too.
-- [ ] **2 adoption (backend)**: decisions 2, 3 and 6.
+- [x] **2 adoption (backend)**: decisions 2, 3 and 6.
   - The runner's worker, `forBoot()`'s branch result, and the adopt transaction under the lock.
   - The adoption's check loop, as a class of its own whose clock and sleep are injected, so the loop is unit-tested
     off `StartupEvent`, which `%test` skips.
@@ -177,14 +177,14 @@ check can never pass. Phase 1 fixes this first.
     - two concurrent checks promote once.
   - Done when: `./gradlew check` is green, and the criterion `the-bundled-store-is-adopted-and-checked-without-a-click`
     is written in `uc.admin.configure-object-store.yaml` beside these tests.
-- [ ] **3 console (admin-web)**: decision 5.
+- [x] **3 console (admin-web)**: decision 5.
   - `StorePanel.vue`'s texts and branches, in `en` and `de`, and `StorePanel.test.ts` for each new branch (no
     setting with the hint; first pending unchecked; first pending failed).
   - Locator for the texts: `grep -n "store\.\(bundledNote\|notSet\|pendingUnchecked\|pendingCheckFailedAt\)" src/admin-web/src`.
   - Done when: `npm run check` in `src/admin-web/` is green, plus a browser pass on the dev instance in the two
     states the dev stack can reach: a fresh database after a backend restart (adopted, passed), and an own store
     saved first (not replaced).
-- [ ] **4 harnesses and published docs**: decision 7 and every page that still tells the operator to choose, save
+- [x] **4 harnesses and published docs**: decision 7 and every page that still tells the operator to choose, save
   and check the bundled store.
   - Locator: `git grep -nE "Use the bundled store|store set --bundled|choose the bundled|choose it, save|pre-chooses" -- site infra scripts tests src docs`,
     and `git grep -ln "uc.admin.configure-object-store.md\|0089-instance-settings\|uc.admin.tenant-reachability.md" -- site/src/content/docs`.
@@ -214,4 +214,31 @@ check can never pass. Phase 1 fixes this first.
 
 ## Retrospective
 
-_Filled at implementation._
+- **The work order missed two writers of the rows its locks protect, and both were live defects.** Decision 4 locked
+  only the check's promotion, but the adoption inserts the pending row too, so it races the Server Owner's `set` on the
+  same key: the bite (no lock in `set`) answered the owner's save with a 500. Separately, phase 1 made `set` and
+  `discardPending` invalidate `StoreSettings`, and the app shell reads the store origin on a Vert.x IO thread. After
+  any invalidation the first page then failed with `BlockingOperationNotAllowedException` and hung, which the boot's
+  adoption would have hit on the very first page of a fresh install. `./gradlew check` found it only because
+  `ExternalServicesSliceTest` happened to run right after the new adoption slice; phase 1, already on `main`, had the
+  same exposure for one commit (fixed in `efb6072a`). Root cause, in both cases: the refine reasoned about the call it
+  changed, not about every reader and writer of the state that call changes. **Next time:** a CR that adds a writer
+  of, or an invalidation to, a cached or locked row lists every other writer and every reader of it, with the thread
+  each one runs on, before it fixes the lock and the cache's contract.
+- **Two locators did not hold against the tree.** The re-render slice case was placed in `InstanceStoreSliceTest`,
+  whose profile has no ingress sink, so it went to `TenantIngressBucketRouteTest` (the one class whose profile
+  renders a file). "Two concurrent checks promote once" was listed in phase 2's tests though decision 4 lands in
+  phase 1, so it was written in phase 1. The rule this teaches is now in `docs/ai/README.md` § Refinement checklist.
+- **Execution and process.** I wrote phase 2's new files and phase 3's edits while phase 1's check was still running,
+  before phase 1 merged. Q1 asked for phase 2 to start after that merge; phase 1 still landed alone (staged by
+  explicit path), but strictly that ordering was not kept. A bite run's restore used a bare `cp`, which this shell
+  aliases to `cp -i`. It hung for ten minutes on the overwrite prompt, a trap the local memory already names, so that
+  rule was ignored. **Next time:** restore a bitten file with `/bin/cp -f` or `cat src > dst` from the start.
+- **The browser pass found a text the decision got wrong.** Decision 5 reasoned that "no setting, bundled offered"
+  lasts only seconds. Where the boot's provisioning of the hint's Garage fails for good, it lasts until a restart, and
+  "reload in a moment" was then a promise nothing keeps. The text now also says where to look and that a store of
+  one's own can be saved instead. Measured by staging that state on purpose: a scratch instance whose Garage admin
+  endpoint did not answer.
+- **Not run here (V1 heavy stage):** the stack e2e (`first-run.setup.ts`, the only proof of the whole path on
+  Compose), lane `web-e2e` (whose `birthInstance` now only waits for the adoption, bounded at 90 s under the 120 s
+  hook), the API fuzzer and `run_backend_races_on_mariadb.py`. The new singleton locks are proven only on H2 so far.

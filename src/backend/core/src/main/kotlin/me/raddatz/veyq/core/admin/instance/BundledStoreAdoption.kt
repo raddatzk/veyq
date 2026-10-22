@@ -11,9 +11,9 @@ import jakarta.enterprise.event.Observes
  * uc.admin.configure-object-store A8). The boot's provisioning of the hint's Garage for an instance with no store in
  * use ends in [BundledHintProvisioned], on the provisioning worker's thread; this then adopts the bundled store
  * ([StoreHandler.adoptBundled]: as pending, only where nothing is saved) and runs the ordinary check on it through
- * [AdoptionCheckLoop] — so only a passing check puts it in use (decision 5), and the Server Owner opens the page on the
+ * [AdoptionCheckLoop] — so only a passing check puts it in use (ADR 0089 decision 5), and the Server Owner opens the page on the
  * result. A bundled store a previous boot adopted and whose check did not pass is checked again the same way: a restart
- * is what an operator does after fixing DNS or the proxy (cr-bundled-store-adopts-itself Q3).
+ * is what an operator does after fixing DNS or the proxy (owner, 2026-10-22).
  *
  * Nothing marks the adoption done; every boot reads the condition again. The worker, and so this, does not run under
  * `%test`: `BundledStoreAdoptionSliceTest` drives [StoreHandler.adoptBundled], `AdoptionCheckLoopTest` the loop.

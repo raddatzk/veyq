@@ -293,7 +293,12 @@ A refined CR nails **decisions, not keystrokes**:
   refusal into veyqctl's `backup_tool`, which `status` and the daily prune also call for the database alone. A proof that seems to need a root Linux host (a file's owner in a
   Docker volume) usually needs only a root container that mounts the volume (cr-restore-places-the-key-as-the-runtime-user
   waited two weeks on the owner for a run an agent then did in an hour); and an expected log line in a CR is measured, not
-  remembered.
+  remembered. A CR that adds a writer of a locked or cached row, or a new invalidation of it, lists every other writer
+  and every reader with the thread each runs on: cr-bundled-store-adopts-itself locked only the check's promotion,
+  though its adoption inserts the same row the Server Owner's save does (a 500 under the race), and invalidated a cache
+  the app shell reads on a Vert.x IO thread, where a cold cache cannot read the database (the first page after a change
+  hung). And a test class a CR names as a case's home is read for its profile: that CR put an ingress re-render case in
+  a class whose profile renders no ingress.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
   names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the

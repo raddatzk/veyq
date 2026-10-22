@@ -6,7 +6,7 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * Every way the adoption's own check ends (ADR 0089 decision 3, cr-bundled-store-adopts-itself decision 3), on a
+ * Every way the adoption's own check ends (ADR 0089 decision 3; [AdoptionCheckLoop] says which steps it retries), on a
  * clock the sleep advances, so the ten-minute budget runs in no time and each ending is read off how many checks ran
  * and how long the loop waited. Each negative is read against a positive control on the same loop: a check that
  * passes on its third attempt, which proves the retry runs at all.
