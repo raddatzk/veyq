@@ -17,8 +17,11 @@
 
 ## Main flow
 
-1. The appointee signs in on a tenant host and opens `/moderation`. The surface reads **my appointment**; for a pending
-   one it shows what accepting means: they will see what people report, child sexual abuse material included, and
+1. The appointee signs in on a tenant host and opens `/moderation`: from the settings hub's **Moderation** section,
+   which the hub shows only to an account whose appointment is pending or accepted (it reads **my appointment** too),
+   or by its address. The section is a door, never the surface: it loads `/moderation` afresh in a new tab, because the
+   hub runs with the member's vault open and the page that opens reports holds nothing of it (ADR 0099 § 6). The
+   surface reads **my appointment**; for a pending one it shows what accepting means: they will see what people report, child sexual abuse material included, and
    every opening of a report is logged with their account.
 2. They accept. The server records the acceptance — the account now carries the `MODERATOR` role — and mails a one-time
    code to their account address through the instance mail.
