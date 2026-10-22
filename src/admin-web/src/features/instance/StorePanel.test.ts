@@ -96,6 +96,30 @@ describe('StorePanel (ADR 0089, admin-web)', () => {
     expect(setInstanceStore).toHaveBeenCalledWith({ bundled: true })
   })
 
+  it('says the server is setting the bundled store itself while nothing is saved yet, not that no store is set', async () => {
+    // Only the seconds after a start before the boot worker adopts it (ADR 0089 decision 3).
+    const w = await mountPanel(read({ bundledAvailable: true }))
+    expect(w.find('.store-not-set').text()).toBe(t('store.adopting'))
+    // control: where the deployment brings no store, nothing is coming
+    const none = await mountPanel(read({ bundledAvailable: false }))
+    expect(none.find('.store-not-set').text()).toBe(t('store.notSet'))
+  })
+
+  it('says what a first setting means while it waits for its check — there is no store in use beside it', async () => {
+    const bundled: InstanceStoreSetting = { ...own, bundled: true, type: 'GARAGE' }
+    const w = await mountPanel(read({ bundledAvailable: true, pending: { setting: bundled, lastCheck: undefined } }))
+    expect(w.find('.store-pending').text()).toBe(t('store.pendingFirst'))
+    expect(w.find('.store-unchecked').text()).toBe(t('store.pendingFirstUnchecked'))
+  })
+
+  it('reads a failed check of a first setting as no store in use, not as an unchanged one', async () => {
+    const bundled: InstanceStoreSetting = { ...own, bundled: true, type: 'GARAGE' }
+    const w = await mountPanel(read({ bundledAvailable: true, pending: { setting: bundled, lastCheck: check(false) } }))
+    expect(w.find('.store-verdict').attributes('data-severity')).toBe('error')
+    expect(w.find('.store-verdict').text()).toBe(t('store.pendingFirstCheckFailedAt'))
+    expect(w.find('[data-step=BUCKET]').classes()).toContain('store-step--failed')
+  })
+
   it('offers no bundled choice where the deployment brings none', async () => {
     const w = await mountPanel(read({ bundledAvailable: false }))
     expect(w.findAll('option').map((o) => o.text())).toEqual([t('store.sourceS3'), t('store.sourceGarage')])

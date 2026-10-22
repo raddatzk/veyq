@@ -65,7 +65,8 @@ const error = ref('')
 function show(s: InstanceStore) {
   store.value = s
   const setting = editedSetting(s)
-  // A fresh install of a bundled recipe starts on the bundled store: choosing it is all that recipe asks for.
+  // A fresh install of a bundled recipe starts on the bundled store: the server sets and checks it on its own
+  // (ADR 0089 decision 3), so the page usually opens on that result.
   source.value = setting ? (setting.bundled ? 'BUNDLED' : setting.type) : s.bundledAvailable ? 'BUNDLED' : InstanceStoreType.S3
   form.endpoint = setting?.endpoint ?? ''
   form.publicEndpoint = setting?.publicEndpoint ?? ''
@@ -333,13 +334,26 @@ const OUTCOME_ICON = {
 
     <section v-if="store && !loading" class="settings-form store-result">
       <h3>{{ pending ? t('store.checkTitlePending') : t('store.checkTitle') }}</h3>
-      <Message v-if="!setting && !pending" severity="info" :closable="false">{{ t('store.notSet') }}</Message>
+      <!-- With the hint and nothing saved, the server is about to set the bundled store itself: only the seconds before
+           its boot worker adopts it (ADR 0089 decision 3). -->
+      <Message v-if="!setting && !pending" severity="info" :closable="false" class="store-not-set">
+        {{ store.bundledAvailable ? t('store.adopting') : t('store.notSet') }}
+      </Message>
+      <!-- A first setting has no store in use beside it, so its texts say what a first one means. -->
       <Message v-else-if="!lastCheck" severity="warn" :closable="false" class="store-unchecked">
-        {{ pending ? t('store.pendingUnchecked') : t('store.unchecked') }}
+        {{ pending ? (setting ? t('store.pendingUnchecked') : t('store.pendingFirstUnchecked')) : t('store.unchecked') }}
       </Message>
       <template v-else>
         <Message :severity="lastCheck.passed ? 'success' : 'error'" :closable="false" class="store-verdict">
-          {{ pending ? t('store.pendingCheckFailedAt') : lastCheck.passed ? t('store.checkPassed') : t('store.checkFailedAt') }}
+          {{
+            pending
+              ? setting
+                ? t('store.pendingCheckFailedAt')
+                : t('store.pendingFirstCheckFailedAt')
+              : lastCheck.passed
+                ? t('store.checkPassed')
+                : t('store.checkFailedAt')
+          }}
         </Message>
         <ol class="store-steps">
           <li v-for="s in lastCheck.steps" :key="s.step" :class="`store-step store-step--${s.outcome.toLowerCase()}`" :data-step="s.step">
