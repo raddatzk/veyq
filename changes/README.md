@@ -459,6 +459,14 @@ members** — the one being removed, the ones being kept, and the surfaces expli
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
 itself is wrong, which is worth finding at refine rather than in the retrospective.
 
+### A rule the refine states over every text gets a locator over the texts
+
+A refine that writes a rule for a class ("an empty value renders as the gap wherever a text names it") inventories
+every member of the class, or the implementer finds the ones the decisions left out. cr-operating-mode-retires's ADR
+edit said it of every fixed text, its decisions named only one sentence of the statement of reasons, and the contact's
+gap in the statement — a Server Owner's step with no contact reading "write to not stated by this operator" — surfaced
+in the implementation as an owner question (inbox #522).
+
 ### The published docs move with the change, in the same CR
 
 The docs site (`site/`, [ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md))
@@ -502,6 +510,10 @@ cannot forge) stayed red through phases 3 and 4 and were first measured in phase
 the test sources: `git grep -n "<old test name>" -- docs/coverage`. Such a phase runs `validate_guard_gaps.py
 --force`, too: locally that guard skips while no file under `scripts/` changed, and a renamed anchor is exactly what
 a skip does not see.
+**So the criteria move in the phase that removes their tests, not in a closing docs phase.** cr-operating-mode-retires
+planned "coverage files" for its last phase; its backend phase deleted the mode tests the refs named, so it had to
+rewrite the criteria then, and retag the e2e specs whose criterion tags `validate_stack_criterion_tags.py` reads. A
+phase plan puts each criterion beside the test that answers it.
 
 **Where a CR may not name its use-cases yet, a phase owns writing them.** A new application cannot name use-cases
 before its concept settles, so `cr-files-application` started with `satisfies: []` and *"written with F1"* — and
