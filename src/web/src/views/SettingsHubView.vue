@@ -25,6 +25,9 @@ import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
 import TrustResetPanel from '../features/account/trustReset/TrustResetPanel.vue'
 import EraseAccountPanel from '../features/account/erasure/EraseAccountPanel.vue'
 import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
+import ModerationEntryPanel from '../features/moderation/ModerationEntryPanel.vue'
+import { myAppointment, type ModeratorAppointment } from '../features/moderation/appointment'
+import { ModeratorAppointmentStateEnum } from '../api/generated/moderation'
 import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { listMyGroups, listMyTenants, type GroupSpace } from '../features/spaces/scopes'
@@ -55,9 +58,26 @@ const trustRefused = ref(false)
 // True once every answer a gate below depends on is in (a section is never judged hidden on a guess).
 const settled = ref(false)
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadTrustRefusals(), loadTenantRole()])
+  await Promise.all([loadGroups(), loadTrustRefusals(), loadTenantRole(), loadAppointment()])
   settled.value = true
 })
+
+// The caller's moderator appointment (uc.moderation.serve-as-moderator): the Moderation section — a door to the
+// surface, which lives outside this shell (ADR 0099 § 6) — is in the rail for a pending or accepted appointee and for
+// nobody else. Null until the answer is in, and on a failed read.
+const appointment = ref<ModeratorAppointment | null>(null)
+const isAppointed = computed(
+  () =>
+    appointment.value?.state === ModeratorAppointmentStateEnum.Pending ||
+    appointment.value?.state === ModeratorAppointmentStateEnum.Accepted,
+)
+async function loadAppointment() {
+  try {
+    appointment.value = await myAppointment()
+  } catch {
+    appointment.value = null
+  }
+}
 watch(() => activeSpace.tenantId, () => void loadTenantRole())
 
 // Whether the caller owns the active tenant: the owner-only sections (mail, storage) are in the rail for an owner and for
@@ -124,6 +144,9 @@ const categories = computed<NavCategory[]>(() => {
         ...(trustRefused.value ? [{ id: 'trust-reset', label: t('trustReset.navTitle'), icon: 'pi pi-history' }] : []),
         // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
         ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'pi pi-user' }] : []),
+        // The way into moderation, for an appointed account only. Account-wide like an appointment (the instance's, not a
+        // space's); the panel only links out, because reported content is never opened beside this shell's vault.
+        ...(isAppointed.value ? [{ id: 'moderation', label: t('moderation.entry.navTitle'), icon: 'pi pi-flag' }] : []),
         // Erasing the account (uc.account.erase-account, ADR 0101) — last, below everything it ends. Account-wide like
         // sessions; the hub's `requiresUnlock` gives the panel the account id and address its proof binds. The Server
         // Owner's account is never erased: the panel reads that from the server and says so (A2), as it is the only
@@ -182,8 +205,8 @@ const hasSection = computed(() => Boolean(route.params.section))
 
 // A section the caller may not see is not offered in the rail, and its address does not open it either: it leads back to
 // /settings (which, on a wide screen, opens the default section). Judged only once the answers are in: the owner-only pages
-// (mail, storage, capabilities) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's;
-// adding a device needs the instance's `core.device-linking`, known at mount.
+// (mail, storage, capabilities) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's,
+// moderation needs an appointment; adding a device needs the instance's `core.device-linking`, known at mount.
 const OWNER_ONLY = new Set(['mail', 'storage', 'capabilities'])
 const isHidden = (id: string): boolean =>
   id === 'pairing'
@@ -192,14 +215,16 @@ const isHidden = (id: string): boolean =>
       ? !isTenantOwner.value
       : id === 'trust-reset'
         ? !trustRefused.value
-        : id.startsWith('group-')
+        : id === 'moderation'
+          ? !isAppointed.value
+          : id.startsWith('group-')
           ? !ownedGroups.value.some((g) => `group-${g.scopeId}` === id)
           : false
 // The page itself is not mounted while it is hidden (it would ask the server for what it may not read) - nor, for the
 // pages that depend on an answer still on its way, before that answer is in.
 const detailVisible = computed(() => !isHidden(activeId.value) && (settled.value || !OWNER_ONLY.has(activeId.value)))
 watch(
-  [settled, hasSection, activeId, isTenantOwner, trustRefused, ownedGroups],
+  [settled, hasSection, activeId, isTenantOwner, trustRefused, ownedGroups, isAppointed],
   () => {
     if (settled.value && hasSection.value && isHidden(activeId.value)) void router.replace('/settings')
   },
@@ -236,6 +261,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'security') return { component: KeyRotationPanel, props: {} }
   if (id === 'trust-reset') return { component: TrustResetPanel, props: {} }
   if (id === 'erase') return { component: EraseAccountPanel, props: {} }
+  if (id === 'moderation' && appointment.value) return { component: ModerationEntryPanel, props: { appointment: appointment.value } }
   return { component: AppearancePanel, props: {} }
 })
 
