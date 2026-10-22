@@ -36,11 +36,24 @@ acceptanceCriteria:
     # bucket taken from any store in use, each redden it). The whole rule is compared, so the prefix without its
     # trailing slash — which claims every app path beginning with the name — fails too. The unit refs decide the
     # same two halves as pure functions. Kubernetes has no blobs route to derive (its store has a host of its own).
-    text: While the bundled store is the store in use, every blobs route the proxy is given — the bootstrap domain's and each tenant's — routes its bucket's path and no path that merely begins with its name; while any other store, or none, is in use, no domain gets a blobs route.
+    text: While the bundled store is the store in use, every blobs route the proxy is given — the bootstrap domain's and each tenant's — routes its bucket's path and no path that merely begins with its name; while neither the store in use nor the pending setting is the bundled store, no domain gets a blobs route.
     coverage:
       backend:
         unit: [TraefikFileBlobsRouteTest.onlyTheBundledStoreReadyNamesABucket, TraefikFileBlobsRouteTest.withoutABucketNoDomainGetsABlobsRouterAndNothingOnlyTheyReference, TraefikFileBlobsRouteTest.theBucketIsReadAtEveryRender]
         integration: [TenantIngressBucketRouteTest.onlyTheBundledStoreInUseIsRoutedAndAtItsBucketsPathAlone]
+      # No web surface, for the reason domain-actually-routes states: routing has no client half.
+  - id: a-pending-bundled-store-is-routed-for-its-check
+    # cr-bundled-store-adopts-itself decision 1 (ADR 0089 decision 3). The check of a pending setting uploads its
+    # probe through the public endpoint, which on Compose is the instance's own domain: with the route only for the
+    # store IN USE, a first bundled store's check could never pass. The integration ref drives the Server Owner's own
+    # save and discard through the admin channel and calls no regenerate of its own after its baseline, so a write that
+    # forgets to re-render is red (bitten: the untouched tree rendered no blobs router after the save). Its negative, a
+    # pending store of the operator's own, is read off the same file. The unit ref decides every pair of resolutions.
+    text: While the bundled store is the pending setting and the deployment offers it, every domain gets its blobs route as it would with the bundled store in use, from the Server Owner's save on and until the pending setting is discarded or replaced; a pending store of the operator's own gets none.
+    coverage:
+      backend:
+        unit: [TraefikFileBlobsRouteTest.aPendingBundledStoreReadyNamesABucketToo]
+        integration: [TenantIngressBucketRouteTest.aPendingBundledStoreIsRoutedFromItsSaveAndUnroutedByItsDiscard]
       # No web surface, for the reason domain-actually-routes states: routing has no client half.
   - id: presign-for-a-reachable-origin
     # ADR 0013 §4 as amended by ADR 0063, and ADR 0067 Decision 5. The negative is the load-bearing one: the

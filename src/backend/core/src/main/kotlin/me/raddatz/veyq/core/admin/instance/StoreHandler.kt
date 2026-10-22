@@ -23,9 +23,11 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.instance.VeyqInstance
 import me.raddatz.veyq.core.tenant.TenantIngressProjector
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import java.net.URI
 
 /** The setting as the Server Owner reads it — connection values only; the secrets are flags (ADR 0089 decision 4). */
@@ -125,12 +127,22 @@ class StoreHandler(
         if (blobsStoredUnderAnotherStore(active, row)) return@call StoreSetOutcome.StoreInUse
         if (row == active) store.discardPending() else store.savePending(row)
         StoreSetOutcome.Stored(view())
-    }
+    }.also { if (it is StoreSetOutcome.Stored) pendingChanged() }
 
     /** Drop the pending setting; the one in use, and everything that follows it, is untouched. */
     fun discardPending(): StoreView = QuarkusTransaction.requiringNew().call {
         store.discardPending()
         view()
+    }.also { pendingChanged() }
+
+    /**
+     * After a committed change of the pending setting: the same-origin blobs route serves a pending bundled store too
+     * ([StoreSettings.bundledRouteBucket]) — its check uploads through it — so the cached resolution is forgotten and
+     * the ingress re-rendered, in [check]'s promotion order.
+     */
+    private fun pendingChanged() {
+        settings.invalidate()
+        projector.regenerate()
     }
 
     /**
@@ -147,24 +159,7 @@ class StoreHandler(
             is StoreResolution.Unavailable -> null to unavailableDetail(resolution)
         }
         val result = checker.run(connection, unreadableDetail, publicOrigin())
-        val promoted = QuarkusTransaction.requiringNew().call {
-            // A setting changed while the check ran has not been checked: record only against the one that was.
-            when {
-                pending == null -> {
-                    if (store.find() == target) store.recordCheck(result)
-                    false
-                }
-                store.findPending() != target -> false
-                result.passed -> {
-                    store.promotePending(result)
-                    true
-                }
-                else -> {
-                    store.recordPendingCheck(result)
-                    false
-                }
-            }
-        }
+        val promoted = QuarkusTransaction.requiringNew().call { settle(target, checkedPending = pending != null, result) }
         if (promoted) {
             settings.invalidate()
             projector.regenerate()
@@ -179,6 +174,35 @@ class StoreHandler(
             }
         }
         return StoreCheckRun.Done(result)
+    }
+
+    /**
+     * Record [result] against [target], the setting the check ran against — or, [checkedPending] and passed, put it in
+     * use. Whether it promoted. In the caller's transaction.
+     *
+     * **Under the instance singleton's row lock.** The check itself holds no lock while it talks to the store, so two
+     * checks of one pending setting (the boot's of an adopted bundled store and the Server Owner's) can both read it
+     * pending; without the lock both promoted, and the second failed on the first's uncommitted active row. With it the
+     * second waits, then finds nothing pending and records nothing (`InstanceStoreSliceTest`'s race).
+     */
+    internal fun settle(target: StoreSettingRow, checkedPending: Boolean, result: StoreCheckResult): Boolean {
+        VeyqInstance.findById(VeyqInstance.SINGLETON_ID, LockModeType.PESSIMISTIC_WRITE)
+        // A setting changed while the check ran has not been checked: record only against the one that was.
+        return when {
+            !checkedPending -> {
+                if (store.find() == target) store.recordCheck(result)
+                false
+            }
+            store.findPending() != target -> false
+            result.passed -> {
+                store.promotePending(result)
+                true
+            }
+            else -> {
+                store.recordPendingCheck(result)
+                false
+            }
+        }
     }
 
     private fun unavailableDetail(r: StoreResolution.Unavailable): String =

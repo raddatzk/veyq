@@ -1,11 +1,17 @@
 package me.raddatz.veyq.core.tenant
 
+import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import io.restassured.http.ContentType
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import jakarta.inject.Inject
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -31,6 +37,11 @@ import java.util.UUID
  *    app path merely beginning with the name.
  *
  * Read at every render: the store changes after boot, and each step regenerates without a restart.
+ *
+ * **A pending bundled store is routed too** (ADR 0089 decision 3, cr-bundled-store-adopts-itself): its check uploads
+ * its probe through this route, so with the route only for the store in use the check of a first bundled store could
+ * never pass on Compose. The Server Owner's save and discard re-render on their own — that case calls no
+ * [TenantIngressProjector.regenerate] of its own after the first.
  */
 @QuarkusTest
 @TestProfile(TenantIngressBucketRouteTest.NonDefaultBucket::class)
@@ -77,6 +88,37 @@ class TenantIngressBucketRouteTest {
         }
     }
 
+    @Test
+    fun aPendingBundledStoreIsRoutedFromItsSaveAndUnroutedByItsDiscard() {
+        val tenant = "p-${UUID.randomUUID()}.example.com"
+        seedTenant(domain = tenant)
+        ensureUser(OWNER_ID, "route-owner@example.com", "SERVER_OWNER")
+        try {
+            StoreSettingFixtures.clear()
+            StoreSettingFixtures.offerBundled(bucket = BUCKET)
+            projector.regenerate()
+            assertNoBlobsRoute("the bundled store offered, nothing set", tenant)
+
+            // From here on only the Server Owner's own writes render the file.
+            owner().contentType(ContentType.JSON).body("""{"bundled":true}""").`when`().put("/api/instance/store").then()
+                .statusCode(200).body("setting", nullValue()).body("pending.setting.bundled", equalTo(true))
+            assertRoutesOnly(BUCKET, tenant)
+
+            owner().`when`().delete("/api/instance/store/pending").then().statusCode(200).body("pending", nullValue())
+            assertNoBlobsRoute("the pending bundled store discarded", tenant)
+
+            // The positive control's negative: a pending store of the operator's own is not routed, hint or not.
+            owner().contentType(ContentType.JSON)
+                .body("""{"bundled":false,"type":"S3","endpoint":"http://s3.invalid:9000","bucket":"$BUCKET","region":"eu-central-1","accessKey":"a","secretKey":"s"}""")
+                .`when`().put("/api/instance/store").then().statusCode(200).body("pending.setting.bundled", equalTo(false))
+            assertNoBlobsRoute("a pending store of the operator's own", tenant)
+        } finally {
+            StoreSettingFixtures.clear()
+        }
+    }
+
+    private fun owner() = givenAdminChannel().header("Authorization", bearer(OWNER_ID))
+
     private fun assertNoBlobsRoute(state: String, tenant: String) {
         val file = Files.readString(Path.of(CONFIG_PATH))
         // Control: the file was rendered with both kinds of domain — the bootstrap pair's app router, from
@@ -110,6 +152,8 @@ class TenantIngressBucketRouteTest {
         const val BOOTSTRAP_DOMAIN = "bucket-bootstrap.example.com"
         /** Not the default, and valid under S3's naming rules — a name a restore onto another store might carry. */
         const val BUCKET = "restored-media"
+        /** Distinct from every other class's: the `%test` H2 mem DB is JVM-shared across test classes. */
+        const val OWNER_ID = "4e1c7a92-3b58-4d06-9f2e-8a6d1c5b7e30"
         val BLOBS_ROUTER = Regex("(?m)^    ([a-z0-9-]+-blobs):\\n      rule: \"([^\"]+)\"")
         val HOST = Regex("Host\\(`([^`]+)`\\)")
         val PATH_PREFIX = Regex("PathPrefix\\(`([^`]*)`\\)")

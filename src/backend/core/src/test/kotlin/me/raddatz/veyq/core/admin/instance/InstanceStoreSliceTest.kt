@@ -1,8 +1,13 @@
 package me.raddatz.veyq.core.admin.instance
 
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.blobstore.StoreCheckOutcome
+import me.raddatz.veyq.core.blobstore.StoreCheckResult
+import me.raddatz.veyq.core.blobstore.StoreCheckStep
+import me.raddatz.veyq.core.blobstore.StoreCheckStepResult
 import me.raddatz.veyq.core.blobstore.StoreResolution
 import me.raddatz.veyq.core.blobstore.StoreSettingFixtures
+import me.raddatz.veyq.core.blobstore.StoreSettingStore
 import me.raddatz.veyq.core.blobstore.StoreSettings
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -10,7 +15,10 @@ import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.raceRounds
+import me.raddatz.veyq.core.testing.whileUncommitted
 import com.sun.net.httpserver.HttpServer
+import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import io.restassured.http.ContentType
@@ -21,9 +29,12 @@ import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.net.InetSocketAddress
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -45,6 +56,12 @@ class InstanceStoreSliceTest {
 
     @Inject
     lateinit var settings: StoreSettings
+
+    @Inject
+    lateinit var handler: StoreHandler
+
+    @Inject
+    lateinit var settingStore: StoreSettingStore
 
     private lateinit var fakeStore: HttpServer
 
@@ -151,6 +168,35 @@ class InstanceStoreSliceTest {
             .body("setting.publicEndpoint", nullValue())
         owner().`when`().delete("/api/instance/store/pending").then().statusCode(200).body("pending", nullValue()) // idempotent
         assertEquals(fakeEndpoint(), resolvedEndpoint())
+    }
+
+    /**
+     * Two checks of one pending setting put it in use once (cr-bundled-store-adopts-itself decision 4): the boot's
+     * check of an adopted bundled store and the Server Owner's own can overlap. The held side is the first check's
+     * promotion ([StoreHandler.settle], in the transaction the hold keeps open); the overlapping side is a whole second
+     * check, whose read saw the setting still pending. It waits on the instance singleton's lock, then finds nothing
+     * pending and records nothing — without the lock it promoted too, onto the first one's uncommitted active row.
+     */
+    @Test
+    fun twoChecksOfOnePendingSettingPutItInUseOnce() {
+        raceRounds { round ->
+            StoreSettingFixtures.clear()
+            put(s3("s$round", endpoint = fakeEndpoint())).statusCode(200).body("pending", not(nullValue()))
+            val target = QuarkusTransaction.requiringNew().call { settingStore.findPending() }!!
+            val first = StoreCheckResult(true, Instant.now(), StoreCheckStep.entries.map { StoreCheckStepResult(it, StoreCheckOutcome.PASSED, HELD) })
+
+            val second = whileUncommitted(
+                change = { assertTrue(handler.settle(target, checkedPending = true, first), "control: the held check promotes") },
+                overlapping = { owner().`when`().post("/api/instance/store/check").then().extract() },
+            )
+
+            assertEquals(200, second.statusCode(), second.asString())
+            QuarkusTransaction.requiringNew().run {
+                assertNull(settingStore.findPending(), "nothing pending any more")
+                assertEquals(target, settingStore.find(), "the checked setting is the one in use")
+                assertEquals(HELD, settingStore.lastCheck()?.steps?.first()?.detail, "and its check is the first one's, not overwritten by the second")
+            }
+        }
     }
 
     @Test
@@ -336,6 +382,9 @@ class InstanceStoreSliceTest {
     private companion object {
         /** A host nobody answers (`.invalid` never resolves): a typo's store. */
         const val TYPO_ENDPOINT = "http://store-check.invalid:9000"
+
+        /** The held check's step detail, which tells its record apart from the overlapping check's. */
+        const val HELD = "the held check"
 
         /** Distinct from every other class's: the `%test` H2 mem DB is JVM-shared across test classes. */
         const val OWNER_ID = "7c2e9b14-5d3a-4f68-8a01-e4b6d9c3f527"
