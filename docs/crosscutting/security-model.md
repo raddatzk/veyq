@@ -154,7 +154,7 @@ consented, identity-free request the **user** turned on, or the breached-passwor
   group's name and icon, a bucket's name, a medium's meta: the member or guest identity whose write the ciphertext is,
   served to no client and never what was written ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 8, [en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md));
-  while the Server Owner keeps it switched on (off by default in the *private* operating mode), the **guest-write
+  wherever a link lets its guest write (no switch of its own: `contribute` and `drop-box` decide), the **guest-write
   record**: per write a link's guest makes that enters it as a last editor, the client address of core's one resolver
   (never one the client chose, [ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)),
   its source port where known and the time to the millisecond, with the guest identity and the object — kept N days
@@ -418,8 +418,8 @@ server-blind token makes this work without the server ever seeing a name:
   moderation path has run on a deployed instance.
   The fixed **operator section** every space's terms carry
   states all this to members and guests — the notice path, what is kept, the measures, the statement and the
-  objection, and in the club, organisation or company mode the authorities — veyq's text filled with the operator's
-  published values, public without an account ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6).
+  objection, and the authorities — veyq's text, one form on every instance, filled with the operator's published values
+  (an empty one shown as not stated), public without an account ([ADR 0035](../decisions/0035-server-terms-of-service.md) decision 6).
   The fixed **instance privacy notice** states the GDPR Art. 13 information for members, reporters and guests — what
   the server keeps in the clear, why, how long, who receives it, the rights — from what the running instance does and
   the operator's published values, public at `/privacy` on every tenant host (decision 8). Both are public operational
@@ -429,11 +429,11 @@ server-blind token makes this work without the server ever seeing a name:
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
   decryptable-on-report — notice-and-takedown works exactly where content is distributed.
 - **A guest's write keeps where it came from, briefly** ([en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)).
-  A link guest has no account, so the evidence a report about its upload can carry is the connection: while the
-  Server Owner keeps the record on, each write that enters a guest as last editor stores the client address the
+  A link guest has no account, so the evidence a report about its upload can carry is the connection: wherever a link
+  lets its guest write, each write that enters a guest as last editor stores the client address the
   network vouches for, its source port and a millisecond time, for N days (1 to 30, default 7); a report's hold copies
   the rows of what it concerns. Guests are told before their first write, with N and the right to object, and linked
-  to the full Art. 13 text in the operator section of the terms. The record
+  to the full Art. 13 text in the instance privacy notice, which the operator section of the terms points to. The record
   adds operator-visible metadata about guests, never content, and nothing about members or readers; an address
   without a port may name no single subscriber behind carrier-grade NAT, and on Helm the address is only as strong as
   an enforced NetworkPolicy ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)

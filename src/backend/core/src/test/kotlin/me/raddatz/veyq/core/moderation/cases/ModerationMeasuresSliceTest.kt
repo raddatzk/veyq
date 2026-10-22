@@ -202,7 +202,7 @@ class ModerationMeasuresSliceTest {
         ModerationTestKit.asOwner(mod.id).body(
             """{"statement":{"statementId":"${UUID.randomUUID()}","ground":"TERMS_BREACH","provision":"Space terms, clause 4",""" +
                 """"facts":"what was found","factsForLog":{"epoch":1,"sealedFacts":"c2VhbGVk"}}}""",
-        ).`when`().post("/api/tenants/${w.tenantId}/suspend").then().statusCode(204)
+        ).`when`().post("/api/tenants/${w.tenantId}/suspend").then().statusCode(200)
         val memberProposal = ModerationTestKit.asOwner(mod.id).`when`().get("/api/instance/moderation/steps").then()
             .body("proposals.size()", equalTo(1)).extract().path<String>("proposals[0].id")
         ModerationTestKit.asOwner(mod.id).`when`().post("/api/instance/moderation/proposals/$memberProposal/decline")
@@ -227,7 +227,7 @@ class ModerationMeasuresSliceTest {
         login(email, kp).then().statusCode(200) // control
         val blockId = ModerationTestKit.asOwner(mod.id).body("""{"address":"$email"}""")
             .`when`().post("/api/instance/moderation/sign-in-blocks").then().statusCode(200)
-            .body("signInBlocks.size()", equalTo(1)).extract().path<String>("signInBlocks[0].id")
+            .body("steps.signInBlocks.size()", equalTo(1)).extract().path<String>("steps.signInBlocks[0].id")
         given().header("Authorization", session).`when`().get("/api/account/email").then().statusCode(401)
         login(email, kp).then().statusCode(401).body("code", equalTo("authentication_failed"))
         ModerationTestKit.asOwner(mod.id).body("""{"address":"$email"}""").`when`().post("/api/instance/moderation/sign-in-blocks")

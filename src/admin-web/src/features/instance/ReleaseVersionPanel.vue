@@ -56,7 +56,6 @@ const loadError = computed(() => loadErrorKind(loadErr.value))
         </div>
         <!-- A1 — absence is a first-class answer, not an empty field. -->
         <Message v-else severity="warn" :closable="false">{{ t('release.unstamped') }}</Message>
-        <p class="settings-muted">{{ t('release.rollbackHint') }}</p>
       </template>
     </section>
   </section>

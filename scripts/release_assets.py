@@ -74,7 +74,7 @@ ENV_TEMPLATE = repo_layout.ENV_TEMPLATE
 TEMPLATE_ASSET = "env.example"
 # The tools that operate a release, by asset name: `veyqctl` itself, and the backup tool its `backup`, `restore` and
 # `upgrade` import from the running release's directory (shipped beside it rather than folded in: cr-veyqctl).
-TOOLS = {"veyqctl": ROOT / "scripts/veyqctl.py", "instance_backup.py": ROOT / "scripts/instance_backup.py"}
+TOOLS = {"veyqctl": repo_layout.VEYQCTL, "instance_backup.py": repo_layout.INSTANCE_BACKUP}
 MANIFEST = "manifest.json"
 RELEASES = "releases.json"
 # `veyqctl`'s keyless signature, written by the publish (`cosign sign-blob --bundle`) beside the assets this file

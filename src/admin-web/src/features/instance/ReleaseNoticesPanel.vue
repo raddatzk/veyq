@@ -5,7 +5,10 @@
 //   - an unscheduled major is the one notice that means "now", so it renders as an error, never as one row among others;
 //   - a build with no release stamp checks nothing, whatever the switch says — the panel says so instead of showing an
 //     empty list that would read as "nothing newer";
-//   - switching the check off asks nothing (it only stops a request), and the panel re-renders from the server's answer.
+//   - switching the check off asks nothing (it only stops a request), and the panel re-renders from the server's answer;
+//   - whether a find is also mailed is said beside the switch: without confirmed instance mail it is only shown here, and
+//     a Server Owner who switched the check on expecting a mail would otherwise wait for one that never comes. The mail
+//     state is read on its own — failing to read it costs that one line, never the notices.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -14,9 +17,10 @@ import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import {
-  getReleaseNotices, InstanceReleaseNoticeKindEnum, isUrgent, noticeDay, setReleaseCheck, UPGRADE_PAGE,
+  getReleaseNotices, InstanceReleaseNoticeKindEnum, isUrgent, noticeDay, noticesMailedTo, setReleaseCheck, UPGRADE_PAGE,
   type InstanceReleaseNotice, type InstanceReleaseNotices,
 } from './releaseNotices'
+import { getInstanceMail, InstanceMailSettingsConfirmationEnum, type InstanceMailSettings } from './instanceMail'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { handle401 } from '../../shared/handle401'
@@ -24,6 +28,7 @@ import { decodeHttpError, isUnauthorized } from '../../shared/httpError'
 
 const { t, locale } = useI18n()
 const on401 = handle401(useRouter())
+const emit = defineEmits<{ openMail: [] }>()
 
 const state = ref<InstanceReleaseNotices | null>(null)
 const enabled = ref(true)
@@ -38,6 +43,21 @@ function apply(s: InstanceReleaseNotices) {
 
 const { pending: loading, error: loadErr } = useAsyncData(async () => apply(await getReleaseNotices()), { onError: on401 })
 const loadError = computed(() => loadErrorKind(loadErr.value))
+
+const mail = ref<InstanceMailSettings | null>(null)
+useAsyncData(async () => { mail.value = await getInstanceMail() }, { onError: on401 })
+
+/** Whether a find also reaches the Server Owner by mail — said only while the check can find anything. */
+const mailLine = computed(() => {
+  const m = mail.value
+  if (!m || !state.value?.enabled || !state.value.releaseLine) return null
+  const address = noticesMailedTo(m)
+  if (address) return { mailed: true, text: t('releaseCheck.mailed', { address }) }
+  return {
+    mailed: false,
+    text: t(m.confirmation === InstanceMailSettingsConfirmationEnum.NotConfigured ? 'releaseCheck.mailNotSetUp' : 'releaseCheck.mailUnconfirmed'),
+  }
+})
 
 const { run: runSave, pending: saving } = useAsyncAction(
   async () => apply(await setReleaseCheck(enabled.value, source.value.trim() || null)),
@@ -108,6 +128,10 @@ const others = computed(() => state.value?.notices.filter((n) => !isUrgent(n)) ?
           {{ !state.enabled ? t('releaseCheck.off')
             : state.lastSuccessAt ? t('releaseCheck.lastSuccess', { at: state.lastSuccessAt.toLocaleString(locale) })
             : t('releaseCheck.neverSucceeded') }}
+        </p>
+        <p v-if="mailLine" class="settings-muted check-mail" :data-mailed="mailLine.mailed">
+          {{ mailLine.text }}
+          <Button v-if="!mailLine.mailed" type="button" link class="check-mail-open" :label="t('releaseCheck.openMail')" @click="emit('openMail')" />
         </p>
         <label>
           <span>{{ t('releaseCheck.source') }}</span>

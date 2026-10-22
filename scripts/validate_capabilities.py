@@ -29,21 +29,6 @@ id outside it, so a missing or misspelt level would quietly take a switch away f
 The defect that bought the check: no incident. Built with cr-tenant-capability-switches; run against the untouched
 catalog, which carried no `levels`, it was red seven times, once per entry.
 
-And it checks every preset (ADR 0088 decision 14): an entry may carry `modes`, its value in each operating mode,
-`{"private": bool, "organisation": bool}` (true = on). Both keys and nothing else, each a boolean, and only on an
-entry whose `levels` hold `instance`, since choosing a mode sets the Server Owner's switch and never a tenant's. The
-backend generates `CapabilityPresets` from it and the mode's write sets exactly those entries, so a missing key would
-leave an entry unset in one mode, and a preset on an entry the Server Owner cannot switch would be a write with no
-switch behind it. An entry without `modes` is not refused: a preset is optional, and an entry the mode does not touch
-keeps whatever the Server Owner set. The defect that bought it: no incident. Built with
-cr-instance-contact-and-provider-identification, before any entry carried `modes`, and bitten then by
-snapshot-and-restore of the catalog (a `modes` on an entry without `instance` and one missing `organisation` each red);
-re-bitten on the first real preset, `core.public-shares.guest-write-record` (cr-guest-write-record): dropping its
-`organisation` is red. The `instance` half is implied by the `levels` check above today (every entry must hold
-`instance`); it stays its own rule so a later tenant-only level cannot take a preset with it. Its limit: it reads
-the catalog only — that the mode's write sets these entries and no other is `OperatorDetailsSliceTest`'s, and
-whether an entry's value per mode is the right one is the refinement's, read by a person against ADR 0093 § 14.
-
 And it checks every requirement (ADR 0088 decision 8): a `flag` or `days` `kind`, its `title` and `whenSet` in both
 languages, a name no other entry uses, and that the name is a property of the wire's `Capability`
 (`contracts/api/_common.openapi.yaml`) of the matching type (a flag boolean, days integer), because both deliveries carry
@@ -108,8 +93,6 @@ COMMON = ROOT / "contracts" / "api" / "_common.openapi.yaml"
 # its module directories (`<backend>/apps/<name>`, the `:apps:<name>` projects) rather than typed here.
 APPS = repo_layout.BACKEND / "apps"
 ROOTS = {"core"} | {d.name for d in APPS.iterdir() if d.is_dir() and (d / "build.gradle.kts").exists()}
-# The operating modes a preset gives a value for (ADR 0088 decision 14, ADR 0093 § 14).
-MODES = ("private", "organisation")
 # The words every entry carries for the Server Owner (ADR 0088 decision 13), each in every language below.
 TEXT_FIELDS = ("title", "purpose", "whenOff")
 LANGUAGES = ("en", "de")
@@ -158,17 +141,6 @@ for cid, entry in caps.items():
         errors.append(
             f"{cid}: levels must list 'instance', and 'tenant' where a tenant owner may switch it too, nothing else "
             f"(ADR 0088 decisions 2 and 12), got {levels!r}")
-    if "modes" in entry:
-        modes = entry["modes"]
-        if not isinstance(levels, list) or "instance" not in levels:
-            errors.append(
-                f"{cid}: modes is a preset over the Server Owner's switch, so its levels must hold 'instance' "
-                f"(ADR 0088 decision 14), got {levels!r}")
-        if (not isinstance(modes, dict) or set(modes) != set(MODES)
-                or any(not isinstance(value, bool) for value in modes.values())):
-            errors.append(
-                f"{cid}: modes must give {' and '.join(MODES)} and nothing else, each true (on) or false (off) "
-                f"(ADR 0088 decision 14), got {modes!r}")
     if entry.get("source") not in KNOWN_SOURCES:
         errors.append(f"{cid}: source '{entry.get('source')}' is not one of {sorted(KNOWN_SOURCES)}")
     serves = entry.get("serves")

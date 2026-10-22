@@ -74,7 +74,7 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
                 editor = PrincipalKey.Share(gated.identityId),
             )
             NodeEntity.flush() // the unique index decides here, inside the retry's reach, not at commit
-            guestWriteRecords.record(seen, gated.identityId, scopeId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
+            guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
             IdentityFolderOutcome.Folder(nodeId, epoch, 0, wrappedContentKey, created = true)
         }
     }

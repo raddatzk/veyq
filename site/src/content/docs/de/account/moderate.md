@@ -103,8 +103,8 @@ Tagen markiert ihn die Liste der Fälle mit **Seit über 90 Tagen unentschieden*
 
 Eine Sperre geht mit einer **Begründung** an die Betroffenen. Wähle den **Grund**, nenne **Gesetz oder Klausel, auf
 die sie sich stützt** — einen kurzen Verweis wie „§ 86a StGB“ oder „Bedingungen des Bereichs, Klausel 4“, so angezeigt,
-wie du ihn schreibst — und schreib, **Was du festgestellt hast**, also warum der Inhalt darunter fällt: Auf den meisten
-Servern ist beides Pflicht, auf einem privaten freiwillig. Was du festgestellt hast, erreicht jede betroffene Person
+wie du ihn schreibst — und schreib, **Was du festgestellt hast**, also warum der Inhalt darunter fällt: Beides ist
+Pflicht. Was du festgestellt hast, erreicht jede betroffene Person
 versiegelt, sodass nur sie es lesen kann — und das Moderationsprotokoll, versiegelt wie eine Notiz —, nie eine E-Mail.
 Die Begründung nennt den Server, nie dich, und sagt, dass die Sperre überall gilt, wo der Server erreichbar ist, bis sie
 aufgehoben wird. Wer beim Melden eine Adresse hinterlassen hat, erfährt die Entscheidung und die nächsten

@@ -1,5 +1,5 @@
 # The tools image, `ghcr.io/raddatzk/veyq-tools` (ADR 0098): the one capture implementation,
-# `scripts/instance_backup.py`, with the binaries its in-pod mode needs on PATH — the MariaDB client of the server's
+# `src/tools/instance_backup.py`, with the binaries its in-pod mode needs on PATH — the MariaDB client of the server's
 # own pinned version, `rclone`, Python. It runs the chart's `backup-gate` init container and a restore Job; Compose
 # never runs it (`veyqctl` fetches the tool as a release asset). Released and signed with the app and admin images
 # (ADR 0057), versioned with them: the gate refuses an app release that is not this image's own.
@@ -22,7 +22,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=mariadb-client /usr/bin/mariadb /usr/bin/mariadb-dump /usr/bin/
 COPY --from=rclone /usr/local/bin/rclone /usr/local/bin/rclone
-COPY scripts/instance_backup.py scripts/instance_backup_selftest.py /opt/veyq/
+COPY src/tools/instance_backup.py src/tools/instance_backup_selftest.py /opt/veyq/
 
 # What the gate holds a release change to (instance_backup.py `gate`): this image's release, and the release a new
 # major is entered from — the predecessor this release's own upgrade proof and chart check ran from

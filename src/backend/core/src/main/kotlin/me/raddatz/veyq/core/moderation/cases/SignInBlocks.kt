@@ -22,6 +22,7 @@ import me.raddatz.veyq.core.moderation.block.ProposalOutcome
 import me.raddatz.veyq.core.moderation.block.ProposalStep
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
 import me.raddatz.veyq.core.moderation.statement.StatementMail
+import me.raddatz.veyq.core.moderation.statement.StatementMailing
 import me.raddatz.veyq.core.moderation.statement.StepStatementInput
 import me.raddatz.veyq.core.moderation.statement.StepStatements
 import me.raddatz.veyq.core.persistence.createOrConflict
@@ -41,6 +42,12 @@ object StepFailures {
     val serverOwner = httpFailure("cannot_block_server_owner", FailureStatus.CONFLICT)
     val blockNotFound = httpFailure("sign_in_block_not_found", FailureStatus.NOT_FOUND)
     val proposalNotFound = httpFailure("proposal_not_found", FailureStatus.NOT_FOUND)
+}
+
+/** A sign-in block's outcome: taken — with whom its statement reached, null without one — or refused. */
+sealed interface BlockOutcome {
+    data class Blocked(val statement: StatementMailing?) : BlockOutcome
+    data class Refused(val failure: HttpFailure) : BlockOutcome, HttpFailure by failure
 }
 
 /**
@@ -106,17 +113,18 @@ class SignInBlocks(
 
     /**
      * Block the sign-in of the account under [address], for [caseId] or none; over content ([overContent], or a case or an
-     * open proposal) with its [statement]. Answers the refusal, or null when done — the statement mailed after the commit.
+     * open proposal) with its [statement]. Answers the refusal, or the block taken — with whom its statement, mailed after
+     * the commit, reached.
      */
     fun block(
         serverOwnerId: String, address: String, caseId: String?, now: Instant = Instant.now(),
         overContent: Boolean = false, statement: StepStatementInput? = null,
-    ): HttpFailure? {
+    ): BlockOutcome {
         val refusal = createOrConflict(conflict = { StepFailures.blockExists }) {
             blockIn(serverOwnerId, address, caseId, now, overContent, statement)
         }
-        if (refusal == null && statement != null) mailStatement(statement)
-        return refusal
+        if (refusal != null) return BlockOutcome.Refused(refusal)
+        return BlockOutcome.Blocked(statement?.let { mailStatement(it) })
     }
 
     /** [block]'s writes, **in the caller's transaction** — the race test holds them uncommitted (`ModerationRacesSliceTest`). */
@@ -237,10 +245,12 @@ class SignInBlocks(
         }
     }
 
-    /** Mail a step's [statement] with its facts — after the step committed, once (`StatementMail.statementSent`). */
-    fun mailStatement(statement: StepStatementInput) {
-        mail.statementSent(statement.statementId, statement.facts?.takeIf { it.isNotBlank() })
-    }
+    /**
+     * Mail a step's [statement] with its facts — after the step committed, once (`StatementMail.stepStatementSent`) — and
+     * answer whom it reached, for the step's answer (ADR 0093 § 7). Never a reason to refuse or undo the step.
+     */
+    fun mailStatement(statement: StepStatementInput): StatementMailing =
+        mail.stepStatementSent(statement.statementId, statement.facts?.takeIf { it.isNotBlank() })
 
     /** The case of the oldest open proposal of [step] on [targetId], or null. */
     private fun proposedCase(step: ProposalStep, targetId: String): String? =

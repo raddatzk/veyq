@@ -6,19 +6,17 @@ import { fromB64std } from '@veyq/crypto/base64'
 import { setupApi } from '../../api/client'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { epochOneFor } from '../instance/moderation'
-import { operatingModeRequest } from '../instance/operator'
 import {
   type CreateServerOwnerRequest,
   CreateServerOwnerRequestSuiteIdEnum,
   type MasterKeyWrapMethodEnum,
-  type OperatingMode,
 } from '../../api/generated'
 
 export type EmergencyKit = { secretKey: string }
 
-/** The account as minted on this device: everything the setup request carries but the operating mode, which the
- *  Server Owner chooses only after the kit is confirmed (uc.admin.setup-server step 4). */
-export type PreparedServerOwner = Omit<CreateServerOwnerRequest, 'operatingMode'>
+/** The account as minted on this device: the whole setup request, posted only after the kit is confirmed
+ *  (uc.admin.setup-server E1). Setup asks for no operator value (ADR 0093 § 14). */
+export type PreparedServerOwner = CreateServerOwnerRequest
 
 /** Build the request (keys born here via the shared cold account-birth). Returns the request + the Emergency
  *  Kit to show the user. */
@@ -65,17 +63,10 @@ export async function prepareServerOwner(
 }
 
 /**
- * Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed — with the operating mode
- * the Server Owner chose (ADR 0093 § 14). *Private* needs the notice [accepted]: without it nothing is posted
- * (`NoticeNotAccepted`), so setup cannot finish as *private* without the tick. This closes setup (single-owner lock);
- * 409 `setup_already_complete` when someone else finished it first.
+ * Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed. This closes setup
+ * (single-owner lock); 409 `setup_already_complete` when someone else finished it first.
  */
-export async function createServerOwner(
-  request: PreparedServerOwner,
-  mode: OperatingMode,
-  accepted: boolean,
-): Promise<{ userId: string }> {
-  const operatingMode = operatingModeRequest(mode, accepted)
-  const result = await setupApi().createServerOwner({ createServerOwnerRequest: { ...request, operatingMode } })
+export async function createServerOwner(request: PreparedServerOwner): Promise<{ userId: string }> {
+  const result = await setupApi().createServerOwner({ createServerOwnerRequest: request })
   return { userId: result.userId }
 }

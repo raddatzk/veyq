@@ -110,7 +110,7 @@ describe('an expired access token (inbox #449)', () => {
     const srv = server({ rotation: 'ok' })
     vi.stubGlobal('fetch', srv.fetchMock)
 
-    await expect(login('owner@example.test', 'wrong')).rejects.toBeTruthy()
+    await expect(login('owner@example.test', 'wrong', 'cookie')).rejects.toBeTruthy()
 
     expect(srv.calls.map((c) => `${c.url.replace(/^.*\/api/, '/api')} ${c.auth ?? '-'}`)).toEqual(['/api/login/challenge -'])
   })

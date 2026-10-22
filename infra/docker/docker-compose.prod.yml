@@ -15,7 +15,7 @@
 # The project name is a property of THIS FILE — not of the directory it is run from, and not of a flag an
 # operator has to remember on every command. Without it Compose derives the project from the file's directory,
 # which both compose files share, and two things follow that no amount of prose prevents: an unqualified
-# `down -v` meant for the dev stack destroys the production volumes, and `scripts/instance_backup.py` — whose
+# `down -v` meant for the dev stack destroys the production volumes, and `src/tools/instance_backup.py` — whose
 # `docker compose … exec` emits no `-p` — aims the documented production capture at whatever happens to be
 # running out of `infra/docker/`, backing up the wrong instance and reporting success. Naming it here is what keeps
 # `infra_*` (dev) and `veyq_*` (prod) apart on one host. `scripts/validate_release_identity.py` holds it.
@@ -144,8 +144,12 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      # `required: false`: an instance's compose.override.yml may leave the bundled store out (ADR 0064 § the
+      # bundled store is opt-in) by disabling `garage` and blanking the hint below, and then needs nothing more —
+      # with `true` (or the short form) Compose refuses the disabled service as an undefined dependency.
       garage:
         condition: service_started
+        required: false
     environment:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:mariadb://mariadb:3306/veyq
       QUARKUS_DATASOURCE_USERNAME: veyq

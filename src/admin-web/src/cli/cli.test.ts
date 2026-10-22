@@ -30,7 +30,12 @@ vi.mock('../features/instance/stepStatement', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/stepStatement')>()),
   stepStatement: vi.fn(),
 }))
-vi.mock('../features/instance/releaseNotices', () => ({ getReleaseNotices: vi.fn(), setReleaseCheck: vi.fn() }))
+vi.mock('../features/instance/releaseNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../features/instance/releaseNotices')>()),
+  getReleaseNotices: vi.fn(),
+  setReleaseCheck: vi.fn(),
+}))
+vi.mock('../features/instance/instanceMail', () => ({ getInstanceMail: vi.fn() }))
 vi.mock('../features/instance/configSecret', () => ({ getInstanceConfigSecret: vi.fn() }))
 vi.mock('../features/instance/store', async (importOriginal) => ({
   // the builders stay real: what `store set` sends is what is asserted on
@@ -75,10 +80,9 @@ vi.mock('../features/instance/orders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/orders')>()),
   enterOrder: vi.fn(),
 }))
-// The rules stay real (the notice's tick, the preset's changes, the merge base): what is asserted is what they send.
+// The rules stay real (the merge base, the recipient rows): what is asserted is what they send.
 vi.mock('../features/instance/operator', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../features/instance/operator')>()),
-  getOperatingMode: vi.fn(),
   getOperator: vi.fn(),
   setOperator: vi.fn(),
   clearOperator: vi.fn(),
@@ -97,6 +101,7 @@ import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
 import { getReleaseNotices, setReleaseCheck, type InstanceReleaseNotices } from '../features/instance/releaseNotices'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
+import { getInstanceMail, type InstanceMailSettings } from '../features/instance/instanceMail'
 import { checkInstanceStore, discardPendingInstanceStore, getInstanceStore, setInstanceStore } from '../features/instance/store'
 import {
   confirmExclusiveBucket,
@@ -116,13 +121,12 @@ import {
   rotateModerationKey,
 } from '../features/instance/moderation'
 import type { InstanceModeration, ModerationSteps } from '../features/instance/moderation'
-import { clearOperator, getOperatingMode, getOperator, setOperator } from '../features/instance/operator'
-import type { InstanceOperatingMode, InstanceOperator } from '../features/instance/operator'
-import { OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
+import { clearOperator, getOperator, setOperator } from '../features/instance/operator'
+import type { InstanceOperator } from '../features/instance/operator'
 import { enterOrder, OrderInvalid, type AuthorityOrder } from '../features/instance/orders'
 import { stepStatement } from '../features/instance/stepStatement'
 import { ORDER_FORMS } from '../features/instance/orderForms'
-import { instanceBackupRetentionApi, instanceGuestWriteRecordApi, instanceOperatorApi } from '../api/client'
+import { instanceBackupRetentionApi, instanceGuestWriteRecordApi } from '../api/client'
 import { eraseAccount, listAccountErasures, stopAccountErasure, type PendingAccountErasure } from '../features/instance/accounts'
 import { stubApi } from '../test/apiMock'
 import { httpError } from '../test/httpError'
@@ -189,6 +193,9 @@ const noticesRead: InstanceReleaseNotices = {
     foundAt: new Date('2026-10-16T04:00:00.000Z'), mailedAt: undefined,
   }],
 }
+function mailRead(confirmation: InstanceMailSettings['confirmation']): InstanceMailSettings {
+  return { tls: true, passwordSet: false, configSecretState: 'OK', address: 'owner@example.com', confirmation }
+}
 const register: InstanceCapability[] = [
   capability('core.x', 'Ex', false, true),
   capability('core.a', 'Alpha', true, false),
@@ -211,12 +218,13 @@ beforeEach(() => {
   vi.mocked(tenants.reassignInvite).mockImplementation(async (_tenantId, ownerEmail) => invite(ownerEmail))
   vi.mocked(tenants.changeTenantDomain).mockResolvedValue(undefined)
   vi.mocked(tenants.revokeTenant).mockResolvedValue(undefined)
-  vi.mocked(tenants.suspendTenant).mockResolvedValue(undefined)
+  vi.mocked(tenants.suspendTenant).mockResolvedValue({})
   vi.mocked(tenants.reactivateTenant).mockResolvedValue(undefined)
   vi.mocked(getInstanceRelease).mockResolvedValue({ release: '1.4.0' })
   vi.mocked(getReleaseNotices).mockResolvedValue(noticesRead)
   vi.mocked(setReleaseCheck).mockImplementation(async (enabled, source) => ({ ...noticesRead, enabled, source: source ?? undefined }))
   vi.mocked(getInstanceConfigSecret).mockResolvedValue({ state: 'MISMATCH' })
+  vi.mocked(getInstanceMail).mockResolvedValue(mailRead('NOT_CONFIGURED'))
 })
 
 describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.suspend-tenant)', () => {
@@ -261,11 +269,14 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
 
   it('tenant revoke, suspend and reactivate each reach their own operation', async () => {
     await invoke(['tenant', 'revoke', '--tenant-id', 't1'])
-    await invoke(['tenant', 'suspend', '--tenant-id', 't2'])
+    const suspended = await invoke(['tenant', 'suspend', '--tenant-id', 't2'])
     await invoke(['tenant', 'reactivate', '--tenant-id', 't2'])
     expect(tenants.revokeTenant).toHaveBeenCalledWith('t1')
     expect(tenants.suspendTenant).toHaveBeenCalledWith('t2', null)
     expect(tenants.reactivateTenant).toHaveBeenCalledWith('t2')
+    // A suspension without a statement answers no delivery: `ok` as before, and nothing on stderr.
+    expect(JSON.parse(suspended.out)).toEqual({ ok: true })
+    expect(suspended.err).toBe('')
   })
 
   it('tenant delete passes the id and the typed domain, and prints when the tenant is erased (uc.admin.delete-tenant)', async () => {
@@ -330,7 +341,15 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     expect(doc.release).toBe('1.4.0')
     expect(doc.enabled).toBe(true)
     expect(doc.notices).toEqual([expect.objectContaining({ kind: 'UNSCHEDULED_MAJOR', release: '2.0' })])
+    expect(doc.noticesMailedTo).toBeNull() // no instance mail: the finds are only shown
     expect(r.code).toBe(0)
+  })
+
+  it('release names the address a find is mailed to only once instance mail is confirmed (ADR 0097 decisions 4 and 5)', async () => {
+    vi.mocked(getInstanceMail).mockResolvedValue(mailRead('CODE_SENT'))
+    expect(JSON.parse((await invoke(['release'])).out).noticesMailedTo).toBeNull()
+    vi.mocked(getInstanceMail).mockResolvedValue(mailRead('CONFIRMED'))
+    expect(JSON.parse((await invoke(['release'])).out).noticesMailedTo).toBe('owner@example.com')
   })
 
   it('release check off switches the check off and keeps its source (uc.admin.learn-of-new-releases A1)', async () => {
@@ -740,7 +759,7 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   })
 
   it('account block passes the address and the case, or no case when none is given', async () => {
-    vi.mocked(blockSignIn).mockResolvedValue(steps())
+    vi.mocked(blockSignIn).mockResolvedValue({ steps: steps() })
     expect((await invoke(['account', 'block', '--address', 'member@example.com', '--case', 'case-1'])).code).toBe(0)
     expect(blockSignIn).toHaveBeenLastCalledWith('member@example.com', 'case-1', null, false)
     expect((await invoke(['account', 'block', '--address', 'member@example.com'])).code).toBe(0)
@@ -748,7 +767,7 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   })
 
   it('account block over content carries its statement of reasons from the flags, sealed by the facade', async () => {
-    vi.mocked(blockSignIn).mockResolvedValue(steps())
+    vi.mocked(blockSignIn).mockResolvedValue({ steps: steps() })
     const statement = { statementId: 's-1', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
     vi.mocked(stepStatement).mockResolvedValueOnce(statement)
     const r = await invoke([
@@ -776,6 +795,67 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
     expect(r.code).toBe(0)
     expect(stepStatement).toHaveBeenCalledWith({ ground: 'ILLEGAL_CONTENT', provision: '', facts: 'what was found' })
     expect(tenants.suspendTenant).toHaveBeenLastCalledWith('t3', statement)
+  })
+
+  // ADR 0093 § 7: the step stands (exit 0) and the JSON carries `statementDelivery`; unless it reached everyone, one
+  // stderr line names who was not reached and the instance contact.
+  it('tenant suspend over content prints whom the statement reached, and stays quiet when it reached every owner', async () => {
+    vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-1', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+    vi.mocked(tenants.suspendTenant).mockResolvedValueOnce({ statementDelivery: { outcome: 'REACHED', notReached: [] } })
+    const r = await invoke(['tenant', 'suspend', '--tenant-id', 't3', '--over-content', '--ground', 'TERMS_BREACH'])
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({ ok: true, statementDelivery: { outcome: 'REACHED', notReached: [] } })
+    expect(r.err).toBe('')
+  })
+
+  it('tenant suspend whose statement did not reach every owner exits 0 and warns on stderr, naming them', async () => {
+    vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-1', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+    const delivery = { outcome: 'NOT_ALL_REACHED' as const, notReached: ['a@club.example.org', 'b@club.example.org'] }
+    vi.mocked(tenants.suspendTenant).mockResolvedValueOnce({ statementDelivery: delivery })
+    const r = await invoke(['tenant', 'suspend', '--tenant-id', 't3', '--over-content', '--ground', 'TERMS_BREACH'])
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({ ok: true, statementDelivery: delivery })
+    expect(r.err).toBe(
+      'veyq-admin: warning: the statement of reasons could not be mailed to a@club.example.org, b@club.example.org and is not sent again — tell them through the instance contact',
+    )
+  })
+
+  it('tenant delete whose statement went to nobody, or to an unknown few, exits 0 and warns', async () => {
+    for (const [outcome, line] of [
+      ['NOBODY_TO_TELL', 'veyq-admin: warning: the statement of reasons went to nobody: the tenant has no owner, or the account no longer exists'],
+      ['UNKNOWN', 'veyq-admin: warning: the server could not tell whom the statement of reasons reached — tell the people it affects through the instance contact'],
+    ] as const) {
+      vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-2', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+      vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES, statementDelivery: { outcome, notReached: [] } })
+      const r = await invoke(['tenant', 'delete', '--tenant-id', 't3', '--domain', 'f.example.com', '--over-content', '--ground', 'TERMS_BREACH'])
+      expect(r.code).toBe(0)
+      expect(JSON.parse(r.out)).toEqual({ dueAt: EXPIRES.toISOString(), statementDelivery: { outcome, notReached: [] } })
+      expect(r.err).toBe(line)
+    }
+  })
+
+  it('account block prints the SignInBlockResult — the steps and whom the statement reached — and warns when it did not reach the member', async () => {
+    vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-3', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
+    vi.mocked(blockSignIn).mockResolvedValueOnce({
+      steps: steps({ proposals: [] }),
+      statementDelivery: { outcome: 'NOT_ALL_REACHED', notReached: ['member@example.com'] },
+    })
+    const r = await invoke(['account', 'block', '--address', 'member@example.com', '--over-content', '--ground', 'TERMS_BREACH'])
+    expect(r.code).toBe(0)
+    const printed = JSON.parse(r.out)
+    expect(printed.statementDelivery).toEqual({ outcome: 'NOT_ALL_REACHED', notReached: ['member@example.com'] })
+    expect(printed.steps.signInBlocks).toEqual([
+      { address: 'Blocked@Example.com', caseId: 'case-3', blockedAt: EXPIRES.toISOString() },
+      { address: 'ordered@example.com', caseId: null, blockedAt: EXPIRES.toISOString() },
+    ])
+    expect(r.err).toBe(
+      'veyq-admin: warning: the statement of reasons could not be mailed to member@example.com and is not sent again — tell them through the instance contact',
+    )
+    // Without a statement there is no delivery to print and nothing to warn of.
+    vi.mocked(blockSignIn).mockResolvedValueOnce({ steps: steps() })
+    const plain = await invoke(['account', 'block', '--address', 'member@example.com'])
+    expect(JSON.parse(plain.out)).not.toHaveProperty('statementDelivery')
+    expect(plain.err).toBe('')
   })
 
   it('tenant delete over content carries its statement to the tenant’s owners', async () => {
@@ -832,62 +912,34 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
   })
 })
 
-describe('veyq-admin — the operating mode and the operator details (uc.admin.operator-details A4)', () => {
-  const guestRecord = {
-    id: 'core.public-shares.guest-write-record', title: { en: 'Guest-write record', de: 'Gast-Schreibprotokoll' },
-    onInPrivate: false, onInOrganisation: true, off: false,
-  }
-  const modeRead = (over: Partial<InstanceOperatingMode> = {}): InstanceOperatingMode =>
-    ({ mode: 'ORGANISATION', chosen: true, preset: [guestRecord], ...over })
+describe('veyq-admin — the operator details (uc.admin.operator-details A4)', () => {
   const op = (over: Partial<InstanceOperator> = {}): InstanceOperator => ({
-    operatingMode: 'ORGANISATION', contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: undefined,
+    contactEmail: 'contact@example.org', contactLanguages: ['de'], statementEmail: undefined,
     notificationEmail: 'alerts@example.org', notificationConfirmation: 'CONFIRMED', notificationConfirmedAt: EXPIRES,
     instanceMailReady: true, providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: undefined,
     providerRepresentative: undefined, supervisoryAuthority: undefined, recipients: [], recipientSuggestions: [], ...over,
   })
 
-  it('mode show prints the mode, the notice in the locale, and what the other mode would switch', async () => {
-    vi.mocked(getOperatingMode).mockResolvedValueOnce(modeRead())
-    const r = await invoke(['mode', 'show'], { ...ENV, LANG: 'de_DE.UTF-8' })
-    expect(r.code).toBe(0)
-    expect(r.out.split('\n')[0]).toBe('mode organisation')
-    expect(r.out).toContain(OPERATING_MODE_NOTICE.de.exemption)
-    expect(r.out).toContain('mode set private would switch:\n  core.public-shares.guest-write-record  off  Gast-Schreibprotokoll')
+  it('there is no mode command any more: the operating mode is retired (ADR 0093 § 14)', async () => {
+    for (const words of [['mode', 'show'], ['mode', 'set', 'private']]) {
+      const r = await invoke(words)
+      expect(r.code).toBe(1)
+      expect(r.err).toContain(`unknown command '${words.join(' ')}'`)
+    }
+    expect(signIn).not.toHaveBeenCalled()
   })
 
-  it('mode set private without --accept-notice prints the notice, refuses and sets nothing', async () => {
-    const operatorApi = stubApi(instanceOperatorApi, { setInstanceOperatingMode: modeRead() })
-    const r = await invoke(['mode', 'set', 'private'])
-    expect(r.code).toBe(1)
-    expect(r.err).toContain(OPERATING_MODE_NOTICE.en.leavesOff)
-    expect(r.err).toContain('--accept-notice')
-    expect(operatorApi.setInstanceOperatingMode).not.toHaveBeenCalled()
-  })
-
-  it('mode set private --accept-notice sets it, and prints the notice again with the result', async () => {
-    const operatorApi = stubApi(instanceOperatorApi, { setInstanceOperatingMode: modeRead({ mode: 'PRIVATE', preset: [{ ...guestRecord, off: true }] }) })
-    const r = await invoke(['mode', 'set', 'private', '--accept-notice'])
-    expect(r.code).toBe(0)
-    expect(operatorApi.setInstanceOperatingMode).toHaveBeenCalledWith({ instanceOperatingModeUpdate: { mode: 'PRIVATE' } })
-    expect(r.out.split('\n')[0]).toBe('mode private')
-    expect(r.out).toContain(OPERATING_MODE_NOTICE.en.intro)
-  })
-
-  it('mode set organisation needs no flag; anything but the two modes is refused', async () => {
-    const operatorApi = stubApi(instanceOperatorApi, { setInstanceOperatingMode: modeRead() })
-    expect((await invoke(['mode', 'set', 'organisation'])).code).toBe(0)
-    expect(operatorApi.setInstanceOperatingMode).toHaveBeenCalledWith({ instanceOperatingModeUpdate: { mode: 'ORGANISATION' } })
-    const r = await invoke(['mode', 'set', 'household'])
-    expect(r.code).toBe(1)
-    expect(r.err).toContain('private or organisation')
-    expect(operatorApi.setInstanceOperatingMode).toHaveBeenCalledOnce()
-  })
-
-  it('operator show prints the values as JSON a script can read', async () => {
+  it('operator show prints the values as JSON a script can read, every value there and null where none is set', async () => {
     vi.mocked(getOperator).mockResolvedValueOnce(op())
     const r = await invoke(['operator', 'show'])
     expect(r.code).toBe(0)
-    expect(JSON.parse(r.out)).toMatchObject({ contactEmail: 'contact@example.org', notificationConfirmation: 'CONFIRMED' })
+    const printed = JSON.parse(r.out)
+    expect(printed).toMatchObject({ contactEmail: 'contact@example.org', notificationConfirmation: 'CONFIRMED' })
+    // The gaps a reader of the published texts sees as "not stated by this operator" — present, as null.
+    for (const k of ['statementEmail', 'providerEmail', 'providerRepresentative', 'supervisoryAuthority', 'dataProtectionOfficer']) {
+      expect(printed).toHaveProperty(k, null)
+    }
+    expect(printed).toHaveProperty('providerName', 'Example e. V.') // control: a set value is its value
   })
 
   it('operator set changes the given values, keeps the rest, and none clears one', async () => {
@@ -1046,7 +1098,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'account erase --address', 'account stop-erasure --address', 'account erasures', 'tenant delete --tenant-id', 'tenant stop-deletion --tenant-id', 'tenant invite-owner --tenant-id','order remove --share', 'order preserve --share', 'order inform --share', 'mode show', 'mode set <private|organisation>', 'operator show', 'operator set', 'operator clear']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'account erase --address', 'account stop-erasure --address', 'account erasures', 'tenant delete --tenant-id', 'tenant stop-deletion --tenant-id', 'tenant invite-owner --tenant-id','order remove --share', 'order preserve --share', 'order inform --share', 'operator show', 'operator set', 'operator clear']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

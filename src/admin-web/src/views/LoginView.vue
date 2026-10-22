@@ -39,7 +39,7 @@ const { run: submit, pending: busy } = useAsyncAction(
   async () => {
     error.value = ''
     expired.value = false
-    await login(email.value, password.value)
+    await login(email.value, password.value, 'cookie')
     await router.push({ name: 'console' })
   },
   { onError: () => { error.value = t('admin.signInFailed') } },

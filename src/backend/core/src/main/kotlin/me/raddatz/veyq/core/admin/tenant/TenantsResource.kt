@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.generated.model.DeleteTenantRequest
 import me.raddatz.veyq.core.generated.model.InviteTenantOwnerRequest
 import me.raddatz.veyq.core.generated.model.SetTenantMemberRoleRequest
 import me.raddatz.veyq.core.generated.model.TenantDeletion
+import me.raddatz.veyq.core.generated.model.TenantSuspension
 import me.raddatz.veyq.core.generated.model.AcceptPreviewRequest
 import me.raddatz.veyq.core.generated.model.AcceptTermsRequest
 import me.raddatz.veyq.core.generated.model.ChangeDomainRequest
@@ -45,7 +46,6 @@ import me.raddatz.veyq.core.generated.model.TenantStorageUpdate
 import me.raddatz.veyq.core.generated.model.TenantSummary
 import me.raddatz.veyq.core.generated.model.TenantTerms
 import me.raddatz.veyq.core.generated.model.TenantTermsUpdate
-import me.raddatz.veyq.core.terms.toSection
 import me.raddatz.veyq.core.terms.toWire
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
@@ -137,7 +137,7 @@ class TenantsResource(
                 deleteTenantRequest.statement?.toStepInput(),
             )
         ) {
-            is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc())).build()
+            is DeleteTenantOutcome.Deleted -> Response.ok(TenantDeletion(o.dueAt.utc(), o.statement?.delivery())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -168,7 +168,7 @@ class TenantsResource(
                 suspendTenantRequest?.statement?.toStepInput(),
             )
         ) {
-            SuspendOutcome.Done -> Response.noContent().build()
+            is SuspendOutcome.Done -> Response.ok(TenantSuspension(o.statement?.delivery())).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -356,7 +356,6 @@ class TenantsResource(
     override fun acceptTenantTerms(tenantId: UUID, acceptTermsRequest: AcceptTermsRequest): Response =
         when (val o = termsHandler.accept(
             identity.principal.name, tenantId.toString(), acceptTermsRequest.revision, acceptTermsRequest.operatorRevision,
-            acceptTermsRequest.variant.toSection(),
         )) {
             is TermsAcceptOutcome.Ok -> Response.ok(TenantTerms(o.revision, o.accepted, o.section.toWire(), o.terms?.toDto())).build()
             is HttpFailure -> httpError(o)

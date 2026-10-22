@@ -31,8 +31,10 @@
   that it does not look. The source can be pointed at a mirror instead.
 - **A2 — The source cannot be reached.** Logged, retried the next day; nothing else changes and nothing is blocked.
   The panel shows when the last check succeeded.
-- **A3 — No instance mail, or an unconfirmed address.** Notices appear in the console only. Changing the address or
-  the settings asks for confirmation again.
+- **A3 — No instance mail, or an unconfirmed address.** Notices appear in the console only, and Server → Release says
+  so beside the switch — not set up, or set up but unconfirmed, with the way to Server → Mail — so that switching the check on is
+  never read as "I will be mailed"; once confirmed it names the address instead. `veyq-admin release` prints the same
+  as `noticesMailedTo` (the address, or null). Changing the address or the settings asks for confirmation again.
 - **A4 — The config-secret key is absent or changed.** The instance mail password cannot be unsealed; no mail is
   sent and the panel says why, as the tenant mail panel does ([ADR 0050](../../../decisions/0050-operator-config-secret-encryption.md)).
 - **A5 — A tenant owner.** Sees nothing of this; instance mail never sends a tenant's mail, and a tenant's settings

@@ -18,6 +18,7 @@ Not a guard (no `validate_` prefix): it asserts nothing and is imported by the s
 from __future__ import annotations
 
 import pathlib
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -33,6 +34,11 @@ SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
 # Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor
 # that may be of either layout (ADR 0106 decision 7). Never read for this checkout - only for another tree.
 LEGACY_SURFACES = {BACKEND: "backend", WEB: "web", ADMIN_WEB: "admin-web", CRYPTO: "packages/crypto"}
+# The two operator tools a release ships as assets, with their selftests (ADR 0106 decision 8). Not a surface: no
+# reader takes them from a predecessor's tree, so they need no legacy path.
+TOOLS_DIR = SRC / "tools"
+VEYQCTL = TOOLS_DIR / "veyqctl.py"
+INSTANCE_BACKUP = TOOLS_DIR / "instance_backup.py"
 
 INFRA_DIR = ROOT / "infra"
 # What Docker builds and Compose runs. The dev file declares its project name (`infra`), so the directory's name is
@@ -71,6 +77,13 @@ def rel(path: pathlib.Path) -> str:
 
 
 CHART_PATH = rel(CHART_DIR)
+
+
+def tools_importable() -> None:
+    """Put `TOOLS_DIR` on `sys.path`, so a script here can `import instance_backup` or `import veyqctl`: Python puts
+    only the running script's own directory there, and the tools live in another one."""
+    if str(TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(TOOLS_DIR))
 
 
 def surface_paths(surface: pathlib.Path) -> tuple[str, str]:

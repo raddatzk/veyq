@@ -124,7 +124,7 @@ messaging pattern this codebase does not have.
   - **In the backend, on a read-only port operation** — `BlobStore.list(startAfter, maxKeys)`, ListObjectsV2 with
     `start-after`, so the cursor is a key that survives a restart (a continuation token is opaque and may expire).
     Bounded per tick, resumable from that cursor, one pass every period. Chosen over the operator tool on
-    `scripts/instance_backup.py`'s rclone listing, which needs no port but runs only when someone runs it, cannot put a
+    `src/tools/instance_backup.py`'s rclone listing, which needs no port but runs only when someone runs it, cannot put a
     number in the console, and reads the database and the listing at two moments with nothing to bracket them but
     the operator's timing. The listing is unpartitionable (`storage_key` is a flat UUID, Decision 1), which is the
     price the bound per tick pays.
@@ -172,7 +172,7 @@ messaging pattern this codebase does not have.
     age and the date the first will go, and a **pause** stops the enqueueing while the counting goes on. A key any
     claim row names is never enqueued, even for an object past its `chunk_count`, because a reclaim row deletes
     `0 … n−1`.
-  - **The closest thing to a prototype is weaker than it sounds**: `scripts/instance_backup.py`'s `verify` counts
+  - **The closest thing to a prototype is weaker than it sounds**: `src/tools/instance_backup.py`'s `verify` counts
     orphaned objects and tolerates them, but it compares a capture's index of the bucket against
     `manifest["store"]["blobs"]`, **one** table and never a bucket, so its orphan count includes every pending
     reclaim and every in-flight upload by construction.

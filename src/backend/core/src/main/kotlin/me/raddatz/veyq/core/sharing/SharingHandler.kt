@@ -694,7 +694,7 @@ class SharingHandler(
             if (!store.admitsGuests(shareId)) return@createOrConflict CreateIdentityOutcome.NotFound
             val token = store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
                 ?: return@createOrConflict CreateIdentityOutcome.IdTaken
-            guestWriteRecords.record(seen, identityId, share.scopeId, GuestWriteObject.IDENTITY, identityId, GuestWriteRecords.NAME)
+            guestWriteRecords.record(seen, identityId, GuestWriteObject.IDENTITY, identityId, GuestWriteRecords.NAME)
             CreateIdentityOutcome.Created(identityId, token)
         }
     }

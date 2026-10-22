@@ -110,7 +110,7 @@ class ModerationRacesSliceTest {
             val second = challenge(email)
             QuarkusTransaction.requiringNew().run { blocks.unblock(mod.id, activeBlockOf(member)) }
             assertEquals(200, verify(email, second, kp), "round $round: control — the lift lets it sign in")
-            assertEquals(null, blocks.block(mod.id, email, null))
+            assertEquals(BlockOutcome.Blocked(null), blocks.block(mod.id, email, null))
             assertEquals(
                 0L,
                 QuarkusTransaction.requiringNew().call { SessionFamilyEntity.count("userId = ?1 and status = ?2", member, SessionFamilyEntity.ACTIVE) },

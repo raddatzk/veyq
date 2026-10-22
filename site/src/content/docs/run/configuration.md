@@ -61,8 +61,9 @@ those to it.
 ## Kubernetes: the chart's values
 
 Run `helm show values` for the chart and its comments. The chart generates no secret, and `values.schema.json`
-refuses an install that leaves a required value unset, naming it. Required: `domain`, `storeDomain`,
-`gateway.className`, every key under `secrets` (or `secrets.existingSecret`), `networkPolicy.ingressFrom` while
+refuses an install that leaves a required value unset, naming it. Required: `domain`, `gateway.className`, the
+database keys under `secrets` (or `secrets.existingSecret`), `storeDomain` and the two Garage keys under `secrets`
+when `garage.enabled` is `true`, `networkPolicy.ingressFrom` while
 network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `gateway.tls.secretName` in
 `shared` mode, `gateway.tls.acme.email` when the ACME issuer is on, and a backup choice: `backup.existingClaim`, or
 `backup.enabled: false`.
@@ -72,7 +73,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | Value | Default | Meaning |
 |---|---|---|
 | `domain` | — | The instance's domain, as `VEYQ_DOMAIN` above |
-| `storeDomain` | — | The bundled store's own host; browsers upload to and download from it |
+| `storeDomain` | — | The bundled store's own host; browsers upload to and download from it. Required, and read, only with `garage.enabled` |
 | `hsts.enabled` | `true` | HSTS on the instance and the admin surface |
 | `image.repository` | `ghcr.io/raddatzk/veyq` | The application image |
 | `image.tag` | the chart's `appVersion` | The release; set it when installing from a checkout |
@@ -127,11 +128,11 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 
 | Value | Default | Meaning |
 |---|---|---|
-| `secrets.existingSecret` | — | The name of a Secret of your own holding the four keys below; the chart then renders none |
+| `secrets.existingSecret` | — | The name of a Secret of your own holding the keys below (the two Garage keys only with `garage.enabled`); the chart then renders none |
 | `secrets.mariadbPassword` | — | The application's database password |
 | `secrets.mariadbRootPassword` | — | MariaDB's root password |
-| `secrets.garageRpcSecret` | — | Exactly 64 hex characters |
-| `secrets.garageAdminToken` | — | The bundled Garage's admin token; the application derives the store's access keys from it |
+| `secrets.garageRpcSecret` | — | Exactly 64 hex characters. Required only with `garage.enabled` |
+| `secrets.garageAdminToken` | — | The bundled Garage's admin token; the application derives the store's access keys from it. Required only with `garage.enabled` |
 
 ### Database and store
 
@@ -146,6 +147,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `mariadb.resources.requests.memory` | `256Mi` | |
 | `externalDatabase.jdbcUrl` | — | `jdbc:mariadb://…` of your own database; the password is still `secrets.mariadbPassword` |
 | `externalDatabase.username` | `veyq` | |
+| `garage.enabled` | `false` | `true` deploys the bundled Garage and offers it in the console. Off by default here, unlike on Compose: on a cluster it is one node on one claim, with no replication or versioning, and needs a host of its own. Off, set a store of your own after the install ([Storage and email](/veyq/run/storage-and-email/)) |
 | `garage.image` | `dxflrs/garage:v2.0.0@sha256:…` | Pinned by digest |
 | `garage.logFilter` | `garage=warn` | The store's `RUST_LOG`. At `info` it logs every request with the reader's address; raise it only to troubleshoot ([Operations](/veyq/run/operations/#logs)) |
 | `garage.persistence.storageClass` | — | |
@@ -183,10 +185,9 @@ The backup gate captures the database and an index of the store before a release
 |---|---|---|
 | The object store | **Server → Object store**, or `veyq-admin store set` | The bundled store, an S3-compatible store of your own, or a Garage of your own, with its endpoint, bucket, region and keys. It applies at once and is checked before a tenant can be created ([First-run setup](/veyq/run/first-run/#connect-the-object-store)) |
 | A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
-| The operating mode | first-run setup, then **Server → Operating mode**, or `veyq-admin mode set` | Private, or club, organisation or company: your own assessment, a preset over the switches it names, and whether the console warns about an empty contact or identification ([Moderation](/veyq/run/moderation/#the-operating-mode)) |
-| How long a guest's write is kept | **Server → Moderation**, or `veyq-admin guest-write-record set <days>` | N, 1 to 30 days, 7 by default: how long a link guest's IP address, source port and time are kept. Whether anything is kept is the switch *Record guests' writes*, whose default follows the operating mode ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)) |
+| How long a guest's write is kept | **Server → Moderation**, or `veyq-admin guest-write-record set <days>` | N, 1 to 30 days, 7 by default: how long a link guest's IP address, source port and time are kept. It is kept wherever a guest may write: switching off *Links to look and add* and *Drop boxes* keeps none ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)) |
 | How long a backup is kept | **Server → Moderation → Backups**, or `veyq-admin backup-retention set <days>` | B, 7 to 365 days, 30 by default: every capture veyq's tools wrote — `veyqctl`'s and the cluster gate's — is deleted once it is older, the newest too; the erasure ledger drops its lines at the same age ([Backup and restore](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)) |
-| Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public — and the private notification address, confirmed by a code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)) |
+| Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public, each optional and published as *not stated by this operator* while empty — and the private notification address, confirmed by a code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)) |
 
 A tenant's mail server, terms and per-link upload limit are its owner's, set in the app, not here.
 

@@ -325,7 +325,7 @@ class BundledStoreHint(
  * 3): veyq imports exactly this pair into the Garage it provisions, so the bundled case needs no credential of its
  * own in the environment and none sealed under the config-secret key — a lost key cannot take the bundled store's
  * media with it. HKDF-SHA256 (RFC 5869) over the token, one `info` per half, in Garage's key shapes: `GK` + 24 hex
- * for the id, 64 hex for the secret. `scripts/instance_backup.py` derives the same pair from the same token for the
+ * for the id, 64 hex for the secret. `src/tools/instance_backup.py` derives the same pair from the same token for the
  * bundled capture; `BundledStoreCredentialsTest` and its self-test pin one vector on both sides.
  */
 data class BundledStoreCredentials(val accessKey: String, val secretKey: String) {
@@ -398,9 +398,9 @@ class StoreSettings(
         is StoreResolution.Ready -> QuarkusTransaction.joiningExisting().call { store.checkPassed() }
     }
 
-    /** The bucket the tenant ingress routes for the store: the current store's, else the bundled one's, else the default. */
-    fun routeBucket(): String =
-        (current() as? StoreResolution.Ready)?.connection?.bucket ?: hint.connection?.bucket ?: DEFAULT_BUCKET
+    /** The bucket the same-origin blobs route serves (ADR 0013 §4) — [bundledRouteBucket] of the setting in use, read
+     *  by the Traefik sink at every render. */
+    fun bundledRouteBucket(): String? = bundledRouteBucket(current())
 
     /** Which stored secrets cannot be opened under the current key — the console's re-entry prompt. */
     fun unreadable(row: StoreSettingRow): List<StoreSecret> = buildList {
@@ -443,6 +443,14 @@ class StoreSettings(
     private fun open(value: SealedValue): String = seal.unseal(SealedSecret(value.ciphertext, value.nonce))
 
     companion object {
-        const val DEFAULT_BUCKET = "blobs"
+        /**
+         * The bundled store's bucket while it is the store in use and ready, else none (ADR 0064 § the bundled store is
+         * opt-in): only the bundled store sits behind this deployment's proxy, so only it has a same-origin route. A
+         * store of the operator's own has an origin of its own, and with no store, an unreadable one, or the bundled
+         * one chosen where the deployment passes no hint, a route would point at nothing — or serve an unused Garage's
+         * S3 API on every tenant domain. Pure, so `TraefikFileBlobsRouteTest` decides every resolution without a hint.
+         */
+        fun bundledRouteBucket(resolution: StoreResolution): String? =
+            (resolution as? StoreResolution.Ready)?.connection?.takeIf { it.bundled }?.bucket
     }
 }

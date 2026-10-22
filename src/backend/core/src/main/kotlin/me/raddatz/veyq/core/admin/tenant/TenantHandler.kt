@@ -25,6 +25,7 @@ import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.tenant.TenantIngressProjector
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
+import me.raddatz.veyq.core.moderation.statement.StatementMailing
 import me.raddatz.veyq.core.moderation.statement.StepStatementInput
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -72,7 +73,8 @@ sealed interface ChangeDomainOutcome {
 
 /** Result of suspending an ACTIVE tenant (ADR 0066). Availability only — no key, grant or content row moves. */
 sealed interface SuspendOutcome {
-    data object Done : SuspendOutcome
+    /** Taken offline; over content, whom its statement — mailed after the commit — reached (null without one). */
+    data class Done(val statement: StatementMailing? = null) : SuspendOutcome
     data object NotFound : SuspendOutcome, HttpFailure by Failures.tenantNotFound
     data object NotActive : SuspendOutcome, HttpFailure by httpFailure("tenant_not_active", FailureStatus.CONFLICT)
 
@@ -89,7 +91,8 @@ sealed interface ReactivateOutcome {
 
 /** Result of the Server Owner deleting an ACTIVE or SUSPENDED tenant (ADR 0101 decision 10). */
 sealed interface DeleteTenantOutcome {
-    data class Deleted(val dueAt: Instant) : DeleteTenantOutcome
+    /** Deleted; over content, whom its statement — mailed after the commit — reached (null without one). */
+    data class Deleted(val dueAt: Instant, val statement: StatementMailing? = null) : DeleteTenantOutcome
     data object NotFound : DeleteTenantOutcome, HttpFailure by Failures.tenantNotFound
     data object DomainMismatch : DeleteTenantOutcome, HttpFailure by httpFailure("tenant_domain_mismatch", FailureStatus.CONFLICT)
     data object NotDeletable : DeleteTenantOutcome, HttpFailure by httpFailure("tenant_not_deletable", FailureStatus.CONFLICT)
@@ -346,11 +349,12 @@ class TenantHandler(
             // A moderator's proposal to take this tenant offline is taken by the suspension itself (uc.admin.suspend-tenant A4);
             // one over content is recorded as a measure with its statement.
             moderationSteps.takenOffline(tenantId, serverOwnerId, statement, now)
-            SuspendOutcome.Done
+            SuspendOutcome.Done()
         }
         if (outcome is SuspendOutcome.Done) {
             reproject()
-            statement?.let { moderationSteps.mailStatement(it) }
+            // The suspension stands whatever the mail reached; the answer reports it (ADR 0093 § 7).
+            return SuspendOutcome.Done(statement?.let { moderationSteps.mailStatement(it) })
         }
         return outcome
     }
@@ -396,12 +400,11 @@ class TenantHandler(
             moderationSteps.deleted(tenantId, serverOwnerId, statement, now)
             DeleteTenantOutcome.Deleted(dueAt)
         }
-        if (outcome is DeleteTenantOutcome.Deleted) {
-            reproject()
-            deletionMail.tenantDeleted(tenantId, dueAt)
-            statement?.let { moderationSteps.mailStatement(it) }
-        }
-        return outcome
+        if (outcome !is DeleteTenantOutcome.Deleted) return outcome
+        reproject()
+        deletionMail.tenantDeleted(tenantId, dueAt)
+        // The deletion stands whatever the mail reached; the answer reports it (ADR 0093 § 7).
+        return outcome.copy(statement = statement?.let { moderationSteps.mailStatement(it) })
     }
 
     /** Stop a pending deletion (ADR 0101 decision 10): the tenant returns SUSPENDED and is reactivated as one is. */

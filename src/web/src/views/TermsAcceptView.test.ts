@@ -49,7 +49,6 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
       terms: { en: 'Be kind.', de: 'Sei nett.' },
       operatorSection: {
         revision: 2,
-        variant: 'REDUCED',
         text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz\nMeldungen prüft ein Mensch.' },
         record: { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse\nIn der Datenschutzerklärung.' },
       },
@@ -78,7 +77,7 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
     await accept.trigger('click')
     await flushPromises()
 
-    expect(acceptTenantTerms).toHaveBeenCalledWith('tenant-1', { revision: 3, operatorRevision: 2, variant: 'REDUCED' })
+    expect(acceptTenantTerms).toHaveBeenCalledWith('tenant-1', { revision: 3, operatorRevision: 2 })
     expect(signOut).not.toHaveBeenCalled()
   })
 })
@@ -88,22 +87,21 @@ describe('TermsAcceptView — the operator section after the space’s terms (AD
     vi.clearAllMocks()
   })
 
-  function served(record: boolean) {
+  function served() {
     vi.mocked(getTenantTerms).mockResolvedValue({
       termsRevision: 3,
       accepted: false,
       terms: { en: 'Be kind.', de: 'Sei nett.' },
       operatorSection: {
         revision: 1,
-        variant: 'FULL',
         text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz' },
-        record: record ? { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse' } : null,
+        record: { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse' },
       },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
   }
 
   it('shows the space’s text first, then the section, and the record’s pointer at its anchor linking the notice', async () => {
-    served(true)
+    served()
     const w = await mountReady()
     const body = w.find('.terms-body').text()
     expect(body.indexOf('Be kind.')).toBeGreaterThanOrEqual(0)
@@ -113,10 +111,4 @@ describe('TermsAcceptView — the operator section after the space’s terms (AD
     expect(w.find('#guest-write-record a').attributes('href')).toBe('/privacy#guest-write-record')
   })
 
-  it('shows no record passage while the record is off (control: the section itself stays)', async () => {
-    served(false)
-    const w = await mountReady()
-    expect(w.find('#guest-write-record').exists()).toBe(false)
-    expect(w.find('[data-testid="operator-section"]').text()).toContain('On this instance')
-  })
 })

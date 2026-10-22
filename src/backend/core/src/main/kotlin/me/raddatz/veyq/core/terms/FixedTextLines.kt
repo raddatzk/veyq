@@ -37,9 +37,8 @@ sealed interface FixedValue {
  * ADR 0035 decision 6) and the privacy notice ([PrivacyNoticeRenderer], decision 8):
  *
  * - `{name}` is filled from the value of that name; a value is empty when null, blank, or a list with no item.
- * - A line naming an empty value is dropped where it is [SectionLine.optional] and wherever [reduced] (the private
- *   mode's variant: "an unset value is simply absent", owner Q26); otherwise the value renders as the visible gap ("not
- *   stated by this operator").
+ * - A line naming an empty value is dropped where it is [SectionLine.optional]; otherwise the value renders as the
+ *   visible gap ("not stated by this operator"). There is one form of each text (ADR 0093 § 14): no variant drops more.
  * - A list value stands alone on its line and becomes one `- item` bullet per item.
  * - A newline inside a typed value renders as ", ", so a value cannot start a markdown heading or list of its own.
  */
@@ -50,11 +49,11 @@ internal object FixedTextLines {
     fun names(line: String): List<String> = PLACEHOLDER.findAll(line).map { it.groupValues[1] }.toList()
 
     /** [line] rendered, as the markdown lines it becomes; null where it is dropped. */
-    fun render(line: String, optional: Boolean, reduced: Boolean, gap: String, value: (String) -> FixedValue): List<String>? {
+    fun render(line: String, optional: Boolean, gap: String, value: (String) -> FixedValue): List<String>? {
         val names = names(line)
         val values = names.associateWith { value(it) }
         val missing = values.values.any { it.isEmpty() }
-        if (missing && (optional || reduced)) return null
+        if (missing && optional) return null
         val items = values.values.filterIsInstance<FixedValue.Items>()
         if (items.isNotEmpty()) {
             require(names.size == 1 && line.trim() == "{${names[0]}}") { "a list value stands alone on its line: $line" }

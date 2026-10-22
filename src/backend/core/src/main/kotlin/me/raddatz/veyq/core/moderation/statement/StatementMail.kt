@@ -1,9 +1,9 @@
 package me.raddatz.veyq.core.moderation.statement
 
 import me.raddatz.veyq.core.admin.instance.InstanceNoticeMailer
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsHandler
 import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.generated.model.StatementDelivery
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.moderation.ModerationEvent
 import me.raddatz.veyq.core.moderation.ModerationEventEntity
@@ -29,18 +29,42 @@ import java.time.format.DateTimeFormatter
 data class ReporterNotice(val reportId: String, val address: String)
 
 /**
+ * What one send of a statement reached: each recipient tried, at their address, and whether its mail went out — or null
+ * [tried] when the recipients could not be read at all. Request-scoped, never stored: the recipient row's `mailedAt` stays
+ * the only stored trace (ADR 0093 § 7). [delivery] is what a Server Owner's step answers.
+ */
+data class StatementMailing(val tried: List<Tried>?) {
+    data class Tried(val address: String, val sent: Boolean)
+
+    /** How many went out. */
+    val sent: Int get() = tried?.count { it.sent } ?: 0
+
+    /**
+     * The answer's `statementDelivery`: nobody to tell when nobody was tried, reached when every mail went out, else the
+     * addresses whose mail did not; unknown when the recipients could not be read. The client never derives a state.
+     */
+    fun delivery(): StatementDelivery = when {
+        tried == null -> StatementDelivery(StatementDelivery.Outcome.UNKNOWN, emptyList())
+        tried.isEmpty() -> StatementDelivery(StatementDelivery.Outcome.NOBODY_TO_TELL, emptyList())
+        tried.all { it.sent } -> StatementDelivery(StatementDelivery.Outcome.REACHED, emptyList())
+        else -> StatementDelivery(StatementDelivery.Outcome.NOT_ALL_REACHED, tried.filterNot { it.sent }.map { it.address })
+    }
+}
+
+/**
  * The mails of the statement of reasons and the objection (ADR 0093 §§ 2, 7; ADR 0097 decision 3 as owner decision Q11
  * widened it; uc.moderation.object-to-a-measure), all through the instance mail and **after** the decision committed —
  * a mail that fails costs the decision nothing:
- *  - [statementSent]: each member a statement names, at their account address — the template's clear parts in the
- *    current form ([StatementTemplate.mailBody]), **never the facts** of a moderator's measure: their passage says they
+ *  - [statementSent]: each member a statement names, at their account address — the template's clear parts
+ *    ([StatementTemplate.mailBody]), **never the facts** of a moderator's measure: their passage says they
  *    are in veyq (ADR 0049). A recipient whose mail did not go out is retried by the hourly cleanup ([retryDue]) for
  *    seven days. **A Server Owner's own step** (a sign-in block, a tenant taken offline) is mailed with its facts, the
  *    Server Owner's own words handed in with the step and held only in memory (owner decision Q24 of
  *    cr-statement-legal-gaps; ADR 0049 decision 2: a consented disclosure by their author) — once: the server keeps no
- *    clear copy to retry from, so [retryDue] leaves those statements alone.
+ *    clear copy to retry from, so [retryDue] leaves those statements alone, and [stepStatementSent] answers whom the one
+ *    send reached, for the step's answer to report (ADR 0093 § 7: "So the step reports what the mail reached").
  *  - [tellReporters]: a reporter who left a contact, the dismissal or the decision and their redress (DSA Art. 16(5),
- *    [StatementTemplate.renderRedress] in the current form) — once per report (a `DECISION_SENT` event is the record),
+ *    [StatementTemplate.renderRedress]) — once per report (a `DECISION_SENT` event is the record),
  *    from the address the deciding moderator's browser opened and sent, mailed from memory and stored nowhere, bounded
  *    per address as a receipt is ([ReportRateLimiter.allowReceipt]).
  *  - [objectionReceived]: every confirmed moderator and the contact's notification address, that an objection arrived.
@@ -53,7 +77,6 @@ class StatementMail(
     private val notices: ModeratorNotices,
     private val limiter: ReportRateLimiter,
     private val moderationLog: ModerationLog,
-    private val operatingMode: OperatingModeHandler,
     private val operator: OperatorDetailsHandler,
 ) {
     private val log = Logger.getLogger(StatementMail::class.java)
@@ -63,21 +86,37 @@ class StatementMail(
 
     private data class Outgoing(val recipientRowId: String, val address: String, val body: String)
 
+    /** Mail every member [statementId] names whose mail has not gone out — a moderator's measure's, retried by [retryDue]. */
+    fun statementSent(statementId: String): StatementMailing = send(statementId, null, serverOwnerStep = false)
+
     /**
-     * Mail every member [statementId] names whose mail has not gone out. Answers how many went out now. [stepFacts] are a
-     * Server Owner's step's facts, which only that step's own call hands in.
+     * Mail a Server Owner's step's statement with its [stepFacts], which only that step's own call hands in — once: what
+     * did not go out now is not retried, so the answer is what the step reports.
      */
-    fun statementSent(statementId: String, stepFacts: String? = null): Int = runCatching {
-        val outgoing = QuarkusTransaction.requiringNew().call { outgoingOf(statementId, stepFacts) }
-        outgoing.count { o ->
-            val sent = mailer.mailTo(o.address, StatementTemplate.MAIL_SUBJECT.en + " / " + StatementTemplate.MAIL_SUBJECT.de, o.body, "a statement of reasons") ==
-                DeliveryResult.SENT
-            if (sent) QuarkusTransaction.requiringNew().run { StatementRecipientEntity.findById(o.recipientRowId)?.mailedAt = Instant.now() }
-            sent
+    fun stepStatementSent(statementId: String, stepFacts: String?): StatementMailing = send(statementId, stepFacts, serverOwnerStep = true)
+
+    private fun send(statementId: String, stepFacts: String?, serverOwnerStep: Boolean): StatementMailing {
+        val outgoing = runCatching { QuarkusTransaction.requiringNew().call { outgoingOf(statementId, stepFacts) } }.getOrElse {
+            log.warn(
+                if (serverOwnerStep) "a Server Owner's statement of reasons could not be mailed; it is not retried, and the step's answer says so"
+                else "a statement of reasons could not be mailed; the hourly cleanup retries it",
+            )
+            return StatementMailing(null)
         }
-    }.getOrElse {
-        log.warn("a statement of reasons could not be mailed; the hourly cleanup retries it")
-        0
+        // One recipient at a time: a mail that failed, or a mark that could not be written, costs the others nothing.
+        return StatementMailing(
+            outgoing.map { o ->
+                val sent = runCatching {
+                    mailer.mailTo(o.address, StatementTemplate.MAIL_SUBJECT.en + " / " + StatementTemplate.MAIL_SUBJECT.de, o.body, "a statement of reasons") ==
+                        DeliveryResult.SENT
+                }.getOrDefault(false)
+                if (sent) {
+                    runCatching { QuarkusTransaction.requiringNew().run { StatementRecipientEntity.findById(o.recipientRowId)?.mailedAt = Instant.now() } }
+                        .onFailure { log.warn("a statement of reasons went out but its recipient could not be marked as mailed") }
+                }
+                StatementMailing.Tried(o.address, sent)
+            },
+        )
     }
 
     /** The cleanup's retry: every statement sent in the last seven days that still owes a member its mail. */
@@ -92,7 +131,7 @@ class StatementMail(
                 "statementId in ?1 and recipientKind = ?2 and mailedAt is null", recent, RecipientKind.ACCOUNT.name,
             ).map { it.statementId }.distinct()
         }
-        return due.sumOf { statementSent(it) }
+        return due.sumOf { statementSent(it).sent }
     }
 
     private fun outgoingOf(statementId: String, stepFacts: String?): List<Outgoing> {
@@ -108,7 +147,6 @@ class StatementMail(
             else -> statement.caseId?.let { ModerationCaseEntity.findById(it) }
                 ?.let { ScopeEntity.findById(it.scopeId) }?.tenantId?.let { TenantEntity.findById(it) }?.domain ?: return emptyList()
         }
-        val form = formNow(operatingMode)
         val contact = contactOf(operator)
         return StatementRecipientEntity.list(
             "statementId = ?1 and recipientKind = ?2 and mailedAt is null", statementId, RecipientKind.ACCOUNT.name,
@@ -126,7 +164,7 @@ class StatementMail(
                 channel = if (step) ObjectionChannel.BY_CONTACT else ObjectionChannel.IN_APP,
                 mailFacts = stepFacts.takeIf { step },
             )
-            Outgoing(r.id, address, StatementTemplate.mailBody(form, fields, domain))
+            Outgoing(r.id, address, StatementTemplate.mailBody(fields, domain))
         }
     }
 
@@ -142,7 +180,7 @@ class StatementMail(
                     if (ofCase && !told) ReportReceived.reference(notice.reportId) else null
                 } ?: return@runCatching
                 if (!limiter.allowReceipt(notice.address)) return@runCatching
-                val body = decisionBody(reference, decision, formNow(operatingMode), contactOf(operator))
+                val body = decisionBody(reference, decision, contactOf(operator))
                 if (mailer.mailTo(notice.address, DECISION_SUBJECT, body, "a report's decision") == DeliveryResult.SENT) {
                     QuarkusTransaction.requiringNew().run {
                         moderationLog.appendCase(
@@ -175,10 +213,6 @@ class StatementMail(
         private val RETRY_WINDOW: Duration = Duration.ofDays(7)
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC)
 
-        /** The form a statement is rendered in now: the operating mode, read when it is rendered (ADR 0093 § 14). */
-        fun formNow(mode: OperatingModeHandler): StatementForm =
-            if (mode.read().mode == me.raddatz.veyq.core.admin.operator.OperatingMode.PRIVATE) StatementForm.REDUCED else StatementForm.FULL
-
         /** The address statements name: the statement address, else the contact's (ADR 0093 § 11); null where none is set. */
         fun contactOf(operator: OperatorDetailsHandler): String? = operator.publicValues().let { it.statementEmail ?: it.contactEmail }
 
@@ -187,10 +221,10 @@ class StatementMail(
         const val ANSWER_SUBJECT = "veyq: your objection was decided / über deinen Widerspruch wurde entschieden"
 
         /**
-         * A reporter's decision: their reference, the outcome and their redress in [form] (DSA Art. 16(5); the template's
+         * A reporter's decision: their reference, the outcome and their redress (DSA Art. 16(5); the template's
          * `reporterDecision`) — nothing of the case (ADR 0049).
          */
-        fun decisionBody(reference: String, decision: Decision, form: StatementForm, contact: String?): String {
+        fun decisionBody(reference: String, decision: Decision, contact: String?): String {
             val en = if (decision == Decision.DISMISSED) {
                 "The moderators of this veyq instance looked at your report and took no measure."
             } else {
@@ -201,8 +235,8 @@ class StatementMail(
             } else {
                 "Die Moderation dieser veyq-Instanz hat deine Meldung geprüft und eine Maßnahme ergriffen."
             }
-            val redressEn = StatementTemplate.renderRedress(StatementLang.EN, form, contact)
-            val redressDe = StatementTemplate.renderRedress(StatementLang.DE, form, contact)
+            val redressEn = StatementTemplate.renderRedress(StatementLang.EN, contact)
+            val redressDe = StatementTemplate.renderRedress(StatementLang.DE, contact)
             return """
                 |$en
                 |$redressEn

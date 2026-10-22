@@ -1,7 +1,6 @@
 // The instance privacy notice in a browser (cr-instance-privacy-notice phase 3's browser pass; ADR 0035 decision 8,
-// uc.admin.privacy-notice), on the run's club, organisation or company instance — so the full notice, with the
-// guest-write record on (its preset) and the values first-run setup published: the provider, the authority and one
-// recipient whose country was left open.
+// uc.admin.privacy-notice), in its one form on every instance (ADR 0093 § 14), with the guest-write record's passage
+// and the values first-run setup published: the provider, the authority and one recipient whose country was left open.
 //
 //   1. Anyone, without an account, opens **Privacy** from the sign-in page's footer and reads the notice — the draft
 //      banner first, the controller and the recipient the Server Owner named, the record's passage with N, each right
@@ -11,7 +10,7 @@
 //      write, its session line shows its guest id, which copies — what it names in an objection (A3).
 //
 // The invite acceptance's link is first-run setup's (`first-run.setup.ts`), where the one invite of the run is opened;
-// the reduced notice in the private mode is `terms-operator-section.spec.ts`'s, which switches the mode anyway.
+// the German notice with its gap is `terms-operator-section.spec.ts`'s.
 import { test, expect, type BrowserContext, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
@@ -59,7 +58,7 @@ test(
     tag: [
       '@uc.admin.privacy-notice:public-without-signing-in',
       '@uc.admin.privacy-notice:fixed-text-with-instance-values',
-      '@uc.admin.privacy-notice:a-missing-value-follows-the-mode',
+      '@uc.admin.privacy-notice:a-missing-value-shows-as-not-stated',
     ],
   },
   async () => {
@@ -71,10 +70,10 @@ test(
     const body = notice.getByTestId('privacy-notice')
     await expect(body.getByText('Draft: this privacy notice has not yet been reviewed by a lawyer.')).toBeVisible({ timeout: 60_000 })
     await expect(notice.locator('#controller')).toContainText('E2E Operator e. V.')
-    // The recipient first-run named, its open country a visible gap in the full notice.
+    // The recipient first-run named, its open country a visible gap.
     await expect(notice.locator('#recipients')).toContainText('E2E Hosting GmbH: hosts the server (not stated by this operator)')
     await expect(notice.locator('#rights')).toContainText('E2E Datenschutzaufsicht')
-    // The record is on (the organisation preset), with the N the instance holds now.
+    // The record's passage, on every instance, with the N the instance holds now.
     await expect(notice.locator('#guest-write-record')).toContainText('Each record is deleted 7 days after the write.')
     await expect(notice.locator('aside#guest-write-record-objection')).toContainText('give your guest id')
     await expect(notice.locator('aside#right-to-object')).toContainText('Art. 21 GDPR')

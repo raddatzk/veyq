@@ -485,12 +485,12 @@ class TenantStore(
         return TenantTermsRow(tenant.termsRevision, tenant.termsMarkdownByLocale)
     }
 
-    /** Whether [userId]'s history for [tenantId] holds a row for the triple — the member gate's answer (ADR 0035
-     *  decision 6): the space's [revision], the operator section's [operatorRevision] and its [variant]. */
-    fun hasAccepted(userId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: String): Boolean =
+    /** Whether [userId]'s history for [tenantId] holds a row for the pair — the member gate's answer (ADR 0035
+     *  decision 6): the space's [revision] and the operator section's [operatorRevision]. */
+    fun hasAccepted(userId: String, tenantId: String, revision: Int, operatorRevision: Int): Boolean =
         TenantTermsAcceptanceEntity.count(
-            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3 and operatorRevision = ?4 and variant = ?5",
-            userId, tenantId, revision, operatorRevision, variant,
+            "userId = ?1 and tenantId = ?2 and acceptedRevision = ?3 and operatorRevision = ?4",
+            userId, tenantId, revision, operatorRevision,
         ) > 0
 
     /** The tenant's current terms **without** a caller — revision + serialized markdown, and **no** acceptance
@@ -513,20 +513,19 @@ class TenantStore(
         return tenant.termsRevision
     }
 
-    /** Record [userId]'s acceptance of the triple for [tenantId], stamped with the server's own time — one row per
-     *  triple (keyed by the (user, tenant, revision, operator revision, variant) UNIQUE), so an older triple's row and
-     *  time stay as evidence (ADR 0035 §4). Written once per triple: re-accepting one already recorded changes nothing
-     *  — the first time stands. */
+    /** Record [userId]'s acceptance of the pair for [tenantId], stamped with the server's own time — one row per
+     *  pair (keyed by the (user, tenant, revision, operator revision) UNIQUE), so an older pair's row and time stay as
+     *  evidence (ADR 0035 §4). Written once per pair: re-accepting one already recorded changes nothing — the first
+     *  time stands. */
     @Transactional
-    fun recordAcceptance(userId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: String) {
-        if (hasAccepted(userId, tenantId, revision, operatorRevision, variant)) return
+    fun recordAcceptance(userId: String, tenantId: String, revision: Int, operatorRevision: Int) {
+        if (hasAccepted(userId, tenantId, revision, operatorRevision)) return
         TenantTermsAcceptanceEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
             this.tenantId = tenantId
             acceptedRevision = revision
             this.operatorRevision = operatorRevision
-            this.variant = variant
             acceptedAt = Instant.now()
         }.persist()
     }

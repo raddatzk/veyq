@@ -1,10 +1,14 @@
 package me.raddatz.veyq.core.blobstore
 
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig.SigningMode
 import me.raddatz.veyq.core.config.VeyqConfig.StoreType
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
 import me.raddatz.veyq.core.crypto.ConfigSecretSeal
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.test.junit.QuarkusMock
+import jakarta.enterprise.inject.Vetoed
 import java.time.Instant
 
 /**
@@ -17,8 +21,21 @@ import java.time.Instant
  */
 object StoreSettingFixtures {
 
-    /** The bundled store chosen — a reference to the deployment's hint, which a test profile supplies. */
+    /** The bundled store chosen — a reference to the deployment's hint. `%test` passes none, so on its own this
+     *  resolves to `Unavailable(hintMissing)`; [useBundled] supplies one. */
     fun chooseBundled() = set(StoreSettingRow(true, null, null, null, null, null, null, null, null, null))
+
+    /**
+     * The bundled store chosen AND offered: [ReadyBundledHint] installed for the calling test method (`QuarkusMock`,
+     * so `:core`'s test JVM boots no further profile), then [chooseBundled] — whose invalidate makes the next read
+     * resolve to `Ready` with [bucket]. Only inside a `@QuarkusTest` method; the mock ends with it, the row does not,
+     * so the caller still [clear]s in its `finally`.
+     */
+    fun useBundled(bucket: String = "blobs") {
+        val config = Arc.container().instance(VeyqConfig::class.java).get()
+        QuarkusMock.installMockForType(ReadyBundledHint(config, bucket), BundledStoreHint::class.java)
+        chooseBundled()
+    }
 
     /** An S3-compatible store of the operator's own. */
     fun chooseS3(
@@ -60,4 +77,27 @@ object StoreSettingFixtures {
 
     private fun store(): StoreSettingStore = Arc.container().instance(StoreSettingStore::class.java).get()
     private fun settings(): StoreSettings = Arc.container().instance(StoreSettings::class.java).get()
+}
+
+/**
+ * A deployment that passes a complete bundled-store hint, with [bucket] as its `veyq.bundled-store.bucket`. Every
+ * value is inert: nothing in a test that uses it reaches the store — it exists so the setting in use can resolve to
+ * the bundled store under `%test`, which passes no hint ([StoreSettingFixtures.useBundled]). `@Vetoed`, because the
+ * scope it inherits would otherwise make it a second candidate for every `BundledStoreHint` injection point.
+ */
+@Vetoed
+class ReadyBundledHint(config: VeyqConfig, bucket: String) : BundledStoreHint(config) {
+    override val connection: StoreConnection? = StoreConnection(
+        bundled = true,
+        type = StoreType.GARAGE,
+        endpoint = "http://garage.invalid:3900",
+        publicEndpoint = null,
+        signingMode = SigningMode.INTERNAL_ENDPOINT,
+        bucket = bucket,
+        region = "garage",
+        accessKey = "GK000000000000000000000000",
+        secretKey = "inert",
+        garageAdminEndpoint = "http://garage.invalid:3903",
+        garageAdminToken = "inert",
+    )
 }

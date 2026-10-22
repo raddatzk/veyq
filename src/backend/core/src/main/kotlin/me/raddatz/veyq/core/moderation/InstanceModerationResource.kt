@@ -8,10 +8,12 @@ import me.raddatz.veyq.core.generated.model.InstanceModeration
 import me.raddatz.veyq.core.generated.model.InstanceModerationOwner
 import me.raddatz.veyq.core.generated.model.InstanceModerator
 import me.raddatz.veyq.core.generated.model.MintModerationEpochRequest
+import me.raddatz.veyq.core.generated.model.SignInBlockResult
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
 import me.raddatz.veyq.core.generated.model.AuthorityOrderRequest
+import me.raddatz.veyq.core.moderation.cases.BlockOutcome
 import me.raddatz.veyq.core.moderation.cases.SignInBlocks
 import me.raddatz.veyq.core.moderation.order.AuthorityOrderHandler
 import me.raddatz.veyq.core.moderation.order.ordered
@@ -61,7 +63,11 @@ class InstanceModerationResource(
     override fun declineModerationProposal(proposalId: UUID): Response = stepped(steps.decline(caller(), proposalId.toString()))
 
     override fun blockAccountSignIn(blockAccountSignInRequest: BlockAccountSignInRequest): Response = with(blockAccountSignInRequest) {
-        stepped(steps.block(caller(), address, caseId?.toString(), overContent = overContent ?: false, statement = statement?.toStepInput()))
+        when (val o = steps.block(caller(), address, caseId?.toString(), overContent = overContent ?: false, statement = statement?.toStepInput())) {
+            // The steps as they now stand, and over content whom the statement reached — the block stands either way.
+            is BlockOutcome.Blocked -> Response.ok(SignInBlockResult(steps.steps(), o.statement?.delivery())).build()
+            is BlockOutcome.Refused -> httpError(o)
+        }
     }
 
     override fun unblockAccountSignIn(blockId: UUID): Response = stepped(steps.unblock(caller(), blockId.toString()))

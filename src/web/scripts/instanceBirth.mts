@@ -47,8 +47,6 @@ export async function birthServerOwner(email: string, password: string, setup: S
       suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
       authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
       moderationEpoch: moderationEpochOne(m.identityPublicKey),
-      // A seeded instance runs as an unchosen one would (ADR 0093 § 14): club, organisation or company.
-      operatingMode: 'ORGANISATION',
     },
   }))
   return built

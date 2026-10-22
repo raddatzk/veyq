@@ -1,7 +1,5 @@
 package me.raddatz.veyq.core.moderation.guestwrite
 
-import me.raddatz.veyq.core.admin.operator.OperatingMode
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.config.VeyqConfig
@@ -14,11 +12,10 @@ import me.raddatz.veyq.core.moderation.hold.HoldTarget
 import me.raddatz.veyq.core.moderation.hold.HoldTrigger
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.node.NodeEntity
-import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
-import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_GUEST_WRITE_RECORD
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
-import me.raddatz.veyq.core.platform.capabilities.StoredCapabilitySwitches
+import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.GuestTreeShare.Link
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -27,6 +24,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusMock
@@ -55,24 +53,22 @@ import org.junit.jupiter.api.Test
 
 /**
  * The guest-write record with core alone (ADR 0093 § 10, en.moderation.guest-write-record): which writes record, what a
- * row holds, the address of ADR 0094's resolver and never one the client chose, the switch and its default per operating
- * mode (ADR 0093 § 14), the two-limit purge, the hold's copy, the disclosure on the resolve and the retention setting.
+ * row holds, the address of ADR 0094's resolver and never one the client chose, that it has no switch and needs no mode
+ * (ADR 0093 § 14), the two-limit purge, the hold's copy, the disclosure on the resolve and the retention setting.
  *
  * The requests come from loopback with the default empty trust list, so the rightmost `X-Forwarded-For` entry is the
  * client (ADR 0094 decision 3) — the same setup as the rate-limit tests. The `header` port source is stated for one test
  * through [ClientPortSetting] (`QuarkusMock`) instead of a profile: `:core`'s test heap holds no further boot.
  *
  * The record table, the retention row, the switches and the operator row are shared H2 state: every test filters by its
- * own objects, and [restore] puts the retention, the switches and the operating mode back.
+ * own objects, and [restore] puts the retention, the switches and the operator row back.
  */
 @QuarkusTest
 class GuestWriteRecordCoreSliceTest {
 
     @Inject lateinit var records: GuestWriteRecords
     @Inject lateinit var holds: Holds
-    @Inject lateinit var modes: OperatingModeHandler
     @Inject lateinit var config: VeyqConfig
-    @Inject lateinit var switches: StoredCapabilitySwitches
     @Inject lateinit var em: EntityManager
 
     private data class Tree(val userId: String, val scopeId: String, val root: String, val a: String, val link: Link)
@@ -95,7 +91,7 @@ class GuestWriteRecordCoreSliceTest {
             OperatorDetailsEntity.deleteAll()
         }
         CapabilitySwitchFixtures.clear()
-        modes.afterCommit()
+        TenantCapabilitySwitchFixtures.clear()
     }
 
     // --- the address: ADR 0094's resolver, never the client's choice (ADR 0094 § For the moderation CR) ----------------
@@ -206,25 +202,22 @@ class GuestWriteRecordCoreSliceTest {
     // --- the switch, the purge and the hold -------------------------------------------------------------------------
 
     @Test
-    fun switchedOffNothingIsRecordedAndThePurgeEmptiesTheTableWhileAHoldCopyStays() {
+    fun thePurgeDeletesALiveRowAtItsEndWhileAHoldCopyStays() {
         val t = tree()
         val held = guestCreate(t, xff = "203.0.113.14")
         val holdId = QuarkusTransaction.requiringNew().call {
             holds.take(null, HoldTarget.Subtree(t.scopeId, listOf(held)), HoldTrigger.CASE_OPEN, Instant.now().plus(Duration.ofDays(1)))
         }
         try {
-            CapabilitySwitchFixtures.with(PUBLIC_SHARES_GUEST_WRITE_RECORD) {
-                val off = guestCreate(t, xff = "203.0.113.15")
-                assertEquals(0, seen(off).size, "switched off: nothing recorded")
-                records.purge(Instant.now())
-                assertEquals(0L, QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.count() }, "the purge deleted every live row")
-            }
+            records.purge(Instant.now())
+            assertEquals(1, seen(held).size, "control: within N, the purge keeps the live row")
+            records.purge(Instant.now().plus(Duration.ofDays(8)))
+            assertEquals(0, seen(held).size, "past its end, the purge deletes the live row")
             val copies = QuarkusTransaction.requiringNew().call {
                 HoldRowEntity.list("holdId = ?1 and sourceTable = ?2", holdId, "veyq_guest_write_record").map { it.payload }
             }
             assertEquals(1, copies.size, "the hold's copy of the held node's record stays")
             assertTrue(copies.single().contains("203.0.113.14"), "the copy is the row as stored")
-            assertEquals(1, seen(guestCreate(t, xff = "203.0.113.16")).size, "switched back on: recorded again")
         } finally {
             QuarkusTransaction.requiringNew().run {
                 HoldRowEntity.delete("holdId", holdId); HoldPinEntity.delete("holdId", holdId); HoldEntity.deleteById(holdId)
@@ -256,14 +249,19 @@ class GuestWriteRecordCoreSliceTest {
         }
     }
 
-    /** The register's AND (ADR 0088 decision 2): with public links off, the record is off too — nothing new is kept. */
+    /**
+     * The record has no switch of its own (ADR 0093 § 10): where guest writes are switched off, a guest cannot write, so
+     * nothing is recorded — the register's AND reaches the record through the write itself (ADR 0088 decision 2).
+     */
     @Test
-    fun theParentOffSwitchesTheRecordOff() {
+    fun whereGuestWritesAreOffNothingIsWrittenAndNothingRecorded() {
         val t = tree()
-        assertTrue(records.disclosedDays(t.scopeId, ShareEntity.READ_WRITE) != null, "control: on")
-        CapabilitySwitchFixtures.with(PUBLIC_SHARES) {
-            assertNull(records.disclosedDays(t.scopeId, ShareEntity.READ_WRITE))
+        CapabilitySwitchFixtures.with(PUBLIC_SHARES_CONTRIBUTE) {
+            val before = QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.count() }
+            guestCreateRefused(t, xff = "203.0.113.20")
+            assertEquals(before, QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.count() }, "a refused write records nothing")
         }
+        assertEquals(1, seen(guestCreate(t, xff = "203.0.113.21")).size, "control: switched back on, the same write records one")
     }
 
     @Test
@@ -286,64 +284,76 @@ class GuestWriteRecordCoreSliceTest {
         assertEquals(1, seen(newer).size, "control: younger than the new N, it stays")
     }
 
-    // --- the default per operating mode (ADR 0093 § 14, ADR 0088 decision 14) ----------------------------------------
+    // --- no operating mode, no switch (ADR 0093 §§ 10, 14; cr-operating-mode-retires decision 6) -----------------------
 
+    /**
+     * An instance set up with no mode and no operator value (`restore` leaves none): every fixed text renders whole, an
+     * empty value as its gap, the record's pointer and the notice's record passages are there, and a guest write is
+     * recorded. Positive control on the same predicate: a value set replaces its gap. Bites (cr-operating-mode-retires):
+     * the capability check put back into [GuestWriteRecords.record] turns "recorded" red; a `switch` key put back on the
+     * notice's record passages turns "the record passage" red.
+     */
     @Test
-    fun privateSwitchesTheRecordOffAndOrganisationOn() {
+    fun anInstanceWithNoModeServesEveryTextWholeAndRecordsAGuestWrite() {
+        val section = given().`when`().get("/api/operator/terms").then().statusCode(200).extract().jsonPath()
+        val text = section.getString("text.en")
+        assertTrue(text.contains("### Authorities and contact"), "the whole section: the authorities")
+        assertTrue(text.contains("Only an authority can ask"), "…the deferral")
+        assertTrue(text.contains("Operator: not stated by this operator"), "an empty provider name shows as the gap")
+        assertTrue(section.getString("record.en").contains("privacy notice of this instance"), "the record's pointer")
+
+        val notice = given().`when`().get("/api/operator/privacy-notice").then().statusCode(200).extract().jsonPath()
+        val ids = notice.getList<String>("passages.id")
+        assertTrue("guest-write-record" in ids && "guest-write-record-objection" in ids, "the record passages: $ids")
+        assertTrue(notice.getString("passages.find { it.id == 'controller' }.text.en").contains("not stated by this operator"))
+
         val t = tree()
-        modes.set(OperatingMode.PRIVATE)
-        assertEquals(setOf(PUBLIC_SHARES_GUEST_WRITE_RECORD), instanceSwitches(), "the preset: off in private")
-        assertEquals(0, seen(guestCreate(t, xff = "203.0.113.20")).size, "private: a guest write records nothing")
-        modes.set(OperatingMode.ORGANISATION)
-        assertEquals(emptySet<String>(), instanceSwitches())
-        assertEquals(1, seen(guestCreate(t, xff = "203.0.113.21")).size, "organisation: the same write records one")
-        modes.set(OperatingMode.PRIVATE)
-        assertEquals(0, seen(guestCreate(t, xff = "203.0.113.22")).size, "back to private: off again")
-    }
+        assertEquals(listOf("203.0.113.40" to null), seen(guestCreate(t, xff = "203.0.113.40")), "a guest write is recorded")
 
-    @Test
-    fun aPrivateInstanceThatSwitchesTheRecordOnByHandRecords() {
-        val t = tree()
-        modes.set(OperatingMode.PRIVATE)
-        QuarkusTransaction.requiringNew().run { CapabilitySwitchEntity.deleteById(PUBLIC_SHARES_GUEST_WRITE_RECORD) }
-        switches.invalidate()
-        assertEquals(1, seen(guestCreate(t, xff = "203.0.113.23")).size, "the preset does not pin it: an ordinary switch afterwards")
-        assertEquals(7, records.disclosedDays(t.scopeId, ShareEntity.READ_WRITE), "and the page says so: the disclosure follows the switch, not the mode")
-    }
-
-    /** The migration applied the mode once (ADR 0088 decision 14): its statement, run against each operator row. */
-    @Test
-    fun theMigrationWritesTheOffRowOnAPrivateInstanceOnly() {
-        val statement = javaClass.classLoader.getResource("db/migration/V202610172106__core_guest_write_record.sql")!!.readText()
-            .let { sql -> sql.substring(sql.indexOf("INSERT INTO veyq_capability_switch")).substringBefore(";") }
-        fun applyWith(mode: String?): Set<String> {
-            QuarkusTransaction.requiringNew().run {
-                OperatorDetailsEntity.deleteAll(); CapabilitySwitchEntity.deleteAll()
-                if (mode != "none") em.createNativeQuery(
-                    "INSERT INTO veyq_operator_details (id, operating_mode, code_attempts, code_failed) VALUES (1, ?1, 0, FALSE)",
-                ).setParameter(1, mode).executeUpdate()
-                em.createNativeQuery(statement).executeUpdate()
-            }
-            return instanceSwitches()
+        // Control: a value set replaces its gap, in both texts.
+        QuarkusTransaction.requiringNew().run {
+            OperatorDetailsEntity().apply { providerName = "Beispiel e. V." }.persist()
         }
-        assertEquals(setOf(PUBLIC_SHARES_GUEST_WRITE_RECORD), applyWith("PRIVATE"), "a private instance gets the off row")
-        assertEquals(emptySet<String>(), applyWith("ORGANISATION"), "control: an organisation instance none")
-        assertEquals(emptySet<String>(), applyWith(null), "an instance with no mode chosen runs as organisation: none")
-        assertEquals(emptySet<String>(), applyWith("none"), "a fresh instance with no operator row: none")
+        assertTrue(given().`when`().get("/api/operator/terms").then().extract().jsonPath().getString("text.en").contains("Operator: Beispiel e. V."))
+        assertTrue(
+            given().`when`().get("/api/operator/privacy-notice").then().extract().jsonPath()
+                .getString("passages.find { it.id == 'controller' }.text.en").contains("Beispiel e. V."),
+        )
+    }
+
+    /** The migration that retired the switch deletes its rows, instance and tenant, and nothing else: its statements, run. */
+    @Test
+    fun theMigrationDeletesTheRetiredSwitchsRowsAndNoOther() {
+        val statements = javaClass.classLoader.getResource("db/migration/V202610211101__core_guest_write_record_has_no_switch.sql")!!
+            .readText().lines().filterNot { it.startsWith("--") }.joinToString("\n").split(";").map { it.trim() }.filter { it.isNotEmpty() }
+        val tenantId = seedTenant()
+        QuarkusTransaction.requiringNew().run {
+            for ((table, id) in listOf("veyq_capability_switch" to RETIRED, "veyq_capability_switch" to PUBLIC_SHARES_CONTRIBUTE)) {
+                em.createNativeQuery("INSERT INTO $table (id) VALUES (?1)").setParameter(1, id).executeUpdate()
+            }
+            for (id in listOf(RETIRED, PUBLIC_SHARES_CONTRIBUTE)) {
+                em.createNativeQuery("INSERT INTO veyq_tenant_capability_switch (id, tenant_id, capability_id) VALUES (?1, ?2, ?3)")
+                    .setParameter(1, UUID.randomUUID()).setParameter(2, UUID.fromString(tenantId)).setParameter(3, id).executeUpdate()
+            }
+            statements.forEach { em.createNativeQuery(it).executeUpdate() }
+        }
+        assertEquals(setOf(PUBLIC_SHARES_CONTRIBUTE), instanceSwitches(), "the retired id's instance row is gone; another stays")
+        val tenantRows = QuarkusTransaction.requiringNew().call {
+            em.createNativeQuery("SELECT capability_id FROM veyq_tenant_capability_switch WHERE tenant_id = ?1")
+                .setParameter(1, UUID.fromString(tenantId)).resultList.map { it.toString() }
+        }
+        assertEquals(listOf(PUBLIC_SHARES_CONTRIBUTE), tenantRows, "…and its tenant row; another tenant row stays")
     }
 
     // --- the disclosure the resolve serves (decision 6) ---------------------------------------------------------------
 
     @Test
-    fun theResolveServesNToAGuestThatWritesWhileTheSwitchIsOn() {
+    fun theResolveServesNToAGuestThatWrites() {
         val write = tree()
         val read = tree(ShareEntity.READ)
         records.setRetention(12)
         resolve(write.link).body("guestWriteRecordDays", equalTo(12))
         resolve(read.link).body("guestWriteRecordDays", nullValue()) // a READ guest is recorded nowhere, so told nothing
-        CapabilitySwitchFixtures.with(PUBLIC_SHARES_GUEST_WRITE_RECORD) {
-            resolve(write.link).body("guestWriteRecordDays", nullValue())
-        }
     }
 
     // --- the retention setting (ADR 0089, ADR 0092 § 2) --------------------------------------------------------------
@@ -423,6 +433,14 @@ class GuestWriteRecordCoreSliceTest {
         return id
     }
 
+    /** A guest's create that a switched-off link refuses; it is refused before any write. */
+    private fun guestCreateRefused(t: Tree, xff: String) {
+        given().contentType(ContentType.JSON).header("X-Contributor-Token", t.link.token).header("X-Forwarded-For", xff).body(
+            """{"nodeId":"${UUID.randomUUID()}","parentId":"${t.a}","kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
+                """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+        ).`when`().post("/api/shares/${t.link.shareId}/nodes").then().statusCode(org.hamcrest.Matchers.not(201))
+    }
+
     private fun resolve(link: Link) = given().`when`().get("/api/shares/${link.shareId}").then().statusCode(200)
 
     private fun rows(objectId: String): List<GuestWriteRecordEntity> =
@@ -466,5 +484,8 @@ class GuestWriteRecordCoreSliceTest {
     private companion object {
         const val PATH = "/api/instance/guest-write-record"
         const val CONTROL = "guest-write-record capture control"
+
+        /** The switch the record had until cr-operating-mode-retires, as its stored rows spelt it. */
+        const val RETIRED = "core.public-shares.guest-write-record"
     }
 }

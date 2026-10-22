@@ -187,7 +187,7 @@ class ShareNodesHandler(
                 ),
             ).also {
                 if (it is CreateShareNodeOutcome.Created) {
-                    guestWriteRecords.record(seen, gated.identityId, scopeId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
+                    guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
                 }
             }
         }
@@ -246,7 +246,7 @@ class ShareNodesHandler(
             )
             when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, PrincipalKey.Share(gated.identityId), SubtreeBoundary(root))) {
                 UpdateNodeOutcome.Updated -> UpdateShareNodeOutcome.Updated.also {
-                    guestWriteRecords.record(seen, gated.identityId, scopeId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
+                    guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
                 }
                 UpdateNodeOutcome.NotFound -> UpdateShareNodeOutcome.NodeNotFound
                 UpdateNodeOutcome.IllegalStructure -> UpdateShareNodeOutcome.IllegalStructure

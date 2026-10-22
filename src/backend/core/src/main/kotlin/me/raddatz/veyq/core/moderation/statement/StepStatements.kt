@@ -1,7 +1,5 @@
 package me.raddatz.veyq.core.moderation.statement
 
-import me.raddatz.veyq.core.admin.operator.OperatingMode
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
@@ -51,10 +49,10 @@ object StepStatementFailures {
  * Written **in the step's transaction**, as a moderator's measure writes its own: the statement row on the step's measure
  * row (its case, where it has one), a recipient row per account told — the blocked member, or every owner of the tenant
  * (owner decision Q25) — and the `STATEMENT_SENT` event. The facts are stored **only sealed** ([StepStatementInput.factsForLog]);
- * the clear copy goes to [StatementMail.statementSent] after the commit, by the step's own caller, and nowhere else.
+ * the clear copy goes to [StatementMail.stepStatementSent] after the commit, by the step's own caller, and nowhere else.
  */
 @ApplicationScoped
-class StepStatements(private val operatingMode: OperatingModeHandler, private val log: ModerationLog) {
+class StepStatements(private val log: ModerationLog) {
 
     /**
      * Whether the step may go ahead with [input], [overContent] being whether it is over content: null, or the refusal.
@@ -64,10 +62,9 @@ class StepStatements(private val operatingMode: OperatingModeHandler, private va
         if (input == null) return if (overContent) StepStatementFailures.required else null
         val facts = input.facts?.takeIf { it.isNotBlank() }
         if ((facts == null) != (input.factsForLog == null)) return StepStatementFailures.invalid
-        // The form follows the operating mode, read now (ADR 0093 § 14), as a moderator's measure's does.
-        val full = operatingMode.read().mode == OperatingMode.ORGANISATION
-        if (full && facts == null) return CaseFailures.factsRequired
-        if (full && input.provision.isNullOrBlank()) return CaseFailures.provisionRequired
+        // Every statement names the facts and the provision or clause (ADR 0093 § 7), as a moderator's measure's does.
+        if (facts == null) return CaseFailures.factsRequired
+        if (input.provision.isNullOrBlank()) return CaseFailures.provisionRequired
         input.factsForLog?.let { sealed ->
             val current = ModerationEpochEntity.find("order by epoch desc").firstResult()?.epoch ?: return ModerationFailures.moderationOff
             if (sealed.epoch != current) return CaseFailures.epochChanged

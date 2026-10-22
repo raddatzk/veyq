@@ -3,8 +3,6 @@ package me.raddatz.veyq.core.terms
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -32,8 +30,7 @@ class OperatorSectionRendererTest {
         retentionDays = 7,
     )
 
-    private fun render(variant: SectionVariant, values: SectionValues = all, recordOn: Boolean = true) =
-        OperatorSectionRenderer.render(text, variant, values, recordOn)
+    private fun render(values: SectionValues = all) = OperatorSectionRenderer.render(text, values)
 
     @Test
     fun theJarCarriesTheContractFileUnchanged() {
@@ -42,80 +39,60 @@ class OperatorSectionRendererTest {
 
     @Test
     fun everyPlaceholderTheFileNamesIsOneTheRendererKnows() {
-        for (variant in SectionVariant.entries) {
-            val r = render(variant)
-            for (t in listOfNotNull(r.text, r.record)) {
-                assertFalse(Regex("""\{\w+}""").containsMatchIn(t.en + t.de), "an unfilled placeholder in $variant: $t")
-            }
+        val r = render()
+        for (t in listOf(r.text, r.record)) {
+            assertFalse(Regex("""\{\w+}""").containsMatchIn(t.en + t.de), "an unfilled placeholder: $t")
         }
     }
 
     @Test
     fun anUnknownPlaceholderIsRefusedRatherThanPrinted() {
-        val broken = text.copy(passages = text.passages + SectionPassage("x", SectionPart.BOTH, listOf(SectionLine(SectionTexts("{nobody}", "{nobody}"), false))))
-        assertThrows<IllegalStateException> { OperatorSectionRenderer.render(broken, SectionVariant.FULL, all, false) }
+        val broken = text.copy(passages = text.passages + SectionPassage("x", false, listOf(SectionLine(SectionTexts("{nobody}", "{nobody}"), false))))
+        assertThrows<IllegalStateException> { OperatorSectionRenderer.render(broken, all) }
     }
 
     @Test
-    fun theFullOnlyPassagesAreExactlyWhatAdr0035ListsUnderDrops() {
-        // drops: the authorities bullet, the statement's deferral, and the statement's further content.
-        assertEquals(
-            setOf("authorities", "deferral", "statement-full"),
-            text.passages.filter { it.part == SectionPart.FULL }.map { it.id }.toSet(),
-        )
-    }
-
-    @Test
-    fun theReducedVariantLeavesOutTheAuthoritiesAndTheDeferralAndKeepsTheNoticePath() {
-        val full = render(SectionVariant.FULL).text
-        val reduced = render(SectionVariant.REDUCED).text
-        for ((t, lang) in listOf(full.en to "en", full.de to "de")) {
-            assertTrue(t.contains(if (lang == "en") "### Authorities and contact" else "### Behörden und Kontakt"), "control, $lang: full has the authorities")
-            assertTrue(t.contains(if (lang == "en") "Only an authority can ask" else "Nur eine Behörde kann verlangen"), "control, $lang: full has the deferral")
+    fun theSectionHasOneFormWithTheAuthoritiesTheDeferralAndTheNoticePath() {
+        // ADR 0093 § 14: no operating mode, so no reduced variant — every passage of the text renders on every instance.
+        val t = render().text
+        for ((text, lang) in listOf(t.en to "en", t.de to "de")) {
+            assertTrue(text.contains(if (lang == "en") "### Authorities and contact" else "### Behörden und Kontakt"), "$lang: the authorities")
+            assertTrue(text.contains(if (lang == "en") "Only an authority can ask" else "Nur eine Behörde kann verlangen"), "$lang: the deferral")
+            assertTrue(text.contains(if (lang == "en") "### Reporting content" else "### Inhalte melden"), "$lang: the notice path")
         }
-        assertFalse(reduced.en.contains("### Authorities and contact"))
-        assertFalse(reduced.en.contains("Only an authority can ask"))
-        assertFalse(reduced.de.contains("### Behörden und Kontakt"))
-        assertFalse(reduced.de.contains("Nur eine Behörde kann verlangen"))
-        assertTrue(reduced.en.contains("### Reporting content") && reduced.de.contains("### Inhalte melden"), "the notice path stays, whole")
-        assertTrue(reduced.en.contains("can object once per measure"), "the objection stays")
+        assertTrue(t.en.contains("The statement also names the facts found"), "the statement's further content")
+        // A file that brings a variant marker back is refused at load, so no second form can creep in unrendered.
+        val withPart = ObjectMapper().readTree(file).deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()
+        (withPart.get("passages").get(0) as com.fasterxml.jackson.databind.node.ObjectNode).put("part", "full")
+        assertThrows<IllegalArgumentException> { OperatorSectionText.parse(withPart) }
     }
 
     @Test
-    fun anEmptyValueIsAVisibleGapInTheFullVariantAndAbsentInTheReducedOne() {
+    fun anEmptyValueIsAVisibleGap() {
         val unset = all.copy(providerName = null, contactEmail = " ")
-        val full = render(SectionVariant.FULL, unset).text
-        assertTrue(full.en.contains("Operator: not stated by this operator"), full.en)
-        assertTrue(full.de.contains("Betrieben von: von der Betreiberseite nicht angegeben"), full.de)
-        assertTrue(full.en.contains("is not stated by this operator, in these languages"), "a blank value is a gap too")
-        val reduced = render(SectionVariant.REDUCED, unset).text
-        assertFalse(reduced.en.contains("Operator:"), "reduced: the line goes")
-        assertFalse(reduced.en.contains("not stated by this operator"), "reduced: no gap anywhere")
-        // control: a set value renders in both
-        assertTrue(render(SectionVariant.REDUCED).text.en.contains("Operator: Example e. V."))
+        val t = render(unset).text
+        assertTrue(t.en.contains("Operator: not stated by this operator"), t.en)
+        assertTrue(t.de.contains("Betrieben von: von der Betreiberseite nicht angegeben"), t.de)
+        assertTrue(t.en.contains("is not stated by this operator, in these languages"), "a blank value is a gap too")
+        // control: a set value replaces its gap
+        assertTrue(render().text.en.contains("Operator: Example e. V."))
+        assertFalse(render().text.en.contains("not stated by this operator"))
     }
 
     @Test
-    fun anOptionalLineGoesInBothVariantsWhereItsValueIsEmpty() {
-        val noRep = all.copy(providerRepresentative = null)
-        for (variant in SectionVariant.entries) {
-            assertFalse(render(variant, noRep).text.en.contains("Represented by"), "$variant")
-            assertTrue(render(variant).text.en.contains("Represented by: Erika Mustermann"), "control, $variant")
-        }
+    fun anOptionalLineGoesWhereItsValueIsEmpty() {
+        assertFalse(render(all.copy(providerRepresentative = null)).text.en.contains("Represented by"))
+        assertTrue(render().text.en.contains("Represented by: Erika Mustermann"), "control")
     }
 
     @Test
-    fun theRecordsPointerFollowsItsSwitchNotTheVariant() {
+    fun theRecordsPointerIsAlwaysThereAndSetApart() {
         // The record's Art. 13 information is the privacy notice's (Q27 of cr-instance-privacy-notice): the section keeps
-        // a pointer, there exactly while the record is on, in either variant, and never inside the text.
-        for (variant in SectionVariant.entries) {
-            val on = render(variant, recordOn = true)
-            assertNotNull(on.record, "$variant, on: the pointer")
-            assertTrue(on.record!!.en.contains("privacy notice of this instance") && on.record!!.de.contains("Datenschutzerklärung dieser Instanz"))
-            assertFalse(on.record!!.en.contains("Art. 6(1)(f)"), "the information itself is the notice's, not repeated here")
-            assertFalse(on.text.en.contains("privacy notice of this instance"), "set apart: never inside the text")
-            assertNull(render(variant, recordOn = false).record, "$variant, off")
-        }
+        // a pointer, always (the record is kept wherever a guest may write, ADR 0093 § 10), and never inside the text.
+        val r = render()
+        assertTrue(r.record.en.contains("privacy notice of this instance") && r.record.de.contains("Datenschutzerklärung dieser Instanz"))
+        assertFalse(r.record.en.contains("Art. 6(1)(f)"), "the information itself is the notice's, not repeated here")
+        assertFalse(r.text.en.contains("privacy notice of this instance"), "set apart: never inside the text")
     }
 
     @Test
@@ -125,21 +102,21 @@ class OperatorSectionRendererTest {
         val withSeparate = ObjectMapper().readTree(file).deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()
         (withSeparate.get("passages").get(0) as com.fasterxml.jackson.databind.node.ObjectNode).put("separate", true)
         assertThrows<IllegalArgumentException> { OperatorSectionText.parse(withSeparate) }
-        assertEquals(2, text.revision, "the move bumped the section's revision once (Q27)")
+        assertEquals(3, text.revision, "Q27's move bumped it to 2, the one form (cr-operating-mode-retires) to 3")
     }
 
     @Test
     fun aValuesNewlinesRenderInlineSoATypedAddressCannotStartAMarkdownBlock() {
-        val r = render(SectionVariant.FULL, all.copy(providerAddress = "Musterstraße 1\n# 12345 Musterstadt\n- x"))
+        val r = render(all.copy(providerAddress = "Musterstraße 1\n# 12345 Musterstadt\n- x"))
         assertTrue(r.text.en.contains("Address: Musterstraße 1, # 12345 Musterstadt, - x"), r.text.en)
     }
 
     @Test
     fun aDraftSaysSoFirstAndOnlyWhileItIsOne() {
         assertTrue(text.draft, "the section is a draft until a qualified legal review")
-        val draft = render(SectionVariant.FULL).text
+        val draft = render().text
         assertTrue(draft.en.startsWith("*Draft:") && draft.de.startsWith("*Entwurf:"))
-        val reviewed = OperatorSectionRenderer.render(text.copy(draft = false), SectionVariant.FULL, all, false).text
+        val reviewed = OperatorSectionRenderer.render(text.copy(draft = false), all).text
         assertTrue(reviewed.en.startsWith("## On this instance"), "control: no banner once reviewed")
     }
 }

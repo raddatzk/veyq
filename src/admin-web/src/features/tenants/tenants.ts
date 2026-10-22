@@ -6,10 +6,10 @@
 // depend on this typed surface, never on the generator runtime.
 import { tenantsApi } from '../../api/client'
 import { decodeHttpError } from '../../shared/httpError'
-import type { TenantCreated, TenantDeletion, TenantInviteState, TenantSummary } from '../../api/generated/tenants'
+import type { TenantCreated, TenantDeletion, TenantInviteState, TenantSummary, TenantSuspension } from '../../api/generated/tenants'
 import type { ServerOwnerStatementInput } from '../instance/stepStatement'
 
-export type { TenantSummary, TenantInviteState, TenantCreated, TenantDeletion } from '../../api/generated/tenants'
+export type { TenantSummary, TenantInviteState, TenantCreated, TenantDeletion, TenantSuspension } from '../../api/generated/tenants'
 
 /** Create a PENDING tenant and mint an owner invite. */
 export function createTenant(tenantName: string, domain: string, ownerEmail: string): Promise<TenantCreated> {
@@ -45,16 +45,16 @@ export function revokeTenant(tenantId: string): Promise<void> {
   return tenantsApi().revokeTenant({ tenantId })
 }
 
-/** Take an ACTIVE tenant offline (ADR 0066) — reversible, and nothing but its `status` changes: no key, grant,
- *  content row or session is touched. While suspended its members are refused on every operation acting on it,
- *  from any domain, and its own domain refuses every API call (uc.spaces.scope-access).
- *  409 `tenant_not_active` if it isn't ACTIVE. */
 /**
- * Take a tenant offline (ADR 0066). Over content it carries its `statement` (ADR 0093 § 7, `stepStatement.ts`), mailed
- * with the facts to the tenant's owners; a suspension for any other reason sends none. A moderator's open proposal makes
- * it over content: the server then refuses it without one (`400 statement_required`).
+ * Take an ACTIVE tenant offline (ADR 0066) — reversible, and nothing but its `status` changes: no key, grant, content
+ * row or session is touched. While suspended its members are refused on every operation acting on it, from any domain,
+ * and its own domain refuses every API call (uc.spaces.scope-access). 409 `tenant_not_active` if it isn't ACTIVE.
+ * Over content it carries its `statement` (ADR 0093 § 7, `stepStatement.ts`), mailed with the facts to the tenant's
+ * owners, and answers whom that mail reached (`statementDelivery`); a suspension for any other reason sends none and
+ * answers none. A moderator's open proposal makes it over content: the server then refuses it without one
+ * (`400 statement_required`).
  */
-export function suspendTenant(tenantId: string, statement?: ServerOwnerStatementInput | null): Promise<void> {
+export function suspendTenant(tenantId: string, statement?: ServerOwnerStatementInput | null): Promise<TenantSuspension> {
   return tenantsApi().suspendTenant({ tenantId, suspendTenantRequest: statement ? { overContent: true, statement } : undefined })
 }
 
@@ -68,7 +68,7 @@ export function reactivateTenant(tenantId: string): Promise<void> {
  * suspension takes it, its status becomes PENDING_DELETION, and one purge erases everything in it at `dueAt`. Members
  * keep their accounts and are mailed. `domain` is the domain as the confirmation typed it — the server compares it with
  * the tenant's, so a wrong id deletes nothing (409 `tenant_domain_mismatch`); 409 `tenant_not_deletable` for a PENDING
- * tenant (revoke it) or one pending deletion already.
+ * tenant (revoke it) or one pending deletion already. Over content, `statementDelivery` says whom the statement reached.
  */
 export function deleteTenant(tenantId: string, domain: string, statement?: ServerOwnerStatementInput | null): Promise<TenantDeletion> {
   // Over content the deletion carries its statement of reasons to the tenant's owners, as a suspension does (ADR 0093 § 7).

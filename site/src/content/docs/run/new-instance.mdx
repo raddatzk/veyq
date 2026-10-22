@@ -57,10 +57,30 @@ The instance lives in `/opt/veyq` (`--home` names another):
 | Path | What it is |
 |---|---|
 | `.env` | The instance's values, `0600` |
-| `compose.override.yml` | Optional, yours: a Compose overlay laid over the recipe on every command (a port, a network, a CA), kept across upgrades |
+| `compose.override.yml` | Optional, yours: a Compose overlay laid over the recipe on every command (a port, a network, a CA, or leaving the bundled store out, below), kept across upgrades |
 | `state.json` | The running release, the Compose project, the source |
 | `releases/<release>/` | That release's files, as published; an upgrade adds the next one beside it |
 | `backups/` | The captures `backup` and `upgrade` take: the database and the store's index each |
+
+**Leave the bundled store out** when the instance uses an S3-compatible store of
+your own: this `compose.override.yml` disables the recipe's Garage and blanks the hint the application reads, so the
+console offers only a store of your own ([Storage and email](/veyq/run/storage-and-email/)):
+
+```yaml
+services:
+  garage:
+    profiles: [bundled-store]   # a profile nothing enables: the service is left out
+  app:
+    environment:
+      VEYQ_BUNDLED_STORE_ENDPOINT: ""
+      VEYQ_BUNDLED_STORE_ADMIN_TOKEN: ""
+```
+
+Nothing else is needed: the application's dependency on `garage` is optional, so Compose drops the service from the
+stack (measured with Compose v5.6.0). `GARAGE_RPC_SECRET` and `GARAGE_ADMIN_TOKEN` stay required in `.env` all the same
+— Compose reads them for the disabled service too, and `install` generates both. Its backups take your store's endpoint
+and key pair from the shell ([Backup and restore](/veyq/run/backup-and-restore/#capture)). Leave the bundled store out
+before the first store is chosen: an instance already on it keeps its objects in Garage's volumes.
 
 No directory here holds an object pool: it lives where `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names — by intent another disk
 or another store, since a pool on the store's own disk dies with it ([Backup and restore](/veyq/run/backup-and-restore/#capture)).
@@ -92,8 +112,8 @@ the stack names one of them.
   <TabItem label="Kubernetes">
 
 `infra/kubernetes/charts/veyq` is the second deployment target ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)):
-the same four workloads as the production compose file — the app, its administration surface, MariaDB and
-Garage — on an operator's own cluster, with a Gateway API implementation of the operator's choice in place of the
+the same workloads as the production compose file — the app, its administration surface, MariaDB and, opted in
+with `garage.enabled`, Garage — on an operator's own cluster, with a Gateway API implementation of the operator's choice in place of the
 compose file's Traefik (the chart owns one `Gateway`; the implementation, its CRDs at v1.5 or later and, for the ACME
 opt-in, cert-manager are yours to install first). It deploys published
 images and builds nothing; it **generates nothing** either, so every secret is yours to supply and an install
@@ -104,12 +124,14 @@ would reconcile each other's routing away.
 ```sh
 # Verify a release first: it leaves ${release}, ${app_digest}, ${admin_digest}, ${tools_digest} and ${chart_digest}
 chart="oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}"
-helm show values "$chart" > my-values.yaml        # fill in: domain, storeDomain, every key under secrets,
+helm show values "$chart" > my-values.yaml        # fill in: domain, the two database keys under secrets,
                                                   # gateway.className, the gateway.tls block,
                                                   # backup.existingClaim — a PersistentVolumeClaim you created
                                                   # for the backup gate (or backup.enabled: false), and
                                                   # networkPolicy.ingressFrom — your gateway's data-plane
-                                                  # pods; for Traefik in the `traefik` namespace, e.g.:
+                                                  # pods; for Traefik in the `traefik` namespace, e.g.
+                                                  # (the bundled store is off: garage.enabled: true also needs
+                                                  # storeDomain and the two Garage keys under secrets):
 #   gateway:
 #     className: traefik
 #   networkPolicy:

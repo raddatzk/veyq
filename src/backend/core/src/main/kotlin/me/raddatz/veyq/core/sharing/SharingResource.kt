@@ -256,9 +256,9 @@ class SharingResource(
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = blocks.contentView(o.share.scopeId).let { view -> o.nodes.map { toShareNode(it, view.nodeBlocked(it.id)) } },
-                    // N while the switch is on and the role writes — the sentence the page shows before a first write. In
-                    // the body, so the tag below changes when the switch or N does and an open page learns it.
-                    guestWriteRecordDays = guestWriteRecords.disclosedDays(o.share.scopeId, o.share.role),
+                    // N while the role writes — the sentence the page shows before a first write. In the body, so the
+                    // tag below changes when N does and an open page learns it.
+                    guestWriteRecordDays = guestWriteRecords.disclosedDays(o.share.role),
                 )
                 // ADR 0081: the tag is a digest of what this response serves — nothing the guest could not already read, and
                 // so (unlike the member listing's scope revision) blind to every change outside the shared subtree.

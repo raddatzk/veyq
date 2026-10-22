@@ -19,7 +19,7 @@ import { listMedia, openOriginal, unsealMeta } from '../memories/media'
  * every Memory opens with the keys their owners already hold.*
  *
  * This runs against a **different** instance from part A's: a fresh database, a fresh bucket and a fresh key
- * path, loaded by `scripts/instance_backup.py restore`. Part A's instance no longer exists — the orchestrator
+ * path, loaded by `src/tools/instance_backup.py restore`. Part A's instance no longer exists — the orchestrator
  * destroyed it — which is the only way "everything was restored" and "nothing was restored" can be told apart
  * from out here.
  *

@@ -4,7 +4,9 @@
 //   - a due rotation is said, and its button rotates;
 //   - the roster shows each moderator's state and whether their address is confirmed;
 //   - a removal asks first, and a refused rotation behind it is SHOWN (the CR's bite, below);
-//   - an appointment of an address no account has is refused in words.
+//   - an appointment of an address no account has is refused in words;
+//   - a block whose statement did not plainly reach the member leaves a standing report with the words (ADR 0093 § 7),
+//     and the statement's fields warn before the block while no instance mail is set up.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -27,6 +29,7 @@ vi.mock('./stepStatement', async () => ({
   ...(await vi.importActual<typeof import('./stepStatement')>('./stepStatement')),
   stepStatement: vi.fn(),
 }))
+vi.mock('./instanceMail', () => ({ statementMailNotSetUp: vi.fn() }))
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
@@ -38,11 +41,16 @@ import {
   type OpenModerationProposal,
 } from './moderation'
 import { stepStatement } from './stepStatement'
+import { statementMailNotSetUp } from './instanceMail'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
+  Message: {
+    props: ['severity', 'closable'],
+    emits: ['close'],
+    template: '<div class="msg" :data-severity="severity"><slot /><button v-if="closable" class="msg-close" @click="$emit(\'close\')">x</button></div>',
+  },
   InputText: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
@@ -104,6 +112,7 @@ describe('ModerationPanel (uc.moderation.appoint-moderators, admin-web)', () => 
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
+    vi.mocked(statementMailNotSetUp).mockResolvedValue(false)
   })
 
   it('says reporting is off while no key exists, and offers no way to make one here (setup makes epoch 1)', async () => {
@@ -213,6 +222,7 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
+    vi.mocked(statementMailNotSetUp).mockResolvedValue(false)
   })
 
   const PROPOSED = new Date('2026-10-17T12:00:00Z')
@@ -271,7 +281,10 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
   })
 
   it('blocks a member’s sign-in with the address, the case and its statement of reasons, after a confirm that says what it does', async () => {
-    vi.mocked(blockSignIn).mockResolvedValue({ proposals: [tenantProposal()], signInBlocks: [signInBlock({ address: 'member@example.com' })] })
+    vi.mocked(blockSignIn).mockResolvedValue({
+      steps: { proposals: [tenantProposal()], signInBlocks: [signInBlock({ address: 'member@example.com' })] },
+      statementDelivery: { outcome: 'REACHED', notReached: [] },
+    })
     const statement = { statementId: 's-1', ground: 'TERMS_BREACH' as const, provision: 'Space terms, clause 4', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } }
     vi.mocked(stepStatement).mockResolvedValue(statement)
     const w = await mountPanel(on(), open)
@@ -293,6 +306,64 @@ describe('ModerationPanel — the Server Owner’s steps (uc.moderation.take-a-m
     // the answer is what is shown: the proposal is settled, the block is in force
     expect(proposal(w, 'p-member').exists()).toBe(false)
     expect(blockRow(w, 'member@example.com').exists()).toBe(true)
+    // its statement reached the member: nothing stands beside the steps (the block had no success message before either)
+    expect(w.find('.statement-delivery').exists()).toBe(false)
+  })
+
+  async function blockAnswering(statementDelivery: { outcome: 'NOT_ALL_REACHED' | 'UNKNOWN' | 'NOBODY_TO_TELL'; notReached: string[] }) {
+    vi.mocked(blockSignIn).mockResolvedValue({
+      steps: { proposals: [tenantProposal()], signInBlocks: [signInBlock({ address: 'member@example.com' })] },
+      statementDelivery,
+    })
+    vi.mocked(stepStatement).mockResolvedValue({ statementId: 's-7', ground: 'ILLEGAL_CONTENT', provision: '§ 130 StGB', facts: 'what was found', factsForLog: { epoch: 3, sealedFacts: 'c2VhbGVk' } })
+    const w = await mountPanel(on(), open)
+    await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    await flushPromises()
+    confirmAsk.mockResolvedValueOnce(true)
+    await proposal(w, 'p-member').find('.mod-proposal__send').trigger('click')
+    await flushPromises()
+    return w
+  }
+
+  it('a block whose statement did not reach the member names the address and keeps the words until dismissed', async () => {
+    const w = await blockAnswering({ outcome: 'NOT_ALL_REACHED', notReached: ['member@example.com'] })
+    const report = w.find('.statement-delivery')
+    expect(report.attributes('data-severity')).toBe('warn')
+    expect(report.find('.statement-delivery__what').text()).toBe(t('moderation.steps.delivery.notReached', { addresses: 'member@example.com' }))
+    expect(report.find('.statement-delivery__ground').text()).toBe(t('moderation.steps.categories.ILLEGAL_CONTENT'))
+    expect(report.find('.statement-delivery__provision').text()).toBe('§ 130 StGB')
+    expect(report.find('.statement-delivery__facts').text()).toBe('what was found')
+    // the block itself stands: the steps the answer carried are shown
+    expect(blockRow(w, 'member@example.com').exists()).toBe(true)
+    await report.find('.msg-close').trigger('click')
+    expect(w.find('.statement-delivery').exists()).toBe(false)
+  })
+
+  it.each([
+    ['UNKNOWN' as const, 'moderation.steps.delivery.unknown', 'warn'],
+    ['NOBODY_TO_TELL' as const, 'moderation.steps.delivery.nobodyToTell', 'info'],
+  ])('a block answering %s says so beside the words', async (outcome, key, severity) => {
+    const w = await blockAnswering({ outcome, notReached: [] })
+    const report = w.find('.statement-delivery')
+    expect(report.attributes('data-severity')).toBe(severity)
+    expect(report.find('.statement-delivery__what').text()).toBe(t(key))
+    expect(report.find('.statement-delivery__facts').text()).toBe('what was found')
+  })
+
+  it('warns in the block’s statement that it cannot be mailed while the instance mail is not set up', async () => {
+    vi.mocked(statementMailNotSetUp).mockResolvedValue(true)
+    const w = await mountPanel(on(), open)
+    await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    await flushPromises()
+    expect(proposal(w, 'p-member').find('.step-statement__no-mail').text()).toBe(t('moderation.steps.statement.noMail'))
+  })
+
+  it('says nothing of mail in the block’s statement when the instance mail is set up — control', async () => {
+    const w = await mountPanel(on(), open)
+    await proposal(w, 'p-member').find('.mod-proposal__block').trigger('click')
+    await flushPromises()
+    expect(statementMailNotSetUp).toHaveBeenCalled()
+    expect(proposal(w, 'p-member').find('.step-statement__no-mail').exists()).toBe(false)
   })
 
   it('blocks nothing when the block is not confirmed', async () => {

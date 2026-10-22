@@ -22,18 +22,18 @@ precondition the operator owns.
 
 Nine subcommands, one file, because they share the layout, the manifest and the credential plumbing:
 
-    python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump | --key-kept-apart)
+    python3 src/tools/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump | --key-kept-apart)
                                                 [--objects-to POOL [--pool-keep N]] [--app-version R]
-    python3 scripts/instance_backup.py copy-objects --objects-to POOL   (the hot early copy, app running)
-    python3 scripts/instance_backup.py verify   DIR [--key-from FILE] [--against-store [--erasures FILE]]
-    python3 scripts/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
+    python3 src/tools/instance_backup.py copy-objects --objects-to POOL   (the hot early copy, app running)
+    python3 src/tools/instance_backup.py verify   DIR [--key-from FILE] [--against-store [--erasures FILE]]
+    python3 src/tools/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
                                                 [--objects-from POOL] [--accept-missing-objects] [--record DIR]
                                                 [--erasures FILE]
-    python3 scripts/instance_backup.py prune    (--captures DIR | --dir DIR) [--keep N]   (every capture older than B)
-    python3 scripts/instance_backup.py retention (--captures DIR | --dir DIR)            (B and the newest, as JSON)
-    python3 scripts/instance_backup.py store-in-use                      (bundled | own | none, for `veyqctl status`)
-    python3 scripts/instance_backup.py empty-database --yes              (the in-place rollback's first write)
-    python3 scripts/instance_backup.py gate     (in the app pod; every input from its environment)
+    python3 src/tools/instance_backup.py prune    (--captures DIR | --dir DIR) [--keep N]   (every capture older than B)
+    python3 src/tools/instance_backup.py retention (--captures DIR | --dir DIR)            (B and the newest, as JSON)
+    python3 src/tools/instance_backup.py store-in-use                      (bundled | own | none, for `veyqctl status`)
+    python3 src/tools/instance_backup.py empty-database --yes              (the in-place rollback's first write)
+    python3 src/tools/instance_backup.py gate     (in the app pod; every input from its environment)
 
 A backup is a directory, defaulting to `infra/backups/<UTC-ISO8601>/`:
 
@@ -134,7 +134,7 @@ seeded from the image as `10001:10001`, the uid the app runs as — because a ke
 key the app cannot read, and the instance then refuses invites and resets as if leg (c) were missing (inbox
 #188). Only root can give a file away, so a non-root invoker facing a directory it does not own is refused at the
 gates, before the first write, and told to run as root or to copy the key in through the app container.
-`scripts/instance_backup_selftest.py` exercises every branch without Docker.
+`src/tools/instance_backup_selftest.py` exercises every branch without Docker.
 
 **Why the manifest is not decoration.** It is what lets `verify` and `restore` refuse before doing damage:
 `restore` demands `--domain` and refuses unless it names a tenant this backup actually held (ADR 0056 §4 —
@@ -218,7 +218,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NamedTuple
 
-REPO =Path(__file__).resolve().parent.parent
+# The checkout this file sits in, at `src/tools/` (ADR 0106 decision 8).
+REPO = Path(__file__).resolve().parents[2]
 # Spelled here, not imported from `repo_layout.py`: this file ships alone (the tools image's `/opt/veyq/`, a release
 # asset beside `veyqctl`), where that module is not. `instance_backup_selftest.py` holds the two to it in the repository.
 DEFAULT_COMPOSE = REPO / "infra/docker/docker-compose.yml"
@@ -1702,9 +1703,9 @@ def take_capture(backup: Path, db: Database, store: Store | None, *, release_of,
     if placement == SEPARATE and key_dest is not None:
         log(f"the key is at {key_dest}. Keep it apart from this capture: a copy of both together is a copy of "
             f"every tenant's SMTP password. Encrypt the capture before it leaves this host.")
-        log(f"now check both:  python3 scripts/instance_backup.py verify {backup} --key-from {key_dest}")
+        log(f"now check both:  python3 src/tools/instance_backup.py verify {backup} --key-from {key_dest}")
     elif not kept_apart:
-        log(f"now check it:  python3 scripts/instance_backup.py verify {backup}")
+        log(f"now check it:  python3 src/tools/instance_backup.py verify {backup}")
     return manifest
 
 
@@ -2321,7 +2322,9 @@ def gate_store(args: argparse.Namespace, db: Database, env: dict[str, str]) -> S
         endpoint, token = env.get("VEYQ_BUNDLED_STORE_ENDPOINT", ""), env.get("VEYQ_BUNDLED_STORE_ADMIN_TOKEN", "")
         if not endpoint or not token.strip():
             raise BackupError("the instance uses the bundled store, and VEYQ_BUNDLED_STORE_ENDPOINT / "
-                              "VEYQ_BUNDLED_STORE_ADMIN_TOKEN are not both set — the chart passes the app's own")
+                              "VEYQ_BUNDLED_STORE_ADMIN_TOKEN are not both set — the chart passes the app's own, and "
+                              "only with garage.enabled: true (turned off under this instance, its claims are still "
+                              "there, and true again restores it)")
         args.store_endpoint = endpoint
         args.store_access_key, args.store_secret_key = derive_bundled_credentials(token)
         args.store_bucket = env.get("VEYQ_BUNDLED_STORE_BUCKET") or "blobs"

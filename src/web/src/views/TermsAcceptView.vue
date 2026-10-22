@@ -18,7 +18,7 @@ import { takeRoute } from '../app/pendingRoute'
 import { signOut } from '../features/account/login/signOut'
 import { renderMarkdown } from '../shared/markdown'
 import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
-import { tripleOf } from '../core/terms/operatorSection'
+import { pairOf } from '../core/terms/operatorSection'
 import { handle401 } from '../shared/handle401'
 import { isUnauthorized } from '../shared/httpError'
 
@@ -71,7 +71,7 @@ async function accept() {
   error.value = ''
   busy.value = true
   try {
-    await acceptTenantTerms(activeSpace.tenantId!, tripleOf(terms.value.termsRevision, terms.value.operatorSection))
+    await acceptTenantTerms(activeSpace.tenantId!, pairOf(terms.value.termsRevision, terms.value.operatorSection))
     markTermsAccepted() // clears termsStale() so the guard lets the member back in
     phase.value = 'done'
     // Return the member to where the guard intercepted them (remembered deep link), else the shell home.

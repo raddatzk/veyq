@@ -115,7 +115,7 @@ end, since the skip asks for a pin whose end is still ahead.
 - [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) §§ 1, 4,
   [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md),
   [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) (a backup's store leg lists the
-  pinned objects too: `scripts/instance_backup.py`'s `blob_index`),
+  pinned objects too: `src/tools/instance_backup.py`'s `blob_index`),
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 - [uc.moderation.report](../use-cases/uc.moderation.report.md)
 - [en.moderation.guest-write-record](en.moderation.guest-write-record.md) — the record rows a hold copies

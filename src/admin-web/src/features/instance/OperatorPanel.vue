@@ -4,9 +4,9 @@
 // `InstanceMailPanel` shape), the provider identification and the supervisory authority (ADR 0093 § 11, ADR 0035
 // decisions 6–7), and for the instance privacy notice the recipients and a data-protection officer (decision 8). What it
 // keeps honest:
-//   - nothing is required: every field may stay empty, and saving never waits on a warning (ADR 0093 § 14);
-//   - the warnings are the facade's (`operatorWarnings`): only in the organisation mode, the contact one only while
-//     public links are on — read from the register's effective state, not assumed;
+//   - nothing is required and nothing warns: every field may stay empty, shown as not stated, and published as "not
+//     stated by this operator" (ADR 0093 § 14); what a Server Owner may owe is information beside the values
+//     (`OperatorDuties`, the same block first-run setup shows), never a check on them;
 //   - a recipient the instance suggests (an external store's host, the mail relay's host) is only offered: it becomes a
 //     row of its kind the Server Owner completes, and nothing is published until the row is saved (cr-instance-privacy-notice 3);
 //   - what a recipient does is a kind chosen from a list, which the notice names in its own words on each language's page;
@@ -24,10 +24,10 @@ import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import {
   clearOperator, confirmOperatorNotification, getOperator, InstanceOperatorNotificationConfirmationEnum as Confirmation,
-  OperatorRecipientKind, operatorWarnings, parseLanguages, PUBLIC_SHARES_ID, RECIPIENT_KINDS, setOperator,
+  OperatorRecipientKind, parseLanguages, RECIPIENT_KINDS, setOperator,
   suggestionRow, suggestionTaken, type InstanceOperator, type OperatorRecipientSuggestion,
 } from './operator'
-import { listInstanceCapabilities } from './capabilities'
+import OperatorDuties from './OperatorDuties.vue'
 import { countryOptions as countriesIn } from './countries'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
@@ -40,9 +40,6 @@ const on401 = handle401(useRouter())
 const { ask } = useConfirm()
 
 const op = ref<InstanceOperator | null>(null)
-// Null until read, and when the read failed: then the contact warning assumes public links are on — a warning too many
-// beats one the Server Owner never sees.
-const publicSharesOn = ref<boolean | null>(null)
 const contactEmail = ref('')
 const contactLanguages = ref('')
 const statementEmail = ref('')
@@ -99,18 +96,11 @@ function removeRecipient(i: number) {
   recipients.value.splice(i, 1)
 }
 
-const { pending: loading, error: loadErr } = useAsyncData(async () => {
-  const [o] = await Promise.all([
-    getOperator(),
-    listInstanceCapabilities()
-      .then((caps) => { publicSharesOn.value = caps.find((c) => c.id === PUBLIC_SHARES_ID)?.effective ?? null })
-      .catch(() => { publicSharesOn.value = null }),
-  ])
-  apply(o)
-}, { onError: on401 })
+const { pending: loading, error: loadErr } = useAsyncData(async () => apply(await getOperator()), { onError: on401 })
 const loadError = computed(() => loadErrorKind(loadErr.value))
 
-const warnings = computed(() => (op.value ? operatorWarnings(op.value, publicSharesOn.value ?? true) : null))
+/** What an empty public field shows: not stated, as the texts that name it publish it (ADR 0093 § 14). */
+const notStated = computed(() => t('operator.notStated'))
 
 const blank = (v: string) => v.trim() || null
 
@@ -231,24 +221,23 @@ const confirmation = computed(() => {
 
       <template v-else-if="op">
         <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-        <Message v-if="warnings?.contact" severity="warn" :closable="false" class="operator-warn-contact">{{ t('operator.warnContact') }}</Message>
-        <Message v-if="warnings?.identification" severity="warn" :closable="false" class="operator-warn-identification">{{ t('operator.warnIdentification') }}</Message>
-        <Message v-if="warnings?.privacy" severity="warn" :closable="false" class="operator-warn-privacy">{{ t('operator.warnPrivacy') }}</Message>
+        <h3 class="operator-heading">{{ t('operatorDuties.title') }}</h3>
+        <OperatorDuties />
 
         <h3 class="operator-heading">{{ t('operator.contactTitle') }}</h3>
         <label>
           <span>{{ t('operator.contactEmail') }}</span>
-          <InputText v-model="contactEmail" class="operator-contact" type="email" autocomplete="off" />
+          <InputText v-model="contactEmail" class="operator-contact" type="email" autocomplete="off" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.contactHint') }}</small>
         </label>
         <label>
           <span>{{ t('operator.contactLanguages') }}</span>
-          <InputText v-model="contactLanguages" class="operator-languages" autocomplete="off" placeholder="de, en" />
+          <InputText v-model="contactLanguages" class="operator-languages" autocomplete="off" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.contactLanguagesHint') }}</small>
         </label>
         <label>
           <span>{{ t('operator.statementEmail') }}</span>
-          <InputText v-model="statementEmail" type="email" autocomplete="off" />
+          <InputText v-model="statementEmail" type="email" autocomplete="off" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.statementHint') }}</small>
         </label>
         <label>
@@ -273,27 +262,28 @@ const confirmation = computed(() => {
         <h3 class="operator-heading">{{ t('operator.identificationTitle') }}</h3>
         <label>
           <span>{{ t('operator.providerName') }}</span>
-          <InputText v-model="providerName" class="operator-provider-name" autocomplete="off" />
+          <InputText v-model="providerName" class="operator-provider-name" autocomplete="off" :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.providerAddress') }}</span>
-          <Textarea v-model="providerAddress" class="operator-provider-address" rows="3" auto-resize />
+          <Textarea v-model="providerAddress" class="operator-provider-address" rows="3" auto-resize :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.providerEmail') }}</span>
-          <InputText v-model="providerEmail" class="operator-provider-email" type="email" autocomplete="off" />
+          <InputText v-model="providerEmail" class="operator-provider-email" type="email" autocomplete="off" :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.providerRepresentative') }}</span>
-          <InputText v-model="providerRepresentative" autocomplete="off" />
+          <InputText v-model="providerRepresentative" autocomplete="off" :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.supervisoryAuthority') }}</span>
-          <InputText v-model="supervisoryAuthority" class="operator-supervisory-authority" autocomplete="off" />
+          <InputText v-model="supervisoryAuthority" class="operator-supervisory-authority" autocomplete="off" :placeholder="notStated" />
         </label>
 
         <h3 class="operator-heading">{{ t('operator.privacyTitle') }}</h3>
         <p class="settings-muted">{{ t('operator.privacySub') }}</p>
+        <p v-if="!recipients.length" class="settings-muted operator-no-recipient">{{ t('operator.noRecipient') }}</p>
         <div v-for="(r, i) in recipients" :key="i" class="operator-recipient" data-testid="operator-recipient">
           <label>
             <span>{{ t('operator.recipientName') }}</span>
@@ -330,7 +320,7 @@ const confirmation = computed(() => {
         </div>
         <label>
           <span>{{ t('operator.dataProtectionOfficer') }}</span>
-          <InputText v-model="dataProtectionOfficer" class="operator-dpo" autocomplete="off" maxlength="500" />
+          <InputText v-model="dataProtectionOfficer" class="operator-dpo" autocomplete="off" maxlength="500" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.dataProtectionOfficerHint') }}</small>
         </label>
 

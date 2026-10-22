@@ -47,9 +47,11 @@ from typing import Callable, Iterable, Iterator, NamedTuple
 
 import yaml
 
-# The store sweep mirrors a bucket with the operator tool's own rclone plumbing, never a second copy of it. Importable
-# because Python puts the running script's own directory — `scripts/` — on `sys.path`, for either orchestrator and for
-# a guard that imports one of them by path.
+# The store sweep mirrors a bucket with the operator tool's own rclone plumbing, never a second copy of it. `repo_layout`
+# is importable because Python puts the running script's own directory — `scripts/` — on `sys.path`, for either
+# orchestrator and for a guard that imports one of them by path; it puts the tools' directory beside it.
+import repo_layout
+repo_layout.tools_importable()
 import instance_backup
 # The opacity oracle needs the set of properties a spec DECLARES opaque. It is derived from the
 # contracts here, never listed, by reusing the guard's own predicate — one definition of "opaque",
@@ -1158,9 +1160,10 @@ def store_sentinel(stamp: str) -> tuple[str, str]:
     find the value it was handed cannot be trusted to find one it was not. The sentinel holds a space and a non-ASCII
     character so the store logs it ENCODED — measured on Garage v2.0.0, which logs `<addr> <method> <uri>` at INFO for
     a request it then refuses (`403 AccessDenied`, anonymous access unsupported) — and the sweep can only find it
-    through the `pct` needle. Unsigned on purpose: refused, it reads and writes nothing. Planted at the START of the
-    run, so finding it also proves the log window reaches back to where the run began. HOW it is sent is the
-    orchestrator's: to the dev store's published port, or through a lane's Traefik on the public origin.
+    through the `pct` needle. Unsigned on purpose: refused, it reads and writes nothing. WHEN and HOW it is sent is the
+    orchestrator's: `run_web_e2e.py` sends it to the dev store's published port at the START of the run, so finding it
+    also proves the log window reaches back to where the run began; lane L1 (`run_stack_e2e.py`) sends it through its
+    Traefik on the public origin once the bundled store is in use — before that, no bucket path routes there.
     """
     sentinel = f"veyq wire-log sentinel {stamp} Größe"
     return sentinel, urllib.parse.quote(sentinel, safe=URI_COMPONENT_SAFE)

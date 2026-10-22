@@ -95,8 +95,7 @@ days**.
 
 A block goes with a **Statement of reasons** to the people it affects. Choose the **Ground**, name **The law or the
 clause it relies on** — a short reference such as "§ 86a StGB" or "Space terms, clause 4", shown as you write it — and
-write **What you found**, which says why the content falls under it: on most servers both are required; on a private one
-they are optional. What you found reaches each of them sealed, so only they can read it — and the moderation log, sealed
+write **What you found**, which says why the content falls under it: both are required. What you found reaches each of them sealed, so only they can read it — and the moderation log, sealed
 like a note — never a mail. The statement names the server, never you, and says the block applies wherever the server is
 reached until it is lifted. A reporter who left an address is told the decision, and what they can do next.
 

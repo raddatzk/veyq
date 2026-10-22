@@ -11,7 +11,6 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.terms.OperatorSections
 import me.raddatz.veyq.core.terms.RenderedSection
-import me.raddatz.veyq.core.terms.SectionVariant
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.util.TreeMap
@@ -59,9 +58,9 @@ sealed interface TermsAcceptOutcome {
  * invite handler; the Resource is a thin adapter.
  *
  * Every read serves the fixed **operator section** after the space's text ([OperatorSections], ADR 0035 decision 6),
- * and the gate compares a **triple**: the space's revision, the section's revision and its variant (decision 2 of
- * cr-operator-section-of-the-terms). Any of them moving reopens the gate; a changed operator value or the guest-write
- * record switched does not, since neither is in the triple. The member's history keeps one row per accepted triple.
+ * and the gate compares a **pair**: the space's revision and the section's revision (the section has one form, ADR 0093
+ * § 14). Either moving reopens the gate; a changed operator value or N does not, since neither is in the pair. The
+ * member's history keeps one row per accepted pair.
  */
 @ApplicationScoped
 class TenantTermsHandler(
@@ -76,7 +75,7 @@ class TenantTermsHandler(
         access.check(callerId, tenantId, READ)
             .refusal(TermsReadOutcome.NotFound, TermsReadOutcome.Suspended)?.let { return it }
         val row = store.termsFor(tenantId) ?: return TermsReadOutcome.NotFound
-        val section = sections.render(tenantId)
+        val section = sections.render()
         return TermsReadOutcome.Ok(row.revision, accepted(callerId, tenantId, row.revision, section), decode(row.markdownByLocale), section)
     }
 
@@ -89,7 +88,7 @@ class TenantTermsHandler(
      */
     fun guestTerms(tenantId: String): GuestTerms? {
         val row = store.guestTermsFor(tenantId) ?: return null
-        return GuestTerms(row.revision, decode(row.markdownByLocale), sections.render(tenantId))
+        return GuestTerms(row.revision, decode(row.markdownByLocale), sections.render())
     }
 
     /**
@@ -108,31 +107,29 @@ class TenantTermsHandler(
         val normalized = normalize(de, en)
         if (normalized.isNotEmpty()) store.updateTerms(tenantId, mapper.writeValueAsString(normalized))
         val row = store.termsFor(tenantId)!!
-        val section = sections.render(tenantId)
+        val section = sections.render()
         return TermsUpdateOutcome.Ok(row.revision, accepted(callerId, tenantId, row.revision, section), decode(row.markdownByLocale), section)
     }
 
     /**
-     * The **member** accepts the triple they were shown — recorded only if every part still equals the current one,
-     * else RevisionChanged (the space owner bumped the terms, a release changed the operator section, or the operating
-     * mode changed meanwhile → the client re-reads + re-presents).
+     * The **member** accepts the pair they were shown — recorded only if both parts still equal the current ones, else
+     * RevisionChanged (the space owner bumped the terms, or a release changed the operator section meanwhile → the client
+     * re-reads + re-presents).
      */
     @Transactional
-    fun accept(callerId: String, tenantId: String, revision: Int, operatorRevision: Int, variant: SectionVariant): TermsAcceptOutcome {
+    fun accept(callerId: String, tenantId: String, revision: Int, operatorRevision: Int): TermsAcceptOutcome {
         access.check(callerId, tenantId, WRITE)
             .refusal(TermsAcceptOutcome.NotFound, TermsAcceptOutcome.Suspended)?.let { return it }
         val row = store.termsFor(tenantId) ?: return TermsAcceptOutcome.NotFound
-        val section = sections.render(tenantId)
-        if (revision != row.revision || operatorRevision != section.revision || variant != section.variant) {
-            return TermsAcceptOutcome.RevisionChanged
-        }
-        store.recordAcceptance(callerId, tenantId, revision, operatorRevision, variant.name)
+        val section = sections.render()
+        if (revision != row.revision || operatorRevision != section.revision) return TermsAcceptOutcome.RevisionChanged
+        store.recordAcceptance(callerId, tenantId, revision, operatorRevision)
         return TermsAcceptOutcome.Ok(row.revision, accepted = true, decode(row.markdownByLocale), section)
     }
 
-    /** Whether [callerId]'s history holds the current triple — what the member gate reads. */
+    /** Whether [callerId]'s history holds the current pair — what the member gate reads. */
     private fun accepted(callerId: String, tenantId: String, revision: Int, section: RenderedSection): Boolean =
-        store.hasAccepted(callerId, tenantId, revision, section.revision, section.variant.name)
+        store.hasAccepted(callerId, tenantId, revision, section.revision)
 
     /** A canonical (sorted-key, blank-dropped, newline-normalized) locale→markdown map for stable comparison. */
     private fun normalize(de: String?, en: String?): TreeMap<String, String> {

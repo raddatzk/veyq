@@ -172,7 +172,7 @@ digest. **Rollback** is the capture the gate took when you left that release, re
 [Restore under Helm](/veyq/run/backup-and-restore/#restore-under-helm).
 
 **With `backup.enabled: false`** nothing captures before the migration, and the backup is yours, by hand, with the
-app **scaled to zero** — *cold* means the writer is stopped — through `kubectl port-forward` to MariaDB and Garage
+app **scaled to zero** — *cold* means the writer is stopped — through `kubectl port-forward` to MariaDB and, with `garage.enabled`, Garage — a store of your own by its address
 ([Backup and restore](/veyq/run/backup-and-restore/)). The key is copied out before the scale-down, because only the
 app pod mounts its claim, and goes on a medium of its own, never into the capture directory
 ([Capture](/veyq/run/backup-and-restore/#capture)). This procedure has not been run on a cluster.
@@ -267,5 +267,5 @@ only ([Restore under Helm](/veyq/run/backup-and-restore/#restore-under-helm)).
 
 **How far this is proven:** `veyqctl rollback` ran once, live (2026-10-17): an instance upgraded from one local release
 to the next was rolled back in place, its config-secret state read `OK`, its store check passed, and every object the
-rows require was in the store as indexed; no browser opened its Memory afterwards. `scripts/veyqctl_selftest.py` holds
+rows require was in the store as indexed; no browser opened its Memory afterwards. `src/tools/veyqctl_selftest.py` holds
 its order and its refusals.

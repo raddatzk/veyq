@@ -24,7 +24,6 @@ const stubs = {
 
 const NOTICE = {
   revision: 1,
-  variant: 'FULL' as const,
   draftBanner: { en: '*Draft: this privacy notice has not yet been reviewed by a lawyer.*', de: '*Entwurf: …*' },
   passages: [
     { id: 'account', separate: false, text: { en: '## Your account\nThe server keeps your email address.', de: '## Dein Konto\nDer Server speichert deine E-Mail-Adresse.' } },

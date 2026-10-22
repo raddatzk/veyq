@@ -1,5 +1,8 @@
 import { instanceApi } from '../../api/client'
-import { InstanceReleaseNoticeKindEnum, type InstanceReleaseNotice, type InstanceReleaseNotices } from '../../api/generated/instance'
+import {
+  InstanceMailSettingsConfirmationEnum, InstanceReleaseNoticeKindEnum,
+  type InstanceMailSettings, type InstanceReleaseNotice, type InstanceReleaseNotices,
+} from '../../api/generated/instance'
 
 export type { InstanceReleaseNotice, InstanceReleaseNotices } from '../../api/generated/instance'
 export { InstanceReleaseNoticeKindEnum } from '../../api/generated/instance'
@@ -17,6 +20,15 @@ export function getReleaseNotices(): Promise<InstanceReleaseNotices> {
  *  Releases. Applies from the next check. Refusal: 400 `invalid_request` (not an http(s) URL). */
 export function setReleaseCheck(enabled: boolean, source: string | null): Promise<InstanceReleaseNotices> {
   return instanceApi().setInstanceReleaseCheck({ instanceReleaseCheckUpdate: { enabled, source } })
+}
+
+/**
+ * Where a newly found notice is also mailed: the Server Owner's address once the instance mail is confirmed, else
+ * `null` — then the notices are only shown here and by `veyq-admin release` (ADR 0097 decisions 4 and 5). The check
+ * itself never waits on mail: it is on by default, and a fresh instance has none.
+ */
+export function noticesMailedTo(mail: InstanceMailSettings): string | null {
+  return mail.confirmation === InstanceMailSettingsConfirmationEnum.Confirmed ? mail.address : null
 }
 
 /** The Run area's upgrade page (ADR 0087) — the same link the notice mail carries. */

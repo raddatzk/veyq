@@ -2,8 +2,6 @@ package me.raddatz.veyq.core.moderation.cases
 
 import me.raddatz.veyq.core.backup.BlockBasis
 import me.raddatz.veyq.core.backup.ErasureLedger
-import me.raddatz.veyq.core.admin.operator.OperatingMode
-import me.raddatz.veyq.core.admin.operator.OperatingModeHandler
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.HttpFailure
@@ -172,7 +170,6 @@ class CaseDecisions(
     private val nodes: NodesStore,
     private val snapshots: CaseSnapshots,
     private val recipients: StatementRecipients,
-    private val operatingMode: OperatingModeHandler,
     private val mail: StatementMail,
     private val deferrals: StatementDeferrals,
     private val ledger: ErasureLedger,
@@ -322,15 +319,13 @@ class CaseDecisions(
         val known = targets.of(case, held)
         val (resolved, refusal) = resolve(case, step, shareId, targetId, known)
         if (resolved == null) return Taken(refused(refusal!!))
-        // The statement's form follows the operating mode, read now (ADR 0093 § 14): the full form requires the facts and
-        // the provision or clause the ground relies on (DSA Art. 17(3)(d), (e)).
-        val full = operatingMode.read().mode == OperatingMode.ORGANISATION
-        if (statement.facts == null && full) return Taken(refused(CaseFailures.factsRequired))
-        if (statement.provision.isNullOrBlank() && full) return Taken(refused(CaseFailures.provisionRequired))
-        noteRefusal(statement.facts)?.let { return Taken(refused(it)) }
-        // The log's copy, the members' copy and the wraps of its key come together or not at all.
-        if ((statement.facts == null) != (statement.sealedFacts == null)) return Taken(refused(CaseFailures.invalid))
-        if (statement.facts == null && statement.factsKeyFor.isNotEmpty()) return Taken(refused(CaseFailures.invalid))
+        // Every statement names the facts and the provision or clause the ground relies on (DSA Art. 17(3)(d), (e);
+        // ADR 0093 § 7: one form on every instance, § 14).
+        val facts = statement.facts ?: return Taken(refused(CaseFailures.factsRequired))
+        if (statement.provision.isNullOrBlank()) return Taken(refused(CaseFailures.provisionRequired))
+        noteRefusal(facts)?.let { return Taken(refused(it)) }
+        // The log's copy and the members' copy come together (the wraps of its key are checked against the members below).
+        if (statement.sealedFacts == null) return Taken(refused(CaseFailures.invalid))
         // The client minted the statement's id and sealed the facts bound to it (ADR 0072 Decision 3): never substituted.
         if (ModerationStatementEntity.findById(statement.statementId) != null) return Taken(refused(CaseFailures.idTaken))
         statement.deferral?.let { d ->
@@ -339,8 +334,8 @@ class CaseDecisions(
         }
         val told = recipients.of(case, resolved, known, held)
         val members = told.filter { it.kind == RecipientKind.ACCOUNT }.map { it.id }.toSet()
-        if (statement.facts != null && members.size > StatementRecipients.MAX_SEALED) return Taken(refused(CaseFailures.recipientsTooMany))
-        if (statement.facts != null && statement.factsKeyFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
+        if (members.size > StatementRecipients.MAX_SEALED) return Taken(refused(CaseFailures.recipientsTooMany))
+        if (statement.factsKeyFor.keys != members) return Taken(refused(CaseFailures.recipientsChanged))
         val row = block(resolved.kind, resolved.targetId, case, moderatorId, now).apply {
             if (resolved.kind.isContent) scopeId = case.scopeId
             if (resolved.kind == BlockKind.GUEST_IDENTITY || resolved.kind == BlockKind.CONTENT_UPLOADER) this.shareId = resolved.shareId
@@ -369,8 +364,8 @@ class CaseDecisions(
             ground = statement.ground.name
             provision = statement.provision?.trim()?.takeIf { it.isNotEmpty() }
             basis = StatementBasis.REPORT.name
-            epoch = statement.facts?.epoch
-            sealedFacts = statement.facts?.sealed
+            epoch = facts.epoch
+            sealedFacts = facts.sealed
             sealedMemberFacts = statement.sealedFacts
             this.sentAt = sentAt
         }

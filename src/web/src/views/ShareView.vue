@@ -62,7 +62,7 @@ import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
 import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
-import { tripleKey, tripleOf, type OperatorSection } from '../core/terms/operatorSection'
+import { pairKey, pairOf, type OperatorSection } from '../core/terms/operatorSection'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -98,27 +98,25 @@ const head = shallowRef<PublicShareHead | null>(null)
 // visitor out. The terms come from the share (GET /api/shares/{shareId}/terms) — a public share is Host-independent,
 // so the tenant can't come from the Host, and the member terms endpoint is auth+membership-gated.
 //
-// After the space's text comes the fixed operator section (ADR 0035 decision 6), and what is accepted is the TRIPLE —
-// the space's revision, the section's revision and its variant — so a release that changed the section or a switched
-// operating mode asks again, and a changed operator value or the guest-write record switched does not. The device keeps
-// the triples it accepted (the last four), so a mode switched back to a variant accepted before asks nobody again, as
-// for a member.
+// After the space's text comes the fixed operator section (ADR 0035 decision 6), and what is accepted is the PAIR —
+// the space's revision and the section's revision — so a release that changed the section asks again, and a changed
+// operator value does not. The device keeps the pairs it accepted (the last two), as a member's history keeps rows.
 const termsTenantId = ref('')
 const termsRevision = ref(0) // 0 = no gate (also the fail-open value on a fetch error)
 const operatorSection = ref<OperatorSection | null>(null)
-const acceptedKeys = ref<string[]>([]) // the locally-recorded accepted triples; extended in-memory on accept so the gate clears
+const acceptedKeys = ref<string[]>([]) // the locally-recorded accepted pairs; extended in-memory on accept so the gate clears
 const termsMarkdown = ref('')
 const renderedTerms = computed(() => (termsMarkdown.value ? renderMarkdown(termsMarkdown.value) : ''))
 const currentKey = computed(() =>
-  operatorSection.value ? tripleKey(tripleOf(termsRevision.value, operatorSection.value)) : '',
+  operatorSection.value ? pairKey(pairOf(termsRevision.value, operatorSection.value)) : '',
 )
 // The gate fires once the share is resolved (post-password), the tenant has published terms, and the locally-stored
-// triples do not include the current one. Sits BETWEEN the password shell and the display-name pre-screen in the template.
+// pairs do not include the current one. Sits BETWEEN the password shell and the display-name pre-screen in the template.
 const needsTerms = computed(
   () => status.value === 'ready' && termsRevision.value > 0 && !acceptedKeys.value.includes(currentKey.value),
 )
 
-/** Fetch the owning tenant's terms + read the locally-stored accepted triples. FAILS OPEN (uc.sharing.share-accept):
+/** Fetch the owning tenant's terms + read the locally-stored accepted pairs. FAILS OPEN (uc.sharing.share-accept):
  *  a transient error is treated as "no terms" (revision 0) so the visitor is never locked out by a network blip. */
 async function loadTerms() {
   try {
@@ -140,9 +138,9 @@ async function loadTerms() {
 function acceptTerms() {
   const section = operatorSection.value
   if (!section) return
-  const triple = tripleOf(termsRevision.value, section)
-  recordTermsAccepted(termsTenantId.value, triple)
-  acceptedKeys.value = [...acceptedKeys.value, tripleKey(triple)]
+  const pair = pairOf(termsRevision.value, section)
+  recordTermsAccepted(termsTenantId.value, pair)
+  acceptedKeys.value = [...acceptedKeys.value, pairKey(pair)]
 }
 
 // --- the note's acceptance gate (uc.sharing.share-note, ADR 0036 point 2) ----------------------------------------

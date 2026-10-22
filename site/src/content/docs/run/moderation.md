@@ -112,7 +112,7 @@ moderators can read it ([uc.moderation.take-a-measure](https://github.com/raddat
 [ADR 0093 § 7](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)): the
 moderator picks the **Ground** — one of the report categories, the law or the terms —, names **The law or the clause it
 relies on** (a short reference in the clear, such as "§ 86a StGB" or "Space terms, clause 4") and writes **What you
-found**, which explains why the content falls under it. In the second operating mode both are required. The statement
+found**, which explains why the content falls under it. Both are required, on every instance. The statement
 also says that the measure applies wherever the instance is reached and lasts until it is lifted. The
 browser seals the facts to the moderation key, for the log, and once more under a key of their own, which it seals to
 each member the statement reaches, so the server stores neither in the clear. One block's statement reaches at most
@@ -122,8 +122,9 @@ through), the uploaders the held copy names, and on a content block every owner 
 guest is told nothing of a moderator's block, having no account (an authority's removal order is different, below). A
 reporter who left an address is told the decision, from that address, which
 the moderator's browser sends once and the server mails without keeping, with what they may do next: report again with
-more information, write to the instance contact and — in the second operating mode — go to court or complain to the
-Digital Services Coordinator of the country they live in (DSA Art. 16(5), Art. 53); the sealed address itself is deleted six months
+more information, write to the instance contact, go to court, and — where the Digital Services Act applies to your
+instance, as the sentence itself says — complain to the Digital Services Coordinator of the country they live in (DSA
+Art. 16(5), Art. 53); the sealed address itself is deleted six months
 later — or six months after the decision, where it could not be told — and the log keeps that the decision was sent. The statement names the instance, never the
 moderator. Without instance mail ([Configuration](/veyq/run/configuration/)) the statements are in veyq all the same.
 
@@ -180,10 +181,26 @@ veyq-admin account block --address <address> --over-content --ground TERMS_BREAC
 
 A blocked member cannot sign in to read a statement, so it goes **by the instance mail to the account's address, with
 what you found** in your words; the server keeps those words only sealed to the moderation key, for the log. Their
-objection goes to the instance contact the statement names, and you lift with **Lift** or `account unblock`. The mail
-goes once: a send that fails is not retried, since the server keeps no copy of your words to send again — without
-instance mail, nobody is told, and you tell them through the contact yourself. A step without a case on your own finding
-says so in the statement. The wording is a draft until a lawyer has reviewed it.
+objection goes to the instance contact the statement names, and you lift with **Lift** or `account unblock`. A step
+without a case on your own finding says so in the statement. The wording is a draft until a lawyer has reviewed it.
+
+### What the mail reached
+
+The mail goes once: a send that fails is not retried, since the server keeps no copy of your words to send again. So
+every step over content — a sign-in block, a tenant taken offline, a tenant deleted — tells you what its mail reached,
+and the step stands whatever it says:
+
+- **Before the step**, while no instance mail is set up, the statement's fields say it cannot be mailed. Set it up
+  under **Server → Mail** first, or be ready to tell them yourself.
+- **After the step**, when the mail did not reach everyone — no instance mail, or the send failed — the console names
+  each address it did not reach, in a notice that stays at the top of the Moderation page (a block) or under the
+  tenant's name (a tenant) until you close it, with your statement beside it — the ground, the law or clause, what you
+  found — and **Copy the statement**. Tell those people through the instance contact, with those words. The notice also
+  says when there was nobody to tell (a tenant without an owner, an account erased meanwhile) and when the server
+  cannot say whom the mail reached. When it reached everyone, the console adds nothing to the step's usual answer.
+- **In the CLI**, `account block`, `tenant suspend` and `tenant delete` print it as `statementDelivery` — `outcome`
+  `REACHED`, `NOT_ALL_REACHED` (with the addresses in `notReached`), `NOBODY_TO_TELL` or `UNKNOWN` — and for anything
+  but `REACHED` add one `warning:` line on stderr. They still exit 0: the step was taken.
 
 ## Take a tenant offline
 
@@ -207,19 +224,23 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
 - It applies to an active tenant only, and it locks out your own membership in that tenant too.
 - **Over content**, it carries a statement of reasons to **each owner of the tenant**, by the instance mail with what you
   found, as a sign-in block does ([above](#a-members-sign-in-and-a-tenant-your-steps)) — its other members are told
-  nothing beyond the space being offline. Tick **Over content** and fill in the statement before **Take offline and send
-  the statement**, or add `--over-content --ground <ground> [--provision <text>] [--facts <text>]` to `tenant
-  suspend`. A moderator's open proposal makes the suspension over content: without a statement it is refused. A
-  suspension for any other reason — unpaid, maintenance — carries none. Bringing the tenant back lifts the record.
+  nothing beyond the space being offline. Under **Take offline or delete** at the end of the tenant's page, tick
+  **Because of the tenant's content** and fill in the statement before **Take offline and send the statement**, or add
+  `--over-content --ground <ground> [--provision <text>] [--facts <text>]` to `tenant suspend`. A moderator's open
+  proposal makes the suspension over content: without a statement it is refused, so the page shows the proposal and
+  keeps the box ticked. What the mail reached is said as for a sign-in block ([What the mail reached](#what-the-mail-reached)):
+  an owner it did not reach is named under the tenant's name with your statement beside it. A suspension for any other
+  reason — unpaid, maintenance — carries none. Bringing the tenant back lifts the record.
 
 You still cannot read anything private, which is the design working as intended.
 
 To close a tenant for good, **Delete tenant** takes it offline the same way and erases it 30 days later
 ([First-run setup and the admin console](/veyq/run/first-run/#tenants)); a deletion settles the tenant's open proposals
 as taken, as a suspension does. **Over content** it carries a statement of reasons to each owner of the tenant exactly
-as taking it offline does: tick **Over content** in the delete form and fill in the statement, or add `--over-content
+as taking it offline does: the same **Because of the tenant's content** box and statement, above both buttons, or add `--over-content
 --ground <ground> [--provision <text>] [--facts <text>]` to `tenant delete`; a moderator's open proposal makes it over
-content. **Stop deletion** lifts that record. Its holds and this page's records stay: they hang on cases, not tenants. A
+content, and what the mail reached is said the same way ([What the mail reached](#what-the-mail-reached)). **Stop
+deletion** lifts that record. Its holds and this page's records stay: they hang on cases, not tenants. A
 record still in force on the tenant, or a sign-in block on an account you erase, ends when the purge erases what it
 was on, so its statement goes at its date instead of being kept forever.
 
@@ -344,8 +365,8 @@ the handover still ends it. What an authority's order holds stays held for as lo
 | A company, or a paid host | reached | reached | reached |
 
 Criminal law and the hosting privilege's "once known, act" reach every operator in either case
-([§ 7 DDG](https://www.gesetze-im-internet.de/ddg/__7.html)). The operating mode below is how you record your own
-answer.
+([§ 7 DDG](https://www.gesetze-im-internet.de/ddg/__7.html)). [What you may owe](#what-you-may-owe) below is how you act
+on your own answer.
 
 ## Transparency reports
 
@@ -364,35 +385,32 @@ Whether a year with nothing to count still needs a report is not settled by the 
 that for § 3(2). Each order you [enter](#an-authoritys-order) opens a case of its own that keeps its kind, when it
 reached you and when it blocked — what the TCO counts ask for; its reference is sealed to the moderation key.
 
-## The operating mode
+## What you may owe
 
-At first-run setup you choose how the instance is run, and you can change it under **Server → Operating mode** or
-with `veyq-admin mode set` ([uc.admin.operator-details](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.operator-details.md), [ADR 0093 § 14](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)):
+There is no mode to choose ([uc.admin.operator-details](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.operator-details.md), [ADR 0093 § 14](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+Every instance serves one form of each fixed text — the operator section of the terms, the privacy notice, the
+statement of reasons — and every value you can set under **Server → Operator** (or `veyq-admin operator set`) is
+optional: an empty one reads *not stated by this operator* wherever a text names it, until you fill it in. Nothing
+warns and nothing is refused over an empty value, so you can try the instance before you publish it. Reporting,
+blocking and the moderators are on in every case: criminal law applies to every operator, and an operator who learns
+of illegal content has to act.
 
-- **Private (family, circle of friends)** — veyq leaves off what only the GDPR, the Digital Services Act and the EU
-  regulation on terrorist content ask of a host: the contact and the provider identification become optional and
-  nothing warns about them. Reporting, blocking and the moderators stay on in either mode: criminal law applies to
-  every operator, and an operator who learns of illegal content has to act.
-- **Club, organisation or company** — the contact and the provider identification are expected: the console warns
-  while public links are on and no contact is set, and while the identification lacks a name, an address for service
-  or an email. An instance where no mode was ever chosen runs as this one.
+What you owe is your own assessment, and first-run setup and the operator settings say so as information:
 
-The mode also sets the **form of a statement of reasons**, read each time one is shown or mailed: in the second mode it
-is the full form, and a block needs its facts; in *private* it is reduced — the measure and its reach, the ground and
-the objection, the facts only where the moderator wrote them, and without whether a report or an order led to it, that
-no automated means decided, and the courts. Who receives it, the objection and its review do not change with the mode.
+- The GDPR's household exemption covers only a purely personal or family activity, and it ends once content is
+  reachable for an unrestricted number of people — a link shared publicly (CJEU *Lindqvist*, C-101/01; *Buivids*,
+  C-345/17). Whether the Digital Services Act and the terrorist-content regulation reach an unpaid private instance is
+  legally uncertain ([the table above](#which-law-reaches-your-instance)).
+- If you share links publicly, or run veyq for a club, an organisation or a company, you are probably not exempt, and
+  then owe at least a name and a postal address ([§ 5 DDG](https://www.gesetze-im-internet.de/ddg/__5.html),
+  § 18(1) MStV) and the controller's contact details (Art. 13(1)(a) GDPR) — the provider identification and the
+  instance contact.
+- It covers every space on the instance: you are the host for all of them, and you cannot see whether a space's owner
+  posted a link publicly, so a friend's space stays private only as long as its links do.
 
-**It is your own assessment, not veyq's, and not legal advice.** The choice comes with a notice that says so: the
-GDPR's household exemption covers only a purely personal or family activity and ends once a link is shared publicly
-(CJEU *Lindqvist*, C-101/01; *Buivids*, C-345/17), and whether the Digital Services Act and the terrorist-content
-regulation reach an unpaid private instance is legally uncertain. If you share links publicly, or run veyq for a club,
-an organisation or a company, you are probably not exempt. Choosing *private* needs a tick in the console, and
-`--accept-notice` with `veyq-admin mode set private`; the server does not record either.
-
-**A mode is a preset.** Choosing one sets the switches it names to its values, after the console and the CLI have
-shown which ones would change; each stays an ordinary switch you can set on its own
-([Capabilities](/veyq/run/capabilities/)), and choosing the mode again sets them again. A tenant's own switches are
-never touched. Nothing is required and nothing is refused in either mode: a warning is a warning.
+Once those values are set, veyq meets a hosting service's duties on your instance; the gaps that remain against the
+law are named in [ADR 0035](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0035-server-terms-of-service.md)
+decision 6. **This is your own assessment, not veyq's, and not legal advice.**
 
 ## What a guest's write keeps
 
@@ -403,10 +421,11 @@ Nothing a member does and nothing anyone only looks at is kept, and never a User
 what a guest added is reported, the report's hold copies these rows, and a moderator can hand them to an authority.
 Everything else expires.
 
-- **The switch** is the capability *Record guests' writes* (`core.public-shares.guest-write-record`,
-  [Capabilities](/veyq/run/capabilities/)). Its default follows the operating mode: **off** in *private*, **on** in
-  *club, organisation or company*; you can set it on its own afterwards. Off, nothing new is kept and the next cleanup
-  (hourly, and at every start) deletes what was; what a report's hold copied stays for the hold's time.
+- **There is no switch for it.** The record is kept wherever a guest may write, so the capabilities that let guests
+  write decide where: *Links to look and add* (`core.public-shares.contribute`) and *Drop boxes*
+  (`core.public-shares.drop-box`), yours and each space's ([Capabilities](/veyq/run/capabilities/)). Switch those off
+  and no guest writes, so nothing is kept. Kept rows go at the cleanup (hourly, and at every start) once older than N;
+  what a report's hold copied stays for the hold's time.
 - **N** is set under **Server → Moderation**, or with `veyq-admin guest-write-record set <days>`: 7 by default, 1 to
   30. Seven days is the supervisory practice; a longer time needs a reason you write into your record of processing. A
   shorter N reaches every kept row at the next cleanup, a longer one only rows written from then on, so no guest is
@@ -462,11 +481,11 @@ empty:
 These are public: the app reads them before sign-in on every address of the instance, and shows the identification
 and the contact with its languages, where they are set, behind **Legal notice** on the sign-in and share pages and at
 the bottom of the signed-in app, beside **Terms of this instance** and **Privacy**; the recipients and the officer are
-public only through the privacy notice. In the *club, organisation or company* mode the panel warns while the notice
-names no recipient or no supervisory authority. The **notification address** is not public:
+public only through the privacy notice. An empty field shows as *Not stated* in the panel, and nothing warns: what you
+may owe is the panel's information above the values ([What you may owe](#what-you-may-owe)). The **notification address** is not public:
 new moderation cases will be mailed there. Saving it mails a code to it through the instance mail, once Server → Mail
 is set up and confirmed (the panel says so until then); you type the code into the same panel, and nothing is mailed
-to the address before. A changed address asks again. **Clear all** removes every value and keeps the mode.
+to the address before. A changed address asks again. **Clear all** removes every value.
 
 ## Moderators
 
@@ -536,24 +555,23 @@ instance** (`/operator-terms`, served by `GET /api/operator/terms`). Nobody edit
 law (you are the host), so a space's owner cannot delete it, and its wording is fixed so nothing a supervisor checks can
 be dropped. You fill it in under **Server → Operator** above, and a changed value shows at once.
 
-What it says depends on the operating mode:
+It has one form on every instance, and says:
 
-| Part | Private | Club, organisation or company |
-|---|---|---|
-| Who runs the instance (your identification) | where set | always; an empty field reads *not stated by this operator* |
-| How to report, who reviews, that a report blocks nothing, what is kept and for how long | yes | yes |
-| The measures, that those affected are told why and can object once | yes | yes |
-| The statement's further content (facts, report or order, that a person decided, the ground with the law or clause, where and how long it applies, the courts) | no | yes |
-| That an authority can defer the statement | no | yes |
-| Authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your contact with its languages | no | yes |
-| A pointer to the guest-write record's information, which is [the privacy notice](#the-privacy-notice)'s | while *Record guests' writes* is on | while it is on |
+- who runs the instance (your identification) — an empty field reads *not stated by this operator*;
+- how to report, who reviews, that a report blocks nothing, what is kept and for how long;
+- the measures, and that those affected are told why and can object once;
+- the statement's further content: the facts, whether a report or an order led to it, that a person decided, the
+  ground with the law or clause, where and how long it applies, the courts;
+- that only an authority can defer the statement;
+- authorities: reports of crimes against life or safety, orders, terrorist content blocked within the hour, your
+  contact with its languages;
+- a pointer to the guest-write record's information, which is [the privacy notice](#the-privacy-notice)'s.
 
 The values it uses are the instance contact and its languages, the address statements name (else the contact) and the
 provider identification.
 
-**When members and guests are asked again.** A space's owner changing their terms, a veyq release that changes the
-section's text, or you switching the operating mode asks every member and guest of every space again. Changing a value,
-N or the record switch asks nobody.
+**When members and guests are asked again.** A space's owner changing their terms, or a veyq release that changes the
+section's text, asks every member and guest of that space again. Changing a value or N asks nobody.
 
 **It is a draft.** No lawyer has reviewed the text yet, and every rendering starts by saying so. Before you publish an
 instance, have it checked. A known question, also named in ADR 0035 decision 6: whether a space's own terms must be
@@ -578,16 +596,15 @@ It states what **this** instance does, from what it is set to, so keeping it tru
   in and the one cookie, what the browser keeps, the terms a member accepted, reports and moderation, a reporter's
   contact, mail (yours, and a space's own relay as its owner's), where encrypted content is stored (an external store by
   its host), backups with your B, logs, and the account erasure with its window and what outlives it;
-- **passages that follow a switch**, on the space's own address: the guest-write record with N and N + B and its own
-  right to object (*Record guests' writes*), the breached-password check naming the address it calls — a mirror you set
+- **the guest-write record** with N and N + B and its own right to object, on every instance (it has no switch);
+- **passages that follow a switch**, on the space's own address: the breached-password check naming the address it calls — a mirror you set
   is named, HIBP is not (*Breached-password check*), and the services a member's browser calls, each by its address
   (*Place names*, *Maps*; a space's owner can switch these off for their space);
 - **the rights**, the complaint to the supervisory authority, and the right to object to everything resting on a
   legitimate interest, set apart.
 
-In the *club, organisation or company* mode an empty value reads *not stated by this operator* (the recipients' passage
-too, while you name none); in *private* it is left out — you may need no notice there, but every passage is still true
-of your instance. It is shown in both modes.
+An empty value reads *not stated by this operator* (the recipients' passage too, while you name none). It is shown on
+every instance — a household may owe no notice, but every passage is still true of your instance.
 
 **It is a draft too**, and says so on every rendering. Questions only counsel answers, and that the notice answers as
 veyq is built until then: whether each space's owner is a joint controller with you for its members' accounts (the

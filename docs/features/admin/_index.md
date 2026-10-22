@@ -71,7 +71,7 @@ handling of reported shares.
   lock on the tenant row)
 - Set tenant branding — planned
 - ★ [Back up & restore the instance](use-cases/uc.admin.back-up-and-restore-instance.md) — **built** (the operator tool
-  `scripts/instance_backup.py`; capture and restore onto an empty instance are rehearsed in the web e2e run)
+  `src/tools/instance_backup.py`; capture and restore onto an empty instance are rehearsed in the web e2e run)
   ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md); three legs not two, a cold
   capture that stops only the writer, and a store leg captured as objects rather than volumes)
 - ★ [Know which release runs, and which a backup came from](use-cases/uc.admin.identify-instance-release.md) —
@@ -79,8 +79,8 @@ handling of reported shares.
   the operator's, the pre-auth `major`/`build` is the client's; they share the major
   ([ADR 0085](../../decisions/0085-one-major-moved-on-a-yearly-train.md), generated from `VERSION`) and the precise release never goes pre-auth)
 - ★ [Install an instance and keep it on its release line](use-cases/uc.admin.install-and-upgrade-instance.md) —
-  **built** (`scripts/veyqctl.py`, [ADR 0096](../../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md);
-  coverage stays `planned`, a host tool being no coverage surface — `scripts/veyqctl_selftest.py` and the stack lane
+  **built** (`src/tools/veyqctl.py`, [ADR 0096](../../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md);
+  coverage stays `planned`, a host tool being no coverage surface — `src/tools/veyqctl_selftest.py` and the stack lane
   prove it). A release is an immutable GitHub Release whose assets are the recipe; `veyqctl install` and `upgrade`
   verify its images before anything is pulled, and an upgrade begins with the backup above by decision, not by advice —
   the schema migrates at boot with no gate and the migration set has no downgrade path
@@ -91,11 +91,11 @@ handling of reported shares.
 - ★ [Learn of a new release without looking for one](use-cases/uc.admin.learn-of-new-releases.md) — **built**
   ([ADR 0097](../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md); a daily check,
   console notices, and instance mail for the Server Owner only)
-- ★ [Choose the operating mode and publish who runs the instance](use-cases/uc.admin.operator-details.md) —
+- ★ [Publish who runs the instance](use-cases/uc.admin.operator-details.md) —
   **built** ([ADR 0093](../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-  §§ 11 and 14, [ADR 0035](../../decisions/0035-server-terms-of-service.md) decisions 6–7; the mode a preset over
-  the register's switches, the contact and the provider identification published, admin-web warning only in the
-  *club, organisation or company* mode; the recipients and the data-protection officer the privacy notice names)
+  §§ 11 and 14, [ADR 0035](../../decisions/0035-server-terms-of-service.md) decisions 6–8; the contact and the provider
+  identification published, every value optional and shown as not stated while empty, what an operator may owe told as
+  information; the recipients and the data-protection officer the privacy notice names)
 - [Read the instance's privacy notice](use-cases/uc.admin.privacy-notice.md) — **built**
   ([ADR 0035](../../decisions/0035-server-terms-of-service.md) decision 8, GDPR Art. 13): fixed text with the
   instance's values and the switches on for the host's space, public at `/privacy` on every tenant host and linked

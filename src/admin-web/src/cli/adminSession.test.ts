@@ -32,7 +32,8 @@ describe('veyq-admin session — the credential comes from the environment and n
 
   it('signs in with the environment credential and points the API clients at the backend', async () => {
     await signIn({ VEYQ_ADMIN_EMAIL: 'o@example.com', VEYQ_ADMIN_PASSWORD: 'pw', BACKEND_URL: 'http://b:8080' })
-    expect(login).toHaveBeenCalledWith('o@example.com', 'pw')
+    // `body`: Node keeps no cookie jar, so a cookie-borne refresh token would leave the run unable to rotate.
+    expect(login).toHaveBeenCalledWith('o@example.com', 'pw', 'body')
     expect(session.apiBase).toBe('http://b:8080')
   })
 

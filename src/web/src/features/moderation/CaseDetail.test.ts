@@ -100,7 +100,6 @@ const caseOf = (over: Partial<ModerationCase> = {}): ModerationCase => ({
       },
     },
   ],
-  statementForm: 'FULL',
   origin: 'REPORT',
   orders: [],
   objections: [],
@@ -332,7 +331,7 @@ describe('CaseDetail', () => {
   })
 
   describe('the statement of reasons', () => {
-    it('in the full form a block without facts is not sent, and says why', async () => {
+    it('a block without facts is not sent, and says why (one form on every instance)', async () => {
       const w = await mountCase()
       expect(w.find('label[for="moderation-statement-facts"]').text()).toBe(t('moderation.decide.facts'))
       await click(w, '.moderation-block-content')
@@ -341,7 +340,7 @@ describe('CaseDetail', () => {
       expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.factsRequired'))
     })
 
-    it('in the full form a block without the provision it relies on is not sent, and says why', async () => {
+    it('a block without the provision it relies on is not sent, and says why', async () => {
       const w = await mountCase()
       expect(w.find('label[for="moderation-statement-provision"]').text()).toBe(t('moderation.decide.provision'))
       await w.find('.moderation-statement-facts').setValue('the facts')
@@ -351,15 +350,17 @@ describe('CaseDetail', () => {
       expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.provisionRequired'))
     })
 
-    it('in the reduced form a block goes without facts, on the ground the moderator chose, telling the reporters', async () => {
-      vi.mocked(takeMeasure).mockResolvedValue(caseOf({ state: 'DECIDED', statementForm: 'REDUCED' }))
+    it('a block with the facts and the provision goes, on the ground the moderator chose, telling the reporters', async () => {
+      vi.mocked(takeMeasure).mockResolvedValue(caseOf({ state: 'DECIDED' }))
       vi.mocked(reporterNoticesOf).mockReturnValue([{ reportId: REPORT, address: 'r@example.org' }])
-      const w = await mountCase(caseOf({ statementForm: 'REDUCED' }))
-      expect(w.find('label[for="moderation-statement-facts"]').text()).toBe(t('moderation.decide.factsOptional'))
+      const w = await mountCase(caseOf())
+      expect(w.find('label[for="moderation-statement-facts"]').text()).toBe(t('moderation.decide.facts'))
       expect((w.find('.moderation-statement-ground').element as HTMLSelectElement).value).toBe('TERMS_BREACH')
       await w.find('.moderation-statement-ground').setValue('ILLEGAL_CONTENT')
+      await w.find('.moderation-statement-provision').setValue('§ 86a StGB')
+      await w.find('.moderation-statement-facts').setValue('the facts')
       await click(w, '.moderation-block-content')
-      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', provision: '', facts: '', deferral: null }, [
+      expect(takeMeasure).toHaveBeenCalledWith(CASE, 'CONTENT', { targetId: ITEM }, '', { ground: 'ILLEGAL_CONTENT', provision: '§ 86a StGB', facts: 'the facts', deferral: null }, [
         { reportId: REPORT, address: 'r@example.org' },
       ])
     })

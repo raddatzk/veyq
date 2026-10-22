@@ -67,7 +67,7 @@ class TenantIngressSinkProducer(
             bootstrapDomain = bootstrapDomain,
             adminDomain = hostname(ingress.adminDomain().orElse(null), "admin-domain"),
             upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
-            bucket = { store.routeBucket() },
+            bucket = { store.bundledRouteBucket() },
             clientPortHeader = config.http().clientPort().takeIf { it.source() == ClientPortSource.HEADER }?.header(),
         )
     }

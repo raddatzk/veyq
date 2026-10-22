@@ -166,8 +166,6 @@ export const scopeSummary = (o: Partial<ScopeSummary> = {}): ScopeSummary => ({
 /** An operator section of the terms as the share and tenant terms reads serve it (ADR 0035 decision 6). */
 export const OPERATOR_SECTION = {
   revision: 1,
-  variant: 'FULL' as const,
   text: { de: '## Auf dieser Instanz', en: '## On this instance' },
-  record: null,
-  objection: null,
+  record: { de: '### Deine IP-Adresse', en: '### Your IP address' },
 }

@@ -179,7 +179,7 @@ describe('the Server Owner’s steps', () => {
   })
 
   it('blocks by the trimmed address with the case, and with an explicit null case when none is named', async () => {
-    const mocks = stubApi(instanceModerationApi, { blockAccountSignIn: steps })
+    const mocks = stubApi(instanceModerationApi, { blockAccountSignIn: { steps } })
     await blockSignIn('  member@example.com ', 'case-1')
     expect(mocks.blockAccountSignIn).toHaveBeenLastCalledWith({
       blockAccountSignInRequest: { address: 'member@example.com', caseId: 'case-1', overContent: false, statement: null },

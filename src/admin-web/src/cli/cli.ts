@@ -113,6 +113,8 @@ export async function run(
     await signIn(env)
     const result = await command.run(flags, env)
     out(command.render ? command.render(result, flags, env) : renderResult(result))
+    const warning = command.warning?.(result)
+    if (warning) err(`${NAME}: warning: ${warning}`)
     return command.exitCode?.(result) ?? 0
   } catch (e) {
     err(`${NAME}: ${await describeFailure(e)}`)

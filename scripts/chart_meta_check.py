@@ -100,8 +100,11 @@ render, asserts — deriving every anchor from the source rather than listing it
        set all three, or the digest render is checked by nobody, and `helm lint` with a digest that is not
        `sha256:<64 hex>` must be refused naming `digest`.
   xix. **The app container's store variables are the bundled-store hint, and no credential of a store**
-       (cr-store-connection-in-admin-web phase 4, ADR 0089): `VEYQ_BUNDLED_STORE_ENDPOINT`, `_ADMIN_ENDPOINT` and
-       `_ADMIN_TOKEN` are present, and no `VEYQ_BLOB_STORE_*` variable is — the store setting lives in the database.
+       (cr-store-connection-in-admin-web phase 4, ADR 0089): no `VEYQ_BLOB_STORE_*` variable is present — the store
+       setting lives in the database — and with `garage.enabled` `VEYQ_BUNDLED_STORE_ENDPOINT`, `_ADMIN_ENDPOINT` and
+       `_ADMIN_TOKEN` are; without it no container of the render (the app's, the backup gate's, any) carries a
+       `VEYQ_BUNDLED_STORE_*` variable (ADR 0064 § the bundled store is opt-in: a hint without the store makes the
+       console offer one that is not there). Some file in `ci/` must render each side.
   xx.  **No rendered object is a `networking.k8s.io` `Ingress`** (ADR 0064: routing is the Gateway API, and the
        chart keeps nothing for `Ingress`). A render that brings one back is red whatever it routes.
   xxi. **Every route hangs off the chart's one `Gateway`, on the listener the TLS mode names, and the `Gateway`
@@ -145,11 +148,12 @@ render, asserts — deriving every anchor from the source rather than listing it
        claim — its one container running `prune` (ADR 0056 decision 8: the daily prune of every capture older than B;
        a capture on the claim can never hold the KEK, and nothing the prune writes is anywhere else); with the gate off,
        no CronJob at all.
-  xxvii.**The bundled store keeps no request log.** Every container whose image repository is `garage` sets
-       `RUST_LOG`, and no directive in it is `info`, `debug` or `trace` (ADR 0092 § 5): unset, the image's own
-       `garage=info` logs every S3 and admin request with the peer's address and the URI with its query. The compose
-       recipe's half is `validate_compose_posture.py` assertion 6. The positive control: every render has such a
-       container, or the level is checked by nobody.
+  xxvii.**The bundled store keeps no request log, and runs only where it is enabled.** Every container whose image
+       repository is `garage` sets `RUST_LOG`, and no directive in it is `info`, `debug` or `trace` (ADR 0092 § 5):
+       unset, the image's own `garage=info` logs every S3 and admin request with the peer's address and the URI with
+       its query. The compose recipe's half is `validate_compose_posture.py` assertion 6. The positive control: every
+       render with `garage.enabled` has such a container, or the level is checked by nobody; and a render without it
+       has none (ADR 0064: off, the chart renders none of Garage's objects).
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -188,6 +192,9 @@ mounts the KEK's claim and judges the app's own release, and that an install cho
 claim of it — the gate carries `VEYQ_BACKUP_DB_*` instead. (xxvii) came with a legal audit (2026-10-18), live when
 written: the chart set no `RUST_LOG`, so the store ran at its image's `garage=info`; run against that chart it was red in
 every render, and it was bitten by injection (the env removed from the template, `garage.logFilter=garage=info`).
+(xix) and (xxvii) became conditional on `garage.enabled` when the bundled store turned opt-in on this target (ADR 0064,
+inbox #521); each direction was bitten by injection — the StatefulSet, the app's hint and the gate's hint each
+rendered unconditionally, the app's hint dropped where on, and no `ci/` file left turning it on.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -213,7 +220,7 @@ port (Kubernetes documents traffic from a pod's own node as always allowed; no c
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
 digest exists or is the one `site/src/content/docs/run/verify-a-release.md` verified — the chart cannot see the verification.
 (xxiv) proves what the init container is handed, not what it does: the gate's decisions are
-`scripts/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
+`src/tools/instance_backup_selftest.py`'s, and that the claim is writable under `fsGroup`, that `restricted` admits the
 pod and that the gate captures cold were measured once, on a kind cluster (cr-kubernetes-backup-gate), not here. And
 it recognises the config-secret claim only through the app container's KEK path; a key the app reads from elsewhere
 is out of its reach. (xxvii) reads what the container is told, not what Garage does with it (that `warn` drops the
@@ -276,6 +283,8 @@ APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
 TOOLS_IMAGE = re.compile(r"(?:^|/)veyq-tools(?::|$)")
+# (xix) the bundled-store hint's variables — present on the app with garage.enabled, on no container without it.
+BUNDLED_HINT = "VEYQ_BUNDLED_STORE_"
 # (xxvii) the bundled store, by its image repository, and the RUST_LOG levels that log every request.
 STORE_IMAGE = re.compile(r"(?:^|/)garage(?::|@|$)")
 VERBOSE_LEVELS = {"info", "debug", "trace"}
@@ -443,6 +452,10 @@ def backup_enabled(values: dict) -> bool:
     return ((values.get("backup") or {}).get("enabled", True)) is not False  # the chart's default is true
 
 
+def garage_enabled(values: dict) -> bool:
+    return ((values.get("garage") or {}).get("enabled", False)) is True  # the chart's default is false (ADR 0064)
+
+
 def every_container(spec: dict | None) -> list[dict]:
     return list((spec or {}).get("containers") or []) + list((spec or {}).get("initContainers") or [])
 
@@ -596,11 +609,17 @@ def check_client_port(tag: str, values: dict, rendered: list[dict]) -> None:
                     )
 
 
-def check_store_log(tag: str, rendered: list[dict]) -> None:
-    """(xxvii) the bundled store's container sets RUST_LOG, at no level that logs every request."""
+def check_store_log(tag: str, garage: bool, rendered: list[dict]) -> None:
+    """(xxvii) the bundled store's container sets RUST_LOG, at no level that logs every request — and runs only with
+    garage.enabled."""
     stores = [c for obj in rendered for c in every_container(pod_spec(obj)) if STORE_IMAGE.search(str(c.get("image") or ""))]
+    if not garage:
+        if stores:
+            errors.append(f"(xxvii) {tag}: garage.enabled is off and {len(stores)} container(s) still run the store's image — "
+                          f"off renders none of Garage's objects (ADR 0064 § the bundled store is opt-in)")
+        return
     if not stores:
-        errors.append(f"(xxvii) {tag}: no container runs the store's image — its log level is checked by nobody")
+        errors.append(f"(xxvii) {tag}: garage.enabled is on and no container runs the store's image — its log level is checked by nobody")
     for container in stores:
         env = {e.get("name"): str(e.get("value")) for e in container.get("env") or [] if "value" in e}
         rust_log = env.get("RUST_LOG")
@@ -894,6 +913,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
     tls = gateway.get("tls") or {}
     acme = bool((tls.get("acme") or {}).get("enabled"))
     admin_domain = bool((values.get("admin") or {}).get("domain"))
+    garage = garage_enabled(values)
 
     first = render(values_file)
     second = render(values_file) if first else ""
@@ -955,7 +975,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
                 continue
             app_containers += 1
 
-            # (xix) the object store reaches the app as the bundled-store HINT and nothing else (ADR 0089).
+            # (xix) the object store reaches the app as the bundled-store HINT and nothing else (ADR 0089) — and the
+            # hint only where the chart brings the store (garage.enabled; off, (xix) below holds every container).
             env_names = {e.get("name") for e in container.get("env") or []}
             leaked = sorted(n for n in env_names if str(n).startswith("VEYQ_BLOB_STORE_"))
             if leaked:
@@ -965,7 +986,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
                     f"pair is derived from the admin token."
                 )
             missing_hint = sorted({"VEYQ_BUNDLED_STORE_ENDPOINT", "VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT", "VEYQ_BUNDLED_STORE_ADMIN_TOKEN"} - env_names)
-            if missing_hint:
+            if garage and missing_hint:
                 errors.append(f"(xix) {tag}: {name_of(obj)} lacks the bundled-store hint {', '.join(missing_hint)} — the console could not offer \"Use the bundled store\".")
 
             # (iii) one migrator at a time.
@@ -1005,6 +1026,16 @@ def check(values_file: pathlib.Path) -> list[dict]:
                         f"{runtime_user} — a PersistentVolumeClaim comes up root-owned and inherits nothing from the image, so "
                         f"without fsGroup={runtime_user} the app cannot write its own config-secret key on a first install."
                     )
+
+    # (xix) off: no container of the render — the app's, the backup gate's, any — is handed a bundled-store variable.
+    if not garage:
+        for obj in rendered:
+            for container in every_container(pod_spec(obj)):
+                hinted = sorted(str(e.get("name")) for e in container.get("env") or [] if str(e.get("name")).startswith(BUNDLED_HINT))
+                if hinted:
+                    errors.append(f"(xix) {tag}: garage.enabled is off and {name_of(obj)} container `{container.get('name')}` is "
+                                  f"handed {', '.join(hinted)} — a hint without the store makes the console offer one that "
+                                  f"is not there (ADR 0064 § the bundled store is opt-in)")
 
     if first and app_containers == 0:
         errors.append(f"{tag}: no container in the render runs the app image — either the chart stopped deploying the app, or this guard no longer recognises it")
@@ -1062,7 +1093,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
         elif has_gate == enabled:
             errors.append(f"(xxv) {tag}: flipping backup.enabled did not flip the gate — the switch renders nothing different")
     check_client_port(tag, values, rendered)
-    check_store_log(tag, rendered)
+    check_store_log(tag, garage, rendered)
+    (garage_on if garage else garage_off).add(tag)
 
     if not first:
         return rendered
@@ -1148,6 +1180,8 @@ if not values_files:
     errors.append(f"{CI_DIR.relative_to(ROOT)} holds no values file — nothing would be rendered, and a run over nothing is not a green")
 digests_set: set[str] = set()
 proxy_rendered: set[str] = set()
+garage_on: set[str] = set()
+garage_off: set[str] = set()
 renders = {f.name: check(f) for f in values_files}
 
 # (xiv) the digest path is rendered by some file, and the schema refuses a digest that is not one.
@@ -1155,6 +1189,11 @@ for which in ("app", "admin", "tools"):
     if values_files and which not in digests_set:
         errors.append(f"(xiv) no file in {CI_DIR.relative_to(ROOT)} sets the {which} image's digest, so the `repository:tag@digest` render is checked by nobody")
 # (xxiii) the PROXY branch is rendered by some file.
+# (xix)/(xxvii) both sides of garage.enabled are rendered by some file, or one direction is checked by nobody.
+for side, files in (("on", garage_on), ("off", garage_off)):
+    if values_files and not files:
+        errors.append(f"(xix/xxvii) no file in {CI_DIR.relative_to(ROOT)} renders garage.enabled {side}, so that side's store "
+                      f"objects and hint are checked by nobody")
 if values_files and not proxy_rendered:
     errors.append(f"(xxiii) no file in {CI_DIR.relative_to(ROOT)} sets app.clientPort.source: proxyProtocol, so the PROXY render — its env and its probes on the admin listener — is checked by nobody")
 if values_files:
@@ -1227,5 +1266,5 @@ print(
     f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "
     f"listener, in {', '.join(sorted(proxy_rendered))}, and a port source outside the enum refused; the backup gate on the tools image where on — the named claim, "
     f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice; the daily prune of every capture past B on that claim alone, and none where off; "
-    f"the store's RUST_LOG below info"
+    f"the bundled store's objects and hint only with garage.enabled (on in {', '.join(sorted(garage_on))}), its RUST_LOG below info"
 )

@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
 // uc.admin.operator-details (admin-web) — Server → Operator. Each case is one observable:
-//   - the organisation mode warns while public links are on and no contact is set, and stops once one is (A1);
-//   - the identification warning is its own, independent of the contact and of public links (A1);
-//   - private warns about nothing, every value empty and public links on — the Impressum warning never shows there;
+//   - nothing warns, every value empty: each empty public field shows as not stated, beside what a Server Owner may owe
+//     (ADR 0093 § 14: no operating mode, nothing required);
 //   - a save sends every value, an empty field as null; a CODE_SENT answer offers the code entry, and the code confirms
 //     (main flow 4); instance mail that is not ready is said (A2).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -13,14 +12,9 @@ vi.mock('./operator', async () => {
   const actual = await vi.importActual<typeof import('./operator')>('./operator')
   return { ...actual, getOperator: vi.fn(), setOperator: vi.fn(), clearOperator: vi.fn(), confirmOperatorNotification: vi.fn() }
 })
-vi.mock('./capabilities', async () => {
-  const actual = await vi.importActual<typeof import('./capabilities')>('./capabilities')
-  return { ...actual, listInstanceCapabilities: vi.fn() }
-})
 
 import OperatorPanel from './OperatorPanel.vue'
 import { confirmOperatorNotification, getOperator, setOperator, type InstanceOperator } from './operator'
-import { listInstanceCapabilities, type InstanceCapability } from './capabilities'
 import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
@@ -52,22 +46,13 @@ const stubs = {
 
 function operator(over: Partial<InstanceOperator> = {}): InstanceOperator {
   return {
-    operatingMode: 'ORGANISATION', contactEmail: undefined, contactLanguages: [], statementEmail: undefined, notificationEmail: undefined,
+    contactEmail: undefined, contactLanguages: [], statementEmail: undefined, notificationEmail: undefined,
     notificationConfirmation: 'NOT_SET', notificationConfirmedAt: undefined, instanceMailReady: true, providerName: undefined,
     providerAddress: undefined, providerEmail: undefined, providerRepresentative: undefined, supervisoryAuthority: undefined,
     recipients: [], recipientSuggestions: [], ...over,
   }
 }
 
-const identified = { providerName: 'Example e. V.', providerAddress: 'Musterstraße 1', providerEmail: 'info@example.org' }
-
-function publicShares(effective: boolean): InstanceCapability[] {
-  const text = { en: 'x', de: 'x' }
-  return [{
-    id: 'core.public-shares', title: text, purpose: text, whenOff: text, off: !effective, effective,
-    tenantSwitchable: true, requirements: [],
-  }]
-}
 
 async function mountPanel() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
@@ -80,47 +65,31 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
-    vi.mocked(listInstanceCapabilities).mockResolvedValue(publicShares(true))
   })
 
-  it('organisation: warns while public links are on and no contact is set, and stops once one is', async () => {
-    vi.mocked(getOperator).mockResolvedValue(operator(identified))
-    vi.mocked(setOperator).mockResolvedValue(operator({ ...identified, contactEmail: 'contact@example.org' }))
-    const w = await mountPanel()
-    expect(w.find('.operator-warn-contact').exists()).toBe(true)
-    expect(w.find('.operator-warn-identification').exists()).toBe(false)
-    await w.find('.operator-contact').setValue('contact@example.org')
-    await w.find('.operator-save').trigger('click')
-    await flushPromises()
-    expect(w.find('.operator-warn-contact').exists()).toBe(false)
-  })
-
-  it('organisation: no contact warning while public links are off — the identification warning stands on its own', async () => {
-    vi.mocked(listInstanceCapabilities).mockResolvedValue(publicShares(false))
+  it('warns about nothing: every empty public field shows as not stated, beside what a Server Owner may owe', async () => {
     vi.mocked(getOperator).mockResolvedValue(operator())
     const w = await mountPanel()
-    expect(w.find('.operator-warn-contact').exists()).toBe(false)
-    expect(w.find('.operator-warn-identification').exists()).toBe(true)
-  })
-
-  it('organisation: the identification warning goes once name, address and email are set, whatever the contact', async () => {
-    vi.mocked(getOperator).mockResolvedValue(operator({ ...identified, providerEmail: undefined }))
-    vi.mocked(setOperator).mockResolvedValue(operator(identified))
-    const w = await mountPanel()
-    expect(w.find('.operator-warn-identification').exists()).toBe(true)
-    await w.find('.operator-provider-email').setValue('info@example.org')
-    await w.find('.operator-save').trigger('click')
-    await flushPromises()
-    expect(w.find('.operator-warn-identification').exists()).toBe(false)
-    expect(w.find('.operator-warn-contact').exists()).toBe(true)
-  })
-
-  it('private: neither warning shows, every value empty and public links on', async () => {
-    vi.mocked(getOperator).mockResolvedValue(operator({ operatingMode: 'PRIVATE' }))
-    const w = await mountPanel()
     expect(w.find('.operator-save').exists()).toBe(true)
-    expect(w.find('.operator-warn-contact').exists()).toBe(false)
-    expect(w.find('.operator-warn-identification').exists()).toBe(false)
+    expect(w.find('[class*="operator-warn"]').exists()).toBe(false)
+    expect(w.find('.msg[data-severity="warn"]').exists()).toBe(false)
+    for (const field of ['.operator-contact', '.operator-provider-name', '.operator-provider-address', '.operator-provider-email', '.operator-supervisory-authority', '.operator-dpo']) {
+      expect(w.find(field).attributes('placeholder')).toBe('Not stated')
+    }
+    expect(w.find('.operator-no-recipient').text()).toContain('not stated by this operator')
+    const duties = w.find('[data-test="operator-duties"]')
+    expect(duties.text()).toContain('household exemption')
+    expect(duties.text()).toContain('your own assessment, not veyq’s')
+    expect(w.find('input[type="checkbox"]').exists()).toBe(false) // information, not a choice: nothing to tick
+  })
+
+  it('a value set shows itself, and the recipients’ gap goes with the first row', async () => {
+    vi.mocked(getOperator).mockResolvedValue(operator({
+      providerName: 'Example e. V.', recipients: [{ name: 'Example Hosting GmbH', kind: 'HOSTING', country: 'DE' }],
+    }))
+    const w = await mountPanel()
+    expect((w.find('.operator-provider-name').element as HTMLInputElement).value).toBe('Example e. V.')
+    expect(w.find('.operator-no-recipient').exists()).toBe(false)
   })
 
   it('a save sends every value, an empty field as null and the languages as tags', async () => {
@@ -137,17 +106,6 @@ describe('OperatorPanel (uc.admin.operator-details, admin-web)', () => {
       providerName: null, providerAddress: 'Musterstraße 1\n12345 Musterstadt', providerEmail: null,
       providerRepresentative: null, supervisoryAuthority: null, recipients: [], dataProtectionOfficer: null,
     })
-  })
-
-  it('organisation: the privacy warning shows while no recipient or no authority is named; private: never', async () => {
-    vi.mocked(getOperator).mockResolvedValue(operator())
-    expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(true)
-    vi.mocked(getOperator).mockResolvedValue(operator({
-      supervisoryAuthority: 'LfD', recipients: [{ name: 'Example Hosting GmbH', kind: 'HOSTING', country: 'DE' }],
-    }))
-    expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(false)
-    vi.mocked(getOperator).mockResolvedValue(operator({ operatingMode: 'PRIVATE' }))
-    expect((await mountPanel()).find('.operator-warn-privacy').exists()).toBe(false)
   })
 
   it('a suggested recipient becomes a row only when added, and is saved only as that row; the officer is saved', async () => {

@@ -4,8 +4,8 @@
 // decision panel, each step with its reach stated. Every decision is confirmed, carries the optional note sealed to the
 // moderation key, and answers with the case as it now stands, which replaces the one shown. "Review" leaves this page
 // for the reported tenant's host, where the share viewer's moderation mode renders the held snapshot. A block carries its
-// statement of reasons (uc.moderation.object-to-a-measure): the ground and the facts, required by the instance's full form
-// and optional in the reduced one; a reporter who left an address is told the decision. An objection is shown opened, and
+// statement of reasons (uc.moderation.object-to-a-measure): the ground, the facts and the provision, required of every
+// statement (ADR 0093 § 7: one form on every instance); a reporter who left an address is told the decision. An objection is shown opened, and
 // decided here by a moderator other than the one who took the measure while there is one (ADR 0099 § 5).
 // An authority (ADR 0093 §§ 7, 12-13): a statement is deferred only on an authority's request, entered with the block
 // or renewed once on the statement, and the case shows until when; a case an order opened shows its orders, and every
@@ -67,7 +67,7 @@ const CSAM_EXTENSION_TYPES: HoldExtensionReason[] = ['AUTHORITY_REFERENCE', 'ART
 const GROUNDS: ModerationGround[] = ['CHILD_SEXUAL_ABUSE', 'TERRORIST_CONTENT', 'THREAT_TO_LIFE', 'ILLEGAL_CONTENT', 'TERMS_BREACH']
 const ground = ref<ModerationGround | ''>('')
 const facts = ref('')
-// The provision of the law or the clause of the terms the ground relies on (DSA Art. 17(3)(d), (e)) — required in the full form.
+// The provision of the law or the clause of the terms the ground relies on (DSA Art. 17(3)(d), (e)) — required.
 const provision = ref('')
 // An authority's deferral of the next block's statement (ADR 0093 § 7): only with its request, at most six weeks.
 const deferAsked = ref(false)
@@ -134,8 +134,6 @@ const openedFacts = computed(() =>
   ),
 )
 
-const fullForm = computed(() => current.value?.statementForm !== 'REDUCED')
-
 const open = computed(() => current.value?.state === 'OPEN')
 const closed = computed(() => current.value?.state === 'CLOSED')
 const inForce = computed(() => (current.value?.measures ?? []).filter((m) => m.liftedAt === null))
@@ -184,15 +182,15 @@ const dismiss = () =>
   )
 
 /**
- * Take a block with its statement: refused here already when the full form lacks the facts or the provision, as the
- * server would; the ground defaults to the case's category, and the facts field empties once the block is taken.
+ * Take a block with its statement: refused here already when it lacks the facts or the provision, as the server
+ * would; the ground defaults to the case's category, and the facts field empties once the block is taken.
  */
 function block(label: string, reach: string, kind: MeasureKind, target: { shareId?: string; targetId?: string }) {
-  if (fullForm.value && facts.value.trim() === '') {
+  if (facts.value.trim() === '') {
     error.value = t('moderation.errors.factsRequired')
     return
   }
-  if (fullForm.value && provision.value.trim() === '') {
+  if (provision.value.trim() === '') {
     error.value = t('moderation.errors.provisionRequired')
     return
   }
@@ -494,12 +492,12 @@ onMounted(load)
         <select id="moderation-statement-ground" v-model="ground" class="moderation-statement-ground" :disabled="busy">
           <option v-for="g in GROUNDS" :key="g" :value="g">{{ t(`report.categories.${g}`) }}</option>
         </select>
-        <label for="moderation-statement-provision">{{ fullForm ? t('moderation.decide.provision') : t('moderation.decide.provisionOptional') }}</label>
+        <label for="moderation-statement-provision">{{ t('moderation.decide.provision') }}</label>
         <input id="moderation-statement-provision" v-model="provision" class="moderation-statement-provision" type="text" maxlength="200" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.decide.provisionHint') }}</span>
-        <label for="moderation-statement-facts">{{ fullForm ? t('moderation.decide.facts') : t('moderation.decide.factsOptional') }}</label>
+        <label for="moderation-statement-facts">{{ t('moderation.decide.facts') }}</label>
         <textarea id="moderation-statement-facts" v-model="facts" class="moderation-statement-facts" rows="4" maxlength="2000" :disabled="busy" />
-        <span class="veyq-form-copy">{{ fullForm ? t('moderation.decide.factsHint') : t('moderation.decide.factsHintReduced') }}</span>
+        <span class="veyq-form-copy">{{ t('moderation.decide.factsHint') }}</span>
         <label class="moderation-defer-ask">
           <input v-model="deferAsked" type="checkbox" class="moderation-defer-toggle" :disabled="busy" />
           {{ t('moderation.deferral.ask') }}

@@ -13,6 +13,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
+import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import {
@@ -42,7 +43,10 @@ import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
 import { decodeHttpError, isUnauthorized } from '../../shared/httpError'
 import StepStatementFields from '../instance/StepStatementFields.vue'
+import StatementDeliveryNotice from '../instance/StatementDeliveryNotice.vue'
+import { reportOf, type StatementReport } from '../instance/statementDelivery'
 import { stepStatement, StepStatementInvalid, type StepStatementDraft } from '../instance/stepStatement'
+import { getModerationSteps, ProposalStep, type OpenModerationProposal } from '../instance/moderation'
 
 // Addressed by id (cr-0087) — the settings rail renders one panel per tenant; the tenantId watch re-loads on switch.
 const props = defineProps<{ tenantId: string }>()
@@ -74,6 +78,12 @@ const quotaGib = ref('')
 const loadedQuota = ref<{ text: string; bytes: number } | null>(null)
 // The delete confirmation as typed: the tenant's domain (uc.admin.delete-tenant). Cleared on every load.
 const deleteTyped = ref('')
+// A moderator's open proposal to take this tenant offline, read with the tenant (see `overContent` below).
+const proposal = ref<OpenModerationProposal | null>(null)
+// What the last step over content answered about its statement's mail, when it did not plainly reach everyone (ADR 0093
+// § 7): kept under the header with the words as sent until dismissed — a reload after the step keeps it, another tenant
+// drops it.
+const report = ref<StatementReport | null>(null)
 
 const isPending = computed(() => tenant.value?.status === 'PENDING')
 // ADR 0066 — the third status. Availability only: SUSPENDED says nothing about the tenant's content, which is
@@ -107,9 +117,13 @@ const { pending: loading, error: loadErr, reload } = useAsyncData(async () => {
     quotaGib.value = found.storageQuotaBytes == null ? '' : formatQuotaGib(found.storageQuotaBytes)
     loadedQuota.value = found.storageQuotaBytes == null ? null : { text: quotaGib.value, bytes: found.storageQuotaBytes }
   }
+  proposal.value = found && (found.status === 'ACTIVE' || found.status === 'SUSPENDED') ? await openOfflineProposal() : null
   return found
 }, { onError: on401 })
-watch(() => props.tenantId, () => reload())
+watch(() => props.tenantId, () => {
+  report.value = null
+  reload()
+})
 // The load error, plus the business `gone` state (loaded fine, no such tenant) the error slot can't carry.
 const loadError = computed<'' | 'notAuthorized' | 'failed' | 'gone'>(() => {
   const kind = loadErrorKind(loadErr.value)
@@ -139,10 +153,32 @@ function reassign() {
   return mint(() => reassignInvite(props.tenantId, email.value.trim()), 'tenant.reassigned')
 }
 
-// A suspension over content carries a statement of reasons to the tenant's owners, by mail (ADR 0093 § 7): the Server
-// Owner ticks it — the server insists when a moderator's proposal is open (`statement_required`) — and writes it.
-const overContent = ref(false)
+// Taking the tenant offline and deleting it ask ONE question, so the page asks it once, above both: is the step over
+// content? Then it carries a statement of reasons to the tenant's owners, by mail (ADR 0093 § 7; ADR 0101 decision 10),
+// written once in the fields below the checkbox. The Server Owner ticks it, or a moderator's open proposal to take the
+// tenant offline does: the server then insists on a statement for either step (`statement_required`), so the page
+// shows the proposal and holds the checkbox ticked.
+const overContentTicked = ref(false)
+const overContent = computed({
+  get: () => overContentTicked.value || proposal.value !== null,
+  set: (v: boolean) => { overContentTicked.value = v },
+})
 const draft = ref<StepStatementDraft>({ ground: 'TERMS_BREACH', provision: '', facts: '' })
+function resetStatement() {
+  overContentTicked.value = false
+  draft.value = { ground: 'TERMS_BREACH', provision: '', facts: '' }
+}
+// Best effort: a failed read leaves the checkbox to the Server Owner, and the server still refuses a step without its
+// statement — the proposal only spares the round trip.
+async function openOfflineProposal(): Promise<OpenModerationProposal | null> {
+  try {
+    const { proposals } = await getModerationSteps()
+    return proposals.find((p) => p.step === ProposalStep.TenantOffline && p.tenantId === props.tenantId) ?? null
+  } catch {
+    return null
+  }
+}
+const proposalCategory = computed(() => (proposal.value ? t(`moderation.steps.categories.${proposal.value.category}`) : ''))
 const SUSPEND_REFUSALS: Record<string, string> = {
   statement_required: 'moderation.steps.errors.statementRequired',
   statement_facts_required: 'moderation.steps.errors.factsRequired',
@@ -166,11 +202,16 @@ async function setSuspended(suspend: boolean) {
   }
   actionError.value = ''
   try {
-    if (suspend) await suspendTenant(props.tenantId, overContent.value ? await stepStatement(draft.value) : null)
-    else await reactivateTenant(props.tenantId)
-    toast.success(t(suspend ? 'tenant.suspended' : 'tenant.reactivated'))
-    overContent.value = false
-    draft.value = { ground: 'TERMS_BREACH', provision: '', facts: '' }
+    let shown: StatementReport | null = null
+    if (suspend) {
+      const statement = overContent.value ? await stepStatement(draft.value) : null
+      const { statementDelivery } = await suspendTenant(props.tenantId, statement)
+      shown = reportOf(statementDelivery, statement)
+      report.value = shown
+    } else await reactivateTenant(props.tenantId)
+    // The standing report says the step was taken; only a plain success is a toast.
+    if (!shown) toast.success(t(suspend ? 'tenant.suspended' : 'tenant.reactivated'))
+    resetStatement()
     await reload()
   } catch (e) {
     if (e instanceof StepStatementInvalid) {
@@ -262,18 +303,17 @@ async function revoke() {
 // typed confirmation, kept beside the action rather than in the shared ConfirmDialog, whose single-flight yes/no has no
 // field. The typed value is what is sent: the server compares it again, so a stale panel cannot delete another tenant.
 const deleteArmed = computed(() => tenant.value !== null && domainConfirmed(deleteTyped.value, tenant.value.domain))
-// Over content, the deletion carries a statement of reasons to the tenant's owners, as a suspension does (ADR 0093 § 7).
-const deleteOverContent = ref(false)
-const deleteDraft = ref<StepStatementDraft>({ ground: 'TERMS_BREACH', provision: '', facts: '' })
+// Over content, the deletion carries the same statement of reasons a suspension does — `overContent` and `draft` above.
 async function removeTenant() {
   if (!deleteArmed.value) return
   actionError.value = ''
   try {
-    const statement = deleteOverContent.value ? await stepStatement(deleteDraft.value) : null
-    const { dueAt } = await deleteTenant(props.tenantId, deleteTyped.value, statement)
-    toast.success(t('tenant.deletionStarted', { date: at(dueAt) }))
-    deleteOverContent.value = false
-    deleteDraft.value = { ground: 'TERMS_BREACH', provision: '', facts: '' }
+    const statement = overContent.value ? await stepStatement(draft.value) : null
+    const { dueAt, statementDelivery } = await deleteTenant(props.tenantId, deleteTyped.value, statement)
+    report.value = reportOf(statementDelivery, statement)
+    // As for taking it offline: the standing report says the step was taken (the date is in the pending-deletion notice).
+    if (!report.value) toast.success(t('tenant.deletionStarted', { date: at(dueAt) }))
+    resetStatement()
     emit('changed')
     await reload()
   } catch (e) {
@@ -284,7 +324,7 @@ async function removeTenant() {
     on401(e)
     if (isUnauthorized(e)) return
     const { code } = await tenantError(e)
-    if (code === 'statement_required') deleteOverContent.value = true
+    if (code === 'statement_required') overContent.value = true
     actionError.value =
       code === 'tenant_domain_mismatch' ? t('tenant.deleteDomainMismatch')
         : code === 'tenant_not_deletable' ? t('tenant.notDeletable')
@@ -354,6 +394,8 @@ async function copyInviteLink() {
         <span class="veyq-badge" :class="statusTone">{{ statusLabel }}</span>
       </div>
 
+      <StatementDeliveryNotice v-if="report" :key="report.statement.statementId" :report="report" @dismiss="report = null" />
+
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
       <Message v-if="isSuspended" severity="warn" :closable="false">{{ t('tenant.suspendedHint') }}</Message>
 
@@ -374,34 +416,9 @@ async function copyInviteLink() {
         <template v-if="isSuspended"> {{ t('tenant.ownerlessSuspendedHint') }}</template>
       </Message>
 
-      <!-- The availability lever (ADR 0066), offered only on a settled tenant: a PENDING one has nothing to take
-           offline — it is withdrawn with revoke instead, which is why these two states share no controls. -->
-      <template v-if="isActive">
-        <label class="checkbox-row tenant-over-content">
-          <input v-model="overContent" type="checkbox" class="tenant-over-content__toggle" />
-          {{ t('tenant.suspendOverContent') }}
-        </label>
-        <small class="settings-muted">{{ t('tenant.suspendOverContentHint') }}</small>
-        <StepStatementFields v-if="overContent" v-model="draft" id-prefix="tenant-statement" />
-      </template>
-      <div v-if="isActive || isSuspended" class="veyq-dialog-action-row">
-        <Button
-          v-if="isSuspended"
-          type="button"
-          :label="t('tenant.reactivate')"
-          icon="pi pi-play"
-          @click="setSuspended(false)"
-        />
-        <Button
-          v-else
-          type="button"
-          :label="overContent ? t('tenant.suspendSend') : t('tenant.suspend')"
-          icon="pi pi-pause"
-          severity="danger"
-          outlined
-          class="tenant-suspend"
-          @click="setSuspended(true)"
-        />
+      <!-- Bringing it back sits by the notice that says it is offline; taking it offline is a measure, at the end. -->
+      <div v-if="isSuspended" class="veyq-dialog-action-row">
+        <Button type="button" :label="t('tenant.reactivate')" icon="pi pi-play" @click="setSuspended(false)" />
       </div>
 
       <!-- Change address, on PENDING and ACTIVE alike (unlike the invite controls below, which are PENDING-only).
@@ -506,34 +523,79 @@ async function copyInviteLink() {
         </div>
       </form>
 
-      <!-- Delete (uc.admin.delete-tenant), on an ACTIVE or SUSPENDED tenant — a PENDING one is revoked instead. Armed only
-           once the tenant's domain is typed: the typed domain is the confirmation, and the server checks it again. -->
-      <form v-if="isActive || isSuspended" class="veyq-form tenant-delete" @submit.prevent="removeTenant">
-        <h3>{{ t('tenant.deleteTitle') }}</h3>
-        <p class="settings-muted">{{ t('tenant.deleteHint') }}</p>
-        <label>
-          {{ t('tenant.deleteConfirmLabel', { domain: tenant.domain }) }}
-          <InputText v-model="deleteTyped" autocomplete="off" spellcheck="false" />
-        </label>
-        <label class="checkbox-row tenant-over-content">
-          <input v-model="deleteOverContent" type="checkbox" class="tenant-delete-over-content__toggle" />
-          {{ t('tenant.suspendOverContent') }}
-        </label>
-        <small class="settings-muted">{{ t('tenant.deleteOverContentHint') }}</small>
-        <StepStatementFields v-if="deleteOverContent" v-model="deleteDraft" id-prefix="tenant-delete-statement" />
-        <div class="veyq-dialog-action-row">
-          <Button type="submit" :label="t('tenant.delete')" icon="pi pi-trash" severity="danger" :disabled="!deleteArmed" />
+      <!-- The measures, last: take offline (ADR 0066, ACTIVE only) and delete (uc.admin.delete-tenant, ACTIVE or
+           SUSPENDED). A PENDING tenant has neither — it is withdrawn with revoke. Both ask the one over-content question,
+           so it is asked once above them, with the one statement it calls for. -->
+      <section v-if="isActive || isSuspended" class="veyq-form tenant-measures">
+        <h3>{{ isActive ? t('tenant.measuresTitle') : t('tenant.deleteTitle') }}</h3>
+        <Message v-if="proposal" severity="warn" :closable="false" class="tenant-proposal">
+          {{ t('tenant.proposalOpen', { category: proposalCategory, caseId: proposal.caseId, at: at(proposal.proposedAt) }) }}
+        </Message>
+        <div class="checkbox-row tenant-over-content">
+          <Checkbox
+            v-model="overContent"
+            input-id="tenant-over-content"
+            binary
+            :disabled="proposal !== null"
+            class="tenant-over-content__toggle"
+          />
+          <label for="tenant-over-content">{{ t('tenant.overContent') }}</label>
         </div>
-      </form>
+        <small class="settings-muted">{{ t('tenant.overContentHint') }}</small>
+        <StepStatementFields v-if="overContent" v-model="draft" id-prefix="tenant-statement" />
+
+        <div v-if="isActive" class="tenant-measure">
+          <p class="settings-muted">{{ t('tenant.suspendHint') }}</p>
+          <div class="veyq-dialog-action-row">
+            <Button
+              type="button"
+              :label="overContent ? t('tenant.suspendSend') : t('tenant.suspend')"
+              icon="pi pi-pause"
+              severity="danger"
+              outlined
+              class="tenant-suspend"
+              @click="setSuspended(true)"
+            />
+          </div>
+        </div>
+
+        <!-- Armed only once the tenant's domain is typed: the typed domain is the confirmation, and the server checks it
+             again. The field is the delete's own — taking offline asks in the console's dialog instead. -->
+        <form class="tenant-measure tenant-delete" @submit.prevent="removeTenant">
+          <p class="settings-muted">{{ t('tenant.deleteHint') }}</p>
+          <label>
+            {{ t('tenant.deleteConfirmLabel', { domain: tenant.domain }) }}
+            <InputText v-model="deleteTyped" autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="veyq-dialog-action-row">
+            <Button
+              type="submit"
+              :label="overContent ? t('tenant.deleteSend') : t('tenant.delete')"
+              icon="pi pi-trash"
+              severity="danger"
+              :disabled="!deleteArmed"
+            />
+          </div>
+        </form>
+      </section>
     </section>
   </section>
 </template>
 
 <style scoped>
 .tenant-owner-invite h3,
-.tenant-delete h3 {
+.tenant-measures h3 {
   margin: 0;
   font-size: 1rem;
+}
+.tenant-measure {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--app-line);
+}
+.tenant-measure p {
+  margin: 0;
 }
 .tenant-storage__figures {
   display: flex;

@@ -81,6 +81,31 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [ModerationMeasuresSliceTest.theServerOwnersStepsAreProposalsTakenOrDeclinedOnTheAdminChannelOnly]
+  - id: suspend-over-content-reports-its-delivery
+    # Alternate flow A6, added by cr-statement-delivery-report (ADR 0093 § 7). The partial case (one of two owners
+    # reached) is the unit test's: a real mailbox does not refuse one of two recipients.
+    text: >-
+      A suspension over content answers whom its statement's mail reached — every owner (each marked mailed), every
+      address it did not reach, nobody to tell for a tenant without an owner, or that the server cannot say — and a
+      suspension without a statement answers none.
+    coverage:
+      backend:
+        integration:
+          - ServerOwnerStatementSliceTest.eachStepOverContentWithMailSetUpAnswersReachedAndMarksEveryRecipientMailed
+          - ServerOwnerStatementSliceTest.withoutInstanceMailASuspensionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands
+          - ServerOwnerStatementSliceTest.anOwnerlessTenantTakenOfflineOverContentAnswersNobodyToTell
+          - ServerOwnerStatementSliceTest.aStepWithoutAStatementAnswersNoDelivery
+        unit:
+          - StatementMailingTest.everyMailWentOutIsReached
+          - StatementMailingTest.noMailWentOutNamesEveryRecipient
+          - StatementMailingTest.oneOfTwoWentOutNamesTheOtherOnly
+          - StatementMailingTest.noRecipientIsNobodyToTell
+          - StatementMailingTest.aListThatCouldNotBeReadIsUnknown
+  - id: suspend-stands-without-mail
+    text: Without instance mail a suspension over content is still taken — the tenant is SUSPENDED — and its answer names every owner the mail did not reach.
+    coverage:
+      backend:
+        integration: [ServerOwnerStatementSliceTest.withoutInstanceMailASuspensionOverContentAnswersNotAllReachedNamingEveryOwnerAndStands]
 gaps:
   admin-web: >-
     The suspend/reactivate controls live here (ADR 0065), and their suites exist and pass locally, but
@@ -91,7 +116,10 @@ gaps:
     run whose log shows admin-web's suites executed, `suspend-active-tenant` and `reactivate-suspended-tenant`
     each gain `src/features/tenants/TenantDetailPanel.test.ts` and `src/cli/cli.test.ts`, and this gap goes. The
     proposals' list (`taken-on-a-moderators-proposal`) is held by `src/features/instance/ModerationPanel.test.ts` and
-    `src/cli/cli.test.ts` (`moderation proposals|decline`) under the same wait.
+    `src/cli/cli.test.ts` (`moderation proposals|decline`) under the same wait, and so is what a suspension over content
+    reports (`suspend-over-content-reports-its-delivery`, `suspend-stands-without-mail`): the standing notice with the
+    words, the toast only on REACHED and the warning before the step in `TenantDetailPanel.test.ts`, the facade's read of
+    the mail in `src/features/instance/instanceMail.test.ts`, and the stderr line with exit 0 in `src/cli/cli.test.ts`.
   web: >-
     No web part. The lockout is the backend's pre-matching `TenantSuspensionFilter`, refusing every request on
     the tenant's own domain before authentication, and the suspend/reactivate controls are the Server Owner's

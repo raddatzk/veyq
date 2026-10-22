@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import me.raddatz.veyq.core.http.ClientSeen
 import me.raddatz.veyq.core.instance.VeyqInstance
 import me.raddatz.veyq.core.moderation.hold.HoldRowEntity
-import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
-import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.sharing.ShareEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -26,22 +24,20 @@ data class GuestWriteRetention(val days: Int, val chosen: Boolean)
  * Every writer calls [record] **in its own transaction, after its write succeeded** — a refused or rolled-back write
  * records nothing, a replay that wrote nothing records nothing — with the identity that wrote (the authenticated caller,
  * never a request field) and the [ClientSeen] its resource resolved once. Nothing here logs: the address is evidence,
- * and evidence never rides a log (ADR 0092 § 1).
+ * and evidence never rides a log (ADR 0092 § 1). The record has no switch of its own (ADR 0093 § 10): it is kept
+ * wherever a guest may write, and `core.public-shares.contribute` / `.drop-box` already decide where that is — a write
+ * that reaches [record] is one those switches let through.
  */
 @ApplicationScoped
-class GuestWriteRecords(private val capabilities: CapabilityRegistry) {
+class GuestWriteRecords {
 
     /**
-     * Record one guest write of [identityId] on [objectId] in [scopeId]'s space. Nothing when [seen] is null (the
-     * resolver yielded no address, ADR 0094), and nothing while the switch is off for that space (the entry or an
-     * ancestor, ADR 0088 decision 2). The port is recorded where [seen] holds one, else the address alone.
+     * Record one guest write of [identityId] on [objectId]. Nothing when [seen] is null (the resolver yielded no address,
+     * ADR 0094). The port is recorded where [seen] holds one, else the address alone.
      */
     @Transactional(Transactional.TxType.MANDATORY)
-    fun record(
-        seen: ClientSeen?, identityId: String, scopeId: String, kind: GuestWriteObject, objectId: String, fieldGroup: String?,
-    ) {
+    fun record(seen: ClientSeen?, identityId: String, kind: GuestWriteObject, objectId: String, fieldGroup: String?) {
         if (seen == null) return
-        if (!capabilities.isActiveInScope(SWITCH, scopeId)) return
         GuestWriteRecordEntity().apply {
             id = UUID.randomUUID().toString()
             shareIdentityId = identityId
@@ -57,13 +53,11 @@ class GuestWriteRecords(private val capabilities: CapabilityRegistry) {
     }
 
     /**
-     * The N a link's resolve discloses to its guest (ADR 0093 § 10, decision 6): the retention while the switch is on for
-     * [scopeId]'s space and [role] lets a guest write; null otherwise — a READ guest is recorded nowhere, so it is told
-     * nothing, and while the switch is off nothing is recorded and nothing is said. The switch decides, never the mode.
+     * The N a link's resolve discloses to its guest (ADR 0093 § 10, decision 6): the retention while [role] lets a guest
+     * write; null otherwise — a READ guest is recorded nowhere, so it is told nothing.
      */
-    fun disclosedDays(scopeId: String, role: String): Int? {
+    fun disclosedDays(role: String): Int? {
         if (role != ShareEntity.READ_WRITE && role != ShareEntity.WRITE_ONLY) return null
-        if (!capabilities.isActiveInScope(SWITCH, scopeId)) return null
         return retentionDays()
     }
 
@@ -113,21 +107,17 @@ class GuestWriteRecords(private val capabilities: CapabilityRegistry) {
     }
 
     /**
-     * The purge (ADR 0093 § 10, ADR 0092 § 2): while the switch is off at the instance level, every live row; otherwise
-     * every row past its own end or older than N as it stands now — so a shortening reaches every row at once and a
-     * lengthening only new ones. Answers how many rows went. Hold copies are not here: they follow the hold's end.
+     * The purge (ADR 0093 § 10, ADR 0092 § 2): every row past its own end or older than N as it stands now — so a
+     * shortening reaches every row at once and a lengthening only new ones. Answers how many rows went. Hold copies are
+     * not here: they follow the hold's end.
      */
     @Transactional
     fun purge(now: Instant): Long {
-        if (!capabilities.isActive(SWITCH, null)) return GuestWriteRecordEntity.deleteAll()
         val oldest = now.minus(Duration.ofDays(retentionDays().toLong()))
         return GuestWriteRecordEntity.delete("expiresAt <= ?1 or observedAt <= ?2", now, oldest)
     }
 
     companion object {
-        /** The switch (ADR 0088): operator-only, its default per operating mode (ADR 0093 § 14). */
-        const val SWITCH = CapabilityIds.PUBLIC_SHARES_GUEST_WRITE_RECORD
-
         /** N's default and range (ADR 0092 § 2): seven days, the supervisory practice; one to thirty. */
         const val DEFAULT_DAYS = 7
         const val MIN_DAYS = 1

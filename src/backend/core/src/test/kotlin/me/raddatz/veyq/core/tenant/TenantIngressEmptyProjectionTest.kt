@@ -7,8 +7,8 @@ import java.nio.file.Path
 
 /**
  * **A projection with no router must not contain an empty `routers:` section.** Traefik rejects a section that is
- * present but empty. Since the file became all of compose's routing it always carries the services and the store
- * middleware, so the state left is narrower than it was: no bootstrap domain configured (a misconfiguration the
+ * present but empty. Since the file became all of compose's routing it always carries the services (and, while the
+ * bundled store is in use, the store middleware), so the state left is narrower than it was: no bootstrap domain configured (a misconfiguration the
  * producer logs as an error, never a failed boot) and no routable tenant. That is still what a first deploy with a
  * mistyped `VEYQ_DOMAIN` looks like, and a proxy then insisting its configuration is broken is the wrong lead.
  *

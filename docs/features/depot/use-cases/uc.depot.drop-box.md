@@ -44,11 +44,11 @@
 - **A4a — someone else uses the same device** ("Not you?"): the page forgets the session on that device and asks for a
   name again — a new identity and, with its first file, a new folder; the earlier one's folder stays as it was.
 - **A4b — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),
-  ADR 0093 § 10): while `core.public-shares.guest-write-record` is on, the drop page says, before the first file, that
+  ADR 0093 § 10): the drop page says, before the first file, that
   the guest's IP address, source port and the time are kept for N days (the N the resolve serves), with the right to
   object as a sentence of its own, both linking the operator section of the terms; naming itself, its folder's
-  creation, each file's creation and each file's content then record that address, port and time. While the switch is
-  off, nothing is recorded and nothing is said.
+  creation, each file's creation and each file's content then record that address, port and time. The record has no
+  switch: it is kept wherever a guest may write (with `drop-box` off, no guest writes and nothing is recorded).
 - **E5 — a guest-sealed folder entry does not open:** that folder is left out of the member's tree; the rest opens.
 - **E6 — a `WRITE_ONLY` link on a plain folder, or another role on a drop box:** refused (`ShareRoots`).
 - **A7 — the trashed drop box is purged:** its folders and files go, then the identities nothing names any more.

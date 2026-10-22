@@ -2,7 +2,6 @@
 # scripts/chart_meta_check.py renders that branch: the PROXY env present, and all three probes — the liveness probe
 # switched on for it — on the admin listener. Like lint-values.yaml, NOT a template for an installation.
 domain: veyq.example.org
-storeDomain: store.veyq.example.org
 image:
   repository: ghcr.io/example/veyq
   # A digest, so the `repository:tag@digest` render is one a file here selects (acme-values.yaml renders without).
@@ -22,8 +21,6 @@ networkPolicy:
 secrets:
   mariadbPassword: ci-only-not-a-password
   mariadbRootPassword: ci-only-not-a-password
-  garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  garageAdminToken: ci-only-not-a-token
 gateway:
   className: traefik
 app:

@@ -88,6 +88,9 @@ a client red names the typed line it expects to fail — and runs `npm run check
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
 dev seeder, web's e2e harness and two backend tests also build that request, and `moderationEpoch` named all of them.
+**A reshaped *response* is found the same way, by its fields, not by its path:** cr-statement-delivery-report nested
+`blockAccountSignIn`'s `ModerationSteps` under `steps`, and its locator — the operation's path — missed the slice test
+that read `signInBlocks[0].id` off the answer; the first full check found it. Grep the answer's fields too.
 
 **The qualifier is load-bearing: an operation on a NEW tag compiles.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase
@@ -456,6 +459,14 @@ members** — the one being removed, the ones being kept, and the surfaces expli
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
 itself is wrong, which is worth finding at refine rather than in the retrospective.
 
+### A rule the refine states over every text gets a locator over the texts
+
+A refine that writes a rule for a class ("an empty value renders as the gap wherever a text names it") inventories
+every member of the class, or the implementer finds the ones the decisions left out. cr-operating-mode-retires's ADR
+edit said it of every fixed text, its decisions named only one sentence of the statement of reasons, and the contact's
+gap in the statement — a Server Owner's step with no contact reading "write to not stated by this operator" — surfaced
+in the implementation as an owner question (inbox #522).
+
 ### The published docs move with the change, in the same CR
 
 The docs site (`site/`, [ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md))
@@ -499,6 +510,10 @@ cannot forge) stayed red through phases 3 and 4 and were first measured in phase
 the test sources: `git grep -n "<old test name>" -- docs/coverage`. Such a phase runs `validate_guard_gaps.py
 --force`, too: locally that guard skips while no file under `scripts/` changed, and a renamed anchor is exactly what
 a skip does not see.
+**So the criteria move in the phase that removes their tests, not in a closing docs phase.** cr-operating-mode-retires
+planned "coverage files" for its last phase; its backend phase deleted the mode tests the refs named, so it had to
+rewrite the criteria then, and retag the e2e specs whose criterion tags `validate_stack_criterion_tags.py` reads. A
+phase plan puts each criterion beside the test that answers it.
 
 **Where a CR may not name its use-cases yet, a phase owns writing them.** A new application cannot name use-cases
 before its concept settles, so `cr-files-application` started with `satisfies: []` and *"written with F1"* — and
@@ -711,7 +726,10 @@ first, and only then do the guards that judge its result change.
 sibling feature (`'../memory/memoryNodes'`, `'../../memory/api'`) never spell the parent directory, and only `vue-tsc`
 named them. Resolve every relative specifier against its file and test where it lands — the way
 `validate_web_core_imports_no_applications.py` reads an edge — and a docs tree that shares the name
-(`docs/features/memory/`) is set apart by its prefix, not by hand.
+(`docs/features/memory/`) is set apart by its prefix, not by hand. A Python module spells even less: `import
+instance_backup` resolves through `sys.path`, which holds the running script's own directory, so cr-tools-under-src's
+locator for the file names missed three importers in `scripts/` that only a run after the move would have broken.
+Moving a `.py` file greps `^\s*(import|from) <module>` as well.
 
 **Before its hits are classified, a move's locator sorts the files by how each is consumed.** A file that *ships
 alone* cannot import a sibling the move adds: `cr-repo-layout-infra-and-tests` switched every script to one

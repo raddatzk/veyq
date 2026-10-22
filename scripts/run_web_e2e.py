@@ -134,9 +134,10 @@ from typing import Iterable, NamedTuple
 # A group's hook shells out to the operator tool for capture/restore, but reuses its rclone plumbing for the one
 # thing the CLI deliberately does not offer (purging a bucket). Importable because Python puts the running
 # script's own directory — `scripts/` — on `sys.path`, which also holds when `validate_e2e_discovery.py`
-# imports this module by path.
-import instance_backup
+# imports this module by path; `repo_layout` then puts the tools' directory beside it.
 import repo_layout
+repo_layout.tools_importable()
+import instance_backup
 # The ADR 0053 sweeps, shared with `run_stack_e2e.py` and bound to this file's dev stack below ([DEV]). The pure
 # parts are re-exported under the names this module always had: the guards that import it by path call them here.
 import e2e_sweeps as sweeps
@@ -745,7 +746,7 @@ def fresh_bucket(name: str) -> None:
 
 
 def backup_env() -> dict[str, str]:
-    """What `scripts/instance_backup.py` reads — the app's OWN variables, pointed at the store's INTERNAL name.
+    """What `src/tools/instance_backup.py` reads — the app's OWN variables, pointed at the store's INTERNAL name.
 
     `%e2e` gives the jar `http://localhost:19000`, the published port; the tool's rclone runs in a container on
     the compose network, where the store is `garage:3900`. Two addresses for one store, and handing the wrong
@@ -769,7 +770,7 @@ def backup_tool_result(*args: str, env_extra: dict[str, str] | None = None) -> s
     """
     # `verify` touches no instance, so it takes no network.
     network = [] if args[0] == "verify" else ["--docker-network", DOCKER_NETWORK]
-    cmd = [sys.executable, str(REPO / "scripts" / "instance_backup.py"), *args, *network]
+    cmd = [sys.executable, str(repo_layout.INSTANCE_BACKUP), *args, *network]
     result = subprocess.run(cmd, env={**backup_env(), **(env_extra or {})}, capture_output=True, text=True)
     for line in (result.stdout + result.stderr).splitlines():
         log(f"  {line}")

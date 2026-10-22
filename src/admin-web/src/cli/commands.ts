@@ -12,12 +12,9 @@
 // their requirements + the external services +
 // the moderator roster and the rotation of the instance moderation key (ADR 0099) + the Server Owner's moderation
 // steps: the moderators' open proposals, a member's sign-in block and its lift (uc.moderation.take-a-measure step 5;
-// a tenant-offline proposal is taken with `tenant suspend`, which settles it) + the operating mode and the
-// operator's published values (ADR 0093 §§ 11 and 14) + the guest-write record's retention (ADR 0093 § 10). The
-// operating mode's notice is printed from admin-web's own
-// i18n (`i18n/operatingModeNotice.ts`), the words the console shows, and *private* needs `--accept-notice` — the
-// facade's rule (`operatingModeRequest`), not one of this file's. The notification address's code is typed into the
-// console only, as instance mail's is.
+// a tenant-offline proposal is taken with `tenant suspend`, which settles it) + the operator's published values (ADR
+// 0093 § 11; every one optional, no operating mode, § 14) + the guest-write record's retention (ADR 0093 § 10). The
+// notification address's code is typed into the console only, as instance mail's is.
 // Per-tenant mail settings, terms authoring and the per-link storage
 // limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `src/web/` (src/admin-web/CLAUDE.md), so
 // they are not Server-Owner commands. The instance's OWN mail settings are the Server Owner's, but stay console-only
@@ -47,7 +44,8 @@ import {
 import { eraseAccount, listAccountErasures, stopAccountErasure } from '../features/instance/accounts'
 import { CliError, renderResult } from './output'
 import { getInstanceRelease } from '../features/instance/release'
-import { getReleaseNotices, setReleaseCheck } from '../features/instance/releaseNotices'
+import { getReleaseNotices, noticesMailedTo, setReleaseCheck } from '../features/instance/releaseNotices'
+import { getInstanceMail } from '../features/instance/instanceMail'
 import { getInstanceConfigSecret } from '../features/instance/configSecret'
 import {
   BUNDLED_STORE_UPDATE,
@@ -96,21 +94,18 @@ import {
   RotationReason,
   type InstanceModeration,
   type ModerationSteps,
+  type SignInBlockResult,
 } from '../features/instance/moderation'
+import { StatementOutcome, type StatementDelivery } from '../features/instance/statementDelivery'
 import {
   clearOperator,
   CLI_RECIPIENT_KINDS,
-  getOperatingMode,
   getOperator,
-  needsAcceptance,
-  OperatingMode,
   operatorUpdateOf,
   parseLanguages,
   parseRecipient,
-  presetChanges,
-  setOperatingMode,
   setOperator,
-  type InstanceOperatingMode,
+  type InstanceOperator,
   type InstanceOperatorUpdate,
 } from '../features/instance/operator'
 import {
@@ -126,7 +121,6 @@ import {
   type InstanceGuestWriteRecord,
 } from '../features/instance/guestWriteRecord'
 import * as backupRetention from '../features/instance/backupRetention'
-import { noticeText, OPERATING_MODE_NOTICE } from '../i18n/operatingModeNotice'
 import { enterOrder, OrderInvalid, type AuthorityOrder, type OrderKind } from '../features/instance/orders'
 import { GROUNDS, stepStatement, StepStatementInvalid, type ServerOwnerStatementInput, type StepStatementDraft } from '../features/instance/stepStatement'
 import { formTime, renderOrderForm } from '../features/instance/orderForms'
@@ -157,6 +151,9 @@ export type Command = {
   /** Text for a person instead of the JSON document — for a command whose output is the served words in the
    *  operator's language, which a script has no use for and a person cannot read as JSON. */
   render?: (result: unknown, flags: Record<string, string>, env: Record<string, string | undefined>) => string
+  /** One line for stderr after the printed result, or null — a step that stands but left the Server Owner something to
+   *  do (a statement its mail did not reach). The exit code stays the command's. */
+  warning?: (result: unknown) => string | null
 }
 
 const tenantId: Flag = { describe: 'tenant id', required: true }
@@ -260,7 +257,11 @@ async function moderatorByAddress(address: string): Promise<string> {
  *  case, the case's category, the step and its target — the member's address (what `account block` takes), or the
  *  tenant's id and domain (what `tenant suspend` takes) — and when; per block in force its address, case and since. */
 function renderSteps(s: ModerationSteps): string {
-  return renderResult({
+  return renderResult(stepsDocument(s))
+}
+
+function stepsDocument(s: ModerationSteps) {
+  return {
     proposals: s.proposals.map((p) => ({
       id: p.id,
       caseId: p.caseId ?? null,
@@ -270,8 +271,29 @@ function renderSteps(s: ModerationSteps): string {
       proposedAt: p.proposedAt,
     })),
     signInBlocks: s.signInBlocks.map((b) => ({ address: b.address, caseId: b.caseId ?? null, blockedAt: b.blockedAt })),
-  })
+  }
 }
+
+/**
+ * The stderr line after a step over content whose statement did not plainly reach everyone (ADR 0093 § 7): the step
+ * stands and the exit code stays 0, but the facts are mailed once, so whoever was not reached is the Server Owner's to
+ * tell through the instance contact. Null when there was no statement or its mail reached everyone.
+ */
+export function statementWarning(delivery: StatementDelivery | undefined): string | null {
+  switch (delivery?.outcome) {
+    case StatementOutcome.NotAllReached:
+      return `the statement of reasons could not be mailed to ${delivery.notReached.join(', ')} and is not sent again — tell them through the instance contact`
+    case StatementOutcome.Unknown:
+      return 'the server could not tell whom the statement of reasons reached — tell the people it affects through the instance contact'
+    case StatementOutcome.NobodyToTell:
+      return 'the statement of reasons went to nobody: the tenant has no owner, or the account no longer exists'
+    default:
+      return null
+  }
+}
+
+/** The warning of a result that carries `statementDelivery` (a suspension, a deletion, a sign-in block). */
+const deliveryWarning = (r: unknown) => statementWarning((r as { statementDelivery?: StatementDelivery }).statementDelivery)
 
 /** The sign-in block in force for this address (case-insensitive, as the server matches an account address). */
 async function signInBlockByAddress(address: string): Promise<string> {
@@ -281,25 +303,19 @@ async function signInBlockByAddress(address: string): Promise<string> {
   return found.id
 }
 
-/** `mode set <word>` → the mode. */
-const MODES: Record<string, OperatingMode> = { private: OperatingMode.Private, organisation: OperatingMode.Organisation }
-const MODE_WORD: Record<OperatingMode, string> = { PRIVATE: 'private', ORGANISATION: 'organisation' }
-
-/** The mode, the notice, and which preset switches the other mode would change — what `mode show` prints, and what
- *  `mode set` prints after setting (the notice "either way", ADR 0093 § 14). */
-function renderMode(m: InstanceOperatingMode, locale: CapabilityLocale): string {
-  const other = m.mode === OperatingMode.Private ? OperatingMode.Organisation : OperatingMode.Private
-  const changes = presetChanges(m.preset, other)
-  const lines = [
-    `mode ${MODE_WORD[m.mode]}${m.chosen ? '' : ' (none chosen; runs as organisation)'}`,
-    '',
-    noticeText(locale),
-    '',
-    changes.length
-      ? `mode set ${MODE_WORD[other]} would switch:\n${changes.map((c) => `  ${c.entry.id}  ${c.on ? 'on' : 'off'}  ${inLocale(c.entry.title, locale)}`).join('\n')}`
-      : `mode set ${MODE_WORD[other]} would switch nothing`,
-  ]
-  return lines.join('\n')
+/**
+ * The values as `operator show` prints them: JSON a script can read, with every value the Server Owner may set present
+ * and `null` where none is set — its gap, which every fixed text publishes as "not stated by this operator" (ADR 0093
+ * § 14: nothing is required, so nothing here is flagged either).
+ */
+function renderOperator(op: InstanceOperator): string {
+  return renderResult({
+    ...operatorUpdateOf(op),
+    notificationConfirmation: op.notificationConfirmation,
+    notificationConfirmedAt: op.notificationConfirmedAt ?? null,
+    instanceMailReady: op.instanceMailReady,
+    recipientSuggestions: op.recipientSuggestions,
+  })
 }
 
 /** The operator flags `operator set` takes, each to its field. `none` clears one; a flag left out keeps its value. */
@@ -374,9 +390,12 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant suspend': {
     usage: 'tenant suspend --tenant-id <id> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it.',
+    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
     flags: { 'tenant-id': tenantId, ...STATEMENT_FLAGS },
     run: async (f) => suspendTenant(f['tenant-id'], await statementOf(f)),
+    // `ok` as before, and over content whom the statement's mail reached.
+    render: (r) => renderResult({ ok: true, ...(r as object) }),
+    warning: deliveryWarning,
   },
   'tenant reactivate': {
     usage: 'tenant reactivate --tenant-id <id>',
@@ -387,9 +406,10 @@ export const COMMANDS: Record<string, Command> = {
   'tenant delete': {
     usage: 'tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
     summary:
-      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does.',
+      'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does, and prints and warns of whom it reached as that does.',
     flags: { 'tenant-id': tenantId, domain: { describe: 'the tenant’s own domain, typed as the confirmation', required: true }, ...STATEMENT_FLAGS },
     run: async (f) => deleteTenant(f['tenant-id'], f.domain, await statementOf(f)),
+    warning: deliveryWarning,
   },
   'tenant stop-deletion': {
     usage: 'tenant stop-deletion --tenant-id <id>',
@@ -417,10 +437,14 @@ export const COMMANDS: Record<string, Command> = {
   release: {
     usage: 'release',
     summary:
-      'Print the release version the running instance was published under, the daily release check (on or off, its source, its last success) and every newer release it found — an UNSCHEDULED_MAJOR means upgrade now.',
+      'Print the release version the running instance was published under, the daily release check (on or off, its source, its last success), every newer release it found — an UNSCHEDULED_MAJOR means upgrade now — and noticesMailedTo: the address a new find is also mailed to, or null while instance mail is not set up and confirmed (then finds are only shown).',
     flags: {},
     // `release` stays the document's first key, so a script that read it before still reads it.
-    run: async () => ({ ...(await getInstanceRelease()), ...(await getReleaseNotices()) }),
+    run: async () => ({
+      ...(await getInstanceRelease()),
+      ...(await getReleaseNotices()),
+      noticesMailedTo: noticesMailedTo(await getInstanceMail()),
+    }),
   },
   'release check': {
     usage: 'release check <on|off>',
@@ -627,36 +651,10 @@ export const COMMANDS: Record<string, Command> = {
     run: async (f) => removeModerator(await moderatorByAddress(f.address)),
     render: (r) => renderRoster(r as InstanceModeration),
   },
-  'mode show': {
-    usage: 'mode show [--lang en|de]',
-    summary: 'Print the operating mode, its notice, and which switches the other mode would set.',
-    flags: { lang },
-    run: () => getOperatingMode(),
-    render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
-  },
-  'mode set': {
-    usage: 'mode set <private|organisation> [--accept-notice] [--lang en|de]',
-    summary: 'Set the operating mode and the switches its preset names. Your own assessment, not veyq’s: private needs --accept-notice. Turns neither reporting nor the moderators off.',
-    flags: {
-      'accept-notice': { describe: 'you have read the notice and choose private on your own responsibility', required: false, switch: true },
-      lang,
-    },
-    operand: { name: 'mode', describe: 'private or organisation' },
-    run: async (f, env) => {
-      const mode = MODES[f.mode]
-      if (!mode) throw new CliError(`mode set takes private or organisation (got '${f.mode}')`)
-      const locale = cliLocale(f, env)
-      if (needsAcceptance(mode) && f['accept-notice'] !== 'true') {
-        throw new CliError(`${noticeText(locale)}\n\n${OPERATING_MODE_NOTICE[locale].accept}\nPass --accept-notice to choose private; nothing was set.`)
-      }
-      return setOperatingMode(mode, f['accept-notice'] === 'true')
-    },
-    render: (r, f, env) => renderMode(r as InstanceOperatingMode, cliLocale(f, env)),
-  },
   'guest-write-record show': {
     usage: 'guest-write-record show',
     summary:
-      'Print how many days a guest’s write keeps its IP address, source port and time (default 7, whether you set it). Whether anything is kept at all is the capability core.public-shares.guest-write-record.',
+      'Print how many days a guest’s write keeps its IP address, source port and time (default 7, whether you set it). The record has no switch: it is kept wherever a guest may write, which the capabilities core.public-shares.contribute and .drop-box decide.',
     flags: {},
     run: () => getGuestWriteRecord(),
     render: (r) => renderGuestWriteRecord(r as InstanceGuestWriteRecord),
@@ -710,9 +708,10 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator show': {
     usage: 'operator show',
-    summary: 'Print the instance contact, the provider identification, the supervisory authority and the notification address with its confirmation.',
+    summary: 'Print the instance contact, the provider identification, the supervisory authority, the privacy notice’s values and the notification address with its confirmation; a value not set is null, published as “not stated by this operator”.',
     flags: {},
     run: () => getOperator(),
+    render: (r) => renderOperator(r as InstanceOperator),
   },
   'operator set': {
     usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<hosting|object-storage|mail-relay|backup|other:<what they do>>|<country code, e.g. DE>; …\'] [--data-protection-officer <n>]',
@@ -735,7 +734,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator clear': {
     usage: 'operator clear',
-    summary: 'Clear every operator value, the notification address and its confirmation included. The operating mode stays.',
+    summary: 'Clear every operator value, the notification address and its confirmation included.',
     flags: {},
     run: () => clearOperator(),
   },
@@ -762,14 +761,18 @@ export const COMMANDS: Record<string, Command> = {
   },
   'account block': {
     usage: 'account block --address <address> [--case <caseId>] [--over-content] [--ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it.',
+    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. A draft until a lawyer has reviewed it. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
     flags: {
       address: { describe: 'the account’s address', required: true },
       case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
       ...STATEMENT_FLAGS,
     },
     run: async (f) => blockSignIn(f.address, f.case ?? null, await statementOf(f), f['over-content'] === 'true'),
-    render: (r) => renderSteps(r as ModerationSteps),
+    render: (r) => {
+      const { steps, statementDelivery } = r as SignInBlockResult
+      return renderResult({ steps: stepsDocument(steps), ...(statementDelivery ? { statementDelivery } : {}) })
+    },
+    warning: deliveryWarning,
   },
   'account unblock': {
     usage: 'account unblock --address <address>',

@@ -14,9 +14,8 @@ import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
 /**
- * The instance's operating mode and the values a host publishes about itself (ADR 0093 §§ 11 and 14, ADR 0035
- * decisions 6–7): one row once the Server Owner chose a mode or saved a value. `operating_mode` NULL reads as
- * [OperatingMode.ORGANISATION] — "until one is chosen". The `code*` columns are the notification address's outstanding
+ * The values a host publishes about itself (ADR 0093 § 11, ADR 0035 decisions 6–7): one row once the Server Owner
+ * saved a value. Every value is optional (ADR 0093 § 14). The `code*` columns are the notification address's outstanding
  * confirmation code, hashed; `confirmed*` what a code confirmed (ADR 0097 decision 5, [me.raddatz.veyq.core.admin.instance.CodeConfirmation]).
  */
 @Entity
@@ -26,9 +25,6 @@ class OperatorDetailsEntity : PanacheEntityBase {
     @Id
     @Column(name = "id")
     var id: Int = SINGLETON_ID
-
-    @Column(name = "operating_mode", length = 16)
-    var operatingMode: String? = null
 
     @Column(name = "contact_email", length = 254)
     var contactEmail: String? = null
@@ -87,9 +83,6 @@ class OperatorDetailsEntity : PanacheEntityBase {
     }
 }
 
-/** How the instance is run, on the Server Owner's own assessment (ADR 0093 § 14). The wire enum's two values. */
-enum class OperatingMode { PRIVATE, ORGANISATION }
-
 /** The values the Server Owner sets, each null (or empty) where none is set. */
 data class OperatorValues(
     val contactEmail: String? = null,
@@ -144,9 +137,8 @@ class OperatorRecipientEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<OperatorRecipientEntity, Int>
 }
 
-/** The whole row as the handler reads it; [mode] is null where none was ever chosen. */
+/** The whole row as the handler reads it. */
 data class OperatorRow(
-    val mode: OperatingMode?,
     val values: OperatorValues,
     val codeHash: String?,
     val codeAddress: String?,
@@ -162,8 +154,8 @@ data class OperatorRow(
  *
  * **A write takes the instance singleton's row lock first** ([VeyqInstance], which exists from first boot), then finds
  * or creates this row under it: two first writes would otherwise both read "no row" and the second fail on the key. The
- * capability switches' write takes the same lock (`CapabilitySwitchStore.set`), so a mode change that sets its preset
- * holds it once and re-enters it — one lock order, instance row then this row, for every writer here.
+ * capability switches' write takes the same lock (`CapabilitySwitchStore.set`) — one lock order, instance row then this
+ * row, for every writer here.
  */
 @ApplicationScoped
 class OperatorDetailsStore {
@@ -203,7 +195,6 @@ class OperatorDetailsStore {
 
     companion object {
         fun OperatorDetailsEntity.toRow(recipients: List<PublishedRecipient>) = OperatorRow(
-            mode = operatingMode?.let { OperatingMode.valueOf(it) },
             values = OperatorValues(
                 contactEmail = contactEmail,
                 contactLanguages = contactLanguages?.split(',')?.filter { it.isNotEmpty() } ?: emptyList(),

@@ -600,6 +600,7 @@ def pebble_compose(release: Release, workdir: Path, values: dict[str, str]) -> l
     nothing Pebble's service or the `edge` network reads, so `install`'s `up` finds both as this stage left them (the
     install stage holds it to that: Pebble's container must survive it, or its root is not the one the app trusts).
     """
+    repo_layout.tools_importable()
     import veyqctl  # the one reading of which variables a compose file requires
 
     recipe = release.tag / "docker-compose.prod.yml"
@@ -883,7 +884,6 @@ def sweep_stack(compose: list[str], project: str, env: Path) -> sweeps.Stack:
 class Window(NamedTuple):
     """What the window stage opened, and the sweeps read back: when it began, its sentinels, the statement log."""
     since: str
-    store_sentinel: str
     statements: sweeps.StatementLog
     statement_sentinels: list[str]
 
@@ -894,6 +894,13 @@ def plant_store_sentinel(stamp: str, workdir: Path) -> str:
     The public origin routes `/<bucket>/…` to Garage (the recipe's ingress, ADR 0063), so this is the path every
     presigned URL of the run takes. Over TLS with the run's Pebble root as the only CA — the certificate stage's
     connection, by SNI, no `/etc/hosts`. Garage refuses it (anonymous access) and logs the URI as sent.
+
+    **After the browser stage, not in the window.** The app renders that route only while the store in use is the
+    bundled one (ADR 0064 § the bundled store is opt-in), and the store is chosen by the browser suite's setup
+    (`tests/e2e/tests/setup/first-run.setup.ts` clicks *Use the bundled store* — that click is itself under test, so
+    nothing here pre-chooses it). Before it, this GET reaches the app's catch-all and Garage never logs it. So here,
+    finding it proves the container sweep reads Garage's log up to the end of the run; that the window reaches back to
+    the run's start rests on `--since` being the run's first timestamp (`main`), which no sentinel proves any more.
     """
     sentinel, key = sweeps.store_sentinel(stamp)
     ctx = ssl.create_default_context(cafile=str(workdir / "pebble-root.pem"))
@@ -901,17 +908,17 @@ def plant_store_sentinel(stamp: str, workdir: Path) -> str:
         with ctx.wrap_socket(raw, server_hostname=DOMAIN) as tls:
             tls.sendall(f"GET /{STORE_BUCKET}/{key} HTTP/1.1\r\nHost: {DOMAIN}\r\nConnection: close\r\n\r\n".encode())
             status = tls.recv(64).decode("latin-1").split("\r\n", 1)[0]
-    print(f"window: planted the store-log sentinel {sentinel!r} through https://{DOMAIN}/{STORE_BUCKET}/…: {status}",
+    print(f"store sentinel: planted {sentinel!r} through https://{DOMAIN}/{STORE_BUCKET}/…: {status}",
           flush=True)
     return sentinel
 
 
 def window(stack: sweeps.Stack, stamp: str, workdir: Path, since: str) -> Window:
-    """Open what must be open BEFORE the browser types anything: the statement log, and the store's log control."""
-    sentinel = plant_store_sentinel(stamp, workdir)
+    """Open what must be open BEFORE the browser types anything: the statement log. (The store's log control is
+    planted after the browser stage, [plant_store_sentinel].)"""
     statements = sweeps.StatementLog(stack, stamp, workdir)
     statements.open()
-    return Window(since, sentinel, statements, [statements.plant("window opened")])
+    return Window(since, statements, [statements.plant("window opened")])
 
 
 def close_window(opened: Window) -> None:
@@ -962,7 +969,7 @@ def guest_write_record(stack: sweeps.Stack, workdir: Path) -> None:
           f"{len(own)} it held to Traefik {expected.get('traefik')}:443", flush=True)
 
 
-def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
+def sweep(stack: sweeps.Stack, workdir: Path, opened: Window, store_sentinel: str) -> None:
     """Every typed canary of the run, swept everywhere an operator of this instance could read it (ADR 0053).
 
     The browser suite records what it typed (`tests/e2e/src/canaries.ts`), one `canaries-<spec>.json` per spec file; every
@@ -1012,7 +1019,7 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window) -> None:
                                   present=[email])),
         ("store", sweeps.sweep_store(stack, STORE_BUCKET, DATABASE, union, rel, workdir)),
         ("container logs", sweeps.sweep_containers(
-            stack, workdir, canary_files, opened.since, opened.store_sentinel,
+            stack, workdir, canary_files, opened.since, store_sentinel,
             controls={APP_SERVICE: lambda text: None if sweeps.names_database(text, DATABASE) else
                       f"the app's log never names its database {DATABASE} (Flyway's JDBC line) — not the whole log"},
             pii=pii)),
@@ -1086,8 +1093,9 @@ def main() -> int:
             stack = sweep_stack(compose, project, installed.env) if installed else None
             opened = stage("window", window, stack, stamp, workdir, since)
             stage("browser", browser, compose, workdir, mirror, selection)
+            store_sentinel = stage("store sentinel", plant_store_sentinel, stamp, workdir)
             stage("guest-write record", guest_write_record, stack, workdir)
-            stage("sweep", sweep, stack, workdir, opened)
+            stage("sweep", sweep, stack, workdir, opened, store_sentinel)
     finally:
         if opened is not None:
             # Retained even when the browser was red: the statement log is evidence either way.

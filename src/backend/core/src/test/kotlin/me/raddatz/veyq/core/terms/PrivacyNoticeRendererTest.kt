@@ -1,7 +1,6 @@
 package me.raddatz.veyq.core.terms
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -42,10 +41,9 @@ class PrivacyNoticeRendererTest {
     private val everythingOn: (String) -> Boolean = { true }
 
     private fun render(
-        variant: SectionVariant = SectionVariant.FULL,
         values: NoticeValues = all,
         active: (String) -> Boolean = everythingOn,
-    ) = PrivacyNoticeRenderer.render(text, variant, values, active)
+    ) = PrivacyNoticeRenderer.render(text, values, active)
 
     private fun RenderedNotice.passage(id: String) = passages.firstOrNull { it.id == id }
 
@@ -56,17 +54,15 @@ class PrivacyNoticeRendererTest {
 
     @Test
     fun everyPlaceholderTheFileNamesIsOneTheRendererKnows() {
-        for (variant in SectionVariant.entries) {
-            for (p in render(variant).passages) {
-                assertFalse(Regex("""\{\w+}""").containsMatchIn(p.text.en + p.text.de), "an unfilled placeholder in $variant ${p.id}")
-            }
+        for (p in render().passages) {
+            assertFalse(Regex("""\{\w+}""").containsMatchIn(p.text.en + p.text.de), "an unfilled placeholder in ${p.id}")
         }
     }
 
     @Test
     fun anUnknownPlaceholderIsRefusedRatherThanPrinted() {
         val broken = text.copy(passages = text.passages + NoticePassage("x", false, NoticeConditions(), listOf(SectionLine(SectionTexts("{nobody}", "{nobody}"), false))))
-        assertThrows<IllegalStateException> { PrivacyNoticeRenderer.render(broken, SectionVariant.FULL, all, everythingOn) }
+        assertThrows<IllegalStateException> { PrivacyNoticeRenderer.render(broken, all, everythingOn) }
     }
 
     @Test
@@ -78,7 +74,7 @@ class PrivacyNoticeRendererTest {
     }
 
     @Test
-    fun theRecordsPassageFollowsItsSwitchWithNAndBAndItsRightToObjectApart() {
+    fun theRecordsPassageIsAlwaysThereWithNAndBAndItsRightToObjectApart() {
         val on = render()
         val record = on.passage("guest-write-record")!!
         assertTrue(record.text.en.contains("deleted 7 days after the write") && record.text.de.contains("7 Tage nach dem Schreibvorgang"), record.text.en)
@@ -88,10 +84,10 @@ class PrivacyNoticeRendererTest {
         assertTrue(objection.text.en.contains("guest id") && objection.text.en.contains("does not stop a later write from being recorded"))
         assertFalse(record.text.en.contains("Your right to object"), "never inside the record's own passage")
 
-        val off = render(active = { it != GuestWriteRecords.SWITCH })
-        assertNull(off.passage("guest-write-record"), "the switch off: the passage goes")
-        assertNull(off.passage("guest-write-record-objection"), "and its right to object with it")
-        assertTrue(off.passage("right-to-object") != null, "control: the general right to object stays")
+        // No switch of its own (ADR 0093 § 10): the passages are bound to none, so nothing active or not drops them.
+        val nothingOn = render(active = { false })
+        assertTrue(nothingOn.passage("guest-write-record") != null && nothingOn.passage("guest-write-record-objection") != null)
+        assertNull(nothingOn.passage("breached-password-check"), "control: a passage bound to a switch goes with it")
     }
 
     @Test
@@ -114,23 +110,17 @@ class PrivacyNoticeRendererTest {
     }
 
     @Test
-    fun theRecipientsFollowTheModeWhenNoneIsNamed() {
-        val none = all.copy(recipients = emptyList())
-        assertNull(render(SectionVariant.REDUCED, none).passage("recipients"), "private, no recipient: the passage is absent")
-        val full = render(SectionVariant.FULL, none).passage("recipients")!!
-        assertTrue(full.text.en.contains("not stated by this operator"), "organisation, no recipient: the gap is visible")
-        // control: a named recipient renders in both, with what it does and where
-        for (variant in SectionVariant.entries) {
-            assertTrue(render(variant).passage("recipients")!!.text.en.contains("- Example Hosting GmbH: hosts the server (Germany)"), "$variant")
-        }
+    fun noRecipientNamedIsAVisibleGap() {
+        val none = render(all.copy(recipients = emptyList())).passage("recipients")!!
+        assertTrue(none.text.en.contains("not stated by this operator"), "no recipient: the gap is visible")
+        // control: a named recipient renders with what it does and where
+        assertTrue(render().passage("recipients")!!.text.en.contains("- Example Hosting GmbH: hosts the server (Germany)"))
     }
 
     @Test
-    fun aRecipientsMissingCountryIsAGapInTheFullVariantAndLeftOutInTheReducedOne() {
+    fun aRecipientsMissingCountryIsAGap() {
         val noCountry = all.copy(recipients = listOf(NoticeRecipient("Mail AG", RecipientKind.MAIL_RELAY, null, null)))
-        assertTrue(render(SectionVariant.FULL, noCountry).passage("recipients")!!.text.en.contains("- Mail AG: relays the mail (not stated by this operator)"))
-        val reduced = render(SectionVariant.REDUCED, noCountry).passage("recipients")!!.text.en
-        assertTrue(reduced.contains("- Mail AG: relays the mail") && !reduced.contains("not stated"), reduced)
+        assertTrue(render(noCountry).passage("recipients")!!.text.en.contains("- Mail AG: relays the mail (not stated by this operator)"))
     }
 
     @Test
@@ -209,24 +199,20 @@ class PrivacyNoticeRendererTest {
     }
 
     @Test
-    fun anEmptyValueIsAVisibleGapInTheFullVariantAndAbsentInTheReducedOne() {
+    fun anEmptyValueIsAVisibleGap() {
         val unset = all.copy(providerName = null, supervisoryAuthority = " ")
-        val full = render(SectionVariant.FULL, unset)
-        assertTrue(full.passage("controller")!!.text.en.contains("- Name: not stated by this operator"))
-        assertTrue(full.passage("rights")!!.text.en.contains("competent for the operator: not stated by this operator."), "a blank value is a gap too")
-        val reduced = render(SectionVariant.REDUCED, unset)
-        assertFalse(reduced.passage("controller")!!.text.en.contains("- Name:"), "reduced: the line goes")
-        assertFalse(reduced.passages.any { it.text.en.contains("not stated by this operator") }, "reduced: no gap anywhere")
-        // control: set values render in both
-        assertTrue(render(SectionVariant.REDUCED).passage("controller")!!.text.en.contains("- Name: Example e. V."))
+        val r = render(unset)
+        assertTrue(r.passage("controller")!!.text.en.contains("- Name: not stated by this operator"))
+        assertTrue(r.passage("rights")!!.text.en.contains("competent for the operator: not stated by this operator."), "a blank value is a gap too")
+        // control: a set value replaces its gap
+        assertTrue(render().passage("controller")!!.text.en.contains("- Name: Example e. V."))
+        assertFalse(render().passage("controller")!!.text.en.contains("not stated by this operator"))
     }
 
     @Test
-    fun theOfficerIsOptionalInBothVariants() {
-        for (variant in SectionVariant.entries) {
-            assertFalse(render(variant, all.copy(dataProtectionOfficer = null)).passage("controller")!!.text.en.contains("Data-protection officer"), "$variant")
-            assertTrue(render(variant).passage("controller")!!.text.en.contains("- Data-protection officer: DSB Beispiel GmbH, dsb@example.org"), "control, $variant")
-        }
+    fun theOfficerIsOptional() {
+        assertFalse(render(all.copy(dataProtectionOfficer = null)).passage("controller")!!.text.en.contains("Data-protection officer"))
+        assertTrue(render().passage("controller")!!.text.en.contains("- Data-protection officer: DSB Beispiel GmbH, dsb@example.org"), "control")
     }
 
     @Test
@@ -249,7 +235,7 @@ class PrivacyNoticeRendererTest {
     fun aDraftSaysSoAndOnlyWhileItIsOne() {
         assertTrue(text.draft, "the notice is a draft until a qualified legal review")
         assertTrue(render().draftBanner!!.en.startsWith("*Draft:") && render().draftBanner!!.de.startsWith("*Entwurf:"))
-        assertNull(PrivacyNoticeRenderer.render(text.copy(draft = false), SectionVariant.FULL, all, everythingOn).draftBanner, "control: no banner once reviewed")
+        assertNull(PrivacyNoticeRenderer.render(text.copy(draft = false), all, everythingOn).draftBanner, "control: no banner once reviewed")
     }
 
     @Test

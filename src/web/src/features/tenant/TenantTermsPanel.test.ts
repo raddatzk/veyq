@@ -68,7 +68,7 @@ async function answer(w: VueWrapper, accepted: boolean) {
   return asked
 }
 
-const SECTION = { revision: 1, variant: 'FULL' as const, text: { de: '## Auf dieser Instanz', en: '## On this instance' } }
+const SECTION = { revision: 1, text: { de: '## Auf dieser Instanz', en: '## On this instance' }, record: { de: '### Deine IP-Adresse', en: '### Your IP address' } }
 
 describe('TenantTermsPanel — the languages that carry terms', () => {
   beforeEach(() => {

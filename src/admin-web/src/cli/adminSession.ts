@@ -39,5 +39,5 @@ export async function signIn(env: Record<string, string | undefined>): Promise<v
   if (!email) throw new CliError('VEYQ_ADMIN_EMAIL is not set')
   if (!password) throw new CliError('VEYQ_ADMIN_PASSWORD is not set')
   session.apiBase = backendUrl(env)
-  await login(email, password)
+  await login(email, password, 'body')
 }

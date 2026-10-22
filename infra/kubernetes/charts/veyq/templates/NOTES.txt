@@ -11,7 +11,9 @@ Save the Emergency Kit on that screen: it is shown once, and the server holds no
 Then point DNS at the address your Gateway API implementation gives the Gateway `veyq`
 (kubectl -n {{ .Release.Namespace }} get gateway veyq — ADDRESS, and PROGRAMMED True) for:
     {{ .Values.domain }}          the instance
-    {{ .Values.storeDomain }}     the object store (its own origin on this target)
+{{- if .Values.garage.enabled }}
+    {{ .Values.storeDomain }}     the bundled object store (its own origin on this target)
+{{- end }}
 {{- if .Values.admin.domain }}
     {{ .Values.admin.domain }}    the administration surface (you chose to expose it)
 {{- end }}
@@ -69,11 +71,23 @@ Every route of this release — the chart's `veyq-*` and the `veyq-tenant-*` one
 the Gateway accepted it:
     kubectl -n {{ .Release.Namespace }} get httproutes,listenersets
 
+{{- if .Values.garage.enabled }}
 Before the first tenant, set the object store in the same console (over the port-forward above): open
 Server → Object store, choose "Use the bundled store" or a store of your own, save it, then "Check store".
 Tenants can be created only after a passed check. For the bundled Garage the same page shows how its background
 provisioning went — the public origin answers no Server-Owner operation, so this is the place to read it;
 `veyq-admin store check` provisions it again and prints every step.
+{{- else }}
+Before the first tenant, set the object store in the same console (over the port-forward above): open
+Server → Object store and enter a store of your own (garage.enabled is false, so this release brings none and the
+console offers no bundled one), save it, then "Check store". Tenants can be created only after a passed check.
+{{- if .Values.backup.enabled }}
+The backup gate cannot open that store's key (it is sealed under the KEK the gate never reads): name a Secret with
+its endpoint, bucket and a key pair that can list it in backup.store.existingSecret, or the first capture fails
+naming the value.
+{{- end }}
+If garage.enabled was true before, its claims (meta-/data-/snapshots-veyq-garage-0) remain: deleting them deletes the objects.
+{{- end }}
 {{- if .Values.backup.enabled }}
 
 Backups: the init container `backup-gate` captures the database and an index of the store onto the claim
