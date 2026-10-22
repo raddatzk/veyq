@@ -37,7 +37,7 @@ kubectl -n veyq logs -f deploy/veyq-app
 ```
 
 What the application logs is operational: routing being written, the object store being set up (an access key's id
-at most, never a secret), the config-secret key being generated or unreadable, background jobs that give up, a mail
+at most, never a secret) and the bundled store being set and checked after a start, the config-secret key being generated or unreadable, background jobs that give up, a mail
 that could not be sent. **What it does not log:** content, names, email addresses, client addresses, keys, tokens and
 the links that carry them. A mail that could not be sent is logged by its kind and the mail server's reply code, not
 by its recipient; a new tenant's invitation that falls back to the copy link is logged by the tenant's id. An

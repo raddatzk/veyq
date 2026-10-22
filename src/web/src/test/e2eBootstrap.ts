@@ -67,28 +67,37 @@ function createTenant(tenantName: string, domain: string, ownerEmail: string) {
 
 /**
  * The object store is a Server-Owner setting that must have PASSED its check before the server creates a tenant (ADR 0089
- * decision 6; `409 store_not_ready`), and the environment only carries the bundled store's HINT — so a fresh instance
- * chooses the bundled store and checks it, which is the whole of what an operator does too. A hand-built call, not a
+ * decision 6; `409 store_not_ready`), and the environment only carries the bundled store's HINT — so the server itself
+ * saves the bundled store and checks it after its boot provisioning (decision 3), and a fresh instance only waits for
+ * that check to have passed: nobody chooses anything, operator or harness. Bounded, and below the 120 s `beforeAll`
+ * the shortest suite gives [birthInstance], so a store that never passes fails here with the last check's steps rather
+ * than as a hook timeout: `run_web_e2e.py` provisions the Garage before a suite boots, so its backend's own provisioning
+ * is quick, and a failing probe is checked again after 10 s, 20 s, 40 s. A hand-built call, not a
  * generated client: `src/web/` generates none for `/api/instance/store` (that surface is `admin-web`'s, ADR 0065) and a
  * client for one harness step would hand product code a Server-Owner door.
  */
-async function chooseBundledStore(): Promise<void> {
-  const call = async (method: string, path: string, body?: unknown) => {
-    const res = await fetch(`${ADMIN_BASE}${path}`, {
-      method,
-      headers: { authorization: `Bearer ${session.accessToken ?? ''}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    })
-    return { status: res.status, json: (await res.json().catch(() => null)) as { bundledAvailable?: boolean; passed?: boolean; steps?: unknown } | null }
+async function waitForTheBundledStore(): Promise<void> {
+  type Store = { bundledAvailable?: boolean; lastCheck?: { passed?: boolean; steps?: unknown } | null; pending?: { lastCheck?: { steps?: unknown } | null } | null }
+  const read = async () => {
+    const res = await fetch(`${ADMIN_BASE}/api/instance/store`, { headers: { authorization: `Bearer ${session.accessToken ?? ''}` } })
+    return { status: res.status, json: (await res.json().catch(() => null)) as Store | null }
   }
-  const now = await call('GET', '/api/instance/store')
+  const deadline = Date.now() + STORE_ADOPTION_MS
+  let now = await read()
   expect(now.status, 'GET /api/instance/store').toBe(200)
   expect(now.json?.bundledAvailable, 'the e2e profile carries the bundled-store hint').toBe(true)
-  const put = await call('PUT', '/api/instance/store', { bundled: true })
-  expect(put.status, 'PUT /api/instance/store {bundled}').toBe(200)
-  const checked = await call('POST', '/api/instance/store/check')
-  expect({ status: checked.status, passed: checked.json?.passed, steps: checked.json?.steps }, 'the bundled store passes its check').toMatchObject({ status: 200, passed: true })
+  while (!now.json?.lastCheck?.passed && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    now = await read()
+  }
+  expect(
+    { status: now.status, passed: now.json?.lastCheck?.passed, pendingSteps: now.json?.pending?.lastCheck?.steps },
+    'the server put the bundled store in use with a passed check',
+  ).toMatchObject({ status: 200, passed: true })
 }
+
+/** How long [waitForTheBundledStore] waits (its KDoc says why this bound). */
+const STORE_ADOPTION_MS = 90_000
 
 /**
  * Varies emails/usernames per run so a re-run against a non-fresh DB does not collide — and, just as important,
@@ -173,7 +182,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
 
   await createServerOwner(owner.built.material, owner.email)
   await become(owner)
-  await chooseBundledStore()
+  await waitForTheBundledStore()
   const tenant = await createTenant(tenantName, HOST, owner.email)
   // The owner's birth is signed by its identity and names its account (ADR 0028 Decision 6) — read it first.
   owner.userId = await myUserId()

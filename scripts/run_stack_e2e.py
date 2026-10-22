@@ -895,10 +895,11 @@ def plant_store_sentinel(stamp: str, workdir: Path) -> str:
     presigned URL of the run takes. Over TLS with the run's Pebble root as the only CA — the certificate stage's
     connection, by SNI, no `/etc/hosts`. Garage refuses it (anonymous access) and logs the URI as sent.
 
-    **After the browser stage, not in the window.** The app renders that route only while the store in use is the
-    bundled one (ADR 0064 § the bundled store is opt-in), and the store is chosen by the browser suite's setup
-    (`tests/e2e/tests/setup/first-run.setup.ts` clicks *Use the bundled store* — that click is itself under test, so
-    nothing here pre-chooses it). Before it, this GET reaches the app's catch-all and Garage never logs it. So here,
+    **After the browser stage, not in the window.** The app renders that route only while the bundled store is in use
+    or pending (ADR 0064 § the bundled store is opt-in), and the server adopts it itself after its boot provisioning
+    (ADR 0089 decision 3) — which the browser suite's setup asserts (`tests/e2e/tests/setup/first-run.setup.ts` opens
+    the object-store page on it in use and passed, so nothing here waits for it or sets it). Before that adoption this
+    GET reaches the app's catch-all and Garage never logs it, and only after the browser stage is it certain. So here,
     finding it proves the container sweep reads Garage's log up to the end of the run; that the window reaches back to
     the run's start rests on `--since` being the run's first timestamp (`main`), which no sentinel proves any more.
     """

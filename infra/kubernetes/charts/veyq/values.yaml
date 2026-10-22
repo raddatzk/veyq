@@ -341,7 +341,7 @@ garage:
   # objects and passes the app no bundled-store hint: after the install, set a store of your own in the admin
   # console (Server → Object store) — no tenant is created before it passes its check — and name it to the backup
   # gate in backup.store.existingSecret. On, set storeDomain and secrets.garageRpcSecret / garageAdminToken, and the
-  # console offers "Use the bundled store".
+  # app sets the bundled store itself and checks it once it has provisioned Garage (ADR 0089 decision 3).
   # Turning it off under an instance whose store IS the bundled one is not refused (Helm cannot read the setting):
   # the app then names the cause, and the claims stay behind (volumeClaimTemplates, no retention policy), so `true`
   # again restores it. Deleting those claims deletes the objects.

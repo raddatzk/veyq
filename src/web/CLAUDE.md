@@ -64,12 +64,15 @@ here; the server is blind.
       When it hand-wrote its bodies, login verify gained `nonce`, the seeder kept the old shape and failed its own
       login with 400. Tenant-scoped calls go over `node:http` as the client's `fetchApi`, because the backend
       resolves the tenant from `Host` and fetch drops a hand-set one; that works for any domain, resolvable or not.
-    - **It chooses and checks the bundled object store before it creates the tenant** (ADR 0089): the store is a
+    - **It needs the bundled object store in use before it creates the tenant** (ADR 0089): the store is a
       Server-Owner setting with a passed check, and `createTenant` answers `409 store_not_ready` until one passed.
-      The check PUTs a probe through the **public origin the backend signs for** (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`,
-      the tenant domain on the browse port), so **the Vite that serves that port must be up when you seed**, or the
-      check fails with `PROBE_PUT … timed out`/`ConnectException` — and by then the owner exists, so the only way back
-      is a wipe (`bootstrap:user` refuses an instance that is already set up). Seed with Vite running, never before.
+      The backend sets the bundled store and checks it itself after its start (decision 3), so the seeder usually
+      finds it passed; where it has not (yet), the seeder saves it and checks it once more. Either check PUTs a probe
+      through the **public origin the backend signs for** (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`, the tenant domain on
+      the browse port), so **the Vite that serves that port must be up**: the backend's own check retries for about
+      ten minutes, the seeder's does not, and when it fails with `PROBE_PUT … timed out`/`ConnectException` the owner
+      already exists, so the only way back is a wipe (`bootstrap:user` refuses an instance that is already set up).
+      Seed with Vite running, never before.
     - **It writes the owner's material as soon as the owner is complete**, before the optional second user — a
       failure in an optional step warns and leaves a usable owner behind. It used to write last, so a failing
       user2 threw away the Secret Key of an owner that already existed in the DB (irrecoverable: a wipe + re-seed

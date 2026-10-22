@@ -97,18 +97,23 @@ test(
 )
 
 test(
-  'the Server Owner connects the bundled store and it passes its check',
-  { tag: '@uc.admin.configure-object-store:server-owner-sets-and-checks-the-store' },
+  'the server sets the bundled store and checks it, and the owner finds it in use without a click',
+  { tag: '@uc.admin.configure-object-store:the-bundled-store-is-adopted-and-checked-without-a-click' },
   async () => {
-    // ADR 0089: the environment only offers the bundled store; choosing and checking it is the owner's act.
-    await page.getByRole('button', { name: 'Object store' }).click()
-    await page.getByRole('combobox', { name: 'Store' }).click()
-    await page.getByRole('option', { name: 'Use the bundled store' }).click()
-    await page.getByRole('button', { name: 'Save' }).click()
-    await expect(page.getByText('This setting is saved but not in use yet', { exact: false })).toBeVisible()
-    await page.getByRole('button', { name: 'Check store' }).click()
-    // The probe uploads through the public origin the backend signs for — through Traefik and its ACME certificate.
-    await expect(page.getByText('The store passed its check. Tenants can be created.')).toBeVisible({ timeout: 60_000 })
+    // ADR 0089 decision 3: where the deployment brings its Garage and nothing is saved, the server saves the bundled
+    // store after its boot provisioning and runs the ordinary check itself — whose probe uploads through the public
+    // origin the backend signs for, through Traefik, the pending store's blobs route and its ACME certificate. The
+    // page reads the store once when it opens, so it is opened again (via another rubric) until the boot worker's
+    // check has passed; the worker re-checks a failing probe after 10 s, 20 s, 40 s, 60 s.
+    const objectStore = () => page.getByRole('button', { name: 'Object store' }).click()
+    await expect(async () => {
+      await page.getByRole('button', { name: 'Operator', exact: true }).click()
+      await objectStore()
+      await expect(page.getByText('The store passed its check. Tenants can be created.')).toBeVisible({ timeout: 2_000 })
+    }).toPass({ timeout: 180_000 })
+    await expect(page.getByRole('combobox', { name: 'Store' })).toContainText('Use the bundled store')
+    // Nothing waits to be saved or checked: no saved change beside it.
+    await expect(page.getByRole('button', { name: 'Discard change' })).toHaveCount(0)
   },
 )
 

@@ -72,9 +72,10 @@ the Gateway accepted it:
     kubectl -n {{ .Release.Namespace }} get httproutes,listenersets
 
 {{- if .Values.garage.enabled }}
-Before the first tenant, set the object store in the same console (over the port-forward above): open
-Server → Object store, choose "Use the bundled store" or a store of your own, save it, then "Check store".
-Tenants can be created only after a passed check. For the bundled Garage the same page shows how its background
+Before the first tenant, the object store must have passed its check. With nothing saved, the app sets the
+bundled store itself after it has provisioned Garage, and checks it; read the result in the same console (over the
+port-forward above) under Server → Object store, where "Check store" runs it again and a store of your own can be
+saved instead. Tenants can be created only after a passed check. For the bundled Garage the same page shows how its background
 provisioning went — the public origin answers no Server-Owner operation, so this is the place to read it;
 `veyq-admin store check` provisions it again and prints every step.
 {{- else }}

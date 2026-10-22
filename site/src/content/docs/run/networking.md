@@ -19,8 +19,8 @@ new tenant's domain answers without a restart and without editing anything.
 **Docker Compose.** Traefik, the only container with public ports (80 and 443), reads one file the application
 writes into the `veyq-traefik-dynamic` volume, and nothing else: no container mounts the Docker socket. **Never
 edit that file.** It is a projection of the tenant table; the next tenant change or start overwrites it, and it is
-not part of a backup, because the next start regenerates it. While the bundled store is the store in use, store
-traffic goes to Garage under a path of each domain (`/blobs/`), so the browser reaches the store on the instance's own
+not part of a backup, because the next start regenerates it. While the bundled store is the store in use, or a saved
+setting waiting for its check, store traffic goes to Garage under a path of each domain (`/blobs/`), so the browser reaches the store on the instance's own
 origin; with a store of your own the file routes no such path, and browsers reach that store at its own address. If the application cannot write
 the file, it logs that loudly and every domain, the instance's own included, stays unrouted; the admin port
 bypasses Traefik, so you keep a way in.

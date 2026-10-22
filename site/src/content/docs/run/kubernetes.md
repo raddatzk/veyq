@@ -58,8 +58,9 @@ gateway and here ([Networking](/veyq/run/networking/#where-the-source-port-comes
 
 **The bundled store is opt-in here** (`garage.enabled`, `false` by default; [ADR
 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)). The store
-itself is not a value: after the install, the Server Owner enters an S3-compatible store of your own in the admin
-console (**Server → Object store**) and checks it, and no tenant is created before it passes. Off, the chart renders
+itself is not a value. Off, the Server Owner enters an S3-compatible store of your own in the admin console
+(**Server → Object store**) after the install and checks it; on, the app sets the bundled store itself once it has set
+Garage up, and checks it. No tenant is created before a store passes. Off, the chart renders
 nothing of Garage and the console offers no bundled store; the backup gate then reads that store through
 `backup.store.existingSecret` ([Backup and restore](/veyq/run/backup-and-restore/#under-kubernetes)).
 
@@ -68,7 +69,7 @@ versions, so keeping its objects is your volume snapshots' job; and a host of it
 its certificate and its listener. With `garage.enabled: true`, set `storeDomain` and generate its secrets the same
 way as for compose: `openssl rand -hex 32` for `secrets.garageRpcSecret` (exactly 64 hex characters) and a long random
 value for `secrets.garageAdminToken`. The app's S3 key pair is derived from the admin token, so the chart carries no
-access key, and the console then offers **Use the bundled store**. An operator who keeps key material out of values
+access key, and the app sets the bundled store itself; the console offers **Use the bundled store** to return to it. An operator who keeps key material out of values
 files names an existing `Secret` in `secrets.existingSecret` instead. Turning it off again under an instance whose
 store is the bundled one is not refused: the app then names the cause, and Garage's claims stay behind, so `true`
 again restores it. **Deleting those claims deletes the objects.**

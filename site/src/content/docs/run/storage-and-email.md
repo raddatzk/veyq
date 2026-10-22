@@ -24,15 +24,17 @@ refuses to create a tenant. Once the first file is stored, the store's type, end
 instance's media to another store is not supported.
 
 **The bundled store.** A recipe that brings a Garage hands the application a hint to it: its addresses and its admin
-token (`GARAGE_ADMIN_TOKEN` / `secrets.garageAdminToken`). The console then offers **Use the bundled store**, which
-stores a reference to that hint, not a copy of its secrets; the store's access keys are derived from the token.
+token (`GARAGE_ADMIN_TOKEN` / `secrets.garageAdminToken`). With no store saved, the application then sets the bundled
+store itself after its start and checks it, so a fresh instance needs no step of yours; the console's **Use the bundled
+store** returns to it from a store of your own. Either way the setting is a reference to that hint, not a copy of its
+secrets; the store's access keys are derived from the token.
 **On Compose it is the default**: the browser reaches it under a path of each tenant's own domain, so no CORS rule is
 needed, and an instance leaves it out with its `compose.override.yml`
 ([Set up a new instance](/veyq/run/new-instance/#install)). **On Kubernetes it is opt-in** (`garage.enabled`): one
 node on one claim, with no replication or versioning, on a host of its own (`storeDomain`), where the application
 writes a CORS rule that allows any origin ([Kubernetes](/veyq/run/kubernetes/)). Where no hint is passed the console
 offers only a store of your own. The same-origin route to the bundled store on Compose exists only while it is the
-store in use.
+store in use or a saved setting waiting for its check, whose test upload travels that route.
 
 **A store of your own.** An S3-compatible service, or a Garage you run:
 
