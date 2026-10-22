@@ -69,7 +69,9 @@ class AppShellRoutes(
     /** The policy for right now: the base policy plus the origin of the store the backend signs against and the origins
      *  of the outside services in use ([ExternalOrigins], a snapshot, so no database is read here). [emitted] is a memo
      *  checked against both on every call, so a racing response that stores the policy of an older state costs the
-     *  next one a rebuild, never a stale header (inbox #445). */
+     *  next one a rebuild, never a stale header (inbox #445). This runs on the IO thread, so the store origin is read
+     *  from `StoreSettings`' cached resolution, which its `invalidate()` resolves again at once for exactly this reason:
+     *  a database read here is refused and the response never written. */
     private fun cspNow(): String {
         val origin = blobStore.storeOrigin
         val services = external.current()

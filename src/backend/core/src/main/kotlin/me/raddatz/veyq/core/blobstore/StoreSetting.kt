@@ -118,7 +118,12 @@ data class StoreSettingRow(
     val secretKey: SealedValue?,
     val garageAdminEndpoint: String?,
     val garageAdminToken: SealedValue?,
-)
+) {
+    companion object {
+        /** The bundled store chosen: a reference to the deployment's [BundledStoreHint], nothing copied. */
+        val BUNDLED = StoreSettingRow(true, null, null, null, null, null, null, null, null, null)
+    }
+}
 
 /**
  * Everything the backend needs to reach a store, secrets open — never persisted, logged or returned. [signingMode]

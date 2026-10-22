@@ -3,14 +3,24 @@ package me.raddatz.veyq.core.blobstore
 import io.quarkus.runtime.LaunchMode
 import io.quarkus.runtime.StartupEvent
 import jakarta.annotation.PreDestroy
+import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.event.Event
 import jakarta.enterprise.event.Observes
+import jakarta.interceptor.Interceptor
 import org.jboss.logging.Logger
 import java.time.Duration
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Fired on the provisioning worker's thread once the boot brought up the bundled hint's Garage for an instance with no
+ * store in use ([BootProvisioning.Source.BUNDLED_HINT]) — what `BundledStoreAdoption` observes. An event rather than a
+ * call, so this package does not reach into the console's handler.
+ */
+data object BundledHintProvisioned
 
 /** What the operator can do about the store's bring-up. The wire vocabulary of `GET /api/instance/store-provisioning`. */
 enum class StoreProvisioningState {
@@ -57,6 +67,7 @@ enum class StoreProvisioningState {
 @ApplicationScoped
 class StoreProvisioningRunner(
     private val provisioners: StoreProvisionerFactory,
+    private val bundledHintProvisioned: Event<BundledHintProvisioned>,
 ) {
     private val log = Logger.getLogger(StoreProvisioningRunner::class.java)
     private val current = AtomicReference(StoreProvisioningState.NOT_ATTEMPTED)
@@ -73,7 +84,9 @@ class StoreProvisioningRunner(
     /** What the Server Owner reads. Never `null`, never blocking: a plain read of the last state reached. */
     fun state(): StoreProvisioningState = current.get()
 
-    fun onStart(@Observes ev: StartupEvent) {
+    // After the default observer priority, so `InstanceStore.seedOnStartup` has committed the instance singleton the
+    // adoption locks by the time the worker reaches it.
+    fun onStart(@Observes @Priority(Interceptor.Priority.APPLICATION + 600) ev: StartupEvent) {
         // Everything, including the mode check and the factory call, is inside the catch. ADR 0063's lesson is
         // that a catch which starts one line too late covers the only failure that never happens: there, the
         // two calls above `writeAtomically`'s try were the only ones an unwritable directory ever threw on.
@@ -83,7 +96,19 @@ class StoreProvisioningRunner(
             // no bundled hint). Both are states the operator reads, not errors.
             val target = provisioners.forBoot() ?: return
             current.set(StoreProvisioningState.IN_PROGRESS)
-            worker.execute { current.set(runBounded(target)) }
+            worker.execute {
+                val state = runBounded(target.provisioner)
+                current.set(state)
+                // The hint's Garage is up and no store is in use: the server adopts and checks the bundled store
+                // (ADR 0089 decision 3) — on this thread, so the boot still waits for none of it.
+                if (state == StoreProvisioningState.PROVISIONED && target.source == BootProvisioning.Source.BUNDLED_HINT) {
+                    try {
+                        bundledHintProvisioned.fire(BundledHintProvisioned)
+                    } catch (e: Exception) {
+                        log.error("Adopting the bundled store failed; set it in the admin console (Server → Object store)", e)
+                    }
+                }
+            }
         } catch (e: Exception) {
             // Reaching here means the *scheduling* failed, not the provisioning. It is still not the boot's
             // problem — but it is the operator's, so it is reported as the give-up it is rather than left as a

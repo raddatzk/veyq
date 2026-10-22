@@ -12,7 +12,7 @@ acceptanceCriteria:
     coverage:
       backend:
         unit: [StoreCheckTest.aPassingCheckWritesOneProbeAndDeletesNothing, StoreCheckTest.theProbeIsOverwrittenByTheNextCheckSoNothingAccumulates, StoreCheckTest.aGarageStoreIsProvisionedFirstAndAFailedBringUpStopsTheCheck]
-        integration: [InstanceStoreSliceTest.anS3StoreIsSavedAsPendingAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse, InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.theBundledStoreIsRefusedWhereTheDeploymentOffersNone, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns, StoreOriginPresignSliceTest.theSignedUrlIsARealPresignedUrlForTheConfiguredBucket]
+        integration: [InstanceStoreSliceTest.anS3StoreIsSavedAsPendingAndItsSecretIsNeverReturned, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse, InstanceStoreSliceTest.aCheckAgainstAStoreNobodyAnswersFailsAtItsStepAndIsRemembered, InstanceStoreSliceTest.theBundledStoreIsRefusedWhereTheDeploymentOffersNone, AppShellStoreOriginSliceTest.thePolicyAllowsTheOriginOfAUrlThisAppSigns, AppShellStoreOriginSliceTest.aPageAnswersRightAfterTheStoreSettingChanged, StoreOriginPresignSliceTest.theSignedUrlIsARealPresignedUrlForTheConfiguredBucket]
     gaps:
       - surface: backend
         reason: >-
@@ -39,6 +39,31 @@ acceptanceCriteria:
         # The race ref is the promotion's lock: two checks of one pending setting (the boot's and the Server Owner's,
         # A8) put it in use once; without the lock the second failed on the first's uncommitted active row (bitten, 500).
         integration: [InstanceStoreSliceTest.aChangedSettingIsNotUsedUntilItsCheckPassesAndAFailingOneLeavesTheOldInUse, InstanceStoreSliceTest.aPendingSettingCanBeDiscardedAndTheOneInUseStays, InstanceStoreSliceTest.aWriteEqualToTheSettingInUseLeavesNothingPending, InstanceStoreSliceTest.withNothingPendingTheCheckRunsAgainstTheSettingInUse, InstanceStoreSliceTest.aPassingCheckPutsThePendingSettingInUse, InstanceStoreSliceTest.twoChecksOfOnePendingSettingPutItInUseOnce]
+  - id: the-bundled-store-is-adopted-and-checked-without-a-click
+    # A8, ADR 0089 decision 3 (cr-bundled-store-adopts-itself). The boot worker that runs it skips `%test`, so its two
+    # halves are tested apart: the adoption's transaction (StoreHandler.adoptBundled) as a slice, each "changes nothing"
+    # case against the same call on an empty instance, and the owner's save racing it under the singleton lock (bitten:
+    # without the lock in `set` the save failed on the adopted row's uncommitted key, 500); the check loop off any boot,
+    # on a clock its sleep advances. The adopted store is routed for its check (TenantIngressBucketRouteTest). The whole
+    # path on a fresh Compose install — boot, provisioning, adoption, a passing check — is the stack e2e's
+    # first-run.setup.ts, which no CI job runs yet (gap below).
+    text: >-
+      Where the deployment offers the bundled store and no store setting is saved, the server saves the bundled store as
+      pending after its boot provisioning and runs the ordinary check on it, again while it fails at a step the
+      deployment's proxy, certificate or DNS can still fix and within its budget, and only a passing check puts it in
+      use; a setting the Server Owner saved, in use or pending, is never replaced, and a bundled store a previous start
+      adopted is checked again.
+    coverage:
+      backend:
+        unit: [AdoptionCheckLoopTest.aCheckThatStartsPassingStopsTheLoopOnThePass, AdoptionCheckLoopTest.aStepWaitingCannotFixIsNotTriedAgain, AdoptionCheckLoopTest.aChangedPendingSettingStopsTheLoopBeforeTheNextCheck, AdoptionCheckLoopTest.aCheckThatFoundSomethingElsePendingStopsTheLoop, AdoptionCheckLoopTest.aCheckStillFailingWhenTheBudgetIsSpentEndsTheLoop, AdoptionCheckLoopTest.aShutdownWhileWaitingEndsTheLoop]
+        integration: [BundledStoreAdoptionSliceTest.withNothingSavedTheBundledStoreIsAdoptedAsPending, BundledStoreAdoptionSliceTest.aPendingStoreOfTheOwnersOwnIsNeverReplaced, BundledStoreAdoptionSliceTest.aStoreInUseIsNeverReplaced, BundledStoreAdoptionSliceTest.aDeploymentThatOffersNoBundledStoreAdoptsNothing, BundledStoreAdoptionSliceTest.aBundledStoreAPreviousBootAdoptedIsCheckedAgainNotSavedAgain, BundledStoreAdoptionSliceTest.theAdoptionsCheckChecksNothingOnceSomethingElseIsPending, BundledStoreAdoptionSliceTest.anOwnersSaveDuringTheAdoptionWaitsForItAndReplacesIt, TenantIngressBucketRouteTest.theBundledStoreTheServerAdoptsIsRoutedForItsCheck]
+    gaps:
+      - surface: backend
+        reason: >-
+          The wiring between the two halves — StoreProvisioningRunner's worker firing BundledHintProvisioned after it
+          provisioned the hint's Garage, and BundledStoreAdoption observing it — runs only outside `%test`, so no backend
+          test executes it. The stack e2e's first-run.setup.ts, which opens the object-store page on the bundled store in
+          use and passed, is its proof; it runs at the V1 heavy stage.
   - id: no-tenant-without-a-checked-store
     text: >-
       Creating a tenant is refused with a reason until the current store setting has passed its check.

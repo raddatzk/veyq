@@ -63,7 +63,7 @@
   sweep deletes it. The page shows those candidates, their age and the date the first will go; **pause** stops the
   deletion and keeps the counting, **resume** lets it go on. A restore or a rollback restarts every grace period and
   withdraws the confirmation, and so does a changed store setting. The sweep itself never deletes an object.
-- **A8 — The bundled store chooses itself** *(planned, `cr-bundled-store-adopts-itself`; ADR 0089 decision 3)*.
+- **A8 — The bundled store chooses itself** (ADR 0089 decision 3).
   Where the recipe passed a bundled-store hint and the instance holds no store setting — none in use, none pending —
   the server saves the bundled store as pending after its boot provisioning of the bundled Garage, and runs the
   main flow's check (step 5) itself, retrying while the domain, the certificate or the proxy in front of the store
