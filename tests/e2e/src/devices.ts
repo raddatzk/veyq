@@ -50,9 +50,31 @@ export async function newDevice(browser: Browser): Promise<Device> {
 export const passwordField = (on: Page) => on.getByRole('textbox', { name: /^Password\b/ })
 
 /**
+ * The one answer of 400 or more that is no error (`signedOutBoot.json`, which scripts/profile_hot_paths.py reads too): a
+ * document with no session asks `POST /api/token/refresh` once at its boot and is told 400 or 401 — the signed-out state.
+ */
+export const SIGNED_OUT_BOOT = JSON.parse(readFileSync(new URL('./signedOutBoot.json', import.meta.url), 'utf8')) as {
+  method: string
+  path: string
+  statuses: number[]
+}
+
+/** Whether a failed resource Chromium logged (its text, its URL) is the signed-out boot's refresh. */
+function isSignedOutBoot(text: string, url: string): boolean {
+  const status = /^Failed to load resource: the server responded with a status of (\d{3})\b/.exec(text)?.[1]
+  let path = ''
+  try {
+    path = new URL(url).pathname
+  } catch {
+    return false
+  }
+  return path === SIGNED_OUT_BOOT.path && SIGNED_OUT_BOOT.statuses.includes(Number(status))
+}
+
+/**
  * The console errors of [pages], for a scenario that asserts its pages log none. One answer is not an error and is left
- * out: a document with no session asks `POST /api/token/refresh` once at its boot and is told 400 or 401 — the
- * signed-out state (`src/web/src/app/sessionRefresh.ts` `rotateSession`), which Chromium logs as a failed resource. A
+ * out: the signed-out boot's refresh ([SIGNED_OUT_BOOT]; `src/web/src/app/sessionRefresh.ts` `rotateSession`), which
+ * Chromium logs as a failed resource. A
  * scenario calls `clear()` after its sign-in too, so what it asserts is the console of the pages it reads, not of the
  * sign-in in front of them (lane L1, 2026-10-23: that 400 alone made memories-styles, memory-banner and depot-styles red).
  */
@@ -67,8 +89,7 @@ export function watchConsole(...pages: Page[]): ConsoleErrors {
     page.on('console', (m) => {
       if (m.type() !== 'error') return
       const from = m.location().url
-      if (/^Failed to load resource: the server responded with a status of 40[01]\b/.test(m.text())
-        && /\/api\/token\/refresh(?:$|[?#])/.test(from)) return
+      if (isSignedOutBoot(m.text(), from)) return
       errors.push(from ? `${m.text()} (${from})` : m.text())
     })
     page.on('pageerror', (e) => errors.push(String(e)))

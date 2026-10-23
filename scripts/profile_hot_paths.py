@@ -83,6 +83,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     import yaml
@@ -121,6 +122,9 @@ STATEMENTS = ("Com_select", "Com_insert", "Com_update", "Com_delete", "Com_stmt_
 # pass. Either way it is recorded apart (`abortedRequests` in server.json). The one place to change it.
 ABORTED_REFUSES = True
 ABORTED = "net::ERR_ABORTED"
+# The one answer of 400 or more that is no error: the signed-out boot's `POST /api/token/refresh` (400/401 by design,
+# src/web/src/app/sessionRefresh.ts). One definition, which tests/e2e/src/devices.ts `watchConsole` reads too.
+SIGNED_OUT_BOOT = json.loads((repo_layout.E2E_DIR / "src" / "signedOutBoot.json").read_text(encoding="utf-8"))
 
 
 class Refused(Exception):
@@ -292,15 +296,28 @@ def browser_run(compose: list[str], workdir: Path, scenario: str, run: int, thro
     return {"stem": stem, **json.loads(window.read_text(encoding="utf-8"))}
 
 
+def signed_out_boot(entry: str) -> bool:
+    """Whether an `httpErrors` entry (`METHOD origin+path status`) is the signed-out boot's refresh ([SIGNED_OUT_BOOT])."""
+    parts = entry.split()
+    if len(parts) != 3 or not parts[2].isdigit():
+        return False
+    method, url, status = parts
+    path = urlsplit(url).path
+    return (method == SIGNED_OUT_BOOT["method"] and path == SIGNED_OUT_BOOT["path"]
+            and int(status) in SIGNED_OUT_BOOT["statuses"])
+
+
 def request_failures(window: dict, aborted_refuses: bool = ABORTED_REFUSES) -> tuple[list[str], list[str]]:
     """The window's requests that refuse the run, and its aborted ones, recorded beside it.
 
     An answer of 400 or more refuses, and so does a request that failed in the network (a refused connection, a name
-    that did not resolve, a TLS failure). A `net::ERR_ABORTED` refuses only when [aborted_refuses] says so
-    (`ABORTED_REFUSES`). A window written before `httpErrors` existed has none."""
+    that did not resolve, a TLS failure) — except the signed-out boot's refresh ([signed_out_boot]), which answers 400
+    or 401 by design. A `net::ERR_ABORTED` refuses only when [aborted_refuses] says so (`ABORTED_REFUSES`). A window
+    written before `httpErrors` existed has none."""
     failed = list(window.get("failedRequests", []))
     aborted = [r for r in failed if r.rstrip().endswith(ABORTED)]
-    refusing = [r for r in failed if r not in aborted] + list(window.get("httpErrors", []))
+    refusing = [r for r in failed if r not in aborted] + [
+        r for r in window.get("httpErrors", []) if not signed_out_boot(r)]
     if aborted_refuses:
         refusing += aborted
     return refusing, aborted
