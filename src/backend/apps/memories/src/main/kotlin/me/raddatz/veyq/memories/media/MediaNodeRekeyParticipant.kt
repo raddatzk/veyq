@@ -189,7 +189,12 @@ class MediaNodeRekeyParticipant(private val items: NodeItemsRevisions) : NodeRek
             if (m.wrappedExif != null && Key(m.id, MediaRekeyRows.EXIF) !in staged) return NodeRekeyParticipant.Verdict.MISSING
         }
         if (blobs.any { Key(it.id, MediaRekeyRows.BLOB_WRAP) !in staged }) return NodeRekeyParticipant.Verdict.MISSING
-        if (buckets.any { Key(it.id, MediaRekeyRows.BUCKET_NAME) !in staged }) return NodeRekeyParticipant.Verdict.MISSING
+        // A READ_WRITE contributor's primary holds the server's copy of that guest's name (`MediaStore.primarySealedNameFor`),
+        // sealed under the link's ROOT key: copied again from the identity, whose name core's commit of the root re-sealed
+        // — in this very transaction when the root is this node (core applies its own parts before the participants).
+        // The re-keyer stages none for it: once the root's old key is gone (a resumed re-key), it could not open it.
+        val copies = contributorNames(buckets)
+        if (buckets.any { it.id !in copies && Key(it.id, MediaRekeyRows.BUCKET_NAME) !in staged }) return NodeRekeyParticipant.Verdict.MISSING
         // … staged against the meta revision the medium still has.
         val stale = media.any { m ->
             listOfNotNull(staged[Key(m.id, MediaRekeyRows.META)], staged[Key(m.id, MediaRekeyRows.EXIF)])
@@ -206,11 +211,21 @@ class MediaNodeRekeyParticipant(private val items: NodeItemsRevisions) : NodeRek
             if (m.wrappedExif != null) m.wrappedExif = staged.getValue(Key(m.id, MediaRekeyRows.EXIF)).value
         }
         for (b in blobs) b.wrappedBlobKey = staged.getValue(Key(b.id, MediaRekeyRows.BLOB_WRAP)).value
-        for (b in buckets) b.sealedName = staged.getValue(Key(b.id, MediaRekeyRows.BUCKET_NAME)).value
+        for (b in buckets) b.sealedName = copies[b.id] ?: staged.getValue(Key(b.id, MediaRekeyRows.BUCKET_NAME)).value
         if (media.isNotEmpty()) {
             val position = items.bump(scopeId, nodeId) // after the media rows: record rows -> node row -> revision row
             media.forEach { it.position = position }
         }
         return NodeRekeyParticipant.Verdict.APPLIED
+    }
+
+    /** Bucket id -> the current name of the READ_WRITE contributor whose primary it is (identities without a wrapped key). */
+    private fun contributorNames(buckets: List<BucketEntity>): Map<String, String> {
+        val owners = buckets.filter { it.isPrimary }
+            .mapNotNull { b -> (PrincipalKey.parse(b.ownerKey) as? PrincipalKey.Share)?.identityId?.let { b.id to it } }
+        if (owners.isEmpty()) return emptyMap()
+        val names = ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is null", owners.map { it.second }).list()
+            .associate { it.id to it.sealedDisplayName }
+        return owners.mapNotNull { (bucket, identity) -> names[identity]?.let { bucket to it } }.toMap()
     }
 }

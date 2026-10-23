@@ -160,6 +160,9 @@ class RekeyStore(
         val core = stage.read(rekeyId, nodeId, NodeRekeyStage.CORE)
         val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId)) ?: return RekeyOutcome.PartsMissing
         if (plan.stale) return RekeyOutcome.PartsStale
+        // Core's parts first: a participant may copy what they re-sealed (a contributor's name, `MediaNodeRekeyParticipant`).
+        // A participant's refusal rolls the whole transaction back, core's writes included.
+        plan.apply()
         for (p in participants.sortedBy { it.part }) {
             when (p.commit(scopeId, nodeId, stage.read(rekeyId, nodeId, p.part))) {
                 NodeRekeyParticipant.Verdict.APPLIED -> Unit
@@ -167,7 +170,6 @@ class RekeyStore(
                 NodeRekeyParticipant.Verdict.STALE -> { QuarkusTransaction.setRollbackOnly(); return RekeyOutcome.PartsStale }
             }
         }
-        plan.apply()
         // The node's own row in ONE statement, every column the commit changes; the copy loaded under the lock is not
         // written back (nothing on it is dirty).
         val sets = mutableListOf("wrappedContentKey = :wrap", "encryptedName = :name", "placementRevision = :placement", "epoch = :epoch")
