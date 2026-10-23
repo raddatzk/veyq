@@ -26,7 +26,7 @@ div.veyq-node-host
               path
               path
               path
-    header.veyq-node-header
+    header.has-leading.veyq-node-header
       div.veyq-node-header-leading
         span.veyq-icon.veyq-node-header-icon
           svg.lucide.lucide-folder.veyq-icon__svg

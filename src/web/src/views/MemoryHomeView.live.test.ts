@@ -57,6 +57,7 @@ import { chooseNew } from '../test/newMenu'
 import { sealName, wrapContentKey, type NodeAddress } from '../core/node/tree'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../core/sharing/dropKey'
 import { hashForNode } from '../core/node/location'
+import { chooseHeaderEntry } from '../test/nodeHeader'
 
 const sealed = (nodeId: string, name: string) => ({
   encryptedName: b64std(v1.sealField({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 }, SCOPE_KEY, v1.utf8(name))),
@@ -340,7 +341,7 @@ describe("the drop box's page, live", () => {
   it('asks the server nothing while a dialog of the page is open, and nothing after the page is gone', async () => {
     const world = dropBoxWorld()
     const w = await openDropBox([world.box])
-    await w.find(`button[aria-label="${t('depot.dropBox.delete')}"]`).trigger('click') // core's delete dialog
+    await chooseHeaderEntry(w, 'delete') // core's delete dialog, from the header's ⋯ (ADR 0110)
     await settle(OVER_ONE_INTERVAL * 2)
     expect(listNodes).not.toHaveBeenCalled()
     w.unmount()

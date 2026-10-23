@@ -45,7 +45,7 @@ div.veyq-node-host
               path
               path
               path
-    header.veyq-node-header
+    header.has-leading.veyq-node-header
       div.veyq-node-header-leading
         span.veyq-icon.veyq-node-header-icon
           svg.lucide.lucide-folder.veyq-icon__svg
@@ -58,6 +58,18 @@ div.veyq-node-host
             button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
               span.veyq-button__icon.veyq-icon
                 svg.lucide.lucide-heart.veyq-icon__svg
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-download.veyq-icon__svg
+                  path
+                  path
+                  path
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
+              span.veyq-button__icon.veyq-icon
+                svg.lucide.lucide-image.veyq-icon__svg
+                  rect
+                  circle
                   path
             button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Rename"]
               span.veyq-button__icon.veyq-icon
@@ -76,26 +88,12 @@ div.veyq-node-host
                 svg.lucide.lucide-copy.veyq-icon__svg
                   rect
                   path
-            button.veyq-button.veyq-button--danger.veyq-button--icon-only.veyq-button--outlined.veyq-button--small.veyq-danger-action.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Delete"]
+            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-more.veyq-prime-icon-button [aria-label="More actions for “Trips”"]
               span.veyq-button__icon.veyq-icon
-                svg.lucide.lucide-trash.lucide-trash-2.veyq-icon__svg
-                  path
-                  path
-                  path
-                  path
-                  path
-            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
-              span.veyq-button__icon.veyq-icon
-                svg.lucide.lucide-image.veyq-icon__svg
-                  rect
+                svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
                   circle
-                  path
-            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
-              span.veyq-button__icon.veyq-icon
-                svg.lucide.lucide-download.veyq-icon__svg
-                  path
-                  path
-                  path
+                  circle
+                  circle
     div.veyq-level-tabs.veyq-tabs
       div.veyq-tabs__bar
         div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]

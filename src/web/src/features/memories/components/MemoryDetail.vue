@@ -171,6 +171,9 @@ provideMemoryView({ source: props.source, rights: can })
 /** The participants row under the title (who was there): it owns the picker the header's action opens. */
 const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
 
+/** The Memory header's priority (owner, 2026-10-23, ADR 0110): what is first a button. Delete and report are always the ⋯
+ *  menu's last entries. */
+const MEMORY_HEADER_ORDER = ['favorite', 'upload', 'share', 'shareUpload', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'] as const
 /** The header's actions (core's `NodeHeader`): each is shown only where `can` grants it; a share guest gets the same list
  *  with fewer entries. The uploader (drop-box) link is its own action with its own dialog (no role switcher). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
@@ -576,7 +579,7 @@ watch(
     <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
          the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
-    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions" :core-actions="coreActions">
+    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions" :core-actions="coreActions" :order="MEMORY_HEADER_ORDER">
       <template #leading>
         <button
           type="button"
@@ -1065,10 +1068,18 @@ watch(
 .memory-cover-preview-hint .veyq-icon {
   font-size: 0.85rem;
 }
+/* On a phone the cover is a small tile beside the name (ADR 0110 decision 1); the hint over an empty cover is its icon alone
+   there — the words stay the button's accessible name and tooltip. */
 @container memory-detail-surface (max-width: 460px) {
   .memory-cover-preview {
-    width: 100%;
-    max-width: 260px;
+    width: 64px;
+  }
+  .memory-cover-preview-hint {
+    inset-block-start: 0;
+    padding: 0;
+  }
+  .memory-cover-preview-hint > span {
+    display: none;
   }
 }
 
