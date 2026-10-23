@@ -193,8 +193,37 @@ components:
         Make one or two upload sessions - or new rows on objects the node already stores (`shared`, `posterShared`) -
         the node's banner, and re-seal the node's `wrappedMeta` with the banner that names them (see
         `setMemoryBanner`). Exactly one of `uploadId` and `shared`, and at most one of `posterUploadId` and
-        `posterShared`, else `400 invalid_request`.
+        `posterShared`, else `400 invalid_request` — the schema's own rule (inbox #507).
       required: [wrappedMeta, metaRevision, nodeEpoch]
+      # MemoryBannerHandler.set: a null one counts as absent. Under `dependentSchemas` (on the required `wrappedMeta`, and
+      # on `posterUploadId` for the poster's pair), never at the top, where an `if` turns a sibling-annotated `$ref` to
+      # this schema into `Any`; there both generators ignore it (measured on openapi-generator 7.23.0, Kotlin and
+      # TypeScript).
+      dependentSchemas:
+        wrappedMeta:
+          if:
+            required: [uploadId]
+            properties: { uploadId: { type: string } }
+          then:
+            properties: { shared: { type: "null" } }
+          else:
+            required: [shared]
+            properties: { shared: { type: object } }
+        posterUploadId:
+          if:
+            properties: { posterUploadId: { type: string } }
+          then:
+            properties: { posterShared: { type: "null" } }
+      # Whole, because one built from the properties' examples carries both forms of the banner and of its poster, which
+      # this operation refuses — the API fuzzing sent it as valid (ST202, the V1 heavy stage 2026-10-23).
+      example:
+        nodeEpoch: 0
+        uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        posterUploadId: 2a3b4c5d-6e7f-4a1b-8c2d-3e4f5a6b7c8d
+        expectedBlobId: null
+        expectedPosterBlobId: null
+        wrappedMeta: d3JhcHBlZC1tZXRh
+        metaRevision: 3
       properties:
         nodeEpoch:
           x-veyq-visibility: structure

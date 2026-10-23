@@ -18,6 +18,12 @@ strings) must say `format: uuid`. The failure names the list — spec, location,
 **The exceptions are named, each with its reason** (`NOT_A_ROW_ID`): an input that is called an id but is not a
 UUID column. Adding one is a decision this file records; a new id-named input is a UUID until it is argued otherwise.
 
+**Every `format: uuid` example of a request input is one the id columns hold.** The server refuses a UUID whose
+version nibble is 8 or more (`StorableUuid`, `core/http/StorableUuid.kt`: MariaDB's `UUID` type rejects part of that
+set), and the API fuzzing builds its positive requests from the contracts' examples, so a hand-typed example such as
+`…-9b1d-…` is a schema-valid request the server answers `400` (ST202 on `stageNodeRekey`, the V1 heavy stage
+2026-10-23). Read from each input's schema (and a list's items) and each parameter's own `example`.
+
 **Its limit.** It proves the contract says `uuid`, not that the handler reads the generated `UUID` (a handler that
 takes `String` from a `uuid` field and uses it raw is still canonical, since the generated parameter already parsed
 and re-printed it), nor that an id-typed column is only ever written from such an input — the audit of #387 did
@@ -34,6 +40,8 @@ import yaml
 import contract_specs
 
 ID_NAME = re.compile(r"(^|[a-z0-9])(Id|Ids)$|^(id|ids)$")
+# `StorableUuid.SHAPE` (src/backend/core/src/main/kotlin/me/raddatz/veyq/core/http/StorableUuid.kt): canonical, version 0-7.
+STORABLE_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-7][0-9a-fA-F]{3}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "options", "head"}
 
 # input name -> why it is not a UUID column. A share id is a 256-bit token; a suite id names a crypto suite; a
@@ -97,14 +105,41 @@ def string_without_uuid(specs: dict[str, dict], schema: dict, file: str) -> bool
     return False
 
 
+def unstorable_uuid_examples(specs: dict[str, dict], schema: dict, file: str) -> list[str]:
+    """The `example` values of a `format: uuid` value schema (or of a list of them) that no id column holds."""
+    file, schema = deref(specs, schema, file)
+    bad: list[str] = []
+    for alt in alternatives(schema):
+        file2, alt = deref(specs, alt, file)
+        if alt.get("type") == "array" or "items" in alt:
+            _, items = deref(specs, alt.get("items") or {}, file2)
+            listed = alt.get("example") if isinstance(alt.get("example"), list) else []
+            if any(a.get("format") == "uuid" for a in alternatives(items)):
+                bad += [str(v) for v in listed if isinstance(v, str) and not STORABLE_UUID.fullmatch(v)]
+            bad += unstorable_uuid_examples(specs, items, file2)
+            continue
+        if alt.get("format") != "uuid":
+            continue
+        for example in [alt.get("example"), schema.get("example")]:
+            if isinstance(example, str) and not STORABLE_UUID.fullmatch(example):
+                bad.append(example)
+    return sorted(set(bad))
+
+
 class Checker:
     def __init__(self, specs: dict[str, dict]):
         self.specs = specs
         self.seen: set[tuple[str, int]] = set()
         self.n_inputs = 0
 
-    def check(self, where: str, name: str, schema: dict, file: str) -> None:
+    def check(self, where: str, name: str, schema: dict, file: str, example: object = None) -> None:
         self.n_inputs += 1
+        bad = unstorable_uuid_examples(self.specs, schema, file)
+        if isinstance(example, str) and not STORABLE_UUID.fullmatch(example) and not string_without_uuid(self.specs, schema, file):
+            bad.append(example)
+        for value in sorted(set(bad)):
+            errors.append(f"{where} — `{name}`'s example {value} is no UUID an id column holds (version nibble 8 or "
+                          f"more, `StorableUuid`): a request built from it is refused `400`.")
         if not ID_NAME.search(name) or name in NOT_A_ROW_ID:
             return
         if string_without_uuid(self.specs, schema, file):
@@ -131,7 +166,7 @@ class Checker:
     def parameter(self, where: str, param: dict, file: str) -> None:
         file, param = deref(self.specs, param, file)
         name = param.get("name", "")
-        self.check(f"{where} parameter", name, param.get("schema") or {}, file)
+        self.check(f"{where} parameter", name, param.get("schema") or {}, file, param.get("example"))
 
     def run(self) -> None:
         for file, spec in self.specs.items():
