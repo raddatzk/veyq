@@ -10,7 +10,7 @@ acceptanceCriteria:
   - id: every-write-is-refused
     text: "With an application off, every write of it answers 422 capability_disabled - a node of its kinds created, renamed, moved, given a cover, copied or imported, its records and blobs written, a link rooted on one of its nodes created, reactivated or given a write role, a guest's write through any link - and a sweep derived from the generated APIs holds that no write operation of an application is left out."
   - id: reads-downloads-and-removals-stay
-    text: "With an application off, its nodes and records open, read and download for members and through existing links, and a member deletes one to the trash and restores it."
+    text: "With an application off, its nodes and records open, read and download for members and through existing links, and a member deletes one to the trash and restores it; restored, it is read-only like the rest. A member's own item marks (putItemFavorites) are still taken."
   - id: rekey-erasure-and-measures-run
     text: "With an application off, a rotation's re-key, an erasure and a moderation measure reach its nodes as always."
   - id: the-client-removes-every-write

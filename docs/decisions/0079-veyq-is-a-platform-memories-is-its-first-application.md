@@ -75,7 +75,9 @@ is read-only** (owner 2026-10-23): the server refuses with `422 capability_disab
 kinds created, renamed, moved, copied or imported, its records and blobs written, a link rooted on one of its nodes
 created or given a write role, a guest's write through any link — while what exists stays readable and downloadable,
 through the links that exist too, so nobody's data is trapped. Taking something out is never refused: a delete to the
-trash and its restore, an erasure and a moderation measure go on, and so does a rotation's re-key, which is the security of what
+trash and its restore (a restored node is read-only like the rest), an erasure and a moderation measure go on, and so
+do a member's own marks on its items ([ADR 0068](0068-favorites-two-confidentiality-levels.md)), which a Master-Key
+rotation re-tags through the same write, and so does a rotation's re-key, which is the security of what
 exists. Switched on again, everything is as before; nothing was deleted. Not built yet: `cr-application-switches`.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.

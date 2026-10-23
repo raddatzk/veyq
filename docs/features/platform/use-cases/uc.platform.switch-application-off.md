@@ -25,7 +25,8 @@
 4. Every write of the application is refused `422 capability_disabled` by the server: a node of its kinds created,
    renamed, moved, given a cover, copied or imported; its records and blobs written; a link rooted on one of its nodes
    created, reactivated or given a write role; a guest's write through any link.
-5. A member deletes a node of the application to the trash and restores it from there, as always.
+5. A member deletes a node of the application to the trash and restores it from there, as always; restored, it is
+   read-only like every node of the application — an application off means its nodes are off (owner 2026-10-23).
 6. Switched on again, every write is accepted and nothing was lost.
 
 ## Alternate / exception flows
@@ -37,7 +38,10 @@
   decision 2).
 - **E4 — a write already in flight** (an upload started before the switch): its completion is refused; nothing of it is
   kept.
-- **E5 — a client that does not know the id** (older, or a native app): it hides nothing, and the server refuses its
+- **E5 — a member's own marks** (a heart on a medium, Memories' item marks, [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md)):
+  taken, because they are the member's own blob, not the application's content, and a Master-Key rotation re-tags
+  them through the same write, which the server cannot tell from a new mark (owner 2026-10-23).
+- **E6 — a client that does not know the id** (older, or a native app): it hides nothing, and the server refuses its
   writes all the same.
 
 ## Quality notes
