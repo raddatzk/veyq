@@ -13,6 +13,8 @@ vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { templat
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
 vi.mock('../features/tenant/TenantMailSettingsPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
 vi.mock('../features/tenant/TenantStoragePanel.vue', () => ({ default: { template: '<div class="stub-storage" />' } }))
+vi.mock('../features/tenant/TenantTermsPanel.vue', () => ({ default: { template: '<div class="stub-terms" />' } }))
+vi.mock('../features/tenant/TenantCapabilitiesPanel.vue', () => ({ default: { template: '<div class="stub-capabilities" />' } }))
 vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template: '<div class="stub-create-group" />' } }))
 vi.mock('../features/account/pairing/AddDevicePanel.vue', () => ({ default: { template: '<div class="stub-add-device" />' } }))
 vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
@@ -272,6 +274,35 @@ describe('SettingsHubView — split view index vs detail', () => {
     const w = await mountHub('/settings/appearance')
     expect(w.find('.stub-appearance').exists()).toBe(true)
     expect(w.get('.settings-hub').classes()).toContain('is-detail')
+  })
+
+  // A reload or a deep link on a tenant page boots with no space open: the shell starts entering the tenant (AppShell) as
+  // the hub mounts. A tenant page mounted then read no tenant, said "Could not load members." and stayed so after the
+  // entry finished (the V1 heavy stage at 999 members, 2026-10-23). It waits for the entry, then mounts with the tenant open.
+  it.each([
+    ['tenant-members', '.stub-members'],
+    ['terms', '.stub-terms'],
+    ['mail', '.stub-mail'],
+    ['storage', '.stub-storage'],
+    ['capabilities', '.stub-capabilities'],
+  ])('a tenant page (%s) is not mounted while the space is still being entered, and mounts once it is', async (section, stub) => {
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as unknown as Awaited<ReturnType<typeof listMyTenants>>[number]])
+    activeSpace.status = 'loading' // what `enterScope` sets before its first await
+    const w = await mountHub(`/settings/${section}`)
+    expect(w.find(stub).exists()).toBe(false)
+    activeSpace.tenantId = 't-1'
+    activeSpace.scopeId = 's-1'
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.status = 'ready'
+    await flushPromises()
+    expect(pathOf(w)).toBe(`/settings/${section}`)
+    expect(w.find(stub).exists()).toBe(true)
+  })
+
+  it('control: a personal page does not wait for the space to be entered', async () => {
+    activeSpace.status = 'loading'
+    const w = await mountHub('/settings/sessions')
+    expect(w.find('.stub-sessions').exists()).toBe(true)
   })
 
   it('Devices and sessions is a Personal section reachable with no scope at all (uc.account.sessions)', async () => {

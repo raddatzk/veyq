@@ -12,7 +12,7 @@ import type { TenantsApi } from '../../api/generated/tenants'
 vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 
-import { syncAvatars, avatarUrlOf, resetAvatars, type AvatarSource } from './avatarCache'
+import { syncAvatars, avatarUrlOf, resetAvatars, AVATAR_CONCURRENCY, type AvatarSource } from './avatarCache'
 import { sealAvatar } from '../../features/account/profile/memberAvatar'
 
 const KEY = new Uint8Array(32).fill(5)
@@ -24,6 +24,9 @@ const SOURCE: AvatarSource = { tenantId: 'tenant-1', scopeId: SCOPE, key: KEY }
 // a minimal PNG header: what `sniffImage` recognises
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 const sealedFor = (userId: string, bytes: Uint8Array = PNG) => ({ sealedAvatar: sealAvatar(KEY, { scopeId: SCOPE, userId }, bytes) })
+
+/** Let every settled promise run its continuations (a queued fetch resumes a few microtasks after the slot it waited for). */
+const flushMicrotasks = async () => { for (let i = 0; i < 20; i++) await Promise.resolve() }
 
 let n = 0
 let getMemberAvatar: ApiMocks<TenantsApi, 'getMemberAvatar'>['getMemberAvatar']
@@ -136,6 +139,34 @@ describe('syncAvatars', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
   })
 
+  // A roster of 1,000 members (#491's scale) put one request per picture on the wire at once, ahead of the page's own reads
+  // (the V1 heavy stage, 2026-10-23). The pictures queue: at most AVATAR_CONCURRENCY are in flight, and every one still lands.
+  it('keeps at most AVATAR_CONCURRENCY picture requests in flight, and every picture of a 1,000-member roster lands', async () => {
+    const answers: (() => void)[] = []
+    getMemberAvatar.mockImplementation(({ userId }: { userId: string }) => new Promise((resolve) => { answers.push(() => resolve(sealedFor(userId))) }))
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ userId: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`, avatarRevision: 1 }))
+    const done = syncAvatars(SOURCE, rows)
+    await flushMicrotasks()
+    expect(getMemberAvatar).toHaveBeenCalledTimes(AVATAR_CONCURRENCY)
+    answers.shift()!() // one answer frees one slot: one more request, never a burst
+    await flushMicrotasks()
+    expect(getMemberAvatar).toHaveBeenCalledTimes(AVATAR_CONCURRENCY + 1)
+    while (answers.length) {
+      answers.splice(0).forEach((answer) => answer())
+      await flushMicrotasks()
+    }
+    await done
+    expect(getMemberAvatar).toHaveBeenCalledTimes(1000)
+    expect(rows.every(({ userId }) => avatarUrlOf(userId) !== null)).toBe(true)
+  })
+
+  it('a failed picture request frees its slot for the next one', async () => {
+    getMemberAvatar.mockRejectedValue(new Error('offline'))
+    const rows = Array.from({ length: AVATAR_CONCURRENCY * 3 }, (_, i) => ({ userId: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`, avatarRevision: 1 }))
+    await syncAvatars(SOURCE, rows)
+    expect(getMemberAvatar).toHaveBeenCalledTimes(AVATAR_CONCURRENCY * 3)
+  })
+
   it('reads no picture without the tenant key (the letter shows)', async () => {
     await syncAvatars({ ...SOURCE, key: null }, [{ userId: U1, avatarRevision: 2 }])
     expect(getMemberAvatar).not.toHaveBeenCalled()
@@ -151,6 +182,19 @@ describe('resetAvatars (sign-out)', () => {
     expect(avatarUrlOf(U1)).toBeNull()
     await syncAvatars(SOURCE, [{ userId: U1, avatarRevision: 1 }])
     expect(getMemberAvatar).toHaveBeenCalledTimes(3) // fetched afresh after the reset
+  })
+
+  it('sends no request for a picture still queued at the reset', async () => {
+    const answers: (() => void)[] = []
+    getMemberAvatar.mockImplementation(({ userId }: { userId: string }) => new Promise((resolve) => { answers.push(() => resolve(sealedFor(userId))) }))
+    const rows = Array.from({ length: AVATAR_CONCURRENCY + 4 }, (_, i) => ({ userId: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`, avatarRevision: 1 }))
+    const pending = syncAvatars(SOURCE, rows)
+    await flushMicrotasks()
+    resetAvatars()
+    answers.splice(0).forEach((answer) => answer())
+    await pending
+    expect(getMemberAvatar).toHaveBeenCalledTimes(AVATAR_CONCURRENCY) // the 4 queued ones never went out
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 
   it('lets a fetch that was in flight at the reset land nowhere', async () => {

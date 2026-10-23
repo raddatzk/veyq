@@ -9,9 +9,11 @@
 // - concurrent syncs of the same (user, revision) share one request;
 // - `404 avatar_not_found` drops the entry (E4), a blob that does not open or is no image shows the letter (E3) - the
 //   revision is still remembered, so a broken or vanished picture is not re-fetched on every directory read;
-// - a failed request (offline, 5xx) leaves the entry as it was and is retried by the next sync.
+// - a failed request (offline, 5xx) leaves the entry as it was and is retried by the next sync;
+// - at most AVATAR_CONCURRENCY requests are in flight, the rest queue (a 1,000-member roster is 1,000 pictures).
 // Members only: the share page has no people and never calls into this module.
 import { tenantsApi } from '../../api/client'
+import type { MemberAvatar } from '../../api/generated/tenants'
 import { withRefresh } from '../../app/sessionRefresh'
 import { HttpStatus, httpStatus } from '../../shared/httpError'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
@@ -40,6 +42,29 @@ const settled = new Map<string, number>()
 const inflight = new Map<string, Promise<void>>()
 let generation = 0
 
+/**
+ * How many picture requests may be in flight at once. A roster carries one integer per member and a picture is fetched per
+ * new integer, so a fresh tab of a 1,000-member tenant (#491's scale) asks for up to 1,000 pictures of about 22 KB. Sent at
+ * once (as in the V1 heavy stage at 999 members, 2026-10-23), every read the page makes after the roster queues behind
+ * them; queued here, a read waits for at most this many, and the pictures still arrive one after the other.
+ */
+export const AVATAR_CONCURRENCY = 6
+let inFlightRequests = 0
+const queued: (() => void)[] = []
+
+/** Take a request slot: at once while one is free (no microtask, so a lone fetch starts synchronously), else in turn. */
+async function takeSlot(): Promise<void> {
+  if (inFlightRequests < AVATAR_CONCURRENCY) inFlightRequests++
+  else await new Promise<void>((resolve) => queued.push(resolve))
+}
+
+/** Hand the slot to the next queued fetch, or free it. */
+function freeSlot(): void {
+  const next = queued.shift()
+  if (next) next()
+  else inFlightRequests--
+}
+
 /** A member's picture as an object URL, or null (the letter). Reactive: a component reading it re-renders on a change. */
 export function avatarUrlOf(userId: string | null | undefined): string | null {
   return userId ? (urls.urls.value.get(userId) ?? null) : null
@@ -62,9 +87,16 @@ async function fetchOne(source: AvatarSource, key: Uint8Array, userId: string, r
   const known = settled.get(userId)
   const alive = () => gen === generation && (settled.get(userId) ?? 0) <= revision
   try {
-    const sealed = await withRefresh(() =>
-      tenantsApi().getMemberAvatar({ tenantId: source.tenantId, userId, ifNoneMatch: known ? `"${known}"` : undefined }),
-    )
+    await takeSlot()
+    let sealed: MemberAvatar
+    try {
+      if (gen !== generation) return // reset (sign-out) while it queued: no request at all
+      sealed = await withRefresh(() =>
+        tenantsApi().getMemberAvatar({ tenantId: source.tenantId, userId, ifNoneMatch: known ? `"${known}"` : undefined }),
+      )
+    } finally {
+      freeSlot()
+    }
     if (!alive()) return
     const bytes = openAvatar(key, { scopeId: source.scopeId, userId }, sealed.sealedAvatar)
     const type = bytes ? sniffImage(bytes.subarray(0, 32)) : undefined
