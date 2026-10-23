@@ -95,6 +95,17 @@ sealed interface AttachResult {
     /** The node's epoch gate refused the item's `nodeEpoch` (ADR 0109 point 6): [code] is the per-item error
      *  (`stale_epoch`, `node_rekey_pending`, or `node_not_found` for a node gone since). Its uploads stay open. */
     data class EpochRefused(val code: String) : AttachResult
+
+    /**
+     * Nothing written, and the caller runs the attach again in a new transaction: the uploader's primary bucket did not
+     * exist when this one would have locked it ([MediaStore.attach]'s first lock), and a concurrent first upload of the
+     * same uploader into the node committed it while this one waited for the node's lock. The medium's row references
+     * that bucket (`fk_media_bucket`, a shared lock on the bucket's row), and a lock on it taken after the node's would
+     * invert the one lock order (bucket → node) against a writer that holds the bucket and waits for the node — a
+     * deadlock (heavy-stage collection run 2026-10-23, `MediaCreateRaceSliceTest`). The run again finds the primary and
+     * locks it first; primaries are never deleted apart from their node, so it never answers this twice.
+     */
+    object PrimaryAppeared : AttachResult
 }
 
 /** A node's uploader bucket for the "Beiträge" tab (en.memory.buckets, cr-0113): opaque owner_key + structure + count. */
@@ -160,6 +171,9 @@ class MediaStore(
      * Every wrap and seal of the item is under [nodeId]'s key, so the item states that node's epoch ([nodeEpoch]) and
      * the epoch gate judges it under the node's row lock — after the scope and share locks [admitted] and a shared
      * original take, before the first write (ADR 0109 point 6). A refusal writes nothing: the sessions stay open.
+     * The uploader's primary bucket is locked before the node, as the medium's row references it; one a concurrent
+     * first upload committed while this waited for the node answers [AttachResult.PrimaryAppeared], and the caller runs
+     * this again in a new transaction — so it is never called inside a caller's transaction that could need that.
      *
      * The sessions are single-use, so they are **spent first** (developer-styleguide §12): each delete is the
      * transaction's first write and its row count decides. Two completes of one upload both found the session live;
@@ -191,8 +205,10 @@ class MediaStore(
         // (scope, then the sessions it spends), so a removal of the banner it shares is seen or waits (`SharedBlobs`).
         if (original is OriginalAttach.Shared) nodes.lockScope(scopeId)
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
-        lockPrimary(nodeId, ownerKey) // the existing row [ensurePrimaryBucket] may refresh, before the node's lock
+        val primaryLocked = lockPrimary(nodeId, ownerKey) // the existing row the medium references, before the node's lock
         epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return AttachResult.EpochRefused(it) }
+        // Missing then and committed now, by a first upload that held the node while this waited: run again ([AttachResult.PrimaryAppeared]).
+        if (!primaryLocked && primaryExists(nodeId, ownerKey)) return AttachResult.PrimaryAppeared
         val sessionIds = listOfNotNull((original as? OriginalAttach.Upload)?.session?.id) + derivatives.map { it.session.id }
         if (sessionIds.sumOf { UploadSessionEntity.delete("id = ?1", it) } != sessionIds.size.toLong()) {
             QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
@@ -582,13 +598,18 @@ class MediaStore(
      * (`MediaNodeRekeyParticipant.lockRows` before the node). `MediaLockOrderRaceSliceTest` deadlocks on a writer's pair
      * swapped.
      */
-    /** Lock [ownerKey]'s existing primary in [nodeId], if any — before the node's lock, as the one lock order (the note
-     *  on [ensurePrimaryBucket]) wants of a row [ensurePrimaryBucket] may write (a still-missing name). A primary
-     *  created after it is an insert, under the node's lock. */
-    private fun lockPrimary(nodeId: String, ownerKey: String) {
+    /** Lock [ownerKey]'s existing primary in [nodeId], if any, and say whether there was one — before the node's lock,
+     *  as the one lock order (the note on [ensurePrimaryBucket]) wants of a row [ensurePrimaryBucket] may write (a
+     *  still-missing name) and of the row a medium's insert references (`fk_media_bucket` takes a shared lock on it).
+     *  A primary this writer then creates is an insert under the node's lock; one ANOTHER writer committed while this
+     *  waited for the node is neither, which is why [attach] asks [primaryExists] after the gate. */
+    private fun lockPrimary(nodeId: String, ownerKey: String): Boolean =
         BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey)
-            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
-    }
+            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
+
+    /** Whether [ownerKey]'s primary in [nodeId] is committed — a plain read, so it takes no lock (READ COMMITTED, ADR 0078). */
+    private fun primaryExists(nodeId: String, ownerKey: String): Boolean =
+        BucketEntity.count("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey) > 0
 
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
         NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()

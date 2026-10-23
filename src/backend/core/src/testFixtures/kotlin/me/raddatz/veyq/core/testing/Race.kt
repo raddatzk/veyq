@@ -137,6 +137,42 @@ fun holdForOverlap(finished: () -> Boolean = { false }): Overlap {
     }
 }
 
+/**
+ * Wait, inside the holding transaction, until at least [count] other transactions are seen waiting on it — the engine's
+ * own record, as [holdForOverlap] reads it for one (`INNODB_LOCK_WAITS` on MariaDB, `SESSIONS.BLOCKER_ID` on H2; H2's
+ * blocker-less unique-key retry is not counted) — and return that evidence. For a hold that forces more than one side
+ * into the order a race means, one after another: [holdForOverlap] answers for "some side waits", which a side that
+ * already waited answers again. Throws [OrderNotForced] when fewer than [count] wait within [OVERLAP_BOUND_S].
+ */
+fun awaitWaiters(count: Int): String {
+    val session = Arc.container().instance(EntityManager::class.java).get().unwrap(Session::class.java)
+    val deadline = System.nanoTime() + OVERLAP_BOUND_S * 1_000_000_000
+    var seen = emptyList<String>()
+    while (System.nanoTime() < deadline) {
+        seen = session.doReturningWork { connection ->
+            when (val kind = ConfigProvider.getConfig().getValue("quarkus.datasource.db-kind", String::class.java)) {
+                "h2" -> connection.createStatement().use { st ->
+                    st.executeQuery(
+                        "SELECT SESSION_ID, LEFT(EXECUTING_STATEMENT, 160) FROM INFORMATION_SCHEMA.SESSIONS WHERE BLOCKER_ID = SESSION_ID()",
+                    ).use { rs -> generateSequence { if (rs.next()) "H2 session ${rs.getInt(1)}: ${rs.getString(2)}" else null }.toList() }
+                }
+                "mariadb" -> connection.createStatement().use { st ->
+                    st.executeQuery(
+                        "SELECT DISTINCT r.trx_mysql_thread_id, LEFT(r.trx_query, 160) FROM information_schema.INNODB_LOCK_WAITS w " +
+                            "JOIN information_schema.INNODB_TRX b ON b.trx_id = w.blocking_trx_id " +
+                            "JOIN information_schema.INNODB_TRX r ON r.trx_id = w.requesting_trx_id " +
+                            "WHERE b.trx_mysql_thread_id = CONNECTION_ID()",
+                    ).use { rs -> generateSequence { if (rs.next()) "InnoDB connection ${rs.getLong(1)}: ${rs.getString(2)}" else null }.toList() }
+                }
+                else -> throw AssertionError("awaitWaiters has no wait evidence for db-kind $kind")
+            }
+        }
+        if (seen.size >= count) return seen.joinToString("; ")
+        Thread.sleep(10)
+    }
+    throw OrderNotForced("$count side(s) should wait on the holder, ${seen.size} did: ${seen.ifEmpty { listOf("none") }}")
+}
+
 /** MariaDB's half of [holdForOverlap]: the engine's lock-wait record against this connection's transaction. */
 private fun innodbOverlap(connection: Connection): Overlap {
     val waits = try {
