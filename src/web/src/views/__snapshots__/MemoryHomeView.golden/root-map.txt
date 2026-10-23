@@ -1,34 +1,34 @@
 div.veyq-node-host
   div.veyq-level-view
     div.veyq-level-toolbar
-      button.p-button.p-button-sm.p-component.veyq-new-menu-button [aria-label="New"]
-        span.p-button-icon.p-button-icon-left.pi.pi-plus
-        span.p-button-label
+      button.p-button.p-button-sm.p-component.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button [aria-label="New"]
+        span.p-button-icon.p-button-icon-left.pi.pi-plus.veyq-button__icon
+        span.p-button-label.veyq-button__label
           "New"
-      button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Trash"]
-        span.p-button-icon.p-button-icon-left.pi.pi-trash
-        span.p-button-label
+      button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small [aria-label="Trash"]
+        span.p-button-icon.p-button-icon-left.pi.pi-trash.veyq-button__icon
+        span.p-button-label.veyq-button__label
           "Trash"
       div.view-mode-toggle [role="group"] [aria-label="View"]
         button.view-mode-button [aria-label="Grid view"] [aria-pressed="false"]
-          span.pi.pi-th-large
+          span.pi.pi-th-large.veyq-icon
         button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
-          span.pi.pi-bars
+          span.pi.pi-bars.veyq-icon
         button.is-active.view-mode-button [aria-label="Map view"] [aria-pressed="true"]
-          span.pi.pi-map
-    div.p-component.p-tabs.veyq-level-tabs
-      div.p-tablist
+          span.pi.pi-map.veyq-icon
+    div.p-component.p-tabs.veyq-level-tabs.veyq-tabs
+      div.p-tablist.veyq-tabs__bar
         div.p-tablist-content.p-tablist-viewport
-          div.p-tablist-tab-list [role="tablist"] [aria-label="Applications"]
-            button.p-tab.p-tab-active [role="tab"]
+          div.p-tablist-tab-list.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
+            button.p-tab.p-tab-active.veyq-tab [role="tab"]
               "All"
-            button.p-tab [role="tab"]
+            button.p-tab.veyq-tab [role="tab"]
               "Memories"
-            button.p-tab [role="tab"]
+            button.p-tab.veyq-tab [role="tab"]
               "Depot"
-            button.p-tab [role="tab"]
+            button.p-tab.veyq-tab [role="tab"]
               "Drop boxes"
-            span.p-tablist-active-bar [role="presentation"]
+            span.p-tablist-active-bar.veyq-tabs__ink [role="presentation"]
         button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
           svg.p-icon
             path

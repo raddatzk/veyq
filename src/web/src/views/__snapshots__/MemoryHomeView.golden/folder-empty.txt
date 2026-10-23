@@ -1,58 +1,58 @@
 div.veyq-node-host
   div.veyq-level-view
     div.veyq-level-toolbar
-      button.p-button.p-button-sm.p-component.veyq-new-menu-button [aria-label="New"]
-        span.p-button-icon.p-button-icon-left.pi.pi-plus
-        span.p-button-label
+      button.p-button.p-button-sm.p-component.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button [aria-label="New"]
+        span.p-button-icon.p-button-icon-left.pi.pi-plus.veyq-button__icon
+        span.p-button-label.veyq-button__label
           "New"
-      button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Trash"]
-        span.p-button-icon.p-button-icon-left.pi.pi-trash
-        span.p-button-label
+      button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small [aria-label="Trash"]
+        span.p-button-icon.p-button-icon-left.pi.pi-trash.veyq-button__icon
+        span.p-button-label.veyq-button__label
           "Trash"
       div.view-mode-toggle [role="group"] [aria-label="View"]
         button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
-          span.pi.pi-th-large
+          span.pi.pi-th-large.veyq-icon
         button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
-          span.pi.pi-bars
+          span.pi.pi-bars.veyq-icon
         button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
-          span.pi.pi-map
+          span.pi.pi-map.veyq-icon
     header.veyq-node-header
       div.veyq-node-header-leading
-        span.pi.pi-folder.veyq-node-header-icon
+        span.pi.pi-folder.veyq-icon.veyq-node-header-icon
       div.veyq-node-header-body
         div.veyq-node-header-titlerow
           h2.veyq-node-header-title
             "Empty"
           div.veyq-node-header-actions
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-              span.p-button-icon.pi.pi-heart
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
-              span.p-button-icon.pi.pi-share-alt
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Rename"]
-              span.p-button-icon.pi.pi-pencil
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Move to…"]
-              span.p-button-icon.pi.pi-file-export
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Copy to…"]
-              span.p-button-icon.pi.pi-copy
-            button.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-danger-action.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Delete"]
-              span.p-button-icon.pi.pi-trash
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
-              span.p-button-icon.pi.pi-image
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
-              span.p-button-icon.pi.pi-download
-    div.p-component.p-tabs.veyq-level-tabs
-      div.p-tablist
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+              span.p-button-icon.pi.pi-heart.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
+              span.p-button-icon.pi.pi-share-alt.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Rename"]
+              span.p-button-icon.pi.pi-pencil.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Move to…"]
+              span.p-button-icon.pi.pi-file-export.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Copy to…"]
+              span.p-button-icon.pi.pi-copy.veyq-button__icon
+            button.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-button.veyq-button--danger.veyq-button--icon-only.veyq-button--outlined.veyq-button--small.veyq-danger-action.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Delete"]
+              span.p-button-icon.pi.pi-trash.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
+              span.p-button-icon.pi.pi-image.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
+              span.p-button-icon.pi.pi-download.veyq-button__icon
+    div.p-component.p-tabs.veyq-level-tabs.veyq-tabs
+      div.p-tablist.veyq-tabs__bar
         div.p-tablist-content.p-tablist-viewport
-          div.p-tablist-tab-list [role="tablist"] [aria-label="Applications"]
-            button.p-tab.p-tab-active [role="tab"]
+          div.p-tablist-tab-list.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
+            button.p-tab.p-tab-active.veyq-tab [role="tab"]
               "All"
-            button.p-tab [role="tab"]
+            button.p-tab.veyq-tab [role="tab"]
               "Memories"
-            button.p-tab [role="tab"]
+            button.p-tab.veyq-tab [role="tab"]
               "Depot"
-            button.p-tab [role="tab"]
+            button.p-tab.veyq-tab [role="tab"]
               "Drop boxes"
-            span.p-tablist-active-bar [role="presentation"]
+            span.p-tablist-active-bar.veyq-tabs__ink [role="presentation"]
         button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
           svg.p-icon
             path
