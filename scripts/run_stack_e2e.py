@@ -64,6 +64,8 @@ the recipe:
      browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
      green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
      every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
+     **A red browser stage skips nothing after it**: the stages 7b and 8 read what the run left on the stack, so they
+     run whenever the stack came up (`PAST_BROWSER`); a red of any stage before the browser still skips them.
   7b. **guest-write record** — the stack scenario ADR 0094 § For the moderation CR asks for, the half the `client port`
      stage leaves open (that one reads an echo): `tests/e2e/tests/features/guest-write-record.spec.ts` has a guest create a
      folder through the release's Traefik and writes, from the browser container's own TCP table, the sockets it holds to
@@ -77,7 +79,10 @@ the recipe:
      since the run began, and every statement the database received in the window — each sensor armed by a positive
      control, and every spec file that executed a test must have recorded canaries. And every address an account was
      signed up with (`pii-<spec>.json`, `recordPii`) must be absent from every container log, and present in the
-     statement log (ADR 0092 § 4). [sweep] lists what is not swept.
+     statement log (ADR 0092 § 4). [sweep] lists what is not swept. It runs on a red browser stage too: it is the
+     lane's operator-blind proof, and what a failing test typed before it failed is on disk (`recordTyped` writes the
+     file on every call), so it must be as absent as what a passing test typed. Every sensor runs and every finding is
+     reported, a spec that recorded no canary among them, rather than the first one stopping the rest.
   9. **evidence** — `compose.log` (every container, timestamped) and `ps.json` into the run directory, always.
   10. **teardown** — `docker compose down -v` by the run's project name (unless `--keep`).
   11. **host** — the run touched nothing that is not its own: every container that existed before it still exists
@@ -997,14 +1002,18 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window, store_sentinel: st
     canary_files = sorted(workdir.glob("canaries-*.json"))
     silent = [name for name, ran in junit_files(workdir / "junit.xml").items()
               if ran and not (workdir / f"canaries-{Path(name).name.removesuffix('.ts')}.json").is_file()]
-    if silent:
-        raise Red(f"spec file(s) {silent} executed tests but recorded no canary — what they typed was never swept for "
-                  "(every typed value goes through recordTyped, tests/e2e/src/canaries.ts)")
+    # Reported with the sensors' verdicts below, not before them: a spec that recorded nothing must not keep the others'
+    # values from being swept (on a red browser stage above all, where a test may have failed before typing).
+    unrecorded = (f"spec file(s) {silent} executed tests but recorded no canary — what they typed was never swept for "
+                  "(every typed value goes through recordTyped, tests/e2e/src/canaries.ts)") if silent else None
     carriers, problems = sweeps.load_canaries(canary_files)
     if problems or not carriers:
         raise Red("the run's canaries could not be read: " + "; ".join(problems or ["the canary files hold none"]))
     union = workdir / "swept-canaries.json"
     union.write_text(json.dumps(sorted(carriers), indent=2, ensure_ascii=False), encoding="utf-8")
+    if not (workdir / "instance.json").is_file():
+        raise Red("the setup project wrote no instance.json, so the dump's control (the owner's email) is unknown — "
+                  "nothing was swept")
     instance = json.loads((workdir / "instance.json").read_text(encoding="utf-8"))
     email = instance["owner"]["email"]
     print(f"sweep: {len(carriers)} typed canary/canaries from {', '.join(p.name for p in canary_files)}", flush=True)
@@ -1016,6 +1025,7 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window, store_sentinel: st
 
     rel = "the browser suite"
     verdicts = [
+        ("canary records", unrecorded),
         ("database", sweeps.sweep(stack, DATABASE, union, rel, retain=workdir / f"database-{DATABASE}.sql",
                                   present=[email])),
         ("store", sweeps.sweep_store(stack, STORE_BUCKET, DATABASE, union, rel, workdir)),
@@ -1035,10 +1045,27 @@ def sweep(stack: sweeps.Stack, workdir: Path, opened: Window, store_sentinel: st
     failed = [f"{surface}: {why}" for surface, why in verdicts if why]
     if failed:
         raise Red("the wire assertion failed — " + " | ".join(failed))
-    print(f"sweep: GREEN on {', '.join(surface for surface, _ in verdicts)}", flush=True)
+    print(f"sweep: GREEN on {', '.join(surface for surface, _ in verdicts if surface != 'canary records')}", flush=True)
 
 
 # ---------------------------------------------------------------- the run
+
+# The stages after the browser that read what the run left on the stack rather than what the browser concluded: the
+# store's log control, the guest-write record (ADR 0094) and the wire assertion (ADR 0053). A red browser stage does
+# not skip them — the sweep is this lane's operator-blind proof, and a run whose browser failed is the one that most
+# needs it. Why web-e2e may skip a failed suite's sweep and this lane may not: web's suites record what they UNSEAL, so
+# a failed suite's set is incomplete; this suite records what it TYPES, before the value is used (`recordTyped`), so a
+# failed test's set is complete up to where it stopped. A red of any stage BEFORE the browser still skips them: then
+# there is no stack to read, or not the one a browser drove.
+PAST_BROWSER = ("store sentinel", "guest-write record", "sweep")
+
+
+def blocking(red: list[str], name: str) -> list[str]:
+    """The reds that skip stage [name]: all of them, except that a stage in [PAST_BROWSER] is not skipped for the
+    browser stage's own red (each red is `<stage>: <why>`, as `main`'s `stage` records it)."""
+    if name in PAST_BROWSER:
+        return [r for r in red if not r.startswith("browser: ")]
+    return list(red)
 
 
 def main() -> int:
@@ -1060,7 +1087,7 @@ def main() -> int:
     red: list[str] = []
 
     def stage(name: str, fn, *fargs, always: bool = False):
-        if red and not always and name not in ("evidence", "teardown", "host"):
+        if blocking(red, name) and not always and name not in ("evidence", "teardown", "host"):
             stages.append((name, 0.0, "skipped"))
             return None
         print(f"\n== {name}", flush=True)

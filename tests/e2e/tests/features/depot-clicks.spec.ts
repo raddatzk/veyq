@@ -32,12 +32,13 @@
 //
 // The store is held or cut off by routing its presigned `PUT`s (`X-Amz-Signature`) in the page, as depot-download.spec.ts
 // cuts its `GET`s; a device's live poll is cut off by its `If-None-Match` (only the poll sends one, `treeStore.pollTree`;
-// a route turns the browser's cache off, so the browser adds none of its own).
+// a route turns the browser's cache off, so the browser adds none of its own). Each such route is switched off, never
+// removed (`switchableRoute`, below), because removing one races the confinement's own route.
 //
 // It starts from the tenant whose owner the round trip activated (the `features` project) and switches nothing of the
 // instance; what it creates is its own folder. Labels are src/web/'s own (src/web/src/i18n/index.ts and
 // src/web/src/features/depot/i18n.ts, en).
-import { test, expect, type Locator, type Page, type Request } from '@playwright/test'
+import { test, expect, type Locator, type Page, type Request, type Route } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { recordTyped } from '../../src/canaries'
@@ -113,12 +114,30 @@ const fileItem = (page: Page, name: string) =>
 
 const isStoreUrl = (url: URL) => url.searchParams.has('X-Amz-Signature')
 
+/**
+ * A page route that is switched off, never removed: once `off()`, it hands every request on unchanged, and it lives until
+ * the page closes. Removing a page route (`page.unroute*`) while one of its requests stands between this handler's
+ * `fallback()` and the confinement's `context.route` (egress.ts) makes Playwright continue that request itself, as the
+ * page's last route goes away — and the confinement's own `continue()` then fails the test with "Route is already
+ * handled!" (lane L1, 2026-10-23: the uploads-tray test, its held `PUT` released by an `unrouteAll`). A switched-off
+ * route keeps that race from ever starting.
+ */
+async function switchableRoute(
+  page: Page,
+  match: (url: URL) => boolean,
+  handler: (route: Route) => Promise<void>,
+): Promise<{ off: () => void }> {
+  let on = true
+  await page.route(match, (route) => (on ? handler(route) : route.fallback()))
+  return { off: () => void (on = false) }
+}
+
 /** Holds every presigned `PUT` of the store until `release()` — an upload that has started and not arrived. */
-async function holdStore(page: Page): Promise<{ release: () => Promise<void>; held: () => number }> {
+async function holdStore(page: Page): Promise<{ release: () => void; held: () => number }> {
   let open: () => void = () => undefined
   const gate = new Promise<void>((resolve) => (open = resolve))
   let held = 0
-  await page.route(isStoreUrl, async (route) => {
+  const route = await switchableRoute(page, isStoreUrl, async (route) => {
     if (route.request().method() !== 'PUT') return route.fallback()
     held += 1
     await gate
@@ -126,9 +145,9 @@ async function holdStore(page: Page): Promise<{ release: () => Promise<void>; he
   })
   return {
     held: () => held,
-    release: async () => {
+    release: () => {
+      route.off()
       open()
-      await page.unrouteAll({ behavior: 'wait' })
     },
   }
 }
@@ -332,7 +351,7 @@ test(
     await expect(tray(page)).toHaveAttribute('aria-expanded', 'false')
     await tray(page).click()
 
-    await store.release()
+    store.release()
     for (const f of trayFiles) await expect(trayRow(page, f.name).locator('.uploads-file-status')).toHaveText('Done', { timeout: 60_000 })
     await expect(panel.locator('.uploads-list-head span')).toHaveText('100%')
     await expect(panel.getByText(/ active$/)).toHaveCount(0)
@@ -356,7 +375,7 @@ test(
     const { page } = member
     await openFolder(page)
     let cut = 0
-    await page.route(isStoreUrl, async (route) => {
+    const cutOff = await switchableRoute(page, isStoreUrl, async (route) => {
       if (route.request().method() !== 'PUT') return route.fallback()
       cut += 1
       return route.abort('internetdisconnected')
@@ -369,7 +388,7 @@ test(
     await tray(page).click()
     const row = trayRow(page, failing.name)
     await expect(row.locator('.uploads-file-status')).toHaveText('Failed')
-    await page.unrouteAll({ behavior: 'wait' })
+    cutOff.off()
     await row.getByRole('button', { name: 'Retry', exact: true }).click()
     await expect(row.locator('.uploads-file-status')).toHaveText('Done', { timeout: 60_000 })
     // Delivered: nothing left to explain, and the file is there.
@@ -393,7 +412,7 @@ test(
     await expect(downloadButton(page, target)).toBeEnabled({ timeout: 60_000 })
     // This device stops noticing changes: its live poll (the only listing sent with `If-None-Match`) is cut off, so the
     // blob it read stays the one it would replace.
-    await page.route((url) => /^\/api\/scopes\/[^/]+\/nodes$/.test(url.pathname), async (route) => {
+    const deaf = await switchableRoute(page, (url) => /^\/api\/scopes\/[^/]+\/nodes$/.test(url.pathname), async (route) => {
       const r = route.request()
       if (r.method() === 'GET' && (await r.headerValue('if-none-match')) !== null) return route.abort('internetdisconnected')
       return route.fallback()
@@ -416,7 +435,7 @@ test(
     await expect(ask).toBeHidden()
     const stale = notice(page, `“${target}” was not uploaded: someone else replaced this file in the meantime.`)
     await expect(stale).toContainText('Replace it anyway, or look at theirs first.', { timeout: 60_000 })
-    await page.unrouteAll({ behavior: 'wait' })
+    deaf.off()
 
     await stale.getByRole('button', { name: 'Replace anyway', exact: true }).click()
     await expect(stale).toHaveCount(0, { timeout: 60_000 })
@@ -447,7 +466,7 @@ test(
     const item = fileItem(page, slow.name)
     await expect(item.locator('.veyq-level-item-meta')).toHaveText('File · Not uploaded yet', { timeout: LIVE })
     await expect(downloadButton(page, slow.name)).toBeDisabled()
-    await store.release()
+    store.release()
     await expect(downloadButton(page, slow.name)).toBeEnabled({ timeout: 60_000 })
     await expect(item.locator('.veyq-level-item-meta')).not.toContainText('Not uploaded yet')
 

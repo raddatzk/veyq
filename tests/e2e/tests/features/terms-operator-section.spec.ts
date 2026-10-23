@@ -10,9 +10,10 @@
 //   4. A German visitor reads the same one form — the authorities, the record's pointer — and the privacy notice: the
 //      record's passage, and the recipient's country left unset shown as a gap.
 //
-// THIS FILE RUNS LAST ON PURPOSE. Publishing terms gates every later guest and every later sign-in of the space, and v1
-// has no way to unpublish them (ADR 0035 decision 1), so it is named to sort after every other feature scenario
-// (`workers: 1`, files in name order). A scenario added after it meets a gated space.
+// THIS FILE RUNS LATE ON PURPOSE. Publishing terms gates every later guest and every later sign-in of the space, and v1
+// has no way to unpublish them (ADR 0035 decision 1), so it is named to sort after the other feature scenarios
+// (`workers: 1`, files in name order). A scenario that sorts after it meets a gated space and must pass the gate itself:
+// video-playback.spec.ts's owner agreed here already, and video-share-and-seek.spec.ts's guest accepts at the link.
 import { test, expect } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'

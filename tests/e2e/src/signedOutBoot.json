@@ -1,0 +1,6 @@
+{
+  "//": "The one answer of 400 or more that is no error: a document with no session asks this once at its boot and is told 400 or 401, the signed-out state (src/web/src/app/sessionRefresh.ts rotateSession). Read by tests/e2e/src/devices.ts (watchConsole) and scripts/profile_hot_paths.py (request_failures), so the two exempt the same request.",
+  "method": "POST",
+  "path": "/api/token/refresh",
+  "statuses": [400, 401]
+}

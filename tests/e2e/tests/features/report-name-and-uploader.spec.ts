@@ -1,7 +1,7 @@
 // A name reported on its own, and everything from one uploader, in a browser (cr-report-a-name-and-an-uploader's browser
 // pass; uc.moderation.report A8, uc.moderation.review-a-case A8, uc.moderation.take-a-measure A8; ADR 0093 §§ 1, 6, 9).
-// Written, not yet run (the owner's test rule of 2026-10-19: lane L1 runs once V1 is through). The tenant owner keeps a
-// folder with an offending name and two files in it; then
+// The owner of a tenant of its own ("E2E Report", born through the console's invite: `birthTenant`) keeps a folder
+// with an offending name and two files in it; then
 //
 //   1. the owner selects the folder and reports **only its name** — the dialog's choice for one node;
 //   2. the moderator — the Server Owner, holding the key since first-run setup (moderation.spec.ts) — finds the case as
@@ -11,16 +11,28 @@
 //      space, and blocks everything from this uploader: both files show "Blocked by the operator";
 //   5. a file the owner uploads after the decision is not blocked.
 //
+// A tenant of its own, because "everything from one uploader" counts and blocks every item that uploader put into the
+// space: in the shared tenant the `features` project starts from, the uploader would be its owner, who uploads in
+// nearly every scenario (lane L1, 2026-10-23: "140 items uploaded to this space", expected 2), and the block would then
+// mark all of those blocked for every scenario after this one. Its cases are told apart from the other scenarios' open
+// ones by the tenant's domain on the case row. The tenant stays, as moderation.spec.ts's and
+// server-owner-statement.spec.ts's do.
+//
 // The name, the reasons and the facts are canaries (`recordTyped`), so lane L1's sweep proves they reached the server
 // sealed. The labels are src/web/'s own (src/web/src/i18n/index.ts, en).
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../src/canaries'
-import { instance, newDevice, passwordField, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { birthTenant } from '../../src/console'
+import { instance, newDevice, passwordField, tenantOrigin, type Device } from '../../src/devices'
+import { stack } from '../../src/stack'
 
 test.describe.configure({ mode: 'serial' })
 
 const stamp = randomBytes(3).toString('hex')
+const TENANT = 'E2E Report'
+const reportDomain = () => `report.${stack().domain}`
+const reportOrigin = () => `https://${reportDomain()}`
 const folder = `Anstößiger Ordnername ${stamp}`
 const fileOne = `Erste Datei ${stamp}.bin`
 const fileTwo = `Zweite Datei ${stamp}.bin`
@@ -30,7 +42,8 @@ const fileReason = `Diese Datei ist rechtswidrig ${stamp}`
 const facts = `Alle Dateien dieser Person verstoßen gegen die Regeln ${stamp}`
 const BLOCKED = 'Blocked by the operator'
 
-let owner: Device
+let admin: Device // the Server Owner's console, which creates the tenant
+let owner: Device // the tenant's owner, the uploader
 let moderator: Device
 
 /** Report what the dialog was opened for: a category, a reason, the good-faith tick; [nameOnly] picks "Only its name". */
@@ -85,7 +98,10 @@ async function passGate(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Open the moderation key' }).click()
 }
 
-/** `/moderation`, unlocked, with the open case of [kind] and [category] open — this scenario's only such one. */
+/**
+ * `/moderation`, unlocked, with the open case of [kind] and [category] open — this scenario's only such one in its tenant.
+ * The moderator works where the Server Owner is a member, the shared tenant; the case row names the reported tenant.
+ */
 async function openCase(page: Page, kind: string, category: string): Promise<void> {
   await expect(async () => {
     await page.goto(`${tenantOrigin()}/moderation`)
@@ -93,6 +109,7 @@ async function openCase(page: Page, kind: string, category: string): Promise<voi
   await passGate(page)
   const row = page
     .locator('.moderation-case-row')
+    .filter({ hasText: reportDomain() })
     .filter({ hasText: kind })
     .filter({ hasText: category })
     .filter({ has: page.locator('.veyq-badge', { hasText: /^Open$/ }) })
@@ -103,22 +120,23 @@ async function openCase(page: Page, kind: string, category: string): Promise<voi
 
 /** The open folder's level, from the space's top. */
 async function openFolder(page: Page): Promise<void> {
-  await page.goto(tenantOrigin())
+  await page.goto(reportOrigin())
   await page.getByRole('button', { name: folder, exact: true }).click()
   await expect(page.getByRole('heading', { name: folder })).toBeVisible({ timeout: 60_000 })
 }
 
 test.beforeAll(async ({ browser }) => {
+  admin = await newDevice(browser)
   owner = await newDevice(browser)
   moderator = await newDevice(browser)
 })
 
 test.afterEach(() => {
-  for (const device of [owner, moderator]) device?.confinement.assertConfined()
+  for (const device of [admin, owner, moderator]) device?.confinement.assertConfined()
 })
 
 test.afterAll(async () => {
-  for (const device of [owner, moderator]) await device?.context.close()
+  for (const device of [admin, owner, moderator]) await device?.context.close()
 })
 
 test(
@@ -126,7 +144,7 @@ test(
   { tag: '@uc.moderation.report:a-name-is-reported-on-its-own' },
   async () => {
     const { page } = owner
-    await signInOwner(owner)
+    await birthTenant(admin, { name: TENANT, domain: reportDomain(), handle: `report-owner-${stamp}` }, owner)
     await page.getByRole('button', { name: 'New', exact: true }).click()
     await page.getByRole('menuitem', { name: 'New folder' }).click()
     const create = page.getByRole('dialog', { name: 'Create a folder' })
@@ -137,7 +155,7 @@ test(
     await upload(page, fileOne)
     await upload(page, fileTwo)
 
-    await page.goto(tenantOrigin())
+    await page.goto(reportOrigin())
     await expect(page.getByRole('button', { name: folder, exact: true })).toBeVisible({ timeout: 60_000 })
     await page.locator('.veyq-select-button').click()
     await tick(page, folder)
@@ -154,7 +172,8 @@ test(
     await openCase(page, 'A name on its own', 'A breach of the terms')
     await expect(page.locator('.moderation-report')).toContainText(nameReason)
     await page.getByRole('button', { name: 'Review what was reported' }).click()
-    await expect(page).toHaveURL(new RegExp(`^${tenantOrigin()}/s/[0-9a-f-]{36}#moderation$`), { timeout: 60_000 })
+    // The review opens on the reported tenant's host (ADR 0099, `features/moderation/cases.ts` `reviewUrl`).
+    await expect(page).toHaveURL(new RegExp(`^${reportOrigin()}/s/[0-9a-f-]{36}#moderation$`), { timeout: 60_000 })
     await passGate(page)
     await expect(page.locator('.moderation-review-name')).toContainText(folder, { timeout: 60_000 })
     await expect(page.locator('.moderation-review-name')).toContainText('The name that was reported, on its own')

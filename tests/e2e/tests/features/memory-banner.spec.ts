@@ -23,7 +23,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../src/canaries'
-import { newDevice, signInOwner, tenantOrigin, type Device } from '../../src/devices'
+import { newDevice, signInOwner, tenantOrigin, watchConsole, type ConsoleErrors, type Device } from '../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -36,7 +36,7 @@ let portrait: { name: string; mimeType: string; buffer: Buffer }
 let member: Device
 let guest: Device
 let shareLink = ''
-const consoleErrors: string[] = []
+let pageConsole: ConsoleErrors
 
 /** A PNG of `w`×`h` drawn on a canvas in the page: a gradient with a marker, so a frame shows where it is cut. */
 async function drawnImage(page: Page, w: number, h: number): Promise<Buffer> {
@@ -64,15 +64,12 @@ const bannerDialog = (page: Page) => page.getByRole('dialog', { name: /banner/i 
 test.beforeAll(async ({ browser }) => {
   member = await newDevice(browser)
   guest = await newDevice(browser)
-  for (const d of [member, guest]) {
-    d.page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
-    d.page.on('pageerror', (e) => consoleErrors.push(String(e)))
-  }
+  pageConsole = watchConsole(member.page, guest.page)
 })
 
 test.afterEach(() => {
   member?.confinement.assertConfined()
-  expect(consoleErrors, 'the console is free of errors').toEqual([])
+  expect(pageConsole.errors, 'the console is free of errors').toEqual([])
 })
 
 test.afterAll(async () => {
@@ -83,6 +80,7 @@ test.afterAll(async () => {
 test('a Memory with a landscape photo, a portrait photo and a video', { tag: ['@uc.memory.banner:not-in-the-gallery'] }, async () => {
   const { page } = member
   await signInOwner(member)
+  pageConsole.clear()
   await page.getByRole('button', { name: 'New', exact: true }).click()
   await page.getByRole('menuitem', { name: 'New Memory' }).click()
   const dialog = page.getByRole('dialog', { name: 'Create a Memory' })
@@ -247,6 +245,10 @@ test(
     await createShare.getByRole('button', { name: 'Create link' }).click()
     shareLink = await createShare.getByRole('textbox', { name: 'Public link' }).inputValue()
     await createShare.getByRole('button', { name: 'Done' }).click()
+    // Done goes back to the Memory's list of links, a modal of its own: closed, so the next test reaches the header.
+    await expect(manage).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(manage).toBeHidden()
 
     const g = guest.page
     await g.goto(shareLink)

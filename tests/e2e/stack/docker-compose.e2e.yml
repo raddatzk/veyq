@@ -114,8 +114,10 @@ services:
       # Server Owner points at the mirror reads it within seconds, with no "check now" the product does not have.
       VEYQ_RELEASE_CHECK_EVERY: 5s
     # No internet for the release check's default source: until the suite points it at the mirror, the check reads the
-    # GitHub Releases every 5 s. These names resolve to the app's own loopback, so each read fails at once, inside the
-    # container (ADR 0097 § Consequences: an offline run's check fails, and the run does not count it as a defect).
+    # GitHub Releases, every 5 s at first and spaced out by each failure in a row (ReleaseCheckBackoff; pointing it at
+    # the mirror starts over, so the mirror is read at the next tick). These names resolve to the app's own loopback, so
+    # each read fails at once, inside the container (ADR 0097 § Consequences: an offline run's check fails, and the run
+    # does not count it as a defect).
     extra_hosts:
       - "api.github.com:127.0.0.1"
       - "github.com:127.0.0.1"

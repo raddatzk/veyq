@@ -77,7 +77,14 @@ export interface Window {
   operationMs: number
   apiRequests: ApiRequest[]
   storeRequests: StoreRequest[]
+  /**
+   * Every request of the window that never got an answer (`requestfailed`), as `METHOD origin+path errorText` — a
+   * `net::ERR_ABORTED` among them too. Recorded, not judged: `scripts/profile_hot_paths.py` (`request_failures`) decides
+   * which of them refuse the run.
+   */
   failedRequests: string[]
+  /** Every answer of the window with a status of 400 or more, as `METHOD origin+path status` — judged by the driver too. */
+  httpErrors: string[]
   metrics: Record<string, number>
 }
 
@@ -89,9 +96,15 @@ export interface Window {
 export async function profiled(browser: Browser, page: Page, cdp: CDPSession, operation: () => Promise<void>): Promise<Window> {
   const { scenario, run, throttle, stem } = spec()
   const failed: string[] = []
+  const httpErrors: string[] = []
   page.on('requestfailed', (r) => {
     const url = new URL(r.url())
     failed.push(`${r.method()} ${url.origin}${url.pathname} ${r.failure()?.errorText ?? ''}`)
+  })
+  page.on('response', (r) => {
+    if (r.status() < 400) return
+    const url = new URL(r.url())
+    httpErrors.push(`${r.request().method()} ${url.origin}${url.pathname} ${r.status()}`)
   })
 
   await cdp.send('Performance.enable')
@@ -134,6 +147,7 @@ export async function profiled(browser: Browser, page: Page, cdp: CDPSession, op
     apiRequests,
     storeRequests,
     failedRequests: failed,
+    httpErrors,
     metrics: Object.fromEntries(metrics.map((m) => [m.name, m.value])),
   }
   writeFileSync(`${OUT}/${stem}.window.json`, JSON.stringify(window, null, 2))

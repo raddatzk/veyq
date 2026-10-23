@@ -51,6 +51,7 @@ import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/featur
 import { runGrantDeliveryWorker } from '../src/features/tasks/grantDeliveryWorker'
 import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } from '../src/features/account/profile/profile'
 import { httpStatus } from '../src/shared/httpError'
+import { backingOff } from './backingOff.mts'
 
 // The Memories application's route slug, as its registration (`features/memories/register.ts`, which imports Vue
 // components and so cannot load here) claims it — only so `hashForNode` builds the URL the browser leg opens.
@@ -377,7 +378,7 @@ async function members(target: number): Promise<void> {
   // 2 — each member's own half: its sealed name, and every fifth a picture.
   const pending = accounts().members.filter((m) => m.stage === 'joined' || m.stage === 'granted')
   if (pending.some((m) => m.stage === 'joined')) {
-    await signIn(a.owner)
+    await backingOff('the owner signs in', () => signIn(a.owner))
     tenant = await tenantScope()
     await deliverGrants(tenant, pending.filter((m) => m.stage === 'joined').length)
   }
@@ -385,17 +386,21 @@ async function members(target: number): Promise<void> {
   const profileRate = progress('profiles', 'accounts')
   for (const m of pending) {
     const index = Number(m.email.match(/^m(\d{4})-/)?.[1] ?? '0')
-    await signIn(m)
-    const own = await openOwnNameKey()
-    if (!own) die(`${m.email} holds no tenant grant after the delivery`)
-    const name = { firstName: FIRST_NAMES[index % 10], lastName: `${LAST_NAMES[Math.floor(index / 10) % 10]} ${index}` }
-    await updateMyProfile({ sealedName: sealName(own.key, own.address, name) })
-    if (index % 5 === 0) await setMyAvatar(sealAvatar(own.key, own.address, avatars[(index / 5) % 5]))
+    // One member's whole half, run again from its sign-in after a 429: writing the same sealed name and picture twice
+    // leaves what writing them once leaves.
+    await backingOff(`profile of ${m.username}`, async () => {
+      await signIn(m)
+      const own = await openOwnNameKey()
+      if (!own) die(`${m.email} holds no tenant grant after the delivery`)
+      const name = { firstName: FIRST_NAMES[index % 10], lastName: `${LAST_NAMES[Math.floor(index / 10) % 10]} ${index}` }
+      await updateMyProfile({ sealedName: sealName(own.key, own.address, name) })
+      if (index % 5 === 0) await setMyAvatar(sealAvatar(own.key, own.address, avatars[(index / 5) % 5]))
+    })
     saveMember({ ...m, stage: 'profiled' })
     profileRate.tick()
   }
   console.log(`members: profiled ${profileRate.end()}`)
-  await signIn(a.owner)
+  await backingOff('the owner signs in', () => signIn(a.owner))
   const now = (await listScopeMembers((await tenantScope()).scopeId)).length
   console.log(`members: the tenant now has ${now}`)
   if (now !== target) die(`the tenant has ${now}, not the target ${target}`)
