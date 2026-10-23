@@ -419,7 +419,7 @@ const en = {
   },
   "store": {
     "navTitle": "Object store",
-    "sub": "Regarding where this server stores the encrypted media: tenants can only be created once the storage has passed the validation check.",
+    "sub": "Where this server stores the encrypted media. Tenants can be created once the store has passed its check.",
     "provisioningTitle": "Setting the store up",
     "provisioningSub": "Whether this server has brought its Garage store from running to usable — media cannot be uploaded or shown until it has.",
     "source": "Store",
@@ -543,7 +543,7 @@ const en = {
   },
   "configSecret": {
     "navTitle": "Config-secret key",
-    "sub": "Some secrets must be known to the server itself at runtime—for instance, a tenant’s SMTP password. These are sealed using a configuration key that the server generates upon its initial startup and never displays again. This indicator shows whether the key is still present and whether it is the same one that was used to seal the secrets..",
+    "sub": "Secrets the server needs itself, such as a tenant’s SMTP password, are sealed under a config key it creates on first start. If the key is lost, you have to enter all of them again; until then, media are unreachable too. This shows whether the key is present and is the one they were sealed with.",
     "loading": "Reading the config-secret key's state…",
     "loadFailed": "Couldn’t read the config-secret key's state.",
     "notOwner": "Only the server owner can see the state of this instance's config-secret key.",
@@ -554,7 +554,7 @@ const en = {
   },
   "capabilities": {
     "navTitle": "Capabilities",
-    "sub": "Whatever this entity offers, switching it off has an immediate effect.",
+    "sub": "What this instance offers. Switching something off takes effect at once.",
     "loading": "Reading the capabilities…",
     "loadFailed": "Couldn’t read the capabilities.",
     "notOwner": "Only the server owner can see and switch this instance's capabilities.",
@@ -1095,7 +1095,7 @@ const de: typeof en = {
   },
   "store": {
     "navTitle": "Objektspeicher",
-    "sub": "Wo dieser Server die verschlüsselten Medien ablegt, Tenants lassen sich erst anlegen, sobald der Speicher die Prüfung bestanden hat.",
+    "sub": "Wo dieser Server die verschlüsselten Medien ablegt. Tenants lassen sich erst anlegen, wenn der Speicher die Prüfung bestanden hat.",
     "provisioningTitle": "Einrichtung des Speichers",
     "provisioningSub": "Ob dieser Server seinen Garage-Speicher von laufend auf nutzbar gebracht hat — ohne das lassen sich keine Medien hochladen oder anzeigen.",
     "source": "Speicher",
@@ -1219,7 +1219,7 @@ const de: typeof en = {
   },
   "configSecret": {
     "navTitle": "Konfigurationsschlüssel",
-    "sub": "Manche Geheimnisse muss der Server selber zur Laufzeit kennen, etwa das SMTP-Passwort eines Tenants. Sie werden unter einem Konfigurationsschlüssel versiegelt, den der Server beim ersten Start erzeugt und nie wieder anzeigt. Diese Anzeige sagt, ob der Schlüssel noch da ist und ob er der ist, mit dem die Geheimnisse versiegelt wurden.",
+    "sub": "Geheimnisse, die der Server selbst braucht, etwa das SMTP-Passwort eines Tenants, versiegelt er unter einem Konfigurationsschlüssel, den er beim ersten Start erzeugt. Geht der Schlüssel verloren, musst du sie alle neu eingeben; bis dahin sind auch die Medien nicht erreichbar. Diese Anzeige sagt, ob er noch da ist und ob er der richtige ist.",
     "loading": "Zustand des Konfigurationsschlüssels wird gelesen…",
     "loadFailed": "Der Zustand des Konfigurationsschlüssels konnte nicht gelesen werden.",
     "notOwner": "Nur der Server-Eigentümer sieht den Zustand des Konfigurationsschlüssels dieser Instanz.",
@@ -1230,7 +1230,7 @@ const de: typeof en = {
   },
   "capabilities": {
     "navTitle": "Funktionen",
-    "sub": "Was diese Instanz überhaupt anbietet, abschalten wirkt sich sofort aus.",
+    "sub": "Was diese Instanz anbietet. Abschalten wirkt sofort.",
     "loading": "Funktionen werden gelesen…",
     "loadFailed": "Die Funktionen konnten nicht gelesen werden.",
     "notOwner": "Nur der Server-Eigentümer sieht und schaltet die Funktionen dieser Instanz.",

@@ -80,12 +80,12 @@ Locators:
 4. **No new keys for the sweep.** A shorter text replaces the old value under the same key. A key whose text becomes
    empty is deleted, after the grep.
 
-## Open questions (owner)
+## Questions (owner, decided 2026-10-23)
 
-- **Q1: Does the owner review each sweep's texts before merge?** **Recommendation:** yes. Each sweep phase presents
+- **Q1: Does the owner review each sweep's texts before merge?** **Decided (owner 2026-10-23: "Ja, Q1 und Q2 wie empfohlen"): yes, as recommended**, phase 1's review items included. Each sweep phase presents
   a before/after table (key, EN, DE, the rule bullet) in its session, and merges after the owner's answer. Texts are
   the product's voice; a rule is not enough to decide every one.
-- **Q2: Does the sweep cover the site's Use pages' own prose?** **Recommendation:** no. The rule is a UI rule; the
+- **Q2: Does the sweep cover the site's Use pages' own prose?** **Decided (owner 2026-10-23, same answer): no, as recommended.** The rule is a UI rule; the
   site explains on purpose. A Use page changes only where it quotes a changed UI text.
 
 ## Phases

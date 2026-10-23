@@ -12,8 +12,8 @@
         "de": "Mitglieder können Inhalte eines Bereichs über einen Link öffentlich zum Ansehen teilen."
       },
       "whenOff": {
-        "en": "It is no longer possible to create new public links, and all active links will be disabled.",
-        "de": "Es lässt sich kein neuer öffentlicher Link mehr anlegen und alle aktiven Links werden abgeschaltet."
+        "en": "No new public link can be made, and existing links stop working at once, the two kinds below included. Nothing is deleted, so the links work again once this is back on.",
+        "de": "Es lässt sich kein neuer öffentlicher Link anlegen, und bestehende Links funktionieren sofort nicht mehr, auch die beiden Arten darunter. Gelöscht wird nichts, also funktionieren die Links wieder, sobald dieser Eintrag wieder an ist."
       },
       "serves": ["uc.sharing.share-public-viewer"],
       "source": "operator-policy",
@@ -26,8 +26,8 @@
             "de": "Jeder Link braucht ein Passwort"
           },
           "whenSet": {
-            "en": "Every link strictly requires a password; active links without a password are implicitly disabled until a password is assigned to them.",
-            "de": "Jeder Link benötigt zwingend ein Passwort, aktive Links ohne Passwort sind implizit deaktiviert bis sie ein Passwort bekommen."
+            "en": "Every link needs a password; existing links without one stop working until they get one.",
+            "de": "Jeder Link braucht ein Passwort; bestehende Links ohne Passwort funktionieren nicht mehr, bis sie eines bekommen."
           }
         },
         "linkMaxDays": {
@@ -37,8 +37,8 @@
             "de": "Links laufen nach so vielen Tagen ab"
           },
           "whenSet": {
-            "en": "Every link expires after the set duration at the latest; active links without an end date are implicitly deactivated until an end date is established. An expired link can be renewed.",
-            "de": "Jeder Link läuft spätestens nach der eingestellten Zeit ab, aktive Links ohne Enddatum werden implizit deaktiviert bis ein Enddatum erstellt wurde. Ein abgelaufener Link kann erneuert werden."
+            "en": "Every link expires after this many days at the latest; existing links without an end date, or with a later one, stop working until they get one that fits. An expired link can be renewed.",
+            "de": "Jeder Link läuft spätestens nach so vielen Tagen ab; bestehende Links ohne Enddatum oder mit einem späteren funktionieren nicht mehr, bis sie ein passendes bekommen. Ein abgelaufener Link lässt sich erneuern."
           }
         }
       },
@@ -54,8 +54,8 @@
         "de": "Ein öffentlicher Link, über den Gäste nicht nur ansehen, sondern auch etwas hinzufügen können. Was ein Gast hinzufügen kann, bestimmt die Anwendung, in die der Link führt."
       },
       "whenOff": {
-        "en": "It is not possible to create any new links of this type, and existing links immediately cease to function.",
-        "de": "Es lässt sich kein neuer Link dieser Art anlegen, bestehende Links funktionieren sofort nicht mehr."
+        "en": "No new link of this kind can be made, and existing ones stop working at once. What guests added stays, and the links work again once this is back on.",
+        "de": "Es lässt sich kein neuer Link dieser Art anlegen, und bestehende funktionieren sofort nicht mehr. Was Gäste hinzugefügt haben, bleibt, und die Links funktionieren wieder, sobald dieser Eintrag wieder an ist."
       },
       "serves": ["uc.sharing.share-contributor"],
       "source": "operator-policy",
@@ -72,8 +72,8 @@
         "de": "Ein öffentlicher Link, über den Gäste etwas einwerfen können, ohne zu sehen, was schon da ist oder was andere eingeworfen haben."
       },
       "whenOff": {
-        "en": "No new links of this type can be created, and existing links of this type immediately cease to function.",
-        "de": "Es lässt sich kein neuer Link dieser Art anlegen, bestehende Links dieser Art funktionieren sofort nicht mehr."
+        "en": "No new link of this kind can be made, and existing ones stop working at once. Drop boxes keep what is in them, and the links work again once this is back on.",
+        "de": "Es lässt sich kein neuer Link dieser Art anlegen, und bestehende funktionieren sofort nicht mehr. Briefkästen behalten, was darin liegt, und die Links funktionieren wieder, sobald dieser Eintrag wieder an ist."
       },
       "serves": ["uc.sharing.share-uploader"],
       "source": "operator-policy",
