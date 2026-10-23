@@ -5,9 +5,10 @@
 // confirmed). Renders the kit PDF in the user's language, then saves it. Pass the intro copy via the default slot.
 import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import { renderKitPdf, saveKitPdf } from './emergencyKit'
 
 const props = defineProps<{ email: string; secretKey: string }>()
@@ -38,14 +39,14 @@ async function download() {
 <template>
   <div class="kit-save">
     <slot />
-    <Button type="button" :label="t('kit.download')" icon="pi pi-download" severity="secondary" @click="download" />
+    <VeyqButton type="button" :label="t('kit.download')" icon="download" variant="secondary" @click="download" />
     <p v-if="downloaded" class="kit-status">
-      <span class="pi pi-check" aria-hidden="true" />
+      <VeyqIcon name="check" />
       {{ t('kit.downloaded') }}
     </p>
-    <Message v-if="failed" severity="error" :closable="false">{{ t('kit.downloadFailed') }}</Message>
+    <VeyqMessage v-if="failed" tone="error">{{ t('kit.downloadFailed') }}</VeyqMessage>
     <label class="kit-confirm">
-      <Checkbox v-model="confirmed" :binary="true" :disabled="!downloaded" />
+      <VeyqCheckbox v-model="confirmed" :disabled="!downloaded" />
       <span>{{ t('kit.backupDownloadConfirm') }}</span>
     </label>
   </div>

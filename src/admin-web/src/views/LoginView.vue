@@ -11,11 +11,11 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Card from 'primevue/card'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Password from 'primevue/password'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqInput from '../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
+import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { login } from '../features/auth/login'
 import { takeAuthPrefill } from '../app/authPrefill'
 import { takeSessionExpired } from '../app/sessionEnd'
@@ -47,36 +47,34 @@ const { run: submit, pending: busy } = useAsyncAction(
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>{{ t('admin.title') }}</template>
-    <template #content>
-      <Message v-if="expired" severity="warn" :closable="false" class="form-message">{{ t('admin.sessionExpired') }}</Message>
+    <template #default>
+      <VeyqMessage v-if="expired" tone="warn" class="form-message">{{ t('admin.sessionExpired') }}</VeyqMessage>
       <p class="veyq-form-copy">{{ t('admin.signInSub') }}</p>
       <form class="veyq-form" @submit.prevent="submit()">
         <label>
           {{ t('common.email') }}
-          <InputText v-model="email" type="email" autocomplete="username" required autofocus />
+          <VeyqInput v-model="email" type="email" autocomplete="username" required autofocus />
         </label>
         <label>
           {{ t('common.password') }}
-          <Password
+          <VeyqPassword
             v-model="password"
             input-id="admin-password"
-            :input-props="{ autocomplete: 'current-password' }"
+            autocomplete="current-password"
             required
-            :feedback="false"
-            toggle-mask
             fluid
           />
         </label>
-        <Button
+        <VeyqButton
           type="submit"
           :label="busy ? t('admin.signingIn') : t('admin.signIn')"
-          icon="pi pi-sign-in"
+          icon="sign-in"
           :loading="busy"
         />
       </form>
-      <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
     </template>
-  </Card>
+  </VeyqCard>
 </template>

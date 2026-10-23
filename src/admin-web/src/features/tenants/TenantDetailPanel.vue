@@ -12,10 +12,10 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import {
   changeTenantDomain,
   deleteTenant,
@@ -196,7 +196,7 @@ async function setSuspended(suspend: boolean) {
       header: t('tenant.suspendConfirmTitle'),
       message: t('tenant.suspendConfirm'),
       acceptLabel: t('tenant.suspend'),
-      acceptIcon: 'pi pi-pause',
+      acceptIcon: 'pause',
     })
     if (!accepted) return
   }
@@ -237,7 +237,7 @@ async function changeDomain() {
     header: t('tenant.changeDomainConfirmTitle'),
     message: t('tenant.changeDomainConfirm', { domain: next }),
     acceptLabel: t('tenant.changeDomainSubmit'),
-    acceptIcon: 'pi pi-arrow-right',
+    acceptIcon: 'arrow-right',
   })
   if (!accepted) return
   actionError.value = ''
@@ -286,7 +286,7 @@ async function revoke() {
     header: t('tenant.revokeConfirmTitle'),
     message: t('tenant.revokeConfirm'),
     acceptLabel: t('tenant.revoke'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!accepted) return
   actionError.value = ''
@@ -380,9 +380,9 @@ async function copyInviteLink() {
 <template>
   <section class="veyq-surface settings-panel">
     <p v-if="loading" class="settings-muted">{{ t('tenant.loading') }}</p>
-    <Message v-else-if="loadError === 'notAuthorized'" severity="warn" :closable="false">{{ t('tenant.notAuthorized') }}</Message>
-    <Message v-else-if="loadError === 'gone'" severity="warn" :closable="false">{{ t('tenant.empty') }}</Message>
-    <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('tenant.loadFailed') }}</Message>
+    <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="warn">{{ t('tenant.notAuthorized') }}</VeyqMessage>
+    <VeyqMessage v-else-if="loadError === 'gone'" tone="warn">{{ t('tenant.empty') }}</VeyqMessage>
+    <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('tenant.loadFailed') }}</VeyqMessage>
 
     <section v-else-if="tenant" class="settings-form">
       <div class="settings-section-header">
@@ -396,29 +396,29 @@ async function copyInviteLink() {
 
       <StatementDeliveryNotice v-if="report" :key="report.statement.statementId" :report="report" @dismiss="report = null" />
 
-      <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-      <Message v-if="isSuspended" severity="warn" :closable="false">{{ t('tenant.suspendedHint') }}</Message>
+      <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
+      <VeyqMessage v-if="isSuspended" tone="warn">{{ t('tenant.suspendedHint') }}</VeyqMessage>
 
       <!-- Pending deletion (uc.admin.delete-tenant): offline, erased at its due date unless stopped here. Stopping
            returns it SUSPENDED, so it is then brought back online with the lever as any suspended tenant. -->
       <template v-if="isPendingDeletion">
-        <Message severity="error" :closable="false" class="tenant-pending-deletion">
+        <VeyqMessage tone="error" class="tenant-pending-deletion">
           {{ t('tenant.pendingDeletionHint', { date: deletionDue }) }}
-        </Message>
+        </VeyqMessage>
         <div class="veyq-dialog-action-row">
-          <Button type="button" :label="t('tenant.stopDeletion')" icon="pi pi-undo" @click="stopDeletion" />
+          <VeyqButton type="button" :label="t('tenant.stopDeletion')" icon="undo" @click="stopDeletion" />
         </div>
       </template>
 
       <!-- No owner (ADR 0101 decision 9): its two ways on are the owner invite below and the deletion at the end. -->
-      <Message v-if="ownerless" severity="warn" :closable="false" class="tenant-ownerless">
+      <VeyqMessage v-if="ownerless" tone="warn" class="tenant-ownerless">
         {{ t('tenant.ownerlessHint') }}
         <template v-if="isSuspended"> {{ t('tenant.ownerlessSuspendedHint') }}</template>
-      </Message>
+      </VeyqMessage>
 
       <!-- Bringing it back sits by the notice that says it is offline; taking it offline is a measure, at the end. -->
       <div v-if="isSuspended" class="veyq-dialog-action-row">
-        <Button type="button" :label="t('tenant.reactivate')" icon="pi pi-play" @click="setSuspended(false)" />
+        <VeyqButton type="button" :label="t('tenant.reactivate')" icon="play" @click="setSuspended(false)" />
       </div>
 
       <!-- Change address, on PENDING and ACTIVE alike (unlike the invite controls below, which are PENDING-only).
@@ -426,16 +426,16 @@ async function copyInviteLink() {
       <form v-if="isPending || isActive" class="veyq-form change-domain" @submit.prevent="changeDomain">
         <label>
           {{ t('tenant.changeDomainTitle') }}
-          <InputText v-model="domain" autocomplete="off" required />
+          <VeyqInput v-model="domain" autocomplete="off" required />
         </label>
         <p class="settings-muted">{{ t('tenant.changeDomainHint') }}</p>
         <div class="veyq-dialog-action-row">
-          <Button
+          <VeyqButton
             type="submit"
             :label="t('tenant.changeDomainSubmit')"
-            icon="pi pi-arrow-right"
-            severity="secondary"
-            outlined
+            icon="arrow-right"
+            variant="secondary"
+            appearance="outlined"
             :disabled="domain.trim().length === 0 || domain.trim().toLowerCase() === tenant.domain"
           />
         </div>
@@ -447,24 +447,24 @@ async function copyInviteLink() {
         <form v-if="!inviteUrl" class="veyq-form" @submit.prevent="reassign">
           <label>
             {{ t('tenant.ownerEmail') }}
-            <InputText v-model="email" type="email" autocomplete="email" required />
+            <VeyqInput v-model="email" type="email" autocomplete="email" required />
           </label>
           <div class="veyq-dialog-action-row">
-            <Button type="button" :label="t('tenant.resend')" icon="pi pi-send" severity="secondary" outlined :loading="busy" @click="resend" />
+            <VeyqButton type="button" :label="t('tenant.resend')" icon="send" variant="secondary" appearance="outlined" :loading="busy" @click="resend" />
             <div class="veyq-action-group">
-              <Button type="button" :label="t('tenant.revoke')" icon="pi pi-trash" severity="danger" outlined :disabled="busy" @click="revoke" />
-              <Button type="submit" :label="t('tenant.reassignSubmit')" :loading="busy" :disabled="email.trim().length === 0" />
+              <VeyqButton type="button" :label="t('tenant.revoke')" icon="trash" variant="danger" appearance="outlined" :disabled="busy" @click="revoke" />
+              <VeyqButton type="submit" :label="t('tenant.reassignSubmit')" :loading="busy" :disabled="email.trim().length === 0" />
             </div>
           </div>
         </form>
 
         <div v-else class="veyq-form">
-          <Message severity="success" :closable="false">{{ t('tenant.inviteReissued') }}</Message>
+          <VeyqMessage tone="success">{{ t('tenant.inviteReissued') }}</VeyqMessage>
           <p class="settings-muted">{{ t('members.copyLinkIntro') }}</p>
           <div class="invite-link-row">
-            <InputText :model-value="inviteUrl" readonly class="invite-link-input" @focus="($event.target as HTMLInputElement).select()" />
-            <Button :icon="copied ? 'pi pi-check' : 'pi pi-copy'" :aria-label="t('members.copyLink')" :title="copied ? t('members.copied') : t('members.copyLink')" @click="copyInviteLink" />
-            <Button icon="pi pi-times" severity="secondary" outlined :aria-label="t('common.done')" :title="t('common.done')" @click="inviteUrl = ''" />
+            <VeyqInput :model-value="inviteUrl" readonly class="invite-link-input" @focus="($event.target as HTMLInputElement).select()" />
+            <VeyqButton :icon="copied ? 'check' : 'copy'" :aria-label="t('members.copyLink')" :title="copied ? t('members.copied') : t('members.copyLink')" @click="copyInviteLink" />
+            <VeyqButton icon="times" variant="secondary" appearance="outlined" :aria-label="t('common.done')" :title="t('common.done')" @click="inviteUrl = ''" />
           </div>
         </div>
       </template>
@@ -476,23 +476,23 @@ async function copyInviteLink() {
           <h3>{{ t('tenant.inviteOwnerTitle') }}</h3>
           <label>
             {{ t('tenant.inviteOwnerEmail') }}
-            <InputText v-model="ownerInviteEmail" type="email" autocomplete="off" required />
+            <VeyqInput v-model="ownerInviteEmail" type="email" autocomplete="off" required />
           </label>
           <div class="veyq-dialog-action-row">
-            <Button type="submit" :label="t('tenant.inviteOwner')" icon="pi pi-user-plus" :disabled="ownerInviteEmail.trim().length === 0" />
+            <VeyqButton type="submit" :label="t('tenant.inviteOwner')" icon="user-plus" :disabled="ownerInviteEmail.trim().length === 0" />
           </div>
         </form>
         <div v-else class="veyq-form tenant-owner-invite">
-          <Message v-if="ownerInvite.mailed" severity="success" :closable="false">{{ t('tenant.ownerInviteMailed', { email: ownerInvite.email }) }}</Message>
+          <VeyqMessage v-if="ownerInvite.mailed" tone="success">{{ t('tenant.ownerInviteMailed', { email: ownerInvite.email }) }}</VeyqMessage>
           <template v-else>
             <p class="settings-muted">{{ t('tenant.ownerInviteCopy', { email: ownerInvite.email }) }}</p>
             <div class="invite-link-row">
-              <InputText :model-value="inviteUrl" readonly class="invite-link-input" @focus="($event.target as HTMLInputElement).select()" />
-              <Button :icon="copied ? 'pi pi-check' : 'pi pi-copy'" :aria-label="t('members.copyLink')" :title="copied ? t('members.copied') : t('members.copyLink')" @click="copyInviteLink" />
+              <VeyqInput :model-value="inviteUrl" readonly class="invite-link-input" @focus="($event.target as HTMLInputElement).select()" />
+              <VeyqButton :icon="copied ? 'check' : 'copy'" :aria-label="t('members.copyLink')" :title="copied ? t('members.copied') : t('members.copyLink')" @click="copyInviteLink" />
             </div>
           </template>
           <div class="veyq-dialog-action-row">
-            <Button type="button" :label="t('common.done')" severity="secondary" outlined @click="ownerInvite = null; inviteUrl = ''" />
+            <VeyqButton type="button" :label="t('common.done')" variant="secondary" appearance="outlined" @click="ownerInvite = null; inviteUrl = ''" />
           </div>
         </div>
       </template>
@@ -506,20 +506,20 @@ async function copyInviteLink() {
         </p>
         <label>
           {{ t('tenant.quotaInput') }}
-          <InputText v-model="quotaGib" inputmode="decimal" autocomplete="off" />
+          <VeyqInput v-model="quotaGib" inputmode="decimal" autocomplete="off" />
         </label>
         <p class="settings-muted">{{ t('tenant.quotaHint') }}</p>
         <div class="veyq-dialog-action-row">
-          <Button
+          <VeyqButton
             v-if="tenant.storageQuotaBytes != null"
             type="button"
             :label="t('tenant.quotaClear')"
-            icon="pi pi-times"
-            severity="secondary"
-            outlined
+            icon="times"
+            variant="secondary"
+            appearance="outlined"
             @click="saveQuota(true)"
           />
-          <Button type="submit" :label="t('tenant.quotaSave')" icon="pi pi-save" severity="secondary" outlined />
+          <VeyqButton type="submit" :label="t('tenant.quotaSave')" icon="save" variant="secondary" appearance="outlined" />
         </div>
       </form>
 
@@ -528,14 +528,13 @@ async function copyInviteLink() {
            so it is asked once above them, with the one statement it calls for. -->
       <section v-if="isActive || isSuspended" class="veyq-form tenant-measures">
         <h3>{{ isActive ? t('tenant.measuresTitle') : t('tenant.deleteTitle') }}</h3>
-        <Message v-if="proposal" severity="warn" :closable="false" class="tenant-proposal">
+        <VeyqMessage v-if="proposal" tone="warn" class="tenant-proposal">
           {{ t('tenant.proposalOpen', { category: proposalCategory, caseId: proposal.caseId, at: at(proposal.proposedAt) }) }}
-        </Message>
+        </VeyqMessage>
         <div class="checkbox-row tenant-over-content">
-          <Checkbox
+          <VeyqCheckbox
             v-model="overContent"
             input-id="tenant-over-content"
-            binary
             :disabled="proposal !== null"
             class="tenant-over-content__toggle"
           />
@@ -547,12 +546,12 @@ async function copyInviteLink() {
         <div v-if="isActive" class="tenant-measure">
           <p class="settings-muted">{{ t('tenant.suspendHint') }}</p>
           <div class="veyq-dialog-action-row">
-            <Button
+            <VeyqButton
               type="button"
               :label="overContent ? t('tenant.suspendSend') : t('tenant.suspend')"
-              icon="pi pi-pause"
-              severity="danger"
-              outlined
+              icon="pause"
+              variant="danger"
+              appearance="outlined"
               class="tenant-suspend"
               @click="setSuspended(true)"
             />
@@ -565,14 +564,14 @@ async function copyInviteLink() {
           <p class="settings-muted">{{ t('tenant.deleteHint') }}</p>
           <label>
             {{ t('tenant.deleteConfirmLabel', { domain: tenant.domain }) }}
-            <InputText v-model="deleteTyped" autocomplete="off" spellcheck="false" />
+            <VeyqInput v-model="deleteTyped" autocomplete="off" spellcheck="false" />
           </label>
           <div class="veyq-dialog-action-row">
-            <Button
+            <VeyqButton
               type="submit"
               :label="overContent ? t('tenant.deleteSend') : t('tenant.delete')"
-              icon="pi pi-trash"
-              severity="danger"
+              icon="trash"
+              variant="danger"
               :disabled="!deleteArmed"
             />
           </div>

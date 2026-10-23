@@ -7,9 +7,9 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import {
   DEFAULT_DAYS, getBackupRetention, MAX_DAYS, MIN_DAYS, needsReason, parseRetentionDays, setBackupRetention,
   type InstanceBackupRetention,
@@ -74,21 +74,21 @@ async function save() {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('backupRetention.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('release.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('backupRetention.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('release.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('backupRetention.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="state">
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-        <Message v-else-if="saved" severity="success" :closable="false">{{ t('backupRetention.saved') }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
+        <VeyqMessage v-else-if="saved" tone="success">{{ t('backupRetention.saved') }}</VeyqMessage>
         <label>
           <span>{{ t('backupRetention.days', { min: MIN_DAYS, max: MAX_DAYS }) }}</span>
-          <InputText v-model="days" class="backup-retention-days" inputmode="numeric" autocomplete="off" />
+          <VeyqInput v-model="days" class="backup-retention-days" inputmode="numeric" autocomplete="off" />
           <small class="settings-muted">{{ state.chosen ? t('backupRetention.chosen') : t('backupRetention.default', { days: DEFAULT_DAYS }) }}</small>
         </label>
-        <Message v-if="reasonOwed" severity="warn" :closable="false" class="reason-owed">{{ t('backupRetention.reasonOwed') }}</Message>
+        <VeyqMessage v-if="reasonOwed" tone="warn" class="reason-owed">{{ t('backupRetention.reasonOwed') }}</VeyqMessage>
         <p class="settings-muted">{{ t('backupRetention.effect') }}</p>
         <div>
-          <Button type="button" class="backup-retention-save" :label="t('backupRetention.save')" icon="pi pi-check" :loading="saving" @click="save" />
+          <VeyqButton class="backup-retention-save" :label="t('backupRetention.save')" icon="check" :loading="saving" @click="save" />
         </div>
       </template>
     </section>

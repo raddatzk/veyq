@@ -12,7 +12,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Message from 'primevue/message'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { getInstanceConfigSecret, InstanceConfigSecretStateEnum } from './configSecret'
 import type { InstanceConfigSecret } from './configSecret'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -49,11 +49,11 @@ const shown = computed(() => (state.value ? RENDER[state.value] : null))
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('configSecret.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('configSecret.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('configSecret.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('configSecret.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('configSecret.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="shown">
-        <Message :severity="shown.severity" :closable="false">{{ t(shown.key) }}</Message>
+        <VeyqMessage :tone="shown.severity">{{ t(shown.key) }}</VeyqMessage>
         <!-- The state code itself, verbatim: it is what a runbook asks for, and the string the API and
              `veyq-admin config-secret` answer with. -->
         <p class="settings-muted">

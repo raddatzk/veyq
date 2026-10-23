@@ -9,11 +9,11 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Select from 'primevue/select'
-import Textarea from 'primevue/textarea'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqTextarea from '../../shared/ui/VeyqTextarea.vue'
 import { enterOrder, OrderInvalid, type AuthorityOrder, type OrderKind } from './orders'
 import { formTime, renderOrderForm, type OrderFormLang } from './orderForms'
 import { useConfirm } from '../../shared/state/useConfirm'
@@ -103,7 +103,7 @@ async function submit() {
     header: t('orders.confirmTitle'),
     message: kind.value === 'REMOVAL' ? t('orders.confirmRemoval') : t('orders.confirmHold'),
     acceptLabel: t('orders.submit'),
-    acceptIcon: 'pi pi-ban',
+    acceptIcon: 'ban',
   })
   if (accepted) await run()
 }
@@ -125,21 +125,21 @@ async function copy() {
         </div>
       </div>
 
-      <Message v-if="error" severity="error" :closable="false" class="order-error">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" class="order-error">{{ error }}</VeyqMessage>
 
       <form class="veyq-form order-form" @submit.prevent="submit">
         <label>
           <span>{{ t('orders.kind') }}</span>
-          <Select v-model="kind" :options="kinds" option-label="label" option-value="value" class="order-kind" :disabled="pending" />
+          <VeyqSelect v-model="kind" :options="kinds" class="order-kind" :disabled="pending" />
         </label>
         <label>
           <span>{{ t('orders.share') }}</span>
-          <InputText v-model="share" class="order-share" autocomplete="off" spellcheck="false" />
+          <VeyqInput v-model="share" class="order-share" autocomplete="off" spellcheck="false" />
           <small class="settings-muted">{{ t('orders.shareHint') }}</small>
         </label>
         <label>
           <span>{{ t('orders.reference') }}</span>
-          <InputText v-model="reference" class="order-reference" autocomplete="off" />
+          <VeyqInput v-model="reference" class="order-reference" autocomplete="off" />
           <small class="settings-muted">{{ t('orders.referenceHint') }}</small>
         </label>
         <label>
@@ -148,23 +148,23 @@ async function copy() {
         </label>
         <label v-if="kind === 'INFORMATION'">
           <span>{{ t('orders.holdDays') }}</span>
-          <InputText v-model="holdDays" class="order-hold-days" inputmode="numeric" autocomplete="off" />
+          <VeyqInput v-model="holdDays" class="order-hold-days" inputmode="numeric" autocomplete="off" />
         </label>
         <label v-if="kind === 'REMOVAL'">
           <span>{{ t('orders.deferUntil') }}</span>
           <input v-model="deferUntil" type="datetime-local" class="p-inputtext order-defer" />
         </label>
         <div>
-          <Button type="submit" class="order-submit" :label="t('orders.submit')" icon="pi pi-ban" :loading="pending" />
+          <VeyqButton type="submit" class="order-submit" :label="t('orders.submit')" icon="ban" :loading="pending" />
         </div>
       </form>
 
       <section v-if="result" class="veyq-form order-result">
-        <Message v-if="!result.found" severity="warn" :closable="false" class="order-not-found">{{ t('orders.notFound') }}</Message>
+        <VeyqMessage v-if="!result.found" tone="warn" class="order-not-found">{{ t('orders.notFound') }}</VeyqMessage>
         <template v-else>
-          <Message v-if="result.blockedAt" severity="success" :closable="false" class="order-blocked">
+          <VeyqMessage v-if="result.blockedAt" tone="success" class="order-blocked">
             {{ t('orders.blocked', { time: formTime(result.blockedAt) }) }}
-          </Message>
+          </VeyqMessage>
           <p v-if="result.holdUntil" class="settings-muted order-held">{{ t('orders.held', { time: formTime(result.holdUntil) }) }}</p>
           <p v-if="result.statementDeferredUntil" class="settings-muted order-deferred">
             {{ t('orders.deferred', { time: formTime(result.statementDeferredUntil) }) }}
@@ -172,9 +172,9 @@ async function copy() {
         </template>
         <template v-if="form">
           <h3>{{ t(`orders.${form.which}`) }}</h3>
-          <Textarea :model-value="form.text" readonly rows="12" auto-resize class="order-form-text" />
+          <VeyqTextarea :model-value="form.text" readonly rows="12" auto-resize class="order-form-text" />
           <div>
-            <Button type="button" class="order-copy" :label="copied ? t('orders.copied') : t('orders.copy')" icon="pi pi-copy" text @click="copy" />
+            <VeyqButton class="order-copy" :label="copied ? t('orders.copied') : t('orders.copy')" icon="copy" appearance="text" @click="copy" />
           </div>
         </template>
       </section>

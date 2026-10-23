@@ -12,10 +12,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import ToggleSwitch from 'primevue/toggleswitch'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage, { type VeyqMessageTone } from '../../shared/ui/VeyqMessage.vue'
+import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
 import {
   confirmInstanceMail, getInstanceMail, InstanceMailSettingsConfirmationEnum as Confirmation, updateInstanceMail,
   type InstanceMailSettings, type InstanceMailSettingsUpdate,
@@ -117,7 +117,7 @@ async function confirm() {
 }
 
 /** Where the confirmation stands, in words and with the severity it deserves. */
-const confirmation = computed(() => {
+const confirmation = computed<{ severity: VeyqMessageTone; text: string } | null>(() => {
   const s = settings.value
   if (!s) return null
   switch (s.confirmation) {
@@ -146,58 +146,58 @@ const confirmation = computed(() => {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('instanceMail.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('instanceMail.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('instanceMail.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('instanceMail.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('instanceMail.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="settings">
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-        <Message v-if="needsAuth && keyState === 'MISMATCH'" severity="error" :closable="false" class="mail-key">{{ t('instanceMail.keyMismatch') }}</Message>
-        <Message v-else-if="needsAuth && keyState === 'ABSENT'" severity="warn" :closable="false" class="mail-key">{{ t('instanceMail.keyUnavailable') }}</Message>
-        <Message v-if="confirmation" :severity="confirmation.severity" :closable="false" class="mail-confirmation" :data-state="settings.confirmation">
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
+        <VeyqMessage v-if="needsAuth && keyState === 'MISMATCH'" tone="error" class="mail-key">{{ t('instanceMail.keyMismatch') }}</VeyqMessage>
+        <VeyqMessage v-else-if="needsAuth && keyState === 'ABSENT'" tone="warn" class="mail-key">{{ t('instanceMail.keyUnavailable') }}</VeyqMessage>
+        <VeyqMessage v-if="confirmation" :tone="confirmation.severity" class="mail-confirmation" :data-state="settings.confirmation">
           {{ confirmation.text }}
-        </Message>
+        </VeyqMessage>
 
         <form v-if="settings.confirmation === Confirmation.CodeSent" class="mail-code" @submit.prevent="confirm">
           <label>
             <span>{{ t('instanceMail.code') }}</span>
-            <InputText v-model="code" class="mail-code__input" inputmode="numeric" autocomplete="one-time-code" maxlength="16" />
+            <VeyqInput v-model="code" class="mail-code__input" inputmode="numeric" autocomplete="one-time-code" maxlength="16" />
           </label>
-          <Message v-if="codeError" severity="error" :closable="false">{{ codeError }}</Message>
+          <VeyqMessage v-if="codeError" tone="error">{{ codeError }}</VeyqMessage>
           <div>
-            <Button type="submit" class="mail-code__confirm" :label="t('instanceMail.confirm')" icon="pi pi-check" :loading="confirming" :disabled="!code.trim()" />
+            <VeyqButton type="submit" class="mail-code__confirm" :label="t('instanceMail.confirm')" icon="check" :loading="confirming" :disabled="!code.trim()" />
           </div>
         </form>
 
         <label>
           <span>{{ t('instanceMail.host') }}</span>
-          <InputText v-model="host" class="mail-host" placeholder="smtp.example.com" autocomplete="off" />
+          <VeyqInput v-model="host" class="mail-host" placeholder="smtp.example.com" autocomplete="off" />
         </label>
         <div class="mail-field-row">
           <label>
             <span>{{ t('instanceMail.port') }}</span>
-            <InputText v-model="port" inputmode="numeric" placeholder="587" autocomplete="off" />
+            <VeyqInput v-model="port" inputmode="numeric" placeholder="587" autocomplete="off" />
           </label>
           <label>
             <span>{{ t('instanceMail.from') }}</span>
-            <InputText v-model="from" class="mail-from" :placeholder="t('instanceMail.fromPlaceholder')" autocomplete="off" />
+            <VeyqInput v-model="from" class="mail-from" :placeholder="t('instanceMail.fromPlaceholder')" autocomplete="off" />
           </label>
         </div>
         <label>
           <span>{{ t('instanceMail.username') }}</span>
-          <InputText v-model="username" autocomplete="off" />
+          <VeyqInput v-model="username" autocomplete="off" />
         </label>
         <label>
           <span>{{ t('instanceMail.password') }}</span>
-          <InputText v-model="password" class="mail-password" type="password" autocomplete="new-password" :placeholder="settings.passwordSet ? t('instanceMail.passwordKeep') : ''" />
+          <VeyqInput v-model="password" class="mail-password" type="password" autocomplete="new-password" :placeholder="settings.passwordSet ? t('instanceMail.passwordKeep') : ''" />
           <small class="settings-muted">{{ settings.passwordSet ? t('instanceMail.passwordSetHint') : t('instanceMail.passwordHint') }}</small>
         </label>
         <div class="mail-toggle-row">
-          <ToggleSwitch v-model="tls" input-id="instance-mail-tls" />
+          <VeyqSwitch v-model="tls" input-id="instance-mail-tls" />
           <label for="instance-mail-tls">{{ t('instanceMail.tls') }}</label>
         </div>
         <p class="settings-muted">{{ t('instanceMail.saveHint') }}</p>
         <div>
-          <Button type="button" class="mail-save" :label="t('instanceMail.save')" icon="pi pi-send" :loading="saving" @click="save" />
+          <VeyqButton class="mail-save" :label="t('instanceMail.save')" icon="send" :loading="saving" @click="save" />
         </div>
       </template>
     </section>

@@ -13,8 +13,8 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import {
   confirmExclusiveBucket,
   getStoreReconcile,
@@ -102,7 +102,7 @@ async function confirm() {
     header: t('reconcile.confirmTitle'),
     message: t('reconcile.confirmBody', { grace: grace.value, keys: c?.storageKeys ?? 0, due: c?.dueKeys ?? 0 }),
     acceptLabel: t('reconcile.confirm'),
-    acceptIcon: 'pi pi-lock',
+    acceptIcon: 'lock',
   })
   if (accepted) await act(confirmExclusiveBucket)
 }
@@ -130,16 +130,16 @@ async function resume() {
     </div>
 
     <p v-if="loading" class="settings-muted">{{ t('reconcile.loading') }}</p>
-    <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('reconcile.notOwner') }}</Message>
-    <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('reconcile.loadFailed') }}</Message>
+    <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('reconcile.notOwner') }}</VeyqMessage>
+    <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('reconcile.loadFailed') }}</VeyqMessage>
 
     <template v-else-if="state && verdict">
-      <Message :severity="verdict.severity" :closable="false" class="reconcile-verdict" :data-verdict="state.verdict">
+      <VeyqMessage :tone="verdict.severity" class="reconcile-verdict" :data-verdict="state.verdict">
         {{ t(verdict.key, { grace }) }}
-      </Message>
-      <Message v-if="state.failure" severity="error" :closable="false" class="reconcile-failure" :data-reason="state.failure.reason">
+      </VeyqMessage>
+      <VeyqMessage v-if="state.failure" tone="error" class="reconcile-failure" :data-reason="state.failure.reason">
         {{ t(FAILURE[state.failure.reason], { at: at(state.failure.at) }) }}
-      </Message>
+      </VeyqMessage>
 
       <p v-if="state.lastPass" class="reconcile-pass">
         {{
@@ -184,48 +184,44 @@ async function resume() {
         {{ t('reconcile.confirmedAt', { at: at(state.exclusiveBucketConfirmedAt) }) }}
       </p>
 
-      <Message v-if="error" severity="error" :closable="false" class="reconcile-error">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" class="reconcile-error">{{ error }}</VeyqMessage>
       <div v-if="!noStore" class="veyq-dialog-action-row">
-        <Button
+        <VeyqButton
           v-if="!confirmed"
-          type="button"
           :label="t('reconcile.confirm')"
-          icon="pi pi-lock"
-          severity="secondary"
-          outlined
+          icon="lock"
+          variant="secondary"
+          appearance="outlined"
           :disabled="busy"
           class="reconcile-confirm"
           @click="confirm"
         />
         <template v-else>
-          <Button
+          <VeyqButton
             v-if="armed"
-            type="button"
             :label="t('reconcile.pause')"
-            icon="pi pi-pause"
-            severity="secondary"
-            outlined
+            icon="pause"
+            variant="secondary"
+            appearance="outlined"
             :disabled="busy"
             class="reconcile-pause"
             @click="pause"
           />
-          <Button
+          <VeyqButton
             v-if="paused"
-            type="button"
             :label="t('reconcile.resume')"
-            icon="pi pi-play"
-            severity="secondary"
-            outlined
+            icon="play"
+            variant="secondary"
+            appearance="outlined"
             :disabled="busy"
             class="reconcile-resume"
             @click="resume"
           />
-          <Button
-            type="button"
+          <VeyqButton
             :label="t('reconcile.withdraw')"
-            icon="pi pi-lock-open"
-            severity="secondary"
-            text
+            icon="lock-open"
+            variant="secondary"
+            appearance="text"
             :disabled="busy"
             class="reconcile-withdraw"
             @click="withdraw"

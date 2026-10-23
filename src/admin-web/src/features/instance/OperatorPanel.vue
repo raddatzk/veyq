@@ -17,11 +17,12 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Select from 'primevue/select'
-import Textarea from 'primevue/textarea'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage, { type VeyqMessageTone } from '../../shared/ui/VeyqMessage.vue'
+import VeyqCombobox from '../../shared/ui/VeyqCombobox.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqTextarea from '../../shared/ui/VeyqTextarea.vue'
 import {
   clearOperator, confirmOperatorNotification, getOperator, InstanceOperatorNotificationConfirmationEnum as Confirmation,
   OperatorRecipientKind, parseLanguages, RECIPIENT_KINDS, setOperator,
@@ -177,7 +178,7 @@ async function save() {
 }
 
 async function clearAll() {
-  if (!(await ask({ header: t('operator.clearTitle'), message: t('operator.clearConfirm'), acceptLabel: t('operator.clear'), acceptIcon: 'pi pi-trash' }))) return
+  if (!(await ask({ header: t('operator.clearTitle'), message: t('operator.clearConfirm'), acceptLabel: t('operator.clear'), acceptIcon: 'trash' }))) return
   actionError.value = ''
   await runClear()
 }
@@ -188,7 +189,7 @@ async function confirm() {
 }
 
 /** Where the notification address's confirmation stands, in words and with the severity it deserves. */
-const confirmation = computed(() => {
+const confirmation = computed<{ severity: VeyqMessageTone; text: string } | null>(() => {
   const o = op.value
   if (!o || !o.notificationEmail) return null
   const address = o.notificationEmail
@@ -216,69 +217,69 @@ const confirmation = computed(() => {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('operator.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('operator.notOwner') }}</Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('operator.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="info">{{ t('operator.notOwner') }}</VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">{{ t('operator.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="op">
-        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+        <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
         <h3 class="operator-heading">{{ t('operatorDuties.title') }}</h3>
         <OperatorDuties />
 
         <h3 class="operator-heading">{{ t('operator.contactTitle') }}</h3>
         <label>
           <span>{{ t('operator.contactEmail') }}</span>
-          <InputText v-model="contactEmail" class="operator-contact" type="email" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="contactEmail" class="operator-contact" type="email" autocomplete="off" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.contactHint') }}</small>
         </label>
         <label>
           <span>{{ t('operator.contactLanguages') }}</span>
-          <InputText v-model="contactLanguages" class="operator-languages" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="contactLanguages" class="operator-languages" autocomplete="off" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.contactLanguagesHint') }}</small>
         </label>
         <label>
           <span>{{ t('operator.statementEmail') }}</span>
-          <InputText v-model="statementEmail" type="email" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="statementEmail" type="email" autocomplete="off" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.statementHint') }}</small>
         </label>
         <label>
           <span>{{ t('operator.notificationEmail') }}</span>
-          <InputText v-model="notificationEmail" class="operator-notification" type="email" autocomplete="off" />
+          <VeyqInput v-model="notificationEmail" class="operator-notification" type="email" autocomplete="off" />
           <small class="settings-muted">{{ t('operator.notificationHint') }}</small>
         </label>
-        <Message v-if="confirmation" :severity="confirmation.severity" :closable="false" class="operator-confirmation" :data-state="op.notificationConfirmation">
+        <VeyqMessage v-if="confirmation" :tone="confirmation.severity" class="operator-confirmation" :data-state="op.notificationConfirmation">
           {{ confirmation.text }}
-        </Message>
+        </VeyqMessage>
         <form v-if="op.notificationConfirmation === Confirmation.CodeSent" class="operator-code" @submit.prevent="confirm">
           <label>
             <span>{{ t('operator.code') }}</span>
-            <InputText v-model="code" class="operator-code__input" inputmode="numeric" autocomplete="one-time-code" maxlength="16" />
+            <VeyqInput v-model="code" class="operator-code__input" inputmode="numeric" autocomplete="one-time-code" maxlength="16" />
           </label>
-          <Message v-if="codeError" severity="error" :closable="false">{{ codeError }}</Message>
+          <VeyqMessage v-if="codeError" tone="error">{{ codeError }}</VeyqMessage>
           <div>
-            <Button type="submit" class="operator-code__confirm" :label="t('operator.confirm')" icon="pi pi-check" :loading="confirming" :disabled="!code.trim()" />
+            <VeyqButton type="submit" class="operator-code__confirm" :label="t('operator.confirm')" icon="check" :loading="confirming" :disabled="!code.trim()" />
           </div>
         </form>
 
         <h3 class="operator-heading">{{ t('operator.identificationTitle') }}</h3>
         <label>
           <span>{{ t('operator.providerName') }}</span>
-          <InputText v-model="providerName" class="operator-provider-name" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="providerName" class="operator-provider-name" autocomplete="off" :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.providerAddress') }}</span>
-          <Textarea v-model="providerAddress" class="operator-provider-address" rows="3" auto-resize :placeholder="notStated" />
+          <VeyqTextarea v-model="providerAddress" class="operator-provider-address" rows="3" auto-resize :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.providerEmail') }}</span>
-          <InputText v-model="providerEmail" class="operator-provider-email" type="email" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="providerEmail" class="operator-provider-email" type="email" autocomplete="off" :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.providerRepresentative') }}</span>
-          <InputText v-model="providerRepresentative" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="providerRepresentative" autocomplete="off" :placeholder="notStated" />
         </label>
         <label>
           <span>{{ t('operator.supervisoryAuthority') }}</span>
-          <InputText v-model="supervisoryAuthority" class="operator-supervisory-authority" autocomplete="off" :placeholder="notStated" />
+          <VeyqInput v-model="supervisoryAuthority" class="operator-supervisory-authority" autocomplete="off" :placeholder="notStated" />
         </label>
 
         <h3 class="operator-heading">{{ t('operator.privacyTitle') }}</h3>
@@ -287,46 +288,46 @@ const confirmation = computed(() => {
         <div v-for="(r, i) in recipients" :key="i" class="operator-recipient" data-testid="operator-recipient">
           <label>
             <span>{{ t('operator.recipientName') }}</span>
-            <InputText v-model="r.name" class="operator-recipient__name" autocomplete="off" maxlength="200" />
+            <VeyqInput v-model="r.name" class="operator-recipient__name" autocomplete="off" maxlength="200" />
           </label>
           <label>
             <span :id="`operator-recipient-kind-${i}`">{{ t('operator.recipientPurpose') }}</span>
-            <Select v-model="r.kind" :options="kindOptions" option-label="label" option-value="value"
-                    :aria-labelledby="`operator-recipient-kind-${i}`" :placeholder="t('operator.recipientKindPick')"
-                    class="operator-recipient__kind" />
+            <VeyqSelect v-model="r.kind" :options="kindOptions"
+                        :aria-labelledby="`operator-recipient-kind-${i}`" :placeholder="t('operator.recipientKindPick')"
+                        class="operator-recipient__kind" />
           </label>
           <label>
             <span :id="`operator-recipient-country-${i}`">{{ t('operator.recipientCountry') }}</span>
-            <Select v-model="r.country" :options="countryOptions" option-label="label" option-value="value" filter show-clear
-                    :aria-labelledby="`operator-recipient-country-${i}`" :placeholder="t('operator.recipientCountryPick')"
-                    class="operator-recipient__country" />
+            <VeyqCombobox v-model="r.country" :options="countryOptions" clearable
+                          :aria-labelledby="`operator-recipient-country-${i}`" :placeholder="t('operator.recipientCountryPick')"
+                          class="operator-recipient__country" />
           </label>
-          <Button type="button" severity="secondary" text icon="pi pi-times" class="operator-recipient__remove"
-                  :aria-label="t('operator.recipientRemove')" @click="removeRecipient(i)" />
+          <VeyqButton variant="secondary" appearance="text" icon="times" class="operator-recipient__remove"
+                      :aria-label="t('operator.recipientRemove')" @click="removeRecipient(i)" />
           <label v-if="r.kind === OperatorRecipientKind.Other" class="operator-recipient__other">
             <span>{{ t('operator.recipientDescription') }}</span>
-            <InputText v-model="r.description" class="operator-recipient__description" autocomplete="off" maxlength="120"
+            <VeyqInput v-model="r.description" class="operator-recipient__description" autocomplete="off" maxlength="120"
                        :invalid="!r.description.trim()" />
             <small class="settings-muted">{{ t('operator.recipientDescriptionHint') }}</small>
           </label>
         </div>
-        <Message v-for="s in openSuggestions" :key="s.kind" severity="info" :closable="false" class="operator-suggestion" :data-kind="s.kind">
+        <VeyqMessage v-for="s in openSuggestions" :key="s.kind" tone="info" class="operator-suggestion" :data-kind="s.kind">
           <span>{{ t('operator.suggested', { host: s.host }) }}</span>
-          <Button type="button" size="small" class="operator-suggestion__add" :label="t('operator.suggestionAdd')" icon="pi pi-plus" @click="adoptSuggestion(s)" />
-        </Message>
+          <VeyqButton size="small" class="operator-suggestion__add" :label="t('operator.suggestionAdd')" icon="plus" @click="adoptSuggestion(s)" />
+        </VeyqMessage>
         <div>
-          <Button type="button" severity="secondary" outlined class="operator-add-recipient" :label="t('operator.addRecipient')" icon="pi pi-plus"
-                  :disabled="recipients.length >= 20" @click="addRecipient" />
+          <VeyqButton variant="secondary" appearance="outlined" class="operator-add-recipient" :label="t('operator.addRecipient')" icon="plus"
+                      :disabled="recipients.length >= 20" @click="addRecipient" />
         </div>
         <label>
           <span>{{ t('operator.dataProtectionOfficer') }}</span>
-          <InputText v-model="dataProtectionOfficer" class="operator-dpo" autocomplete="off" maxlength="500" :placeholder="notStated" />
+          <VeyqInput v-model="dataProtectionOfficer" class="operator-dpo" autocomplete="off" maxlength="500" :placeholder="notStated" />
           <small class="settings-muted">{{ t('operator.dataProtectionOfficerHint') }}</small>
         </label>
 
         <div class="operator-actions">
-          <Button type="button" class="operator-save" :label="t('operator.save')" icon="pi pi-check" :loading="saving" @click="save" />
-          <Button type="button" severity="secondary" text class="operator-clear" :label="t('operator.clear')" icon="pi pi-trash" :loading="clearing" @click="clearAll" />
+          <VeyqButton class="operator-save" :label="t('operator.save')" icon="check" :loading="saving" @click="save" />
+          <VeyqButton variant="secondary" appearance="text" class="operator-clear" :label="t('operator.clear')" icon="trash" :loading="clearing" @click="clearAll" />
         </div>
       </template>
     </section>
@@ -356,7 +357,7 @@ const confirmation = computed(() => {
     grid-template-columns: 1fr;
   }
 }
-.operator-suggestion :deep(.p-message-text) {
+.operator-suggestion :deep(.veyq-message__text) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

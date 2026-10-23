@@ -4,10 +4,10 @@
 // Server Owner a tenant member or key-holder — ownership is claimed only when the invite is opened (Slice B).
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { createTenant, tenantError } from './tenants'
 import { buildInviteLink, copyText } from '../../shared/inviteLink'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
@@ -69,63 +69,63 @@ async function copyLink() {
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" :header="t('tenant.create')" modal class="tenant-dialog" :closable="!loading" :close-on-escape="!loading">
+  <VeyqDialog v-model:visible="visible" :header="t('tenant.create')" class="tenant-dialog" :closable="!loading" :close-on-escape="!loading">
     <form v-if="!inviteUrl" class="veyq-form" @submit.prevent="submit">
       <label>
         {{ t('tenant.name') }}
-        <InputText v-model="name" autocomplete="off" required :disabled="loading" />
+        <VeyqInput v-model="name" autocomplete="off" required :disabled="loading" />
       </label>
       <label>
         {{ t('tenant.domain') }}
-        <InputText v-model="domain" autocomplete="off" required :disabled="loading" />
+        <VeyqInput v-model="domain" autocomplete="off" required :disabled="loading" />
         <small class="field-hint">{{ t('tenant.domainHint') }}</small>
       </label>
       <label>
         {{ t('tenant.ownerEmailNew') }}
-        <InputText v-model="ownerEmail" type="email" autocomplete="email" required :disabled="loading" />
+        <VeyqInput v-model="ownerEmail" type="email" autocomplete="email" required :disabled="loading" />
       </label>
-      <Message v-if="storeBlocked" severity="warn" :closable="false" class="tenant-store-blocked">
+      <VeyqMessage v-if="storeBlocked" tone="warn" class="tenant-store-blocked">
         {{ t('tenant.storeNotReady') }}
-        <Button
+        <VeyqButton
           type="button"
-          text
-          icon="pi pi-database"
+          appearance="text"
+          icon="database"
           :label="t('tenant.openStore')"
           @click="emit('openStore')"
         />
-      </Message>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      </VeyqMessage>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button
+        <VeyqButton
           type="button"
           :label="t('common.cancel')"
-          icon="pi pi-times"
-          severity="secondary"
-          outlined
+          icon="times"
+          variant="secondary"
+          appearance="outlined"
           :disabled="loading"
           @click="visible = false"
         />
-        <Button type="submit" :label="t('common.create')" icon="pi pi-plus" :loading="loading" :disabled="!canSubmit" />
+        <VeyqButton type="submit" :label="t('common.create')" icon="plus" :loading="loading" :disabled="!canSubmit" />
       </div>
     </form>
 
     <div v-else class="veyq-form">
-      <Message severity="success" :closable="false">{{ t('tenant.created') }}</Message>
+      <VeyqMessage tone="success">{{ t('tenant.created') }}</VeyqMessage>
       <p class="field-hint">{{ t('members.copyLinkIntro') }}</p>
       <div class="invite-link-row">
-        <InputText :model-value="inviteUrl" readonly class="invite-link-input" @focus="($event.target as HTMLInputElement).select()" />
-        <Button
-          :icon="copied ? 'pi pi-check' : 'pi pi-copy'"
+        <VeyqInput :model-value="inviteUrl" readonly class="invite-link-input" @focus="($event.target as HTMLInputElement).select()" />
+        <VeyqButton
+          :icon="copied ? 'check' : 'copy'"
           :aria-label="t('members.copyLink')"
           :title="copied ? t('members.copied') : t('members.copyLink')"
           @click="copyLink"
         />
       </div>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.done')" icon="pi pi-check" @click="visible = false" />
+        <VeyqButton type="button" :label="t('common.done')" icon="check" @click="visible = false" />
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

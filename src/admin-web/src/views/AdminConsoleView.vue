@@ -15,9 +15,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Message from 'primevue/message'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../shared/ui/VeyqIcon.vue'
 import CreateTenantDialog from '../features/tenants/CreateTenantDialog.vue'
 import TenantDetailPanel from '../features/tenants/TenantDetailPanel.vue'
 import ReleaseVersionPanel from '../features/instance/ReleaseVersionPanel.vue'
@@ -119,11 +120,11 @@ async function signOut() {
         <h1 class="admin-shell__title">{{ t('admin.title') }}</h1>
         <p class="admin-shell__sub">{{ t('admin.sub') }}</p>
       </div>
-      <Button
+      <VeyqButton
         type="button"
-        severity="secondary"
-        text
-        icon="pi pi-sign-out"
+        variant="secondary"
+        appearance="text"
+        icon="sign-out"
         :label="t('admin.signOut')"
         @click="signOut"
       />
@@ -131,25 +132,25 @@ async function signOut() {
 
     <p v-if="loading" class="admin-shell__note">{{ t('admin.loading') }}</p>
 
-    <!-- The refusal surface. `severity="error"` and the server's own reason, so the page never reads as a
+    <!-- The refusal surface. `tone="error"` and the server's own reason, so the page never reads as a
          glitch — a 403 is an answer, not a failure. -->
-    <Card v-else-if="serverRole.verdict === 'forbidden'" class="login-card">
+    <VeyqCard v-else-if="serverRole.verdict === 'forbidden'" class="login-card">
       <template #title>{{ t('admin.forbidden') }}</template>
-      <template #content>
+      <template #default>
         <p class="veyq-form-copy">{{ t('admin.forbiddenSub') }}</p>
-        <Button
+        <VeyqButton
           type="button"
-          severity="secondary"
-          icon="pi pi-sign-out"
+          variant="secondary"
+          icon="sign-out"
           :label="t('admin.signOut')"
           @click="signOut"
         />
       </template>
-    </Card>
+    </VeyqCard>
 
-    <Message v-else-if="serverRole.verdict === 'unreachable'" severity="error" :closable="false">
+    <VeyqMessage v-else-if="serverRole.verdict === 'unreachable'" tone="error">
       {{ t('admin.unreachable') }}
-    </Message>
+    </VeyqMessage>
 
     <div v-else-if="isOwner" class="admin-shell__body">
       <nav class="admin-shell__nav">
@@ -162,7 +163,7 @@ async function signOut() {
               :class="{ 'is-active': selected === tn.tenantId && !serverPanel }"
               @click="selected = tn.tenantId; serverPanel = null"
             >
-              <span class="pi pi-server" aria-hidden="true" />
+              <VeyqIcon name="server" />
               <span class="admin-shell__tenant">
                 <span>
                   {{ tn.name }}
@@ -175,10 +176,10 @@ async function signOut() {
             </button>
           </li>
         </ul>
-        <Button
+        <VeyqButton
           type="button"
-          text
-          icon="pi pi-plus"
+          appearance="text"
+          icon="plus"
           :label="t('tenant.create')"
           @click="createOpen = true"
         />
@@ -186,47 +187,47 @@ async function signOut() {
         <ul>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'release' }" @click="serverPanel = 'release'">
-              <span class="pi pi-tag" aria-hidden="true" /> {{ t('release.navTitle') }}
+              <VeyqIcon name="tag" /> {{ t('release.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'store' }" @click="serverPanel = 'store'">
-              <span class="pi pi-database" aria-hidden="true" /> {{ t('store.navTitle') }}
+              <VeyqIcon name="database" /> {{ t('store.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'configSecret' }" @click="serverPanel = 'configSecret'">
-              <span class="pi pi-key" aria-hidden="true" /> {{ t('configSecret.navTitle') }}
+              <VeyqIcon name="key" /> {{ t('configSecret.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'capabilities' }" @click="serverPanel = 'capabilities'">
-              <span class="pi pi-sliders-h" aria-hidden="true" /> {{ t('capabilities.navTitle') }}
+              <VeyqIcon name="sliders-h" /> {{ t('capabilities.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'services' }" @click="serverPanel = 'services'">
-              <span class="pi pi-globe" aria-hidden="true" /> {{ t('services.navTitle') }}
+              <VeyqIcon name="globe" /> {{ t('services.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'mail' }" @click="serverPanel = 'mail'">
-              <span class="pi pi-envelope" aria-hidden="true" /> {{ t('instanceMail.navTitle') }}
+              <VeyqIcon name="envelope" /> {{ t('instanceMail.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'moderation' }" @click="serverPanel = 'moderation'">
-              <span class="pi pi-shield" aria-hidden="true" /> {{ t('moderation.navTitle') }}
+              <VeyqIcon name="shield" /> {{ t('moderation.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'accounts' }" @click="serverPanel = 'accounts'">
-              <span class="pi pi-users" aria-hidden="true" /> {{ t('accounts.navTitle') }}
+              <VeyqIcon name="users" /> {{ t('accounts.navTitle') }}
             </button>
           </li>
           <li>
             <button type="button" :class="{ 'is-active': serverPanel === 'operator' }" @click="serverPanel = 'operator'">
-              <span class="pi pi-id-card" aria-hidden="true" /> {{ t('operator.navTitle') }}
+              <VeyqIcon name="id-card" /> {{ t('operator.navTitle') }}
             </button>
           </li>
         </ul>
