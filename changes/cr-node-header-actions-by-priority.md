@@ -142,3 +142,20 @@ that point at a header button (EN and DE together: "… or in the ⋯ menu"), an
 **Done when:** every `scripts/validate_*.py` except `validate_guard_gaps.py` green; `npm run build` in `site/` green; the
 e2e specs are updated but **run in the heavy stage at the end of V1** (owner 2026-10-19), which the inbox row names as
 the proof still owed.
+
+## Retrospective
+
+- **Planning: the breakpoint was never computed on both sides.** Decision 6 put the actions at the title row's end from
+  541 px beside a 12rem minimum title, and every number to see the result was in the CR (180 px cover, 41 px buttons);
+  the browser pass found 9 buttons at 540 px and 1 at 541 px. Root cause: the refine reasoned about the two layouts, not
+  about their output at the switch. Moved: `changes/README.md` § *A layout that switches at a breakpoint is computed on
+  both sides of it at refine*; the decision itself is #531, the owner's.
+- **Execution: a measuring component met test suites that stub `getBoundingClientRect` globally** (a gallery's geometry,
+  960 px for every element) — 32 red tests on the first run, because "unmeasured" read as "measured, one button". Fixed
+  by measuring layout widths (`clientWidth`/`offsetWidth`, 0 without a layout); the trap is a comment at `measure()` in
+  `NodeHeader.vue`. The CR's note to open the ⋯ "with `pointerdown`" was wrong for `VeyqMenu` (its opener toggles on
+  click); the helpers in `src/test/nodeHeader.ts` now carry the right event.
+- **Process: the browser pass started in a hidden pane** although both the CR and the machine notes say RO never fires
+  there; the first width sweep read stale counts until a probe showed rAF stalled. The owner was asked twice (once
+  with the 541 px question). Next time: `tabs_context` and an rAF probe before the first measurement of an RO pass
+  (machine note updated), and every owner question of a pass asked in one go.
