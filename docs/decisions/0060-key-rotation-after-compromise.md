@@ -161,6 +161,13 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
 - **The tenant re-key is `O(N)` and lands on a compromise, which is when it is worth paying**
   ([ADR 0025](0025-forward-secrecy-policy-per-scope.md) already reasoned this through and chose async delivery
   for it).
+- **Every rotated scope re-keys its nodes**, so the old identity reads nothing added afterwards, inside an existing
+  folder or Memory included ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)): `O(nodes + media)`
+  symmetric re-seals on the device that commits each scope's epoch — the rotator's own for the personal scope, the
+  completing owner's elsewhere — and nothing re-encrypted in the store. A space reads *secured* only once its re-key
+  is done. What stays in the old identity's reach is what existed at the rotation and every link it could rebuild,
+  until re-issued; the result screen says both. Until `changes/cr-scope-rotation-rekeys-nodes.md` lands, no node is
+  re-keyed (inbox #518).
 - **A pending group invitation does not survive the rotation.** The invitee's `sealed_name_key` is wrapped to
   the old identity and has no re-mint path; the proposal must be withdrawn and re-issued.
 - **Operator-blindness is unchanged.** The server learns that an account published a new identity public key

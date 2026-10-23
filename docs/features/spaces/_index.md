@@ -64,6 +64,10 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   (an owner's worker completes a rotation a tenant removal or an account rotation had to queue; owners only, an
   event joins only an unclaimed job, `done` only on the holder's own commit; owners see `stalled` / `failed` on the
   space and re-queue a failed one)
+- [Re-key a space's nodes after a rotation](use-cases/uc.spaces.rekey-after-rotation.md) — **planned**
+  (every rotation replaces every node key below `K_SC` and re-seals what sits under it, nothing re-encrypted in the
+  store; writes wait per node; links follow the new key and stay marked for re-issue;
+  [ADR 0109](../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md), inbox #518)
 - Create / share with a group — **built (G1–G3)**, each step its own use-case below ([ADR 0014](../../decisions/0014-group-scopes-and-governance.md)):
   **G1** create + open + browse (`en.spaces.group-scope`, cr-0032); **G2** member-add — per-tenant username
   search ([en.spaces.member-identity](enablers/en.spaces.member-identity.md)) + the
