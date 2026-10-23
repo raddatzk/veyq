@@ -82,6 +82,7 @@ class MediaNodeRekeySliceTest {
             assertEquals(NEW_META_B to 1L, b.wrappedMeta to b.metaRevision, "the trashed medium is re-sealed too")
             for (blob in w.liveBlobs + w.trashedBlob) assertEquals(newWrap(blob), BlobEntity.findById(blob)!!.wrappedBlobKey, blob)
             assertEquals(NEW_SUB, BucketEntity.findById(w.sub)!!.sealedName)
+            // not staged: the commit copied the contributor's name again, as core's part of the same commit re-sealed it
             assertEquals(NEW_RW_NAME, BucketEntity.findById(w.rwPrimary)!!.sealedName)
             // the WRITE_ONLY guest's rows: under its K_up, kept as they are
             assertEquals(OLD_WRAP, BlobEntity.findById(w.guestBlob)!!.wrappedBlobKey)
@@ -229,7 +230,7 @@ class MediaNodeRekeySliceTest {
             """{"fromEpoch":0,"media":[
                  {"mediaId":"${w.live}","metaRevision":$liveRevision,"wrappedMeta":"$NEW_META_A","wrappedExif":"$NEW_EXIF_A","blobs":${wraps(w.liveBlobs)}},
                  {"mediaId":"${w.trashed}","metaRevision":0,"wrappedMeta":"$NEW_META_B","blobs":${wraps(listOf(w.trashedBlob))}}],
-               "buckets":[{"bucketId":"${w.sub}","sealedName":"$NEW_SUB"},{"bucketId":"${w.rwPrimary}","sealedName":"$NEW_RW_NAME"}]}"""
+               "buckets":[{"bucketId":"${w.sub}","sealedName":"$NEW_SUB"}]}"""
         }
         post(w, "/nodes/${w.memory}/media-rekey/$rekeyId", body).statusCode(204)
     }

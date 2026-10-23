@@ -23,7 +23,7 @@ import { ensurePersonalScope, openScope } from '../spaces/scopes'
 import { ScopeKind } from '../../api/generated/scopes'
 import { ShareRole } from '../../api/generated/sharing'
 import { createFolder, listTree, nodeContentKey } from '../../core/node/tree'
-import { unsealNodeMeta } from '../../core/node/nodeMeta'
+import { unsealNodeMeta, type NodeMetaState } from '../../core/node/nodeMeta'
 import { uploadCoverBlob, writeNodeCover } from '../../core/node/cover/coverWrite'
 import { uploadedCover } from '../../core/node/cover/coverModel'
 import { CHUNK_SIZE } from '../../core/blob/transport'
@@ -39,6 +39,7 @@ import { FILE_KIND } from '../depot/kinds'
 import { fileUploadJob } from '../depot/uploadFile'
 import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from '../depot/dropBox'
 import { guestFileUploadJob } from '../depot/shareUpload'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 // Distinctive plaintext for the wire sweep (ADR 0053): spaces and umlauts, so no name is a run of base64 letters that
 // random ciphertext could contain (inbox #323).
@@ -64,7 +65,7 @@ const ctx = () => ({ onProgress: () => {}, signal: new AbortController().signal 
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Depot's
   // `register.ts` registers it, so the guest's slug is the one the page computes.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
 })
 
 describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
@@ -79,20 +80,21 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
 
     // --- Memories: a Memory with media, a chapter with media, then its date, place and cover ------------------------
     const memory = await createMemory(scopeId, epochs, MEMORY_NAME)
+    const birthEpoch = epochs.current // a node is born at its scope's current epoch (ADR 0024); nothing re-keys it here
     const memoryMedia: SealedMedia[] = []
     for (const salt of [1, 2]) {
       const data = bytesOf(200 * 1024 + salt, salt)
       // No MIME => the original-only path: what an upgrade must keep is the sealed bytes and their row.
-      const { mediaId } = await addMedia(scopeId, memory.nodeId, memory.memoryKey, { blob: new Blob([data as BlobPart]), mediaType: '' })
+      const { mediaId } = await addMedia(scopeId, memory.nodeId, memory.memoryKey, { blob: new Blob([data as BlobPart]), mediaType: '' }, undefined, { nodeEpoch: birthEpoch })
       memoryMedia.push({ mediaId, ...(await sealedBytes(data)) })
     }
-    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId)
+    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, birthEpoch)
     const chapterData = bytesOf(150 * 1024, 3)
-    const { mediaId: chapterMediaId } = await addMedia(scopeId, chapter.nodeId, chapter.chapterKey, { blob: new Blob([chapterData as BlobPart]), mediaType: '' })
+    const { mediaId: chapterMediaId } = await addMedia(scopeId, chapter.nodeId, chapter.chapterKey, { blob: new Blob([chapterData as BlobPart]), mediaType: '' }, undefined, { nodeEpoch: birthEpoch })
     const chapterMedia: SealedMedia[] = [{ mediaId: chapterMediaId, ...(await sealedBytes(chapterData)) }]
 
-    let meta = await setMemoryDate(scopeId, memory.nodeId, memory.memoryKey, DATE, { wrappedMeta: null, metaRevision: 0 })
-    meta = await setMemoryLocation(scopeId, memory.nodeId, memory.memoryKey, { name: PLACE, nameSource: 'manual', derivedMode: 'fixed' }, meta)
+    let meta: NodeMetaState = { ...(await setMemoryDate(scopeId, memory.nodeId, memory.memoryKey, DATE, { wrappedMeta: null, metaRevision: 0, nodeEpoch: birthEpoch })), nodeEpoch: birthEpoch }
+    meta = { ...(await setMemoryLocation(scopeId, memory.nodeId, memory.memoryKey, { name: PLACE, nameSource: 'manual', derivedMode: 'fixed' }, meta)), nodeEpoch: birthEpoch }
     // The cover: an uploaded image (a cover is set only by an upload), sealed as it is - no decode in this suite.
     const coverUp = await uploadCoverBlob(scopeId, memory.nodeId, memory.memoryKey, new Blob([bytesOf(4 * 1024, 7) as BlobPart]), { type: 'image/jpeg' })
     await writeNodeCover({ scopeId, nodeId: memory.nodeId, nodeKey: memory.memoryKey, current: meta, cover: uploadedCover(coverUp.plan, CROP), uploadId: coverUp.uploadId })
@@ -102,14 +104,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
     const memberFiles: SealedFile[] = []
     for (const [name, data] of [[FILE_A, bytesOf(CHUNK_SIZE + 1234, 4)], [FILE_B, bytesOf(4321, 5)]] as const) {
-      const { nodeId } = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey } }, fileOf(data, name)).run(ctx())
+      const { nodeId } = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: birthEpoch } }, fileOf(data, name)).run(ctx())
       memberFiles.push({ nodeId, name, type: MIME, modifiedAt: MODIFIED_AT, ...(await sealedBytes(data)) })
     }
 
     // --- Depot: a drop box in that folder, and a guest's file in the guest's own folder -----------------------------
-    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey }, BOX_NAME)
+    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey, epoch: birthEpoch }, BOX_NAME)
     const boxKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), boxId)!
-    const link = await mintDropBoxLink(scopeId, boxId, boxKey, epochs, BOX_NAME)
+    const link = await mintDropBoxLink(scopeId, boxId, { key: boxKey, epoch: birthEpoch }, epochs, BOX_NAME)
     const head = await resolvePublicShare(link.shareId, b64url(link.kShare))
     const guest = await nameDropGuest(head, { name: GUEST })
     const guestFolder = await ensureDropFolder(head, guest, GUEST)
@@ -120,7 +122,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
     const guestFiles: SealedFile[] = [{ nodeId: guestFileId, name: GUEST_FILE, type: MIME, modifiedAt: MODIFIED_AT, ...(await sealedBytes(guestData)) }]
 
     // --- a READ link on the Memory, recorded as its guest sees it now ------------------------------------------------
-    const minted = await createShare(scopeId, memory.nodeId, memory.memoryKey, epochs, MEMORY_NAME, ShareRole.Read)
+    const minted = await createShare(scopeId, memory.nodeId, { key: memory.memoryKey, epoch: birthEpoch }, epochs, MEMORY_NAME, ShareRole.Read)
     const fragmentKey = b64url(minted.kShare)
     const resolved = await resolveShare(minted.shareId, fragmentKey)
     expect(resolved.memoryName, 'the guest reads the Memory title before the upgrade').toBe(MEMORY_NAME)

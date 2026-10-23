@@ -12,6 +12,7 @@ import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { registry } from '../applications/registry'
 import { fileNameSlug } from '../../shared/naming'
 import { treeNode } from '../../test/models'
+import { nothingOfItsOwnToRekey } from './rekey/hooks'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const A = '5c09e000-0000-4000-8000-0000000000a0'
@@ -53,8 +54,8 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
     const { url, method, json } = bodies[0]
     expect(method).toBe('PATCH')
     expect(url).toContain(`/api/scopes/${SCOPE_ID}/nodes/${M}`)
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: A, epoch: 0, placementRevision: 3 })
+    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentEpoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ parentId: A, epoch: 0, parentEpoch: 0, placementRevision: 3 })
     const wrap = fromB64std(json.wrappedContentKey as string)
     expect(Array.from(v1.open({ purpose: 'content-key', ...at(4) }, keyA, wrap))).toEqual(Array.from(keyM))
     expect(() => v1.open({ purpose: 'content-key', ...at(3) }, keyA, wrap)).toThrow(v1.OpenRefused)
@@ -70,7 +71,7 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
     await moveNode(SCOPE_ID, epochsOf(scopeKey), tree(), M, B)
 
     const { json } = bodies[0]
-    expect(json).toMatchObject({ parentId: B, placementRevision: 3 })
+    expect(json).toMatchObject({ parentId: B, parentEpoch: 0, placementRevision: 3 })
     const wrap = fromB64std(json.wrappedContentKey as string)
     expect(Array.from(v1.open({ purpose: 'content-key', ...at(4) }, keyB, wrap))).toEqual(Array.from(keyM))
     for (const [key, revision] of [[keyA, 4], [keyB, 3], [scopeKey, 4]] as const) {
@@ -82,7 +83,8 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
 // ADR 0080 Decision 8: a restore's slug token — and, on the taken-name retry, its re-sealed name — is derived under the
 // LIVE parent's key, opened from the tree as it is now. Here the parent A was moved under B while M sat in the trash, so
 // A's own key is reached through B; neither B's key nor K_SC (the node's epoch key) may stand in for it. A restore is
-// not a placement: the name binds the revision M already has (3), and its key wrap is not sent at all.
+// not a placement: the name binds the revision M already has (3), and its key wrap is not sent at all. It states the
+// live parent's epoch (`parentEpoch`, ADR 0109 point 6).
 describe('a restore on the wire (ADR 0080 Decision 8)', () => {
   const sealAt = (kek: Uint8Array, id: string, k: Uint8Array, revision: number) =>
     b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: revision }, kek, k))
@@ -102,7 +104,8 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     const { url, method, json } = bodies[0]
     expect(method).toBe('POST')
     expect(url).toContain(`/api/scopes/${SCOPE_ID}/nodes/${M}/restore`)
-    expect(Object.keys(json)).toEqual(['slugToken'])
+    expect(Object.keys(json).sort()).toEqual(['parentEpoch', 'slugToken'])
+    expect(json.parentEpoch, 'the live parent\'s epoch').toBe(0)
     expect(json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'italien')))
     for (const stale of [keyB, scopeKey]) expect(json.slugToken).not.toBe(b64std(v1.slugToken(stale, A, 'italien')))
   })
@@ -113,7 +116,7 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), liveTree(), trashed, 'Neapel')
 
     const { json } = bodies[0]
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'slugToken'])
+    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'parentEpoch', 'slugToken'])
     expect(json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'neapel')))
     const name = fromB64std(json.encryptedName as string)
     expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...at(3) }, keyA, name))).toBe('Neapel')
@@ -129,7 +132,7 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
 // caller that passes the wrong kind (or none) is told apart from one that passes the right one.
 describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
   const LEAF = 'LEAFTEST'
-  registry.registerKind({ kind: LEAF, icon: 'file', shareable: false, slug: fileNameSlug })
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', shareable: false, slug: fileNameSlug })
   const NAME = 'Day1.MD'
   const leafToken = (key: Uint8Array, slot: string) => b64std(v1.slugToken(key, slot, 'day1.md'))
   const folderToken = (key: Uint8Array, slot: string) => b64std(v1.slugToken(key, slot, 'day1-md'))
@@ -146,8 +149,8 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
 
   it('a create folds with the created kind; a folder of the same name keeps slugify', async () => {
     const bodies = recordCreate()
-    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA }, LEAF, NAME)
-    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA }, 'FOLDER', NAME)
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0 }, LEAF, NAME)
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0 }, 'FOLDER', NAME)
     expect(bodies[0].slugToken).toBe(leafToken(keyA, A))
     expect(bodies[1].slugToken).toBe(folderToken(keyA, A))
     expect(bodies[0].slugToken).not.toBe(bodies[1].slugToken)
@@ -187,7 +190,7 @@ describe('a create sends its name as a field envelope (ADR 0093 § 9)', () => {
       return new Response(JSON.stringify({ nodeId: json.nodeId }), { status: 201, headers: { 'Content-Type': 'application/json' } })
     }))
 
-    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA }, 'FOLDER', 'Neapel')
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0 }, 'FOLDER', 'Neapel')
 
     const name = fromB64std(bodies[0].encryptedName as string)
     const node = { scopeId: SCOPE_ID, nodeId: bodies[0].nodeId as string, epoch: 0, placementRevision: 0 }

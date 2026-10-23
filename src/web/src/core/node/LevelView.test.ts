@@ -41,6 +41,7 @@ import { ZipWriter } from '../export/zip'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../test/nodeHeader'
+import { nothingOfItsOwnToRekey } from './rekey/hooks'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null, over: Partial<TreeNode> = {}): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
@@ -94,8 +95,8 @@ const reg = (): Registry => holder.reg!
 function twoKinds() {
   const a = stubRows('a')
   const b = stubRows('b')
-  reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory } })
-  reg().registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory } })
+  reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory } })
+  reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory } })
   return { a, b }
 }
 
@@ -136,8 +137,8 @@ describe('LevelView: the one list', () => {
 
   it('calls a row factory ONCE per level view, shared by two kinds, handed the nodes of both (kinds in registration order)', async () => {
     const shared = stubRows('s')
-    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: shared.factory } })
-    reg().registerKind({ kind: 'ALPHA_PART', icon: 'images', shareable: false, list: { rows: shared.factory } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: shared.factory } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA_PART', icon: 'images', shareable: false, list: { rows: shared.factory } })
     const w = mountLevel([node('p1', 'ALPHA_PART'), node('a1', 'ALPHA'), node('a2', 'ALPHA')])
     expect(shared.calls()).toBe(1)
     expect(shared.ctx().value.nodes.map((n) => n.name)).toEqual(['a1', 'a2', 'p1'])
@@ -191,7 +192,7 @@ describe('LevelView: the one list', () => {
 
   it('a row the factory has none for is the explicit unsupported row, never dropped', () => {
     const nothing = { row: () => null }
-    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: () => nothing } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: () => nothing } })
     const w = mountLevel([node('a1', 'ALPHA')])
     const row = rowOf(w, 'a1')
     expect(row.classes()).toContain('is-unsupported')
@@ -203,7 +204,7 @@ describe('LevelView: the one list', () => {
 describe('LevelView: a kind no application serves (the unsupported row)', () => {
   it('lists a registered kind without a list: its icon, its name and the unsupported state, not clickable', () => {
     twoKinds()
-    reg().registerKind({ kind: 'LEAF', icon: 'file-check', shareable: false })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file-check', shareable: false })
     const w = mountLevel([node('a1', 'ALPHA'), node('l1', 'LEAF'), node('l2', 'LEAF')])
     expect(titlesOf(w)).toEqual(['a1', 'l1', 'l2'])
     for (const name of ['l1', 'l2']) {
@@ -395,7 +396,7 @@ describe('LevelView: the view switch', () => {
 
   it('adds a kind\'s own view, each mode once in the order first named; choosing it replaces the list by that presentation', async () => {
     const a = stubRows('a', { presentationFor: 'map' })
-    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, MAP] } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, MAP] } })
     const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS })
     expect(switchLabels(w)).toEqual([t('node.viewGrid'), t('node.folders'), t('node.viewList')])
     await w.findAll('.view-mode-button')[1].trigger('click')
@@ -427,8 +428,8 @@ describe('LevelView: the mode it shows', () => {
     // ALPHA offers the map (its empty tab is left out in an identity folder); BETA has the rows only, as Depot's.
     a = stubRows('a', { presentationFor: 'map' })
     b = stubRows('b')
-    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
-    reg().registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory } })
     setViewMode('map')
   })
   const anna = node('Anna', FOLDER_KIND, 'Trips')
@@ -486,7 +487,7 @@ describe('LevelView: the empty level', () => {
     ctx.access.mode === 'member' ? !ctx.access.readonly : ctx.access.role !== ShareRole.Read
   beforeEach(() => {
     const a = stubRows('a')
-    reg().registerKind({
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: 'ALPHA', icon: 'images', shareable: false, createDialog: Dialog, list: { rows: a.factory, tabLabel: 'memory.memories', emptyText: () => 'memory.memoryEmpty' },
       createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed: allowAll },
     })
@@ -536,7 +537,7 @@ describe('LevelView: the "New" menu', () => {
         },
       },
     })
-    reg().registerKind({
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey,
       kind: 'ALPHA', icon: 'images', shareable: false, createDialog: Dialog, list: { rows: rows.factory },
       createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed },
       levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'upload', order: 30, allowed, acceptsDrop: true }],
@@ -614,7 +615,7 @@ describe('LevelView: the "New" menu', () => {
     it('are ignored when an entry did not declare that it takes files (no `acceptsDrop`)', async () => {
       holder.reg = createRegistry()
       const rows = stubRows('a', { action: { id: 'x.upload', handler: { enabled: () => true, run: () => {}, drop: (f) => dropped.push(f.map((x) => x.name)) } } })
-      holder.reg.registerKind({
+      holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
         kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: rows.factory },
         levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'upload', order: 30, allowed: () => true }],
       })

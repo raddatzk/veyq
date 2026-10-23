@@ -93,18 +93,23 @@ export async function listBuckets(scopeId: string, nodeId: string): Promise<Buck
   return res.buckets.map((b) => toBucket(b, nodeId, res.sealedDropPrivateKey))
 }
 
-/** Create a sub-bucket under a primary root — the client seals the folder name under K_node. `parentBucketId` nests
- *  it under that root (a contributor's, to curate contributions — cr-0123); omitted ⇒ the caller's own primary. */
-export async function createBucket(scopeId: string, nodeId: string, memoryKey: Uint8Array, name: string, parentBucketId?: string): Promise<BucketItem> {
+/** Create a sub-bucket under a primary root — the client seals the folder name under K_node, stating the node's epoch as
+ *  read with it (`nodeEpoch`, ADR 0109 point 6). `parentBucketId` nests it under that root (a contributor's, to curate
+ *  contributions — cr-0123); omitted ⇒ the caller's own primary. */
+export async function createBucket(
+  scopeId: string, nodeId: string, memoryKey: Uint8Array, nodeEpoch: number, name: string, parentBucketId?: string,
+): Promise<BucketItem> {
   const bucketId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
   const sealedName = b64std(v1.sealField(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
-  return toBucket(await withRefresh(() => bucketsApi().createBucket({ scopeId, nodeId, createBucketRequest: { bucketId, sealedName, parentBucketId } })), nodeId, null)
+  return toBucket(await withRefresh(() => bucketsApi().createBucket({ scopeId, nodeId, createBucketRequest: { nodeEpoch, bucketId, sealedName, parentBucketId } })), nodeId, null)
 }
 
 /** Rename one of the caller's own sub-buckets — re-seal the name under K_node (a later slice's UI). */
-export async function renameBucket(scopeId: string, nodeId: string, memoryKey: Uint8Array, bucketId: string, name: string): Promise<BucketItem> {
+export async function renameBucket(
+  scopeId: string, nodeId: string, memoryKey: Uint8Array, nodeEpoch: number, bucketId: string, name: string,
+): Promise<BucketItem> {
   const sealedName = b64std(v1.sealField(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
-  return toBucket(await withRefresh(() => bucketsApi().renameBucket({ scopeId, nodeId, bucketId, renameBucketRequest: { sealedName } })), nodeId, null)
+  return toBucket(await withRefresh(() => bucketsApi().renameBucket({ scopeId, nodeId, bucketId, renameBucketRequest: { nodeEpoch, sealedName } })), nodeId, null)
 }
 
 /** Delete one of the caller's own sub-buckets — its media reparent to the primary (a later slice's UI). */

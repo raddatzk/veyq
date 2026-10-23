@@ -24,13 +24,14 @@ describe('createChapter on the wire (ADR 0080 Decision 2)', () => {
     const scopeKey = v1.randomBytes(32)
     const memoryKey = v1.randomBytes(32) // the parent Memory's K_node
 
-    const { nodeId } = await createChapter(SCOPE_ID, epochsOf(scopeKey), memoryKey, 'Tag 1', MEMORY_ID)
+    const { nodeId } = await createChapter(SCOPE_ID, epochsOf(scopeKey), memoryKey, 'Tag 1', MEMORY_ID, 0)
 
     expect(bodies).toHaveLength(1)
     const { url, method, json } = bodies[0]
     expect(method).toBe('POST')
     expect(url).toContain(`/api/scopes/${SCOPE_ID}/nodes`)
     expect(json.parentId).toBe(MEMORY_ID)
+    expect(json.parentEpoch).toBe(0) // the parent Memory's epoch as read (ADR 0109 point 6)
     const name = fromB64std(json.encryptedName as string)
     const ctx = { purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 } as const
     expect(new TextDecoder().decode(v1.openField(ctx, memoryKey, name))).toBe('Tag 1')

@@ -64,7 +64,7 @@ afterEach(() => {
 
 describe('FolderNameDialog names the sibling a name collides with (inbox #389)', () => {
   it('a folder create onto a sibling folder\'s slug sends nothing and names it', async () => {
-    const w = mountDialog({ mode: 'create', parentId: 'p', parentKey: new Uint8Array(32) })
+    const w = mountDialog({ mode: 'create', parentId: 'p', parentKey: new Uint8Array(32), parentEpoch: 0 })
     await typeAndClickSubmit(w, '  trips ')
 
     expect(createFolder).not.toHaveBeenCalled()
@@ -84,7 +84,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     const w = mountDialog({ mode: 'create', parentId: null })
     await typeAndClickSubmit(w, 'Trips')
 
-    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', null)
+    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', null, {})
     expect(w.emitted('done')).toBeTruthy()
   })
 
@@ -107,7 +107,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
 
   it('a collision the loaded tree cannot see still ends on the server\'s 409, unnamed', async () => {
     vi.mocked(createFolder).mockRejectedValueOnce(httpError(409))
-    const w = mountDialog({ mode: 'create', parentId: 'p', parentKey: new Uint8Array(32) })
+    const w = mountDialog({ mode: 'create', parentId: 'p', parentKey: new Uint8Array(32), parentEpoch: 0 })
     await typeAndClickSubmit(w, 'Elsewhere')
 
     expect(createFolder).toHaveBeenCalledOnce()

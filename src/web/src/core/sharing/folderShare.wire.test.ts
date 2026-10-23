@@ -23,17 +23,18 @@ afterEach(() => vi.unstubAllGlobals())
 
 const k0 = v1.randomBytes(32)
 const k1 = v1.randomBytes(32)
-// A rotated scope: the top folder was made at epoch 0, the copy must still seal under the WRITE key (epoch 1).
+// A rotated scope whose nodes are re-keyed to epoch 1 (a node below the current epoch is behind the device floor and
+// mints nothing, ADR 0109 point 6): the copy seals under the WRITE key (epoch 1), never the old epoch's key.
 const EPOCHS: EpochKeys = { current: 1, keys: new Map([[0, k0], [1, k1]]) }
 const keyTop = v1.randomBytes(32)
 const keySub = v1.randomBytes(32)
 const wrapUnder = (kek: Uint8Array, id: string, k: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }, kek, k))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 1, placementRevision: 0 }, kek, k))
 const folder = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
-  id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 0, name, wrappedContentKey: wrapUnder(kek, id, k),
+  id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 1, name, wrappedContentKey: wrapUnder(kek, id, k),
   wrappedMeta: null, metaRevision: 0, placementRevision: 0,
 })
-const TREE: TreeNode[] = [folder(TOP, null, k0, keyTop, 'Reisen'), folder(SUB, TOP, keyTop, keySub, 'Archiv 2026')]
+const TREE: TreeNode[] = [folder(TOP, null, k1, keyTop, 'Reisen'), folder(SUB, TOP, keyTop, keySub, 'Archiv 2026')]
 
 function recordFetch() {
   const bodies: { url: string; method: string; json: Record<string, unknown> }[] = []
@@ -48,17 +49,17 @@ function recordFetch() {
 describe('a folder share on the wire', () => {
   it.each([ShareRole.Read, ShareRole.ReadWrite])('a %s link of a nested folder wraps the folder\'s own key and seals its name under K_share', async (role) => {
     const bodies = recordFetch()
-    // What the shell hands the dialog: the folder's key through the chain (K_SC(0) → top → sub).
+    // What the shell hands the dialog: the folder's key through the chain (K_SC(1) → top → sub), with its epoch.
     const folderKey = nodeContentKey(SCOPE_ID, EPOCHS, TREE, SUB)!
     expect(Array.from(folderKey)).toEqual(Array.from(keySub))
 
-    const minted = await mintShare(SCOPE_ID, SUB, folderKey, EPOCHS, 'Archiv 2026', role)
+    const minted = await mintShare(SCOPE_ID, SUB, { key: folderKey, epoch: TREE[1].epoch }, EPOCHS, 'Archiv 2026', role)
 
     expect(bodies).toHaveLength(1)
     const { url, method, json } = bodies[0]
     expect(method).toBe('POST')
     expect(url).toContain('/api/shares')
-    expect(json).toMatchObject({ shareId: minted.shareId, nodeId: SUB, role, sealedShareKeyEpoch: 1 })
+    expect(json).toMatchObject({ shareId: minted.shareId, nodeId: SUB, role, nodeEpoch: 1, sealedShareKeyEpoch: 1 })
     expect(typeof json.sealedShareKey).toBe('string')
 
     // The wrap opens under K_share to the folder's key — not the scope key of either epoch, not the parent's.

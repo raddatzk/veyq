@@ -118,7 +118,7 @@ function childNamed(tree: TreeNode[], parentId: string | null, kind: string, nam
   return tree.find((n) => n.parentId === parentId && n.kind === kind && n.name === name)
 }
 
-async function ensureMemoryAndChapter(scope: OpenedScope, memoryName: string, chapterName: string): Promise<{ chapterId: string; chapterKey: Uint8Array; hash: string }> {
+async function ensureMemoryAndChapter(scope: OpenedScope, memoryName: string, chapterName: string): Promise<{ chapterId: string; chapterKey: Uint8Array; chapterEpoch: number; hash: string }> {
   let tree = await listTree(scope.scopeId, scope.epochs)
   let memory = childNamed(tree, null, MEMORY_KIND, memoryName)
   if (!memory) {
@@ -129,13 +129,14 @@ async function ensureMemoryAndChapter(scope: OpenedScope, memoryName: string, ch
   let chapter = childNamed(tree, memory.id, CHAPTER_KIND, chapterName)
   if (!chapter) {
     const memoryKey = nodeContentKey(scope.scopeId, scope.epochs, tree, memory.id)!
-    await createChapter(scope.scopeId, scope.epochs, memoryKey, chapterName, memory.id)
+    await createChapter(scope.scopeId, scope.epochs, memoryKey, chapterName, memory.id, memory.epoch)
     tree = await listTree(scope.scopeId, scope.epochs)
     chapter = childNamed(tree, memory.id, CHAPTER_KIND, chapterName)!
   }
   return {
     chapterId: chapter.id,
     chapterKey: nodeContentKey(scope.scopeId, scope.epochs, tree, chapter.id)!,
+    chapterEpoch: chapter.epoch, // what a write under the chapter's key states (ADR 0109 point 6)
     hash: hashForNode(tree, chapter.id, TENANT_SCOPE),
   }
 }
@@ -206,7 +207,7 @@ async function photos(target: number, bare: boolean, width: number): Promise<voi
   await signIn(a.owner)
   const scope = await tenantScope()
   const chapterName = bare ? 'No derivatives' : 'All photos'
-  const { chapterId, chapterKey, hash } = await ensureMemoryAndChapter(scope, 'Volume photos', chapterName)
+  const { chapterId, chapterKey, chapterEpoch, hash } = await ensureMemoryAndChapter(scope, 'Volume photos', chapterName)
   remember({ [bare ? 'bare' : 'photos']: { scopeId: scope.scopeId, nodeId: chapterId, hash, name: chapterName } })
   const have = (await listMedia(scope.scopeId, chapterId)).length
   const gap = target - have
@@ -218,7 +219,7 @@ async function photos(target: number, bare: boolean, width: number): Promise<voi
   const s = shapes('original')
   const p = progress('photos', 'photos')
   await pool(gap, width, async (k) => {
-    await addCopiedMedia(scope.scopeId, chapterId, chapterKey, photo(have + k, s, !bare))
+    await addCopiedMedia(scope.scopeId, chapterId, chapterKey, photo(have + k, s, !bare), { nodeEpoch: chapterEpoch })
     p.tick()
   })
   const now = (await listMedia(scope.scopeId, chapterId)).length
@@ -269,8 +270,8 @@ async function tree(target: number, shape: 'realistic' | 'wide'): Promise<void> 
   const rows = await listTree(group.scopeId, group.epochs)
   console.log(`tree: '${shape}' group holds ${rows.length} nodes, target ${target}`)
   // name -> (id, content key) of every node already there; names are unique by construction.
-  const byName = new Map<string, { id: string; key: Uint8Array }>()
-  for (const n of rows) byName.set(n.name, { id: n.id, key: nodeContentKey(group.scopeId, group.epochs, rows, n.id)! })
+  const byName = new Map<string, { id: string; key: Uint8Array; epoch: number }>()
+  for (const n of rows) byName.set(n.name, { id: n.id, key: nodeContentKey(group.scopeId, group.epochs, rows, n.id)!, epoch: n.epoch })
   let count = rows.length
   const p = progress('tree', 'nodes')
   for (const spec of shape === 'wide' ? wide() : realistic()) {
@@ -278,9 +279,9 @@ async function tree(target: number, shape: 'realistic' | 'wide'): Promise<void> 
     if (byName.has(spec.name)) continue
     const parentRef = spec.parent === null ? null : byName.get(spec.parent)
     if (spec.parent !== null && !parentRef) die(`parent '${spec.parent}' of '${spec.name}' is missing — the group was not filled by this seeder`)
-    const parent: NodeParent = parentRef ? { id: parentRef.id, key: parentRef.key } : null
+    const parent: NodeParent = parentRef ? { id: parentRef.id, key: parentRef.key, epoch: parentRef.epoch } : null
     const made = await createContentNode(group.scopeId, group.epochs, parent, spec.kind as typeof FOLDER_KIND, spec.name)
-    byName.set(spec.name, { id: made.nodeId, key: made.contentKey })
+    byName.set(spec.name, { id: made.nodeId, key: made.contentKey, epoch: made.epoch })
     count++
     p.tick()
   }
@@ -415,13 +416,14 @@ async function upload(count: number): Promise<void> {
   const tree = await listTree(scope.scopeId, scope.epochs)
   const key = nodeContentKey(scope.scopeId, scope.epochs, tree, chapterId)
   if (!key) die('the member cannot open the upload Chapter')
+  const nodeEpoch = tree.find((n) => n.id === chapterId)!.epoch
   const have = (await listMedia(scope.scopeId, chapterId)).length
   const s = shapes('phone')
   const p = progress('upload', 'photos')
   const started = Date.now()
   // One at a time, as the web client's upload queue runs (`uploadQueue.ts`: the sequential runner).
   for (let k = 0; k < count; k++) {
-    await addCopiedMedia(scope.scopeId, chapterId, key, photo(have + k, s, true))
+    await addCopiedMedia(scope.scopeId, chapterId, key, photo(have + k, s, true), { nodeEpoch })
     p.tick()
   }
   const bytes = count * (s.landscape.original.length + s.landscape.thumbnail.length + s.landscape.preview.length)

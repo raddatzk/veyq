@@ -80,3 +80,30 @@ export function identityEntryKey(
   const drop = openDropKey(scopeId, parent.id, parent.key, parent.sealedDropPrivateKey)
   return openIdentityKey(scopeId, parent.id, drop, identity.identityId, identity.wrappedIdentityKey)
 }
+
+/**
+ * A node's drop key REPLACED in its re-key (ADR 0109 point 5): a fresh keypair, its private half sealed under the node's
+ * NEW key, its public half for each WRITE_ONLY link (under that link's `K_share`), and every existing guest's `K_up`
+ * re-sealed to it — opened through the OLD drop key, which is then dropped. The guest keeps its `K_up`.
+ */
+export function replaceDropKey(scopeId: string, nodeId: string, oldNodeKey: Uint8Array, newNodeKey: Uint8Array, sealedOld: string): {
+  sealedDropPrivateKey: string
+  sealedPublicFor(kShare: Uint8Array): string
+  resealIdentityKey(identityId: string, wrappedIdentityKey: string): string
+} {
+  const old = openDropKey(scopeId, nodeId, oldNodeKey, sealedOld)
+  const fresh = v1.generateDropKey()
+  const freshPublic = v1.dropKeyPublic(fresh)
+  return {
+    sealedDropPrivateKey: b64std(v1.seal(dropPrivateContext(scopeId, nodeId), newNodeKey, v1.serializeDropKey(fresh))),
+    sealedPublicFor: (kShare) => b64std(v1.seal(DROP_PUBLIC_KEY, kShare, v1.serializeHybridPublic(freshPublic))),
+    resealIdentityKey: (identityId, wrappedIdentityKey) => {
+      const kUp = openIdentityKey(scopeId, nodeId, old, identityId, wrappedIdentityKey)
+      try {
+        return b64std(v1.sealTo(uploadIdentityContext(scopeId, nodeId, identityId), freshPublic, kUp))
+      } finally {
+        kUp.fill(0)
+      }
+    },
+  }
+}

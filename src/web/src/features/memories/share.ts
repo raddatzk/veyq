@@ -21,7 +21,7 @@ import { caseMediaApi, publicShareMediaApi } from './api'
 import { activeReview } from '../../core/sharing/review'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
-import { resolvePublicShare, ShareUnavailableError, type PublicShareHead } from '../../core/sharing/resolvePublicShare'
+import { resolvePublicShare, shareRootEpoch, ShareUnavailableError, type PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import {
   carriedSettings,
   mintShare,
@@ -32,6 +32,7 @@ import {
   type ShareNote,
   type ReissuableShare,
   type ReissueSettings,
+  type ShareRootKey,
   type WriteOnlyMint,
 } from '../../core/sharing/manageShares'
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
@@ -108,7 +109,7 @@ export {
 export async function createShare(
   scopeId: string,
   nodeId: string,
-  memoryKey: Uint8Array,
+  memory: ShareRootKey,
   epochs: EpochKeys,
   memoryName: string,
   role: ShareRole = ShareRole.Read,
@@ -120,13 +121,13 @@ export async function createShare(
   const writeOnly: WriteOnlyMint | undefined =
     role === ShareRole.WriteOnly
       ? {
-          dropFields: async (kShare) =>
+          dropFields: async (kShare, memoryKey) =>
             dropKeysForShare(scopeId, nodeId, memoryKey, kShare, await currentSealedDropKey(scopeId, nodeId)),
           // Another owner set the Memory's drop key first: seal to theirs, which every upload so far is sealed to.
           retryOnce: (e) => isCodedError(e, HttpStatus.conflict, 'drop_key_exists'),
         }
       : undefined
-  return mintShare(scopeId, nodeId, memoryKey, epochs, memoryName, role, expiresAt, note, name, password, writeOnly)
+  return mintShare(scopeId, nodeId, memory, epochs, memoryName, role, expiresAt, note, name, password, writeOnly)
 }
 
 /**
@@ -137,7 +138,7 @@ export async function createShare(
  */
 export async function reissueShare(
   old: ReissuableShare,
-  memoryKey: Uint8Array,
+  memory: ShareRootKey,
   epochs: EpochKeys,
   memoryName: string,
   settings: ReissueSettings = carriedSettings(epochs, old),
@@ -146,14 +147,14 @@ export async function reissueShare(
   const writeOnly: WriteOnlyMint | undefined =
     old.role === ShareRole.WriteOnly
       ? {
-          dropFields: async (kShare) => {
+          dropFields: async (kShare, memoryKey) => {
             const existing = await currentSealedDropKey(scopeId, nodeId)
             if (!existing) throw new Error('drop_key_missing') // a WRITE_ONLY share proves the Memory has one
             return { sealedDropPublicKey: dropKeysForShare(scopeId, nodeId, memoryKey, kShare, existing).sealedDropPublicKey }
           },
         }
       : undefined
-  return remintShare(old, memoryKey, epochs, memoryName, settings, writeOnly)
+  return remintShare(old, memory, epochs, memoryName, settings, writeOnly)
 }
 
 /** The Memory's sealed drop private key as the server holds it now — null until its first WRITE_ONLY share. */
@@ -190,13 +191,16 @@ export async function createContributorIdentity(
   pwToken?: string,
 ): Promise<ContributorSession> {
   // A READ_WRITE guest names itself as on any link: the platform's identity, the name under the root's key (`K_node`).
-  if (access.kind === 'read') return createGuestIdentity({ shareId, scopeId }, access.memoryKey, { name: displayName, fragmentKey, pwToken })
+  if (access.kind === 'read') {
+    return createGuestIdentity({ shareId, scopeId }, access.memoryKey, { name: displayName, fragmentKey, pwToken, rootEpoch: access.rootEpoch })
+  }
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
   const minted = mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey)
   const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), minted.uploaderKey, v1.utf8(displayName)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
-    createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
+    // `K_up` is sealed to the root's drop key, which a re-key replaces: the root's epoch as read (ADR 0109 point 6)
+    createShareIdentityRequest: { nodeEpoch: access.rootEpoch, identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
     xShareWrite: b64std(v1.shareWriteToken(fromB64url(fragmentKey), shareId)),
   })
@@ -216,7 +220,9 @@ export function sessionSealKey(session: ContributorSession, access: ShareAccess)
 /** The share-scoped upload transport (no auth) — reserve and sign each next window through core's guest blob transport
  *  (`core/sharing/guestBlob.ts`: `startShareBlobUploads`, then `presignShareBlobUploadWindows`, the link's gate again, so
  *  a revoked link stops the upload there), complete via `completeShareMedia`. */
-function shareUploadTransport(shareId: string, contributorToken: string, pwToken?: string, nodeId?: string): MediaUploadTransport {
+function shareUploadTransport(
+  shareId: string, contributorToken: string, nodeEpoch: number, pwToken?: string, nodeId?: string,
+): MediaUploadTransport {
   // The target (5a.5): a Memory or chapter below the share root, named on every start, window and completion — one target
   // per request. Absent for the root itself, so a root-level upload sends exactly what it always did.
   const target = nodeId === undefined ? {} : { nodeId }
@@ -230,6 +236,9 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
       const done = await publicShareMediaApi().completeShareMedia({
         shareId,
         shareMediaBatchRequest: {
+          // the target node's epoch as read (`ShareNode.epoch`, the root's `rootEpoch`): every wrap of the batch is under
+          // its key — or a WRITE_ONLY guest's `K_up`, sealed to the root's drop key — ADR 0109 point 6
+          nodeEpoch,
           contributorToken,
           ...target,
           items: [{
@@ -261,14 +270,16 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
  * the root, as every upload did before.
  */
 export async function addSharePhoto(
-  session: ContributorSession & { shareId: string; scopeId: string; sealKey: Uint8Array; pwToken?: string; nodeId?: string },
+  session: ContributorSession & {
+    shareId: string; scopeId: string; sealKey: Uint8Array; nodeEpoch: number; pwToken?: string; nodeId?: string
+  },
   source: AddMediaSource,
   deriver: MediaDeriver = createBrowserDeriver(),
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
   return uploadMediaVia(
     session.scopeId, session.sealKey, source, deriver,
-    shareUploadTransport(session.shareId, session.contributorToken, session.pwToken, session.nodeId), opts,
+    shareUploadTransport(session.shareId, session.contributorToken, session.nodeEpoch, session.pwToken, session.nodeId), opts,
   )
 }
 
@@ -295,10 +306,12 @@ export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: strin
  *    seal their name + uploads under;
  *  - `drop` (WRITE_ONLY): the Memory's drop PUBLIC key and the node it belongs to — enough to wrap an identity key
  *    of its own to, nothing to open anything with.
+ * Both carry `rootEpoch`, the epoch the shared root's key was minted at (`PublicShare.rootEpoch`): what a guest's write
+ * under that key or that drop key states (ADR 0109 point 6).
  */
 export type ShareAccess =
-  | { kind: 'read'; memoryKey: Uint8Array }
-  | { kind: 'drop'; nodeId: string; dropPublicKey: v1.HybridPublic }
+  | { kind: 'read'; memoryKey: Uint8Array; rootEpoch: number }
+  | { kind: 'drop'; nodeId: string; dropPublicKey: v1.HybridPublic; rootEpoch: number }
 
 /** The decrypted shared Memory, ready to render: its name, the grant `role`, what its [access] holds, and every
  *  media (each with its own node's `K_node` — none for a WRITE_ONLY link, which is served no media). */
@@ -441,7 +454,7 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     } catch {
       throw new ShareUnavailableError('bad_fragment_key')
     }
-    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [] }
+    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey, rootEpoch: shareRootEpoch(share) }, items: [] }
   }
 
   const shareRootKey = openShareRoot(head).key // READ / READ_WRITE only (guarded above)
@@ -459,7 +472,7 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
     items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, nodeId: m.nodeId })
   }
-  return { access: { kind: 'read', memoryKey: shareRootKey }, items }
+  return { access: { kind: 'read', memoryKey: shareRootKey, rootEpoch: shareRootEpoch(share) }, items }
 }
 
 /**

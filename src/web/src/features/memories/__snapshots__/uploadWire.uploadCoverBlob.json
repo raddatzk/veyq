@@ -64,6 +64,7 @@
       "body": {
         "expectedBlobId": null,
         "metaRevision": 0,
+        "nodeEpoch": 0,
         "uploadId": "upload-1",
         "wrappedMeta": "A0B7gJjWqa0wA4ulTjqE4DG3CcgFjDaVgoEjJUX2v8itFRGR6OYbG4XQmfMgByswye9hOeVMsk6W6GJe1YMPv5Iic5GcoXqzuYmkHEekO8IHCZfqdQHogAWD/Q07OmJePqaVj56vP6FXtMzs9f+nQysLVSdhc2yAoDFsbo6HAotjEB9fh4ociSH7640ZyNEsl6xR1yKW4sL5h2kRPAx/Dn0yDp8GWa1f7f79ycKcJ4NgZshnkt8J8K+luhCwW5x4qv3bCDuMt72gfQc0xsNafP2l1HrfzZC9uWpNCjv8ze7iy1xgDLa/uby0NELXvN1bTZg/4EMs3WUxPi17W86YSHn8pGnvaKqGREhBVH82NrxKswLwfbCQgMXYRMrc0sKSmOdfkSP2Ax+OJR47qoCD+8+62sxs776+kv5W63jjh3CLyaxSpS2Ugh2fMKxwYx51dTCwiTZU6r7G5AIBA2Qy4ukXCVk56dlNpEw8NWsdytQgAGwirWc8B9WdiMcxdXAwRbsfrA=="
       }

@@ -26,6 +26,7 @@ import { prepareCopy, type CopyTarget } from './copySubtree'
 import { framesFor, framesOfBytes } from './copySource'
 import { ImportFailed } from './importSubtree'
 import type { ManifestPayload } from './manifest'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const FILE = 'C_FILE' // a Depot-like file: its import reads the payload by frame (`importStreams`)
 const ALBUM = 'C_ALBUM' // a Memory-like kind: both hooks, but its import needs whole payloads (no `importStreams`)
@@ -60,7 +61,7 @@ let failOn: string | null = null
 let corrupt: string | null = null
 
 beforeAll(() => {
-  registry.registerKind({
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, importStreams: true, contentSchema: { application: 'c', version: 1 },
     copyLosses: ['c.fileLoss'],
     async exportContent(ctx) {
@@ -98,7 +99,7 @@ beforeAll(() => {
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
     },
   })
-  registry.registerKind({
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 'c', version: 1 }, copyLosses: ['c.albumLoss'],
     async exportContent(ctx) {
       const bytes = contents.get('pic')!
@@ -110,7 +111,7 @@ beforeAll(() => {
       throw new Error('an album is never handed a copy')
     },
   })
-  registry.registerKind({
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: RAW, icon: 'file', shareable: false, importStreams: true, contentSchema: { application: 'c', version: 1 },
     // its import would take a payload by frame, but its export offers none: the copy cannot read it so
     async exportContent(ctx) {
@@ -122,7 +123,7 @@ beforeAll(() => {
       throw new Error('a raw node is never handed a copy')
     },
   })
-  registry.registerKind({
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: BOX, icon: 'file', shareable: false, contentSchema: { application: 'c', version: 1 }, importsAsFolder: true, copyLosses: ['c.boxLoss'],
     exportContent: async () => ({ type: 'c.box', schema: 1 }),
   })
@@ -137,7 +138,7 @@ beforeEach(() => {
   let n = 0
   vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
     created.push({ name, parent: parent?.id ?? null, kind })
-    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9) }
+    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
   })
   vi.mocked(deleteNode).mockReset().mockResolvedValue(undefined)
 })
@@ -194,7 +195,7 @@ describe('run: the replay under the destination', () => {
 
   it('reads each original by frame - every frame once, every slice at most a frame - never the file whole', async () => {
     const prepared = await prepareCopy({ access, tree, rootIds: ['doc'], appVersion: 'test' })
-    await prepared.run(target({ id: 'archiv', key: new Uint8Array(32) }))
+    await prepared.run(target({ id: 'archiv', key: new Uint8Array(32), epoch: 1 }))
     expect(created).toEqual([{ name: 'doc.txt', parent: 'archiv', kind: FILE, bytes: 'a document of eleven' }])
     expect(frameReads).toEqual(['doc:0', 'doc:1', 'doc:2', 'doc:3', 'doc:4'])
     expect(Math.max(...sliceSizes)).toBe(FRAME)
@@ -204,7 +205,7 @@ describe('run: the replay under the destination', () => {
     const prepared = await prepareCopy({ access, tree, rootIds: ['doc', 'empty', 'album'], appVersion: 'test' })
     expect(prepared.nodes).toBe(2)
     expect(prepared.leftOut).toEqual([{ name: 'Lissabon', kind: ALBUM, reason: 'not_copyable' }])
-    const result = await prepared.run(target({ id: 'reisen', key: new Uint8Array(32) }))
+    const result = await prepared.run(target({ id: 'reisen', key: new Uint8Array(32), epoch: 1 }))
     expect(result.nodeIds).toEqual(['new1', 'new2'])
     expect(created.map((c) => [c.name, c.parent])).toEqual([['doc.txt (2)', 'reisen'], ['leer.txt (2)', 'reisen']])
   })
@@ -212,7 +213,7 @@ describe('run: the replay under the destination', () => {
   it('a stop part-way trashes every top node it created and says N of M; nothing else is undone', async () => {
     const prepared = await prepareCopy({ access, tree, rootIds: ['doc', 'box'], appVersion: 'test' })
     failOn = 'drop.txt'
-    const error = await prepared.run(target({ id: 'archiv', key: new Uint8Array(32) })).catch((e: unknown) => e)
+    const error = await prepared.run(target({ id: 'archiv', key: new Uint8Array(32), epoch: 1 })).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ImportFailed)
     expect(error).toMatchObject({ done: 3, total: 4, rolledBack: true, leftover: null })
     expect(vi.mocked(deleteNode).mock.calls.map(([, id]) => id)).toEqual(['new1', 'new2'])

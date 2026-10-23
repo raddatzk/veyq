@@ -23,6 +23,7 @@ vi.mock('./scopes', () => ({
   clearSpaceIcon: vi.fn(),
   openMyTenantIcon: vi.fn(),
   revokeScopeShares: vi.fn(),
+  scopeLifecycle: vi.fn(),
 }))
 // The pin store's badge read: {} (no badge) unless a test says otherwise - what the vault-less real one degraded to.
 vi.mock('../account/identityPins', async (orig) => ({ ...(await orig<typeof import('../account/identityPins')>()), trustStates: vi.fn() }))
@@ -33,7 +34,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, setTenantMemberRole, memberError } from './members'
-import { listMyTenants, openMyTenantIcon, revokeScopeShares } from './scopes'
+import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { trustStates } from '../account/identityPins'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
@@ -53,6 +54,8 @@ beforeEach(() => {
   vi.mocked(trustStates).mockResolvedValue({})
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
+  // ADR 0109: the owner's row says whether the tenant's re-key is unfinished; nothing pending here
+  vi.mocked(scopeLifecycle).mockResolvedValue(null)
 })
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.

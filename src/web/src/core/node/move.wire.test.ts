@@ -3,8 +3,9 @@
 // what makes a moved subtree keep working (ADR 0080 decisions 1, 3, 4 and 11):
 //   - the node's OWN content key travels unchanged, re-wrapped under the destination's key at the NEXT placement
 //     revision, and the request states the revision it was built on (the server's compare-and-set);
-//   - the epoch: a move into or out of the scope root seals at the CURRENT epoch (the entry is under `K_SC` there), a
-//     move between two folders at the node's stored one;
+//   - the epoch: a placement never changes it — every move seals at the node's own stored epoch (ADR 0109 point 6; at
+//     the scope root the entry is under `K_SC` at that epoch, which the device floor holds at the current one), and
+//     states the destination's epoch as `parentEpoch`;
 //   - a drop-box guest's folder moved out: its key opened through the drop key and the guest's `K_up`, re-wrapped under
 //     the destination's key — after the server ends its identity, the folder and the file inside it open as before.
 // Read back the way the next listing reads it (`nodeContentKey` over the rows as the server then stores them).
@@ -88,8 +89,8 @@ describe('a member\'s move between folders', () => {
   it('re-wraps the node\'s own key under the destination at version + 1, states version 3, keeps the stored epoch', async () => {
     const nodes = tree()
     const json = await moveAsMember(epochsOf(scopeKey), nodes, M, B)
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: B, placementRevision: 3, epoch: 0 })
+    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'parentEpoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
+    expect(json).toMatchObject({ parentId: B, placementRevision: 3, epoch: 0, parentEpoch: 0 })
     const at4 = { purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 0, placementRevision: 4 } as const
     same(v1.open(at4, keys.b, fromB64std(json.wrappedContentKey as string)), keys.m)
     expect(() => v1.open(at4, keys.a, fromB64std(json.wrappedContentKey as string)), 'never the old parent\'s key').toThrow(v1.OpenRefused)
@@ -145,22 +146,24 @@ describe('a member moves a selection of several', () => {
 })
 
 describe('a member\'s move and the scope\'s epochs (ADR 0080 decision 4)', () => {
-  // A scope rotated once: E_0 and E_1, the write key E_1. A and B were created at epoch 0 (their entries under E_0).
+  // A scope rotated once: E_0 and E_1, the write key E_1. A, B and M are re-keyed to epoch 1 (A's and B's entries under
+  // E_1; a node below the current epoch is behind the device floor, ADR 0109 point 6); C, below M, is not yet (epoch 0).
   const e0 = v1.randomBytes(32)
   const e1 = v1.randomBytes(32)
   const rotated: EpochKeys = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
   const keys = { a: v1.randomBytes(32), b: v1.randomBytes(32), m: v1.randomBytes(32), c: v1.randomBytes(32) }
   const tree = () => [
-    row(A, null, 'FOLDER', e0, keys.a, 'Reisen', 0, 0),
-    row(B, null, 'FOLDER', e0, keys.b, 'Archiv', 0, 0),
-    row(M, A, 'FOLDER', keys.a, keys.m, 'Italien', 0, 3),
+    row(A, null, 'FOLDER', e1, keys.a, 'Reisen', 1, 0),
+    row(B, null, 'FOLDER', e1, keys.b, 'Archiv', 1, 0),
+    row(M, A, 'FOLDER', keys.a, keys.m, 'Italien', 1, 3),
     row(C, M, 'FOLDER', keys.m, keys.c, 'Rom', 0, 0),
   ]
 
-  it('into the scope root: sealed at the CURRENT epoch, under E_1 — never the node\'s old E_0', async () => {
+  it('into the scope root: sealed at the node\'s own epoch (1, the current one after its re-key), under E_1 — never E_0', async () => {
     const nodes = tree()
     const json = await moveAsMember(rotated, nodes, M, null)
     expect(json.parentId, 'the root is no parent on the wire').toBeUndefined()
+    expect(json.parentEpoch, 'the root states no parent epoch').toBeUndefined()
     expect(json).toMatchObject({ epoch: 1, placementRevision: 3 })
     const wrap = fromB64std(json.wrappedContentKey as string)
     same(v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: M, epoch: 1, placementRevision: 4 }, e1, wrap), keys.m)
@@ -170,18 +173,18 @@ describe('a member\'s move and the scope\'s epochs (ADR 0080 decision 4)', () =>
     same(nodeContentKey(SCOPE, rotated, after, C), keys.c)
   })
 
-  it('out of the scope root into a folder: the current epoch too (stored as sent), under the folder\'s key', async () => {
+  it('out of the scope root into a folder: the node\'s own epoch (stored as sent), under the folder\'s key', async () => {
     const nodes = tree()
     const json = await moveAsMember(rotated, nodes, A, B)
-    expect(json).toMatchObject({ parentId: B, epoch: 1, placementRevision: 0 })
+    expect(json).toMatchObject({ parentId: B, epoch: 1, parentEpoch: 1, placementRevision: 0 })
     same(v1.open({ purpose: 'content-key', scopeId: SCOPE, nodeId: A, epoch: 1, placementRevision: 1 }, keys.b, fromB64std(json.wrappedContentKey as string)), keys.a)
     const after = nodes.map((x) => (x.id === A ? applied(x, json) : x))
     for (const [id, key] of [[A, keys.a], [M, keys.m], [C, keys.c]] as const) same(nodeContentKey(SCOPE, rotated, after, id), key)
   })
 
-  it('between two folders: the node\'s stored epoch (0), whatever the current one', async () => {
+  it('between two folders: the node\'s stored epoch (0), whatever the current one; the destination\'s as parentEpoch', async () => {
     const json = await moveAsMember(rotated, tree(), C, B)
-    expect(json).toMatchObject({ parentId: B, epoch: 0, placementRevision: 0 })
+    expect(json).toMatchObject({ parentId: B, epoch: 0, parentEpoch: 1, placementRevision: 0 })
   })
 })
 

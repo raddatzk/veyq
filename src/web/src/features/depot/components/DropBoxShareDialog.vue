@@ -87,7 +87,7 @@ const create = () =>
   run(async () => {
     const expiry = rules.maxDays !== null && expiresAt.value ? endOfDay(expiresAt.value) : null
     const minted = await mintDropBoxLink(
-      props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName, '',
+      props.scopeId, props.nodeId, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName, '',
       rules.passwordRequired ? password.value : '', expiry,
     )
     password.value = ''

@@ -86,6 +86,7 @@
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
 // tests (`registry.test.ts`) are what does.
+import { nothingOfItsOwnToRekey, type RekeyContentHook } from '../node/rekey/hooks'
 import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
@@ -198,6 +199,10 @@ export interface KindDescriptor {
    *  neither: it has no content. */
   exportContent?: ExportContentHook
   importContent?: ImportContentHook
+  /** A node's re-key after a rotation (ADR 0109): the kind re-seals what only it stores under the node's key — its
+   *  references inside the node's meta, its own rows (staged under the commit's re-key id). REQUIRED, so a kind cannot be
+   *  registered without saying what its re-key does; one with nothing of its own passes `nothingOfItsOwnToRekey`. */
+  rekeyContent: RekeyContentHook
   /** The application this kind's content belongs to and the highest version of its content schema this build writes and
    *  reads (ADR 0082 decision 9): a download names it in the manifest's `applications`, and an import's dry run lists a
    *  node whose content is newer as one it leaves out. `application` is the `<application>` part of every `content.type`
@@ -379,6 +384,9 @@ export interface NodeCreateDialogProps {
   epochs: EpochKeys
   parentId: string | null
   parentKey: Uint8Array | null
+  /** The parent's epoch as read (`TreeNode.epoch`): the create states it as `parentEpoch` (ADR 0109 point 6). Null at
+   *  the scope root. */
+  parentEpoch: number | null
 }
 export interface NodeCreateDialogEmits {
   done: []
@@ -395,6 +403,9 @@ export interface NodeShareDialogProps {
   scopeId: string
   nodeId: string
   nodeKey: Uint8Array
+  /** The node's epoch as read (`TreeNode.epoch`): the epoch `nodeKey` was minted at, which a mint or re-issue states as
+   *  `nodeEpoch` (ADR 0109 point 6). */
+  nodeEpoch: number
   epochs: EpochKeys
   nodeName: string
   nodeKind: NodeKind
@@ -565,6 +576,7 @@ export function createRegistry(): Registry {
     [FOLDER_KIND, {
       kind: FOLDER_KIND, icon: 'folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
+      rekeyContent: nothingOfItsOwnToRekey,
     }],
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()

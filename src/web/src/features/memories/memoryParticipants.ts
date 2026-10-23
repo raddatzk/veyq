@@ -9,7 +9,8 @@
 // re-reads the blob and MERGES: the union of what is stored and what the editor wants, except that an id the editor
 // REMOVED stays removed ({@link mergeParticipants}).
 import { editParticipantsOf, unsealNodeMeta } from '../../core/node/nodeMeta'
-import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
+import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
+import type { NodeMetaState } from '../../core/node/nodeMeta'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /** At most this many participants: `wrappedMeta` is limited to 8192 base64 characters (~6 KB sealed) and an id is ~40
@@ -68,9 +69,10 @@ export async function setMemoryParticipants(
   nodeId: string,
   nodeKey: Uint8Array,
   wanted: readonly string[],
-  current: SealedMetaState,
+  current: NodeMetaState,
+  opts: WriteNodeMetaOptions = {},
 ): Promise<SealedMetaState> {
   const openedWith = unsealMemoryParticipants(scopeId, nodeKey, { id: nodeId, wrappedMeta: current.wrappedMeta })
-  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editParticipantsOf((stored) => mergeParticipants(stored, wanted, openedWith)))
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editParticipantsOf((stored) => mergeParticipants(stored, wanted, openedWith)), undefined, opts)
   return state
 }

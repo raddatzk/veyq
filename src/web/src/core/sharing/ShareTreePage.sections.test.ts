@@ -36,6 +36,7 @@ import { sealName, wrapContentKey } from '../node/tree'
 import type { PublicShareHead } from './resolvePublicShare'
 import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated/sharing'
 import { realI18n } from '../../test/i18n'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_3'
@@ -99,7 +100,7 @@ beforeEach(() => {
   localStorage.clear()
   seen.props = null
   const r = createRegistry()
-  r.registerKind({ kind: DOC_KIND, icon: 'file', shareable: false, list: { rows: stubRows } })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: DOC_KIND, icon: 'file', shareable: false, list: { rows: stubRows } })
   holder.reg = r
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })

@@ -51,11 +51,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     const location = { name: 'Teneriffa Süd', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
     const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
 
-    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaRevision: 0 })
-    meta = await setMemoryLocation(scopeId, nodeId, memoryKey, location, meta)
+    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 })
+    meta = await setMemoryLocation(scopeId, nodeId, memoryKey, location, { ...meta, nodeEpoch: 0 })
     // A cover is set only by an upload: its blob sealed as it is (no decode here) and attached in the meta's own write.
     const up = await uploadCoverBlob(scopeId, nodeId, memoryKey, new Blob([new Uint8Array(512).fill(9)]), { type: 'image/jpeg' })
-    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: meta, cover: uploadedCover(up.plan, crop), uploadId: up.uploadId })
+    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: { ...meta, nodeEpoch: 0 }, cover: uploadedCover(up.plan, crop), uploadId: up.uploadId })
 
     // All three sub-objects come back on the server-stored blob — the cover never clobbered the date/location.
     const withCover = await readBack()
@@ -83,7 +83,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
     // The live blob is at version 3 (three meta writes), and the server says so on the listing.
     expect(withCover.metaRevision).toBe(3)
-    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: { wrappedMeta: withCover.wrappedMeta, metaRevision: withCover.metaRevision }, cover: null })
+    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: { wrappedMeta: withCover.wrappedMeta, metaRevision: withCover.metaRevision, nodeEpoch: withCover.epoch }, cover: null })
     const withoutCover = await readBack()
     expect(unsealMemoryCover(scopeId, memoryKey, withoutCover)).toBeNull()
     expect(unsealMemoryDate(scopeId, memoryKey, withoutCover)).toEqual(date)

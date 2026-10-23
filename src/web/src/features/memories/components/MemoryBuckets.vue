@@ -31,6 +31,8 @@ import { useUndo } from '../../../shared/state/useUndo'
 const props = defineProps<{
   scopeId: string
   nodeId: string
+  /** The node's epoch as read with `memoryKey`: a bucket name's write states it (ADR 0109 point 6). */
+  nodeEpoch: number
   memoryKey: Uint8Array | null
   media: MediaItem[] // all live media in the Memory (each carrying ownerKey/bucketId)
   thumbs: Map<string, string> // mediaId → decrypted thumbnail object-url (owned by the parent gallery)
@@ -267,9 +269,9 @@ async function submitBucketDialog() {
       // Nest under the active primary root — a real id targets that owner (incl. a contributor's); the virtual
       // own-primary passes none, so the server nests under (and materializes) your own primary.
       const parent = activeBucket.value
-      await buckets.create(props.nodeId, key, name, parent && !parent.virtual ? parent.id : undefined)
+      await buckets.create(props.nodeId, key, props.nodeEpoch, name, parent && !parent.virtual ? parent.id : undefined)
     } else if (activeBucket.value) {
-      await buckets.rename(props.nodeId, key, activeBucket.value.id, name)
+      await buckets.rename(props.nodeId, key, props.nodeEpoch, activeBucket.value.id, name)
     }
     bucketDialog.value.open = false
     await loadBuckets()

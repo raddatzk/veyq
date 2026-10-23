@@ -29,6 +29,7 @@ import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../tes
 import { ShareRole } from '../../api/generated/sharing'
 import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, rowOf } from '../../test/levelRows'
+import { nothingOfItsOwnToRekey } from './rekey/hooks'
 
 function node(id: string, kind: NodeKind, parentId: string | null, blocked = false): TreeNode {
   return treeNode({
@@ -43,7 +44,7 @@ const tree = [TRIPS, node('open', 'ALPHA', 'Trips'), node('held', 'ALPHA', 'Trip
 beforeEach(() => {
   setViewMode('list')
   holder.reg = createRegistry()
-  holder.reg.registerKind({
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: 'ALPHA', icon: 'images', shareable: false,
     list: { rows: stubRows('a').factory }, // its rows carry a rename: the placeholder drops it
   })

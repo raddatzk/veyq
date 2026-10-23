@@ -23,6 +23,7 @@ import { shareBlob, type SharedBlob } from '../../blob/sharedBlob'
 import type { CoreHeaderAction } from '../nodeHeader'
 import type { CoreRowAction } from '../levelRow'
 import { nodeMetaState, unsealNodeMeta } from '../nodeMeta'
+import { assertActiveScopeFloor } from '../rereadNode'
 import type { TreeNode } from '../tree'
 import { patchNodeMeta, treeStore } from '../treeStore'
 import { useToast } from '../../../shared/state/useToast'
@@ -158,6 +159,8 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
           async run({ onProgress, signal }) {
             // An equal picture the node already stores is shared, not uploaded again (ADR 0013 § 5); a failure to look is
             // no match. Its row is minted per attempt: a retry never reuses an id the server may have taken.
+            // the device floor before anything is sealed under the node's key (ADR 0109 point 6, layer 2)
+            assertActiveScopeFloor(scopeId, node)
             const stored = await findStoredOf(node)?.({ scopeId, nodeId: node.id, nodeKey: key, file, signal }).catch(() => null)
             const shared: SharedBlob | null = stored
               ? shareBlob(scopeId, stored, key, { ownerId: node.id, role: COVER_ROLE }, DERIVED_META)
@@ -170,8 +173,9 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
                 undefined, { strict: true, onProgress, signal },
               )
             // The freshest meta and version, read AFTER the upload: it may have taken a while, and a stale base only costs a retry.
+            // The epoch stated is the one `key` was read at (`node`'s), never a fresher tree's: the blob is wrapped under `key`.
             const state = await writeNodeCover({
-              scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)),
+              scopeId, nodeId: node.id, nodeKey: key, current: { ...nodeMetaState(latest(node)), nodeEpoch: node.epoch },
               cover: uploadedCover(shared ? shared.ref : up!.plan, crop),
               uploadId: up?.uploadId, shared: shared?.request, surfaceConflict: false,
             })
@@ -192,7 +196,9 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
 
   async function writeSealed(node: TreeNode, key: Uint8Array, scopeId: string, cover: unknown | null, surfaceConflict: boolean): Promise<void> {
     try {
-      const state = await writeNodeCover({ scopeId, nodeId: node.id, nodeKey: key, current: nodeMetaState(latest(node)), cover, surfaceConflict })
+      // the epoch `key` was read at (`node`'s), whatever a fresher tree says: the cover's wraps are under `key`
+      const current = { ...nodeMetaState(latest(node)), nodeEpoch: node.epoch }
+      const state = await writeNodeCover({ scopeId, nodeId: node.id, nodeKey: key, current, cover, surfaceConflict })
       patchNodeMeta(node.id, state.wrappedMeta, state.metaRevision)
     } catch (e) {
       await writeFailed(node, e)

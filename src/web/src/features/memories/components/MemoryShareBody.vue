@@ -22,7 +22,7 @@ import {
   type ShareAccess,
   type ContributorSession,
 } from '../share'
-import { pickLocaleText, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { pickLocaleText, shareRootEpoch, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { forgetGuestSession, saveGuestSession, useGuestSession } from '../../../core/sharing/guestIdentity'
 import type { GuestAccess } from '../../../core/access'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
@@ -123,7 +123,12 @@ function enqueueBatch(picked: File[]) {
     {
       key: shareId,
       // Into the link's root (a WRITE_ONLY link writes there only): no target node is named.
-      upload: (source, opts) => addSharePhoto({ shareId, scopeId: props.head.scopeId, sealKey: key, ...s, pwToken: props.pwToken }, source, undefined, opts),
+      // The root's epoch as read: a WRITE_ONLY guest's wraps are under its own `K_up`, sealed to the root's drop key.
+      upload: (source, opts) =>
+        addSharePhoto(
+          { shareId, scopeId: props.head.scopeId, sealKey: key, nodeEpoch: shareRootEpoch(props.head.share), ...s, pwToken: props.pwToken },
+          source, undefined, opts,
+        ),
     },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
     // Never a re-resolve: the resolve serves an uploader no media; the settled tile is the session's own view.

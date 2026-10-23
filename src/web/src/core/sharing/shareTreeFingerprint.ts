@@ -9,6 +9,8 @@
 // (`sealedDropPrivateKey`, set once, by the node's first WRITE_ONLY link) with an identity folder's wrapped `K_up`
 // (`wrappedIdentityKey`). The guest's media poll opens a WRITE_ONLY uploader's media through the drop key of the head
 // it holds (`openSharedMemory`), and that listing moves without any row: a head kept without the key never opens it.
+// After a re-key (ADR 0109) the root's epoch (`rootEpoch`, what a guest's write states) and a WRITE_ONLY link's drop public
+// key (`sealedDropPublicKey`, replaced with the node's drop key) move too: a head kept with the old ones writes stale.
 import type { PublicShare } from '../../api/generated/sharing'
 
 export function shareTreeFingerprint(share: PublicShare): string {
@@ -18,5 +20,8 @@ export function shareTreeFingerprint(share: PublicShare): string {
     )
     .sort()
     .join('\n')
-  return [share.role, share.rootKind ?? '', share.sealedName ?? '', share.sealedNote ?? '', share.wrap ?? '', share.guestWriteRecordDays ?? '', nodes].join('\n#\n')
+  return [
+    share.role, share.rootKind ?? '', share.sealedName ?? '', share.sealedNote ?? '', share.wrap ?? '', share.guestWriteRecordDays ?? '',
+    share.rootEpoch ?? '', share.sealedDropPublicKey ?? '', nodes,
+  ].join('\n#\n')
 }

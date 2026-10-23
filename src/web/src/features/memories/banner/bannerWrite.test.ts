@@ -141,7 +141,7 @@ const ref = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 300, wrapped
 const image = (blobId: string) => sealedBanner({ medium: 'image', blob: ref(blobId), framing: { frame: 'fill', focal: CENTRE } })
 const video = (blobId: string, posterId: string) =>
   sealedBanner({ medium: 'video', blob: ref(blobId), poster: ref(posterId), type: 'video/mp4', framing: { frame: 'fit', focal: CENTRE } })
-const base = (wrappedMeta: string | null, metaRevision = 3) => ({ scopeId: SCOPE, nodeId: NODE, nodeKey: key, current: { wrappedMeta, metaRevision } })
+const base = (wrappedMeta: string | null, metaRevision = 3) => ({ scopeId: SCOPE, nodeId: NODE, nodeKey: key, current: { wrappedMeta, metaRevision, nodeEpoch: 0 } })
 const conflict = (body: object) => ({ response: new Response(JSON.stringify(body), { status: 409 }) })
 
 type Doors = {

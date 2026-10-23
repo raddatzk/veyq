@@ -630,7 +630,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const withOverride = { ...meta, capturedAtOverride: Date.UTC(2019, 7, 15) }
 
     // B2.3 — re-sealing the raw tier is what keeps the date and the GPS. Lever: seal `{ v: 1, placeName }` instead.
-    const saved = await backfillPlaceName(SCOPE_ID, target(item.mediaId, memoryKey, withOverride), memoryKey, 'München', 'city')
+    const saved = await backfillPlaceName(SCOPE_ID, target(item.mediaId, memoryKey, withOverride), memoryKey, 0, 'München', 'city')
     expect(saved.tier).toMatchObject({
       placeName: 'München', placeLevel: 'city',
       capturedAtOverride: Date.UTC(2019, 7, 15), gpsLat: 48.137, gpsLng: 11.575, w: 4032,
@@ -638,7 +638,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     // B2.4 — a tier whose ONLY content is a name must not seal to null, or the name is resolved again on every
     // open. Lever: make `metaHasContent` ignore `placeName`.
-    const nameOnly = await backfillPlaceName(SCOPE_ID, target(item.mediaId, memoryKey, null), memoryKey, 'Formentera', 'island')
+    const nameOnly = await backfillPlaceName(SCOPE_ID, target(item.mediaId, memoryKey, null), memoryKey, 0, 'Formentera', 'island')
     expect(nameOnly.wrappedMeta).not.toBeNull()
     expect(nameOnly.tier).toMatchObject({ placeName: 'Formentera' })
 
@@ -646,7 +646,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // an overflowing name breaks that write too. Worst case: every field populated plus a maximal name.
     // Lever: remove the clamp in `backfillPlaceName`.
     const maximal = await backfillPlaceName(
-      SCOPE_ID, target(item.mediaId, memoryKey, { ...withOverride, capturedAtSource: 'exif' }), memoryKey,
+      SCOPE_ID, target(item.mediaId, memoryKey, { ...withOverride, capturedAtSource: 'exif' }), memoryKey, 0,
       'Sant Francesc de Formentera i les Illes Balears de la Mediterrània Occidental'.repeat(4),
       'country',
     )
@@ -917,7 +917,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     // a full listed tier: geometry + date + GPS. Only the date is user-editable; the rest rides along unchanged.
     const captured: MediaMeta = { v: 1, w: 800, h: 600, capturedAt: ORIG, gpsLat: 48.1, gpsLng: 11.5 }
 
-    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured, 3), memoryKey, CORRECTED)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured, 3), memoryKey, 0, CORRECTED)
 
     expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaRevision).toBe(3) // the revision it read
     expect(updated.metaRevision).toBe(4)
@@ -940,7 +940,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const memoryKey = v1.randomBytes(32)
     const captured: MediaMeta = { v: 1, capturedAt: ORIG, capturedAtOverride: CORRECTED }
 
-    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured), memoryKey, null)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured), memoryKey, 0, null)
 
     expect(decodeMeta(memoryKey, store.captured.updatedMeta!)).toEqual({ v: 1, capturedAt: ORIG })
     expect(effectiveCapturedAt(updated.tier)).toBe(ORIG) // falls back to the derived original
@@ -953,7 +953,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const memoryKey = v1.randomBytes(32)
     const captured: MediaMeta = { v: 1, capturedAtOverride: CORRECTED } // only ever had a manual date, no geometry/GPS
 
-    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured), memoryKey, null)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured), memoryKey, 0, null)
 
     expect(store.captured.updatedMeta).toBeNull() // nothing left to seal → the tier is cleared
     expect(updated.tier).toBeNull()
@@ -965,7 +965,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
 
-    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, CORRECTED)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, 0, CORRECTED)
 
     expect(decodeMeta(memoryKey, store.captured.updatedMeta!)).toEqual({ v: 1, capturedAtOverride: CORRECTED })
     expect(effectiveCapturedAt(updated.tier)).toBe(CORRECTED)
@@ -985,7 +985,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const media = target(MEDIA_ID, memoryKey, tier)
     expect(unsealMeta(SCOPE_ID, memoryKey, mediaItem(media))?.placeName).toBe('Lisboa')
 
-    await setMediaMeta(SCOPE_ID, media, memoryKey, CORRECTED)
+    await setMediaMeta(SCOPE_ID, media, memoryKey, 0, CORRECTED)
 
     expect(decodeMeta(memoryKey, store.captured.updatedMeta!)).toEqual({ ...tier, capturedAtOverride: CORRECTED })
   })
@@ -1001,7 +1001,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const updateMediaMeta = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(peers, 2)).mockResolvedValue({})
     fakeApi(mediaApi, { updateMediaMeta })
 
-    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, CORRECTED)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, 0, CORRECTED)
     expect(updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.metaRevision).toBe(2)
     expect(decodeMeta(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta!)).toEqual({
       v: 1, capturedAt: ORIG, placeName: 'Lisboa', capturedAtOverride: CORRECTED,
@@ -1011,7 +1011,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const corrected = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG, capturedAtOverride: 1 })
     const conflicting = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(corrected, 2)).mockResolvedValue({})
     fakeApi(mediaApi, { updateMediaMeta: conflicting })
-    const err = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, CORRECTED).catch((e) => e)
+    const err = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, 0, CORRECTED).catch((e) => e)
     expect(err).toBeInstanceOf(MetaConflictError)
     expect(conflicting).toHaveBeenCalledTimes(1)
   })
@@ -1093,10 +1093,10 @@ describe('the media type — the persisted video signal (cr-inline-video-playbac
     const memoryKey = v1.randomBytes(32)
     const elsewhere = target(MEDIA_ID, v1.randomBytes(32), { v: 1, capturedAt: 1, gpsLat: 1, gpsLng: 2 })
 
-    await expect(backfillPlaceName(SCOPE_ID, elsewhere, memoryKey, 'Lisboa')).rejects.toBeInstanceOf(MetaUnreadableError)
+    await expect(backfillPlaceName(SCOPE_ID, elsewhere, memoryKey, 0, 'Lisboa')).rejects.toBeInstanceOf(MetaUnreadableError)
     expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
     // control: the same backfill over a tier that opens does PUT
-    await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 1 }), memoryKey, 'Lisboa')
+    await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 1 }), memoryKey, 0, 'Lisboa')
     expect(store.api.updateMediaMeta).toHaveBeenCalledTimes(1)
   })
 
@@ -1111,7 +1111,7 @@ describe('the media type — the persisted video signal (cr-inline-video-playbac
     const updateMediaMeta = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(corrected, 4)).mockResolvedValue({})
     fakeApi(mediaApi, { updateMediaMeta })
 
-    await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10, gpsLat: 1, gpsLng: 2 }, 3), memoryKey, 'Lisboa', 'city')
+    await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10, gpsLat: 1, gpsLng: 2 }, 3), memoryKey, 0, 'Lisboa', 'city')
     expect(decodeMeta(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta!)).toMatchObject({
       capturedAtOverride: 20, placeName: 'Lisboa',
     })
@@ -1119,7 +1119,7 @@ describe('the media type — the persisted video signal (cr-inline-video-playbac
     const named = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10, placeName: 'Lisbon' })
     const late = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(named, 5)).mockResolvedValue({})
     fakeApi(mediaApi, { updateMediaMeta: late })
-    const result = await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10 }, 4), memoryKey, 'Lisboa')
+    const result = await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10 }, 4), memoryKey, 0, 'Lisboa')
     expect(late).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ wrote: false, metaRevision: 5, wrappedMeta: named })
   })

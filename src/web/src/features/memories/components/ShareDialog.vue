@@ -345,6 +345,7 @@ function fmtDate(d: Date): string {
       :scope-id="scopeId"
       :node-id="nodeId"
       :memory-key="nodeKey"
+      :memory-epoch="nodeEpoch"
       :epochs="epochs"
       :memory-name="nodeName"
       :edit-share="editShare"

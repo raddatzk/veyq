@@ -92,7 +92,7 @@ const stale = (wrappedMeta: string | null, metaRevision: number) => ({
   response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta, metaRevision }), { status: 409 }),
 })
 const opened = (sealed: string) => JSON.parse(new TextDecoder().decode(v1.openField(metaCtx(NODE_ID), nodeKey, fromB64std(sealed))))
-const fresh = (wrappedMeta: string | null = null, metaRevision = 0) => ({ wrappedMeta, metaRevision })
+const fresh = (wrappedMeta: string | null = null, metaRevision = 0) => ({ wrappedMeta, metaRevision, nodeEpoch: 0 })
 const LISBON = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
 
 describe('setMemoryDate', () => {

@@ -60,6 +60,8 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{
   memoryKey: Uint8Array
+  /** The node `memoryKey` belongs to, with the epoch that key was minted at: a meta write states it (ADR 0109 point 6). */
+  memoryNode: { id: string; epoch: number }
   items: MediaItem[]
   startIndex: number
   memoryName: string
@@ -405,7 +407,7 @@ async function persistCapturedAt(overrideMs: number | null) {
   savingCapturedAt.value = true
   capturedAtError.value = null
   try {
-    const updated: MediaMetaWrite = await write.set(target, props.memoryKey, overrideMs)
+    const updated: MediaMetaWrite = await write.set(target, props.memoryKey, props.memoryNode, overrideMs)
     applyMetaState(target, updated, updated.tier) // let the grid re-sort
     if (item.value !== target) return // navigated away mid-save — drop the stale result
     isEditingCapturedAt.value = false
@@ -519,7 +521,7 @@ async function resolvePlaceForCurrent() {
   const resolved = await resolvePlaceName(geocoderUrl.value, meta.gpsLat!, meta.gpsLng!, locale.value)
   if (!resolved) return
   try {
-    const updated = await write.backfillPlace(target, props.memoryKey, resolved.name, resolved.level)
+    const updated = await write.backfillPlace(target, props.memoryKey, props.memoryNode, resolved.name, resolved.level)
     applyMetaState(target, updated, updated.tier)
   } catch (e) {
     /* best-effort: a failed seal leaves the coordinate showing, and the next open tries again — and a tier that

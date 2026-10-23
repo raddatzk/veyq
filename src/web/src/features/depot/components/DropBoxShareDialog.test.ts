@@ -31,7 +31,7 @@ const stubs = {
 
 function mountDialog() {
   return mount(DropBoxShareDialog, {
-    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { current: 0, keys: new Map() }, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX' },
+    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { current: 0, keys: new Map() }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX' },
     global: { plugins: [realI18n()], stubs },
   })
 }

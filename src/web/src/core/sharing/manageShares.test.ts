@@ -28,7 +28,7 @@ describe('mintShare', () => {
     fakeApi(sharesApi, { createShare: create })
     const nodeKey = v1.randomBytes(32)
 
-    const minted = await mintShare(SCOPE_ID, NODE_ID, nodeKey, EPOCHS, 'Taxes', ShareRole.ReadWrite)
+    const minted = await mintShare(SCOPE_ID, NODE_ID, { key: nodeKey, epoch: 1 }, EPOCHS, 'Taxes', ShareRole.ReadWrite)
 
     const req = create.mock.calls[0][0].createShareRequest
     expect(req).toMatchObject({ shareId: minted.shareId, nodeId: NODE_ID, role: ShareRole.ReadWrite, sealedShareKeyEpoch: 1 })
@@ -44,9 +44,9 @@ describe('mintShare', () => {
     fakeApi(sharesApi, { createShare: create })
     const drop = { dropFields: async () => ({ sealedDropPublicKey: 'AA==' }) }
 
-    await expect(mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'x', ShareRole.WriteOnly))
+    await expect(mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'x', ShareRole.WriteOnly))
       .rejects.toThrow('share_write_only_mint_mismatch')
-    await expect(mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'x', ShareRole.Read, null, NO_NOTE, '', '', drop))
+    await expect(mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'x', ShareRole.Read, null, NO_NOTE, '', '', drop))
       .rejects.toThrow('share_write_only_mint_mismatch')
     expect(create).not.toHaveBeenCalled()
   })
@@ -56,7 +56,7 @@ describe("the note's acceptance switch (uc.sharing.share-note)", () => {
   const minted = async (note: Parameters<typeof mintShare>[7]) => {
     const create = vi.fn<SharingApi['createShare']>(async ({ createShareRequest }) => ({ shareId: createShareRequest.shareId }))
     fakeApi(sharesApi, { createShare: create })
-    const m = await mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Taxes', ShareRole.Read, null, note)
+    const m = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'Taxes', ShareRole.Read, null, note)
     const req = create.mock.calls[0][0].createShareRequest
     return { ...m, req, address: { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: m.shareId } }
   }
@@ -94,7 +94,7 @@ describe("the note's acceptance switch (uc.sharing.share-note)", () => {
       ...address, role: ShareRole.Read, expiresAt: null, sealedNote, sealedShareName: null, passwordRequired: false, sealedPassword: null,
       sealedShareKey: req.sealedShareKey!, sealedShareKeyEpoch: req.sealedShareKeyEpoch!,
     }
-    const renewed = await remintShare(old, v1.randomBytes(32), EPOCHS, 'Taxes')
+    const renewed = await remintShare(old, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'Taxes')
     const r = reissue.mock.calls[0][0].reissueShareRequest
     const renewedAt = { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: renewed.shareId }
     expect(readShareNote(EPOCHS, renewedAt, r, r.sealedNote!)).toEqual({ texts: { en: 'v2' }, mustAccept: true })
@@ -113,13 +113,13 @@ describe('remintShare', () => {
     }
     const settings = { note: NO_NOTE, name: '', password: '', expiresAt: null }
 
-    const minted = await remintShare(old, nodeKey, EPOCHS, 'Taxes', settings)
+    const minted = await remintShare(old, { key: nodeKey, epoch: 1 }, EPOCHS, 'Taxes', settings)
 
     const req = reissue.mock.calls[0][0].reissueShareRequest
     expect(req.shareId).toBe(minted.shareId)
     expect(v1.open(SHARE_KEY, minted.kShare, fromB64std(req.wrap!))).toEqual(nodeKey)
     expect(recoverShareKey(EPOCHS, { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: minted.shareId }, req)).toEqual(minted.kShare)
-    await expect(remintShare({ ...old, role: ShareRole.WriteOnly }, nodeKey, EPOCHS, 'Taxes', settings))
+    await expect(remintShare({ ...old, role: ShareRole.WriteOnly }, { key: nodeKey, epoch: 1 }, EPOCHS, 'Taxes', settings))
       .rejects.toThrow('share_write_only_mint_mismatch')
   })
 })
@@ -131,7 +131,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
   async function mintedRow(mine: boolean, oldName = 'Taxes'): Promise<{ row: ShareSummary; kShare: Uint8Array }> {
     const create = vi.fn<SharingApi['createShare']>(async ({ createShareRequest }) => ({ shareId: createShareRequest.shareId }))
     fakeApi(sharesApi, { createShare: create })
-    const minted = await mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, oldName, ShareRole.Read)
+    const minted = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, oldName, ShareRole.Read)
     const req = create.mock.calls[0][0].createShareRequest
     const row: ShareSummary = {
       shareId: minted.shareId, nodeId: NODE_ID, scopeId: SCOPE_ID, role: ShareRole.Read, sealedName: req.sealedName,

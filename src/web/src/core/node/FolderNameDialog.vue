@@ -16,6 +16,7 @@ import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { createFolder, renameNode, type NodeParent, type TreeNode } from './tree'
 import { treeStore, loadTree } from './treeStore'
+import { memberCreateOptions } from './rereadNode'
 import { FOLDER_KIND } from './kind'
 import { collidingSibling, nameTakenMessage } from './siblingCollision'
 import { registry } from '../applications/registry'
@@ -32,6 +33,7 @@ const props = defineProps<{
   epochs: EpochKeys // the scope's epoch key set (ADR 0024): create seals under the write epoch, rename under the node's own
   parentId?: string | null // create: the parent (null = root)
   parentKey?: Uint8Array | null // create: the parent node's content key, which the new folder's key wraps under (ADR 0080)
+  parentEpoch?: number | null // create: the parent's epoch as read, stated as `parentEpoch` (ADR 0109 point 6)
   node?: TreeNode | null // rename: the node being renamed, of any kind
 }>()
 const emit = defineEmits<{ done: []; close: [] }>()
@@ -49,15 +51,16 @@ const confirmLabel = computed(() => (props.mode === 'rename' ? t('common.save') 
  *  creates nothing, rather than a node its parent's holders could not open. */
 function createParent(): NodeParent {
   if (!props.parentId) return null
-  if (!props.parentKey) throw new Error('parent_key_unavailable')
-  return { id: props.parentId, key: props.parentKey }
+  if (!props.parentKey || props.parentEpoch == null) throw new Error('parent_key_unavailable')
+  return { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch }
 }
 
 const { run: runSubmit, pending: loading } = useAsyncAction(
   async () => {
     const trimmed = name.value.trim()
     if (props.mode === 'create') {
-      await createFolder(props.scopeId, props.epochs, trimmed, createParent())
+      const parent = createParent()
+      await createFolder(props.scopeId, props.epochs, trimmed, parent, memberCreateOptions(props.scopeId, parent))
     } else if (props.node) {
       // A rename is a placement to the same parent (ADR 0080 Decision 3): the key re-wraps and the name re-seals under
       // the parent's key, resolved from the loaded tree, at the next placement revision.

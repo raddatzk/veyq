@@ -258,7 +258,7 @@ describe('GroupMembersPanel — a stuck compromise rotation, on an owner row (uc
   })
 
   const withRow = (compromiseRotation: 'stalled' | 'failed' | null) =>
-    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation })
+    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation, rekeying: false })
 
   it('on failed: says the old key still reads what is new, and re-queues it', async () => {
     withRow('failed')

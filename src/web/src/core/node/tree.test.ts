@@ -22,6 +22,7 @@ import type { ContentApi, NodeSummary } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { treeNode } from '../../test/models'
+import { NodeKeyBelowFloorError } from './rekey/floor'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
@@ -151,7 +152,7 @@ describe('createFolder', () => {
     const create = echoCreate()
     mockContent({ createNode: create })
     const parentKey = v1.randomBytes(32)
-    const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey })
+    const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey, epoch: 0 })
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.parentId).toBe(PARENT)
     expect(v1.open(kNodeCtx(id), parentKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
@@ -166,8 +167,8 @@ describe('createFolder', () => {
     const create = echoCreate()
     mockContent({ createNode: create })
     const parentKey = v1.randomBytes(32)
-    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey })
-    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day Trips', { id: PARENT, key: parentKey }) // folds to the same slug
+    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey, epoch: 0 })
+    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day Trips', { id: PARENT, key: parentKey, epoch: 0 }) // folds to the same slug
     const [a, b] = create.mock.calls.map((c) => c[0].createNodeRequest.slugToken)
     expect(a).toBe(b)
     expect(a).toBe(b64std(v1.slugToken(parentKey, PARENT, 'day-trips')))
@@ -279,14 +280,21 @@ describe('restoreNode', () => {
     const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
 
-    await restoreNode(SCOPE_ID, epochs, [], { id: 'n1', parentId: null, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'Rom 2026' })
+    // A node re-keyed to epoch 1: a restore does not re-tag it (as a rename does not), so its own epoch's key, E_1
+    await restoreNode(SCOPE_ID, epochs, [], { id: 'n1', parentId: null, kind: 'FOLDER', epoch: 1, placementRevision: 0, name: 'Rom 2026' })
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
-    // E_0, because the node's epoch is fixed at birth and a restore does not re-tag it (as a rename does not)
-    expect(req.slugToken).toBe(b64std(v1.slugToken(e0, SCOPE_ID, 'rom-2026')))
-    expect(req.slugToken).not.toBe(b64std(v1.slugToken(e1, SCOPE_ID, 'rom-2026')))
+    expect(req.slugToken).toBe(b64std(v1.slugToken(e1, SCOPE_ID, 'rom-2026')))
+    expect(req.slugToken).not.toBe(b64std(v1.slugToken(e0, SCOPE_ID, 'rom-2026')))
+    expect(req.parentEpoch, 'at the scope root the node\'s own epoch').toBe(1)
     // an ordinary restore leaves the stored name alone
     expect(req.encryptedName).toBeUndefined()
+
+    // one still at epoch 0 is behind the device floor (ADR 0109 point 6): refused before anything is sent
+    restore.mockClear()
+    await expect(restoreNode(SCOPE_ID, epochs, [], { id: 'n2', parentId: null, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'Rom 2026' }))
+      .rejects.toBeInstanceOf(NodeKeyBelowFloorError)
+    expect(restore).not.toHaveBeenCalled()
   })
 
   it('re-seals the name in the SAME request as the token derived from it, both under the live parent\'s key', async () => {
@@ -381,23 +389,31 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(e0), after, C)!)).toEqual(Array.from(keys.C))
   })
 
-  it('the epoch: the current one into the root and out of it, the node\'s own between two folders (ADR 0080 Decision 4)', async () => {
+  it('the epoch: always the node\'s own — a placement never changes it — and the destination\'s as parentEpoch (ADR 0109 point 6)', async () => {
     const update = vi.fn<ContentApi['updateNode']>()
     mockContent({ updateNode: update })
+    // The rotated scope after its re-key reached A, B and M (epoch 1, A's and B's entries under E_1), not yet C (epoch 0).
+    const reKeyed = (): TreeNode[] => [
+      treeRow(A, null, 'FOLDER', 'Reisen', e1, keys.A, 1),
+      treeRow(B, null, 'FOLDER', 'Archiv', e1, keys.B, 1),
+      treeRow(M, A, 'MEMORY', 'Italien', keys.A, keys.M, 1),
+      treeRow(C, M, 'CHAPTER', 'Tag 1', keys.M, keys.C, 0),
+    ]
 
-    await moveNode(SCOPE_ID, rotated, tree(), M, null) // into the root: under E_current, at the current epoch
+    await moveNode(SCOPE_ID, rotated, reKeyed(), M, null) // into the root: under K_SC at the node's own epoch (1)
     expect(sent(update, 0).epoch).toBe(1)
     expect(sent(update, 0).parentId).toBeUndefined()
+    expect(sent(update, 0).parentEpoch).toBeUndefined()
     expect(Array.from(unwrapAt(e1, M, sent(update, 0).wrappedContentKey!, 1, 1))).toEqual(Array.from(keys.M))
     expect(sent(update, 0).slugToken).toBe(b64std(v1.slugToken(e1, SCOPE_ID, 'italien')))
 
-    await moveNode(SCOPE_ID, rotated, tree(), A, B) // out of the root: the epoch the server will store, the current
-    expect(sent(update, 1).epoch).toBe(1)
+    await moveNode(SCOPE_ID, rotated, reKeyed(), A, B) // out of the root: its own epoch, stored as sent
+    expect(sent(update, 1)).toMatchObject({ epoch: 1, parentEpoch: 1 })
     expect(Array.from(unwrapAt(keys.B, A, sent(update, 1).wrappedContentKey!, 1, 1))).toEqual(Array.from(keys.A))
 
-    await moveNode(SCOPE_ID, rotated, tree(), M, B) // between folders: the server keeps the stored epoch, so seal at it
-    expect(sent(update, 2).epoch).toBe(0)
-    expect(Array.from(unwrapAt(keys.B, M, sent(update, 2).wrappedContentKey!, 0, 1))).toEqual(Array.from(keys.M))
+    await moveNode(SCOPE_ID, rotated, reKeyed(), C, B) // between folders: the stored epoch (0), whatever the current one
+    expect(sent(update, 2)).toMatchObject({ epoch: 0, parentEpoch: 1 })
+    expect(Array.from(unwrapAt(keys.B, C, sent(update, 2).wrappedContentKey!, 0, 1))).toEqual(Array.from(keys.C))
   })
 
   it('on 409 stale_placement it re-reads the tree once and rebuilds on the revision it finds there', async () => {

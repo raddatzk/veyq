@@ -14,6 +14,7 @@ import type { UploadJob } from '../../core/blob/queue'
 import type { BlobChunkProvider } from '../../core/blob/transport'
 import type { GuestAccess } from '../../core/access'
 import { createContentNode, deleteNode, restoreNode, type NodeParent, type TreeNode } from '../../core/node/tree'
+import { memberCreateOptions } from '../../core/node/rereadNode'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { loadTree, treeStore } from '../../core/node/treeStore'
 import { abandonShareNodeAsGuest, createShareNodeAsGuest, guestTreeContext, guestTreeErrorOf, GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
@@ -177,7 +178,7 @@ export function memberDepotSource(from: {
         // nothing, rather than a node nobody can read.
         const key = folder ? from.keyOf(folder.id) : null
         if (folder && !key) return null
-        const parent: NodeParent = folder && key ? { id: folder.id, key } : null
+        const parent: NodeParent = folder && key ? { id: folder.id, key, epoch: folder.epoch } : null
         return memberBatch(scopeId, epochs, parent)
       },
       beginReplace() {
@@ -192,7 +193,7 @@ export function memberDepotSource(from: {
         if (!scopeId || !epochs) return null
         const key = folder ? from.keyOf(folder.id) : null
         if (folder && !key) return null
-        return memberTree(scopeId, epochs, folder && key ? { id: folder.id, key } : null)
+        return memberTree(scopeId, epochs, folder && key ? { id: folder.id, key, epoch: folder.epoch } : null)
       },
     },
     async deleteFile(nodeId, options) {
@@ -226,8 +227,13 @@ function memberTree(scopeId: string, epochs: EpochKeys, level: NodeParent): File
   return {
     async folder(parent, name) {
       try {
-        const { nodeId, contentKey } = await createContentNode(scopeId, epochs, at(parent), FOLDER_KIND, name)
-        made.set(nodeId, { id: nodeId, key: contentKey })
+        const under = at(parent)
+        const { nodeId, contentKey, epoch } = await createContentNode(
+          scopeId, epochs, under, FOLDER_KIND, name, undefined,
+          // the level's folder may be re-read after an epoch refusal; a folder this upload just made is current already
+          parent === null ? memberCreateOptions(scopeId, under) : {},
+        )
+        made.set(nodeId, { id: nodeId, key: contentKey, epoch })
         return nodeId
       } catch (e) {
         const { status, code } = await decodeHttpError(e)
@@ -310,10 +316,10 @@ function guestTree(ctx: GuestTreeContext, levelId: string): FilesTreeUpload {
     async folder(parent, name) {
       const parentId = parent ?? levelId
       try {
-        const { nodeId, contentKey } = await createShareNodeAsGuest(ctx, { parentId, kind: FOLDER_KIND, name })
+        const { nodeId, contentKey, epoch } = await createShareNodeAsGuest(ctx, { parentId, kind: FOLDER_KIND, name })
         ctx.keys.set(nodeId, contentKey)
         ctx.names.set(nodeId, name)
-        ctx.nodes.set(nodeId, { id: nodeId, parentId, kind: FOLDER_KIND, epoch: ctx.nodes.get(parentId)?.epoch ?? 0, blockedByOperator: false })
+        ctx.nodes.set(nodeId, { id: nodeId, parentId, kind: FOLDER_KIND, epoch, blockedByOperator: false })
         return nodeId
       } catch (e) {
         const err = await guestTreeErrorOf(e)

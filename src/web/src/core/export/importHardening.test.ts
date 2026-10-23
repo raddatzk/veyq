@@ -21,6 +21,7 @@ import { pickedDirectory, type DirectoryFile, type ImportInput } from './importS
 import { LIMITS, MAX_DEPTH, MAX_NODES, type ManifestPayload } from './manifest'
 import { ZipWriter, openZip } from './zip'
 import * as v1 from '@veyq/crypto/v1'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const FILE = 'H_FILE'
 const ALBUM = 'H_ALBUM'
@@ -34,7 +35,7 @@ const access = memberAccessOf({ scopeId: 's', epochs })
 
 const created: { kind: string; name: string; parent: string | null; bytes: string }[] = []
 beforeAll(() => {
-  registry.registerKind({
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
     validateContent: (c) => (typeof c.note === 'string' && c.note.length > 10 ? { code: 'too_large', message: 'note' } : null),
     async exportContent(ctx) {
@@ -48,7 +49,7 @@ beforeAll(() => {
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
     },
   })
-  registry.registerKind({
+  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
     kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
     async exportContent(ctx) {
       const files = ['IMG.jpg', 'img.JPG'].map((n) => ctx.addPayload(n, { size: n.length, mediaType: 'image/jpeg', chunks: async function* () { yield text(n) } }))
@@ -69,7 +70,7 @@ function fresh(): void {
   let n = 0
   vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
     created.push({ kind, name, parent: parent?.id ?? null, bytes: '' })
-    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9) }
+    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
   })
 }
 beforeEach(() => {

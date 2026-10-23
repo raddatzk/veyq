@@ -202,7 +202,7 @@ async function onReissue(s: ManagedShare) {
   actionError.value = false
   alreadyReplaced.value = false
   try {
-    const minted = await remintShare({ ...s, ...addressOf(s) }, props.nodeKey, props.epochs, props.nodeName)
+    const minted = await remintShare({ ...s, ...addressOf(s) }, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
     link.value = buildShareLink(minted.shareId, minted.kShare)
     view.value = 'link'
   } catch (e) {
@@ -385,7 +385,7 @@ function endOfDay(d: Date): Date {
 const { run: runCreate, pending: minting } = useAsyncAction(
   async () => {
     const minted = await mintShare(
-      props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName, role.value,
+      props.scopeId, props.nodeId, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName, role.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null,
       effectiveNote(), name.value, passwordEnabled.value ? password.value : '',
     )

@@ -10,7 +10,10 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => 
 vi.mock('../spaces/scopes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../spaces/scopes')>()),
   commitRotation: vi.fn(),
+  listMyScopes: vi.fn(),
 }))
+// The re-key (ADR 0109) is `rekeyScope`'s own suite; here only when the worker runs it and what it does with its answer.
+vi.mock('../../core/node/rekey/rekeyScope', () => ({ rekeyScope: vi.fn() }))
 vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 // Hoisted so the (hoisted) vi.mock factory can close over the same mutable object the tests reach into.
 const { activeSpace } = vi.hoisted(() => ({ activeSpace: { scopeId: null as string | null } }))
@@ -22,7 +25,9 @@ import { tasksApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import type { TasksApi } from '../../api/generated/tasks'
 import type { ScopeMember } from '../../api/generated/scopes'
-import { commitRotation } from '../spaces/scopes'
+import { commitRotation, listMyScopes } from '../spaces/scopes'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import type { ScopeSummary } from '../../api/generated/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { refreshActiveScope } from '../../app/activeSpace'
 
@@ -43,6 +48,51 @@ beforeEach(() => {
   activeSpace.scopeId = null
   vi.mocked(commitRotation).mockResolvedValue(2)
   vi.mocked(listScopeMembers).mockResolvedValue(SURVIVORS)
+  vi.mocked(listMyScopes).mockResolvedValue([])
+  vi.mocked(rekeyScope).mockResolvedValue({ done: true, committed: 1 })
+})
+
+/** An owner's scope row as `listMyScopes` serves it, re-keying or not. */
+const row = (id: string, rekeying: boolean) => ({ id, rekeying }) as unknown as ScopeSummary
+
+describe('runScopeRotationWorker and the re-key (ADR 0109 point 7)', () => {
+  it('resumes a scope an earlier run left re-keying before it claims anything', async () => {
+    vi.mocked(listMyScopes).mockResolvedValue([row('g1', true), row('g2', false)])
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValue(null))
+    await runScopeRotationWorker()
+    expect(rekeyScope).toHaveBeenCalledWith('g1')
+    expect(rekeyScope).not.toHaveBeenCalledWith('g2') // control: a scope that does not lag is left alone
+  })
+
+  it('re-keys after its own rotation and completes only then', async () => {
+    const order: string[] = []
+    vi.mocked(commitRotation).mockImplementation(async () => { order.push('commit'); return 2 })
+    vi.mocked(rekeyScope).mockImplementation(async () => { order.push('rekey'); return { done: true, committed: 3 } })
+    const completeTask = vi.fn<TasksApi['completeTask']>().mockImplementation(async () => { order.push('complete') })
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 }).mockResolvedValueOnce(null), completeTask)
+    expect(await runScopeRotationWorker()).toBe(1)
+    expect(order).toEqual(['commit', 'rekey', 'complete'])
+  })
+
+  it('leaves the job leased, uncompleted, when the re-key does not finish', async () => {
+    vi.mocked(rekeyScope).mockResolvedValue({ done: false, committed: 0 })
+    const completeTask = vi.fn<TasksApi['completeTask']>()
+    const failTask = vi.fn<TasksApi['failTask']>()
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 }).mockResolvedValueOnce(null), completeTask, failTask)
+    expect(await runScopeRotationWorker()).toBe(0)
+    expect(completeTask).not.toHaveBeenCalled()
+    expect(failTask).not.toHaveBeenCalled()
+  })
+
+  it('completes a job whose rotation an earlier lease committed without rotating again', async () => {
+    // the resume pass sees the scope re-keying, finishes it; the claimed job's rotation is the one already committed
+    vi.mocked(listMyScopes).mockResolvedValue([row('g1', true)])
+    const completeTask = vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined)
+    mockTasks(vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 2 }).mockResolvedValueOnce(null), completeTask)
+    expect(await runScopeRotationWorker()).toBe(1)
+    expect(commitRotation).not.toHaveBeenCalled()
+    expect(completeTask).toHaveBeenCalledWith({ jobId: 'j1', completeRequest: {} })
+  })
 })
 
 describe('runScopeRotationWorker', () => {

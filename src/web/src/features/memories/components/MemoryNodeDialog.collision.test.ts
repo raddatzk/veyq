@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)', () => {
   it('a Memory onto a folder\'s slug at the root sends nothing and names the folder', async () => {
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
     await typeAndClickSubmit(w, 'italien')
 
     expect(createMemory).not.toHaveBeenCalled()
@@ -65,7 +65,7 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
   })
 
   it('a Memory onto a sibling Memory in a folder names the Memory', async () => {
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: 'f1', parentKey: KEY })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: 'f1', parentKey: KEY, parentEpoch: 0 })
     await typeAndClickSubmit(w, 'ROM!')
 
     expect(createMemory).not.toHaveBeenCalled()
@@ -73,18 +73,18 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
   })
 
   it('a chapter onto a sibling chapter names the chapter; another name is sent', async () => {
-    const w = mountDialog({ kind: CHAPTER_KIND, parentId: 'm1', parentKey: KEY })
+    const w = mountDialog({ kind: CHAPTER_KIND, parentId: 'm1', parentKey: KEY, parentEpoch: 0 })
     await typeAndClickSubmit(w, 'tag-1')
     expect(createChapter).not.toHaveBeenCalled()
     expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('memory.aChapter'), name: 'Tag 1' }))
 
     await typeAndClickSubmit(w, 'Tag 2')
-    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1')
+    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1', 0, { reread: expect.any(Function) })
   })
 
   it('a collision the loaded tree cannot see still ends on the server\'s 409', async () => {
     vi.mocked(createMemory).mockRejectedValueOnce(httpError(409))
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
     await typeAndClickSubmit(w, 'Neu')
 
     expect(createMemory).toHaveBeenCalledOnce()

@@ -366,7 +366,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const sealer = date || location
       ? (key: Uint8Array, addr: Parameters<typeof sealNodeMeta>[1]) => sealNodeMeta(key, addr, { v: 1, ...(date ? { date } : {}), ...(location ? { location } : {}) })
       : undefined
-    const { nodeId, contentKey: nodeKey } = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, kind, ctx.name, sealer)
+    const { nodeId, contentKey: nodeKey, epoch: nodeEpoch } = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, kind, ctx.name, sealer)
 
     const copying = ctx.purpose === 'copy'
     const bytesOf = (m: ExportedMedium) => m.file.size + (copying ? (m.copy?.tiers ?? []).reduce((s, t) => s + t.file.size, 0) : 0)
@@ -377,7 +377,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
       if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Import cancelled', 'AbortError')
       const before = done
       const size = bytesOf(medium)
-      const opts = { signal: ctx.signal, onProgress: (f: number) => ctx.onProgress?.((before + f * size) / total) }
+      const opts = { signal: ctx.signal, nodeEpoch, onProgress: (f: number) => ctx.onProgress?.((before + f * size) / total) }
       const { mediaId } = copying
         ? await addCopiedMedia(ctx.scopeId, nodeId, nodeKey, await copiedSource(ctx, medium), opts)
         : await addOriginal(ctx, nodeId, nodeKey, medium, opts)
@@ -396,10 +396,10 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
         let target = row
         const at = isoToMs(medium.capturedAt)
         if (medium.capturedAtCorrected && at !== undefined) {
-          const w = await setMediaMeta(ctx.scopeId, target, nodeKey, at)
+          const w = await setMediaMeta(ctx.scopeId, target, nodeKey, nodeEpoch, at)
           target = { ...target, wrappedMeta: w.wrappedMeta ?? undefined, metaRevision: w.metaRevision }
         }
-        if (medium.location?.place) await backfillPlaceName(ctx.scopeId, target, nodeKey, medium.location.place)
+        if (medium.location?.place) await backfillPlaceName(ctx.scopeId, target, nodeKey, nodeEpoch, medium.location.place)
       }
     }
 
@@ -420,7 +420,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
 
 /** A download's medium: its original through the ordinary upload, which decodes it to derive the tiers. */
 async function addOriginal(
-  ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, opts: { signal?: AbortSignal; onProgress: (f: number) => void },
+  ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
 ): Promise<{ mediaId: string }> {
   const file = wholePayload(await ctx.payload(medium.file, medium.name ?? 'file'))
   return addMedia(ctx.scopeId, nodeId, nodeKey, { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name }, undefined, opts)

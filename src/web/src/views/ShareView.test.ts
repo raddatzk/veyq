@@ -71,7 +71,7 @@ function serve(r: ResolvedShare, rootKind: NodeKind = MEMORY_KIND) {
   vi.mocked(listShareMedia).mockReset().mockResolvedValue(NO_SHARE_MEDIA) // the items come from openSharedMemory's stub
 }
 
-const DROP: ShareAccess = { kind: 'drop', nodeId: 'n1', dropPublicKey: new Uint8Array() }
+const DROP: ShareAccess = { kind: 'drop', nodeId: 'n1', dropPublicKey: new Uint8Array(), rootEpoch: 0 }
 function dropShare(): ResolvedShare {
   return { memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.WriteOnly, scopeId: 'scope-1', access: DROP, items: [] }
 }
@@ -230,7 +230,7 @@ describe('ShareView — a chapter share', () => {
   })
 
   it('an uploader link rooted at a CHAPTER reaches the drop\'s name screen', async () => {
-    const access: ShareAccess = { kind: 'drop', nodeId: 'chapter-1', dropPublicKey: new Uint8Array() }
+    const access: ShareAccess = { kind: 'drop', nodeId: 'chapter-1', dropPublicKey: new Uint8Array(), rootEpoch: 0 }
     serve({ ...dropShare(), memoryName: 'Day 1', access }, CHAPTER_KIND)
     const wrapper = mountShareView()
     await flushPromises()

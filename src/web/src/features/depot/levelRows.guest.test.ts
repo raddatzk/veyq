@@ -321,7 +321,7 @@ describe('a contributor uploads a folder', () => {
   })
   beforeEach(() => {
     let n = 0
-    vi.mocked(createShareNodeAsGuest).mockReset().mockImplementation(async () => ({ nodeId: `g-${++n}`, contentKey: v1.randomBytes(32) }))
+    vi.mocked(createShareNodeAsGuest).mockReset().mockImplementation(async () => ({ nodeId: `g-${++n}`, contentKey: v1.randomBytes(32), epoch: 0 }))
     vi.mocked(abandonShareNodeAsGuest).mockReset().mockResolvedValue(undefined)
     vi.mocked(tenantStorageFits).mockClear()
   })

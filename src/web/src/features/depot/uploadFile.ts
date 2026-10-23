@@ -27,6 +27,8 @@
 // attached it after all), and best effort: a node the trash call misses stays, and the section offers an upload into
 // it. A replace never trashes anything — the node was there before the job.
 import { createContentNode, deleteNode, type NodeParent } from '../../core/node/tree'
+import { assertNodeKeyAtFloor } from '../../core/node/rekey/floor'
+import { memberCreateOptions } from '../../core/node/rereadNode'
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
 import type { UploadBatch, UploadJob, UploadJobContext } from '../../core/blob/queue'
 import type { BlobMeta } from '../../core/blob/meta'
@@ -65,9 +67,10 @@ export function fileBlobMeta(file: Pick<PayloadFile, 'type' | 'name' | 'lastModi
   return { type: file.type, name: file.name, modifiedAt: file.lastModified }
 }
 
-/** A replace: the existing file node, its own key, and the blob the member saw in it (null when the node holds none
- *  yet — a file whose first upload never completed). The node keeps its name; the new blob brings its own meta. */
-export type FileReplace = { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null }
+/** A replace: the existing file node, its own key with the epoch that key was minted at (`TreeNode.epoch`, which the
+ *  completion states, ADR 0109 point 6), and the blob the member saw in it (null when the node holds none yet — a file
+ *  whose first upload never completed). The node keeps its name; the new blob brings its own meta. */
+export type FileReplace = { nodeId: string; nodeKey: Uint8Array; nodeEpoch: number; expectedBlobId: string | null }
 
 /** Where one upload goes: the scope, its epoch keys (a new node seals under the write epoch) and either the parent a
  *  new file is created under (`null` = the scope root) or the file it replaces. */
@@ -85,10 +88,12 @@ export type FileUploadResult = { nodeId: string }
 export type FileJobExtra = { file: File; replaceNodeId?: string }
 
 /** Create the FILE node, mapping the two refusals a create can end on to their final codes. */
-async function createFileNode(target: FileUploadTarget, name: string): Promise<{ nodeId: string; nodeKey: Uint8Array }> {
+async function createFileNode(target: FileUploadTarget, name: string): Promise<{ nodeId: string; nodeKey: Uint8Array; nodeEpoch: number }> {
   try {
-    const { nodeId, contentKey } = await createContentNode(target.scopeId, target.epochs, target.parent, FILE_KIND, name)
-    return { nodeId, nodeKey: contentKey }
+    const { nodeId, contentKey, epoch } = await createContentNode(
+      target.scopeId, target.epochs, target.parent, FILE_KIND, name, undefined, memberCreateOptions(target.scopeId, target.parent),
+    )
+    return { nodeId, nodeKey: contentKey, nodeEpoch: epoch }
   } catch (e) {
     const { status, code } = await decodeHttpError(e)
     if (status === HttpStatus.conflict && code === FileUploadError.slugTaken) throw new Error(FileUploadError.slugTaken)
@@ -98,13 +103,14 @@ async function createFileNode(target: FileUploadTarget, name: string): Promise<{
 }
 
 /** Depot's `completeFile`: attach the upload to the node's slot, replacing exactly `expectedBlobId` (absent: an empty
- *  slot). A `409 stale_file` becomes [StaleFileError] with the blob the slot holds now. */
+ *  slot), stating the file node's epoch as read with the key the content blob's key is wrapped under (ADR 0109 point 6).
+ *  A `409 stale_file` becomes [StaleFileError] with the blob the slot holds now. */
 export async function completeFileUpload(
-  scopeId: string, nodeId: string, uploadId: string, expectedBlobId: string | null,
+  scopeId: string, nodeId: string, nodeEpoch: number, uploadId: string, expectedBlobId: string | null,
 ): Promise<FileBlobRef> {
   try {
     return await withRefresh(() =>
-      filesApi().completeFile({ scopeId, nodeId, fileCompleteRequest: { uploadId, expectedBlobId: expectedBlobId ?? undefined } }),
+      filesApi().completeFile({ scopeId, nodeId, fileCompleteRequest: { nodeEpoch, uploadId, expectedBlobId: expectedBlobId ?? undefined } }),
     )
   } catch (e) {
     return rethrowCompletion(e)
@@ -147,7 +153,7 @@ export function deliveredSince(batches: readonly UploadBatch[]): Set<string> {
  */
 export function fileUploadJob<F extends PayloadFile = File>(target: FileUploadTarget, file: F): UploadJob<FileUploadResult, { file: F; replaceNodeId?: string }> {
   const { scopeId } = target
-  let node: { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null } | null =
+  let node: { nodeId: string; nodeKey: Uint8Array; nodeEpoch: number; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null
   let final: Error | null = null
   /** The node this job created and that holds nothing of it yet — what {@link abandon} trashes. */
@@ -161,10 +167,12 @@ export function fileUploadJob<F extends PayloadFile = File>(target: FileUploadTa
         node = { ...(await createFileNode(target, file.name)), expectedBlobId: null }
         created = node.nodeId
       }
+      // the device floor before the content is sealed under the file's key (ADR 0109 point 6, layer 2)
+      assertNodeKeyAtFloor({ id: node.nodeId, epoch: node.nodeEpoch }, target.epochs)
       const plan = planBlob(scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file, fileBlobMeta(file))
       const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId), onProgress, signal)
       throwIfAborted(signal)
-      const attached = await completeFileUpload(scopeId, node.nodeId, uploadId, node.expectedBlobId)
+      const attached = await completeFileUpload(scopeId, node.nodeId, node.nodeEpoch, uploadId, node.expectedBlobId)
       created = null // the node holds the file now: nothing to undo, whatever fails after
       expectMintedId(plan.blobId, attached.blobId)
       return { nodeId: node.nodeId }

@@ -29,7 +29,7 @@ import { createChapter, createMemory } from './memoryNodes'
 import { MEMORY_KIND } from './kinds'
 import { addMedia, listMedia, openOriginal } from './media'
 import { mintShare } from '../../core/sharing/manageShares'
-import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
+import { resolvePublicShare, shareRootEpoch } from '../../core/sharing/resolvePublicShare'
 import { openShareRoot } from '../../core/sharing/shareTree'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { createShareNodeAsGuest, guestTreeContext, placeShareNodeAsGuest, GuestTreeError } from '../../core/sharing/guestTree'
@@ -73,15 +73,15 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const epochs = epochsOf((await openPersonalScope())!)
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
-    const leftId = await createFolder(scopeId, epochs, LEFT_NAME, { id: folderId, key: folderKey })
-    const rightId = await createFolder(scopeId, epochs, RIGHT_NAME, { id: folderId, key: folderKey })
+    const leftId = await createFolder(scopeId, epochs, LEFT_NAME, { id: folderId, key: folderKey, epoch: 0 })
+    const rightId = await createFolder(scopeId, epochs, RIGHT_NAME, { id: folderId, key: folderKey, epoch: 0 })
     const leftKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), leftId)!
-    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: leftId, key: leftKey })
+    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: leftId, key: leftKey, epoch: 0 })
     const inMemory = await addMedia(scopeId, memory.nodeId, memory.memoryKey, photo(1))
-    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId)
+    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, 0)
 
     // --- A: a READ_WRITE link of the folder, through core's mint ---------------------------------------------------
-    const minted = await mintShare(scopeId, folderId, folderKey, epochs, FOLDER_NAME, ShareRole.ReadWrite)
+    const minted = await mintShare(scopeId, folderId, { key: folderKey, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.ReadWrite)
     const shareId = minted.shareId
     const fragmentKey = b64url(minted.kShare)
 
@@ -89,7 +89,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const head = await resolvePublicShare(shareId, fragmentKey)
     expect(head.rootKind).toBe(FOLDER_KIND)
     expect(head.role).toBe(ShareRole.ReadWrite)
-    const identity = await createGuestIdentity(head, openShareRoot(head).key, { name: GUEST_NAME, fragmentKey })
+    const identity = await createGuestIdentity(head, openShareRoot(head).key, { name: GUEST_NAME, fragmentKey, rootEpoch: shareRootEpoch(head.share) })
     const contextNow = async () => guestTreeContext(await resolvePublicShare(shareId, fragmentKey), { contributorToken: identity.contributorToken, fragmentKey })
 
     // --- (a) anonymous: a folder under the root, then one nested in it ---------------------------------------------
@@ -155,7 +155,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
         shareId, nodeId: folderId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
           parentId: leftId, encryptedName: sealName(rootKey, rootAt, 'Umbenannt'), slugToken: slugTokenFor(rootKey, leftId, FOLDER_KIND, 'Umbenannt'),
-          wrappedContentKey: wrapContentKey(rootKey, rootAt, rootKey), placementRevision: 0,
+          wrappedContentKey: wrapContentKey(rootKey, rootAt, rootKey), placementRevision: 0, parentEpoch: ctx.nodes.get(leftId)!.epoch,
         },
       }),
     )
@@ -169,7 +169,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
         shareId, nodeId: memory.nodeId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
           parentId: leftId, encryptedName: sealName(leftKeyGuest, staleAt, MEMORY_NAME), slugToken: slugTokenFor(leftKeyGuest, leftId, MEMORY_KIND, MEMORY_NAME),
-          wrappedContentKey: wrapContentKey(leftKeyGuest, staleAt, memoryKey), placementRevision: 0,
+          wrappedContentKey: wrapContentKey(leftKeyGuest, staleAt, memoryKey), placementRevision: 0, parentEpoch: ctx.nodes.get(leftId)!.epoch,
         },
       }),
     )
@@ -177,7 +177,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     expect(byId(await listTree(scopeId, epochs), memory.nodeId)?.parentId, 'the Memory stays where the guest moved it').toBe(rightId)
 
     // A READ link of the same folder: the guest may read, never write.
-    const readOnly = await mintShare(scopeId, folderId, folderKey, epochs, FOLDER_NAME, ShareRole.Read)
+    const readOnly = await mintShare(scopeId, folderId, { key: folderKey, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.Read)
     const readHead = await resolvePublicShare(readOnly.shareId, b64url(readOnly.kShare))
     const readCtx = guestTreeContext(readHead, { contributorToken: identity.contributorToken, fragmentKey: b64url(readOnly.kShare) })
     const onRead = await failure(createShareNodeAsGuest(readCtx, { parentId: folderId, kind: FOLDER_KIND, name: 'Nur lesen' }))

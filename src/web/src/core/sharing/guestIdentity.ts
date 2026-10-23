@@ -8,7 +8,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import { i18n } from '../../i18n'
-import type { PublicShareHead } from './resolvePublicShare'
+import { resolvePublicShare, shareRootEpoch, type PublicShareHead } from './resolvePublicShare'
+import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { openShareRoot } from './shareTree'
 
 /** A guest's display name, sealed bound to (scope, share, identity) (cr-0101, ADR 0072): under the shared root's key for
@@ -64,20 +65,21 @@ export type GuestIdentity = { identityId: string; contributorToken: string; disp
  * Name yourself on a READ_WRITE link (operator-blind): the display name sealed under the shared root's key `rootKey`,
  * bound to a client-minted identity id, and an anonymous identity created with it. The request proves the guest holds the
  * whole link, not only its id (ADR 0076): `X-Share-Write` carries the token derived from `fragmentKey` (the link's
- * `#k=`), whose hash the share stores; `pwToken` is the password gate's guest token (cr-0164). The server never sees the
- * name, the key or the person.
+ * `#k=`), whose hash the share stores; `pwToken` is the password gate's guest token (cr-0164). `rootEpoch` is the epoch
+ * `rootKey` was minted at (`PublicShare.rootEpoch`), which the request states (ADR 0109 point 6). The server never sees
+ * the name, the key or the person.
  */
 export async function createGuestIdentity(
   head: Pick<PublicShareHead, 'shareId' | 'scopeId'>,
   rootKey: Uint8Array,
-  { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },
+  { name, fragmentKey, pwToken, rootEpoch }: { name: string; fragmentKey: string; pwToken?: string; rootEpoch: number },
 ): Promise<GuestIdentity> {
   const { shareId, scopeId } = head
   const identityId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
   const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), rootKey, v1.utf8(name)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
-    createShareIdentityRequest: { identityId, sealedDisplayName },
+    createShareIdentityRequest: { identityId, sealedDisplayName, nodeEpoch: rootEpoch },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
     xShareWrite: b64std(v1.shareWriteToken(fromB64url(fragmentKey), shareId)),
   })
@@ -88,12 +90,18 @@ export async function createGuestIdentity(
  * Name the guest of a READ_WRITE link once for every body of it (cr-node-key-hierarchy 5b.4b): {@link createGuestIdentity}
  * under the SHARE ROOT's key — whichever body asks first, so a folder link's guest is named under the folder's key even
  * when its first write is in a Memory below — and saved as the link's one session ({@link saveGuestSession}). A member
- * opens the name through the chain (the node's key or one of its ancestors', `features/memories/mediaBuckets.ts`).
+ * opens the name through the chain (the node's key or one of its ancestors', `features/memories/mediaBuckets.ts`). The two
+ * epoch refusals (the root re-keyed since `head` was read, or not yet re-keyed) resolve the link again and name the
+ * guest under the root's key as it then is (`writeAtNodeEpoch`, ADR 0109 point 6).
  */
 export async function nameShareGuest(
   head: PublicShareHead, { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },
 ): Promise<GuestIdentity> {
-  const identity: GuestIdentity = { ...(await createGuestIdentity(head, openShareRoot(head).key, { name, fragmentKey, pwToken })), displayName: name }
+  const created = await writeAtNodeEpoch(async (reread) => {
+    const at = reread ? await resolvePublicShare(head.shareId, fragmentKey, pwToken) : head
+    return createGuestIdentity(at, openShareRoot(at).key, { name, fragmentKey, pwToken, rootEpoch: shareRootEpoch(at.share) })
+  })
+  const identity: GuestIdentity = { ...created, displayName: name }
   saveGuestSession(head.shareId, identity)
   return identity
 }

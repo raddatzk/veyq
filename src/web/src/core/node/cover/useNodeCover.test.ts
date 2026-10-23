@@ -175,7 +175,7 @@ describe('what each intent writes', () => {
     })
     api.save(FOLDER, { kind: 'upload', file, crop })
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
-    expect(lastWrite().current).toEqual({ wrappedMeta: 'cGVlcg==', metaRevision: 7 })
+    expect(lastWrite().current).toEqual({ wrappedMeta: 'cGVlcg==', metaRevision: 7, nodeEpoch: FOLDER.epoch })
   })
 
   it('upload: a file that is no image is refused before any upload (a dialog never emits one; the door is shut anyway)', () => {

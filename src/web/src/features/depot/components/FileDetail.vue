@@ -259,7 +259,7 @@ async function startReplace(file: File, confirmed = false): Promise<void> {
     })
     if (!accepted) return
   }
-  const jobs = await batch.jobs([{ file, replace: { nodeId: props.node.id, nodeKey, expectedBlobId: blob.value?.blobId ?? null } }])
+  const jobs = await batch.jobs([{ file, replace: { nodeId: props.node.id, nodeKey, nodeEpoch: props.node.epoch, expectedBlobId: blob.value?.blobId ?? null } }])
   if (jobs.length === 0) return
   enqueue<FileUploadResult, FileJobExtra>(jobs, {
     label: props.node.name,

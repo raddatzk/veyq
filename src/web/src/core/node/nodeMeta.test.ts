@@ -103,8 +103,8 @@ describe('openNodeMetaForWrite — only an ABSENT blob is fresh (ADR 0077 point 
 })
 
 describe('nodeMetaState', () => {
-  it('is the blob and the revision the tree holds, nothing else', () => {
-    expect(nodeMetaState(treeNode({ wrappedMeta: 'YQ==', metaRevision: 7, id: 'n' }))).toEqual({ wrappedMeta: 'YQ==', metaRevision: 7 })
+  it('is the blob, the revision and the node\'s epoch the tree holds, nothing else', () => {
+    expect(nodeMetaState(treeNode({ wrappedMeta: 'YQ==', metaRevision: 7, epoch: 2, id: 'n' }))).toEqual({ wrappedMeta: 'YQ==', metaRevision: 7, nodeEpoch: 2 })
   })
 })
 

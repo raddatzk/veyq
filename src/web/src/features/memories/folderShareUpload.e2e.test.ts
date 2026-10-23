@@ -29,7 +29,7 @@ import { createChapter, createMemory } from './memoryNodes'
 import { addMedia, listMedia, openOriginal } from './media'
 import { listBuckets, openBucketName } from './mediaBuckets'
 import { mintShare } from '../../core/sharing/manageShares'
-import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
+import { resolvePublicShare, shareRootEpoch } from '../../core/sharing/resolvePublicShare'
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { addSharePhoto, deleteSharePhoto } from './share'
@@ -66,11 +66,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share upload e2e (live, real cryp
     const epochs = epochsOf((await openPersonalScope())!)
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
-    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey })
-    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId)
+    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey, epoch: 0 })
+    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, 0)
     const membersPhoto = await addMedia(scopeId, memory.nodeId, memory.memoryKey, photo(1))
 
-    const minted = await mintShare(scopeId, folderId, folderKey, epochs, FOLDER_NAME, ShareRole.ReadWrite)
+    const minted = await mintShare(scopeId, folderId, { key: folderKey, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.ReadWrite)
     const shareId = minted.shareId
     const fragmentKey = b64url(minted.kShare)
 
@@ -78,8 +78,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share upload e2e (live, real cryp
     const head = await resolvePublicShare(shareId, fragmentKey)
     const rootKey = openShareRoot(head).key
     const { keys } = walkSubtree(head.scopeId, head.share.nodes, rootKey)
-    const guest = await createGuestIdentity(head, rootKey, { name: GUEST_NAME, fragmentKey })
-    const upload = (nodeId: string) => ({ ...guest, shareId, scopeId: head.scopeId, sealKey: keys.get(nodeId)!, nodeId })
+    const guest = await createGuestIdentity(head, rootKey, { name: GUEST_NAME, fragmentKey, rootEpoch: shareRootEpoch(head.share) })
+    const epochOf = (nodeId: string) => head.share.nodes.find((n) => n.id === nodeId)!.epoch
+    const upload = (nodeId: string) => ({ ...guest, shareId, scopeId: head.scopeId, sealKey: keys.get(nodeId)!, nodeEpoch: epochOf(nodeId), nodeId })
     const intoMemory = await addSharePhoto(upload(memory.nodeId), photo(2))
     const intoChapter = await addSharePhoto(upload(chapter.nodeId), photo(3))
 
@@ -113,13 +114,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share upload e2e (live, real cryp
     expect(after, "the member's photo stays (the live control)").toContain(membersPhoto.mediaId)
 
     // --- a READ link of the same folder refuses an upload into the Memory --------------------------------------------
-    const readOnly = await mintShare(scopeId, folderId, folderKey, epochs, FOLDER_NAME, ShareRole.Read)
+    const readOnly = await mintShare(scopeId, folderId, { key: folderKey, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.Read)
     const onRead = await failure(addSharePhoto({ ...upload(memory.nodeId), shareId: readOnly.shareId }, photo(4)))
     expect(await isCodedError(onRead, HttpStatus.forbidden, 'share_not_contributable'), 'a READ link: 403 share_not_contributable').toBe(true)
 
     // --- the raw wire: a second guest uploads too; what the first is served names neither identity -----------------
-    const other = await createGuestIdentity(head, rootKey, { name: OTHER_GUEST_NAME, fragmentKey })
-    await addSharePhoto({ ...other, shareId, scopeId: head.scopeId, sealKey: keys.get(memory.nodeId)!, nodeId: memory.nodeId }, photo(5))
+    const other = await createGuestIdentity(head, rootKey, { name: OTHER_GUEST_NAME, fragmentKey, rootEpoch: shareRootEpoch(head.share) })
+    await addSharePhoto({ ...other, shareId, scopeId: head.scopeId, sealKey: keys.get(memory.nodeId)!, nodeEpoch: epochOf(memory.nodeId), nodeId: memory.nodeId }, photo(5))
     const resolveWire = JSON.stringify(await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json())
     const mediaWire = JSON.stringify(await (await publicShareMediaApi().listShareMediaRaw({ shareId })).raw.json())
     for (const id of [other.identityId, guest.identityId]) {

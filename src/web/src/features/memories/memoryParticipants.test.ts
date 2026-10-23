@@ -72,7 +72,7 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
     const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode })
     const withDate = sealNodeMeta(nodeKey, NODE, { v: 1, date })
-    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, B], { wrappedMeta: withDate, metaRevision: 3 })
+    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, B], { wrappedMeta: withDate, metaRevision: 3, nodeEpoch: 0 })
     expect(idsOf(state.wrappedMeta)).toEqual([A, B])
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(date)
     // the stored object carries user ids and nothing else (no name, no snapshot - ADR 0083 decision 4)
@@ -84,7 +84,7 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
   it('keeps an unknown sibling field inside the sub-object and in the blob', async () => {
     fakeApi(contentApi, { updateNode: vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined) })
     const base = sealNodeMeta(nodeKey, NODE, { v: 1, future: { x: 1 }, participants: { userIds: [A], flag: true } })
-    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, B], { wrappedMeta: base, metaRevision: 0 })
+    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, B], { wrappedMeta: base, metaRevision: 0, nodeEpoch: 0 })
     const meta = unsealNodeMeta(nodeKey, NODE, state.wrappedMeta)
     expect(meta.future).toEqual({ x: 1 })
     expect(meta.participants).toEqual({ userIds: [A, B], flag: true })
@@ -93,7 +93,7 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
   it('an empty list drops the sub-object and keeps the date', async () => {
     fakeApi(contentApi, { updateNode: vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined) })
     const base = sealNodeMeta(nodeKey, NODE, { v: 1, date, participants: { userIds: [A] } })
-    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [], { wrappedMeta: base, metaRevision: 0 })
+    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [], { wrappedMeta: base, metaRevision: 0, nodeEpoch: 0 })
     expect('participants' in unsealNodeMeta(nodeKey, NODE, state.wrappedMeta)).toBe(false)
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(date)
   })
@@ -102,9 +102,9 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
     const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode })
     const base = sealNodeMeta(nodeKey, NODE, { v: 1, participants: { userIds: [A, B] } })
-    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, B], { wrappedMeta: base, metaRevision: 5 })
+    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, B], { wrappedMeta: base, metaRevision: 5, nodeEpoch: 0 })
     expect(updateNode).not.toHaveBeenCalled()
-    expect(state).toEqual({ wrappedMeta: base, metaRevision: 5 })
+    expect(state).toEqual({ wrappedMeta: base, metaRevision: 5, nodeEpoch: 0 })
   })
 
   it('on 409 stale_revision MERGES: a peer\'s added participant survives, the editor\'s addition lands', async () => {
@@ -112,7 +112,7 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
     const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 8)).mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })
     const mine = sealNodeMeta(nodeKey, NODE, { v: 1, participants: { userIds: [A] } })
-    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, C], { wrappedMeta: mine, metaRevision: 7 })
+    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A, C], { wrappedMeta: mine, metaRevision: 7, nodeEpoch: 0 })
     expect(updateNode).toHaveBeenCalledTimes(2)
     expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(8)
     expect(idsOf(state.wrappedMeta)).toEqual([A, D, C])
@@ -125,7 +125,7 @@ describe('setMemoryParticipants (read-modify-write, ADR 0077 + ADR 0083)', () =>
     const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 2)).mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })
     const mine = sealNodeMeta(nodeKey, NODE, { v: 1, participants: { userIds: [A, B] } })
-    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A], { wrappedMeta: mine, metaRevision: 1 })
+    const state = await setMemoryParticipants(SCOPE_ID, NODE_ID, nodeKey, [A], { wrappedMeta: mine, metaRevision: 1, nodeEpoch: 0 })
     expect(idsOf(state.wrappedMeta)).toEqual([A, D]) // B removed by the editor, D added by the peer
   })
 })

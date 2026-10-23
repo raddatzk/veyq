@@ -47,7 +47,7 @@ const stubs = {
 }
 const mountDialog = (extra: { contribute?: boolean } = { contribute: true }) =>
   mount(FileShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FILE_ID, nodeKey: FILE_KEY, epochs: EPOCHS, nodeName: 'Report.pdf', nodeKind: FILE_KIND, ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FILE_ID, nodeKey: FILE_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Report.pdf', nodeKind: FILE_KIND, ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 const byText = (w: ReturnType<typeof mountDialog>, text: string) => w.findAll('button').find((b) => b.text() === text)!
@@ -109,7 +109,8 @@ describe('FileShareDialog', () => {
     expect(mintShare).toHaveBeenCalledOnce()
     const args = mintShare.mock.calls[0]
     expect([args[0], args[1], args[4], args[5]]).toEqual([SCOPE_ID, FILE_ID, 'Report.pdf', role])
-    expect(Array.from(args[2])).toEqual(Array.from(FILE_KEY))
+    expect(Array.from(args[2].key)).toEqual(Array.from(FILE_KEY))
+    expect(args[2].epoch).toBe(0)
     expect(w.html()).toContain('new-share')
   })
 

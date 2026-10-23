@@ -8,6 +8,7 @@ import { mergeRowActions } from '../node/levelRow'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { canCopy, copiesKind, copyHeaderActions, copyRowActions } from './copyActions'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 
 const unlocked = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) })
 const t = (k: string) => k
@@ -15,11 +16,11 @@ const hooks = { exportContent: async () => null, importContent: async () => ({ n
 
 beforeAll(() => {
   if (!registry.kind('CP_STREAMS').supported) {
-    registry.registerKind({ kind: 'CP_STREAMS', icon: 'file', shareable: false, ...hooks, importStreams: true })
-    registry.registerKind({ kind: 'CP_WHOLE', icon: 'file', shareable: false, ...hooks }) // its import needs whole payloads
-    registry.registerKind({ kind: 'CP_AS_FOLDER', icon: 'file', shareable: false, exportContent: hooks.exportContent, importsAsFolder: true })
-    registry.registerKind({ kind: 'CP_NO_IMPORT', icon: 'file', shareable: false, exportContent: hooks.exportContent, importStreams: true })
-    registry.registerKind({ kind: 'CP_NONE', icon: 'file', shareable: false })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_STREAMS', icon: 'file', shareable: false, ...hooks, importStreams: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_WHOLE', icon: 'file', shareable: false, ...hooks }) // its import needs whole payloads
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_AS_FOLDER', icon: 'file', shareable: false, exportContent: hooks.exportContent, importsAsFolder: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NO_IMPORT', icon: 'file', shareable: false, exportContent: hooks.exportContent, importStreams: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NONE', icon: 'file', shareable: false })
   }
 })
 

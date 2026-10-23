@@ -28,6 +28,8 @@ import type { BlobPlan, BlobSource } from '../../../core/blob/types'
 import { editField, unsealNodeMeta } from '../../../core/node/nodeMeta'
 import { writeNodeMeta } from '../../../core/node/nodeMetaWrite'
 import type { SealedMetaState } from '../../../core/node/sealedMetaWrite'
+import type { NodeMetaState } from '../../../core/node/nodeMeta'
+import { assertActiveScopeFloor } from '../../../core/node/rereadNode'
 import type { MediaDeriver } from '../../../shared/image/mediaDeriver'
 import { memoryBannerApi } from '../api'
 import { BANNER_POSTER_ROLE, BANNER_ROLE, bannerBlobIds, type BannerMedium, type BannerRefShape } from './bannerModel'
@@ -151,7 +153,7 @@ export type WriteMemoryBannerArgs = {
   nodeId: string
   nodeKey: Uint8Array
   /** The node's sealed meta as the writer last saw it (the tree's); a `409 stale_revision` re-bases it. */
-  current: SealedMetaState
+  current: NodeMetaState
   /** The node's new `banner` field value (null: none), built by the caller. */
   banner: Record<string, unknown> | null
   /** The open uploads - or shared rows - that become the banner (their blobs are the ones `banner` names); absent for a
@@ -177,7 +179,7 @@ export async function writeMemoryBanner(a: WriteMemoryBannerArgs): Promise<Seale
   const openedWith = unsealNodeMeta(a.nodeKey, { scopeId, nodeId }, a.current.wrappedMeta).banner
   const edit = editField('banner', a.banner, openedWith, a.surfaceConflict ?? true)
   let replaced: unknown = null
-  const send = async (wrappedMeta: string | null, metaRevision: number): Promise<void> => {
+  const send = async (wrappedMeta: string | null, metaRevision: number, nodeEpoch: number): Promise<void> => {
     const sealed = wrappedMeta!
     const old = bannerBlobIds(replaced)
     try {
@@ -186,6 +188,7 @@ export async function writeMemoryBanner(a: WriteMemoryBannerArgs): Promise<Seale
           memoryBannerApi().setMemoryBanner({
             scopeId, nodeId,
             setMemoryBannerRequest: {
+              nodeEpoch,
               uploadId: a.upload!.uploadId ?? null,
               shared: a.upload!.shared ?? null,
               posterUploadId: a.upload!.posterUploadId ?? null,
@@ -201,11 +204,11 @@ export async function writeMemoryBanner(a: WriteMemoryBannerArgs): Promise<Seale
         await withRefresh(() =>
           memoryBannerApi().removeMemoryBanner({
             scopeId, nodeId,
-            removeMemoryBannerRequest: { blobId: old.blobId!, posterBlobId: old.posterBlobId, wrappedMeta: sealed, metaRevision },
+            removeMemoryBannerRequest: { nodeEpoch, blobId: old.blobId!, posterBlobId: old.posterBlobId, wrappedMeta: sealed, metaRevision },
           }),
         )
       } else {
-        await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: sealed, metaRevision } }))
+        await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: sealed, metaRevision, nodeEpoch } }))
       }
     } catch (e) {
       if (await isCodedError(e, HttpStatus.conflict, 'banner_stale')) throw new BannerStaleError()
@@ -219,6 +222,9 @@ export async function writeMemoryBanner(a: WriteMemoryBannerArgs): Promise<Seale
       return edit(meta, ctx)
     },
     send,
+    // The banner names blobs wrapped under the key they were uploaded with: no rebuild under another (no `reread`), the
+    // refusal is the caller's. The floor runs first — a banner is a member's write (ADR 0109 point 6).
+    { atFloor: (epoch) => assertActiveScopeFloor(scopeId, { id: nodeId, epoch }) },
   )
   return state
 }

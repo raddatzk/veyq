@@ -33,6 +33,8 @@ import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
 import { registry } from '../applications/registry'
 import { HttpStatus, isCodedError, isHttpStatus } from '../../shared/httpError'
 import { expectMintedId } from './mintedId'
+import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
+import { assertNodeKeyAtFloor, nodeKeyForWrite } from './rekey/floor'
 import { identityEntryKey } from '../sharing/dropKey'
 
 /** Which node a seal belongs to: its scope, its id, the epoch it is sealed at and the placement revision the wire stores
@@ -244,16 +246,19 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
 }
 
 /**
- * Where a new node goes (ADR 0080 Decision 1): its parent's id and the parent's **content key**, the key the new
- * node's own key wraps under, or `null` for the scope root, where it wraps under the write key `E_current`.
- * The parent's key comes from {@link nodeContentKey}.
+ * Where a new node goes (ADR 0080 Decision 1): its parent's id, the parent's **content key** — the key the new node's own
+ * key wraps under — and the parent's **epoch** as read (`TreeNode.epoch`, the epoch that key was minted at: the create
+ * states it as `parentEpoch`, ADR 0109 point 6); or `null` for the scope root, where it wraps under the write key
+ * `E_current`. The parent's key comes from {@link nodeContentKey}.
  */
-export type NodeParent = { id: string; key: Uint8Array } | null
+export type NodeParent = { id: string; key: Uint8Array; epoch: number } | null
 
 /** Create a FOLDER. Like every node it births a random content key wrapped under its parent's (ADR 0080
  *  Decision 1), so whoever holds the folder's key opens every key created below it. Returns its node id. */
-export async function createFolder(scopeId: string, epochs: EpochKeys, name: string, parent: NodeParent = null): Promise<string> {
-  return (await createContentNode(scopeId, epochs, parent, FOLDER_KIND, name)).nodeId
+export async function createFolder(
+  scopeId: string, epochs: EpochKeys, name: string, parent: NodeParent = null, opts: CreateNodeOptions = {},
+): Promise<string> {
+  return (await createContentNode(scopeId, epochs, parent, FOLDER_KIND, name, undefined, opts)).nodeId
 }
 
 /**
@@ -266,7 +271,26 @@ export async function createFolder(scopeId: string, epochs: EpochKeys, name: str
 export async function createContentNode(
   scopeId: string, epochs: EpochKeys, parent: NodeParent, kind: NodeKind, name: string,
   metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
-): Promise<{ nodeId: string; contentKey: Uint8Array }> {
+  opts: CreateNodeOptions = {},
+): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number }> {
+  const reread = opts.reread
+  if (!reread || parent === null) return createContentNodeOnce(scopeId, epochs, parent, kind, name, metaSealer)
+  return writeAtNodeEpoch(async (again) =>
+    createContentNodeOnce(scopeId, epochs, again ? await reread() : parent, kind, name, metaSealer),
+  )
+}
+
+/** How a create re-reads its parent after an epoch refusal (ADR 0109 point 6) — `node_rekey_pending` or the device
+ *  floor (after a wait), `stale_epoch` (once): the parent's key and epoch as the tree now holds them. */
+export type CreateNodeOptions = { reread?: () => Promise<NodeParent> }
+
+/** One create attempt (see {@link createContentNode}). The device floor runs first: a parent whose key is from before
+ *  the last rotation this device holds is not sealed under (`NodeKeyBelowFloorError`, layer 2). */
+async function createContentNodeOnce(
+  scopeId: string, epochs: EpochKeys, parent: NodeParent, kind: NodeKind, name: string,
+  metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
+): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number }> {
+  if (parent) assertNodeKeyAtFloor(parent, epochs)
   const parentId = parent?.id ?? null
   const parentSlot = parentId ?? scopeId
   const entryKey = parent?.key ?? writeKey(epochs)
@@ -286,12 +310,15 @@ export async function createContentNode(
         slugToken: slugTokenFor(entryKey, parentSlot, kind, name),
         orderIndex: 0,
         epoch: epochs.current,
+        // the epoch of the parent key the entry is sealed under, as read (ADR 0109 point 6)
+        parentEpoch: parent?.epoch,
         wrappedContentKey,
         wrappedMeta: metaSealer?.(contentKey, node), // sealed under the just-minted K_node (e.g. a pre-armed location)
       },
     }),
   )
-  return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey }
+  // the node's key is minted at the current epoch: what every later write to it states as `nodeEpoch`
+  return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey, epoch: node.epoch }
 }
 
 /** Wrap a node's content key under the key its entry lives under (its parent's, `K_SC` at a scope-root), bound to the
@@ -406,14 +433,13 @@ export class PlacementConflictError extends Error {
 export const PLACEMENT_RETRIES = 1
 
 /**
- * The epoch a placement seals its entry at (ADR 0080 Decision 4). An entry at the scope root lives under `K_SC`, so a
- * placement into the root — a rename there included — seals at the CURRENT epoch (the server refuses another); a move
- * out of the root stores the epoch it was sealed at, so it uses the current one too. Between two non-root parents the
- * entry is under the parent's key, which no rotation changes: the server keeps the node's stored epoch and ignores the
- * request's, so the client seals at the stored one — anything else would be bound to an epoch the row does not carry.
+ * The epoch a placement seals its entry at: ALWAYS the node's own (ADR 0109 point 6). A node's epoch is the epoch its key
+ * was minted at, and no placement changes it — the server checks the request's `epoch` against the stored one and keeps
+ * that. At the scope root the entry is under `K_SC` at that epoch; a node whose epoch lags the scope's current one is not
+ * re-keyed yet, and the server answers a placement into the root `409 node_rekey_pending`.
  */
-export function placementEpoch(epochs: EpochKeys, node: { parentId: string | null; epoch: number }, to: { parentId: string | null }): number {
-  return node.parentId === null || to.parentId === null ? epochs.current : node.epoch
+export function placementEpoch(node: { epoch: number }): number {
+  return node.epoch
 }
 
 /**
@@ -425,8 +451,11 @@ export function placementEpoch(epochs: EpochKeys, node: { parentId: string | nul
  *
  * On `409 stale_placement` (a concurrent move or rename of this node landed first) the tree is re-read and the
  * placement rebuilt on the node as it now is, at most {@link PLACEMENT_RETRIES} time(s); then
- * {@link PlacementConflictError}. Every other failure (`slug_taken`, `stale_epoch`, `illegal_structure`, …) is the
- * caller's. The server checks structure only (a live destination in the scope, the kind's placement rule, no cycle).
+ * {@link PlacementConflictError}. The two epoch refusals (ADR 0109 point 6) re-read the tree too and rebuild under the
+ * keys and epochs it now carries: `node_rekey_pending` (the node or the destination is not re-keyed since the last
+ * rotation) after a wait, `stale_epoch` (re-keyed since this tree was read) once — `writeAtNodeEpoch`. Every other
+ * failure (`slug_taken`, `illegal_structure`, …) is the caller's. The server checks structure only (a live destination
+ * in the scope, the kind's placement rule, no cycle).
  */
 export async function placeNode(
   scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string, to: Placement,
@@ -434,7 +463,10 @@ export async function placeNode(
   let current = tree
   for (let attempt = 0; ; attempt++) {
     try {
-      await sendPlacement(scopeId, epochs, current, nodeId, to)
+      await writeAtNodeEpoch(async (reread) => {
+        if (reread) current = await listTree(scopeId, epochs)
+        await sendPlacement(scopeId, epochs, current, nodeId, to)
+      })
       return
     } catch (e) {
       if (!(await isCodedError(e, HttpStatus.conflict, 'stale_placement'))) throw e
@@ -461,8 +493,12 @@ async function sendPlacement(scopeId: string, epochs: EpochKeys, tree: TreeNode[
   const node = tree.find((n) => n.id === nodeId)
   const contentKey = node ? nodeContentKey(scopeId, epochs, tree, nodeId) : null
   if (!node || !contentKey) throw new v1.OpenRefused('content-key') // its chain does not open: nothing to re-wrap
-  const epoch = placementEpoch(epochs, node, to)
-  const destinationKey = to.parentId === null ? keyAt(epochs, epoch) : nodeContentKey(scopeId, epochs, tree, to.parentId)
+  const epoch = placementEpoch(node)
+  // The key the entry is sealed under, through the device floor (layer 2): at the scope root `K_SC` at the node's epoch,
+  // which must be the current one; else the destination's key, whose epoch the request states.
+  if (to.parentId === null) assertNodeKeyAtFloor(node, epochs)
+  const destination = to.parentId === null ? null : nodeKeyForWrite(scopeId, epochs, tree, to.parentId)
+  const destinationKey = to.parentId === null ? keyAt(epochs, epoch) : destination?.key
   if (!destinationKey) throw new v1.OpenRefused('content-key') // a destination whose chain does not open
   const name = to.name ?? node.name
   const sealedAt = { scopeId, nodeId, epoch, placementRevision: node.placementRevision + 1 }
@@ -476,6 +512,8 @@ async function sendPlacement(scopeId: string, epochs: EpochKeys, tree: TreeNode[
         encryptedName: sealName(destinationKey, sealedAt, name),
         slugToken: slugTokenFor(destinationKey, to.parentId ?? scopeId, node.kind, name),
         epoch,
+        // the destination parent's epoch as read: the entry is sealed under its key (ADR 0109 point 6)
+        parentEpoch: destination?.epoch,
         placementRevision: node.placementRevision,
       },
     }),
@@ -550,8 +588,8 @@ export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNo
  * Restore a trashed subtree. The client **must** supply the slug token: it is a blinded MAC under the parent's key, so
  * the server cannot recompute one, and the delete consumed the original when it freed the name. It is derived under
  * the **live** parent's content key (ADR 0080 Decision 8), resolved from the loaded `tree`; at the scope root under
- * the node's **own** epoch key — a restore does not re-tag the epoch (ADR 0024), unlike a placement into the root,
- * which seals at the current one ({@link placementEpoch}).
+ * the node's **own** epoch key — a restore does not re-tag the epoch (ADR 0024), and neither does a placement
+ * ({@link placementEpoch}, ADR 0109 point 6).
  *
  * `newName` is the A1 retry after a `slug_taken`: a node created while this one sat in the trash already holds
  * the name, so the user picks another. The re-sealed name travels in the SAME request as the token derived from
@@ -570,11 +608,18 @@ export async function restoreNode(
   // A restore is not a placement: the node comes back under the parent it left, its key wrap untouched, so the revision
   // does not move and a re-sealed name binds the one the node already has (ADR 0080 Decision 3).
   const address = { scopeId, nodeId: node.id, epoch: node.epoch, placementRevision: node.placementRevision }
+  // The epoch of the key the entry is re-sealed under (ADR 0109 point 6): the live parent's, or at the scope root the
+  // node's own (its entry is under `K_SC` at it).
+  const parent = node.parentId === null ? node : tree.find((n) => n.id === node.parentId)
+  if (!parent) throw new v1.OpenRefused('content-key') // a parent the loaded tree does not hold
+  assertNodeKeyAtFloor(parent, epochs) // the device floor (layer 2): never re-seal under a key from before the last rotation
+  const parentEpoch = parent.epoch
   await withRefresh(() =>
     contentApi().restoreNode({
       scopeId,
       nodeId: node.id,
       restoreNodeRequest: {
+        parentEpoch,
         slugToken: slugTokenFor(key, parentSlot, node.kind, name),
         encryptedName: newName === undefined ? undefined : sealName(key, address, newName),
       },

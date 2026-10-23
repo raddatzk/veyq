@@ -66,6 +66,8 @@ import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDat
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { setMemoryParticipants } from './memoryParticipants'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
+import type { NodeMetaState } from '../../core/node/nodeMeta'
+import { assertActiveScopeFloor, memberNodeMetaOptions } from '../../core/node/rereadNode'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import {
   addSharePhoto,
@@ -88,6 +90,10 @@ import { uploadBanner, writeMemoryBanner, type PreparedBanner, type UploadedBann
  *  cursor (the LAST page's; `null`: no keyset to continue, or the node holds nothing yet). `tag` is what the poll echoes
  *  as `If-None-Match`, opaque to the view: a member's is the node's item revision (ADR 0033), a guest's a digest of what
  *  the link serves (ADR 0081 decision 4). */
+/** A node as a write under its key names it: its id and the epoch its key was minted at (`TreeNode.epoch`, ADR 0109
+ *  point 6). */
+export type NodeAt = { id: string; epoch: number }
+
 export type MediaListing = { items: MediaItem[]; revision: { tag: string; delete: number } | null; cursor: string | null }
 
 /** Where a live poll continues from (uc.memory.live-updates, cr-0107). */
@@ -132,7 +138,7 @@ export interface MemoryUpload {
   /** Make the session ready (a guest: the page's naming flow); resolves whether it now is. */
   prepare(): Promise<boolean>
   /** The upload-queue target of a batch into `nodeId` sealed under `key`, or null when the session cannot send now. */
-  target(nodeId: string, key: Uint8Array): UploadTarget | null
+  target(nodeId: string, key: Uint8Array, nodeEpoch: number): UploadTarget | null
   /** The uploads go through a link: a `quota_exceeded` refusal then reads as the link being full — never which limit
    *  was reached — and offers no retry, because none can help (ADR 0073 §6). */
   readonly viaLink: boolean
@@ -153,24 +159,24 @@ export interface MediaTrashDoor {
 
 /** The node's sealed meta writes (date, place; the automatic reconcile of both) — ADR 0077's version-checked PATCH. */
 export interface NodeMetaDoor {
-  setDate(nodeId: string, key: Uint8Array, date: MemoryDate, current: SealedMetaState): Promise<SealedMetaState>
-  reconcileDate(nodeId: string, key: Uint8Array, items: MediaItem[], current: SealedMetaState): Promise<{ state: SealedMetaState; wrote: boolean }>
-  setLocation(nodeId: string, key: Uint8Array, location: MemoryLocation | null, current: SealedMetaState): Promise<SealedMetaState>
+  setDate(nodeId: string, key: Uint8Array, date: MemoryDate, current: NodeMetaState): Promise<SealedMetaState>
+  reconcileDate(nodeId: string, key: Uint8Array, items: MediaItem[], current: NodeMetaState): Promise<{ state: SealedMetaState; wrote: boolean }>
+  setLocation(nodeId: string, key: Uint8Array, location: MemoryLocation | null, current: NodeMetaState): Promise<SealedMetaState>
   /** The Memory's participants (opaque user ids, ADR 0083): a merging read-modify-write, see `memoryParticipants.ts`. */
-  setParticipants(nodeId: string, key: Uint8Array, userIds: readonly string[], current: SealedMetaState): Promise<SealedMetaState>
+  setParticipants(nodeId: string, key: Uint8Array, userIds: readonly string[], current: NodeMetaState): Promise<SealedMetaState>
   /** The read-modify-write the location's self-heal runs its own edit through. */
   write: (
     nodeId: string,
     key: Uint8Array,
-    current: SealedMetaState,
+    current: NodeMetaState,
     edit: Parameters<typeof writeNodeMeta>[4],
   ) => ReturnType<typeof writeNodeMeta>
 }
 
 /** A medium's own meta writes from the lightbox (capture-time correction, the resolved place name). */
 export interface MediaMetaDoor {
-  set(target: MediaMetaTarget, key: Uint8Array, overrideMs: number | null): Promise<MediaMetaWrite>
-  backfillPlace(target: MediaMetaTarget, key: Uint8Array, placeName: string, placeLevel?: string): Promise<MediaMetaWrite>
+  set(target: MediaMetaTarget, key: Uint8Array, node: NodeAt, overrideMs: number | null): Promise<MediaMetaWrite>
+  backfillPlace(target: MediaMetaTarget, key: Uint8Array, node: NodeAt, placeName: string, placeLevel?: string): Promise<MediaMetaWrite>
 }
 
 /** A Memory's banner (uc.memory.banner, ADR 0102): the upload of its bytes and the one write of its slots and the meta
@@ -194,8 +200,8 @@ export interface BucketsDoor {
   members(): Promise<ScopeMember[]>
   /** The keys of `nodeId`'s ancestors, nearest first — a link's guest named itself under its root's key. */
   ancestorKeys(nodeId: string): Uint8Array[]
-  create(nodeId: string, key: Uint8Array, name: string, parentBucketId?: string): Promise<BucketItem>
-  rename(nodeId: string, key: Uint8Array, bucketId: string, name: string): Promise<BucketItem>
+  create(nodeId: string, key: Uint8Array, nodeEpoch: number, name: string, parentBucketId?: string): Promise<BucketItem>
+  rename(nodeId: string, key: Uint8Array, nodeEpoch: number, bucketId: string, name: string): Promise<BucketItem>
   remove(nodeId: string, bucketId: string): Promise<void>
   move(nodeId: string, mediaIds: string[], targetBucketId: string | null): Promise<void>
   trash(mediaId: string): Promise<void>
@@ -300,7 +306,11 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     upload: {
       ready: () => true,
       prepare: async () => true,
-      target: (nodeId, key) => ({ scopeId: scope(), nodeId, memoryKey: key }),
+      target: (nodeId, key, nodeEpoch) => ({
+        scopeId: scope(), nodeId, memoryKey: key, nodeEpoch,
+        // the device floor before anything is sealed under the node's key (ADR 0109 point 6, layer 2)
+        atFloor: () => assertActiveScopeFloor(scope(), { id: nodeId, epoch: nodeEpoch }),
+      }),
       viaLink: false,
     },
     deleteMedia: {
@@ -314,19 +324,30 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       purge: (mediaId) => purgeMedia(scope(), mediaId),
     },
     nodeMeta: {
-      setDate: (nodeId, key, date, current) => setMemoryDate(scope(), nodeId, key, date, current),
-      reconcileDate: (nodeId, key, items, current) => reconcileMemoryDate(scope(), nodeId, key, items, current),
-      setLocation: (nodeId, key, location, current) => setMemoryLocation(scope(), nodeId, key, location, current),
-      setParticipants: (nodeId, key, userIds, current) => setMemoryParticipants(scope(), nodeId, key, userIds, current),
-      write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit),
+      // A member's meta writes carry plain values only, so after an epoch refusal they are rebuilt under the node's key
+      // as a re-read finds it; the floor runs before each attempt (ADR 0109 point 6).
+      setDate: (nodeId, key, date, current) => setMemoryDate(scope(), nodeId, key, date, current, memberNodeMetaOptions(scope(), nodeId)),
+      reconcileDate: (nodeId, key, items, current) =>
+        reconcileMemoryDate(scope(), nodeId, key, items, current, memberNodeMetaOptions(scope(), nodeId)),
+      setLocation: (nodeId, key, location, current) =>
+        setMemoryLocation(scope(), nodeId, key, location, current, memberNodeMetaOptions(scope(), nodeId)),
+      setParticipants: (nodeId, key, userIds, current) =>
+        setMemoryParticipants(scope(), nodeId, key, userIds, current, memberNodeMetaOptions(scope(), nodeId)),
+      write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit, undefined, memberNodeMetaOptions(scope(), nodeId)),
     },
     banner: {
       upload: (nodeId, key, prepared, opts) => uploadBanner(scope(), nodeId, key, prepared, opts),
       write: (args) => writeMemoryBanner({ ...args, scopeId: scope() }),
     },
     mediaMeta: {
-      set: (target, key, overrideMs) => setMediaMeta(scope(), target, key, overrideMs),
-      backfillPlace: (target, key, name, level) => backfillPlaceName(scope(), target, key, name, level),
+      set: (target, key, node, overrideMs) => {
+        assertActiveScopeFloor(scope(), node)
+        return setMediaMeta(scope(), target, key, node.epoch, overrideMs)
+      },
+      backfillPlace: (target, key, node, name, level) => {
+        assertActiveScopeFloor(scope(), node)
+        return backfillPlaceName(scope(), target, key, node.epoch, name, level)
+      },
     },
     marks: {
       load: (nodeId, scopeKey) => loadItemFavoritesFor(scope(), nodeId, scopeKey),
@@ -344,8 +365,14 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
           return [] // a chain that does not open: only the node's own key
         }
       },
-      create: (nodeId, key, name, parent) => createBucket(scope(), nodeId, key, name, parent),
-      rename: (nodeId, key, bucketId, name) => renameBucket(scope(), nodeId, key, bucketId, name),
+      create: (nodeId, key, nodeEpoch, name, parent) => {
+        assertActiveScopeFloor(scope(), { id: nodeId, epoch: nodeEpoch })
+        return createBucket(scope(), nodeId, key, nodeEpoch, name, parent)
+      },
+      rename: (nodeId, key, nodeEpoch, bucketId, name) => {
+        assertActiveScopeFloor(scope(), { id: nodeId, epoch: nodeEpoch })
+        return renameBucket(scope(), nodeId, key, nodeEpoch, bucketId, name)
+      },
       remove: (nodeId, bucketId) => deleteBucket(scope(), nodeId, bucketId),
       move: (nodeId, mediaIds, target) => moveBucketMedia(scope(), nodeId, mediaIds, target),
       trash: (mediaId) => deleteMedia(scope(), mediaId),
@@ -433,7 +460,7 @@ function guestWrites(
       ready: () => !!session.value,
       prepare: async () => !!(await access().requestGuest()),
       viaLink: true,
-      target(nodeId, key) {
+      target(nodeId, key, nodeEpoch) {
         const s = session.value
         if (!s) return null
         return {
@@ -446,6 +473,7 @@ function guestWrites(
                 shareId,
                 scopeId: scope(),
                 sealKey: key,
+                nodeEpoch,
                 pwToken: a.pwToken,
                 ...(nodeId === tree.rootId ? {} : { nodeId }),
               },

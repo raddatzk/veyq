@@ -84,7 +84,7 @@ const memberView = (scopeId: string) => ({
 
 function mountBuckets(mediaItems: MediaItem[]) {
   return mount(MemoryBuckets, {
-    props: { scopeId: 's-1', nodeId: 'n-1', memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
+    props: { scopeId: 's-1', nodeId: 'n-1', nodeEpoch: 0, memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
     global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub }, provide: memberView('s-1') },
   })
 }
@@ -123,7 +123,7 @@ describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy
     vi.mocked(listBuckets).mockResolvedValue([bucket('b-share', 'share:x', 1, 'ct')])
     try {
       mount(MemoryBuckets, {
-        props: { scopeId: SCOPE, nodeId: MEMORY, memoryKey, media: [media('m3', 'share:x', 'b-share')], thumbs: new Map() },
+        props: { scopeId: SCOPE, nodeId: MEMORY, nodeEpoch: 0, memoryKey, media: [media('m3', 'share:x', 'b-share')], thumbs: new Map() },
         global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub }, provide: memberView(SCOPE) },
       })
       await flushPromises()
@@ -378,7 +378,7 @@ describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)
 describe('MemoryBuckets — a bucket of 2,000 on the windowed grid (ADR 0105)', () => {
   function mountReal(mediaItems: MediaItem[]) {
     return mount(MemoryBuckets, {
-      props: { scopeId: 's-1', nodeId: 'n-1', memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
+      props: { scopeId: 's-1', nodeId: 'n-1', nodeEpoch: 0, memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
       global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub }, provide: memberView('s-1') },
       attachTo: document.body,
     })

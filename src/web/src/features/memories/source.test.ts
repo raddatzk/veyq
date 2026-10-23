@@ -216,7 +216,7 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
   it('an unnamed guest is not ready and sends nothing; preparing asks the page\'s one naming flow', async () => {
     const { source } = guest(ShareRole.ReadWrite)
     expect(source.upload!.ready()).toBe(false)
-    expect(source.upload!.target(CHAPTER, keys.chapter)).toBeNull()
+    expect(source.upload!.target(CHAPTER, keys.chapter, 3)).toBeNull()
     expect(await source.upload!.prepare()).toBe(true)
     expect(requestGuest).toHaveBeenCalledTimes(1)
   })
@@ -225,12 +225,12 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
     const { source } = guest(ShareRole.ReadWrite)
     saveGuestSession(SHARE, GUEST)
     expect(source.upload!.ready()).toBe(true)
-    const target = source.upload!.target(CHAPTER, keys.chapter)!
+    const target = source.upload!.target(CHAPTER, keys.chapter, 3)!
     expect(target.key).toBe(source.batchKey(CHAPTER))
     const file = { blob: new Blob([new Uint8Array(3)]), mediaType: 'image/jpeg' }
     await target.upload!(file, {})
     const [session, sent] = vi.mocked(share.addSharePhoto).mock.calls[0]
-    expect(session).toEqual({ ...GUEST, shareId: SHARE, scopeId: SCOPE, sealKey: keys.chapter, pwToken: PW, nodeId: CHAPTER })
+    expect(session).toEqual({ ...GUEST, shareId: SHARE, scopeId: SCOPE, sealKey: keys.chapter, nodeEpoch: 3, pwToken: PW, nodeId: CHAPTER })
     expect(sent).toBe(file)
     expect(loadOwnShareMedia(SHARE, GUEST.identityId), 'the device remembers what it sent (#361)').toEqual(new Set(['m-new']))
     expect(source.deleteMedia!.reach).toBe('own')
@@ -240,7 +240,7 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
   it('into the share root: no target node, as every root upload always sent', async () => {
     const { source } = guest(ShareRole.ReadWrite)
     saveGuestSession(SHARE, GUEST)
-    await source.upload!.target(MEMORY, keys.memory)!.upload!({ blob: new Blob([]), mediaType: 'image/jpeg' }, {})
+    await source.upload!.target(MEMORY, keys.memory, 0)!.upload!({ blob: new Blob([]), mediaType: 'image/jpeg' }, {})
     const [session] = vi.mocked(share.addSharePhoto).mock.calls[0]
     expect(session).not.toHaveProperty('nodeId')
     expect(session.sealKey).toBe(keys.memory)
@@ -249,7 +249,7 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
   it('deletes its own media for good, with its token and the password, and forgets it', async () => {
     const { source } = guest(ShareRole.ReadWrite)
     saveGuestSession(SHARE, GUEST)
-    await source.upload!.target(CHAPTER, keys.chapter)!.upload!({ blob: new Blob([]), mediaType: 'image/jpeg' }, {})
+    await source.upload!.target(CHAPTER, keys.chapter, 0)!.upload!({ blob: new Blob([]), mediaType: 'image/jpeg' }, {})
     const del = source.deleteMedia!
     if (del.reach !== 'own') throw new Error('a guest purges its own')
     expect(del.isOwn('m-other'), "another's media is not this guest's").toBe(false)
@@ -261,7 +261,7 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
   it('"Not you?" forgets the session: nothing is own any more, a delete is refused', async () => {
     const { source } = guest(ShareRole.ReadWrite)
     saveGuestSession(SHARE, GUEST)
-    await source.upload!.target(CHAPTER, keys.chapter)!.upload!({ blob: new Blob([]), mediaType: 'image/jpeg' }, {})
+    await source.upload!.target(CHAPTER, keys.chapter, 0)!.upload!({ blob: new Blob([]), mediaType: 'image/jpeg' }, {})
     forgetGuestSession(SHARE)
     const del = source.deleteMedia!
     if (del.reach !== 'own') throw new Error('a guest purges its own')
@@ -275,7 +275,10 @@ describe("the member's source is today's calls, with its scope", () => {
   const S = 'scope-m'
   const key = v1.randomBytes(32)
   const item = mediaItem({ mediaId: 'm-1' })
-  const state = { wrappedMeta: null, metaRevision: 0 }
+  const state = { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 }
+  // what a member's meta write hands on beside its arguments: the floor before each attempt and the re-read after an
+  // epoch refusal (ADR 0109 point 6)
+  const metaOpts = { atFloor: expect.any(Function), reread: expect.any(Function) }
   const src = memberMemorySource({ scopeId: () => S })
   const edit = () => null
   const gridSignal = new AbortController().signal // a grid's read can be dropped while it waits (inbox #488)
@@ -294,18 +297,18 @@ describe("the member's source is today's calls, with its scope", () => {
     ['trash.list', () => src.trash!.list('n'), media.listTrash, [S, 'n']],
     ['trash.restore', () => src.trash!.restore('m-1'), media.restoreMedia, [S, 'm-1']],
     ['trash.purge', () => src.trash!.purge('m-1'), media.purgeMedia, [S, 'm-1']],
-    ['nodeMeta.setDate', () => src.nodeMeta!.setDate('n', key, { mode: 'auto' }, state), setMemoryDate, [S, 'n', key, { mode: 'auto' }, state]],
-    ['nodeMeta.reconcileDate', () => src.nodeMeta!.reconcileDate('n', key, [item], state), reconcileMemoryDate, [S, 'n', key, [item], state]],
-    ['nodeMeta.setLocation', () => src.nodeMeta!.setLocation('n', key, null, state), setMemoryLocation, [S, 'n', key, null, state]],
-    ['nodeMeta.write', () => src.nodeMeta!.write('n', key, state, edit), writeNodeMeta, [S, 'n', key, state, edit]],
-    ['mediaMeta.set', () => src.mediaMeta!.set(item, key, 5), media.setMediaMeta, [S, item, key, 5]],
-    ['mediaMeta.backfillPlace', () => src.mediaMeta!.backfillPlace(item, key, 'Rom', 'city'), media.backfillPlaceName, [S, item, key, 'Rom', 'city']],
+    ['nodeMeta.setDate', () => src.nodeMeta!.setDate('n', key, { mode: 'auto' }, state), setMemoryDate, [S, 'n', key, { mode: 'auto' }, state, metaOpts]],
+    ['nodeMeta.reconcileDate', () => src.nodeMeta!.reconcileDate('n', key, [item], state), reconcileMemoryDate, [S, 'n', key, [item], state, metaOpts]],
+    ['nodeMeta.setLocation', () => src.nodeMeta!.setLocation('n', key, null, state), setMemoryLocation, [S, 'n', key, null, state, metaOpts]],
+    ['nodeMeta.write', () => src.nodeMeta!.write('n', key, state, edit), writeNodeMeta, [S, 'n', key, state, edit, undefined, metaOpts]],
+    ['mediaMeta.set', () => src.mediaMeta!.set(item, key, { id: 'n', epoch: 2 }, 5), media.setMediaMeta, [S, item, key, 2, 5]],
+    ['mediaMeta.backfillPlace', () => src.mediaMeta!.backfillPlace(item, key, { id: 'n', epoch: 2 }, 'Rom', 'city'), media.backfillPlaceName, [S, item, key, 2, 'Rom', 'city']],
     ['marks.load', () => src.marks!.load('n', key), loadItemFavoritesFor, [S, 'n', key]],
     ['marks.toggle', () => src.marks!.toggle('m-1', 'n', key), toggleItemFavorite, ['m-1', S, 'n', key]],
     ['buckets.list', () => src.buckets!.list('n'), media.listBuckets, [S, 'n']],
     ['buckets.members', () => src.buckets!.members(), listScopeMembers, [S]],
-    ['buckets.create', () => src.buckets!.create('n', key, 'A', 'p'), media.createBucket, [S, 'n', key, 'A', 'p']],
-    ['buckets.rename', () => src.buckets!.rename('n', key, 'b', 'B'), media.renameBucket, [S, 'n', key, 'b', 'B']],
+    ['buckets.create', () => src.buckets!.create('n', key, 2, 'A', 'p'), media.createBucket, [S, 'n', key, 2, 'A', 'p']],
+    ['buckets.rename', () => src.buckets!.rename('n', key, 2, 'b', 'B'), media.renameBucket, [S, 'n', key, 2, 'b', 'B']],
     ['buckets.remove', () => src.buckets!.remove('n', 'b'), media.deleteBucket, [S, 'n', 'b']],
     ['buckets.move', () => src.buckets!.move('n', ['m-1'], null), media.moveBucketMedia, [S, 'n', ['m-1'], null]],
     ['buckets.trash', () => src.buckets!.trash('m-1'), media.deleteMedia, [S, 'm-1']],
@@ -320,7 +323,7 @@ describe("the member's source is today's calls, with its scope", () => {
 
   it('uploads through the authed `addMedia` target, grouped by the node as before', () => {
     expect(src.upload!.ready()).toBe(true)
-    expect(src.upload!.target('n', key)).toEqual({ scopeId: S, nodeId: 'n', memoryKey: key })
+    expect(src.upload!.target('n', key, 2)).toEqual({ scopeId: S, nodeId: 'n', memoryKey: key, nodeEpoch: 2, atFloor: expect.any(Function) })
     expect(src.batchKey('n')).toBe('n')
   })
 })

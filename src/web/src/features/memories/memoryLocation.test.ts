@@ -184,7 +184,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
   it('setting a location keeps the existing date', async () => {
     const updateNode = mockUpdate()
     const withDate = sealNodeMeta(nodeKey, NODE, { v: 1, date })
-    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, loc, { wrappedMeta: withDate, metaRevision: 0 })
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, loc, { wrappedMeta: withDate, metaRevision: 0, nodeEpoch: 0 })
 
     expect(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta).toBe(sealed)
     expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(loc)
@@ -193,7 +193,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
 
   it('a name over its bound is written cut to it (the meta budget\'s bound holds on the write too)', async () => {
     mockUpdate()
-    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, { ...loc, name: 'x'.repeat(MAX_PLACE_NAME + 40) }, { wrappedMeta: null, metaRevision: 0 })
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, { ...loc, name: 'x'.repeat(MAX_PLACE_NAME + 40) }, { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 })
     const raw = unsealNodeMeta(nodeKey, NODE, sealed).location as { name: string }
     expect(raw.name).toHaveLength(MAX_PLACE_NAME)
   })
@@ -202,7 +202,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
     mockUpdate()
     const nameOnly: MemoryLocation = { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' }
     const withDate = sealNodeMeta(nodeKey, NODE, { v: 1, date })
-    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, nameOnly, { wrappedMeta: withDate, metaRevision: 0 })
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, nameOnly, { wrappedMeta: withDate, metaRevision: 0, nodeEpoch: 0 })
 
     expect(unsealNodeMeta(nodeKey, NODE, sealed)).toMatchObject({ v: 1, date, location: { name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' } })
     expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual({ ...nameOnly, derived: undefined, nameAnchor: undefined })
@@ -212,7 +212,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
   it('removing the location (null) keeps the date and drops only the place', async () => {
     mockUpdate()
     const withBoth = sealNodeMeta(nodeKey, NODE, { v: 1, date, location: loc })
-    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: withBoth, metaRevision: 0 })
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: withBoth, metaRevision: 0, nodeEpoch: 0 })
 
     expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toBeNull() // place gone
     expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(date) // date intact
@@ -224,7 +224,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
     const withFixed = sealNodeMeta(nodeKey, NODE, { v: 1, location: fixed })
     // switching back to auto = writing the same name with derivedMode 'auto' and no frozen derived
     const asAuto: MemoryLocation = { name: fixed.name, nameSource: fixed.nameSource, derivedMode: 'auto' }
-    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, asAuto, { wrappedMeta: withFixed, metaRevision: 0 })
+    const { wrappedMeta: sealed } = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, asAuto, { wrappedMeta: withFixed, metaRevision: 0, nodeEpoch: 0 })
 
     const back = unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })
     expect(back?.derivedMode).toBe('auto')
@@ -238,7 +238,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
       .mockResolvedValueOnce(undefined)
     fakeApi(contentApi, { updateNode })
 
-    const state = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, loc, { wrappedMeta: null, metaRevision: 7 })
+    const state = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, loc, { wrappedMeta: null, metaRevision: 7, nodeEpoch: 0 })
 
     expect(updateNode).toHaveBeenCalledTimes(2)
     expect(updateNode.mock.calls[1][0].updateNodeRequest.metaRevision).toBe(8)

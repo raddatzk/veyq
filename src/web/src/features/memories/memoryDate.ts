@@ -13,7 +13,8 @@ import { effectiveCapturedAt, type MediaItem } from './media'
 import { openedMeta } from './openedListing'
 import { openContentKey, type TreeNode } from '../../core/node/tree'
 import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from '../../core/node/nodeMeta'
-import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
+import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
+import type { NodeMetaState } from '../../core/node/nodeMeta'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /** The four date modes: derive from media (`auto`), a single day, a `from..to` span, or an open-ended `since`. */
@@ -66,10 +67,11 @@ export async function setMemoryDate(
   nodeId: string,
   nodeKey: Uint8Array,
   date: MemoryDate,
-  current: SealedMetaState,
+  current: NodeMetaState,
+  opts: WriteNodeMetaOptions = {},
 ): Promise<SealedMetaState> {
   const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).date
-  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('date', date, openedWith))
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('date', date, openedWith), undefined, opts)
   return state
 }
 
@@ -84,7 +86,8 @@ export async function reconcileMemoryDate(
   nodeId: string,
   nodeKey: Uint8Array,
   items: MediaItem[],
-  current: SealedMetaState,
+  current: NodeMetaState,
+  opts: WriteNodeMetaOptions = {},
 ): Promise<{ state: SealedMetaState; wrote: boolean }> {
   const next = computeAutoRange(scopeId, items, nodeKey)
   const { state, wrote } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, (meta) => {
@@ -94,7 +97,7 @@ export async function reconcileMemoryDate(
     if (!stored && next.from === undefined) return null // absent meta already == the empty `auto` state
     meta.date = next
     return meta
-  })
+  }, undefined, opts)
   return { state, wrote }
 }
 
