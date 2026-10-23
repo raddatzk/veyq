@@ -8,6 +8,7 @@ sources:
   - docs/features/spaces/use-cases/uc.spaces.add-member.md
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/account/use-cases/uc.account.recover-access.md
+  - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
 ---
 import Mermaid from '../../../components/Mermaid.astro';
 
@@ -395,7 +396,8 @@ clear.
 - The password and the write token are layer-1 controls. They stop a leaked link or a database copy against an
   honest server, not the operator, who can skip the check.
 - Revocation is soft. Disabling, expiring or deleting a link stops new access, but what a guest already downloaded
-  stays downloaded. A scope-key rotation does not revoke a share, because `K_node` does not change.
+  stays downloaded. A scope-key rotation does not revoke a share: its re-key re-wraps the node's new key under the
+  link's unchanged `K_share`.
 - Every member can rebuild every link of a Memory, so a member removed from a space may hold those links until they
   are **re-issued** (a new id and a new `K_share`;
   [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
@@ -414,10 +416,10 @@ See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/ve
 
 - **Layer 1, access invalidation.** The server stops honouring a membership, a share or a session. It takes effect at
   once and needs no keys, but it is a defence only under an honest operator.
-- **Layer 2, epoch rotation.** A key-holder's client mints a new content-key epoch and grants it only to the parties
-  who remain, so content sealed afterwards is out of the removed party's reach. Nothing is re-encrypted. Each new
-  epoch wraps its predecessor, so holding the latest epoch derives every earlier one, and an old epoch never
-  derives a newer one.
+- **Layer 2, epoch rotation and re-key.** A key-holder's client mints a new content-key epoch, grants it only to the
+  parties who remain, then re-keys every node of the scope under it, so content sealed afterwards is out of the
+  removed party's reach. Nothing in the store is re-encrypted. Each new epoch wraps its predecessor, so holding the
+  latest epoch derives every earlier one, and an old epoch never derives a newer one.
 
 **When layer 2 runs is a per-scope policy**
 ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)).
@@ -440,6 +442,17 @@ the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisio
    Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
 5. The removed member is refused at once (layer 1). The remaining members open the new grant. Each device raises
    its per-scope **epoch floor** and never seals under a lower epoch again, whatever epoch the server reports.
+6. The owner's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
+   ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)): a fresh node key minted at `n+1`, the node's own entry under its parent's new key (under
+   `E(n+1)` at the root), each child's entry, the node's meta, its media's meta and EXIF and every `K_blob` wrap
+   re-sealed under the new key, `K_blob` itself kept. A node with a drop key gets a new keypair, and its guests'
+   identity keys are re-sealed to it. Each link rooted on the node gets the new key wrapped under its unchanged
+   `K_share`, opened from its recovery copy, which stays at its epoch. A large node's fields go up in staged parts
+   first, and the commit swaps them in one transaction.
+7. Until a node is committed, a write sealed under its key is refused `409 node_rekey_pending` and retried; a write
+   stating a node key from before is `409 stale_epoch` and re-reads. A member's device also seals nothing under a node
+   key from before the highest epoch it holds. An interrupted re-key reads *re-keying* and is resumed by the next
+   owner's worker; a queued rotation completes only once no node lags (`409 rekey_incomplete`).
 
 <Mermaid code={`
 sequenceDiagram
@@ -457,8 +470,9 @@ sequenceDiagram
   S-->>D: refused (layer 1)
   M->>S: fetch grant
   S-->>M: grant of E(n+1)
+  R->>S: per node, top-down: fresh key, re-sealed fields,<br>re-wrapped K_blob and links, one commit each
   M->>M: verify signature, open, raise epoch floor<br>peel chain for older content
-  M->>S: new content sealed under E(n+1)
+  M->>S: new content sealed under the node's new key
 `} />
 
 **Revoke never takes key material**
@@ -481,16 +495,18 @@ only under the Master Key.
 2. The device mints a new Master Key and identity, rewrites the `PASSWORD` and `RECOVERY` wraps (the Emergency Kit
    stays valid), deletes every device wrap, and re-seals the pin store and the device register in the same request.
 3. The new identity public key is published. Every contact who pinned the old one now sees *changed*.
-4. The personal scope gets a new epoch granted to the new identity. For each shared scope a rotation job is queued
-   for **another owner** to complete. The rotator is excluded and is refused by the server if it tries. Re-admission
+4. The personal scope gets a new epoch granted to the new identity, and this device re-keys its nodes. For each
+   shared scope a rotation job is queued for **another owner** to complete, whose device re-keys the scope's nodes
+   before the job completes. The rotator is excluded and is refused by the server if it tries. Re-admission
    runs through each scope's human changed-key review, which is what stops an attacker who holds the old identity
    from rotating its way back in.
-5. Every other session is revoked. The result screen shows each scope's status (waiting, stalled, secured, failed)
-   as the server reports it.
+5. Every other session is revoked. The result screen shows each scope's status (waiting, stalled, re-keying,
+   secured, failed) as the server reports it; *secured* only once every node of the scope is re-keyed.
 
-**What the server learns.** That a membership was deleted and an epoch committed, the epoch index on each node, the
+**What the server learns.** That a membership was deleted and an epoch committed, the epoch index on each node and
+its moving to the current epoch as the re-key reaches it, rewritten ciphertext in rows it already held, the
 grant-present and granted-epoch markers, the rotation jobs and their status, and the new directory value after an
-account rotation. It never sees an epoch key.
+account rotation. It never sees an epoch key or a node key, and no store object is read or written by a re-key.
 
 **What it cannot do.**
 
@@ -498,7 +514,7 @@ account rotation. It never sees an epoch key.
   request, and the remover's client wraps only to the members it read, minus the one it removes, however the server
   lists them afterwards ([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md) Decision 4).
 - **Make a member seal new content under an epoch the removed member holds**, once that member's device has held the
-  newer epoch (Decision 6).
+  newer epoch (Decision 6), nor under a node key from before it (ADR 0109 point 6).
 - **Undo the past.** Nothing here retracts content already read. Rotation is forward secrecy, not repair.
 
 **Residual.**
@@ -509,6 +525,9 @@ account rotation. It never sees an epoch key.
 - **The tenant default is layer 1 only.** A removed member who kept keys and ciphertext and colludes with a
   malicious operator keeps that narrow reach until an explicit re-key.
 - **Item favorites** are sealed under `E0` by choice, so a former member can read a set written after their removal.
+- **What existed at the rotation** stays readable to whoever held its keys: blobs are re-wrapped, never re-encrypted.
+- **Links from before** keep opening the new key until re-issued, since every former member can rebuild their
+  `K_share`; a drop box's guest from before keeps their identity key, re-sealed to the new drop key, until then too.
 - **The proof-key check runs on the server**, so it binds every caller except the operator.
 - Account rotation is impossible without the Emergency Kit. Containment (revoke sessions, remove saved keys) is
   all that remains.

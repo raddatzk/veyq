@@ -472,14 +472,17 @@ server-blind token makes this work without the server ever seeing a name:
   ([ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). Every member can rebuild
   **every** link of a Memory from its recovery copy, so a member removed from a group or the tenant may hold every
   link that existed on its Memories while they belonged — and using one needs **no dump**: against an honest server
-  the link is a bearer capability, and `K_node` never re-keys. A **re-issue** (one request, one transaction: a new
+  the link is a bearer capability, and a rotation re-wraps it to the new `K_node` rather than closing it
+  ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4). A **re-issue** (one request, one transaction: a new
   id and a fresh `K_share` carrying the old settings, the old link deleted) is what cuts them off. Re-activation is
   refused (`reissue_required`) for a share whose owner has left, whose copy predates the scope's current epoch or
   its last member removal (a scope counts its removals, because the tenant never rotates on one), or that a bulk
   switch-off marked — every link of the space, one already off included; a group or tenant removal can opt to turn off every link of its space in the same
   transaction, and any owner of a space can do so at any time. This is the
   **honest-server** cut: with a dump the departed member already holds `K_node` and reads the Memory whatever the
-  link does — the ADR 0012 class.
+  link does until the scope next rotates (a group removal's own rotation; the tenant's explicit re-key), which
+  re-keys every node — the ADR 0012 class; after it, a link they could rebuild reads what is added below its root
+  until it is re-issued.
 - **An optional share password** is an **operator-blind access-control gate**, *not* a cryptographic one
   ([ADR 0037](../decisions/0037-password-protected-shares.md)): the content stays E2EE under the unchanged
   `K_share` fragment, and the password gates **what the server serves** (a locked resolve returns only the
@@ -604,7 +607,7 @@ operator lacks can.
 | links a device of its own while the user links theirs | **Cannot** — the QR carries a secret the relay never receives, and both relayed values carry a MAC under the channel key it derives: the trusted device seals only to an answer whose MAC verifies, the new device opens only an envelope whose MAC does. What remains is an attacker who also reads the QR (below) | [ADR 0059](../decisions/0059-device-linking.md) §11 |
 | gets a removed group member re-granted by the removal's own rotation | **Cannot** — the removal and its rotation are one request, and the remover's client wraps the new epoch only to the members it picked from, minus the one it removes, however the server lists them afterwards. A rotation *queued* to another key-holder is outside this row (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 |
 | has a member seal new content under an epoch the removed member holds | **Cannot** once the member's device has held the newer epoch — each device remembers the highest epoch it has held for each scope and opens no older grant, whatever current epoch the operator pairs it with. A member who never learnt of the newer epoch is the fork (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 6 |
-| hands a removed group member, or an account's old identity after a rotation, what is added inside a folder or Memory that existed before the rotation — with a dump | **Can** — a rotation moves `K_SC` only, and no node key re-keys yet, so that content seals under node keys they hold; only new scope-root entries are out of their reach (inbox #518) | [ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md), built by `changes/cr-scope-rotation-rekeys-nodes.md` |
+| hands a removed group member, or an account's old identity after a rotation, what is added inside a folder or Memory that existed before the rotation — with a dump | **Cannot**, except through a link made before, until it is re-issued — every rotation re-keys every live and trashed node of the scope: a fresh key each, every field under the old one re-sealed, each `K_blob` re-wrapped. A write into a node not yet re-keyed is refused (`409 node_rekey_pending`, layer 1), and a member's device seals nothing under a node key bound to an epoch below the highest it has held for the scope (layer 2). What existed at the rotation stays readable to them; a link keeps opening the new key, and its `K_share` is rebuildable from the recovery copy they could open | [ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md), [ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) |
 | wipes or rolls back the pin store or the device register, so a detected key change becomes a silent first use | **Cannot** on a device that has held one — it keeps the highest revision it opened and refuses an older store, a missing one and one that does not open, before every read and every write; a linked device starts from its linker's marks. A device with no mark yet trusts the first store it is served (below). **Residual, consented:** a refused document's one way back is the user starting it over (empty) after a confirmation that names the cost — no server response reaches that write, but a server that keeps a document refused can wait for the user to press it; the downgrade is visible and consented now, not silent. On a client the operator serves, it could ship a client that writes the empty store itself ([ADR 0026](../decisions/0026-client-trust-tiers.md)) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7 |
 | reads an uploader link's Memory — with the link and a dump; no activity needed | **Cannot** — an uploader link carries no wrap of `K_node`, only the Memory's drop public key; its guests seal under keys of their own, wrapped to that drop key, so the link plus a dump reads what its guests uploaded and nothing else — no other media, no sibling share's key | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 |
 | reads another share's password, private label or note, or rebuilds its link — with a viewer or contributor link of the same Memory and a dump | **Cannot** — each share's recovery copy of `K_share` is sealed under the scope key `K_SC`, which no share link carries; the link's `K_node` and its own `K_share` open none of it. A member removed from a group may still hold the old links (below) | [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md) point 4 |
@@ -630,7 +633,12 @@ operator lacks can.
   **re-issued** — which cuts them off against an honest server; the removal, or any owner of the space later, can
   turn every link of it off at once ([ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). With a dump they also
   read the old share's later password, label or note edits, and the Memory's content under `K_node` stays readable
-  whatever the link does (the ADR 0012 class);
+  whatever the link does (the ADR 0012 class) until the scope next rotates; after that rotation's re-key, what is
+  added below a link's root stays readable through that link's `K_share` until it is re-issued
+  ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4);
+- a guest identity in a drop box from before a rotation: its `K_up` is re-sealed to the new drop key, not replaced
+  (only the guest holds it), so whoever held the old drop key reads what that guest adds afterwards, until the
+  link is re-issued (ADR 0109 point 5);
 - the names a Memory's guests gave, to an operator holding a viewer or contributor link of it. No link is served
   a guest's name, but the names stay sealed under field keys derived from `K_node` (a contributor's) or from an
   uploader's own key, which the
@@ -671,7 +679,9 @@ control, honest-operator; L2 crypto, the only real operator boundary), here appl
    ciphertext (an honest operator is already stopped by layer 1). May be queued until a key-holder is online; not a
    hole, because layer 1 already blocks new fetches. Every rotation re-keys every node of the scope too
    ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)) — without that, what is added
-   inside an existing folder or Memory seals under a key the revoked party holds. **Not built yet** (inbox #518).
+   inside an existing folder or Memory would seal under a key the revoked party holds. Writes into a node wait while
+   it is re-keyed. A link made before keeps working, re-wrapped to the new key, and stays the revoked party's way in
+   until it is re-issued.
 
 **Whether layer 2 fires is a per-scope policy** ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)),
 because rotation re-grants **every** remaining member (`O(N)`): **groups** rotate automatically on removal (small,

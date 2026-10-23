@@ -75,3 +75,5 @@ After a space gets new keys, whoever was shut out cannot read anything added to 
 - Decisions: [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md), [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
+- End-user view (docs site): [Replace your keys](../../../../site/src/content/docs/account/replace-your-keys.mdx),
+  [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

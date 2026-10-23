@@ -9,6 +9,7 @@ sources:
   - docs/decisions/0024-scope-key-rotation.md
   - docs/decisions/0025-forward-secrecy-policy-per-scope.md
   - docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md
+  - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
 ---
 
 veyq encrypts content under layered envelopes: an account's keys open a scope's key, the scope's key opens
@@ -72,16 +73,19 @@ sharing one Memory would then hand out the whole scope's key and leave the other
 server gating instead of cryptography. A chapter carries its own key for the same reason: adding per-chapter
 sharing later would have forced a client-side re-encryption of every chapter's media.
 
-**Rotation touches one layer only.** Only `K_SC` rotates; node keys and blob keys never re-key. Rotating
-`K_SC` forward into a new epoch costs one random key, one chain link and one re-wrap per remaining member, with
-no content re-sealed and no media re-encrypted
-([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md)). ADR 0024
-rejected full re-encryption on every removal (gigabytes re-keyed per leave, for content that is existing but
-unopened) and a flat set of independent epoch keys (each new member would need one wrap per epoch; the backward
-chain makes it one). The cost of that today: a rotation re-keys no node yet, so what is added inside a folder or
-Memory that existed before the rotation seals under keys the excluded party holds; only a new entry at the scope's
-root is out of their reach. [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) decides that every
-rotation re-keys every node below the scope key; it is not built yet.
+**A rotation re-keys the tree and re-encrypts nothing.** `K_SC` rotates forward into a new epoch: one random key,
+one chain link and one re-wrap per remaining member
+([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md)). The device that
+commits the epoch then re-keys every live and trashed node of the scope, top-down, one atomic commit per node: a
+fresh node key minted at the new epoch, every field sealed under the old key re-sealed under it, each `K_blob`
+re-wrapped and kept, no store object read or written ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)). Per node that is one key and its children's
+entries, per medium its blob wraps and two field seals, all symmetric and all in the database: a Chapter of 1,000
+photos is about 5,000 seals, about 20 requests. Until a node is re-keyed, a write into it waits
+(`409 node_rekey_pending`); a write stating a node key from before is refused (`409 stale_epoch`). ADR 0024 rejected
+full re-encryption on every removal (gigabytes re-keyed per leave, for content that is existing but unopened) and a
+flat set of independent epoch keys (each new member would need one wrap per epoch; the backward chain makes it one).
+What the re-key leaves in the excluded party's reach: what existed at the rotation, and every link they could
+rebuild, until it is re-issued (Layer 4).
 
 **But removal is still `O(N)`, so whether it rotates is a per-scope policy.** A new epoch must be wrapped to
 every remaining member's identity, because nobody holding only the old epoch can derive the new one. That is a
@@ -195,7 +199,7 @@ Master Key, so a leaked identity implies a leaked Master Key, and a new identity
 would still be readable ([ADR 0060](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0060-key-rotation-after-compromise.md)
 Decision 1). Rotation needs a cold unlock, and the server checks a Secret-Key proof signature over what the request
 installs. That is the material a phished linked device never received, so the attacker cannot rotate first and lock
-the holder out. Rotation also re-keys every scope the account belongs to. The rotator is not allowed to re-admit
+the holder out. Rotation also re-keys every scope the account belongs to, every node of it included. The rotator is not allowed to re-admit
 themselves: another owner of each shared scope runs the scope rotation, and the new identity is re-admitted through
 the human changed-key review. Every `DEVICE` and `DEVICE_KEY` wrap dies. Rotation is **forward secrecy, not
 repair**: what was already read stays read.
@@ -247,8 +251,8 @@ In Memories the key of a Memory or a chapter is called `K_node`.
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing or leaking it means |
 |---|---|---|---|---|---|
-| **Node key** (`K_node`, a folder's key) | 32 random bytes from the client that creates the node; never derived from `K_SC` or the parent | Its **parent's** content key, or `K_SC` at the node's epoch for a scope-root node. A share adds independent wraps of the same key (Layer 4) | Every scope member, down the chain; every viewer or contributor link at or above the node | **Never.** A move or rename re-wraps it under the (new) parent's key, an `O(1)` write that leaves the subtree untouched | Leaked: the node's whole subtree, including names and everything created under it later |
-| **`K_blob`** | Random, one per blob | The content key of the blob's **direct** owning node (a chapter's media under the chapter's key). Media a public uploader added sit under that uploader's own key instead (Layer 4) | Whoever holds that node's key | Never. Moving media between a chapter and its Memory re-wraps only `K_blob` | That one blob |
+| **Node key** (`K_node`, a folder's key) | 32 random bytes from the client that creates the node; never derived from `K_SC` or the parent | Its **parent's** content key, or `K_SC` at the node's epoch for a scope-root node. A share adds independent wraps of the same key (Layer 4) | Every scope member, down the chain; every viewer or contributor link at or above the node | At **every rotation** of `K_SC`: the re-key replaces it with a fresh key minted at the new epoch, which the node's `epoch` records ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)). A move or rename re-wraps it under the (new) parent's key, an `O(1)` write that leaves the subtree untouched | Leaked: the node's whole subtree, including names and everything created under it until the scope next rotates |
+| **`K_blob`** | Random, one per blob | The content key of the blob's **direct** owning node (a chapter's media under the chapter's key). Media a public uploader added sit under that uploader's own key instead (Layer 4) | Whoever holds that node's key | Never. A rotation re-wraps it under the node's new key; moving media between a chapter and its Memory re-wraps only `K_blob` | That one blob |
 | **Chunk frames** | The blob's bytes, encrypted in frames under `K_blob` with AES-256-GCM | — | — | — | — |
 
 A node's **directory entry** (its sealed name and its blinded slug token) lives under its **parent's** key, so
@@ -275,14 +279,15 @@ will hand over
 § 9). A group's name and a space's icon are not fields: each keeps a key per scope epoch (a pending invitee is handed
 the name's).
 
-:::caution[Node keys do not rotate, and a removal does not change that]
-A rotation moves only `K_SC`. A removed member or former guest who kept a node's key, **and** obtains its later
-ciphertext (from a database dump or a colluding operator), can read what is added under that node after their
-removal. Against an honest server, deleting the membership or the share is the cut. This residual is the same for
-a Memory and for a folder subtree; the folder case was accepted for parity
+:::caution[Between rotations, a node key stays]
+A rotation replaces every node key of the scope. Until the next one, a removed member or former guest who kept a
+node's key, **and** obtains its later ciphertext (from a database dump or a colluding operator), can read what is
+added under that node: a tenant member's routine removal does not rotate
+([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)), nor
+does revoking a link. After a rotation, a link they could rebuild still opens the new key until it is re-issued.
+Against an honest server, deleting the membership or the share is the cut
 ([ADR 0080](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-Decision 5; [ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md)
-§ Rotation / revocation). See [Known limitations](/veyq/security/known-limitations/).
+Decision 5; [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) § Consequences). See [Known limitations](/veyq/security/known-limitations/).
 :::
 
 ## Layer 4: sharing keys
@@ -292,10 +297,10 @@ server.
 
 | Key | How it is made | What wraps it | Who holds it | When it rotates | What losing or leaking it means |
 |---|---|---|---|---|---|
-| **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_node)`, viewer and contributor links only), the field keys of the root's name, the note and the private label, and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
+| **`K_share`** | 32 random bytes, minted by the client per share | Not wrapped for the link: it travels in the URL fragment. Members recover it from the recovery copy below. Under it sit the share root's node key (`symWrap(K_share, K_node)`, viewer and contributor links only), the field keys of the root's name, the note and the private label, and the password's reveal copy | Anyone with the link; every member of the scope | **Never** for the life of a link; a rotation re-wraps the root's new node key under it, so the link keeps showing what is added. Cutting someone off a link means **re-issuing** it: a new id and a fresh `K_share` ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | Leaked: the shared subtree. Revoking the share stops new access on an honest server; what was already downloaded stays read |
 | **Recovery copy** (`sealed_share_key`) | `K_share` sealed under `K_SC` at the scope's **current** epoch, bound to scope, node, share and epoch; mandatory on every share | `K_SC` | Every scope member; **no link** | Not re-sealed by a rotation: a copy older than the scope's current epoch makes its link re-issue-only ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)) | — |
-| **Drop keypair** (hybrid post-quantum KEM) | Minted by the owner's client when a Memory's first uploader link is created; one per Memory (a chapter has its own), not per share | Private half: under the node's key. Public half: under `K_share` on each uploader share | Private: everyone who reads the node. Public: uploader guests | No rotation is defined | Private half leaked: what uploaders added to that node |
-| **Uploader identity key** | Random, minted by an uploader guest's client | Wrapped to the drop public key | That guest, and every reader of the node | — | That identity's uploads: their blob keys, metadata and display name |
+| **Drop keypair** (hybrid post-quantum KEM) | Minted by the owner's client when a Memory's first uploader link is created; one per Memory (a chapter has its own), not per share | Private half: under the node's key. Public half: under `K_share` on each uploader share | Private: everyone who reads the node. Public: uploader guests | At **every rotation** of `K_SC`: a new keypair, the private half under the node's new key, the public half re-sealed under each uploader link's `K_share`, every guest identity key re-sealed to it, the old private half discarded ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 5) | Private half leaked: what uploaders added to that node until the next rotation, and after it what a guest identity from before adds (below) |
+| **Uploader identity key** | Random, minted by an uploader guest's client | Wrapped to the drop public key | That guest, and every reader of the node | Never. A rotation re-seals it to the new drop public key; only a re-issue starts every guest over | That identity's uploads: their blob keys, metadata and display name |
 
 **Why the recovery copy is sealed under `K_SC` and not `K_node`.** A viewer or contributor link holds `K_node`;
 that is what the link exists to hand over. A copy under `K_node` would let that link's holder, with a database dump,
@@ -313,7 +318,9 @@ one asymmetric wrap per identity, not per blob. A link plus a full dump reads on
 drop key belongs to the node rather than to the share so that every reader finds the private half where they
 already look.
 
-**Shares are independent of scope rotation.** A shared node key is wrapped to `K_share`, not to `K_SC`, so rotating
-the scope does not revoke a link; links are revoked separately. A guest write must also present a token derived from
-`K_share` ([ADR 0076](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)),
+**A rotation does not revoke a link.** A shared node key is wrapped to `K_share`, not to `K_SC`; the re-key re-wraps
+the root's new key under the link's unchanged `K_share`, so the link keeps showing what is added, and whoever held an
+older epoch can rebuild that `K_share` from the recovery copy. The re-key leaves recovery copies at their epoch, so
+every link from before reads re-issue-required; links are revoked or re-issued separately. A guest write must also
+present a token derived from `K_share` ([ADR 0076](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)),
 so a share id alone opens no write. That is a layer-1 control: the operator, being the server, could write anyway.

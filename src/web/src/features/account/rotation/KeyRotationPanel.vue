@@ -31,6 +31,7 @@ import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
 import { listMyScopes, listMyTenants } from '../../spaces/scopes'
+import { soleOwnerSpaces, type SoleOwnerSpace } from './soleOwnerSpaces'
 import { groupNameSeen } from '../../spaces/groupNamesSeen'
 import type { RotationScopeState } from '../../../api/generated/account'
 import { ScopeKind } from '../../../api/generated/scopes'
@@ -65,6 +66,9 @@ const tenantNames = ref<Record<string, string>>({})
  *  (inbox #281). A sole-member scope of another tenant is not listed here and reads neutral. */
 const scopeKinds = ref<Record<string, ScopeKind>>({})
 const requeueing = ref<string | null>(null)
+/** The shared spaces this account owns alone, named before the button (uc.account.rotate-keys E4); empty hides the
+ *  line, and so does a read that fails. */
+const soleOwned = ref<SoleOwnerSpace[]>([])
 const requeueError = ref('')
 
 async function loadQueued() {
@@ -76,6 +80,9 @@ async function loadQueued() {
   await loadLabels()
 }
 onMounted(loadQueued)
+onMounted(async () => {
+  soleOwned.value = await soleOwnerSpaces().catch(() => [])
+})
 
 /** The device-local labels both lists use instead of a raw scope id; a failed read leaves the neutral label. */
 async function loadLabels() {
@@ -187,10 +194,19 @@ async function confirm() {
               <li><VeyqIcon name="sign-out" /><span>{{ t('rotation.factSignsOut') }}</span></li>
               <li><VeyqIcon name="envelope" /><span>{{ t('rotation.factInvites') }}</span></li>
               <li><VeyqIcon name="history" /><span>{{ t('rotation.factNotRepair') }}</span></li>
+              <li><VeyqIcon name="link" /><span>{{ t('rotation.factLinks') }}</span></li>
             </ul>
           </div>
           <ul class="rotation-facts">
-            <li><VeyqIcon name="crown" /><span>{{ t('rotation.soleOwner') }}</span></li>
+            <li v-if="soleOwned.length" data-testid="rotation-sole-owner">
+              <VeyqIcon name="crown" />
+              <div>
+                <span>{{ t('rotation.soleOwner') }}</span>
+                <ul class="rotation-sole-owner">
+                  <li v-for="s in soleOwned" :key="s.scopeId">{{ s.name ?? t('rotation.scopeNameUnavailable') }}</li>
+                </ul>
+              </div>
+            </li>
             <li><VeyqIcon name="key" /><span>{{ t('rotation.factNeedsKit') }}</span></li>
           </ul>
         </div>
@@ -342,6 +358,13 @@ async function confirm() {
   align-items: start;
   gap: 0.5rem;
 }
+.rotation-sole-owner {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+.rotation-facts .rotation-sole-owner li {
+  display: list-item;
+}
 .rotation-facts .veyq-icon {
   color: var(--app-muted);
   margin-top: 0.15rem;
@@ -354,6 +377,14 @@ async function confirm() {
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
+}
+/* A state's hint is a sentence: in the list row's `auto` column it squeezed the space's name under the badge. Name and
+   badge share the first line; the hint, and a re-queue, take the whole width below. */
+.rotation-results .veyq-list-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.rotation-results .veyq-list-row > small {
+  grid-column: 1 / -1;
 }
 .rotation-queued {
   margin-top: 1.5rem;

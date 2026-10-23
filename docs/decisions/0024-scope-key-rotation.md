@@ -99,10 +99,8 @@ members; new content seals under it. Nothing is re-encrypted.**
 **Guarantee.** *Forward-confidential for post-rotation content* — against an honest operator and a database or
 store dump once every writer holds the new epoch, which Decision 6 makes the condition for writing, **and once the
 rotation's re-key has reached every node** ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md), which
-holds every write into a node not yet re-keyed). **Until `changes/cr-scope-rotation-rekeys-nodes.md` lands it holds
-only for new scope-root entries:** node keys are not re-keyed yet, so what is added inside a folder or Memory that
-existed before the rotation seals under a key the excluded party holds (inbox #518). A link they could rebuild stays
-their way in until it is re-issued (ADR 0109 point 4). Against an
+holds every write into a node not yet re-keyed). A link they could rebuild stays their way in until it is re-issued
+(ADR 0109 point 4). Against an
 **active** operator, on a client it does not serve ([ADR 0026](0026-client-trust-tiers.md)), it holds for content
 sealed by any client that has received the new epoch: the removal's own rotation cannot be redirected to the
 removed member (Decision 4), and no client goes back below an epoch it has held (Decision 6). Three things it

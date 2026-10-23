@@ -56,8 +56,7 @@ Memory, an expense and a file side by side).
    who kept a folder's key reads everything later created under it until the scope next rotates, which re-keys the
    folder ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)); a group-member removal rotates, so the
    removed member's reach ends there, except through a link they could rebuild, until it is re-issued. Honest-server
-   revocation is the cut in between, as ADR 0075 states. Until `changes/cr-scope-rotation-rekeys-nodes.md` lands, no
-   rotation re-keys a node, and the reach lasts (inbox #518).
+   revocation is the cut in between, as ADR 0075 states.
 6. **Tree operations for a guest are core operations behind `ShareGuestGate`; content operations are the
    application's.** Create, move, rename and delete of nodes carry no application semantics, so core serves them
    (a guest variant of the node operations, authorised by the gate instead of a member session) and checks the

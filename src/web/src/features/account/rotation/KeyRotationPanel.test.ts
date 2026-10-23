@@ -14,10 +14,12 @@ vi.mock('./rotateKeys', () => ({
 }))
 vi.mock('../../../app/vault', () => ({ unlockOrigin: () => 'cold' }))
 vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn(), listMyScopes: vi.fn() }))
+vi.mock('./soleOwnerSpaces', () => ({ soleOwnerSpaces: vi.fn() }))
 
 import KeyRotationPanel from './KeyRotationPanel.vue'
 import { listQueuedRotations, requeueQueuedRotation, rotateKeys } from './rotateKeys'
 import { listMyScopes, listMyTenants } from '../../spaces/scopes'
+import { soleOwnerSpaces } from './soleOwnerSpaces'
 import { forgetGroupNamesSeen, rememberGroupName } from '../../spaces/groupNamesSeen'
 import { ScopeKind, type ScopeSummary } from '../../../api/generated/scopes'
 import { realI18n, t } from '../../../test/i18n'
@@ -33,7 +35,7 @@ const stubs = {
   TrustResetLink: true,
 }
 
-const STATES = ['waiting', 'stalled', 'secured', 'failed'] as const
+const STATES = ['waiting', 'stalled', 'rekeying', 'secured', 'failed'] as const
 const scopeOf = (state: string) => `s-${state}`
 
 async function mountPanel() {
@@ -42,6 +44,10 @@ async function mountPanel() {
   await flushPromises()
   return wrapper
 }
+
+beforeEach(() => {
+  vi.mocked(soleOwnerSpaces).mockResolvedValue([])
+})
 
 const row = (w: ReturnType<typeof mount>, scopeId: string) => w.find(`[data-queued-scope="${scopeId}"]`)
 const requeueIn = (w: ReturnType<typeof mount>, scopeId: string) =>
@@ -190,5 +196,28 @@ describe('KeyRotationPanel — the scopes re-keyed alone are labelled, never sho
     const w = await rotate([{ scopeId: 's-personal', status: 'secured' }])
     expect(alone(w, 's-personal').text()).toContain(t('rotation.scopeNameUnavailable'))
     expect(alone(w, 's-personal').text()).not.toContain('s-personal')
+  })
+})
+
+describe('KeyRotationPanel — the spaces this account owns alone, before the button (uc.account.rotate-keys E4)', () => {
+  beforeEach(() => {
+    vi.mocked(listMyTenants).mockResolvedValue([])
+    vi.mocked(listQueuedRotations).mockResolvedValue([])
+  })
+  const line = (w: ReturnType<typeof mount>) => w.find('[data-testid="rotation-sole-owner"]')
+
+  it('names each one under the warning, a space it cannot open by the neutral label', async () => {
+    vi.mocked(soleOwnerSpaces).mockResolvedValue([{ scopeId: 'g1', name: 'Urlaub' }, { scopeId: 'g2', name: null }])
+    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+    expect(line(w).text()).toContain(t('rotation.soleOwner'))
+    expect(line(w).findAll('li').map((li) => li.text())).toEqual(['Urlaub', t('rotation.scopeNameUnavailable')])
+  })
+
+  it('shows no warning when there is none', async () => {
+    const w = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
+    await flushPromises()
+    expect(line(w).exists()).toBe(false)
+    expect(w.text()).toContain(t('rotation.factLinks')) // control: the facts did render
   })
 })

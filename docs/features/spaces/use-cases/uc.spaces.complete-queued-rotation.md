@@ -12,8 +12,10 @@
 - **Preconditions:** A `SCOPE_ROTATION` job is queued on the scope. The owner's device holds the scope's current
   grant.
 - **Postconditions (success):** The scope carries a new epoch, re-granted to the members the server listed after
-  every event the job carried, minus any whose identity key reads `changed`. The job is `done`, which the server
-  accepts only because this owner committed that epoch while holding the job's lease. The server saw job, decline
+  every event the job carried, minus any whose identity key reads `changed`, and every live and trashed node of it
+  re-keyed under that epoch ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)). The job is `done`,
+  which the server accepts only because this owner committed that epoch while holding the job's lease and no node
+  of the scope lags it. The server saw job, decline
   and membership rows and the rotation's ciphertext — never a key.
 
 ## Main flow
@@ -31,8 +33,11 @@
    main flow). The server refuses a caller who is not an owner, who is excluded by a live job, or whose own grant
    is behind or absent. On success it marks every rotation job of the scope leased to this caller with the epoch it
    committed.
-5. **It completes the job.** The completion lands in one guarded statement: the job is still leased to this caller
-   **and**, for a rotation, carries this caller's commit mark. A completion that lost its lease writes nothing.
+5. **It re-keys the scope's nodes** ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)), top-down,
+   before it completes.
+6. **It completes the job.** The completion lands in one guarded statement: the job is still leased to this caller
+   **and**, for a rotation, carries this caller's commit mark, **and** no node of the scope lags the current epoch
+   (`409 rekey_incomplete` otherwise; the job stays leased). A completion that lost its lease writes nothing.
 
 ## Alternate / exception flows
 
@@ -63,6 +68,10 @@
   ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) E3).
 - **E9 — a lease expires and is reclaimed mid-completion.** The reclaiming owner keeps the job; the stale holder's
   completion writes nothing and is answered `409 not_lease_holder`.
+- **E10 — the re-key stops halfway.** The scope reads `rekeying` on every owner's row, derived from the node rows,
+  and writes into a node not yet re-keyed wait. The next run of any owner's worker resumes the re-key before it
+  claims anything; a job whose epoch an earlier lease committed completes once the re-key is done, without a second
+  rotation.
 
 ## Quality notes
 
@@ -73,9 +82,10 @@
 - **Owners only, on purpose.** A non-owner cannot build a complete rotation commit: it must carry every open
   admission, and a pending consent proposal and a tenant's open member invites are hidden from non-owners
   ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md) §4).
-- **The states are derived, not stored.** `waiting`, `stalled`, `secured` and `failed` are computed from job,
-  decline and membership rows the server already holds; the owner's row carries only `stalled` and `failed`,
-  the two that need an owner, and never names who rotated.
+- **The states are derived, not stored.** `waiting`, `stalled`, `rekeying`, `secured` and `failed` are computed
+  from job, decline, membership and node rows the server already holds; the owner's row carries `stalled` and
+  `failed`, the two that need an owner, and `rekeying` as its own flag, which a worker resumes without anyone
+  acting; it never names who rotated.
 - **Nothing pushes.** The state is shown where the space is (its row and its member panel); nothing notifies an
   owner who does not look.
 
@@ -88,11 +98,13 @@ removed member or a stolen key stops reading what comes next.
 
 - Feature: [Spaces (scopes)](../_index.md)
 - Enabler: [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (the rotation itself)
+- Use-case: [uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md) (the re-key step 5 runs)
 - Triggers: [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) (A4),
   [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) (step 7)
 - Decisions: [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md) (the queue; per-tag
   eligibility), [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (§ Guarantee),
   [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) (Decisions 4 and 6),
+  [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) (point 7),
   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (§4 owners rotate)
 - Concept: [background tasks](../../../crosscutting/background-tasks.md)
 - End-user view (docs site): [Invite and manage members](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

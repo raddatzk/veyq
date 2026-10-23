@@ -3,50 +3,47 @@ title: "Deine Schlüssel ersetzen"
 sources:
   - docs/features/account/use-cases/uc.account.rotate-keys.md
   - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
+  - docs/features/spaces/use-cases/uc.spaces.rekey-after-rotation.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
 
-Das ist nur für den Notfall: wenn jemand anderes deine Schlüssel hat, etwa weil du einen Code bestätigt hast, der
-nicht zu deinem neuen Gerät gehörte. Die Seite erklärt dasselbe, bevor sie nach etwas fragt, und nichts davon ist
-Kleingedrucktes.
+Für den Notfall: Jemand anderes hat deine Schlüssel, etwa über ein fremdes Gerät, dem du den Zugang bestätigt hast.
 
 ## Was ersetzt wird
 
-Die Schlüssel, die deine Daten tatsächlich öffnen: dein **Master Key** und deine **Identität**, an der dich alle
-anderen erkennen. Dein Passwort und dein Secret Key bleiben gleich, dein Notfall-Kit gilt weiter.
+Dein **Master Key** und deine **Identität**. Passwort, Secret Key und Notfall-Kit bleiben, wie sie sind.
 
-## Warum es diesen Schritt gibt
+## Warum
 
-Abmelden und den gespeicherten Schlüssel eines Geräts entfernen nehmen ihm den Zugang zum Server, aber nicht die
-Schlüssel, die es schon hat. Mit ihnen kann die Person weiterlesen, sobald sie anders an deine verschlüsselten Daten
-kommt, und sich als dich ausgeben. Das ändern nur neue Schlüssel.
+Abmelden beendet den Zugang eines Geräts zum Server, nicht die Schlüssel, die es hat. Neue Schlüssel sperren diese
+für alles aus, was ab jetzt dazukommt.
 
 ## Brauchst du das?
 
-Ja, wenn ein Gerät deine Schlüssel hatte, das nicht deins ist. Nein, wenn du nur ein eigenes Gerät verloren hast:
-Wähle dafür stattdessen **Abmelden und gespeicherten Schlüssel entfernen**
-([Geräte und Sitzungen](/veyq/de/account/devices-and-sessions/)).
+Nur wenn ein fremdes Gerät deine Schlüssel hatte. Für ein verlorenes eigenes Gerät wähle stattdessen **Abmelden und
+gespeicherten Schlüssel entfernen** ([Geräte und Sitzungen](/veyq/de/account/devices-and-sessions/)).
 
-## Was danach anders ist
+## Was es kostet
 
-- **Für alle anderen bist du eine neue Identität.** Alle sehen, dass sich dein Schlüssel geändert hat, und wer dich
-  verifiziert hatte, muss die Sicherheitsnummer neu vergleichen.
-- **In jedem geteilten Bereich bist du draußen, bis jemand dort deinen neuen Schlüssel bestätigt**, am besten, indem
-  ihr die Sicherheitsnummer am Telefon vergleicht: [Eine Person verifizieren](/veyq/de/account/verify-a-person/).
-- **Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel.** Jedes braucht dein Passwort
-  und deinen Secret Key, um wieder hineinzukommen, oder du fügst es von diesem Gerät aus neu hinzu. Auch dieses Gerät
-  fragt bei der nächsten Anmeldung nach beidem.
-- **Offene Gruppeneinladungen an dich verfallen** und müssen neu geschickt werden.
-- **Es lässt sich nicht rückgängig machen, und es holt nichts zurück:** Was die Person schon gesehen hat, bleibt bei
-  ihr.
+- **Alle sehen, dass sich dein Schlüssel geändert hat.** Wer dich verifiziert hatte, vergleicht die
+  Sicherheitsnummer neu.
+- **In jedem geteilten Bereich bist du draußen, bis jemand dort deinen neuen Schlüssel bestätigt**
+  ([Eine Person verifizieren](/veyq/de/account/verify-a-person/)).
+- **Alle anderen Geräte werden abgemeldet** und brauchen wieder Passwort und Secret Key oder werden von diesem aus
+  über **Gerät hinzufügen** neu hinzugefügt.
+- **Offene Gruppeneinladungen an dich verfallen.**
+- **Es lässt sich nicht rückgängig machen.** Was jetzt da ist, bleibt für den alten Schlüssel lesbar; nur was danach
+  dazukommt, ist für ihn zu.
+- **Vorher erstellte Links bleiben für den alten Schlüssel offen, bis du sie erneuerst**
+  ([Einen Link erneuern](/veyq/de/sharing/manage-links/)).
 
 Zwei Dinge, bevor du anfängst:
 
-- **Bist du in einem geteilten Bereich die einzige besitzende Person, mach vorher jemand anderen dazu.** Sonst kann
-  dort niemand das neue Schloss einbauen, und dein alter Schlüssel liest dort weiter mit.
-- **Du brauchst dein Notfall-Kit.** Das ist Absicht: Es ist das Einzige, was die andere Person nicht hat, und genau
-  das hindert sie daran, dir das zuerst anzutun.
+- **Bist du in einem geteilten Bereich die einzige besitzende Person, nennt die Seite ihn mit Namen.** Mach dort
+  vorher jemand anderen dazu, sonst behält dieser Bereich das alte Schloss.
+- **Du brauchst dein Notfall-Kit.** Ohne es lassen sich deine Schlüssel nicht ersetzen. Bewahr es so auf, dass nur
+  du drankommst.
 
 ## Sie ersetzen
 
@@ -54,28 +51,31 @@ Zwei Dinge, bevor du anfängst:
 2. Gib unter **Schlüssel ersetzen** **Dein Passwort** und **Dein Secret Key** ein.
 3. Wähle **Schlüssel ersetzen** und bestätige im Dialog **Schlüssel wirklich ersetzen?** mit **Schlüssel ersetzen**.
 
-<Screenshot id="account-replace-keys" shows="Der Block Schlüssel ersetzen unter Sicherheit mit dem, was ersetzt wird, warum, wann und was danach anders ist, den Feldern für Passwort und Secret Key und der Schaltfläche Schlüssel ersetzen" />
+<Screenshot id="account-replace-keys" shows="Der Block Schlüssel ersetzen unter Sicherheit: was ersetzt wird, warum, wann, Was es kostet, die Liste der Bereiche, in denen du die einzige besitzende Person bist, ein geteilter Bereich mit Niemand kann es tun, die Felder für Passwort und Secret Key und die Schaltfläche Schlüssel ersetzen" />
 
 Danach steht dort **Deine Schlüssel sind ersetzt** und jeder Bereich mit seinem Stand:
 
-- **Neues Schloss** — neues Schloss für den Bereich selbst. Ordner und Erinnerungen, die schon da waren, behalten ihre
-  alten Schlüssel – der alte Schlüssel liest also, was dort dazukommt.
-- **Nicht gesichert** — er hat noch sein altes Schloss. Ersetze deine Schlüssel noch einmal.
+- **Neues Schloss.** Was hier ab jetzt dazukommt, ist für den alten Schlüssel zu. Vorher erstellte Links bleiben für
+  ihn offen, bis du sie erneuerst.
+- **Schloss wird eingebaut.** Das neue Schloss wird eingebaut. Hinzufügen wartet hier, bis das fertig ist.
+- **Altes Schloss.** Dieser Bereich hat noch sein altes Schloss. Versuch es noch einmal.
 
-Unter **Geteilte Bereiche** siehst du die Bereiche, in denen jemand anderes das neue Schloss einbauen oder dich wieder
-hineinlassen muss: **Wartet auf jemand anderen** heißt, eine andere besitzende Person tut es, sobald sie veyq das
-nächste Mal öffnet; **Niemand kann es tun** heißt, es gibt keine andere besitzende Person mehr — mach jemand anderen
-zur besitzenden Person dieses Bereichs. Bis das neue Schloss eingebaut ist, kann der alte Schlüssel Neues dort noch
-lesen.
+Unter **Geteilte Bereiche** baut jemand anderes das neue Schloss ein und lässt dich wieder hinein:
+
+- **Wartet auf eine andere besitzende Person.** Eine andere besitzende Person baut das neue Schloss ein, sobald sie
+  veyq das nächste Mal öffnet. Bis dahin liest der alte Schlüssel, was hier dazukommt.
+- **Niemand kann es tun.** Keine andere besitzende Person kann das neue Schloss einbauen. Mach hier jemanden zur
+  besitzenden Person. Bis dahin liest der alte Schlüssel, was hier dazukommt.
+- **Schloss wird eingebaut.** Das neue Schloss wird eingebaut. Jemand hier muss noch bestätigen, dass du es bist.
+- **Neues Schloss.** Neues Schloss drin. Jemand hier muss noch bestätigen, dass du es bist.
+- **Altes Schloss.** Das Einbauen ist wiederholt gescheitert, deshalb liest der alte Schlüssel noch, was hier
+  dazukommt. Stoß es neu an.
 
 Besitzt du einen geteilten Bereich oder eine Gruppe und ein anderes Mitglied hat die eigenen Schlüssel ersetzt, baut
-das Gerät einer besitzenden Person, vielleicht deins, das neue Schloss von selbst ein. Klappt das nicht, steht beim
-Bereich in der Seitenleiste **Braucht ein neues Schloss**, und seine Mitgliederliste sagt, warum. Entweder gibt es
-keine besitzende Person mehr, die es einbauen kann: Dann mach jemand anderen zur besitzenden Person. Oder das Einbauen
-ist wiederholt gescheitert: Dann wähle **Neu anstoßen**, und dein Gerät übernimmt es.
+das Gerät einer besitzenden Person, vielleicht deins, das neue Schloss von selbst ein; solange es eingebaut wird,
+wartet dort das Hinzufügen. Klappt das nicht, steht beim Bereich in der Seitenleiste **Braucht ein neues Schloss**,
+und seine Mitgliederliste sagt, warum. Entweder gibt es keine besitzende Person mehr, die es einbauen kann: Mach
+jemand anderen zur besitzenden Person. Oder das Einbauen ist wiederholt gescheitert: Wähle **Neu anstoßen**, und
+dein Gerät übernimmt es.
 
-Dein Notfall-Kit funktioniert danach weiter: Dein Secret Key bleibt gleich, nur was er öffnet, ändert sich.
-
-Für die anderen Mitglieder sehen deine neuen Schlüssel aus wie ein Fremder, der sich als du ausgibt, und genau das
-soll veyq bemerken. Deshalb bestätigen sie es, und deshalb kann der Server allein deine Bereiche nie jemand anderem
-geben: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)
+Mehr: [Sind meine Daten sicher?](/veyq/de/privacy/is-my-data-safe/)

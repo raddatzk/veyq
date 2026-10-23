@@ -7,6 +7,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
   - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
+  - docs/features/spaces/use-cases/uc.spaces.rekey-after-rotation.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -52,10 +53,10 @@ the only person is deleted after 30 days. You never gain access to anyone's grou
 not taken away at once: for 30 days they can still sign in, look through it and save what they want, but change
 nothing. Then it is erased.
 
-Each group they shared with others also gets a new lock. One of its owners' devices fits it by itself the next time
-that owner opens veyq. The server shuts them out at once, but until the new lock is in, their old key would still open
-what is new in that group. The new lock is on the group itself: folders and Memories that were already there keep
-their keys, so their old key would still open what is added inside them.
+Each group they shared with others also gets a new lock, on every folder and Memory in it. One of its owners'
+devices fits it by itself the next time that owner opens veyq; adding things there waits while it goes in. The server
+shuts them out at once, but until the new lock is in, their old key would still open what is new in that group.
+Links made before stay open to them until you renew them ([Renew a link](/veyq/sharing/manage-links/)).
 
 ## Share the ownership
 

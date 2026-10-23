@@ -2142,6 +2142,17 @@ about the framework until a request shows it: `@Uncompressed` on an implementing
 (it reads the method that declares the endpoint — here the generated interface), and only the wire test's refusal that
 the method answered itself showed it.
 
+### A contract that makes a client-sent field required lands on `main` together with its client phase
+
+The paragraphs on contracts phases above let a *branch* be red between the contracts phase and the client phase; they
+do not let `main` be. cr-scope-rotation-rekeys-nodes merged its contracts and backend phases while its web phase was
+still open, and the contract had made `nodeEpoch` required on twenty writes: until the web phase landed, `npm run check`
+in `src/web/` was red on `main` (24 call sites) and every sealed write from a web client built from `main` was a `400`
+against a backend built from `main` — the owner's dev loop and every session working on `main` with it. Contracts →
+backend → web is the order the *work* is done in, not the order it may *merge* in: a CR whose contract makes a field the
+client sends required merges its server and client phases in one merge, or keeps the field optional until the client
+phase merges.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong

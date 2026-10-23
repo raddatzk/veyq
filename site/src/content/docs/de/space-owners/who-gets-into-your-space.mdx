@@ -7,6 +7,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/features/spaces/use-cases/uc.spaces.set-space-icon.md
   - docs/features/spaces/use-cases/uc.spaces.complete-queued-rotation.md
+  - docs/features/spaces/use-cases/uc.spaces.rekey-after-rotation.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -54,11 +55,12 @@ sie die einzige Person war, wird nach 30 Tagen gelöscht. Du bekommst dabei nie 
 Ihren persönlichen Bereich verliert sie nicht sofort: 30 Tage lang kann sie sich noch anmelden, ihn durchsehen und
 speichern, was sie behalten will, aber nichts mehr ändern. Danach wird er gelöscht.
 
-Jede Gruppe, die sie mit anderen geteilt hat, bekommt außerdem ein neues Schloss. Das Gerät einer Person, die die
-Gruppe besitzt, baut es von selbst ein, sobald diese veyq das nächste Mal öffnet. Der Server sperrt die entfernte
-Person sofort aus, aber bis das neue Schloss eingebaut ist, würde ihr alter Schlüssel Neues in dieser Gruppe noch
-öffnen. Das neue Schloss gilt für die Gruppe selbst: Ordner und Erinnerungen, die schon da waren, behalten ihre
-Schlüssel, also würde ihr alter Schlüssel noch öffnen, was darin dazukommt.
+Jede Gruppe, die sie mit anderen geteilt hat, bekommt außerdem ein neues Schloss, an jedem Ordner und jeder
+Erinnerung darin. Das Gerät einer Person, die die Gruppe besitzt, baut es von selbst ein, sobald diese veyq das
+nächste Mal öffnet; solange es eingebaut wird, wartet dort das Hinzufügen. Der Server sperrt die entfernte Person
+sofort aus, aber bis das neue Schloss eingebaut ist, würde ihr alter Schlüssel Neues in dieser Gruppe noch öffnen.
+Vorher erstellte Links bleiben für sie offen, bis du sie erneuerst
+([Einen Link erneuern](/veyq/de/sharing/manage-links/)).
 
 ## Den Besitz teilen
 
