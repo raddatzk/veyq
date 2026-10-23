@@ -2,7 +2,8 @@
 // page's `registerDownload` talks to a fake `ServiceWorker` that hands its messages to the REAL SW-side `handleMessage`,
 // the "navigation" is the REAL `handleFetch`, and the bytes cross a real `MessageChannel`. What is pinned: the bytes
 // arrive whole and in order with the attachment headers; the handle serves one navigation; a page failure, a short or
-// overlong stream and an ended session error the body (the browser fails the download) instead of closing it; a browser
+// overlong stream and an ended session error the body (the browser fails the download) instead of closing it, and the page
+// hears of each (its write or close fails, never waits for ever, F11); a browser
 // cancel reaches the page as an AbortError; a filename cannot inject into the header.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { handleFetch, handleMessage, makeRegistry, type PlaybackRegistry } from './mediaSw'
@@ -173,6 +174,32 @@ describe('a streamed download through the SW', () => {
     expect(await registerDownload({ name: 'a', size: 1 }, { navigate: navigateSpy })).toBeNull()
     expect(navigateSpy).not.toHaveBeenCalled()
   })
+
+  // F11: the SW errored the body and told the page nothing, so the page waited for a credit that never came and the export
+  // dialog stood at "Writing the file… 100%" for ever. A refusal must reach the page as the write's (or the close's) failure.
+  /** The page's whole write, or 'hung' when it has neither settled after a while. */
+  const settled = (p: Promise<unknown>) =>
+    Promise.race([p.then(() => 'resolved', (e: unknown) => e), new Promise((r) => setTimeout(() => r('hung'), 300))])
+
+  it('a stream that runs past the registered size fails the page\'s write - it does not hang', async () => {
+    const chunks = chunksOf(10, 10, 10)
+    const { sink, res } = await startDownload('a.zip', 15) // announced shorter than what the page streams
+    const reading = res.arrayBuffer().then(() => 'closed', (e: Error) => e.message)
+    const page = await settled(streamBlob(source(chunks), sink))
+    expect(page).toBeInstanceOf(Error)
+    expect((page as Error).message).toBe('download_overrun')
+    expect(await reading).toBe('download_overrun') // and the browser failed the download
+  })
+
+  it('an end short of the registered size fails the page\'s close - never reported as saved', async () => {
+    const chunks = chunksOf(10, 10)
+    const { sink, res } = await startDownload('a.zip', 50) // announced longer than what the page streams
+    const reading = res.arrayBuffer().then(() => 'closed', (e: Error) => e.message)
+    const page = await settled(streamBlob(source(chunks), sink))
+    expect(page).toBeInstanceOf(Error)
+    expect((page as Error).message).toBe('download_short')
+    expect(await reading).toBe('download_short')
+  })
 })
 
 describe('the SW side guards what the page sends', () => {
@@ -180,16 +207,18 @@ describe('the SW side guards what the page sends', () => {
     const ch = new MessageChannel()
     const s = new DownloadSession(size, 'a', ch.port2)
     const page = ch.port1
+    const told: unknown[] = []
     page.onmessage = (e: MessageEvent) => {
       if ((e.data as { type: string }).type === 'veyq-dl-pull') pulls.push(1)
+      else told.push(e.data)
     }
     const pulls: number[] = []
-    return { body: s.body(), page, pulls }
+    return { body: s.body(), page, pulls, told }
   }
   const tick = () => new Promise((r) => setTimeout(r, 5))
 
-  it('a stream that ends short of the registered size errors', async () => {
-    const { body, page } = session(4)
+  it('a stream that ends short of the registered size errors, and the page is told', async () => {
+    const { body, page, told } = session(4)
     const reading = new Response(body).arrayBuffer()
     await tick()
     const two = new Uint8Array([1, 2])
@@ -197,15 +226,19 @@ describe('the SW side guards what the page sends', () => {
     await tick()
     page.postMessage({ type: 'veyq-dl-end' })
     await expect(reading).rejects.toThrow('download_short')
+    await tick()
+    expect(told).toEqual([{ type: 'veyq-dl-failed', reason: 'short' }])
   })
 
-  it('a stream that runs past the registered size errors', async () => {
-    const { body, page } = session(1)
+  it('a stream that runs past the registered size errors, and the page is told', async () => {
+    const { body, page, told } = session(1)
     const reading = new Response(body).arrayBuffer()
     await tick()
     const two = new Uint8Array([1, 2])
     page.postMessage({ type: 'veyq-dl-data', bytes: two.buffer }, [two.buffer])
     await expect(reading).rejects.toThrow('download_overrun')
+    await tick()
+    expect(told).toEqual([{ type: 'veyq-dl-failed', reason: 'overrun' }])
   })
 
   it('refuses a registration without a port, with a negative or fractional size, or without a handle', () => {

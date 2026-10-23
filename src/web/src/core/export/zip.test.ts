@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { crc32 } from './crc32'
-import { openZip, READ_CHUNK, ZipError, ZipWriter } from './zip'
+import { openZip, READ_CHUNK, ZipError, ZipWriter, zipLength, type ZipPlanEntry } from './zip'
 import type { ByteSink } from '../blob/stream'
 
 function memorySink() {
@@ -153,5 +153,60 @@ describe('what the reader refuses', () => {
   it('a small entry read whole above its limit', async () => {
     const zip = await openZip(await zipOf(() => {}))
     await expectCode(zip.bytes('a', 2), 'unsupported')
+  })
+})
+
+// F11: a save target held to an exact length (the SW download route's Content-Length) must be told the archive's own length,
+// not the payloads' sum - so `zipLength` is pinned against what the writer really writes, shape by shape.
+describe('zipLength: the exact length of the archive the writer writes', () => {
+  /** Write `plan` for real and count the bytes the sink receives (nothing is kept: a large entry costs no memory). */
+  async function writtenLength(plan: ZipPlanEntry[], zip64At?: number): Promise<number> {
+    let length = 0
+    const sink: ByteSink = { write: async (b) => void (length += b.length), close: async () => {}, abort: async () => {} }
+    const w = new ZipWriter(sink, { zip64At })
+    for (const e of plan) {
+      if ('directory' in e) await w.addDirectory(e.path)
+      else await w.addFile(e.path, e.size, split(new Uint8Array(e.size).fill(7), READ_CHUNK))
+    }
+    await w.finish()
+    return length
+  }
+  const file = (path: string, size: number): ZipPlanEntry => ({ path, size })
+  const dir = (path: string): ZipPlanEntry => ({ path, directory: true })
+  const manifest = file('.veyq/manifest.json', 412)
+
+  const shapes: [string, ZipPlanEntry[]][] = [
+    ['no entry at all', []],
+    ['an empty folder', [dir('Leer'), manifest]],
+    ['empty files', [dir('a'), file('a/0', 0), file('a/1', 0), manifest]],
+    ['many small files in nested folders', [
+      dir('Trip'), dir('Trip/Sub'), dir('Trip/Sub/Deeper'),
+      ...Array.from({ length: 400 }, (_, i) => file(`Trip/${['', 'Sub/', 'Sub/Deeper/'][i % 3]}f${i}.txt`, (i * 37) % 211)),
+      manifest,
+    ]],
+    ['a large file', [dir('Video'), file('Video/clip.mp4', READ_CHUNK * 3 + 5), manifest]],
+    ['non-ASCII names (UTF-8 bytes, not code units)', [
+      dir('Grüße'), dir('Grüße/日本'), file('Grüße/日本/写真 😀.jpg', 1234), file('Grüße/naïve café.txt', 5), file('Grüße/é.bin', 3), manifest,
+    ]],
+  ]
+
+  it.each(shapes)('%s', async (_label, plan) => {
+    expect(zipLength(plan)).toBe(await writtenLength(plan))
+  })
+
+  // The ZIP64 branches at the format's own limit need a 4 GiB payload; lowering the limit takes them with small data, as the
+  // writer's own tests do. Each limit puts the switch somewhere else: every entry ZIP64, only the later offsets, only the
+  // directory past it.
+  it.each([1, 8, 600, 5000, 20_000])('the ZIP64 records and fields, with the limit lowered to %i bytes', async (zip64At) => {
+    for (const [, plan] of shapes) expect(zipLength(plan, { zip64At })).toBe(await writtenLength(plan, zip64At))
+  })
+
+  it('65 535 entries: the ZIP64 end records by count alone', async () => {
+    const plan = Array.from({ length: 65_535 }, (_, i) => file(`e${i}`, 0))
+    expect(zipLength(plan)).toBe(await writtenLength(plan))
+  }, 60_000)
+
+  it('the payloads alone are never the length (what the export dialog announced before F11)', () => {
+    expect(zipLength([dir('a'), file('a/x.bin', 100), manifest])).toBeGreaterThan(100 + 412)
   })
 })

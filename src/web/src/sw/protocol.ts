@@ -5,11 +5,12 @@
 // indices and plaintext, never a key or an auth token.
 
 /**
- * Protocol version. Bump on ANY breaking change to the messages below (4: a playback may be `audio/*` too, inbox #412). register.ts sends it in the handshake; a
+ * Protocol version. Bump on ANY breaking change to the messages below (4: a playback may be `audio/*` too, inbox #412; 5: a
+ * download's SW-side failure and its clean end reach the page, `veyq-dl-failed` / `veyq-dl-done`, F11). register.ts sends it in the handshake; a
  * controlling SW built at a different version answers a mismatch (or nothing), and the page falls back to the
  * Slice-1 full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
  */
-export const PROTOCOL_VERSION = 4
+export const PROTOCOL_VERSION = 5
 
 /** The synthetic in-origin path the SW intercepts. `<handle>` is opaque + per-playback — never a blobId (ADR 0047). */
 export const MEDIA_PATH_PREFIX = '/__media/'
@@ -104,7 +105,9 @@ export type ChunkReply =
 // --- SW ↔ page (over the per-download MessagePort) ---------------------------
 //
 // Credit-based: the page sends one `veyq-dl-data` (or the final `veyq-dl-end`) per `veyq-dl-pull` it received, so the
-// SW never holds more than one chunk the browser has not consumed. `veyq-dl-error` needs no credit.
+// SW never holds more than one chunk the browser has not consumed. `veyq-dl-error` needs no credit. Every way the SW ends a
+// download reaches the page: a clean end is confirmed (`veyq-dl-done`), a stream the SW refuses is reported
+// (`veyq-dl-failed`) - a page waiting for a credit that will never come would otherwise wait for ever (F11).
 
 /** SW → page: the registration is held; the page may navigate to the download URL now. */
 export type DownloadRegistered = { type: 'veyq-dl-registered' }
@@ -114,7 +117,13 @@ export type DownloadPull = { type: 'veyq-dl-pull' }
 export type DownloadCancel = { type: 'veyq-dl-cancel' }
 /** SW → page: the handle was never fetched within its time-to-live, or the session ended: it is gone. */
 export type DownloadGone = { type: 'veyq-dl-gone'; reason: 'expired' | 'ended' }
-export type SwToPageDownloadMessage = DownloadRegistered | DownloadPull | DownloadCancel | DownloadGone
+/** SW → page: the SW errored the body because of what the page sent - more bytes than registered (`overrun`), an end short
+ *  of them (`short`), bytes or an end without a credit (`protocol`). The browser has failed the download. */
+export type DownloadFailed = { type: 'veyq-dl-failed'; reason: DownloadFailure }
+export type DownloadFailure = 'overrun' | 'short' | 'protocol'
+/** SW → page: the end arrived with every registered byte, and the body is closed: the browser has the whole file. */
+export type DownloadDone = { type: 'veyq-dl-done' }
+export type SwToPageDownloadMessage = DownloadRegistered | DownloadPull | DownloadCancel | DownloadGone | DownloadFailed | DownloadDone
 
 /** page → SW: the next plaintext bytes (a transferred ArrayBuffer), the clean end, or a failure. A failure errors the
  *  response stream, so the browser marks the download failed — never a clean, truncated file. */

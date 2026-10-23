@@ -19,7 +19,7 @@ const node = treeNode({ id: 'n1', kind: 'FOLDER', name: 'Trip: 2025' })
 const tree = { rootId: null } as unknown as TreeSource<TreeNode>
 const sink = { write: vi.fn(), close: vi.fn(), abort: vi.fn() }
 const prepared = (over: Partial<PreparedExport> = {}): PreparedExport => ({
-  nodes: 4, payloads: 3, bytes: 2_500_000, skipped: [{ name: 'Box', kind: 'DEPOT_DROPBOX', reason: 'unsupported_kind' }],
+  nodes: 4, payloads: 3, bytes: 2_500_000, archiveBytes: 2_501_234, skipped: [{ name: 'Box', kind: 'DEPOT_DROPBOX', reason: 'unsupported_kind' }],
   write: vi.fn(async () => {}), ...over,
 })
 
@@ -55,14 +55,16 @@ describe('ExportSubtreeDialog: Download as a ZIP', () => {
     expect(body().querySelector('[role="alert"]')).toBeNull()
   })
 
-  it('"Save as ZIP…" opens the save target FIRST with the safe name and the known size, then writes into it and closes', async () => {
+  it('"Save as ZIP…" opens the save target FIRST with the safe name and the archive\'s own length, then writes into it and closes', async () => {
     const p = prepared()
     vi.mocked(prepareExport).mockResolvedValue(p)
     const w = await mountDialog()
     expect(save().textContent).toContain(t('export.save'))
     save().click()
     await flushPromises()
-    expect(openSaveTarget).toHaveBeenCalledWith('Trip_ 2025.zip', 2_500_000)
+    // the ZIP's exact length, never the payloads' sum: the SW route serves it as the Content-Length and fails a longer
+    // stream (F11)
+    expect(openSaveTarget).toHaveBeenCalledWith('Trip_ 2025.zip', 2_501_234)
     expect(p.write).toHaveBeenCalledWith(sink, expect.any(Function))
     expect(w.emitted('close')).toBeTruthy()
   })
@@ -78,6 +80,17 @@ describe('ExportSubtreeDialog: Download as a ZIP', () => {
     save().click()
     await flushPromises()
     expect(body().querySelector('[role="alert"]')?.textContent).toContain(t('export.tooLarge'))
+    expect(w.emitted('close')).toBeUndefined()
+  })
+
+  it('a write the save target fails (the SW refused the stream) says so instead of staying on "Writing the file…"', async () => {
+    const p = prepared({ write: vi.fn(async () => { throw new Error('download_overrun') }) })
+    vi.mocked(prepareExport).mockResolvedValue(p)
+    const w = await mountDialog()
+    save().click()
+    await flushPromises()
+    expect(body().querySelector('[role="alert"]')?.textContent).toContain(t('export.failed'))
+    expect(body().textContent).not.toContain(t('export.writing'))
     expect(w.emitted('close')).toBeUndefined()
   })
 
