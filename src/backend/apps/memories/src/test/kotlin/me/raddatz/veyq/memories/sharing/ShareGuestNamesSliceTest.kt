@@ -153,7 +153,7 @@ class ShareGuestNamesSliceTest {
 
     private fun createIdentity(shareId: String, role: String, name: String): String =
         given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$name"${identityKeyJson(role)}}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$name"${identityKeyJson(role)}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract().path("identityId")
 
     private fun seedMedia(scopeId: String, nodeId: String, identityId: String): String {

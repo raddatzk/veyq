@@ -97,7 +97,7 @@ class NodePlacementRaceCoreSliceTest {
     }
 
     private fun update(t: Tree, node: String, placement: NodesHandler.PlacementRequest): UpdateNodeOutcome =
-        handler.update(t.userId, t.scopeId, node, placement, null, null, null)
+        handler.update(t.userId, t.scopeId, node, placement, null, null, null, null)
 
     private fun row(node: String): Row = QuarkusTransaction.requiringNew().call {
         NodeEntity.findById(node)!!.let { Row(it.parentId, it.encryptedName, it.slugToken, it.wrappedContentKey, it.placementRevision) }

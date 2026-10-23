@@ -134,10 +134,10 @@ class NodeTreeRaceSliceTest {
     }
 
     private fun createMemory(userId: String, scopeId: String, nodeId: String, parent: String): CreateNodeOutcome =
-        handler.create(userId, scopeId, nodeId, parent, MemoriesNodeKinds.MEMORY, "bmV3", slug(), 0, 0, CONTENT_KEY, null)
+        handler.create(userId, scopeId, nodeId, parent, MemoriesNodeKinds.MEMORY, "bmV3", slug(), 0, 0, CONTENT_KEY, null, 0)
 
     private fun move(userId: String, scopeId: String, nodeId: String, parent: String): UpdateNodeOutcome =
-        handler.update(userId, scopeId, nodeId, placementTo(parent), null, null, null)
+        handler.update(userId, scopeId, nodeId, placementTo(parent), null, null, null, null)
 
     /** A trashed Memory with a Chapter under it, both stamped past the retention as one delete stamps them — and,
      *  as it does, only the root's slug token freed (a freed descendant would stay in the trash on a restore, #357).

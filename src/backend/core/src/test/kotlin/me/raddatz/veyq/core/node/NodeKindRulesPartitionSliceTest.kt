@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.node
 
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
+
 import me.raddatz.veyq.core.content.CreateNodeOutcome
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
@@ -66,7 +68,7 @@ class NodeKindRulesPartitionSliceTest {
     @Test
     fun anEmptyRuleSetPlacesNothingNotEvenAFolder() {
         val (userId, scopeId) = seedMemberScope()
-        val none = NodesHandler(store, access, mutableListOf(), capabilities, blocks)
+        val none = NodesHandler(store, access, mutableListOf(), capabilities, blocks, NodeEpochGate())
         assertEquals(CreateNodeOutcome.IllegalStructure, create(none, userId, scopeId, null, NodeEntity.FOLDER))
 
         // control: the registered set places the same folder at the same root
@@ -78,14 +80,14 @@ class NodeKindRulesPartitionSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val a = Forged("MEMORY")
         val b = Forged("MEMORY")
-        val doubled = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a, b), capabilities, blocks)
+        val doubled = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a, b), capabilities, blocks, NodeEpochGate())
         assertEquals(CreateNodeOutcome.IllegalStructure, create(doubled, userId, scopeId, null, "MEMORY"))
         assertTrue(a.asked.isEmpty() && b.asked.isEmpty(), "an ambiguous kind is asked of nobody")
         assertTrue(create(doubled, userId, scopeId, null, NodeEntity.FOLDER) is CreateNodeOutcome.Created,
             "the unambiguous kind beside it is unaffected")
 
         // control: either of them alone places the Memory
-        val single = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a), capabilities, blocks)
+        val single = NodesHandler(store, access, mutableListOf<NodeKindRules>(FolderNodeRules(), a), capabilities, blocks, NodeEpochGate())
         assertTrue(create(single, userId, scopeId, null, "MEMORY") is CreateNodeOutcome.Created)
         assertEquals(listOf("MEMORY"), a.asked)
     }
@@ -111,15 +113,15 @@ class NodeKindRulesPartitionSliceTest {
         post(userId, scopeId, """{"nodeId":"$outer","kind":"FOLDER","encryptedName":"b3V0ZXI=","slugToken":"b3V0ZXI=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .then().statusCode(201).body("nodeId", equalTo(outer))
         val inner = UUID.randomUUID().toString()
-        post(userId, scopeId, """{"parentId":"$outer","nodeId":"$inner","kind":"FOLDER","encryptedName":"aW5uZXI=","slugToken":"aW5uZXI=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
+        post(userId, scopeId, """{"parentId":"$outer","parentEpoch":0,"nodeId":"$inner","kind":"FOLDER","encryptedName":"aW5uZXI=","slugToken":"aW5uZXI=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .then().statusCode(201).body("nodeId", equalTo(inner))
 
-        post(userId, scopeId, """{"parentId":"${UUID.randomUUID()}","nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bG9zdA==","slugToken":"bG9zdA==","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
+        post(userId, scopeId, """{"parentId":"${UUID.randomUUID()}","parentEpoch":0,"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bG9zdA==","slugToken":"bG9zdA==","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .then().statusCode(422).body("code", equalTo("illegal_structure"))
     }
 
     private fun create(h: NodesHandler, userId: String, scopeId: String, parent: String?, kind: String): CreateNodeOutcome =
-        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null)
+        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null, 0)
 
     private fun post(userId: String, scopeId: String, body: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body(body)

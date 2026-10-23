@@ -68,9 +68,9 @@ class NodesSliceTest {
     fun createTreeThenList() {
         val (userId, scopeId) = seedMemberScope()
         val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zm9sZGVy","slugToken":"Zm9sZGVyLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
-        val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVtb3J5","slugToken":"bWVtLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbS13cmFw"}""")
+        val memory = createNode(userId, scopeId, """{"parentEpoch":0,"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVtb3J5","slugToken":"bWVtLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbS13cmFw"}""")
         // a chapter carries its OWN K_node, wrapped under the parent Memory's K_node (recursive K_node, cr-0060 / ADR 0012)
-        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
+        val chapter = createNode(userId, scopeId, """{"parentEpoch":0,"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
 
         given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes")
@@ -108,7 +108,7 @@ class NodesSliceTest {
     fun renameThenDeleteSubtree() {
         val (userId, scopeId) = seedMemberScope()
         val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"b2xk","slugToken":"b2xkLXM=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
-        val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val memory = createNode(userId, scopeId, """{"parentEpoch":0,"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         // rename the folder (new ciphertext name + recomputed slug + re-wrapped key, a placement write at the root)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -167,7 +167,7 @@ class NodesSliceTest {
 
         // a partial update that SETS wrappedMeta replaces it
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"bWV0YS12Mg==","metaRevision":0}""")
+            .body("""{"wrappedMeta":"bWV0YS12Mg==","nodeEpoch":0,"metaRevision":0}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
@@ -187,10 +187,10 @@ class NodesSliceTest {
         val memory = createMemory(userId, scopeId, meta = "djA=")
         metaRevisionOf(userId, scopeId, memory, expect = 0)
 
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","nodeEpoch":0,"metaRevision":0}""").then().statusCode(204)
         metaRevisionOf(userId, scopeId, memory, expect = 1)
 
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12MQ==","nodeEpoch":0,"metaRevision":0}""")
             .then().statusCode(409)
             .body("code", equalTo("stale_revision"))
             .body("wrappedMeta", equalTo("YS12MQ=="))
@@ -199,7 +199,7 @@ class NodesSliceTest {
         metaRevisionOf(userId, scopeId, memory, expect = 1)
 
         // control: the loser re-applies on what the 409 handed it, states 1, and lands at 2
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12Mg==","metaRevision":1}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"Yi12Mg==","nodeEpoch":0,"metaRevision":1}""").then().statusCode(204)
         listed(userId, scopeId, memory).body("find { it.id == '$memory' }.wrappedMeta", equalTo("Yi12Mg=="))
         metaRevisionOf(userId, scopeId, memory, expect = 2)
     }
@@ -220,7 +220,7 @@ class NodesSliceTest {
         patchNode(userId, scopeId, memory, """{"encryptedName":"bmV3","slugToken":"cmVuYW1lZA==",$REWRAP}""").then().statusCode(204)
         metaRevisionOf(userId, scopeId, memory, expect = 0)
         // control: the same blob with its revision is accepted
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","nodeEpoch":0,"metaRevision":0}""").then().statusCode(204)
         metaRevisionOf(userId, scopeId, memory, expect = 1)
     }
 
@@ -232,16 +232,16 @@ class NodesSliceTest {
     fun staleMetaWriteThatAlsoRenamesLeavesTheNameUnchanged() {
         val (userId, scopeId) = seedMemberScope()
         val memory = createMemory(userId, scopeId, meta = "djA=")
-        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaRevision":0}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","nodeEpoch":0,"metaRevision":0}""").then().statusCode(204)
 
-        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaRevision":0}""")
+        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","nodeEpoch":0,"metaRevision":0}""")
             .then().statusCode(409).body("code", equalTo("stale_revision"))
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("bWVt"))
             .body("find { it.id == '$memory' }.slugToken", equalTo("bWV0YS1z"))
             .body("find { it.id == '$memory' }.placementRevision", equalTo(0))
         // control: the same rename at the current revision lands, name and meta together
-        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaRevision":1}""")
+        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","nodeEpoch":0,"metaRevision":1}""")
             .then().statusCode(204)
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("c3RhbGU="))
@@ -258,7 +258,7 @@ class NodesSliceTest {
     /** A rename of a scope-root node in place, built on placement revision 0 — the store's own input. */
     private fun rootRename(scopeId: String, name: String) = NodesStore.Placement(
         parentSlot = scopeId, encryptedName = name, slugToken = "cmVuYW1lLXNsdWc=", wrappedContentKey = "cmUtd3JhcA==",
-        epoch = null, expectedRevision = 0,
+        expectedRevision = 0,
     )
 
     private fun createMemory(userId: String, scopeId: String, meta: String): String = createNode(

@@ -54,7 +54,7 @@ class ShareSwitchGuestGateMemoriesSliceTest {
         },
         Path("completeShareMedia") { id ->
             given().contentType(ContentType.JSON)
-                .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"${TestIds.uuid()}"}]}""")
+                .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"${TestIds.uuid()}"}]}""")
                 .`when`().post("/api/shares/$id/media")
         },
         // The delete answers a link it does not admit and a medium it cannot find with ONE 404 (`share_media_not_found`,

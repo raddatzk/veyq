@@ -1,5 +1,8 @@
 package me.raddatz.veyq.core
 
+import me.raddatz.veyq.core.node.rekey.NodeRekeyParticipant
+import me.raddatz.veyq.core.node.rekey.NodeRekeyStageNodeSubtreeEraser
+import me.raddatz.veyq.core.node.rekey.NodeRekeyStageScopeEraser
 import me.raddatz.veyq.core.blob.AttachmentGuestIdentityUsage
 import me.raddatz.veyq.core.blob.AttachmentNodeSubtreeEraser
 import me.raddatz.veyq.core.items.NodeItemsRevisionNodeSubtreeEraser
@@ -136,6 +139,7 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
     @Inject @All lateinit var guestPlaceholders: MutableList<GuestPlaceholders>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
+    @Inject @All lateinit var rekeyParticipants: MutableList<NodeRekeyParticipant>
 
     @Inject lateinit var nodes: NodesStore
     @Inject lateinit var dispatcher: UploadCompletions
@@ -158,12 +162,20 @@ class CoreAloneSliceTest {
 
     @Test
     fun everySeamHoldsExactlyCoresOwnImplementations() {
-        assertEquals(setOf(AttachmentScopeEraser::class.java, FavoritesScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java),
-            classes(scopeErasers), "ScopeEraser: core's own four, and no application's")
         assertEquals(
-            setOf(AttachmentNodeSubtreeEraser::class.java, NodeItemsRevisionNodeSubtreeEraser::class.java, GuestWriteRecordNodeSubtreeEraser::class.java),
+            setOf(
+                AttachmentScopeEraser::class.java, FavoritesScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java,
+                NodeRekeyStageScopeEraser::class.java,
+            ),
+            classes(scopeErasers), "ScopeEraser: core's own five, and no application's",
+        )
+        assertEquals(
+            setOf(
+                AttachmentNodeSubtreeEraser::class.java, NodeItemsRevisionNodeSubtreeEraser::class.java, GuestWriteRecordNodeSubtreeEraser::class.java,
+                NodeRekeyStageNodeSubtreeEraser::class.java,
+            ),
             classes(subtreeErasers),
-            "NodeSubtreeEraser: core's attachments, item-list counters and guest-write records only",
+            "NodeSubtreeEraser: core's attachments, item-list counters, guest-write records and re-key stages only",
         )
         assertEquals(setOf(AttachmentGuestIdentityUsage::class.java, NodeGuestIdentityUsage::class.java), classes(identityUsages),
             "GuestIdentityUsage: core's attachments and identity folders only")
@@ -173,7 +185,7 @@ class CoreAloneSliceTest {
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
         assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
         for ((seam, beans) in mapOf(
-            "MembershipEraser" to membershipErasers,
+            "MembershipEraser" to membershipErasers, "NodeRekeyParticipant" to rekeyParticipants,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
             "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "GuestCreatableKinds" to guestCreatableKinds,
         )) {

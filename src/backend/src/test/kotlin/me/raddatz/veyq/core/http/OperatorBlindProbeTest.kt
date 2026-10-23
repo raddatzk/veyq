@@ -95,9 +95,22 @@ class OperatorBlindProbeTest {
         },
         "deleteNode" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}") },
         "restoreNode" to Probe(Address.SCOPE, prepare = { w -> listOf(w.live, w.control).forEach { trashNode(w, it) } }) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/restore", """{"slugToken":"$slug"}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/restore", """{"slugToken":"$slug","parentEpoch":0}""")
         },
         "listTrashedNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/trash/nodes") },
+        // --- re-key (ADR 0109): the world's nodes are at the current epoch, so the control's stage and commit answer
+        // `409 stale_epoch` (nothing to re-key) — past the gate ---
+        "listRekeyNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/rekey/nodes") },
+        "getNodeRekeyParts" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/rekey/nodes/${s.nodeId}") },
+        "stageNodeRekey" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/rekey/nodes/${s.nodeId}/${UUID.randomUUID()}/parts", """{"fromEpoch":0}""")
+        },
+        "commitNodeRekey" to Probe(Address.SCOPE) { s ->
+            Call(
+                "POST", "/api/scopes/${s.scopeId}/rekey/nodes/${s.nodeId}/${UUID.randomUUID()}",
+                """{"nodeEpoch":0,"epoch":0,"placementRevision":0,"metaRevision":0,"encryptedName":"$B64","slugToken":"$slug","wrappedContentKey":"$B64"}""",
+            )
+        },
         "getFavorites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/favorites") },
         "putFavorites" to Probe(Address.SCOPE) { s -> Call("PUT", "/api/scopes/${s.scopeId}/favorites", """{"ciphertext":"$B64"}""") },
         // --- reports (uc.moderation.report): a member reports what their space holds ---
@@ -119,39 +132,43 @@ class OperatorBlindProbeTest {
             Call("POST", "/api/scopes/${s.scopeId}/blob-upload-windows", """{"items":[{"uploadId":"${s.uploadId}","fromChunk":0}]}""")
         },
         "completeMedia" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/media-batch", """{"items":[{"nodeId":"${s.nodeId}","mediaId":"${TestBlob.ownerOf(s.uploadId)}","originalUploadId":"${s.uploadId}","derivatives":[]}]}""")
+            Call("POST", "/api/scopes/${s.scopeId}/media-batch", """{"items":[{"nodeId":"${s.nodeId}","mediaId":"${TestBlob.ownerOf(s.uploadId)}","originalUploadId":"${s.uploadId}","derivatives":[],"nodeEpoch":0}]}""")
         },
         "listNodeMedia" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media") },
         "listNodeBuckets" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets") },
+        "listMediaRekey" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media-rekey") },
+        "stageMediaRekey" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media-rekey/${UUID.randomUUID()}", """{"fromEpoch":0}""")
+        },
         "createBucket" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets", """{"bucketId":"${UUID.randomUUID()}","sealedName":"$B64"}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets", """{"bucketId":"${UUID.randomUUID()}","sealedName":"$B64","nodeEpoch":0}""")
         },
         "renameBucket" to Probe(Address.SCOPE) { s ->
-            Call("PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}", """{"sealedName":"$B64"}""")
+            Call("PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}", """{"sealedName":"$B64","nodeEpoch":0}""")
         },
         "deleteBucket" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}") },
         "setNodeCover" to Probe(Address.SCOPE) { s ->
-            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover", """{"uploadId":"${s.uploadId}","expectedBlobId":null,"wrappedMeta":"$B64","metaRevision":0}""")
+            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover", """{"uploadId":"${s.uploadId}","expectedBlobId":null,"wrappedMeta":"$B64","metaRevision":0,"nodeEpoch":0}""")
         },
         "removeNodeCover" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover/removal", """{"blobId":"${UUID.randomUUID()}","wrappedMeta":"$B64","metaRevision":0}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover/removal", """{"blobId":"${UUID.randomUUID()}","wrappedMeta":"$B64","metaRevision":0,"nodeEpoch":0}""")
         },
         // --- a Memory's banner (uc.memory.banner): the cover's gate, Memories' operation ---
         "setMemoryBanner" to Probe(Address.SCOPE) { s ->
             Call(
                 "PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/banner",
-                """{"uploadId":"${s.uploadId}","expectedBlobId":null,"expectedPosterBlobId":null,"wrappedMeta":"$B64","metaRevision":0}""",
+                """{"uploadId":"${s.uploadId}","expectedBlobId":null,"expectedPosterBlobId":null,"wrappedMeta":"$B64","metaRevision":0,"nodeEpoch":0}""",
             )
         },
         "removeMemoryBanner" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/banner/removal", """{"blobId":"${UUID.randomUUID()}","posterBlobId":null,"wrappedMeta":"$B64","metaRevision":0}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/banner/removal", """{"blobId":"${UUID.randomUUID()}","posterBlobId":null,"wrappedMeta":"$B64","metaRevision":0,"nodeEpoch":0}""")
         },
         "moveBucketMedia" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media-moves", """{"mediaIds":["${s.mediaId}"],"targetBucketId":"${s.bucketId}"}""")
         },
         "getMediaExif" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/media/${s.mediaId}/exif") },
         "updateMediaMeta" to Probe(Address.SCOPE) { s ->
-            Call("PUT", "/api/scopes/${s.scopeId}/media/${s.mediaId}/meta", """{"wrappedMeta":"$B64","metaRevision":0}""")
+            Call("PUT", "/api/scopes/${s.scopeId}/media/${s.mediaId}/meta", """{"wrappedMeta":"$B64","metaRevision":0,"nodeEpoch":0}""")
         },
         "deleteMedia" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/media/${s.mediaId}") },
         "restoreMedia" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/media/${s.mediaId}/restore") },
@@ -163,7 +180,7 @@ class OperatorBlindProbeTest {
         },
         // --- files (the world's node is a Memory, so the control's complete answers `422 illegal_target` — past the gate) ---
         "completeFile" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/files/${s.nodeId}/content", """{"uploadId":"${s.uploadId}"}""")
+            Call("POST", "/api/scopes/${s.scopeId}/files/${s.nodeId}/content", """{"uploadId":"${s.uploadId}","nodeEpoch":0}""")
         },
         "listFiles" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/files") },
         // --- scopes ---
@@ -195,7 +212,7 @@ class OperatorBlindProbeTest {
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
-            Call("POST", "/api/shares", """{${ShareWriteProof.newShare()},"nodeId":"${s.nodeId}","role":"READ","wrap":"$B64","sealedName":"$B64",${ShareWriteProof.recovery()}}""")
+            Call("POST", "/api/shares", """{${ShareWriteProof.newShare()},"nodeId":"${s.nodeId}","role":"READ","wrap":"$B64","sealedName":"$B64",${ShareWriteProof.recovery()},"nodeEpoch":0}""")
         },
         // With `nodeId` only; without it the listing is account-addressed and filters instead of refusing
         // (ScopeAccessSliceTest). A non-member gets `[]`, so every answer is told apart by its rows.
@@ -210,7 +227,7 @@ class OperatorBlindProbeTest {
         "reissueShare" to Probe(Address.SHARE) { s ->
             Call(
                 "POST", "/api/shares/${s.shareId}/reissue",
-                """{${ShareWriteProof.newShare()},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","sealedShareKeyEpoch":0}""",
+                """{${ShareWriteProof.newShare()},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","sealedShareKeyEpoch":0,"nodeEpoch":0}""",
             )
         },
         // --- tasks ---

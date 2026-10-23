@@ -161,7 +161,7 @@ class NodeCoverCoreSliceTest {
             CoverKit.remove(stranger, scopeId, folder, started.blobId).statusCode(404).body("code", equalTo("node_not_found"))
         }
         given().contentType(ContentType.JSON)
-            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaRevision":0}""")
+            .body("""{"uploadId":"${started.uploadId}","wrappedMeta":"bQ==","metaRevision":0,"nodeEpoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$folder/cover").then().statusCode(401)
         assertNull(CoverKit.slot(folder))
     }

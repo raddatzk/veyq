@@ -78,7 +78,7 @@ class NodeCreatedAtCoreSliceTest {
         patch(userId, scopeId, node, place(parent = other, version = 1)) // move
         assertEquals(born, listed(userId, scopeId, node))
         given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$node").then().statusCode(204)
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"slugToken":"${slug()}"}""")
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"slugToken":"${slug()}","parentEpoch":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$node/restore").then().statusCode(204)
         assertEquals(born, listed(userId, scopeId, node))
         assertEquals(born, row(node))
@@ -95,7 +95,7 @@ class NodeCreatedAtCoreSliceTest {
     }
 
     private fun place(parent: String?, version: Long): String {
-        val to = parent?.let { "\"parentId\":\"$it\"," } ?: ""
+        val to = parent?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""
         return """{$to"encryptedName":"cmVuYW1lZA==","slugToken":"${slug()}","wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":$version}"""
     }
 

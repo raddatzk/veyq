@@ -40,6 +40,7 @@ class MemoryBannerResource(
                 setMemoryBannerRequest.posterUploadId?.toString(), setMemoryBannerRequest.posterShared?.toSpec(),
                 setMemoryBannerRequest.expectedBlobId?.toString(), setMemoryBannerRequest.expectedPosterBlobId?.toString(),
                 setMemoryBannerRequest.wrappedMeta, setMemoryBannerRequest.metaRevision.validated(),
+                setMemoryBannerRequest.nodeEpoch.validated(),
             ),
         )
 
@@ -49,6 +50,7 @@ class MemoryBannerResource(
                 identity.principal.name, scopeId.toString(), nodeId.toString(),
                 removeMemoryBannerRequest.blobId.toString(), removeMemoryBannerRequest.posterBlobId?.toString(),
                 removeMemoryBannerRequest.wrappedMeta, removeMemoryBannerRequest.metaRevision.validated(),
+                removeMemoryBannerRequest.nodeEpoch.validated(),
             ),
         )
 

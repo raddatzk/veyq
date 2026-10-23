@@ -11,6 +11,14 @@ import me.raddatz.veyq.memories.generated.model.MediaExifResponse
 import me.raddatz.veyq.memories.generated.model.MediaListPage
 import me.raddatz.veyq.memories.generated.model.MediaMetaResponse
 import me.raddatz.veyq.memories.generated.model.MediaMetaUpdate
+import me.raddatz.veyq.memories.generated.model.MediaRekeyPage
+import me.raddatz.veyq.memories.generated.model.MediaRekeyStage
+import me.raddatz.veyq.memories.generated.model.RekeyBucketName
+import me.raddatz.veyq.memories.generated.model.RekeyMedium
+import me.raddatz.veyq.memories.generated.model.RekeyMediumBlob
+import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Key
+import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Value
+import me.raddatz.veyq.core.node.rekey.RekeyOutcome
 import me.raddatz.veyq.memories.generated.model.MediaResultItem
 import me.raddatz.veyq.memories.generated.model.MediaSummary
 import me.raddatz.veyq.memories.generated.model.UploaderKey
@@ -21,6 +29,7 @@ import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.http.httpStaleSealedMeta
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -49,6 +58,7 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 )
 class MediaResource(
     private val handler: MediaHandler,
+    private val rekey: MediaRekeyHandler,
     private val blocks: ModerationBlocks,
     private val identity: SecurityIdentity,
 ) : MediaApi {
@@ -62,6 +72,7 @@ class MediaResource(
                 derivatives = item.derivatives.orEmpty().map { DerivativeDeclare(it.kind.value, it.uploadId.toString()) },
                 wrappedMeta = item.wrappedMeta,
                 wrappedExif = item.wrappedExif,
+                nodeEpoch = item.nodeEpoch.validated(),
                 originalShared = item.originalShared?.toSpec(),
             )
         }
@@ -107,6 +118,59 @@ class MediaResource(
             is HttpFailure -> httpError(o)
         }
 
+    override fun listMediaRekey(scopeId: UUID, nodeId: UUID, since: String?, limit: Int?): Response =
+        when (
+            val o = rekey.list(identity.principal.name, scopeId.toString(), nodeId.toString(), ItemsCursor.parse(since), ItemsPage.limitOf(limit))
+        ) {
+            is MediaRekeyListOutcome.Page -> Response.ok(
+                MediaRekeyPage(
+                    media = o.media.items.map { m ->
+                        RekeyMedium(
+                            mediaId = UUID.fromString(m.mediaId),
+                            metaRevision = m.metaRevision,
+                            blobs = m.blobs.map { RekeyMediumBlob(UUID.fromString(it.blobId), it.role, it.wrappedBlobKey) },
+                            wrappedMeta = m.wrappedMeta,
+                            wrappedExif = m.wrappedExif,
+                        )
+                    },
+                    buckets = o.buckets.map {
+                        RekeyBucketName(
+                            bucketId = UUID.fromString(it.bucketId),
+                            sealedName = it.sealedName,
+                            shareId = it.shareId,
+                            identityId = it.identityId?.let(UUID::fromString),
+                        )
+                    },
+                    more = o.media.more,
+                    cursor = o.media.cursor?.wire(),
+                ),
+            ).build()
+            is MediaRekeyListOutcome.Refused -> httpError(o.failure)
+        }
+
+    override fun stageMediaRekey(scopeId: UUID, nodeId: UUID, rekeyId: UUID, mediaRekeyStage: MediaRekeyStage): Response {
+        val values = buildMap {
+            mediaRekeyStage.media.orEmpty().forEach { m ->
+                val id = m.mediaId.toString()
+                val revision = m.metaRevision.validated()
+                m.wrappedMeta?.let { put(Key(id, MediaRekeyRows.META), Value(it, revision)) }
+                m.wrappedExif?.let { put(Key(id, MediaRekeyRows.EXIF), Value(it, revision)) }
+                m.blobs.forEach { put(Key(it.blobId.toString(), MediaRekeyRows.BLOB_WRAP), Value(it.wrappedBlobKey, null)) }
+            }
+            mediaRekeyStage.buckets.orEmpty().forEach { put(Key(it.bucketId.toString(), MediaRekeyRows.BUCKET_NAME), Value(it.sealedName, null)) }
+        }
+        return when (
+            val o = rekey.stage(
+                identity.principal.name, scopeId.toString(), nodeId.toString(), rekeyId.toString(),
+                mediaRekeyStage.fromEpoch.validated(), values,
+            )
+        ) {
+            RekeyOutcome.Staged -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+            else -> error("not a staging answer: $o")
+        }
+    }
+
     override fun getMediaExif(scopeId: UUID, mediaId: UUID): Response =
         when (val o = handler.mediaExif(identity.principal.name, scopeId.toString(), mediaId.toString())) {
             is MediaExifOutcome.Found -> Response.ok(MediaExifResponse(wrappedExif = o.wrappedExif)).build()
@@ -117,7 +181,8 @@ class MediaResource(
         // `@NotNull` refuses a missing version at the boundary; the type is nullable only so that absence is visible
         // (a primitive would default to 0 — see the spec's MediaMetaUpdate.metaRevision).
         val metaRevision = mediaMetaUpdate.metaRevision ?: return httpError(Failures.invalidRequest)
-        return when (val o = handler.updateMeta(identity.principal.name, scopeId.toString(), mediaId.toString(), mediaMetaUpdate.wrappedMeta, metaRevision)) {
+        val nodeEpoch = mediaMetaUpdate.nodeEpoch.validated()
+        return when (val o = handler.updateMeta(identity.principal.name, scopeId.toString(), mediaId.toString(), mediaMetaUpdate.wrappedMeta, metaRevision, nodeEpoch)) {
             is MetaOutcome.Found -> Response.ok(MediaMetaResponse(wrappedMeta = o.wrappedMeta)).build()
             is MetaOutcome.Stale -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaRevision)
             is HttpFailure -> httpError(o)

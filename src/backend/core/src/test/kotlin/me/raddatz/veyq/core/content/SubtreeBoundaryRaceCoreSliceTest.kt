@@ -79,16 +79,16 @@ class SubtreeBoundaryRaceCoreSliceTest {
     }
 
     private fun memberMovesAOut(t: Tree): UpdateNodeOutcome =
-        handler.update(t.userId, t.scopeId, t.a, placementTo(t.outside), null, null, null)
+        handler.update(t.userId, t.scopeId, t.a, placementTo(t.outside), null, null, null, null)
 
     private fun boundedMove(t: Tree): UpdateNodeOutcome =
-        handler.updateInScope(t.scopeId, t.x, placementTo(t.a), null, null, null, FIXTURE_EDITOR, SubtreeBoundary(t.root))
+        handler.updateInScope(t.scopeId, t.x, placementTo(t.a), null, null, null, null, FIXTURE_EDITOR, SubtreeBoundary(t.root))
 
     // createInScope joins its caller's transaction; the caller opens it, as the member's create does.
     private fun boundedCreate(t: Tree, id: String): CreateNodeOutcome {
         val slug = Base64.getEncoder().encodeToString(id.toByteArray())
         return createOrConflict(conflict = handler.createReplay(t.scopeId, t.a, slug, id)) {
-            handler.createInScope(t.scopeId, id, t.a, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, FIXTURE_EDITOR, SubtreeBoundary(t.root))
+            handler.createInScope(t.scopeId, id, t.a, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, 0, FIXTURE_EDITOR, SubtreeBoundary(t.root))
         }
     }
 

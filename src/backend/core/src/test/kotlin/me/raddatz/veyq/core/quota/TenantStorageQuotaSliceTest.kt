@@ -292,7 +292,7 @@ class TenantStorageQuotaSliceTest {
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         val token = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU=","nodeEpoch":0}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         return Link(shareId, token)

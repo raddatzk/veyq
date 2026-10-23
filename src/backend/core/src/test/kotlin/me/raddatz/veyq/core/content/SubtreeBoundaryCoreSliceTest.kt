@@ -87,14 +87,14 @@ class SubtreeBoundaryCoreSliceTest {
     }
 
     private fun place(t: Tree, node: String, to: String?, version: Long = 0): UpdateNodeOutcome =
-        handler.updateInScope(t.scopeId, node, placementTo(to, placementRevision = version), null, null, null, FIXTURE_EDITOR, SubtreeBoundary(t.root))
+        handler.updateInScope(t.scopeId, node, placementTo(to, placementRevision = version), null, null, null, null, FIXTURE_EDITOR, SubtreeBoundary(t.root))
 
     private fun create(t: Tree, parent: String?): Pair<String, CreateNodeOutcome> {
         val id = UUID.randomUUID().toString()
         val slug = Base64.getEncoder().encodeToString(id.toByteArray())
         // createInScope joins its caller's transaction; the caller opens it, as the member's create does.
         return id to createOrConflict(conflict = handler.createReplay(t.scopeId, parent, slug, id)) {
-            handler.createInScope(t.scopeId, id, parent, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, FIXTURE_EDITOR, SubtreeBoundary(t.root))
+            handler.createInScope(t.scopeId, id, parent, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, 0, FIXTURE_EDITOR, SubtreeBoundary(t.root))
         }
     }
 

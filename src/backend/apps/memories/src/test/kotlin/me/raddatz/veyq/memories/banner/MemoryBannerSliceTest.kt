@@ -116,7 +116,7 @@ class MemoryBannerSliceTest {
         // control: a medium in the same Memory moves the counter the banner never moved
         val original = CoverKit.start(userId, scopeId, memory, role = "ORIGINAL", ownerId = UUID.randomUUID().toString())
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original.uploadId)}","originalUploadId":"${original.uploadId}","derivatives":[]}]}""")
+            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original.uploadId)}","nodeEpoch":0,"originalUploadId":"${original.uploadId}","derivatives":[]}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200).body("results[0].error", nullValue())
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200).body("media.size()", equalTo(1)).body("mediaRevision", greaterThan(0))
@@ -248,7 +248,7 @@ class MemoryBannerSliceTest {
         assertEquals(video.blobId to poster.blobId, BannerKit.slots(memory), "the trash keeps the banner for a restore")
         assertEquals(2L, QuarkusTransaction.requiringNew().call { BlobEntity.count("id in ?1", listOf(video.blobId, poster.blobId)) })
 
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"slugToken":"YmFubmVyLXJlc3RvcmU="}""")
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"parentEpoch":0,"slugToken":"YmFubmVyLXJlc3RvcmU="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/restore").then().statusCode(204)
         assertEquals("store_unavailable", CoverKit.downloadError(userId, scopeId, video.blobId), "restored, the banner reads again")
 

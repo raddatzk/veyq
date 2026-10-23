@@ -189,7 +189,7 @@ class FileShareSliceTest {
 
     private fun memberUpload(userId: String, scopeId: String, node: String) {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"${memberStart(userId, scopeId, node)}"}""")
+            .body("""{"nodeEpoch":0,"uploadId":"${memberStart(userId, scopeId, node)}"}""")
             .`when`().post("/api/scopes/$scopeId/files/$node/content").then().statusCode(200)
     }
 
@@ -211,7 +211,7 @@ class FileShareSliceTest {
     private fun completeShare(link: GuestTreeShare.Link, node: String, uploadId: String, expected: String? = null): ValidatableResponse {
         val extra = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"$extra}""")
+            .body("""{"contributorToken":"${link.token}","nodeEpoch":0,"uploadId":"$uploadId"$extra}""")
             .`when`().post("/api/shares/${link.shareId}/files/$node/content").then()
     }
 

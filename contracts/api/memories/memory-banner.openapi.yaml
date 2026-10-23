@@ -28,6 +28,8 @@ paths:
         fields:
           - field: metaRevision
             required: true
+        epochs:
+          - field: nodeEpoch
       summary: Make uploaded bytes the Memory's banner - the slots and the sealed meta naming them, in one write.
       description: >
         The client sealed the banner's bytes as uploads owned by this node (`startBlobUploads` with `ownerId` = this
@@ -58,6 +60,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/SetMemoryBannerRequest" }
             example:
+              nodeEpoch: 0
               uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
               posterUploadId: 2a3b4c5d-6e7f-4a1b-8c2d-3e4f5a6b7c8d
               expectedBlobId: null
@@ -96,6 +99,8 @@ paths:
         fields:
           - field: metaRevision
             required: true
+        epochs:
+          - field: nodeEpoch
       summary: Remove the Memory's banner - both slots and the sealed meta that named them, in one write.
       description: >
         Empties the `BANNER` slot of `blobId` and the `BANNER_POSTER` slot of `posterBlobId` (null: the banner had no
@@ -115,6 +120,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RemoveMemoryBannerRequest" }
             example:
+              nodeEpoch: 0
               blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
               posterBlobId: null
               wrappedMeta: d3JhcHBlZC1tZXRh
@@ -168,8 +174,8 @@ components:
       description: >
         The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current meta and
         revision); a banner slot holds another blob than stated (`banner_stale`, with what both slots hold now); or
-        the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). Nothing was written
-        in any case, and the uploads of a refused set are still open.
+        the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4); `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). Nothing
+        was written in any case, and the uploads of a refused set are still open.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/MemoryBannerConflict" }
@@ -188,8 +194,18 @@ components:
         the node's banner, and re-seal the node's `wrappedMeta` with the banner that names them (see
         `setMemoryBanner`). Exactly one of `uploadId` and `shared`, and at most one of `posterUploadId` and
         `posterShared`, else `400 invalid_request`.
-      required: [wrappedMeta, metaRevision]
+      required: [wrappedMeta, metaRevision, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The Memory's epoch as the client read it: the banner wraps and the meta are sealed under its key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         uploadId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -253,8 +269,18 @@ components:
     RemoveMemoryBannerRequest:
       type: object
       description: Empty the node's banner slots and re-seal the node's `wrappedMeta` without the banner (see `removeMemoryBanner`).
-      required: [blobId, wrappedMeta, metaRevision]
+      required: [blobId, wrappedMeta, metaRevision, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The Memory's epoch as the client read it: the banner wraps and the meta are sealed under its key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         blobId:
           x-veyq-visibility: id
           type: string

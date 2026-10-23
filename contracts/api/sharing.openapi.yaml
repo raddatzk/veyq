@@ -44,6 +44,10 @@ paths:
     post:
       tags: [sharing]
       operationId: createShare
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Create a public share of a node the caller is a member of (any scope).
       description: >
         The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, content key)` over the
@@ -63,6 +67,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateShareRequest" }
             example:
+              nodeEpoch: 0
               shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
               nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               role: READ
@@ -97,7 +102,7 @@ paths:
             The `shareId` is already taken or was ever used — by a live, a deleted or an erased link (`id_taken`),
             the `sealedShareKeyEpoch` is not the scope's current epoch
             (`stale_epoch` — the caller's scope key lags a rotation; re-open it and re-seal, ADR 0024 Decision 6), or
-            the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). For WRITE_ONLY: the
+            the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). For WRITE_ONLY: the
             request carries a drop private key the
             shared node already has one of (`drop_key_exists`), or carries none while the node has none
             (`drop_key_missing`) — nothing is written in either case. A taken `shareId` answers `id_taken` before
@@ -257,6 +262,10 @@ paths:
     post:
       tags: [sharing]
       operationId: reissueShare
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Re-issue a share — a new link with a fresh key, the old one deleted, in one request.
       description: >
         Creates a **new** share with a fresh client-minted `shareId` and a fresh `K_share`, carrying the old one's
@@ -289,6 +298,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ReissueShareRequest" }
             example:
+              nodeEpoch: 0
               shareId: 9Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i3q2-7v
               wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
               sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -326,7 +336,7 @@ paths:
             scope key and re-seal, ADR 0024 Decision 6), the space is being deleted and read-only
             (`scope_deleting`), or a moderator blocked the link itself (`share_blocked_by_operator` — a re-issue would
             serve the blocked content under a new id; a link blocked only with a guest uploader may be re-issued,
-            uc.moderation.take-a-measure). Nothing is written in any case.
+            uc.moderation.take-a-measure), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). Nothing is written in any case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -747,6 +757,10 @@ paths:
     post:
       tags: [sharing]
       operationId: createShareIdentity
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
       summary: Name yourself as a contributor (unauthenticated) → an anonymous share identity.
       description: >
         **No auth.** For a **READ_WRITE** or **WRITE_ONLY** share (cr-0101, ADR 0030, ADR 0031), before uploading
@@ -777,7 +791,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CreateShareIdentityRequest" }
-            example: { identityId: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, sealedDisplayName: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0= }
+            example: { identityId: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, sealedDisplayName: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0=, nodeEpoch: 0 }
       responses:
         "201":
           description: The anonymous share identity was created.
@@ -798,7 +812,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: The `identityId` is already taken (`id_taken`).
+          description: The `identityId` is already taken (`id_taken`), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -929,6 +943,10 @@ paths:
     post:
       tags: [sharing]
       operationId: createShareNode
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: parentEpoch
       summary: Create a node inside a shared subtree (unauthenticated) — a READ_WRITE guest's tree operation.
       description: >
         **No auth.** A guest's create of a node under a node of the shared subtree ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
@@ -968,6 +986,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateShareNodeRequest" }
             example:
+              parentEpoch: 0
               nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               parentId: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
               kind: FOLDER
@@ -996,7 +1015,10 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: A sibling under the parent already has that slug (`slug_taken`), the `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is above the scope's current one — nothing stored (`stale_epoch`).
+          description: >
+            A sibling under the parent already has that slug (`slug_taken`), the `nodeId` is already taken, in any scope (`id_taken`), the `epoch` is not the scope's current one (`stale_epoch` — a new node's key is minted at the current epoch, ADR 0109
+            point 6), or `parentEpoch` below the parent's stored epoch (`stale_epoch`) or a parent not re-keyed since the last rotation
+            (`node_rekey_pending`) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -1022,6 +1044,8 @@ paths:
         fields:
           - field: placementRevision
             conflictCode: stale_placement
+        epochs:
+          - field: parentEpoch
       summary: Move or rename a node inside a shared subtree (unauthenticated) — one placement write.
       description: >
         **No auth.** A guest's placement write ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
@@ -1057,6 +1081,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/UpdateShareNodeRequest" }
             example:
+              parentEpoch: 0
               parentId: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
               encryptedName: cmVuYW1lZA==
               slugToken: bmV3LXNsdWc=
@@ -1081,7 +1106,7 @@ paths:
           description: >
             A sibling at the destination already has that slug (`slug_taken`), or the node was moved or renamed since
             the stated `placementRevision` (`stale_placement` — nothing was written; the client re-reads the share and
-            rebuilds the placement, ADR 0080 Decision 3).
+            rebuilds the placement, ADR 0080 Decision 3), or `parentEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -1365,7 +1390,7 @@ components:
 
     CreateShareRequest:
       type: object
-      required: [shareId, nodeId, role, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier]
+      required: [shareId, nodeId, role, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier, nodeEpoch]
       description: >
         The share's keys follow its role (ADR 0031 point 7). A READ or READ_WRITE share carries `wrap` and no
         drop key. A WRITE_ONLY share carries **no** `wrap` — its guest never holds the shared node's content key —
@@ -1393,6 +1418,17 @@ components:
               sealedDropPublicKey: { type: "null" }
               sealedDropPrivateKey: { type: "null" }
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The shared node's epoch as the client read it: the share wraps the node's key, and a WRITE_ONLY link's drop
+            private key is sealed under it.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         shareId:
           x-veyq-visibility: id
           type: string
@@ -1611,7 +1647,7 @@ components:
 
     ReissueShareRequest:
       type: object
-      required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier]
+      required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier, nodeEpoch]
       description: >
         The new share of a re-issue (ADR 0075): `createShare`'s body without `nodeId` and `role` — both come from
         the old share — and without `sealedDropPrivateKey`, since a WRITE_ONLY re-issue keeps the shared node's
@@ -1619,6 +1655,16 @@ components:
         `sealedDropPublicKey` for WRITE_ONLY, any other combination `400 invalid_request`. The recovery copy is
         **required**: a re-issue is made by a member who opened the old one, and its link must stay recoverable.
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The shared node's epoch as the client read it: the new link wraps the node's key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         shareId:
           x-veyq-visibility: id
           type: string
@@ -2003,6 +2049,15 @@ components:
             The shared root node. A WRITE_ONLY guest binds its identity key's wrap to it (`upload-identity-key`, ADR
             0072), since it is served no node. Null in a locked response.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        rootEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch the shared root's key was minted at (ADR 0109 point 6) — what a guest's write states as the root's
+            epoch (`nodeEpoch` / `parentEpoch`). Served for every unlocked role, WRITE_ONLY included; null in a locked
+            response.
+          minimum: 0
+          example: 0
         rootKind:
           $ref: "#/components/schemas/NodeKind"
           # The backend's Jackson writes a null property as `null` (measured: `"rootKind": null` on the locked
@@ -2268,13 +2323,23 @@ components:
 
     CreateShareNodeRequest:
       type: object
-      required: [nodeId, parentId, kind, encryptedName, slugToken, epoch, wrappedContentKey]
+      required: [nodeId, parentId, kind, encryptedName, slugToken, epoch, wrappedContentKey, parentEpoch]
       description: >
         A READ_WRITE guest's create inside the shared subtree (`createShareNode`): the member's `CreateNodeRequest`
         with a required `epoch` checked as off the scope root (a guest never writes there) and without
         `wrappedMeta` (a node's payload is its application's content, not a core tree operation's). The parent is
         always a node of the subtree.
       properties:
+        parentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The parent's epoch as the guest read it (`ShareNode.epoch`): the new node's entry is sealed under the parent's key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         nodeId:
           x-veyq-visibility: id
           type: string
@@ -2344,12 +2409,22 @@ components:
 
     UpdateShareNodeRequest:
       type: object
-      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementRevision]
+      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementRevision, parentEpoch]
       description: >
         A READ_WRITE guest's placement write (`updateShareNode`) — every field of the node's directory entry and key
         wrap at once, as the placement half of the member's `UpdateNodeRequest`, without `epoch` (the node keeps its
         stored one) and without the reorder and the payload re-seal.
       properties:
+        parentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The destination parent's epoch as the guest read it: the entry is sealed under its key.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         parentId:
           x-veyq-visibility: id
           type: string
@@ -2405,8 +2480,19 @@ components:
 
     CreateShareIdentityRequest:
       type: object
-      required: [identityId, sealedDisplayName]
+      required: [identityId, sealedDisplayName, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The shared root's epoch as the guest read it (`PublicShare.rootEpoch`): a READ_WRITE guest's name is sealed
+            under the root's key, a WRITE_ONLY guest's `K_up` to the root's drop public key, which a re-key replaces.
+            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         identityId:
           x-veyq-visibility: id
           type: string

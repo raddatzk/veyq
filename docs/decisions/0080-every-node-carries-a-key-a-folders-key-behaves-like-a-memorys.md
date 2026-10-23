@@ -47,9 +47,10 @@ Memory, an expense and a file side by side).
    replaces every node key of the scope ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)), so a
    node's `epoch` is the epoch its key was minted at, and every write sealed under a node's key states it (ADR 0109
    point 6). At the **scope root** the entries are sealed and re-sealed at the **current** epoch and the server
-   refuses any other (`409 stale_epoch` on create, rename and move whose destination is the root). Off the root an epoch above the current one is refused at
-   any destination (`NodesHandler.sealableOffRoot`), a move out of the root stores the epoch it states, and a move
-   between non-root parents keeps the stored one.
+   refuses any other (`409 stale_epoch` on create, rename and move whose destination is the root). A create states the
+   current epoch at any parent. A placement never changes a node's epoch: it states the node's own (else `409
+   stale_epoch`), a node the last rotation's re-key has not reached may not go to the root (`409 node_rekey_pending`),
+   and off the root the destination parent's epoch is stated and checked like any write's (ADR 0109 point 6).
 5. **Folders inherit the `K_node` residual, accepted for parity, up to the next rotation.** A former guest, or a
    member removed without a rotation (the tenant's routine removal, [ADR 0025](0025-forward-secrecy-policy-per-scope.md)),
    who kept a folder's key reads everything later created under it until the scope next rotates, which re-keys the
@@ -112,7 +113,8 @@ Memory, an expense and a file side by side).
    left a name unopenable whenever that differed from the one the guest sealed with). It used to store an epoch below
    the current one as sent; a node's epoch is now its key's ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)
    point 6), and a node born below it would wait for a re-key that already ran.
-   A guest's placement states no epoch: the node keeps its own. Finer rights ("not the cover", "not the date") come later through
+   A guest's placement states no epoch of its own — the node keeps its epoch — and states its destination's (ADR 0109
+   point 6). Finer rights ("not the cover", "not the date") come later through
    a policy seam that asks the application per node and operation, never a role registry in core.
 7. **One key, many wraps.** A Memory inside a shared folder may also be shared alone; its share is another wrap
    of the same key.
@@ -292,8 +294,9 @@ there — the placement rule above refuses it, and the web offers no control.
 13. A guest moves a node out of its subtree, or its root → refused; a WRITE_ONLY guest moves anything → refused.
 14. A share created without `sealedShareKey` → `400`.
 15. A rename without a re-wrapped key → `400`; a rename built on a stale `placement_revision` → `409 stale_placement`.
-16. A move to the scope root at a stale epoch → `409 stale_epoch`; a move between non-root parents keeps the stored
-    epoch; an epoch above the current one → `409 stale_epoch` at any destination.
+16. A placement never changes the node's epoch: one stating another epoch → `409 stale_epoch` at any destination; a
+    node not re-keyed since the last rotation → `409 node_rekey_pending` into the root, and a destination parent not
+    re-keyed → `409 node_rekey_pending` (ADR 0109 point 6).
 17. A `READ_WRITE` guest creates a kind `NodeKindRules` does not admit under the folder → refused.
 18. A kind with no role declaration, in a `READ_WRITE` share: a write → refused, a read → served (fail closed).
 19. A guest renames the share root → refused; a member renames it → the share's `sealedName` opens to the new name.

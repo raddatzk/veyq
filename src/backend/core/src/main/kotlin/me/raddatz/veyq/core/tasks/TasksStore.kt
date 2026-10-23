@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.tasks
 import me.raddatz.veyq.core.membership.Admission
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.admission
+import me.raddatz.veyq.core.node.rekey.ScopeRekeying
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
@@ -63,6 +64,9 @@ sealed interface CompleteResult {
      *  written, the lease kept. The worker's failure report then spends an attempt — the right outcome for a worker
      *  that did not rotate. */
     object RotationNotCommitted : CompleteResult, HttpFailure by httpFailure("rotation_not_committed", CONFLICT)
+    /** A `scope-rotation` job whose epoch is in but whose re-key is not: a live or trashed node of the scope still
+     *  carries a key from before (ADR 0109 point 7). Nothing written, the lease kept: the worker re-keys and completes. */
+    object RekeyIncomplete : CompleteResult, HttpFailure by httpFailure("rekey_incomplete", CONFLICT)
 }
 
 /** One rotator's queued compromise rotation on one scope, and where it stands ([CompromiseRotationPolicy]). */
@@ -227,6 +231,11 @@ class TasksStore {
         if (job.status != JobEntity.LEASED || job.leaseHolder != userId) return CompleteResult.NotHolder
 
         if (job.capabilityTag != CapabilityTags.GRANT_DELIVERY) {
+            // A rotation is done only once its re-key is (ADR 0109 point 7): the epoch committed AND no node of the scope
+            // lags it. A holder that committed nothing is answered as before, by the guarded write below.
+            if (job.capabilityTag == CapabilityTags.SCOPE_ROTATION && job.rotatedEpoch != null && ScopeRekeying.lags(job.scopeId)) {
+                return CompleteResult.RekeyIncomplete
+            }
             return if (markDone(job, userId, sealedResult) == 1) CompleteResult.Done else lostCompletion(job, userId)
         }
         val grant = sealedResult ?: return CompleteResult.MissingResult
@@ -529,6 +538,9 @@ class TasksStore {
         val scopes = covering.keys.map { it.first }.toSet()
         val members = MembershipEntity.find("scopeId in ?1", scopes).list().groupBy { it.scopeId }
         val epochs = ScopeEntity.find("id in ?1", scopes).list().associate { it.id to it.currentEpoch }
+        // ADR 0109 point 1: a rotation reads secured only once no node of the scope lags its epoch (derived, one range
+        // read per scope).
+        val lagging = epochs.filter { (scopeId, current) -> ScopeRekeying.lagsBelow(scopeId, current) }.keys
         val decliners = JobDeclineEntity.find("jobId in ?1", covering.values.map { it.id }.toSet()).list()
             .groupBy({ it.jobId }, { it.workerId })
         val now = Instant.now()
@@ -545,6 +557,7 @@ class TasksStore {
                 claimableByAnOwner = rows.any {
                     it.role == MembershipEntity.OWNER && it.wrappedGrant != null && it.userId !in declined
                 },
+                nodesLag = scopeId in lagging,
             )
             CompromiseRotationRow(scopeId, rotator, CompromiseRotationPolicy.state(facts, now))
         }.sortedWith(compareBy({ it.scopeId }, { it.rotatorId }))

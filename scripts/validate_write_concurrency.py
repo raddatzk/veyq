@@ -18,6 +18,17 @@ with a `mode` of one of two values:
     compatibility, so a counter that says version is a word error the contract would carry onto every client.
   - `last-writer-wins` — with a non-empty `reason`: why no revision is needed (one writer, or the write carries
     only what its writer typed).
+  - `node-epoch` — a write whose only guard is the node epoch it states (below), with no revision and no reason to
+    give: a create, a restore, a guest's write, a batch completion.
+
+**Node epochs (ADR 0109 point 6).** A write that seals anything under a node's key states that node's epoch as it read
+it — `nodeEpoch` (the node's own key) or `parentEpoch` (an entry under its parent's key) — so the server can refuse a
+key from before a rotation (`409 stale_epoch`) and a node the rotation's re-key has not reached (`409
+node_rekey_pending`). The declaration lists them under `epochs` beside any mode: each names an epoch-shaped request
+property — top-level, or one level into a batch's items as `<array>.<name>` (`items.nodeEpoch`) — an integer, required
+or `requiredWith` another property, and the operation's `409` names both refusals. An epoch-shaped property makes its
+write a subject whatever its verb, and every one must be declared (the reverse angle). The bite cases are
+`validate_guard_gaps.py` 91 (a batch's per-item declaration dropped) and 92 (a refusal the `409` does not name).
 
 The reverse angle: any non-GET operation whose request schema carries a counter-shaped property (`revision` or
 `version`, or a name ending in `Revision` or `Version`) must be declared `revision` with that property as the `field`
@@ -67,7 +78,12 @@ API = contract_specs.API
 
 EDIT_VERB = re.compile(r"^(rename|set|update|change|commit|move|put)[A-Z]")
 COUNTER_SHAPED = re.compile(r"^(revision|version|[a-z][A-Za-z0-9]*(Revision|Version))$")
-MODES = ("revision", "last-writer-wins")
+MODES = ("revision", "last-writer-wins", "node-epoch")
+# A write that seals under a node's key states that node's epoch as it read it (ADR 0109 point 6): the node's own
+# (`nodeEpoch`) or, for an entry sealed under a parent's key, the parent's (`parentEpoch`). Not a counter: it is
+# compared, never compare-and-set, and it has two refusals of its own.
+EPOCH_SHAPED = re.compile(r"^(node|parent)Epoch$")
+EPOCH_CONFLICTS = ("stale_epoch", "node_rekey_pending")
 VERSION_SHAPED = re.compile(r"^(version|[a-z][A-Za-z0-9]*Version)$")
 DEFAULT_CONFLICT = "stale_revision"
 METHODS = ("get", "put", "post", "patch", "delete")
@@ -110,6 +126,66 @@ def request_properties(specs: dict[str, dict], schema: dict | None, file: str) -
 
     walk(schema, file)
     return props, required
+
+
+def epoch_properties(specs: dict[str, dict], props: dict, file: str) -> dict[str, dict]:
+    """Every epoch-shaped property of the request: a top-level one by its name, one inside an array's item schema
+    (a batch, `completeMedia`'s `items`) as `<array>.<name>`, one level deep — the shape every batch has."""
+    found: dict[str, dict] = {n: p for n, p in props.items() if EPOCH_SHAPED.match(n)}
+    for name, prop in props.items():
+        if not isinstance(prop, dict):
+            continue
+        if "$ref" in prop:
+            prop, _ = resolve(specs, prop["$ref"], file)
+        t = prop.get("type")
+        if t == "array" or (isinstance(t, list) and "array" in t):
+            inner, _ = request_properties(specs, prop.get("items"), file)
+            found.update({f"{name}.{n}": p for n, p in inner.items() if EPOCH_SHAPED.match(n)})
+    return found
+
+
+def check_epochs(where: str, entries: object, epochs: dict[str, dict], props: dict, required: set[str],
+                 conflict: str) -> list[str]:
+    """The `epochs` list: each names an epoch-shaped field the request carries, an integer, required or required with
+    another property, and the `409` names both of its refusals; every epoch-shaped field is declared."""
+    errors: list[str] = []
+    declared: list[str] = []
+    if entries is not None and (not isinstance(entries, list) or not entries):
+        return [f"{where}: x-veyq-concurrency.epochs must be a non-empty list of declarations"]
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            errors.append(f"{where}: an epochs entry is {entry!r}, expected a mapping")
+            continue
+        field = entry.get("field")
+        if field in declared:
+            errors.append(f"{where}: epoch field {field!r} is declared twice")
+            continue
+        if field not in epochs:
+            errors.append(f"{where}: epoch field {field!r} is not an epoch-shaped property of the request "
+                          f"(`nodeEpoch` / `parentEpoch`, top-level or in a batch's items)")
+            continue
+        declared.append(field)
+        if not is_integer(epochs[field]):
+            errors.append(f"{where}: epoch field {field!r} is not an integer")
+        with_ = entry.get("requiredWith")
+        with_list = [with_] if isinstance(with_, str) else list(with_ or [])
+        top = field.split(".")[0]
+        if "." not in field and field not in required:
+            if not with_list:
+                errors.append(f"{where}: epoch field {field!r} is neither required nor `requiredWith` another property")
+            for w in with_list:
+                if w not in props:
+                    errors.append(f"{where}: {field!r} requiredWith {w!r} is not a property of the request schema")
+        if "." in field and top not in props:
+            errors.append(f"{where}: epoch field {field!r} names no array property {top!r}")
+        for code in EPOCH_CONFLICTS:
+            if code not in conflict:
+                errors.append(f"{where}: its 409 response does not name `{code}` (a refusal of {field!r})")
+    for other in sorted(epochs):
+        if other not in declared:
+            errors.append(f"{where}: carries epoch-shaped {other!r} that no epochs declaration names "
+                          f"(declared: {', '.join(declared) or 'none'})")
+    return errors
 
 
 def is_integer(prop: dict) -> bool:
@@ -164,7 +240,7 @@ def check_declaration(
 def main() -> int:
     specs = load_specs()
     errors: list[str] = []
-    n_subject = n_revision = n_lww = 0
+    n_subject = n_revision = n_lww = n_epoch = 0
     for file, spec in specs.items():
         for path, item in (spec.get("paths") or {}).items():
             for method, op in (item or {}).items():
@@ -175,20 +251,34 @@ def main() -> int:
                 body = (((op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema")
                 props, required = request_properties(specs, body, file) if body else ({}, set())
                 counters = sorted(n for n in props if COUNTER_SHAPED.match(n))
+                epochs = epoch_properties(specs, props, file) if body else {}
                 subject = method in ("put", "patch") or (method == "post" and EDIT_VERB.match(oid) is not None)
                 decl = op.get("x-veyq-concurrency")
-                if not subject and not (method != "get" and counters):
+                if not subject and not (method != "get" and (counters or epochs)):
                     if decl is not None:
                         errors.append(f"{where}: declares x-veyq-concurrency but is no edit operation")
                     continue
                 n_subject += 1
                 if not isinstance(decl, dict):
-                    why = "an edit operation" if subject else f"a write carrying {', '.join(counters)}"
+                    why = "an edit operation" if subject else f"a write carrying {', '.join(counters or sorted(epochs))}"
                     errors.append(f"{where}: {why} with no x-veyq-concurrency declaration (ADR 0077)")
                     continue
                 mode = decl.get("mode")
                 if mode not in MODES:
                     errors.append(f"{where}: x-veyq-concurrency.mode is {mode!r}, expected one of {MODES}")
+                    continue
+                if "epochs" in decl or epochs:
+                    n_epoch += 1
+                    errors.extend(check_epochs(where, decl.get("epochs"), epochs, props, required,
+                                               conflict_text(specs, op, file)))
+                if mode == "node-epoch":
+                    if not epochs:
+                        errors.append(f"{where}: declared node-epoch but its request carries no epoch-shaped field")
+                    if counters:
+                        errors.append(f"{where}: declared node-epoch but its request carries {', '.join(counters)} — "
+                                      f"a counter-carrying write is declared `revision`")
+                    if "fields" in decl:
+                        errors.append(f"{where}: a node-epoch declaration has no `fields` (revision) list")
                     continue
                 if mode == "last-writer-wins":
                     n_lww += 1
@@ -225,7 +315,7 @@ def main() -> int:
             print("  -", e)
         return 1
     print(f"write concurrency OK: {n_subject} edit operation(s) declared — {n_revision} revision-checked, "
-          f"{n_lww} last-writer-wins with a reason.")
+          f"{n_lww} last-writer-wins with a reason, {n_epoch} stating a node epoch.")
     print("  scope: the DECLARATION and its wire form, never that the server compares — see the docstring.")
     return 0
 

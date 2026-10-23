@@ -261,7 +261,7 @@ class ShareLinkStorageLimitSliceTest {
     /** A second identity-bearing handle on share [shareId] of [f]'s Memory. */
     private fun link(f: Link, shareId: String, role: String): Link {
         val token = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="${identityKeyJson(role)}}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="${identityKeyJson(role)}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         return f.copy(shareId = shareId, token = token)
@@ -295,7 +295,7 @@ class ShareLinkStorageLimitSliceTest {
             .extract().path<List<String>>("results.uploadId")
         val derivs = if (derivative == null) "" else ""","derivatives":[{"kind":"THUMBNAIL","uploadId":"${ids[1]}"}]"""
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"${f.token}","items":[{"mediaId":"$mediaId","originalUploadId":"${ids[0]}"$derivs}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"${f.token}","items":[{"mediaId":"$mediaId","originalUploadId":"${ids[0]}"$derivs}]}""")
             .`when`().post("/api/shares/${f.shareId}/media")
             .then().statusCode(200).body("results[0].mediaId", equalTo(mediaId))
         return mediaId
@@ -313,7 +313,7 @@ class ShareLinkStorageLimitSliceTest {
         val mediaId = UUID.randomUUID().toString()
         val uploadId = memberStartOk(f, blob, ownerId = mediaId)
         given().header("Authorization", bearer(f.ownerId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"${f.memory}","mediaId":"$mediaId","originalUploadId":"$uploadId"}]}""")
+            .body("""{"items":[{"nodeId":"${f.memory}","mediaId":"$mediaId","nodeEpoch":0,"originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/scopes/${f.scopeId}/media-batch")
             .then().statusCode(200).body("results[0].mediaId", equalTo(mediaId))
     }

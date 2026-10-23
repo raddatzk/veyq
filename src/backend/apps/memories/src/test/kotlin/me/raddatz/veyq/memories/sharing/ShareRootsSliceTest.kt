@@ -156,7 +156,7 @@ class ShareRootsSliceTest {
         org.junit.jupiter.api.Assertions.assertEquals(role, ShareEntity.findById(shareId)!!.role)
 
     private fun identity(shareId: String): String =
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path("contributorToken")
 

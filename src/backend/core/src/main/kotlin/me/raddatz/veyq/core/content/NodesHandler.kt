@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.membership.AccessMode.READ
@@ -24,9 +25,14 @@ sealed interface CreateNodeOutcome {
     object IllegalStructure : CreateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : CreateNodeOutcome, HttpFailure by Failures.slugTaken
     object IdTaken : CreateNodeOutcome, HttpFailure by Failures.idTaken
-    /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6) — a bounded create:
-     *  one above it (ADR 0080 Decision 6) — nothing stored. */
+    /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6, ADR 0109 point 6: a
+     *  key is minted at the current epoch, a guest's included), or the parent's stated epoch is not its stored one —
+     *  nothing stored. */
     object StaleEpoch : CreateNodeOutcome, HttpFailure by Failures.staleEpoch
+    /** The parent is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing stored. */
+    object RekeyPending : CreateNodeOutcome, HttpFailure by Failures.nodeRekeyPending
+    /** A create under a node that states no `parentEpoch`. */
+    object InvalidRequest : CreateNodeOutcome, HttpFailure by Failures.invalidRequest
     /** Creating the kind needs a capability that is switched off instance-wide ([NodeKindRules.capabilityToCreate],
      *  ADR 0088) — nothing stored. */
     object CapabilityDisabled : CreateNodeOutcome, HttpFailure by Failures.capabilityDisabled
@@ -56,9 +62,12 @@ sealed interface UpdateNodeOutcome {
     object IncompletePlacement : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
     /** The node was moved or renamed past the stated `placementRevision`; nothing was written (ADR 0080 Decision 3). */
     object StalePlacement : UpdateNodeOutcome, HttpFailure by Failures.stalePlacement
-    /** A placement at the scope root sealed at an epoch that is not the scope's current one, or any placement stating
-     *  an epoch above it (ADR 0080 Decision 4). */
+    /** A placement stating an epoch that is not the node's, or a `nodeEpoch` / `parentEpoch` not the stored one (ADR
+     *  0109 point 6). */
     object StaleEpoch : UpdateNodeOutcome, HttpFailure by Failures.staleEpoch
+    /** The node at the scope root, the destination parent or the node a meta seals under is not re-keyed yet (ADR 0109
+     *  point 6). */
+    object RekeyPending : UpdateNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** The node's `wrappedMeta` moved past the stated revision; nothing was written (ADR 0077). Carries the current
      *  blob and revision for the loser to re-apply its own change on. */
     data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleRevision
@@ -79,6 +88,8 @@ sealed interface RestoreNodeOutcome {
     object SlugTaken : RestoreNodeOutcome, HttpFailure by Failures.slugTaken
     /** A moderator blocked it or a node above it — deleted, never restored, while the block stands (451). */
     object Blocked : RestoreNodeOutcome, HttpFailure by Failures.blockedByOperator
+    object StaleEpoch : RestoreNodeOutcome, HttpFailure by Failures.staleEpoch
+    object RekeyPending : RestoreNodeOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface ListTrashOutcome {
@@ -103,22 +114,16 @@ class NodesHandler(
     @All private val kindRules: MutableList<NodeKindRules>,
     private val capabilities: CapabilityRegistry,
     private val blocks: ModerationBlocks,
+    private val gate: NodeEpochGate,
 ) {
 
     private fun parentAllows(kind: String, parent: ParentSlot): Boolean =
         NodeKindRules.parentAllows(kindRules, kind, parent)
 
-    /**
-     * The epoch rule for an entry OFF the scope root (ADR 0080 Decisions 4 and 6): it is under its parent's key, not
-     * `K_SC`, so it may carry the epoch it was sealed at — the [current] one or one below, which there opens nothing.
-     * One above the current (or a scope without one) was sealed at no epoch that exists; stored, it is a number no
-     * later reader or rotation can account for. A member's placement off the root and a guest's create ask it.
-     */
-    private fun sealableOffRoot(epoch: Int, current: Int?): Boolean = current != null && epoch <= current
-
     fun create(
         userId: String, scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
+        parentEpoch: Int?,
     ): CreateNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
@@ -126,7 +131,7 @@ class NodesHandler(
         return createOrConflict(conflict = createReplay(scopeId, parentSlotId, slugToken, nodeId)) {
             createInScope(
                 scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta,
-                editor = PrincipalKey.User(userId),
+                parentEpoch, editor = PrincipalKey.User(userId),
             )
         }
     }
@@ -169,7 +174,7 @@ class NodesHandler(
     internal fun createInScope(
         scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
-        editor: PrincipalKey, boundary: SubtreeBoundary? = null, identityWriter: String? = null,
+        parentEpoch: Int?, editor: PrincipalKey, boundary: SubtreeBoundary? = null, identityWriter: String? = null,
     ): CreateNodeOutcome {
         check(QuarkusTransaction.isActive()) { "createInScope joins its caller's transaction; open one with createOrConflict" }
         // Every decision under the tree's lock (NodesStore.lockScope), taken before ANY node is read. Not only because
@@ -180,15 +185,11 @@ class NodesHandler(
         // create landed outside with the reads before the lock). A caller that took the lock already — a guest's
         // create — re-takes it here at no cost: the row is this transaction's.
         store.lockScope(scopeId)
-        // ADR 0024 Decision 6, layer 1: content sealed under an epoch below the current one is readable by every
-        // member removed since — a writer whose grant lags a rotation. Under the lock a rotation takes, so a rotation
-        // that committed first is seen. A bounded create (a guest's, ADR 0080 Decision 6) never lands at the scope
-        // root — its parent is a node of the subtree, the boundary below refuses any other — so it takes the rule
-        // off the root: the epoch it sealed with, at or below the current one, stored as sent (its name and wrap
-        // bind it, so the reader must open at that number).
-        val current = store.currentEpoch(scopeId)
-        val epochAdmitted = if (boundary == null) epoch == current else sealableOffRoot(epoch, current)
-        if (!epochAdmitted) return CreateNodeOutcome.StaleEpoch
+        // ADR 0024 Decision 6, ADR 0109 point 6, layer 1: a node's epoch is the epoch its key was minted at, and a key
+        // is minted at the current one — at the root, where the entry is under K_SC, and below it, member and guest
+        // alike (this narrows ADR 0080 Decision 6's "at or below": a writer told to re-read never leaves a name
+        // unopenable). Under the lock a rotation takes, so a rotation that committed first is seen.
+        if (epoch != store.currentEpoch(scopeId)) return CreateNodeOutcome.StaleEpoch
         val slot = parentSlotId ?: scopeId // null/absent → the scope root (slot = scope id)
         val parent = store.parentSlot(scopeId, slot)
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
@@ -200,6 +201,16 @@ class NodesHandler(
         // did. Only creation: a node of the kind that exists is moved and renamed as before (decision 5).
         NodeKindRules.capabilityToCreate(kindRules, kind)?.let { if (!capabilities.isActiveInScope(it, scopeId)) return CreateNodeOutcome.CapabilityDisabled }
         store.identityFolderOwner(scopeId, slot)?.let { owner -> if (owner != identityWriter) return CreateNodeOutcome.IllegalStructure }
+        // The entry is sealed under the parent's key: the parent's epoch as the writer read it, under the parent's row
+        // lock (ADR 0109 point 6) — after the scope lock, as every writer and the re-key's commit take them.
+        if (parent is ParentSlot.Node) {
+            when (gate.check(scopeId, slot, parentEpoch ?: return CreateNodeOutcome.InvalidRequest)) {
+                NodeEpochGate.Verdict.OK -> Unit
+                NodeEpochGate.Verdict.MISSING -> return CreateNodeOutcome.IllegalStructure
+                NodeEpochGate.Verdict.STALE -> return CreateNodeOutcome.StaleEpoch
+                NodeEpochGate.Verdict.PENDING -> return CreateNodeOutcome.RekeyPending
+            }
+        }
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is
         // stored verbatim or not at all.
@@ -234,6 +245,8 @@ class NodesHandler(
         val wrappedContentKey: String?,
         val epoch: Int?,
         val placementRevision: Long?,
+        /** The destination parent's epoch as read, with a placement to a parent node (ADR 0109 point 6). */
+        val parentEpoch: Int? = null,
     ) {
         /** Whether the request asks for a placement at all — any of its fields, the destination included. */
         val present: Boolean
@@ -254,20 +267,21 @@ class NodesHandler(
 
     fun update(
         userId: String, scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
-        wrappedMeta: String?, metaRevision: Long?,
+        wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?,
     ): UpdateNodeOutcome {
         // The request's own shape first, as the boundary's validation is: a malformed body is a 400 for anyone.
-        malformed(placement, wrappedMeta, metaRevision)?.let { return it }
+        malformed(placement, wrappedMeta, metaRevision, nodeEpoch)?.let { return it }
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
-        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaRevision, PrincipalKey.User(userId))
+        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))
     }
 
     /** [epochOptional]: only a bounded placement may leave the epoch out ([updateInScope]). */
     private fun malformed(
-        placement: PlacementRequest, wrappedMeta: String?, metaRevision: Long?, epochOptional: Boolean = false,
+        placement: PlacementRequest, wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?, epochOptional: Boolean = false,
     ): UpdateNodeOutcome? = when {
         wrappedMeta != null && metaRevision == null -> UpdateNodeOutcome.MissingMetaRevision
+        wrappedMeta != null && nodeEpoch == null -> UpdateNodeOutcome.IncompletePlacement
         placement.present && !(if (epochOptional) placement.completeWithoutEpoch else placement.complete) ->
             UpdateNodeOutcome.IncompletePlacement
         else -> null
@@ -298,13 +312,16 @@ class NodesHandler(
      */
     internal fun updateInScope(
         scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
-        wrappedMeta: String?, metaRevision: Long?, editor: PrincipalKey, boundary: SubtreeBoundary? = null,
+        wrappedMeta: String?, metaRevision: Long?, nodeEpoch: Int?, editor: PrincipalKey, boundary: SubtreeBoundary? = null,
     ): UpdateNodeOutcome {
-        malformed(placement, wrappedMeta, metaRevision, epochOptional = boundary != null)?.let { return it }
+        malformed(placement, wrappedMeta, metaRevision, nodeEpoch, epochOptional = boundary != null)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 
         var write: NodesStore.Placement? = null
+        val claims = mutableListOf<NodesStore.EpochClaim>()
+        // The meta is sealed under the node's own key (ADR 0109 point 6).
+        if (wrappedMeta != null) claims += NodesStore.EpochClaim(nodeId, nodeEpoch!!)
         if (placement.present) {
             val slot = placement.parentId ?: scopeId // null/absent → the scope root (slot = scope id)
             val parent = store.parentSlot(scopeId, slot)
@@ -319,49 +336,37 @@ class NodesHandler(
             // enters an identity folder, so no concurrent write can turn a destination outside into one inside.
             if (store.identityFolderOwner(scopeId, slot) != null) return UpdateNodeOutcome.IllegalStructure
             if (slot == nodeId || store.wouldCycle(scopeId, nodeId, slot)) return UpdateNodeOutcome.IllegalStructure
-            // ADR 0080 Decision 4: an entry at the scope root lives under K_SC, so it is sealed at the CURRENT epoch —
-            // a rename at the root and a move into it alike (ADR 0024 Decision 6: an older epoch's key is one a member
-            // removed since still holds). Unlocked, like create's: a placement racing the rotation that supersedes
-            // its epoch was sealed while that epoch was current. Below the root the entry is under the parent's key,
-            // which no rotation changes: a move out of the root stores the epoch the client sealed at, and a
-            // placement between two non-root parents keeps the stored one (the client seals at it; the
-            // compare-and-set guarantees the parent it read is still the node's).
+            // ADR 0109 point 6: a placement never changes the node's epoch — the epoch its key was minted at, which the
+            // entry's seals bind. So a stated epoch is the node's own (the gate under the lock says STALE otherwise); at
+            // the scope root the entry is under K_SC at it, so a node the last rotation's re-key has not reached may not
+            // go there (or be renamed there) yet. Below the root the entry is under the destination parent's key: its
+            // epoch, stated as read, under the parent's row lock. A bounded placement (a guest's) states no epoch of its
+            // own — it keeps the stored one and never touches the root, which is outside every boundary.
             val epoch = placement.epoch
-            val storedEpoch = if (epoch == null) {
-                // A bounded placement without an epoch (see the KDoc): the node keeps its stored one. The scope root
-                // as its destination is outside every boundary; refused here, it never reaches a write with no epoch.
+            if (epoch == null) {
                 if (parent is ParentSlot.Root) return UpdateNodeOutcome.IllegalStructure
-                null
             } else {
-                val current = store.currentEpoch(scopeId)
-                // For ANY destination, the rule off the root first ([sealableOffRoot]): an epoch above the current one
-                // is refused, since a move out of the root stores the request's epoch. One BELOW the current one stays
-                // accepted off the root; at the root the stricter rule below follows.
-                if (!sealableOffRoot(epoch, current)) return UpdateNodeOutcome.StaleEpoch
-                when {
-                    parent is ParentSlot.Root -> {
-                        if (epoch != current) return UpdateNodeOutcome.StaleEpoch
-                        epoch
-                    }
-                    node.parentId == scopeId -> epoch
-                    else -> null
-                }
+                claims += NodesStore.EpochClaim(nodeId, epoch, pendingRefuses = parent is ParentSlot.Root)
+            }
+            if (parent is ParentSlot.Node) {
+                claims += NodesStore.EpochClaim(slot, placement.parentEpoch ?: return UpdateNodeOutcome.IncompletePlacement)
             }
             write = NodesStore.Placement(
                 parentSlot = slot,
                 encryptedName = placement.encryptedName!!,
                 slugToken = placement.slugToken!!,
                 wrappedContentKey = placement.wrappedContentKey!!,
-                epoch = storedEpoch,
                 expectedRevision = placement.placementRevision!!,
             )
         }
-        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaRevision, editor, boundary)) {
+        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaRevision, editor, boundary, claims)) {
             NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
             NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
             NodesStore.ApplyResult.IllegalMove -> UpdateNodeOutcome.IllegalStructure
             NodesStore.ApplyResult.SlugTaken -> UpdateNodeOutcome.SlugTaken
             NodesStore.ApplyResult.StalePlacement -> UpdateNodeOutcome.StalePlacement
+            NodesStore.ApplyResult.StaleEpoch -> UpdateNodeOutcome.StaleEpoch
+            NodesStore.ApplyResult.RekeyPending -> UpdateNodeOutcome.RekeyPending
             is NodesStore.ApplyResult.StaleMeta -> UpdateNodeOutcome.StaleMeta(r.wrappedMeta, r.metaRevision)
         }
     }
@@ -396,14 +401,16 @@ class NodesHandler(
      * ADR 0080 Decision 2), and the delete consumed the original when it freed the name.
      */
     fun restore(
-        userId: String, scopeId: String, nodeId: String, slugToken: String, encryptedName: String?,
+        userId: String, scopeId: String, nodeId: String, slugToken: String, encryptedName: String?, parentEpoch: Int,
     ): RestoreNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(RestoreNodeOutcome.NotFound, RestoreNodeOutcome.Suspended, RestoreNodeOutcome.ScopeDeleting)?.let { return it }
         // uc.moderation.take-a-measure: a blocked item can be deleted, never restored, while the block stands.
         if (blocks.contentView(scopeId).nodeBlocked(nodeId)) return RestoreNodeOutcome.Blocked
-        return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName, PrincipalKey.User(userId))) {
+        return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName, parentEpoch, PrincipalKey.User(userId))) {
             NodesStore.RestoreResult.DONE -> RestoreNodeOutcome.Restored
+            NodesStore.RestoreResult.STALE_EPOCH -> RestoreNodeOutcome.StaleEpoch
+            NodesStore.RestoreResult.REKEY_PENDING -> RestoreNodeOutcome.RekeyPending
             NodesStore.RestoreResult.SLUG_TAKEN -> RestoreNodeOutcome.SlugTaken
             NodesStore.RestoreResult.NOT_FOUND -> RestoreNodeOutcome.NotFound
         }

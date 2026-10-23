@@ -370,7 +370,8 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("g-reissue-stale.example.com")
         val group = seedGroup(tenantId, owner)
         removeByRotation(owner, group, member = null).then().statusCode(201) // the group is at epoch 1 now
-        val old = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 1)
+        // a Memory created now has its key minted at the group's current epoch (ADR 0109 point 6)
+        val old = createShare(owner, atCurrentEpoch(seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)), copyEpoch = 1)
         val newId = TestIds.shareId()
 
         reissue(owner, old, epoch = 0, newId = newId).then().statusCode(409).body("code", equalTo("stale_epoch"))
@@ -737,8 +738,8 @@ class ShareSharedScopeSliceTest {
                 assertEquals(owner, share.ownerAccount, "round $round")
             }
             // Control: a member who stays re-activates a link minted after the removal (the one above is now marked
-            // for re-issue by the removal, ADR 0075).
-            val later = createShare(owner, memory)
+            // for re-issue by the removal, ADR 0075) — once the Memory is re-keyed to the removal's epoch (ADR 0109 point 6).
+            val later = createShare(owner, atCurrentEpoch(memory))
             revoke(owner, later)
             assertEquals(ReactivateShareOutcome.Done, handler.reactivate(owner, later), "round $round")
             QuarkusTransaction.requiringNew().run { assertEquals(true, ShareEntity.findById(later)!!.enabled) }
@@ -771,9 +772,23 @@ class ShareSharedScopeSliceTest {
     ) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
         .body(
             """{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName",""" +
-                """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":${copyEpoch ?: currentEpochOfNode(nodeId)}}""",
+                """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":${copyEpoch ?: currentEpochOfNode(nodeId)},"nodeEpoch":${nodeEpochOf(nodeId)}}""",
         )
         .`when`().post("/api/shares")
+
+    /** [nodeId] with its key at its scope's current epoch — minted after a rotation, or re-keyed since (the re-key's
+     *  own commit is `RekeyCoreSliceTest`'s). */
+    private fun atCurrentEpoch(nodeId: String): String = QuarkusTransaction.requiringNew().call {
+        NodeEntity.findById(nodeId)!!.apply { epoch = ScopeEntity.findById(scopeId)!!.currentEpoch }.id
+    }
+
+    /** The epoch [nodeId]'s key was minted at (ADR 0109 point 6) — what a link's create states; 0 for an unknown node. */
+    private fun nodeEpochOf(nodeId: String): Int = QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)?.epoch ?: 0 }
+
+    /** The same for a link's shared node — what its re-issue states. */
+    private fun shareNodeEpochOf(shareId: String): Int = QuarkusTransaction.requiringNew().call {
+        ShareEntity.findById(shareId)?.nodeId?.let { NodeEntity.findById(it)?.epoch } ?: 0
+    }
 
     private fun currentEpochOfNode(nodeId: String): Int = QuarkusTransaction.requiringNew().call {
         NodeEntity.findById(nodeId)?.let { ScopeEntity.findById(it.scopeId)?.currentEpoch } ?: 0
@@ -785,7 +800,7 @@ class ShareSharedScopeSliceTest {
     /** `POST /api/shares/{shareId}/reissue` under [newId], the recovery copy at [epoch] (ADR 0075). */
     private fun reissue(userId: String, shareId: String, epoch: Int, newId: String = TestIds.shareId(), keys: String = """"wrap":"$newWrap"""") =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},$keys,"sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},$keys,"sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$epoch,"nodeEpoch":${shareNodeEpochOf(shareId)}}""")
             .`when`().post("/api/shares/$shareId/reissue")
 
     private fun resolves(shareId: String, status: Int) = given().`when`().get("/api/shares/$shareId").then().statusCode(status)

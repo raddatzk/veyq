@@ -76,7 +76,7 @@ class GuestCompleteTargetRaceSliceTest {
 
     @Test
     fun aCompletionIntoAMemoryAMemberMovesOutOfTheSubtreeMeanwhileIsRefused() = raceAgainst("move") { t ->
-        assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, t.memory, placementTo(t.away), null, null, null))
+        assertEquals(UpdateNodeOutcome.Updated, nodes.update(t.userId, t.scopeId, t.memory, placementTo(t.away), null, null, null, null))
     }
 
     @Test
@@ -112,7 +112,7 @@ class GuestCompleteTargetRaceSliceTest {
     /** The guest's completion into the Memory, as the item's error (null = landed). */
     private fun complete(t: Tree, uploadId: String): String? {
         val item = ShareMediaItem(TestBlob.ownerOf(uploadId), uploadId, emptyList(), null, null)
-        val o = media.complete(t.link.shareId, null, t.link.token, listOf(item), t.memory, seen = null)
+        val o = media.complete(t.link.shareId, null, t.link.token, listOf(item), t.memory, seen = null, nodeEpoch = 0)
         return (o as ShareMediaCompleteOutcome.Results).items.single().error
     }
 

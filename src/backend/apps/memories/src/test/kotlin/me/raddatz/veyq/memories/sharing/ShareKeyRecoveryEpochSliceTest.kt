@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.sharing
 
 import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -87,13 +88,19 @@ class ShareKeyRecoveryEpochSliceTest {
 
     // --- helpers ---
 
-    /** Simulate a rotated scope: bump its current content-key epoch. */
+    /** Simulate a rotated scope whose re-key is done: bump its current content-key epoch, and every node's with it (a
+     *  node still at the old epoch takes no new link, ADR 0109 point 6 — not what these tests are about). */
     private fun setScopeEpoch(scopeId: String, epoch: Int) =
-        QuarkusTransaction.requiringNew().run { ScopeEntity.findById(scopeId)!!.apply { currentEpoch = epoch }.persist() }
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.apply { currentEpoch = epoch }.persist()
+            NodeEntity.update("epoch = ?1 where scopeId = ?2", epoch, scopeId)
+        }
+
+    private fun nodeEpochOf(nodeId: String): Int = QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)!!.epoch }
 
     private fun create(userId: String, nodeId: String, shareId: String, recovery: String?) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName"${recovery?.let { ",$it" } ?: ""}}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName","nodeEpoch":${nodeEpochOf(nodeId)}${recovery?.let { ",$it" } ?: ""}}""")
             .`when`().post("/api/shares")
             .then()
 

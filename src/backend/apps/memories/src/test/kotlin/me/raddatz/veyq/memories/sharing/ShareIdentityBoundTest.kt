@@ -87,7 +87,7 @@ class ShareIdentityBoundTest {
     // --- helpers (mirroring SharePasswordAttemptBoundTest) ---
 
     private fun createIdentity(shareId: String) =
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
 
     private fun createShare(userId: String, nodeId: String): String =

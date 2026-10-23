@@ -154,7 +154,7 @@ class UploaderContentMemoriesSliceTest {
     /** A guest identity of the world's link, minted as a guest's client does; its id. */
     private fun guest(w: World): String =
         given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(w.shareId))
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
             .`when`().post("/api/shares/${w.shareId}/identities").then().statusCode(201).extract().path("identityId")
 
     /** A medium of the world's Memory, uploaded by the guest [identity] or, null, by the owner. Seeded, not uploaded. */

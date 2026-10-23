@@ -37,18 +37,19 @@ object CoverKit {
 
     fun set(
         userId: String, scopeId: String, nodeId: String, uploadId: String, expectedBlobId: String?,
-        wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0,
+        wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0, nodeEpoch: Int = 0,
     ): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId","expectedBlobId":${expectedBlobId?.let { "\"$it\"" }},"wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision}""")
+            .body("""{"uploadId":"$uploadId","expectedBlobId":${expectedBlobId?.let { "\"$it\"" }},"wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision,"nodeEpoch":$nodeEpoch}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/cover")
             .then()
 
     fun remove(
         userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0,
+        nodeEpoch: Int = 0,
     ): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"blobId":"$blobId","wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision}""")
+            .body("""{"blobId":"$blobId","wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision,"nodeEpoch":$nodeEpoch}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover/removal")
             .then()
 

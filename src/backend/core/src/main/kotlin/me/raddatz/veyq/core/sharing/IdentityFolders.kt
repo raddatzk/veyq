@@ -64,10 +64,9 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
             if (!gated.admitted()) return@createOrConflict IdentityFolderOutcome.NotFound
             if (nodes.findInScope(scopeId, root) == null) return@createOrConflict IdentityFolderOutcome.NotContributable
             existing(root, gated.identityId)?.let { return@createOrConflict it }
-            // Off the scope root, at or below the current epoch, stored as sent (ADR 0080 decision 6: the rule a
-            // guest's create takes); the seals bind it, so the reader opens at it.
-            val current = nodes.currentEpoch(scopeId)
-            if (current == null || epoch > current) return@createOrConflict IdentityFolderOutcome.StaleEpoch
+            // The folder's key is minted at the scope's CURRENT epoch, as every node's (ADR 0109 point 6, narrowing ADR
+            // 0080 decision 6's "at or below"): a guest whose page lags a rotation is told to re-resolve the link.
+            if (epoch != nodes.currentEpoch(scopeId)) return@createOrConflict IdentityFolderOutcome.StaleEpoch
             if (nodes.idTaken(nodeId)) return@createOrConflict IdentityFolderOutcome.IdTaken
             nodes.createIdentityFolder(
                 nodeId, scopeId, root, gated.identityId, encryptedName, slugToken, epoch, wrappedContentKey,

@@ -8,6 +8,7 @@ import me.raddatz.veyq.core.blob.UploadItemResult
 import me.raddatz.veyq.core.blob.WindowRequest
 import me.raddatz.veyq.core.blob.WindowItemResult
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate.PwCheck
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
@@ -59,8 +60,11 @@ sealed interface CreateShareOutcome {
     object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
     /** The keys do not match the role: a wrap on a WRITE_ONLY share, a drop key on any other — a 400. */
     object InvalidRequest : CreateShareOutcome, HttpFailure by Failures.invalidRequest
-    /** The recovery copy's epoch is not the scope's current one (ADR 0024 Decision 6) — a 409, nothing written. */
+    /** The recovery copy's epoch is not the scope's current one (ADR 0024 Decision 6), or `nodeEpoch` is not the shared
+     *  node's stored one (ADR 0109 point 6) — a 409, nothing written. */
     object StaleEpoch : CreateShareOutcome, HttpFailure by Failures.staleEpoch
+    /** The shared node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — a 409, nothing written. */
+    object RekeyPending : CreateShareOutcome, HttpFailure by Failures.nodeRekeyPending
     /** A WRITE_ONLY share brought a drop private key, but the node already has one — a 409, nothing written. */
     object DropKeyExists : CreateShareOutcome, HttpFailure by httpFailure("drop_key_exists", CONFLICT)
     /** A WRITE_ONLY share brought no drop private key, and the node has none — a 409, nothing written. */
@@ -74,6 +78,9 @@ sealed interface ResolveShareOutcome {
         val share: ShareEntity,
         val nodes: List<ShareNodeRow>,
         val rootKind: String?,
+        /** The epoch the shared root's key was minted at (ADR 0109 point 6) — what a guest's write states as the root's;
+         *  served for every unlocked role, null only when the root row is gone. */
+        val rootEpoch: Int?,
         /** What hangs off the served nodes — `node|slot|blob` per attachment: no part of the body, but a guest reads it
          *  beside the nodes (a file's blob, a cover), so the conditional resolve's tag covers it (ADR 0081). */
         val attachments: List<String> = emptyList(),
@@ -93,6 +100,10 @@ sealed interface CreateIdentityOutcome {
     /** Unknown/disabled/expired share, or password-protected with no token given (cr-0164) — a 404. */
     object NotFound : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     object IdTaken : CreateIdentityOutcome, HttpFailure by Failures.idTaken
+    /** `nodeEpoch` is not the shared root's stored epoch (ADR 0109 point 6) — a 409, nothing stored; the guest re-resolves. */
+    object StaleEpoch : CreateIdentityOutcome, HttpFailure by Failures.staleEpoch
+    /** The shared root is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — a 409, nothing stored. */
+    object RekeyPending : CreateIdentityOutcome, HttpFailure by Failures.nodeRekeyPending
     /** A wrapped identity key that does not match the role: missing on WRITE_ONLY, present on READ_WRITE — a 400. */
     object InvalidRequest : CreateIdentityOutcome, HttpFailure by Failures.invalidRequest
     /** The share does not accept contributions (not READ_WRITE/WRITE_ONLY) — a 403. */
@@ -215,6 +226,8 @@ sealed interface ReissueShareOutcome {
     object InvalidRequest : ReissueShareOutcome, HttpFailure by Failures.invalidRequest
     /** The recovery copy is not sealed at the scope's current epoch (ADR 0024 Decision 6) — a 409, nothing written. */
     object StaleEpoch : ReissueShareOutcome, HttpFailure by Failures.staleEpoch
+    /** The shared node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — a 409, nothing written. */
+    object RekeyPending : ReissueShareOutcome, HttpFailure by Failures.nodeRekeyPending
     object IdTaken : ReissueShareOutcome, HttpFailure by Failures.idTaken
     /** The share is already deleted — re-issued once already (a concurrent re-issue won, or an earlier one ran) or
      *  deleted. A member's answer only (inbox #252): a 409, nothing written; the caller re-reads the list. */
@@ -281,13 +294,29 @@ class SharingHandler(
     private val blocks: ModerationBlocks,
     /** The guest-write record (ADR 0093 § 10): a guest naming itself is one of the writes it keeps. */
     private val guestWriteRecords: GuestWriteRecords,
+    /** ADR 0109 point 6: a share wraps its node's key, a guest's name is sealed under its root's — each states that epoch. */
+    private val epochs: NodeEpochGate,
 ) {
+
+    /**
+     * The epoch gate's answer as [T]'s refusal, or null when [stated] is [nodeId]'s stored epoch and the node is re-keyed
+     * to the scope's current one (ADR 0109 point 6). Takes the node's row lock in the caller's transaction — after the
+     * scope and share rows the path holds, before anything it writes.
+     */
+    private fun <T> epochRefusal(scopeId: String, nodeId: String, stated: Int, missing: T, stale: T, pending: T): T? =
+        when (epochs.check(scopeId, nodeId, stated)) {
+            NodeEpochGate.Verdict.OK -> null
+            NodeEpochGate.Verdict.MISSING -> missing
+            NodeEpochGate.Verdict.STALE -> stale
+            NodeEpochGate.Verdict.PENDING -> pending
+        }
 
     fun create(
         userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
         sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
         sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
+        nodeEpoch: Int,
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
@@ -327,6 +356,12 @@ class SharingHandler(
             refused = access.check(userId, node.scopeId, WRITE)
                 .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)
                 ?: CreateShareOutcome.StaleEpoch.takeIf { sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId) }
+                // The share wraps the node's key, and a WRITE_ONLY link's drop private key is sealed under it: the node's
+                // epoch as the caller read it, under its row lock — after the scope's, before the drop key's update.
+                ?: epochRefusal(
+                    node.scopeId, nodeId, nodeEpoch, CreateShareOutcome.NoNode, CreateShareOutcome.StaleEpoch,
+                    CreateShareOutcome.RekeyPending,
+                )
             if (refused != null) {
                 null
             } else {
@@ -554,7 +589,7 @@ class SharingHandler(
         userId: String, shareId: String, newShareId: String, wrap: String?, sealedDropPublicKey: String?,
         sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int,
         sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-        writeVerifier: String,
+        writeVerifier: String, nodeEpoch: Int,
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
@@ -577,6 +612,14 @@ class SharingHandler(
             val (enabled, owner) = store.enabledAndOwnerOf(shareId) ?: return@call ReissueShareOutcome.NotFound
             reissueRefusal(userId, old.scopeId, false, enabled, owner)?.let { return@call it }
             if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return@call ReissueShareOutcome.StaleEpoch
+            // The new link wraps the node's key (ADR 0109 point 6): its epoch, judged under the node's row lock — taken
+            // after the share row's (scope → share → node, every guest write's order), so the share row is locked here
+            // first without loading it ([SharingStore.lockShareRow]); the spend below then finds the lock its own.
+            store.lockShareRow(old.id)
+            epochRefusal(
+                old.scopeId, old.nodeId, nodeEpoch, ReissueShareOutcome.NotFound, ReissueShareOutcome.StaleEpoch,
+                ReissueShareOutcome.RekeyPending,
+            )?.let { return@call it }
             when (
                 store.reissue(
                     old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
@@ -625,15 +668,19 @@ class SharingHandler(
         // Only past the password gate: a locked response names no kind (inbox #329). Read for every role from the one
         // row, so a WRITE_ONLY guest — served no node — learns which application renders the link, and nothing else of
         // the subtree. A trashed root names none, as it serves no node (`ShareDeletedNodeSliceTest`).
-        val rootKind = store.findNode(share.nodeId)?.takeIf { it.deletedAt == null }?.kind
+        val root = store.findNode(share.nodeId)
+        val rootKind = root?.takeIf { it.deletedAt == null }?.kind
+        // ADR 0109 point 6: what a guest's write states as the root's epoch — every unlocked role, WRITE_ONLY included
+        // (its identity's `K_up` is wrapped to the root's drop key, which a re-key replaces).
+        val rootEpoch = root?.epoch
         if (ShareAccessPolicy.canView(share.role)) {
             val nodes = store.subtree(share.scopeId, share.nodeId)
-            return ResolveShareOutcome.Found(share, nodes, rootKind, store.attachmentTags(share.scopeId, nodes.map { it.id }))
+            return ResolveShareOutcome.Found(share, nodes, rootKind, rootEpoch, store.attachmentTags(share.scopeId, nodes.map { it.id }))
         }
         // WRITE_ONLY: the minimal capability — no nodes; only the root's kind. The client seals its uploads under its own
         // identity key, wrapped to the root node's drop public key (served sealed under `K_share` in place of the wrap, ADR
         // 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
-        return ResolveShareOutcome.Found(share, emptyList(), rootKind)
+        return ResolveShareOutcome.Found(share, emptyList(), rootKind, rootEpoch)
     }
 
     /**
@@ -666,7 +713,7 @@ class SharingHandler(
      *  § 10), in this transaction, once the identity is stored — a replay stores nothing and records nothing. */
     fun createIdentity(
         shareId: String, pwToken: String?, writeToken: String?, identityId: String, sealedDisplayName: String,
-        wrappedIdentityKey: String?, seen: ClientSeen?,
+        wrappedIdentityKey: String?, nodeEpoch: Int, seen: ClientSeen?,
     ): CreateIdentityOutcome {
         val share = gate.activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
         when (gate.passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
@@ -692,6 +739,13 @@ class SharingHandler(
             // The link again, under the row lock its delete holds: gated only above, a guest named itself on a link
             // deleted in between, and nothing would ever drop that identity.
             if (!store.admitsGuests(shareId)) return@createOrConflict CreateIdentityOutcome.NotFound
+            // ADR 0109 point 6: a READ_WRITE guest's name is sealed under the root's key, a WRITE_ONLY guest's `K_up` to the
+            // root's drop key — both replaced by a re-key. The root's epoch as the guest read it (`PublicShare.rootEpoch`),
+            // under the root's row lock, taken after the share row's (every guest write's order: share → node).
+            epochRefusal(
+                share.scopeId, share.nodeId, nodeEpoch, CreateIdentityOutcome.NotFound, CreateIdentityOutcome.StaleEpoch,
+                CreateIdentityOutcome.RekeyPending,
+            )?.let { return@createOrConflict it }
             val token = store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
                 ?: return@createOrConflict CreateIdentityOutcome.IdTaken
             guestWriteRecords.record(seen, identityId, GuestWriteObject.IDENTITY, identityId, GuestWriteRecords.NAME)

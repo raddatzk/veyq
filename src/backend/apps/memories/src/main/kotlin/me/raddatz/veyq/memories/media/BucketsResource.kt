@@ -8,6 +8,7 @@ import me.raddatz.veyq.memories.generated.model.MoveMediaRequest
 import me.raddatz.veyq.memories.generated.model.RenameBucketRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -44,7 +45,7 @@ class BucketsResource(
         when (
             val o = handler.createBucket(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), createBucketRequest.bucketId.toString(),
-                createBucketRequest.sealedName, createBucketRequest.parentBucketId?.toString(),
+                createBucketRequest.sealedName, createBucketRequest.parentBucketId?.toString(), createBucketRequest.nodeEpoch.validated(),
             )
         ) {
             is CreateBucketOutcome.Ok -> Response.ok(toSummary(o.bucket)).build()
@@ -52,7 +53,10 @@ class BucketsResource(
         }
 
     override fun renameBucket(scopeId: UUID, nodeId: UUID, bucketId: UUID, renameBucketRequest: RenameBucketRequest): Response =
-        when (val o = handler.renameBucket(identity.principal.name, scopeId.toString(), nodeId.toString(), bucketId.toString(), renameBucketRequest.sealedName)) {
+        when (val o = handler.renameBucket(
+            identity.principal.name, scopeId.toString(), nodeId.toString(), bucketId.toString(), renameBucketRequest.sealedName,
+            renameBucketRequest.nodeEpoch.validated(),
+        )) {
             is RenameBucketOutcome.Ok -> Response.ok(toSummary(o.bucket)).build()
             is HttpFailure -> httpError(o)
         }

@@ -84,7 +84,7 @@ class GuestWriteRecordDepotSliceTest {
         blob.stage(fakeStore, QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(uploadId)!!.storageKey })
         val expectedField = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
         given().contentType(ContentType.JSON).header("X-Forwarded-For", xff)
-            .body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"$expectedField}""")
+            .body("""{"contributorToken":"${link.token}","nodeEpoch":0,"uploadId":"$uploadId"$expectedField}""")
             .`when`().post("/api/shares/${link.shareId}/files/$file/content").then()
     }
 

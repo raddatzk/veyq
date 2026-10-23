@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.RequestClient
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
@@ -68,7 +69,7 @@ class ShareMediaResource(
         return when (
             val o = handler.complete(
                 shareId, xSharePassword, shareMediaBatchRequest.contributorToken, items, shareMediaBatchRequest.nodeId?.toString(),
-                client.seen(),
+                client.seen(), shareMediaBatchRequest.nodeEpoch.validated(),
             )
         ) {
             is ShareMediaCompleteOutcome.Results -> Response.ok(

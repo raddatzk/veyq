@@ -249,6 +249,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   90 a dead rule in Depot's own stylesheet (`src/web/src/features/depot/depot.css`) — rejected: the second application's
      sheet (inbox #517 moved `styles/pdf.css` there) is read as well; 89 alone would stay green if the guard's walk
      narrowed to Memories' directory, which is where the first application sheet happened to sit
+  91 `completeMedia`'s per-item `nodeEpoch` declaration dropped, the field still on the batch's items — rejected:
+     `validate_write_concurrency` reads epoch-shaped fields one level into a batch's items and requires each to be
+     declared (ADR 0109 point 6). Before, the guard resolved top-level properties only, so a per-item epoch was invisible
+  92 `commitNodeRekey`'s `409` no longer naming `node_rekey_pending` — rejected: an epoch declaration owes both of its
+     refusals in the `409`, so a client meeting the one that means "retry" finds it documented
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -312,6 +317,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      stands. **Left open on purpose** — the same data-flow gap as 25: a constant holding the whole name IS caught,
      and the realistic regression (a hand parse in the moderation CR's guest-write path) spells the name. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
+  93 a ciphertext column named outside `wrapped_*` / `sealed_*` / `encrypted_*` (`node_ciphertext`) that no re-key
+     rewrites passes `validate_node_rekey_arity`, which derives its subject from column NAMES. **Left open on purpose**:
+     every column sealed under a node key today carries one of those prefixes or is named in the guard, and a guard
+     that read types or seal purposes would need the client's seal map, which the backend does not have. Pinned so the
+     name limit in its docstring is executable.
   84 a baseline entry recording a `500` under `status_code_conformance`, with a reason, passes
      `validate_api_fuzz_baseline`, which keeps `not_a_server_error` out of the baseline by its check name. **Left
      open on purpose** — the same response is red under `not_a_server_error` in the same run, and that entry is the
@@ -1456,6 +1466,29 @@ def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
     return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
 
 
+def forge_batch_epoch_undeclared(root: pathlib.Path) -> str:
+    # The batch's only declaration goes; the per-item field stays, so the reverse angle is all that can catch it.
+    _in_operation(root, "memories/media.openapi.yaml", "completeMedia",
+                  "      x-veyq-concurrency:\n        mode: node-epoch\n        epochs:\n          - field: items.nodeEpoch\n", "")
+    return "completeMedia's items.nodeEpoch declaration dropped, the field kept (must be REJECTED)"
+
+
+def forge_epoch_refusal_unnamed(root: pathlib.Path) -> str:
+    # Only the retry code: stale_epoch stays named, so one named refusal must not cover the other.
+    _in_operation(root, "content.openapi.yaml", "commitNodeRekey", "`node_rekey_pending` — the parent", "`node_rekey_p3nding` — the parent")
+    return "commitNodeRekey's 409 no longer names node_rekey_pending (must be REJECTED)"
+
+
+def forge_rekey_column_named_outside_the_prefixes(root: pathlib.Path) -> str:
+    f = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/node/rekey/NodeRekeyStageEntity.kt"
+    anchor = '    @Column(name = "revision")\n'
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("NodeRekeyStageEntity: anchor not found (moved or drifted?)")
+    probe = '    @Column(name = "node_ciphertext")\n    var nodeCiphertext: String? = null\n\n'
+    f.write_text(f.read_text().replace(anchor, probe + anchor, 1))
+    return "a ciphertext column named node_ciphertext that no re-key rewrites (must stay ACCEPTED — the gap is open)"
+
+
 def forge_revision_field_named_version(root: pathlib.Path) -> str:
     # Both sides renamed together, so every other rule still holds: only the word is wrong.
     _in_operation(root, "account.openapi.yaml", "writeIdentityPins", "          - field: revision\n",
@@ -1617,6 +1650,9 @@ CASES = [
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
     ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
+    ("91", WRITE_CONCURRENCY, forge_batch_epoch_undeclared, False),
+    ("92", WRITE_CONCURRENCY, forge_epoch_refusal_unnamed, False),
+    ("93", "validate_node_rekey_arity.py", forge_rekey_column_named_outside_the_prefixes, True),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),

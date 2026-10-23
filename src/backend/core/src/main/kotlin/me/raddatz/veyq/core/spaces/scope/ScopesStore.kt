@@ -16,6 +16,7 @@ import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.MembershipStore
+import me.raddatz.veyq.core.node.rekey.ScopeRekeying
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
@@ -48,6 +49,8 @@ data class ScopeRow(
     val granter: GranterRow?,
     /** Owner-only: whether a compromise rotation queued on this scope needs an owner (`STALLED`/`FAILED`), or null. */
     val compromiseRotation: CompromiseRotationState? = null,
+    /** Owner-only: the scope's re-key is unfinished — a node lags its current epoch (ADR 0109, derived); null for others. */
+    val rekeying: Boolean? = null,
 )
 
 /** The granter of one grant as a read serves it: its id, its signature over the grant, and its current identity
@@ -252,6 +255,7 @@ class ScopesStore(
                     ScopeRow(
                         it.id, it.kind, it.tenantId, m.role, it.currentEpoch, m.grantedEpoch, grant, it.encryptedName,
                         it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt, granterOf(m), stuck[it.id],
+                        rekeying = if (m.role == MembershipEntity.OWNER) ScopeRekeying.lagsBelow(it.id, it.currentEpoch) else null,
                     )
                 }
             }

@@ -156,7 +156,7 @@ class GuestWriteRecordCoreSliceTest {
         val identityId = UUID.randomUUID().toString()
         given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(t.link.shareId))
             .header("X-Forwarded-For", "203.0.113.10")
-            .body("""{"identityId":"$identityId","sealedDisplayName":"bmFtZQ=="}""")
+            .body("""{"identityId":"$identityId","sealedDisplayName":"bmFtZQ==","nodeEpoch":0}""")
             .`when`().post("/api/shares/${t.link.shareId}/identities").then().statusCode(201)
         val node = guestCreate(t, xff = "203.0.113.11")
         GuestTreeShare.place(t.link, node, t.root, placementRevision = 0).statusCode(204)
@@ -182,7 +182,7 @@ class GuestWriteRecordCoreSliceTest {
         val member = UUID.randomUUID().toString()
         given().header("Authorization", bearer(t.userId)).header("X-Forwarded-For", "203.0.113.12").contentType(ContentType.JSON)
             .body(
-                """{"nodeId":"$member","parentId":"${t.a}","kind":"FOLDER","encryptedName":"bg==","slugToken":"${GuestTreeShare.slug()}",""" +
+                """{"nodeId":"$member","parentId":"${t.a}","parentEpoch":0,"kind":"FOLDER","encryptedName":"bg==","slugToken":"${GuestTreeShare.slug()}",""" +
                     """"orderIndex":0,"wrappedContentKey":"a21lbQ==","epoch":0}""",
             )
             .`when`().post("/api/scopes/${t.scopeId}/nodes").then().statusCode(201)
@@ -427,7 +427,7 @@ class GuestWriteRecordCoreSliceTest {
         var spec = given().contentType(ContentType.JSON).header("X-Contributor-Token", t.link.token).header("X-Forwarded-For", xff)
         if (portHeader != null) spec = spec.header(ClientAddress.PORT_HEADER, portHeader)
         spec.body(
-            """{"nodeId":"$id","parentId":"${t.a}","kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
+            """{"nodeId":"$id","parentId":"${t.a}","parentEpoch":0,"kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
                 """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
         ).`when`().post("/api/shares/${t.link.shareId}/nodes").then().statusCode(201)
         return id
@@ -436,7 +436,7 @@ class GuestWriteRecordCoreSliceTest {
     /** A guest's create that a switched-off link refuses; it is refused before any write. */
     private fun guestCreateRefused(t: Tree, xff: String) {
         given().contentType(ContentType.JSON).header("X-Contributor-Token", t.link.token).header("X-Forwarded-For", xff).body(
-            """{"nodeId":"${UUID.randomUUID()}","parentId":"${t.a}","kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
+            """{"nodeId":"${UUID.randomUUID()}","parentId":"${t.a}","parentEpoch":0,"kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
                 """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
         ).`when`().post("/api/shares/${t.link.shareId}/nodes").then().statusCode(org.hamcrest.Matchers.not(201))
     }

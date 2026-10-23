@@ -3,7 +3,7 @@ package me.raddatz.veyq.core.tasks
 import java.time.Instant
 
 /** Where a rotation an account rotation queued on one scope stands (uc.account.rotate-keys §9, ADR 0060 Decision 6). */
-enum class CompromiseRotationState { WAITING, STALLED, SECURED, FAILED }
+enum class CompromiseRotationState { WAITING, STALLED, REKEYING, SECURED, FAILED }
 
 /** The facts one rotator's state on one scope is derived from — every one read from a row the server holds. */
 data class CompromiseRotationFacts(
@@ -17,6 +17,8 @@ data class CompromiseRotationFacts(
     val jobMaxAttempts: Int,
     /** Whether some owner of the scope holds a grant there and has not declined the covering job. */
     val claimableByAnOwner: Boolean,
+    /** Whether a live or trashed node of the scope still carries a key minted before its current epoch (ADR 0109). */
+    val nodesLag: Boolean = false,
 )
 
 /**
@@ -34,19 +36,26 @@ data class CompromiseRotationFacts(
  *  4. It is live and no owner may claim it → `STALLED` (uc.account.rotate-keys E4).
  *  5. Otherwise `WAITING`.
  *
+ * And a `SECURED` that rule 1 or 2 answers is `REKEYING` while a node of the scope lags the current epoch (ADR 0109
+ * point 1): the new epoch is in, but whatever is added inside a node not re-keyed yet seals under a key the old
+ * identity holds. A rotation is secured only once its re-key is done.
+ *
  * The error direction is the safe one: a rotator re-admitted after someone else's rotation can read `FAILED`, and a
  * re-queue then costs one redundant rotation.
  */
 object CompromiseRotationPolicy {
     fun state(f: CompromiseRotationFacts, now: Instant): CompromiseRotationState = when {
-        f.rotatorGrantedEpoch == null || f.rotatorGrantedEpoch < f.scopeCurrentEpoch -> CompromiseRotationState.SECURED
-        f.jobStatus == JobEntity.DONE -> CompromiseRotationState.SECURED
+        f.rotatorGrantedEpoch == null || f.rotatorGrantedEpoch < f.scopeCurrentEpoch -> secured(f)
+        f.jobStatus == JobEntity.DONE -> secured(f)
         f.jobStatus == JobEntity.FAILED -> CompromiseRotationState.FAILED
         f.jobStatus == JobEntity.LEASED && f.jobLeaseExpiresAt?.isBefore(now) == true && f.jobAttempts >= f.jobMaxAttempts ->
             CompromiseRotationState.FAILED
         !f.claimableByAnOwner -> CompromiseRotationState.STALLED
         else -> CompromiseRotationState.WAITING
     }
+
+    private fun secured(f: CompromiseRotationFacts): CompromiseRotationState =
+        if (f.nodesLag) CompromiseRotationState.REKEYING else CompromiseRotationState.SECURED
 
     /**
      * What a scope's row shows its owners (D10): `FAILED` if any rotator's rotation failed, else `STALLED` if any

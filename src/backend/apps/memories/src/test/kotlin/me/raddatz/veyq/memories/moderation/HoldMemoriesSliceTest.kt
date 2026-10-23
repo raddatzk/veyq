@@ -193,7 +193,7 @@ class HoldMemoriesSliceTest {
         val memory = seedNode(m.scopeId, "MEMORY", wrappedContentKey = CONTENT_KEY)
         val shareId = share(m.userId, memory, role = "READ_WRITE")
         val identity = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId))
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"Z3Vlc3Q="}""")
             .`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract()
         val w = World(
             m.userId, m.scopeId, memory, shareId, identity.path("identityId"), identity.path("contributorToken"),

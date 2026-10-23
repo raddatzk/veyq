@@ -45,6 +45,8 @@ sealed interface CreateShareNodeOutcome {
     /** The epoch the guest sealed with is above the scope's current one (or the scope has none) — a 409, nothing
      *  stored (ADR 0080 Decision 6, the rule a member's placement off the root follows). */
     object StaleEpoch : CreateShareNodeOutcome, HttpFailure by Failures.staleEpoch
+    /** The parent is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing stored. */
+    object RekeyPending : CreateShareNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** Creating the kind needs a capability that is switched off ([me.raddatz.veyq.core.node.NodeKindRules.capabilityToCreate],
      *  asked by `createInScope` for a guest as for a member). Unreachable today: no kind a guest may create names one.
      *  So `createShareNode`'s contract names no `422 capability_disabled` yet: it joins the contract, with a test that
@@ -69,6 +71,10 @@ sealed interface UpdateShareNodeOutcome {
     object IllegalScope : UpdateShareNodeOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object SlugTaken : UpdateShareNodeOutcome, HttpFailure by Failures.slugTaken
     object StalePlacement : UpdateShareNodeOutcome, HttpFailure by Failures.stalePlacement
+    /** `parentEpoch` is not the destination's stored epoch (ADR 0109 point 6) — nothing written; the guest re-resolves. */
+    object StaleEpoch : UpdateShareNodeOutcome, HttpFailure by Failures.staleEpoch
+    /** The destination is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written. */
+    object RekeyPending : UpdateShareNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** Unreachable through the API (every field is required there) — kept so no handler outcome is a 500. */
     object InvalidRequest : UpdateShareNodeOutcome, HttpFailure by Failures.invalidRequest
 }
@@ -137,7 +143,8 @@ class ShareNodesHandler(
      *  transaction — a replay ([NodesHandler.createReplay]) stored nothing and records nothing. */
     fun create(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, seen: ClientSeen?,
+        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, parentEpoch: Int,
+        seen: ClientSeen?,
     ): CreateShareNodeOutcome {
         // A create adds a row, so it spends the upload budget (ADR 0051, `@RateLimit(key = SHARE)`) — after every check
         // of the gate, so an unauthorized caller spends nothing.
@@ -175,14 +182,15 @@ class ShareNodesHandler(
             if (writeOnly && !WriteOnlyGuestKinds.allows(writeOnlyKinds, gated.rootKind, kind)) {
                 return@createOrConflict CreateShareNodeOutcome.IllegalScope
             }
-            // ADR 0080 decision 6: the epoch the guest sealed with, stored as sent — its name and wrap bind it, so the
-            // reader opens at that number. A guest never writes at the scope root, so it keys nothing of the entry (that
-            // is under the parent's key); `createInScope` checks it under this scope lock with the rule off the root (at
-            // or below the current one, else `stale_epoch`), as a member's placement there.
+            // ADR 0109 point 6 (narrowing ADR 0080 decision 6): the new node's key is minted at the scope's CURRENT epoch,
+            // a guest's too, and its entry is sealed under the parent's key at the parent's stated epoch — both checked by
+            // `createInScope` under this scope lock and the parent's row lock. A guest whose page holds keys from before a
+            // rotation is told `stale_epoch` and re-resolves the link, whose wrap opens the new key.
             fromNodes(
                 nodes.createInScope(
                     scopeId, nodeId, parentId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey,
-                    wrappedMeta = null, editor = PrincipalKey.Share(gated.identityId), boundary = SubtreeBoundary(root),
+                    wrappedMeta = null, parentEpoch = parentEpoch, editor = PrincipalKey.Share(gated.identityId),
+                    boundary = SubtreeBoundary(root),
                     identityWriter = if (writeOnly) gated.identityId else null,
                 ),
             ).also {
@@ -197,7 +205,8 @@ class ShareNodesHandler(
      *  move re-seals the name, so the guest is its last editor), in this transaction. */
     fun update(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String,
-        encryptedName: String, slugToken: String, wrappedContentKey: String, placementRevision: Long, seen: ClientSeen?,
+        encryptedName: String, slugToken: String, wrappedContentKey: String, placementRevision: Long, parentEpoch: Int,
+        seen: ClientSeen?,
     ): UpdateShareNodeOutcome {
         // A placement adds no row, so it spends no budget (`@RateLimitExempt` on the route).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false, onlyRole = ShareEntity.READ_WRITE)) {
@@ -239,12 +248,13 @@ class ShareNodesHandler(
                     GuestNodeRules.readWriteAllows(rules, destinationKind, GuestNodeOp.MoveChildIn(node.kind))
             }
             if (!allowed) return@call UpdateShareNodeOutcome.IllegalScope
-            // No epoch: the node keeps its stored one (a bounded placement never touches the scope root).
+            // No epoch of its own: the node keeps its stored one (a bounded placement never touches the scope root). The
+            // destination's, stated as read, is checked under its row lock (ADR 0109 point 6).
             val placement = NodesHandler.PlacementRequest(
                 parentId = parentId, encryptedName = encryptedName, slugToken = slugToken,
-                wrappedContentKey = wrappedContentKey, epoch = null, placementRevision = placementRevision,
+                wrappedContentKey = wrappedContentKey, epoch = null, placementRevision = placementRevision, parentEpoch = parentEpoch,
             )
-            when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, PrincipalKey.Share(gated.identityId), SubtreeBoundary(root))) {
+            when (nodes.updateInScope(scopeId, nodeId, placement, null, null, null, null, PrincipalKey.Share(gated.identityId), SubtreeBoundary(root))) {
                 UpdateNodeOutcome.Updated -> UpdateShareNodeOutcome.Updated.also {
                     guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
                 }
@@ -252,10 +262,12 @@ class ShareNodesHandler(
                 UpdateNodeOutcome.IllegalStructure -> UpdateShareNodeOutcome.IllegalStructure
                 UpdateNodeOutcome.SlugTaken -> UpdateShareNodeOutcome.SlugTaken
                 UpdateNodeOutcome.StalePlacement -> UpdateShareNodeOutcome.StalePlacement
+                UpdateNodeOutcome.StaleEpoch -> UpdateShareNodeOutcome.StaleEpoch
+                UpdateNodeOutcome.RekeyPending -> UpdateShareNodeOutcome.RekeyPending
                 UpdateNodeOutcome.IncompletePlacement, UpdateNodeOutcome.MissingMetaRevision -> UpdateShareNodeOutcome.InvalidRequest
-                // No epoch and no meta is sent, and the gate refused a space that serves no guests.
-                UpdateNodeOutcome.StaleEpoch, is UpdateNodeOutcome.StaleMeta, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting ->
-                    error("a guest placement states no epoch and no meta, and passed the gate")
+                // No meta is sent, and the gate refused a space that serves no guests.
+                is UpdateNodeOutcome.StaleMeta, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting ->
+                    error("a guest placement states no meta, and passed the gate")
             }
         }
     }
@@ -356,9 +368,11 @@ class ShareNodesHandler(
         CreateNodeOutcome.SlugTaken -> CreateShareNodeOutcome.SlugTaken
         CreateNodeOutcome.IdTaken -> CreateShareNodeOutcome.IdTaken
         CreateNodeOutcome.StaleEpoch -> CreateShareNodeOutcome.StaleEpoch
+        CreateNodeOutcome.RekeyPending -> CreateShareNodeOutcome.RekeyPending
         CreateNodeOutcome.CapabilityDisabled -> CreateShareNodeOutcome.CapabilityDisabled
         // The gate refused a space that serves no guests, and `createInScope` answers none of the member gate's refusals.
-        CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting ->
+        // A guest create always names its parent and states its epoch (the contract requires `parentEpoch`).
+        CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting, CreateNodeOutcome.InvalidRequest ->
             error("a guest create past the gate cannot answer $o")
     }
 }

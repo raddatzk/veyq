@@ -29,11 +29,22 @@ tags:
       `/api/scopes/{scopeId}/trash/nodes` — the trash hangs off the *space*, not the node, because a trashed
       node has no live node to hang a tab from ([ADR 0061](../../docs/decisions/0061-node-deletion-reversible-node-trash.md)).
       Distinct from the `/api/scopes` scopes resource.
+  - name: rekey
+    description: >
+      A scope's re-key after a rotation ([ADR 0109](../../docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
+      uc.spaces.rekey-after-rotation): every node, trashed ones included, listed with the epoch its key was minted
+      at; one node's core parts; its staged batches and its one-transaction commit. The `/api/scopes/{scopeId}/rekey`
+      subtree. Each application stages its own fields through its own operation under the same re-key id.
 paths:
   /api/scopes/{scopeId}/nodes:
     post:
       tags: [content]
       operationId: createNode
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: parentEpoch
+            requiredWith: [parentId]
       summary: Create a node of any kind in the scope's tree.
       description: >
         Adds a node under `parentId` (or the scope root if omitted). The client mints the node's id (`nodeId`,
@@ -79,7 +90,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409":
-          description: A sibling already has that slug (`slug_taken`), the `nodeId` is already taken (`id_taken`), the `epoch` is not the scope's current one (`stale_epoch` — the caller's grant lags a rotation; nothing stored), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: >
+            A sibling already has that slug (`slug_taken`), the `nodeId` is already taken (`id_taken`), the `epoch` is not
+            the scope's current one or `parentEpoch` is below the parent's stored epoch (`stale_epoch` — the caller holds a
+            key from before a rotation; nothing stored, it re-reads), the parent is not re-keyed since the last rotation
+            yet (`node_rekey_pending` — nothing stored, it retries once the re-key reached the parent, ADR 0109 point 6),
+            or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -161,6 +177,11 @@ paths:
           - field: placementRevision
             requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]
             conflictCode: stale_placement
+        epochs:
+          - field: nodeEpoch
+            requiredWith: [wrappedMeta]
+          - field: parentEpoch
+            requiredWith: [parentId]
       summary: Move / rename (one placement write), reorder, or re-seal a node's payload.
       description: >
         Partial update with three independent parts; fields not sent are unchanged.
@@ -178,18 +199,21 @@ paths:
         or writes **nothing** and answers `409 stale_placement` (the client re-reads the node and rebuilds, ADR
         0077). Structure only: the destination is the root or a live node of the same scope, the kind's placement
         rule admits it there, it is neither the node nor inside the node's subtree (else `422
-        illegal_structure`), and the slug is free there (`409 slug_taken`). **Epoch** (ADR 0080 Decision 4): when
-        the destination is the scope root the entry is sealed under `K_SC`, so `epoch` must be the scope's current
-        one (else `409 stale_epoch`, nothing stored) and is stored; a move out of the root stores the request's
-        `epoch`; a placement between two non-root parents keeps the node's stored epoch. At any destination an
-        `epoch` above the scope's current one is `409 stale_epoch` (no such epoch exists yet).
+        illegal_structure`), and the slug is free there (`409 slug_taken`). **Epoch** (ADR 0109 point 6): a node's
+        epoch is the epoch its key was minted at, and a placement never changes it — `epoch` must be the node's stored
+        one (else `409 stale_epoch`). At the scope root the entry is sealed under `K_SC` at it, so a node there must be
+        at the scope's current epoch: one not re-keyed since the last rotation is `409 node_rekey_pending`. Below the
+        root the entry is sealed under the destination parent's key, whose epoch the request states (`parentEpoch`):
+        below the parent's stored epoch is `409 stale_epoch`, a parent not re-keyed yet `409 node_rekey_pending`.
 
         **Reorder** = `orderIndex`, with no revision.
 
         **Meta** = a re-sealed `wrappedMeta` with the `metaRevision` it was built from — required whenever
         `wrappedMeta` is sent (else `400 invalid_request`); the server compare-and-sets it and stores
         `metaRevision + 1`, or writes **nothing** (a placement in the same request included) and answers `409
-        stale_revision` carrying the current blob and revision (ADR 0077).
+        stale_revision` carrying the current blob and revision (ADR 0077). It is sealed under the node's own key, so it
+        states the node's epoch (`nodeEpoch`): below the stored one is `409 stale_epoch`, a node not re-keyed since the
+        last rotation `409 node_rekey_pending` (ADR 0109 point 6).
       security:
         - bearerAuth: []
       parameters:
@@ -228,9 +252,10 @@ paths:
             A sibling at the destination already has that slug (`slug_taken`); the space is being deleted and
             read-only (`scope_deleting`, uc.spaces.delete-group A4); the node was moved or renamed since the stated
             `placementRevision` (`stale_placement` — nothing was written; the client re-reads the node and rebuilds
-            the placement against it, ADR 0080 Decision 3); a placement at the scope root stated an `epoch` that is
-            not the scope's current one, or any placement one above it (`stale_epoch` — nothing was written, ADR 0080
-            Decision 4); or the node's
+            the placement against it, ADR 0080 Decision 3); a placement stated an `epoch` that is not the node's, or a `nodeEpoch` / `parentEpoch` below the stored one
+            (`stale_epoch` — nothing was written; the client re-reads, ADR 0109 point 6); the node at the scope root, the
+            destination parent or the node a meta write seals under is not re-keyed since the last rotation yet
+            (`node_rekey_pending` — nothing was written; the client retries after the re-key reached it); or the node's
             `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob and revision —
             nothing was written, ADR 0077). Every code but `stale_revision` carries `code` alone.
           content:
@@ -286,6 +311,8 @@ paths:
         fields:
           - field: metaRevision
             required: true
+        epochs:
+          - field: nodeEpoch
       summary: Make an uploaded image the node's cover - the blob and the sealed meta naming it, in one write (inbox #411).
       description: >
         A cover is an image attached to the node itself, in its `COVER` slot (core's one-blob-per-slot node
@@ -322,6 +349,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/SetNodeCoverRequest" }
             example:
+              nodeEpoch: 0
               uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
               expectedBlobId: null
               wrappedMeta: d3JhcHBlZC1tZXRh
@@ -358,6 +386,8 @@ paths:
         fields:
           - field: metaRevision
             required: true
+        epochs:
+          - field: nodeEpoch
       summary: Remove the node's cover - the blob and the sealed meta that named it, in one write (inbox #411).
       description: >
         The cover blob goes (its row, and its store objects on the reclaim list, in the same transaction) and the
@@ -379,6 +409,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RemoveNodeCoverRequest" }
             example:
+              nodeEpoch: 0
               blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
               wrappedMeta: d3JhcHBlZC1tZXRh
               metaRevision: 4
@@ -405,6 +436,10 @@ paths:
     post:
       tags: [content]
       operationId: restoreNode
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: parentEpoch
       summary: Restore a soft-deleted subtree out of the space's trash (uc.memory.delete-node).
       description: >
         Clears `deleted_at` across the subtree and writes the supplied `slugToken` back onto its root, returning
@@ -424,7 +459,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RestoreNodeRequest" }
-            example: { slugToken: c2x1Zy10b2tlbi1iYXNlNjQ= }
+            example: { slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=, parentEpoch: 0 }
       responses:
         "204":
           description: The subtree is back in the tree.
@@ -442,7 +477,11 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: A live sibling already holds that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: >
+            A live sibling already holds that slug (`slug_taken`); `parentEpoch` is below the stored epoch of the key the
+            entry is re-sealed under (`stale_epoch`, the client re-reads) or that key's node is not re-keyed since the last
+            rotation (`node_rekey_pending`, the client retries — ADR 0109 point 6); or the space is being deleted and
+            read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -487,6 +526,210 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
 
+  /api/scopes/{scopeId}/rekey/nodes:
+    get:
+      tags: [rekey]
+      operationId: listRekeyNodes
+      summary: Every node of the scope, trashed ones included, with the epoch its key was minted at (uc.spaces.rekey-after-rotation step 1).
+      description: >
+        What a re-key walks ([ADR 0109](../../docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)):
+        the scope's current epoch and every node of it, live **and** trashed — a trashed node is re-keyed too, so a
+        restore never brings back a key the excluded party holds (ADR 0109 point 1). A node whose `epoch` is below
+        `currentEpoch` still has its key from before the rotation. The rows carry what `listNodes` carries, plus
+        `trashed`. Only an owner of the scope who holds its current grant and is not excluded by a live rotation job
+        may read it — the one who may commit a re-key (CR decision 5); anyone else is `403`. Nothing here is new to
+        the server: it is the tree and the trash it already serves, unfiltered by `deleted_at`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      responses:
+        "200":
+          description: The scope's current epoch and every node of it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RekeyNodeList" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: >
+            The caller is a member but may not re-key the scope — not an owner (`not_scope_owner`), excluded by a live
+            rotation job (`rotation_excluded`), or its grant lags the current epoch (`grant_behind`) — or the tenant
+            is suspended.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+  /api/scopes/{scopeId}/rekey/nodes/{nodeId}:
+    get:
+      tags: [rekey]
+      operationId: getNodeRekeyParts
+      summary: The core-owned fields a node's re-key re-seals besides its own row (uc.spaces.rekey-after-rotation step 2).
+      description: >
+        Every field core stores under the node's key or as a wrap of it that is not on the node's row: the blobs in its
+        attachment slots (cover, banner, a file's content — each `K_blob` wrapped under the node's key), every live
+        share rooted on it (its recovery copy, from which the re-keyer opens `K_share` to re-wrap the new key, ADR 0109
+        point 4) and every guest identity of those shares (its `K_up` sealed to the node's drop public key, ADR 0109
+        point 5; a `READ_WRITE` identity's name under the node's key). Rows a `WRITE_ONLY` guest sealed under its own
+        `K_up` are not listed: the re-key leaves them as they are. Live or trashed node alike. The caller's rights are
+        `listRekeyNodes`'s.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "200":
+          description: The node's core-owned re-key parts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeRekeyParts" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: As `listRekeyNodes`.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or node in it, or the caller is not an accepted member of the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+  /api/scopes/{scopeId}/rekey/nodes/{nodeId}/{rekeyId}/parts:
+    post:
+      tags: [rekey]
+      operationId: stageNodeRekey
+      summary: Stage one batch of a node's re-sealed core fields under a re-key id (CR decision 1).
+      description: >
+        A node with more fields than one request carries (a folder of many children, a link with many guests) sends
+        them here first, up to 256 of each kind per call, under a re-key id the client mints; `commitNodeRekey` swaps
+        every staged value in at once. A value staged twice for the same row is replaced. Nothing staged is served or
+        read before the commit, and a stage no commit took expires after a day. Each staged value is ciphertext the
+        commit would carry anyway: the server learns nothing it would not learn from the commit. `fromEpoch` is the
+        node's epoch as the re-keyer read it; a node re-keyed since (another owner finished it) is `409 stale_epoch`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/RekeyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeRekeyStage" }
+      responses:
+        "204":
+          description: The batch is staged.
+        "400":
+          description: Malformed request (a list over 256 entries, a malformed value).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: As `listRekeyNodes`.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or node in it, or the caller is not an accepted member of the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            The node's epoch is no longer `fromEpoch` (`stale_epoch` — it was re-keyed since; the client re-reads), or the
+            node does not lag the scope's current epoch (`stale_epoch` too: nothing to re-key), or the space is being
+            deleted and read-only (`scope_deleting`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+  /api/scopes/{scopeId}/rekey/nodes/{nodeId}/{rekeyId}:
+    post:
+      tags: [rekey]
+      operationId: commitNodeRekey
+      x-veyq-concurrency:
+        mode: revision
+        fields:
+          - field: placementRevision
+            conflictCode: stale_placement
+          - field: metaRevision
+        epochs:
+          - field: nodeEpoch
+          - field: parentEpoch
+            requiredWith: [parentId]
+      summary: Commit one node's re-key in one transaction (ADR 0109 point 2).
+      description: >
+        The node gets the key the client minted: its own entry (`encryptedName`, `slugToken`, `wrappedContentKey`)
+        under its parent's **current** key — `K_SC` at the current epoch at the scope root, the parent node's key
+        below it, a guest's `K_up` for a guest's identity folder — sealed at the current epoch and at
+        `placementRevision + 1`; its `wrappedMeta` re-sealed under the new key (`metaRevision + 1`); its
+        `sealedDropPrivateKey` replaced when it had one (ADR 0109 point 5). Every value staged under `rekeyId` — core's
+        (`stageNodeRekey`) and each application's — is swapped in by the same transaction: each child's entry (its
+        current key re-wrapped under the new one, its name re-sealed, its slug token recomputed; `placementRevision`
+        of the child + 1), the blobs in the node's slots, each share's `wrap` and `sealedDropPublicKey`, each guest
+        identity's `wrappedIdentityKey` and name, and the application's fields (its participant, fail closed). The
+        node's `epoch` becomes `epoch`, the scope's current one. No store object is read or written.
+
+        **Fail closed.** Every row the server knows to be sealed under the node's key or a wrap of it must have a
+        staged value — every child (live or trashed; a guest's identity folder excepted, its entry is under `K_up`),
+        every attachment blob, every live share, every identity of those shares, and each application's rows — else
+        `409 rekey_parts_missing`, nothing written. A staged child that is no longer the node's child, or whose
+        `placementRevision` moved since it was staged, is `409 rekey_parts_stale`: the client re-stages.
+
+        **Order and refusals** (ADR 0109 point 6). Checked under the scope's and the node's row lock, which every
+        write sealing under the node's key takes too: `nodeEpoch` is the node's epoch as the re-keyer read it — not
+        the stored one is `409 stale_epoch` (another owner re-keyed it); the parent — `parentEpoch`, with `parentId`
+        — below the scope's current epoch is `409 node_rekey_pending` (top-down: the parent first); `epoch` not the
+        scope's current one is `409 stale_epoch`. The caller's rights are `listRekeyNodes`'s.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/RekeyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommitNodeRekeyRequest" }
+      responses:
+        "204":
+          description: The node is re-keyed; its epoch is the scope's current one.
+        "400":
+          description: Malformed request (a missing field, a `parentId` that is not the node's parent).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: As `listRekeyNodes`.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or node in it, or the caller is not an accepted member of the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            Nothing was written. `stale_epoch` — the node's epoch is not `nodeEpoch` (re-keyed since) or `epoch` is not
+            the scope's current one; `node_rekey_pending` — the parent is not re-keyed yet; `stale_placement` — the node
+            was moved or renamed since `placementRevision`; `stale_revision` — its `wrappedMeta` moved since
+            `metaRevision`; `rekey_parts_missing` — a row sealed under the node's key has no staged value;
+            `rekey_parts_stale` — a staged child moved since it was staged; `slug_taken` — a re-computed token collides
+            (a defect: the set of names under a parent does not change); `scope_deleting`.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rekey_parts_missing } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -507,13 +750,21 @@ components:
       required: true
       description: Opaque id of the node.
       schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+    RekeyId:
+      name: rekeyId
+      in: path
+      required: true
+      description: A client-minted id of one node's re-key attempt; what its staged parts are kept under until the commit.
+      schema: { type: string, format: uuid, example: 6c7c3f0e-2a9b-1d4a-6e8b-2c1f2d3e4a5b }
 
   responses:
     CoverConflict:
       description: >
         The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob and
         revision - nothing was written and the upload is still open, ADR 0077); the cover slot holds another blob than
-        the one stated (`cover_stale`, with `currentBlobId` - nothing was attached, the upload was spent); or the
+        the one stated (`cover_stale`, with `currentBlobId` - nothing was attached, the upload was spent); `nodeEpoch`
+        is below the node's stored epoch (`stale_epoch` - the client re-reads) or the node is not re-keyed since the last
+        rotation (`node_rekey_pending` - the client retries; nothing was written either way, ADR 0109 point 6); or the
         space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
       content:
         application/json:
@@ -573,9 +824,10 @@ components:
             The scope **content-key epoch** this node is tagged with (ADR 0024): a scope-root node's name / slug /
             content-key wrap are sealed under `K_SC` at it (below the root they are under the parent's key, and every
             seal still binds the epoch, ADR 0072).
-            Must be the scope's **current** epoch (else `409 stale_epoch`, nothing stored — ADR 0024 Decision 6: a
-            write under an older epoch would be readable by a member removed since); omitted/absent = 0 (the
-            pre-rotation baseline). A member reads a node of epoch `k` iff they hold an epoch ≥ `k`.
+            Must be the scope's **current** epoch at any parent (else `409 stale_epoch`, nothing stored — ADR 0024
+            Decision 6, ADR 0109 point 6: a key minted at an older epoch is the epoch the node keeps, and a rotation
+            re-keys every node below it); omitted/absent = 0 (the pre-rotation baseline). It is the epoch the node's key
+            is minted at.
           minimum: 0
           default: 0
           example: 0
@@ -594,6 +846,16 @@ components:
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        parentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            With `parentId`: the parent's epoch as the caller read it (`NodeSummary.epoch`) — the epoch of the key the
+            entry is sealed under (ADR 0109 point 6). Below the parent's stored epoch is `409 stale_epoch`; a parent not
+            re-keyed since the last rotation is `409 node_rekey_pending`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     UpdateNodeRequest:
       type: object
@@ -663,10 +925,10 @@ components:
           x-veyq-visibility: structure
           type: integer
           description: >
-            Placement write — the scope content-key epoch the entry was sealed at (ADR 0024). Must be the scope's
-            current one when the destination is the scope root (else `409 stale_epoch`); stored on a move into or
-            out of the root; between two non-root parents the node keeps its stored epoch. Above the current one it
-            is refused at any destination (`409 stale_epoch`, ADR 0080 Decision 4).
+            Placement write — the node's epoch, the epoch its key was minted at, which the entry's seals bind (ADR
+            0072). A placement never changes it, so it must be the node's stored one (else `409 stale_epoch`); at the
+            scope root the entry is under `K_SC` at it, and a node there below the scope's current epoch is `409
+            node_rekey_pending` (ADR 0109 point 6).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
@@ -702,6 +964,26 @@ components:
             ignored without it — a reorder needs no revision, a placement states its own `placementRevision` (ADR
             0077).
           example: 3
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            With `wrappedMeta`: the node's epoch as the caller read it — the payload is sealed under the node's own key
+            (ADR 0109 point 6). Below the stored epoch is `409 stale_epoch`; a node not re-keyed since the last
+            rotation is `409 node_rekey_pending`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        parentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            Placement write to a parent node (`parentId` not null): the destination parent's epoch as the caller read
+            it — the entry is sealed under that parent's key (ADR 0109 point 6). Below its stored epoch is `409
+            stale_epoch`; a parent not re-keyed yet is `409 node_rekey_pending`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     SetNodeCoverRequest:
       type: object
@@ -709,8 +991,18 @@ components:
         Make one upload session - or a new row on an object the node already stores (`shared`) - the node's cover, and
         re-seal the node's `wrappedMeta` with the cover that names it (see `setNodeCover`). Exactly one of `uploadId`
         and `shared`, else `400 invalid_request`.
-      required: [wrappedMeta, metaRevision]
+      required: [wrappedMeta, metaRevision, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The node's epoch as the caller read it: the cover's wrap and the meta are sealed under the node's own key
+            (ADR 0109 point 6). Below the stored epoch is `409 stale_epoch`; a node not re-keyed since the last
+            rotation is `409 node_rekey_pending`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         uploadId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -753,8 +1045,18 @@ components:
     RemoveNodeCoverRequest:
       type: object
       description: Empty the node's cover slot and re-seal the node's `wrappedMeta` without the cover (see `removeNodeCover`).
-      required: [blobId, wrappedMeta, metaRevision]
+      required: [blobId, wrappedMeta, metaRevision, nodeEpoch]
       properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The node's epoch as the caller read it: the cover's wrap and the meta are sealed under the node's own key
+            (ADR 0109 point 6). Below the stored epoch is `409 stale_epoch`; a node not re-keyed since the last
+            rotation is `409 node_rekey_pending`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         blobId:
           x-veyq-visibility: id
           type: string
@@ -862,7 +1164,10 @@ components:
         epoch:
           x-veyq-visibility: structure
           type: integer
-          description: The scope content-key epoch this node is sealed under (ADR 0024); 0 for pre-rotation nodes.
+          description: >
+            The epoch the node's key was minted at (ADR 0109 point 6) — the one every seal of its entry binds; at the
+            scope root its entry is under `K_SC` at it. Every node of a scope is at the scope's current epoch except
+            while a rotation's re-key has not reached it yet; a write sealing under its key states it.
           minimum: 0
           example: 0
         parentId:
@@ -943,7 +1248,7 @@ components:
 
     RestoreNodeRequest:
       type: object
-      required: [slugToken]
+      required: [slugToken, parentEpoch]
       description: >
         The freshly computed slug token the restored root takes under its parent. The server cannot recompute one
         (it is a blinded MAC under the parent's key, ADR 0012 / ADR 0080) and the original was consumed when the delete freed the name,
@@ -956,6 +1261,17 @@ components:
           maxLength: 128
           example: c2x1Zy10b2tlbi1iYXNlNjQ=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        parentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch of the key the entry is re-sealed under, as the caller read it: the live parent's epoch, or at the
+            scope root the node's own (its entry is under `K_SC` at it). Below the stored epoch is `409 stale_epoch`; a
+            node not re-keyed since the last rotation is `409 node_rekey_pending` (ADR 0109 point 6) — a trashed node is
+            re-keyed too, so a restore never brings back a key from before.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         encryptedName:
           type: [string, "null"]
           description: >
@@ -1041,6 +1357,410 @@ components:
           format: date-time
           description: When the scheduled job will hard-erase this subtree — `deletedAt + retention`, **derived** at the resource boundary from the operator's configured window and never stored, so it follows a reconfigured window instead of freezing it at deletion time (ADR 0061 Decision 6). After this instant the subtree is gone and a restore answers 404.
           example: "2026-09-16T10:15:30Z"
+
+    RekeyNodeList:
+      type: object
+      required: [currentEpoch, nodes]
+      properties:
+        currentEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The scope's current epoch — every node is re-keyed once its `epoch` equals it.
+          minimum: 0
+          example: 1
+        nodes:
+          type: array
+          description: Every node of the scope, live and trashed.
+          items: { $ref: "#/components/schemas/RekeyNode" }
+
+    RekeyNode:
+      type: object
+      description: >
+        One node as `listNodes` serves it, live or trashed. `epoch` is the epoch its key was minted at (ADR 0109
+        point 6); a node below the scope's current epoch still has its key from before the rotation.
+      required: [id, kind, encryptedName, slugToken, epoch, wrappedContentKey, metaRevision, placementRevision, trashed]
+      properties:
+        id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: Parent node id, or null at the scope root.
+          example: null
+        kind:
+          $ref: "#/components/schemas/NodeKind"
+        trashed:
+          x-veyq-visibility: flag
+          type: boolean
+          description: The node is in the space's trash (it or an ancestor was soft-deleted). It is re-keyed like a live one.
+          example: false
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The epoch the node's key was minted at (ADR 0109 point 6).
+          minimum: 0
+          example: 0
+        placementRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: As `NodeSummary.placementRevision`.
+          minimum: 0
+          example: 2
+        metaRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: As `NodeSummary.metaRevision`.
+          minimum: 0
+          example: 3
+        encryptedName:
+          type: string
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+        slugToken:
+          type: string
+          contentEncoding: base64
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+        wrappedContentKey:
+          type: string
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+        wrappedMeta:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 8192
+          example: null
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 256
+          example: null
+        shareIdentityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: As `NodeSummary.shareIdentityId` — a guest's identity folder, whose entry is under that identity's `K_up`.
+          example: null
+        wrappedIdentityKey:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+
+    NodeRekeyParts:
+      type: object
+      required: [blobs, shares, identities]
+      properties:
+        blobs:
+          type: array
+          description: Every blob in one of the node's attachment slots whose `K_blob` is wrapped under the node's key.
+          items: { $ref: "#/components/schemas/RekeyBlob" }
+        shares:
+          type: array
+          description: Every share rooted on the node that is not deleted — revoked ones too, which may be re-activated.
+          items: { $ref: "#/components/schemas/RekeyShare" }
+        identities:
+          type: array
+          description: Every guest identity of those shares.
+          items: { $ref: "#/components/schemas/RekeyIdentity" }
+
+    RekeyBlob:
+      type: object
+      required: [blobId, role, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        role:
+          $ref: "_common.openapi.yaml#/components/schemas/BlobRole"
+        wrappedBlobKey:
+          type: string
+          description: The blob's `K_blob` wrapped under the node's key (seal purpose `blob-key`, bound to the role and the node as owner).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
+    RekeyShare:
+      type: object
+      required: [shareId, role, sealedShareKey, hasWrap, hasDropPublicKey]
+      properties:
+        hasWrap:
+          x-veyq-visibility: flag
+          type: boolean
+          description: The link carries a `wrap` of the node's key (READ, READ_WRITE); the re-key stages its new one.
+          example: true
+        hasDropPublicKey:
+          x-veyq-visibility: flag
+          type: boolean
+          description: The link carries the node's drop public key (WRITE_ONLY); the re-key stages the new one, sealed under `K_share`.
+          example: false
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          minLength: 43
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        role:
+          x-veyq-visibility: enum
+          type: string
+          enum: [READ, READ_WRITE, WRITE_ONLY]
+          example: READ
+        sealedShareKey:
+          type: string
+          description: The share's recovery copy (`K_share` under `K_SC` at `sealedShareKeyEpoch`), as `ShareSummary.sealedShareKey`. The re-key opens `K_share` through it and leaves it at its epoch, so `reissueRequired` stays true (ADR 0109 point 4).
+          contentEncoding: base64
+          maxLength: 256
+          example: c2VhbGVkLXNoYXJlLWtleQ==
+        sealedShareKeyEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The epoch the recovery copy is sealed at (as `ShareSummary.sealedShareKeyEpoch`).
+          minimum: 0
+          example: 0
+
+    RekeyIdentity:
+      type: object
+      required: [identityId, shareId]
+      properties:
+        identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          minLength: 43
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: The identity's `K_up` sealed to the node's drop public key (`upload-identity-key`), when it has one.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+        sealedDisplayName:
+          type: [string, "null"]
+          description: The guest's display name, when it is sealed under the node's key (a `READ_WRITE` guest; a `WRITE_ONLY` guest's is under its own `K_up` and is not listed).
+          contentEncoding: base64
+          maxLength: 512
+          example: null
+
+    NodeRekeyStage:
+      type: object
+      description: One batch of a node's re-sealed core fields (`stageNodeRekey`). Every list is optional and at most 256 long.
+      required: [fromEpoch]
+      properties:
+        fromEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The node's epoch as the re-keyer read it (`RekeyNode.epoch`).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        children:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/RekeyChildEntry" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+        blobs:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/RekeyBlobWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+        shares:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/RekeyShareWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+        identities:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/RekeyIdentitySeal" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+
+    RekeyChildEntry:
+      type: object
+      description: >
+        A child's directory entry re-sealed under the node's NEW key: its own (unchanged) key re-wrapped, its name
+        re-sealed, its slug token recomputed, each bound to the child's epoch and `placementRevision + 1`.
+      required: [nodeId, placementRevision, encryptedName, slugToken, wrappedContentKey]
+      properties:
+        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        placementRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The child's placement revision as read; the commit stores it + 1.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        encryptedName:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedContentKey:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RekeyBlobWrap:
+      type: object
+      description: A blob's unchanged `K_blob` re-wrapped under the node's new key (ADR 0109 point 3).
+      required: [blobId, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        wrappedBlobKey:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RekeyShareWrap:
+      type: object
+      description: >
+        A share's new `wrap` — the node's new key under the share's unchanged `K_share`, for every link that carries one
+        (a WRITE_ONLY link carries none) — and, for a share carrying the node's drop public key, the new one sealed under
+        `K_share` (ADR 0109 points 4 and 5).
+      required: [shareId]
+      properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 43, max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_-]{43}")'
+        wrap:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcA==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPublicKey:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RekeyIdentitySeal:
+      type: object
+      description: A guest identity's `K_up` re-sealed to the node's new drop public key, and a `READ_WRITE` guest's name re-sealed under the node's new key (ADR 0109 point 5).
+      required: [identityId]
+      properties:
+        identityId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        wrappedIdentityKey:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDisplayName:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 512
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    CommitNodeRekeyRequest:
+      type: object
+      description: The node's own re-keyed fields (`commitNodeRekey`); every list-shaped part is staged under the re-key id first.
+      required: [nodeEpoch, epoch, placementRevision, metaRevision, encryptedName, slugToken, wrappedContentKey]
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The node's epoch as the re-keyer read it (`RekeyNode.epoch`); not the stored one is `409 stale_epoch`.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The scope's current epoch — the node's epoch after the commit, and the one its new seals bind.
+          minimum: 0
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The node's parent as read; null/absent at the scope root. A parent that is not the node's is `400`.
+          example: null
+        parentEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: With `parentId` — the parent's epoch as read; it must be the scope's current one (top-down), else `409 node_rekey_pending`.
+          minimum: 0
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        placementRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The node's placement revision as read; the commit stores it + 1, the revision the new entry is sealed at.
+          minimum: 0
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        metaRevision:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The node's meta revision as read; with `wrappedMeta` the commit stores it + 1.
+          minimum: 0
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        encryptedName:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedContentKey:
+          type: string
+          description: The node's NEW content key wrapped under its parent's current key (`K_SC` at `epoch` at the scope root, a guest's `K_up` for an identity folder), bound to scope, node, `epoch` and `placementRevision + 1`.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedMeta:
+          type: [string, "null"]
+          description: The node's payload re-sealed under the new key; required when the node has one (else `409 rekey_parts_missing`).
+          contentEncoding: base64
+          maxLength: 8192
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          description: A NEW drop private key sealed under the new key; required when the node has one (ADR 0109 point 5).
+          contentEncoding: base64
+          maxLength: 256
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

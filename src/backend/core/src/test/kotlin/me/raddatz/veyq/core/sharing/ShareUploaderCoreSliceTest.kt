@@ -72,7 +72,7 @@ class ShareUploaderCoreSliceTest {
                 overlapping = {
                     nodes.applyUpdate(
                         scopeId, memory,
-                        NodesStore.Placement(scopeId, renamed, "cmVuYW1lLXNsdWc=", "cmUtd3JhcA==", epoch = null, expectedRevision = 0),
+                        NodesStore.Placement(scopeId, renamed, "cmVuYW1lLXNsdWc=", "cmUtd3JhcA==", expectedRevision = 0),
                         null, null, null, FIXTURE_EDITOR,
                     )
                 },

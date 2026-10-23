@@ -232,7 +232,7 @@ class TenantStorageQuotaMemoriesSliceTest {
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         val token = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         return Link(shareId, token)
@@ -273,7 +273,7 @@ class TenantStorageQuotaMemoriesSliceTest {
             .extract().path<List<String>>("results.uploadId")
         val derivs = if (derivative == null) "" else ""","derivatives":[{"kind":"THUMBNAIL","uploadId":"${ids[1]}"}]"""
         given().header("Authorization", bearer(f.userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"${f.memoryB}","mediaId":"$mediaId","originalUploadId":"${ids[0]}"$derivs}]}""")
+            .body("""{"items":[{"nodeId":"${f.memoryB}","mediaId":"$mediaId","nodeEpoch":0,"originalUploadId":"${ids[0]}"$derivs}]}""")
             .`when`().post("/api/scopes/${f.scopeB}/media-batch")
             .then().statusCode(200).body("results[0].mediaId", equalTo(mediaId))
         return mediaId

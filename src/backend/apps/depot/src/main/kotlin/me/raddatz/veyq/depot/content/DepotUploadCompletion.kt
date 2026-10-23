@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.depot.DepotNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -45,6 +46,7 @@ class DepotUploadCompletion(
     private val blobs: BlobUploadStore,
     private val uploads: BlobUploadHandler,
     private val attachments: AttachmentStore,
+    private val epochs: NodeEpochGate,
 ) : UploadCompletion {
 
     override fun accepts(nodeKind: String): Boolean = nodeKind == DepotNodeKinds.FILE
@@ -65,10 +67,26 @@ class DepotUploadCompletion(
                 return failed("budget_exceeded")
             }
         }
+        // ADR 0109 point 6: the content blob's key is wrapped under the file node's key, so the request states the node's
+        // epoch, judged under the node's row lock in the attach's transaction — asked as part of the attach's gate, which
+        // runs after the scope lock and before the session's spend (the first write): the caller's own gate first (a
+        // guest's takes the share row), then the node's lock, the order every guest write takes (scope → share → node).
+        val nodeEpoch = checkNotNull(item.payloads[NODE_EPOCH]?.toIntOrNull()) { "Depot's item() always states the node's epoch" }
+        var verdict = NodeEpochGate.Verdict.OK
+        val gated = { admitted() && epochs.check(scopeId, node.id, nodeEpoch).also { verdict = it } == NodeEpochGate.Verdict.OK }
         val outcome = attachments.attach(
-            scopeId, node.id, setOf(DepotNodeKinds.FILE), DepotBlobRoles.FILE_CONTENT, session, manifest, item.payloads[EXPECTED], admitted,
+            scopeId, node.id, setOf(DepotNodeKinds.FILE), DepotBlobRoles.FILE_CONTENT, session, manifest, item.payloads[EXPECTED], gated,
             attached,
         )
+        // The epoch refused under the lock: nothing attached, the session stays open (the attach rolled back).
+        if (outcome == AttachOutcome.NotAdmitted) {
+            when (verdict) {
+                NodeEpochGate.Verdict.OK -> Unit // the caller's own gate refused
+                NodeEpochGate.Verdict.STALE -> return failed(STALE_EPOCH)
+                NodeEpochGate.Verdict.PENDING -> return failed(NODE_REKEY_PENDING)
+                NodeEpochGate.Verdict.MISSING -> return failed("node_not_found")
+            }
+        }
         return when (outcome) {
             is AttachOutcome.Attached -> CompleteItemResult(outcome.blobId, node.id, null)
             is AttachOutcome.Conflict -> failed(STALE_FILE)
@@ -90,10 +108,19 @@ class DepotUploadCompletion(
         /** The item's error when the slot did not hold the expected blob ([AttachOutcome.Conflict]). */
         const val STALE_FILE = "stale_file"
 
+        /** The [CompleteItem.payloads] key of the file node's epoch as the caller read it (ADR 0109 point 6). */
+        const val NODE_EPOCH = "nodeEpoch"
+
+        /** The item's error when [NODE_EPOCH] is not the node's stored epoch (`409 stale_epoch`). */
+        const val STALE_EPOCH = "stale_epoch"
+
+        /** The item's error when the node is not re-keyed since the scope's last rotation (`409 node_rekey_pending`). */
+        const val NODE_REKEY_PENDING = "node_rekey_pending"
+
         /** Core's generic item for one upload into the file [nodeId]: the node is the `ownerId` the wrap is bound to. */
-        fun item(nodeId: String, uploadId: String, expectedBlobId: String?): CompleteItem = CompleteItem(
+        fun item(nodeId: String, uploadId: String, expectedBlobId: String?, nodeEpoch: Int): CompleteItem = CompleteItem(
             ownerId = nodeId, nodeId = nodeId, originalUploadId = uploadId, derivatives = emptyList(),
-            payloads = listOfNotNull(expectedBlobId?.let { EXPECTED to it }).toMap(),
+            payloads = listOfNotNull(expectedBlobId?.let { EXPECTED to it }, NODE_EPOCH to nodeEpoch.toString()).toMap(),
         )
     }
 }

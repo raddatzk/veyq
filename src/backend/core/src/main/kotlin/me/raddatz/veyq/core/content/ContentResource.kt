@@ -56,7 +56,7 @@ class ContentResource(
             identity.principal.name, scopeId.toString(), createNodeRequest.nodeId.toString(), createNodeRequest.parentId?.toString(),
             createNodeRequest.kind, createNodeRequest.encryptedName, createNodeRequest.slugToken,
             createNodeRequest.orderIndex ?: 0, createNodeRequest.epoch ?: 0,
-            createNodeRequest.wrappedContentKey, createNodeRequest.wrappedMeta,
+            createNodeRequest.wrappedContentKey, createNodeRequest.wrappedMeta, createNodeRequest.parentEpoch,
         )
         return when (outcome) {
             is CreateNodeOutcome.Created ->
@@ -86,8 +86,9 @@ class ContentResource(
                 wrappedContentKey = updateNodeRequest.wrappedContentKey,
                 epoch = updateNodeRequest.epoch,
                 placementRevision = updateNodeRequest.placementRevision,
+                parentEpoch = updateNodeRequest.parentEpoch,
             ),
-            updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta, updateNodeRequest.metaRevision,
+            updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta, updateNodeRequest.metaRevision, updateNodeRequest.nodeEpoch,
         )) {
             UpdateNodeOutcome.Updated -> Response.noContent().build()
             is UpdateNodeOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaRevision)
@@ -100,7 +101,7 @@ class ContentResource(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), setNodeCoverRequest.uploadId?.toString(),
                 setNodeCoverRequest.shared?.toSpec(),
                 setNodeCoverRequest.expectedBlobId?.toString(), setNodeCoverRequest.wrappedMeta,
-                setNodeCoverRequest.metaRevision.validated(),
+                setNodeCoverRequest.metaRevision.validated(), setNodeCoverRequest.nodeEpoch.validated(),
             ),
         )
 
@@ -109,6 +110,7 @@ class ContentResource(
             covers.remove(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), removeNodeCoverRequest.blobId.toString(),
                 removeNodeCoverRequest.wrappedMeta, removeNodeCoverRequest.metaRevision.validated(),
+                removeNodeCoverRequest.nodeEpoch.validated(),
             ),
         )
 
@@ -133,7 +135,7 @@ class ContentResource(
     override fun restoreNode(scopeId: UUID, nodeId: UUID, restoreNodeRequest: RestoreNodeRequest): Response =
         when (val o = handler.restore(
             identity.principal.name, scopeId.toString(), nodeId.toString(),
-            restoreNodeRequest.slugToken, restoreNodeRequest.encryptedName,
+            restoreNodeRequest.slugToken, restoreNodeRequest.encryptedName, restoreNodeRequest.parentEpoch.validated(),
         )) {
             RestoreNodeOutcome.Restored -> Response.noContent().build()
             is HttpFailure -> httpError(o)

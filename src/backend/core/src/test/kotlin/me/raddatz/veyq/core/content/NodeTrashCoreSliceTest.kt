@@ -48,7 +48,7 @@ class NodeTrashCoreSliceTest {
     fun restoreOfAnUnknownSubtreeIs404() {
         val (userId, scopeId) = seedMemberScope()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"slugToken":"Z29uZQ=="}""")
+            .body("""{"slugToken":"Z29uZQ==","parentEpoch":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes/${UUID.randomUUID()}/restore")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }

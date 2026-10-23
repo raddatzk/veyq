@@ -221,7 +221,7 @@ object TestFixtures {
 
     /**
      * A complete placement write (ADR 0080 Decision 3) to [parentId] (null = the scope root), built on
-     * [placementRevision] and sealed at [epoch]: a fresh slug token, so two placements never collide unless a test
+     * [placementRevision] and sealed at [epoch] (the node's), stating [parentEpoch] for a parent node (ADR 0109): a fresh slug token, so two placements never collide unless a test
      * says so, and opaque name and wrap bytes — the server opens neither.
      */
     fun placementTo(
@@ -231,9 +231,10 @@ object TestFixtures {
         encryptedName: String = "cGxhY2Vk",
         wrappedContentKey: String = "cmUtd3JhcHBlZA==",
         slugToken: String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray()),
+        parentEpoch: Int? = parentId?.let { 0 },
     ): NodesHandler.PlacementRequest = NodesHandler.PlacementRequest(
         parentId = parentId, encryptedName = encryptedName, slugToken = slugToken, wrappedContentKey = wrappedContentKey,
-        epoch = epoch, placementRevision = placementRevision,
+        epoch = epoch, placementRevision = placementRevision, parentEpoch = parentEpoch,
     )
 
     /** The opaque sealed drop keypair halves and a wrapped WRITE_ONLY identity key (ADR 0031 point 7). */

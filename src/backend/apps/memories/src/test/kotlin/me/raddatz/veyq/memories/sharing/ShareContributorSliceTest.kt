@@ -48,7 +48,7 @@ class ShareContributorSliceTest {
 
         // name yourself — NO bearer; the sealed name is stored opaque, and we get an identity + a capability token
         val idResp = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201)
             .body("identityId", notNullValue())
@@ -66,7 +66,7 @@ class ShareContributorSliceTest {
 
         // complete → attaches ONE media to the shared Memory root, stamped with the identity
         val mediaId = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).body("results[0].mediaId", notNullValue())
             .extract().path<String>("results[0].mediaId")
@@ -104,14 +104,14 @@ class ShareContributorSliceTest {
         val preview = memberStart(TestBlob.SMALL, membersMedia, "PREVIEW", null)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","mediaId":"$membersMedia","originalUploadId":"$original","derivatives":[""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"$membersMedia","nodeEpoch":0,"originalUploadId":"$original","derivatives":[""" +
                     """{"kind":"THUMBNAIL","uploadId":"$thumb"},{"kind":"PREVIEW","uploadId":"$preview"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200).body("results[0].error", nullValue())
 
         val shareId = createShare(userId, memory, role = "READ_WRITE")
         val contributorToken = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         fun guestStart(meta: String?) = given().contentType(ContentType.JSON)
@@ -119,7 +119,7 @@ class ShareContributorSliceTest {
             .`when`().post("/api/shares/$shareId/blob-uploads").then()
         val guestUpload = guestStart("Z3Vlc3QtbWV0YQ==").statusCode(200).extract().path<String>("results[0].uploadId")
         val guestsMedia = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(guestUpload)}","originalUploadId":"$guestUpload"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(guestUpload)}","originalUploadId":"$guestUpload"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).extract().path<String>("results[0].mediaId")
 
@@ -140,7 +140,7 @@ class ShareContributorSliceTest {
         val shareId = createShare(userId, memory, role = "READ")
 
         given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
     }
@@ -163,7 +163,7 @@ class ShareContributorSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "READ_WRITE")
         val contributorToken = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
 
@@ -171,7 +171,7 @@ class ShareContributorSliceTest {
             .`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
 
         // a revoked share is inert for the guest paths — identity-create + upload both 404 (non-enumerable)
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+        given().contentType(ContentType.JSON).body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities").then().statusCode(404)
         given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
@@ -186,7 +186,7 @@ class ShareContributorSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "READ_WRITE")
         val contributorToken = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         fun start(n: Int) = given().contentType(ContentType.JSON)
@@ -207,7 +207,7 @@ class ShareContributorSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "READ_WRITE")
         val contributorToken = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         fun start(vararg roles: String) = given().contentType(ContentType.JSON)

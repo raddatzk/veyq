@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -25,11 +26,13 @@ import jakarta.transaction.Transactional
  * were it to, the whole transaction rolls back to the same answer. A meta that moved rolls everything back too
  * ([MemoryBannerOutcome.StaleMeta]), the cover's rule (ADR 0077).
  *
- * Lock order is the tree's: the scope row first, then the node row (the meta UPDATE). The tree revision moves once per
+ * Lock order is the tree's: the scope row first, then the node row — the epoch gate's lock (ADR 0109 point 6: the slots'
+ * wraps and the meta are sealed under the node's key, so a request states its epoch, judged before anything is written),
+ * which the meta UPDATE takes again. The tree revision moves once per
  * slot write and once for the meta (ADR 0081) - a change signal, not a count.
  */
 @ApplicationScoped
-class MemoryBannerStore(private val attachments: AttachmentStore, private val nodes: NodesStore) {
+class MemoryBannerStore(private val attachments: AttachmentStore, private val nodes: NodesStore, private val gate: NodeEpochGate) {
 
     /** What fills one slot, and the blob the caller read there (null: empty). */
     sealed interface Fill {
@@ -52,9 +55,10 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
     @Transactional
     fun set(
         scopeId: String, nodeId: String, banner: Fill, poster: Fill?, expectedPosterBlobId: String?,
-        wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
+        wrappedMeta: String, metaRevision: Long, nodeEpoch: Int, editor: PrincipalKey,
     ): MemoryBannerOutcome {
         nodes.lockScope(scopeId)
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return it }
         val current = slots(nodeId)
         if (current != (banner.expectedBlobId to expectedPosterBlobId)) return MemoryBannerOutcome.BannerStale(current.first, current.second)
         // Every object both slots touch - the predecessors and the shared sources - locked at once, in the one lock
@@ -84,9 +88,11 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
      */
     @Transactional
     fun remove(
-        scopeId: String, nodeId: String, blobId: String, posterBlobId: String?, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
+        scopeId: String, nodeId: String, blobId: String, posterBlobId: String?, wrappedMeta: String, metaRevision: Long, nodeEpoch: Int,
+        editor: PrincipalKey,
     ): MemoryBannerOutcome {
         nodes.lockScope(scopeId)
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return it }
         val (bannerNow, posterNow) = slots(nodeId)
         if ((bannerNow != null && bannerNow != blobId) || (posterNow != null && posterNow != posterBlobId)) {
             return MemoryBannerOutcome.BannerStale(bannerNow, posterNow)
@@ -96,6 +102,15 @@ class MemoryBannerStore(private val attachments: AttachmentStore, private val no
         if (posterNow != null) detachHeld(scopeId, nodeId, MemoryBanner.POSTER_SLOT, posterNow)?.let { return it }
         return writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
     }
+
+    /** The epoch gate on the node, under its row lock and the scope's held before it; null when [nodeEpoch] holds. */
+    private fun epochRefusal(scopeId: String, nodeId: String, nodeEpoch: Int): MemoryBannerOutcome? =
+        when (gate.check(scopeId, nodeId, nodeEpoch)) {
+            NodeEpochGate.Verdict.OK -> null
+            NodeEpochGate.Verdict.MISSING -> MemoryBannerOutcome.NotFound
+            NodeEpochGate.Verdict.STALE -> MemoryBannerOutcome.StaleEpoch
+            NodeEpochGate.Verdict.PENDING -> MemoryBannerOutcome.RekeyPending
+        }
 
     /** The blobs the two slots hold now, read under the scope lock. */
     private fun slots(nodeId: String): Pair<String?, String?> =

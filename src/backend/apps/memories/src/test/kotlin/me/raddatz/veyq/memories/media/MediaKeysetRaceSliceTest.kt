@@ -22,9 +22,10 @@ import org.junit.jupiter.api.Test
 
 /**
  * The keyset a live gallery pages and polls on must order rows the way they COMMIT (cr-gallery-list-paging § Measured
- * substrate, Q1): a client that has passed a cursor never sees a row land behind it later. Two meta edits in one node,
- * the first stamped before the second but committed after it — here forced: a third transaction holds the first
- * medium's row, so its edit has taken its stamp and waits while the second edits, bumps and commits. A client polls in
+ * substrate, Q1): a client that has passed a cursor never sees a row land behind it later. Two writes in one node, the
+ * first stamped before the second but committed after it — here forced: a third transaction holds the first medium's
+ * row, so its restore has taken its stamp and waits while a meta edit of the second edits, bumps and commits. (Not two
+ * meta edits: each takes the node row's lock first since ADR 0109 point 6's epoch gate, so they cannot overlap.) A client polls in
  * between, advances its cursor past the second edit, and polls again once the first has committed: the first edit
  * must arrive. Deterministic, not likely: the order is forced, so one round already shows a defect; it races
  * [RACE_ROUNDS] rounds on fresh rows anyway, and runs on MariaDB through `scripts/run_backend_races_on_mariadb.py`.
@@ -41,6 +42,7 @@ class MediaKeysetRaceSliceTest {
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val (first, second) = MediaSeed.photos(scopeId, memory, 2, derivatives = false)
+            store.trashMedia(scopeId, first, userId)
             var held = poll(userId, scopeId, memory, ifNoneMatch = null, since = null)
 
             val locked = CountDownLatch(1)
@@ -55,10 +57,10 @@ class MediaKeysetRaceSliceTest {
                     }
                 }
                 assertTrue(locked.await(10, TimeUnit.SECONDS), "round $round: the holder took the row")
-                // The first edit takes its stamp and then waits for the held row.
-                val slow = pool.submit { store.setMeta(scopeId, first, "Zmlyc3Q=", 0, PrincipalKey.User(userId)) }
+                // The first write (a restore, which takes no node lock first) takes its stamp and then waits for the held row.
+                val slow = pool.submit { store.restoreMedia(scopeId, first) }
                 Thread.sleep(WAIT_MS) // the slow edit is stamped and waiting, and the clock has moved on
-                store.setMeta(scopeId, second, "c2Vjb25k", 0, PrincipalKey.User(userId)) // stamped later, committed first
+                store.setMeta(scopeId, second, "c2Vjb25k", 0, 0, PrincipalKey.User(userId)) // stamped later, committed first
 
                 held = poll(userId, scopeId, memory, ifNoneMatch = held.revision, since = held.cursor)
                 assertEquals(listOf(second), held.ids, "round $round: the poll between the two commits sees the second edit")
@@ -73,7 +75,7 @@ class MediaKeysetRaceSliceTest {
 
             val after = poll(userId, scopeId, memory, ifNoneMatch = held.revision, since = held.cursor)
             assertEquals(200, after.status, "round $round: the first edit's commit moved the revision")
-            assertEquals(listOf(first), after.ids, "round $round: the first edit, committed last, reaches the next poll")
+            assertEquals(listOf(first), after.ids, "round $round: the first write, committed last, reaches the next poll")
         }
     }
 

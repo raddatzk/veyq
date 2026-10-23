@@ -108,6 +108,7 @@ class SharingResource(
             pwVerifier = createShareRequest.pwVerifier,
             sealedPassword = createShareRequest.sealedPassword, // cr-0118: management-only reveal copy
             writeVerifier = createShareRequest.writeVerifier, // ADR 0076: the hash of the link's key-derived write proof
+            nodeEpoch = createShareRequest.nodeEpoch.validated(), // ADR 0109 point 6: the share wraps the node's key
         )) {
             is CreateShareOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareCreated(shareId = o.shareId)).build()
@@ -205,6 +206,7 @@ class SharingResource(
             pwVerifier = reissueShareRequest.pwVerifier,
             sealedPassword = reissueShareRequest.sealedPassword,
             writeVerifier = reissueShareRequest.writeVerifier, // the new K_share's proof (ADR 0076)
+            nodeEpoch = reissueShareRequest.nodeEpoch.validated(), // ADR 0109 point 6: the new link wraps the node's key
         )) {
             is ReissueShareOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareCreated(shareId = o.shareId)).build()
@@ -253,6 +255,9 @@ class SharingResource(
                     sealedDropPublicKey = if (o.share.role == ShareEntity.WRITE_ONLY) o.share.sealedDropPublicKey else null,
                     nodeId = UUID.fromString(o.share.nodeId), // a WRITE_ONLY guest binds its identity key's wrap to it
                     rootKind = o.rootKind, // every unlocked role, WRITE_ONLY included (inbox #329); the Locked arm sets none
+                    // ADR 0109 point 6: what a guest's write states as the root's epoch. In the body, so the tag below moves
+                    // when a re-key reaches the root and an open page re-reads its keys.
+                    rootEpoch = o.rootEpoch,
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = blocks.contentView(o.share.scopeId).let { view -> o.nodes.map { toShareNode(it, view.nodeBlocked(it.id)) } },
@@ -363,7 +368,7 @@ class SharingResource(
     ): Response =
         when (val o = handler.createIdentity(
             shareId, xSharePassword, xShareWrite, createShareIdentityRequest.identityId.toString(), createShareIdentityRequest.sealedDisplayName,
-            createShareIdentityRequest.wrappedIdentityKey, client.seen(),
+            createShareIdentityRequest.wrappedIdentityKey, createShareIdentityRequest.nodeEpoch.validated(), client.seen(),
         )) {
             is CreateIdentityOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareIdentityCreated(identityId = UUID.fromString(o.identityId), contributorToken = o.contributorToken)).build()
@@ -445,6 +450,7 @@ class SharingResource(
             orderIndex = createShareNodeRequest.orderIndex ?: 0,
             epoch = createShareNodeRequest.epoch.validated(),
             wrappedContentKey = createShareNodeRequest.wrappedContentKey,
+            parentEpoch = createShareNodeRequest.parentEpoch.validated(),
             seen = client.seen(),
         )) {
             is CreateShareNodeOutcome.Created -> Response.status(Response.Status.CREATED)
@@ -470,6 +476,7 @@ class SharingResource(
             slugToken = updateShareNodeRequest.slugToken,
             wrappedContentKey = updateShareNodeRequest.wrappedContentKey,
             placementRevision = updateShareNodeRequest.placementRevision.validated(),
+            parentEpoch = updateShareNodeRequest.parentEpoch.validated(),
             seen = client.seen(),
         )) {
             UpdateShareNodeOutcome.Updated -> Response.noContent().build()

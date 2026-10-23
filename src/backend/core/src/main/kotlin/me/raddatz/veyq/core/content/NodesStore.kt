@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.node.ScopeTreeRevisionEntity
@@ -70,7 +71,7 @@ data class TrashedNodeRow(
  * caller states it or does not compile.
  */
 @ApplicationScoped
-class NodesStore {
+class NodesStore(private val gate: NodeEpochGate) {
     // cr-0073 reclaimed a node's standalone cover blob HERE, at delete time. ADR 0061 moved that into
     // `NodeSubtreePurge` (today through `AttachmentNodeSubtreeEraser`, the cover being an attachment since inbox
     // #341): under a soft-delete, reclaiming the cover when the user deletes would hand a restore back a Memory whose
@@ -287,19 +288,30 @@ class NodesStore {
         object SlugTaken : ApplyResult
         object StalePlacement : ApplyResult
         data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : ApplyResult
+        /** A stated node epoch is not the node's stored one (ADR 0109 point 6): the writer holds a key from before. */
+        object StaleEpoch : ApplyResult
+        /** A node the write seals under is not re-keyed since the scope's last rotation yet (ADR 0109 point 6). */
+        object RekeyPending : ApplyResult
     }
 
     /**
+     * One node epoch a write states (ADR 0109 point 6): the node whose key it seals under, as the writer read it, checked
+     * under that node's row lock ([NodeEpochGate]). [pendingRefuses] false only for a placement's own node off the scope
+     * root: its key is re-wrapped, not sealed under, so a node the re-key has not reached may still move — but the epoch
+     * it states must be its own.
+     */
+    data class EpochClaim(val nodeId: String, val stated: Int, val pendingRefuses: Boolean = true)
+
+    /**
      * A placement write (ADR 0080 Decision 3): every field of the node's directory entry and key wrap at once, built on
-     * [expectedRevision]. [epoch] is the epoch to store, or null to keep the stored one (a placement between two
-     * non-root parents, ADR 0080 Decision 4 — the handler decides which).
+     * [expectedRevision]. A placement never changes the node's epoch: it is the epoch the node's key was minted at (ADR
+     * 0109 point 6), and only a re-key moves it.
      */
     data class Placement(
         val parentSlot: String,
         val encryptedName: String,
         val slugToken: String,
         val wrappedContentKey: String,
-        val epoch: Int?,
         val expectedRevision: Long,
     )
 
@@ -337,7 +349,7 @@ class NodesStore {
     @Transactional
     fun applyUpdate(
         scopeId: String, nodeId: String, placement: Placement?, orderIndex: Int?, wrappedMeta: String?, metaRevision: Long?,
-        editor: PrincipalKey, boundary: SubtreeBoundary? = null,
+        editor: PrincipalKey, boundary: SubtreeBoundary? = null, epochs: List<EpochClaim> = emptyList(),
     ): ApplyResult {
         lockScope(scopeId)
         if (boundary != null) {
@@ -353,6 +365,16 @@ class NodesStore {
                 return ApplyResult.IllegalMove
             }
             if (slugTaken(placement.parentSlot, placement.slugToken, exceptNodeId = nodeId)) return ApplyResult.SlugTaken
+        }
+        // ADR 0109 point 6, under each node's row lock after the scope's (the re-key's commit order): no write lands
+        // under a key from before the rotation, and none into a node the re-key has not reached yet.
+        for (claim in epochs) {
+            when (gate.check(scopeId, claim.nodeId, claim.stated)) {
+                NodeEpochGate.Verdict.OK -> Unit
+                NodeEpochGate.Verdict.MISSING -> return ApplyResult.Missing
+                NodeEpochGate.Verdict.STALE -> return ApplyResult.StaleEpoch
+                NodeEpochGate.Verdict.PENDING -> if (claim.pendingRefuses) return ApplyResult.RekeyPending
+            }
         }
         val sets = mutableListOf<String>()
         val conds = mutableListOf("id = :id", "deletedAt is null")
@@ -372,7 +394,6 @@ class NodesStore {
                 "placementRevision" to p.expectedRevision,
             )
             conds += "placementRevision = :placementRevision"
-            p.epoch?.let { sets += "epoch = :epoch"; params["epoch"] = it }
             sets += editorSets("name", editor, params)
         }
         orderIndex?.let { sets += "orderIndex = :orderIndex"; params["orderIndex"] = it }
@@ -463,7 +484,7 @@ class NodesStore {
     }
 
     /** The 3-way result of a restore: applied, no such trashed root, or the name was taken meanwhile. */
-    enum class RestoreResult { DONE, NOT_FOUND, SLUG_TAKEN }
+    enum class RestoreResult { DONE, NOT_FOUND, SLUG_TAKEN, STALE_EPOCH, REKEY_PENDING }
 
     /**
      * Restore the trashed subtree rooted at [nodeId]: clear `deletedAt` across the subtree and write the client's
@@ -480,7 +501,9 @@ class NodesStore {
      * the name keeps its editor.
      */
     @Transactional
-    fun restoreSubtree(scopeId: String, nodeId: String, slugToken: String, encryptedName: String?, editor: PrincipalKey): RestoreResult {
+    fun restoreSubtree(
+        scopeId: String, nodeId: String, slugToken: String, encryptedName: String?, entryEpoch: Int, editor: PrincipalKey,
+    ): RestoreResult {
         lockScope(scopeId) // the purge's lock: it erases what it selected under it, or finds this restore committed
         val all = NodeEntity.find("scopeId", scopeId).list()
         val root = all.firstOrNull { it.id == nodeId && it.deletedAt != null } ?: return RestoreResult.NOT_FOUND
@@ -488,6 +511,16 @@ class NodesStore {
         // clearing it on its own would leave a live node hanging under a trashed one — visible in no listing at
         // all, because the client assembles the tree by parentId and the parent is filtered out.
         if (all.any { it.id == root.parentId && it.deletedAt != null }) return RestoreResult.NOT_FOUND
+        // ADR 0109 point 6: the token (and a re-sealed name) go under the key the entry lives under — the live parent's,
+        // or `K_SC` at the node's own epoch at the scope root — so the request states that node's epoch. A trashed node
+        // is re-keyed like a live one, so a restore never brings back a key from before the rotation.
+        val entryNode = if (root.parentId == scopeId) root.id else root.parentId
+        when (gate.check(scopeId, entryNode, entryEpoch)) {
+            NodeEpochGate.Verdict.OK -> Unit
+            NodeEpochGate.Verdict.MISSING -> return RestoreResult.NOT_FOUND
+            NodeEpochGate.Verdict.STALE -> return RestoreResult.STALE_EPOCH
+            NodeEpochGate.Verdict.PENDING -> return RestoreResult.REKEY_PENDING
+        }
         // Decided HERE, inside the transaction that writes the token: a live sibling may have taken the name
         // while this subtree sat in the trash, and the constraint spans trashed rows either way. Checking it at
         // the handler would leave the window between the two reads open, and letting the database decide turns
@@ -499,6 +532,10 @@ class NodesStore {
         // whole subtree (nothing is live under a trashed parent), and with this root live it is a trash root again,
         // restorable on its own with a token the client derives under the live parent (inbox #357).
         val subtree = collectSubtree(all, nodeId) { it.slugToken == it.id }
+        // ADR 0109 point 1: a trashed node is re-keyed like a live one, and nothing comes back with a key from before the
+        // scope's current epoch — the restore waits until the re-key reached every node it would bring back.
+        val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: 0
+        if (all.any { it.id in subtree && it.epoch < current }) return RestoreResult.REKEY_PENDING
         for (n in all) {
             if (n.id in subtree) n.deletedAt = null
         }

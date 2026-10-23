@@ -24,21 +24,22 @@ object BannerKit {
     fun set(
         userId: String?, scopeId: String, nodeId: String, uploadId: String, posterUploadId: String? = null,
         expectedBlobId: String? = null, expectedPosterBlobId: String? = null, wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0,
+        nodeEpoch: Int = 0,
     ): ValidatableResponse =
         given().apply { if (userId != null) header("Authorization", bearer(userId)) }.contentType(ContentType.JSON)
             .body(
                 """{"uploadId":"$uploadId","posterUploadId":${q(posterUploadId)},"expectedBlobId":${q(expectedBlobId)},""" +
-                    """"expectedPosterBlobId":${q(expectedPosterBlobId)},"wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision}""",
+                    """"expectedPosterBlobId":${q(expectedPosterBlobId)},"wrappedMeta":"$wrappedMeta","nodeEpoch":$nodeEpoch,"metaRevision":$metaRevision}""",
             )
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/banner")
             .then()
 
     fun remove(
         userId: String?, scopeId: String, nodeId: String, blobId: String, posterBlobId: String? = null,
-        wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0,
+        wrappedMeta: String = "bWV0YQ==", metaRevision: Long = 0, nodeEpoch: Int = 0,
     ): ValidatableResponse =
         given().apply { if (userId != null) header("Authorization", bearer(userId)) }.contentType(ContentType.JSON)
-            .body("""{"blobId":"$blobId","posterBlobId":${q(posterBlobId)},"wrappedMeta":"$wrappedMeta","metaRevision":$metaRevision}""")
+            .body("""{"blobId":"$blobId","posterBlobId":${q(posterBlobId)},"wrappedMeta":"$wrappedMeta","nodeEpoch":$nodeEpoch,"metaRevision":$metaRevision}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/banner/removal")
             .then()
 

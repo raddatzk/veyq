@@ -251,7 +251,7 @@ class ChapterShareSliceTest {
     /** A named guest on [shareId] with the key member [key] (`identityKeyJson`): (identityId, contributorToken). */
     private fun identity(shareId: String, key: String): Pair<String, String> {
         val r = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$uploaderName"$key}""")
+            .body("""{"nodeEpoch":0,"identityId":"${TestIds.uuid()}","sealedDisplayName":"$uploaderName"$key}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")
@@ -269,7 +269,7 @@ class ChapterShareSliceTest {
 
     private fun complete(shareId: String, token: String, uploadId: String): String =
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .body("""{"nodeEpoch":0,"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).body("results[0].error", nullValue()).extract().path("results[0].mediaId")
 

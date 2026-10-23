@@ -70,7 +70,7 @@ class MemoryBlobRolesSliceTest {
 
     private fun completeOverHttp(mediaId: String, original: String, derivatives: String = "") =
         asOwner().body(
-            """{"items":[{"mediaId":"$mediaId","originalUploadId":"$original","nodeId":"${w.live.nodeId}"""" +
+            """{"items":[{"mediaId":"$mediaId","nodeEpoch":0,"originalUploadId":"$original","nodeId":"${w.live.nodeId}"""" +
                 (if (derivatives.isEmpty()) "" else ""","derivatives":[$derivatives]""") + "}]}",
         ).`when`().post("/api/scopes/${w.live.scopeId}/media-batch")
 
@@ -79,7 +79,7 @@ class MemoryBlobRolesSliceTest {
         QuarkusTransaction.requiringNew().call {
             completion.complete(
                 w.live.scopeId, NodeEntity.findById(w.live.nodeId)!!,
-                MediaUploadCompletion.item(mediaId, w.live.nodeId, original, derivatives, null, null),
+                MediaUploadCompletion.item(mediaId, w.live.nodeId, original, derivatives, null, null, nodeEpoch = 0),
                 UploadOpener.Member(w.live.ownerId),
                 admitted = { true },
             ).error

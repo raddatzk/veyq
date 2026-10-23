@@ -48,6 +48,10 @@ sealed interface NodeCoverOutcome {
 
     /** The node's `wrappedMeta` moved past the stated revision; NOTHING was written, the upload is still open (ADR 0077). */
     data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : NodeCoverOutcome, HttpFailure by Failures.staleRevision
+    /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written, the upload still open. */
+    object StaleEpoch : NodeCoverOutcome, HttpFailure by Failures.staleEpoch
+    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written. */
+    object RekeyPending : NodeCoverOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 /**
@@ -74,7 +78,7 @@ class NodeCoverHandler(
      */
     fun set(
         userId: String, scopeId: String, nodeId: String, uploadId: String?, shared: SharedBlobSpec?, expectedBlobId: String?,
-        wrappedMeta: String, metaRevision: Long,
+        wrappedMeta: String, metaRevision: Long, nodeEpoch: Int,
     ): NodeCoverOutcome {
         if ((uploadId == null) == (shared == null)) return NodeCoverOutcome.InvalidRequest
         access.check(userId, scopeId, WRITE)
@@ -83,7 +87,7 @@ class NodeCoverHandler(
         if (!NodeKindRules.takesCover(kindRules, node.kind)) return NodeCoverOutcome.IllegalTarget
         val editor = PrincipalKey.User(userId)
         if (shared != null) {
-            return store.setShared(scopeId, node.id, node.kind, shared, userId, expectedBlobId, wrappedMeta, metaRevision, editor)
+            return store.setShared(scopeId, node.id, node.kind, shared, userId, expectedBlobId, wrappedMeta, metaRevision, nodeEpoch, editor)
         }
         val session = blobs.findSession(scopeId, checkNotNull(uploadId), UploadOpener.Member(userId)) ?: return NodeCoverOutcome.NotFound
         if (!session.boundTo(node.id, NodeCover.SLOT)) return NodeCoverOutcome.UploadMismatch
@@ -94,14 +98,16 @@ class NodeCoverHandler(
                 return NodeCoverOutcome.Budget
             }
         }
-        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision, editor)
+        return store.set(scopeId, node.id, node.kind, session, manifest, expectedBlobId, wrappedMeta, metaRevision, nodeEpoch, editor)
     }
 
     /** Empty [nodeId]'s cover slot (only while it holds [blobId]) and write the node's [wrappedMeta] without the cover. */
-    fun remove(userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long): NodeCoverOutcome {
+    fun remove(
+        userId: String, scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long, nodeEpoch: Int,
+    ): NodeCoverOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(NodeCoverOutcome.NotFound, NodeCoverOutcome.Suspended, NodeCoverOutcome.ScopeDeleting)?.let { return it }
         if (nodes.findInScope(scopeId, nodeId) == null) return NodeCoverOutcome.NotFound
-        return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaRevision, PrincipalKey.User(userId))
+        return store.remove(scopeId, nodeId, blobId, wrappedMeta, metaRevision, nodeEpoch, PrincipalKey.User(userId))
     }
 }

@@ -23,7 +23,7 @@ import io.restassured.http.ContentType
 import jakarta.inject.Inject
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -135,7 +135,7 @@ class MediaCreateRaceSliceTest {
             val answer = whileUncommitted(
                 change = {
                     val session = UploadSessionEntity.findById(first.uploadId)!!
-                    assertNotNull(store.attach(first.mediaId, OriginalAttach.Upload(session, null), memory, emptyList(), null, null, uploaderUserId = userId), "round $round")
+                    assertTrue(store.attach(first.mediaId, OriginalAttach.Upload(session, null), memory, emptyList(), null, null, 0, uploaderUserId = userId) is AttachResult.Attached, "round $round")
                 },
                 overlapping = { complete(userId, scopeId, completeBody(memory, second)) },
             )
@@ -167,7 +167,7 @@ class MediaCreateRaceSliceTest {
 
     private fun completeBody(nodeId: String, vararg uploads: Upload) =
         uploads.joinToString(",", """{"items":[""", "]}") {
-            """{"mediaId":"${it.mediaId}","originalUploadId":"${it.uploadId}","nodeId":"$nodeId"}"""
+            """{"mediaId":"${it.mediaId}","nodeEpoch":0,"originalUploadId":"${it.uploadId}","nodeId":"$nodeId"}"""
         }
 
     /** A batch's answer: its status and each item's error (empty when the batch did not answer per item). */
@@ -187,7 +187,7 @@ class MediaCreateRaceSliceTest {
 
     private fun createBucket(userId: String, scopeId: String, nodeId: String, bucketId: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bucketId":"$bucketId","sealedName":"YnVja2V0"}""")
+            .body("""{"nodeEpoch":0,"bucketId":"$bucketId","sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets").then().extract().answer()
 
     private fun mediaRows(mediaId: String): Long = QuarkusTransaction.requiringNew().call { MediaEntity.count("id", mediaId) }

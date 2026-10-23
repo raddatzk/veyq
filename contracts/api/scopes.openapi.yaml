@@ -1878,6 +1878,15 @@ components:
           example: null
         compromiseRotation:
           $ref: "#/components/schemas/CompromiseRotation"
+        rekeying:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            **Owner-only** (absent for anyone else): the scope's epoch moved and a live or trashed node of it still
+            carries a key from before — its rotation's re-key is unfinished (ADR 0109 point 7). Derived from the node rows
+            the server holds (`veyq_node.epoch` below `currentEpoch`), never stored. An owner's scope-rotation worker
+            reads it to resume the re-key; the space shows *Fitting the new lock* meanwhile.
+          example: false
 
     # A local alias to the _common source, shared with the tenants spec (the ErrorResponse pattern).
     TenantStatus:

@@ -90,7 +90,7 @@ class MeasureOnSurvivingObjectRacesSliceTest {
         QuarkusTransaction.requiringNew().call { ModerationBlockEntity.count("targetId = ?1 and activeKey is not null", targetId) }
 
     private fun removeBanner(w: World): MemoryBannerOutcome =
-        banners.remove(w.scopeId, w.memory, w.banner, w.poster, "bWV0YQ==", 1, PrincipalKey.User(w.userId))
+        banners.remove(w.scopeId, w.memory, w.banner, w.poster, "bWV0YQ==", 1, 0, PrincipalKey.User(w.userId))
 
     @Test
     fun aBannerRemovalInsideAnUncommittedMeasureEndsIt() {
