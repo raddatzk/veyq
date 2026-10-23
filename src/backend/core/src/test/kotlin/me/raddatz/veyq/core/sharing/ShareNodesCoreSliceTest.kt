@@ -24,8 +24,9 @@ import org.junit.jupiter.api.Test
  * Bite tests 13 (out of the subtree, the root, a cycle, a WRITE_ONLY guest), 17 (a kind `NodeKindRules` refuses, and
  * before it a kind no application declares guest-creatable),
  * 19 (the root's rename) and 20 (a READ folder share exists although no application writes under it), plus what the
- * slice promises: a guest's tree is a member's tree, a create's epoch is the one it sealed with (at or below the
- * current one), a placement is compare-and-set.
+ * slice promises: a guest's tree is a member's tree, a create's epoch is the scope's current one (ADR 0109 point 6
+ * narrowed ADR 0080 decision 6's "at or below") and its parent's epoch is checked under the parent's lock, a placement
+ * is compare-and-set.
  *
  * The tree: `outer` at the scope root holds the shared `root` and, beside it, `outside`; `root` holds `a` and `b`.
  */
@@ -37,15 +38,18 @@ class ShareNodesCoreSliceTest {
         val a: String, val b: String, val link: Link,
     )
 
-    /** The scope at epoch [epoch], the tree, and a link on `root`. */
-    private fun tree(role: String = ShareEntity.READ_WRITE, epoch: Int = 0): Tree {
+    /** The scope at epoch [epoch], the tree — every node re-keyed to it, unless [nodesAt] says they lag — and a link on `root`. */
+    private fun tree(role: String = ShareEntity.READ_WRITE, epoch: Int = 0, nodesAt: Int = epoch): Tree {
         val (userId, scopeId) = seedMemberScope()
-        if (epoch != 0) QuarkusTransaction.requiringNew().run { ScopeEntity.findById(scopeId)!!.currentEpoch = epoch }
         val outer = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val root = seedNode(scopeId, NodeEntity.FOLDER, parentId = outer, wrappedContentKey = CONTENT_KEY)
         val outside = seedNode(scopeId, NodeEntity.FOLDER, parentId = outer, wrappedContentKey = CONTENT_KEY)
         val a = seedNode(scopeId, NodeEntity.FOLDER, parentId = root, wrappedContentKey = CONTENT_KEY)
         val b = seedNode(scopeId, NodeEntity.FOLDER, parentId = root, wrappedContentKey = CONTENT_KEY)
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.currentEpoch = epoch
+            NodeEntity.update("epoch = ?1 where scopeId = ?2", nodesAt, scopeId)
+        }
         return Tree(userId, scopeId, outer, root, outside, a, b, GuestTreeShare.seed(userId, scopeId, root, role))
     }
 
@@ -56,9 +60,9 @@ class ShareNodesCoreSliceTest {
         val t = tree(epoch = 2)
         val f1 = UUID.randomUUID().toString()
         val f2 = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = f1, encryptedName = "ZjEtbmFtZQ==", wrappedContentKey = "ZjEtd3JhcA==", epoch = 2)
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = f1, encryptedName = "ZjEtbmFtZQ==", wrappedContentKey = "ZjEtd3JhcA==", epoch = 2, parentEpoch = 2)
             .statusCode(201).body("nodeId", equalTo(f1))
-        create(t.link, f1, NodeEntity.FOLDER, nodeId = f2, encryptedName = "ZjItbmFtZQ==", wrappedContentKey = "ZjItd3JhcA==", epoch = 2)
+        create(t.link, f1, NodeEntity.FOLDER, nodeId = f2, encryptedName = "ZjItbmFtZQ==", wrappedContentKey = "ZjItd3JhcA==", epoch = 2, parentEpoch = 2)
             .statusCode(201).body("nodeId", equalTo(f2))
 
         // A member lists them as stored — the names and wraps the guest sealed, under the parents it named, at the
@@ -79,27 +83,46 @@ class ShareNodesCoreSliceTest {
             .body("nodes.find { it.id == '$f2' }.parentId", equalTo(f1))
     }
 
-    // --- the epoch is the one the guest sealed with (ADR 0080 decision 6): checked as off the root, stored as sent ---
+    // --- the epoch is the scope's current one (ADR 0109 point 6), the parent's the one it stores ---
 
-    /** Its name and wrap bind the epoch, so the server stores the one sent — below the current one too, never the
-     *  current one in its place — and no payload: `wrappedMeta` is not a guest's to set. */
+    /** A new node's key is minted at the current epoch, a guest's too (ADR 0109 point 6 narrowed ADR 0080 decision 6's
+     *  "at or below"): an epoch below it is a page holding keys from before a rotation — `stale_epoch`, nothing stored,
+     *  and the guest re-resolves. The control stores the current one as sent, and no payload: `wrappedMeta` is not a
+     *  guest's to set. */
     @Test
-    fun anEpochBelowTheCurrentIsStoredAsSentWithNoPayload() {
+    fun anEpochBelowTheCurrentIsStaleAndTheCurrentOneIsStoredWithNoPayload() {
         val t = tree(epoch = 3)
         val id = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 1, extra = ""","wrappedMeta":"bWV0YQ=="""")
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 1, parentEpoch = 3).statusCode(409).body("code", equalTo("stale_epoch"))
+        assertNull(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) }, "nothing stored")
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 3, parentEpoch = 3, extra = ""","wrappedMeta":"bWV0YQ=="""")
             .statusCode(201)
         val row = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.let { it.epoch to it.wrappedMeta } }
-        assertEquals(1 to null, row, "stored at the epoch the guest sealed with, with no payload")
+        assertEquals(3 to null, row, "stored at the current epoch the guest sealed with, with no payload")
+    }
+
+    /** The entry is sealed under the parent's key: a `parentEpoch` below the parent's stored one is `stale_epoch`, a
+     *  parent the rotation's re-key has not reached is `node_rekey_pending` — nothing stored either way, and the same
+     *  create lands once the parent is re-keyed (ADR 0109 point 6, bite test 2). */
+    @Test
+    fun aParentEpochBelowTheStoredIsStaleAndALaggingParentIsPending() {
+        val t = tree(epoch = 2, nodesAt = 1) // a rotation to 2 the re-key has not brought to the tree yet
+        val id = UUID.randomUUID().toString()
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 2, parentEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 2, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        assertNull(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) }, "nothing stored")
+
+        QuarkusTransaction.requiringNew().run { NodeEntity.findById(t.a)!!.epoch = 2 } // the re-key reached the parent
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 2, parentEpoch = 2).statusCode(201)
     }
 
     @Test
     fun anEpochAboveTheCurrentIsStaleAndStoresNothing() {
         val t = tree(epoch = 3)
         val id = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 4).statusCode(409).body("code", equalTo("stale_epoch"))
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 4, parentEpoch = 3).statusCode(409).body("code", equalTo("stale_epoch"))
         assertNull(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) }, "nothing stored")
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 3).statusCode(201) // control: the current one
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 3, parentEpoch = 3).statusCode(201) // control: the current one
     }
 
     /** A required integer is a presence check, not a silent 0 (src/backend/CLAUDE.md). */
@@ -117,10 +140,10 @@ class ShareNodesCoreSliceTest {
     fun aGuestMovesAndRenamesInsideTheSubtree() {
         val t = tree(epoch = 1)
         val epochBefore = epochOf(t.a)
-        place(t.link, t.a, t.b, placementRevision = 0, encryptedName = "bW92ZWQ=", wrappedContentKey = "bW92ZWQtd3JhcA==")
+        place(t.link, t.a, t.b, placementRevision = 0, encryptedName = "bW92ZWQ=", wrappedContentKey = "bW92ZWQtd3JhcA==", parentEpoch = 1)
             .statusCode(204)
         assertEquals(t.b, parentOf(t.a))
-        place(t.link, t.a, t.b, placementRevision = 1, encryptedName = "cmVuYW1lZA==").statusCode(204) // a rename: same parent
+        place(t.link, t.a, t.b, placementRevision = 1, encryptedName = "cmVuYW1lZA==", parentEpoch = 1).statusCode(204) // a rename: same parent
         given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes").then()
             .body("find { it.id == '${t.a}' }.encryptedName", equalTo("cmVuYW1lZA=="))
             .body("find { it.id == '${t.a}' }.placementRevision", equalTo(2))
@@ -218,7 +241,7 @@ class ShareNodesCoreSliceTest {
         assertEquals(0L, versionOf(t.root))
         // control: a member renames it
         given().header("Authorization", bearer(t.userId)).contentType("application/json")
-            .body("""{"parentId":"${t.outer}","encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"d3JhcA==","epoch":0,"placementRevision":0}""")
+            .body("""{"parentId":"${t.outer}","encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}","wrappedContentKey":"d3JhcA==","epoch":0,"placementRevision":0,"parentEpoch":0}""")
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/${t.root}").then().statusCode(204)
     }
 

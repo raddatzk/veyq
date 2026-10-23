@@ -105,6 +105,7 @@ class ScopesResource(
                         grantSignature = it.granter?.signature,
                         granterIdentityPublicKey = it.granter?.identityPublicKey,
                         compromiseRotation = it.compromiseRotation?.toWire(),
+                        rekeying = it.rekeying,
                     )
                 }).build()
             is HttpFailure -> httpError(outcome)
@@ -266,7 +267,8 @@ class ScopesResource(
     private fun CompromiseRotationState.toWire(): CompromiseRotation = when (this) {
         CompromiseRotationState.STALLED -> CompromiseRotation.stalled
         CompromiseRotationState.FAILED -> CompromiseRotation.failed
-        CompromiseRotationState.WAITING, CompromiseRotationState.SECURED -> error("$this needs no owner and is never served")
+        CompromiseRotationState.WAITING, CompromiseRotationState.REKEYING, CompromiseRotationState.SECURED ->
+            error("$this needs no owner and is never served")
     }
 
     override fun revokeScopeShares(scopeId: UUID): Response =

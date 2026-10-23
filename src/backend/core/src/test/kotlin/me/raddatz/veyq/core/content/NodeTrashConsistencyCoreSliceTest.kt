@@ -239,7 +239,7 @@ class NodeTrashConsistencyCoreSliceTest {
     }
 
     private fun create(t: Tree, nodeId: String, parent: String?, token: String = slug()): ValidatableResponse {
-        val parentField = parent?.let { "\"parentId\":\"$it\"," } ?: ""
+        val parentField = parent?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""
         return given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
             .body("""{$parentField"nodeId":"$nodeId","kind":"FOLDER","encryptedName":"Zg==","slugToken":"$token","orderIndex":0,"wrappedContentKey":"aw=="}""")
             .`when`().post("/api/scopes/${t.scopeId}/nodes").then()
@@ -252,7 +252,7 @@ class NodeTrashConsistencyCoreSliceTest {
     }
 
     private fun restore(t: Tree, nodeId: String, token: String = slug()): ValidatableResponse =
-        given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON).body("""{"slugToken":"$token"}""")
+        given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON).body("""{"slugToken":"$token","parentEpoch":0}""")
             .`when`().post("/api/scopes/${t.scopeId}/nodes/$nodeId/restore").then()
 
     private fun markers(t: Tree): List<Instant?> = tx { listOf(t.folder, t.sub, t.leaf).map { NodeEntity.findById(it)!!.deletedAt } }

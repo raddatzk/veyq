@@ -172,7 +172,7 @@ class ShareNodeAbandonCoreSliceTest {
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
             .body(
                 """{"parentId":"${t.a}","encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}",""" +
-                    """"wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":0}""",
+                    """"wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":0,"parentEpoch":0}""",
             )
             .`when`().patch("/api/scopes/${t.scopeId}/nodes/$renamed").then().statusCode(204)
         abandon(link, renamed).statusCode(409).body("code", equalTo("not_a_placeholder"))

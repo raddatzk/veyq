@@ -30,7 +30,7 @@ class ShareContributorCoreSliceTest {
 
     @Test
     fun unknownShareIdentityCreateIs404() {
-        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName","nodeEpoch":0}""")
             .`when`().post("/api/shares/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/identities")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
     }

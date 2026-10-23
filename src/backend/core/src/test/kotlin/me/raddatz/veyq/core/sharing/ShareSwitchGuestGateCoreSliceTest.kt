@@ -93,7 +93,7 @@ class ShareSwitchGuestGateCoreSliceTest {
         else Path("resolveShareBlob") { id -> given().`when`().get("/api/shares/$id/blobs/${w.coverBlob}") },
         Path("createShareIdentity") { id ->
             given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(id))
-                .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="${identityKeyJson(role)}}""")
+                .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ==","nodeEpoch":0${identityKeyJson(role)}}""")
                 .`when`().post("/api/shares/$id/identities")
         },
         Path("startShareBlobUploads") { id ->
@@ -110,7 +110,7 @@ class ShareSwitchGuestGateCoreSliceTest {
             given().contentType(ContentType.JSON).header("X-Contributor-Token", token)
                 .body(
                     """{"nodeId":"${UUID.randomUUID()}","parentId":"${w.root}","kind":"${NodeEntity.FOLDER}","encryptedName":"bmFtZQ==",""" +
-                        """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+                        """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA==","parentEpoch":0}""",
                 )
                 .`when`().post("/api/shares/$id/nodes")
         },
@@ -118,7 +118,7 @@ class ShareSwitchGuestGateCoreSliceTest {
             given().contentType(ContentType.JSON).header("X-Contributor-Token", token)
                 .body(
                     """{"parentId":"${w.root}","encryptedName":"cGxhY2Vk","slugToken":"${GuestTreeShare.slug()}",""" +
-                        """"wrappedContentKey":"cmUtd3JhcHBlZA==","placementRevision":${placementRevision(w.sub)}}""",
+                        """"wrappedContentKey":"cmUtd3JhcHBlZA==","placementRevision":${placementRevision(w.sub)},"parentEpoch":0}""",
                 )
                 .`when`().patch("/api/shares/$id/nodes/${w.sub}")
         },

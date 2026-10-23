@@ -44,22 +44,23 @@ object GuestTreeShare {
     fun create(
         link: Link, parentId: String, kind: String, nodeId: String = UUID.randomUUID().toString(), slugToken: String = slug(),
         encryptedName: String = "bmFtZQ==", wrappedContentKey: String = "d3JhcA==", epoch: Int = 0, extra: String = "",
+        parentEpoch: Int = 0,
     ): ValidatableResponse =
         given().contentType(ContentType.JSON).header("X-Contributor-Token", link.token)
             .body(
                 """{"nodeId":"$nodeId","parentId":"$parentId","kind":"$kind","encryptedName":"$encryptedName",""" +
-                    """"slugToken":"$slugToken","epoch":$epoch,"wrappedContentKey":"$wrappedContentKey"$extra}""",
+                    """"slugToken":"$slugToken","epoch":$epoch,"wrappedContentKey":"$wrappedContentKey","parentEpoch":$parentEpoch$extra}""",
             )
             .`when`().post("/api/shares/${link.shareId}/nodes").then()
 
     fun place(
         link: Link, nodeId: String, parentId: String, placementRevision: Long = 0, slugToken: String = slug(),
-        encryptedName: String = "cGxhY2Vk", wrappedContentKey: String = "cmUtd3JhcHBlZA==",
+        encryptedName: String = "cGxhY2Vk", wrappedContentKey: String = "cmUtd3JhcHBlZA==", parentEpoch: Int = 0,
     ): ValidatableResponse =
         given().contentType(ContentType.JSON).header("X-Contributor-Token", link.token)
             .body(
                 """{"parentId":"$parentId","encryptedName":"$encryptedName","slugToken":"$slugToken",""" +
-                    """"wrappedContentKey":"$wrappedContentKey","placementRevision":$placementRevision}""",
+                    """"wrappedContentKey":"$wrappedContentKey","placementRevision":$placementRevision,"parentEpoch":$parentEpoch}""",
             )
             .`when`().patch("/api/shares/${link.shareId}/nodes/$nodeId").then()
 

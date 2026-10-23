@@ -77,6 +77,10 @@ object Failures {
      *  client re-reads and rebuilds against the current epoch (ADR 0024). */
     val staleEpoch: HttpFailure = httpFailure("stale_epoch", CONFLICT)
 
+    /** A write sealed under the key of a node the scope's last rotation has not re-keyed yet → 409; nothing was
+     *  written, and the writer retries once the re-key reached the node (ADR 0109 point 6). Only that node waits. */
+    val nodeRekeyPending: HttpFailure = httpFailure("node_rekey_pending", CONFLICT)
+
     /** A moderator blocked this content (uc.moderation.take-a-measure; RFC 7725) → 451 for every byte read, a restore
      *  and a content replace, member and guest alike: the client draws "Blocked by the operator", not "missing". */
     val blockedByOperator: HttpFailure = httpFailure("blocked_by_operator", UNAVAILABLE_FOR_LEGAL_REASONS)

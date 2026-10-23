@@ -88,6 +88,7 @@ class AccountRotationResource(
     private fun CompromiseRotationState.toWire(): RotationScopeState.State = when (this) {
         CompromiseRotationState.WAITING -> RotationScopeState.State.waiting
         CompromiseRotationState.STALLED -> RotationScopeState.State.stalled
+        CompromiseRotationState.REKEYING -> RotationScopeState.State.rekeying
         CompromiseRotationState.SECURED -> RotationScopeState.State.secured
         CompromiseRotationState.FAILED -> RotationScopeState.State.failed
     }

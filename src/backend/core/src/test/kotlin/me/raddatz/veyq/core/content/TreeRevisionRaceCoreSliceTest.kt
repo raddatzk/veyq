@@ -68,7 +68,7 @@ class TreeRevisionRaceCoreSliceTest {
                 { given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$trashed").statusCode() },
                 {
                     given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                        .body("""{"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
+                        .body("""{"wrappedMeta":"bWV0YQ==","metaRevision":0,"nodeEpoch":0}""")
                         .`when`().patch("/api/scopes/$scopeId/nodes/$renamed").statusCode()
                 },
                 {

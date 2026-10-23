@@ -83,7 +83,7 @@ class NodeFieldEditorCoreSliceTest {
     fun aMembersMetaWriteAndCoverNameTheMemberAsTheMetasEditorAndLeaveTheName() {
         val t = tree()
         val node = guestCreate(t, t.inner)
-        patch(t, node, """{"wrappedMeta":"bWV0YQ==","metaRevision":0}""")
+        patch(t, node, """{"wrappedMeta":"bWV0YQ==","metaRevision":0,"nodeEpoch":0}""")
         assertEquals(t.member, row(node).metaEditor)
         assertEquals(guest(t), row(node).nameEditor, "a meta write is no write of the name")
 
@@ -180,7 +180,7 @@ class NodeFieldEditorCoreSliceTest {
         val metaField = meta?.let { ""","wrappedMeta":"$it"""" } ?: ""
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
             .body(
-                """{"nodeId":"$id","parentId":"$parent","kind":"FOLDER","encryptedName":"bg==","slugToken":"${GuestTreeShare.slug()}",""" +
+                """{"nodeId":"$id","parentId":"$parent","parentEpoch":0,"kind":"FOLDER","encryptedName":"bg==","slugToken":"${GuestTreeShare.slug()}",""" +
                     """"orderIndex":0,"wrappedContentKey":"a21lbQ==","epoch":0$metaField}""",
             )
             .`when`().post("/api/scopes/${t.scopeId}/nodes").then().statusCode(201)
@@ -189,7 +189,7 @@ class NodeFieldEditorCoreSliceTest {
 
     private fun memberPlace(t: Tree, node: String, parent: String, revision: Long) = patch(
         t, node,
-        """{"parentId":"$parent","encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}",""" +
+        """{"parentId":"$parent","parentEpoch":0,"encryptedName":"cmVuYW1lZA==","slugToken":"${GuestTreeShare.slug()}",""" +
             """"wrappedContentKey":"cmV3cmFw","epoch":0,"placementRevision":$revision}""",
     )
 
@@ -205,7 +205,7 @@ class NodeFieldEditorCoreSliceTest {
     private fun restore(t: Tree, node: String, encryptedName: String?) {
         val name = encryptedName?.let { ""","encryptedName":"$it"""" } ?: ""
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"slugToken":"${GuestTreeShare.slug()}"$name}""")
+            .body("""{"slugToken":"${GuestTreeShare.slug()}","parentEpoch":0$name}""")
             .`when`().post("/api/scopes/${t.scopeId}/nodes/$node/restore").then().statusCode(204)
     }
 

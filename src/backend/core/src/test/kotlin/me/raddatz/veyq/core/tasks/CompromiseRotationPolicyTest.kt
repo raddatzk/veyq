@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.tasks
 
 import me.raddatz.veyq.core.tasks.CompromiseRotationState.FAILED
+import me.raddatz.veyq.core.tasks.CompromiseRotationState.REKEYING
 import me.raddatz.veyq.core.tasks.CompromiseRotationState.SECURED
 import me.raddatz.veyq.core.tasks.CompromiseRotationState.STALLED
 import me.raddatz.veyq.core.tasks.CompromiseRotationState.WAITING
@@ -25,8 +26,9 @@ class CompromiseRotationPolicyTest {
     private fun state(
         rotatorGrantedEpoch: Int? = 3, scopeCurrentEpoch: Int = 3, jobStatus: String = JobEntity.PENDING,
         jobLeaseExpiresAt: Instant? = null, jobAttempts: Int = 1, jobMaxAttempts: Int = 5, claimableByAnOwner: Boolean = true,
+        nodesLag: Boolean = false,
     ) = CompromiseRotationPolicy.state(
-        CompromiseRotationFacts(rotatorGrantedEpoch, scopeCurrentEpoch, jobStatus, jobLeaseExpiresAt, jobAttempts, jobMaxAttempts, claimableByAnOwner),
+        CompromiseRotationFacts(rotatorGrantedEpoch, scopeCurrentEpoch, jobStatus, jobLeaseExpiresAt, jobAttempts, jobMaxAttempts, claimableByAnOwner, nodesLag),
         now,
     )
 
@@ -107,6 +109,19 @@ class CompromiseRotationPolicyTest {
         assertEquals(STALLED, state(claimableByAnOwner = false), "uc.account.rotate-keys E4: make someone else an owner")
         assertEquals(STALLED, state(jobStatus = JobEntity.LEASED, jobLeaseExpiresAt = now.minusSeconds(1), jobAttempts = 4,
             claimableByAnOwner = false), "a lapsed lease with attempts left is live, so stalled")
+    }
+
+    /** ADR 0109 point 1: a secured rotation whose re-key has not reached every node yet reads `REKEYING` — through
+     *  either secured rule — and a lag changes no other state (it is not the rotator's grant that a node lags). */
+    @Test
+    fun aSecuredRotationWithANodeStillLaggingIsRekeying() {
+        assertEquals(REKEYING, state(rotatorGrantedEpoch = 2, nodesLag = true), "the grant rule: the epoch is in, a node is not")
+        assertEquals(REKEYING, state(jobStatus = JobEntity.DONE, nodesLag = true), "the done rule")
+        assertEquals(SECURED, state(rotatorGrantedEpoch = 2, nodesLag = false), "control: no node lags")
+        assertEquals(WAITING, state(nodesLag = true), "a waiting rotation stays waiting")
+        assertEquals(FAILED, state(jobStatus = JobEntity.FAILED, nodesLag = true), "a failed one stays failed")
+        assertEquals(STALLED, state(claimableByAnOwner = false, nodesLag = true), "a stalled one stays stalled")
+        assertNull(CompromiseRotationPolicy.ownerView(listOf(REKEYING, WAITING)), "re-keying needs nobody: a worker resumes it")
     }
 
     // The owner's row (D10): the worst state that needs someone, or nothing.

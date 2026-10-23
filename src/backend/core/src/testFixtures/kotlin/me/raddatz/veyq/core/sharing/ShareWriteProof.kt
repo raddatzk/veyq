@@ -30,10 +30,13 @@ object ShareWriteProof {
      *  re-issue body whose test reads the id back from the response. */
     fun newShare(): String = TestIds.shareId().let { """"shareId":"$it",${field(it)}""" }
 
-    /** The recovery copy every create carries (ADR 0080 decision 12): the `"sealedShareKey"` and `"sealedShareKeyEpoch"`
-     *  members, for splicing into a create body. The backend opens nothing, so any base64 serves; [epoch] must be the
-     *  scope's current one (a fresh scope's is 0), or the create is `409 stale_epoch`. */
-    fun recovery(epoch: Int = 0): String = """"sealedShareKey":"cmVjb3Zlcnk=","sealedShareKeyEpoch":$epoch"""
+    /** The recovery copy every create and re-issue carries (ADR 0080 decision 12): the `"sealedShareKey"` and
+     *  `"sealedShareKeyEpoch"` members, for splicing into its body — with the shared node's `"nodeEpoch"` (ADR 0109
+     *  point 6), which every such body states too. The backend opens nothing, so any base64 serves; [epoch] must be the
+     *  scope's current one (a fresh scope's is 0) and [nodeEpoch] the node's stored one (a fresh node's is 0), or the
+     *  write is `409 stale_epoch`. */
+    fun recovery(epoch: Int = 0, nodeEpoch: Int = 0): String =
+        """"sealedShareKey":"cmVjb3Zlcnk=","sealedShareKeyEpoch":$epoch,"nodeEpoch":$nodeEpoch"""
 
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
     private fun b64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)

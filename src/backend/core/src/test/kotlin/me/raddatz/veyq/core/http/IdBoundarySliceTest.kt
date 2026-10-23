@@ -37,7 +37,7 @@ class IdBoundarySliceTest {
     }
 
     private fun folder(nodeId: String, parentId: String? = null, slug: String = UUID.randomUUID().toString().replace("-", "")): String =
-        """{"nodeId":"$nodeId","parentId":${parentId?.let { "\"$it\"" }},"kind":"FOLDER","encryptedName":"YQ==","slugToken":"$slug","orderIndex":0,"wrappedContentKey":"a21lbQ=="}"""
+        """{"nodeId":"$nodeId","parentId":${parentId?.let { "\"$it\",\"parentEpoch\":0" }},"kind":"FOLDER","encryptedName":"YQ==","slugToken":"$slug","orderIndex":0,"wrappedContentKey":"a21lbQ=="}"""
 
     // --- a path id ----------------------------------------------------------------------------------------------
 

@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.SharedBlobSpec
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.identity.PrincipalKey
+import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -25,13 +26,29 @@ import jakarta.transaction.Transactional
  * revision is a change signal, not a count.
  */
 @ApplicationScoped
-class NodeCoverStore(private val attachments: AttachmentStore, private val nodes: NodesStore) {
+class NodeCoverStore(private val attachments: AttachmentStore, private val nodes: NodesStore, private val gate: NodeEpochGate) {
+
+    /**
+     * ADR 0109 point 6: the cover's wrap and the meta are sealed under the node's key, so the request states the node's
+     * epoch, judged under the node's row lock — taken after the scope's (the tree's order, the re-key commit's), before
+     * the slot. Null when it holds; else the refusal, with nothing written.
+     */
+    private fun epochRefusal(scopeId: String, nodeId: String, nodeEpoch: Int): NodeCoverOutcome? {
+        nodes.lockScope(scopeId)
+        return when (gate.check(scopeId, nodeId, nodeEpoch)) {
+            NodeEpochGate.Verdict.OK -> null
+            NodeEpochGate.Verdict.MISSING -> NodeCoverOutcome.NotFound
+            NodeEpochGate.Verdict.STALE -> NodeCoverOutcome.StaleEpoch
+            NodeEpochGate.Verdict.PENDING -> NodeCoverOutcome.RekeyPending
+        }
+    }
 
     @Transactional
     fun set(
         scopeId: String, nodeId: String, kind: String, session: UploadSessionEntity, manifest: List<Long>?,
-        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
+        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, nodeEpoch: Int, editor: PrincipalKey,
     ): NodeCoverOutcome {
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return it }
         val o = attachments.attach(scopeId, nodeId, setOf(kind), NodeCover.SLOT, session, manifest, expectedBlobId)
         return refusal(o) ?: writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
     }
@@ -44,8 +61,9 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
     @Transactional
     fun setShared(
         scopeId: String, nodeId: String, kind: String, shared: SharedBlobSpec, memberUserId: String,
-        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey,
+        expectedBlobId: String?, wrappedMeta: String, metaRevision: Long, nodeEpoch: Int, editor: PrincipalKey,
     ): NodeCoverOutcome {
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return it }
         val o = attachments.attachShared(scopeId, nodeId, setOf(kind), NodeCover.SLOT, shared, memberUserId, expectedBlobId)
         return refusal(o) ?: writeMeta(scopeId, nodeId, wrappedMeta, metaRevision, editor)
     }
@@ -63,7 +81,10 @@ class NodeCoverStore(private val attachments: AttachmentStore, private val nodes
     }
 
     @Transactional
-    fun remove(scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long, editor: PrincipalKey): NodeCoverOutcome {
+    fun remove(
+        scopeId: String, nodeId: String, blobId: String, wrappedMeta: String, metaRevision: Long, nodeEpoch: Int, editor: PrincipalKey,
+    ): NodeCoverOutcome {
+        epochRefusal(scopeId, nodeId, nodeEpoch)?.let { return it }
         when (attachments.detach(scopeId, nodeId, NodeCover.SLOT, blobId)) {
             // An empty slot (a replay, a meta that named a blob already gone) still writes the meta: the removal is idempotent.
             AttachmentStore.DetachOutcome.Detached, AttachmentStore.DetachOutcome.Empty -> Unit

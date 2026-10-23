@@ -45,7 +45,7 @@ class NodeTreeRaceCoreSliceTest {
             val (_, scopeId) = seedMemberScope()
             val (memory, chapter) = expiredSubtree(scopeId)
             whileUncommitted(
-                change = { assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, memory, slug(), null, FIXTURE_EDITOR), "round $round") },
+                change = { assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, memory, slug(), null, 0, FIXTURE_EDITOR), "round $round") },
                 overlapping = { purge.run() },
             )
             tx {
@@ -69,7 +69,7 @@ class NodeTreeRaceCoreSliceTest {
             val (memory, _) = expiredSubtree(scopeId)
             val restored = whileUncommitted(
                 change = { purge.eraseExpiredIn(scopeId, cutoff()) },
-                overlapping = { runCatching { store.restoreSubtree(scopeId, memory, slug(), null, FIXTURE_EDITOR) } },
+                overlapping = { runCatching { store.restoreSubtree(scopeId, memory, slug(), null, 0, FIXTURE_EDITOR) } },
             )
             assertEquals(Result.success(NodesStore.RestoreResult.NOT_FOUND), restored, "round $round")
             assertNull(tx { NodeEntity.findById(memory) }, "round $round")
@@ -91,7 +91,7 @@ class NodeTreeRaceCoreSliceTest {
             store.deleteSubtree(scopeId, child)
             val restored = whileUncommitted(
                 change = { store.deleteSubtree(scopeId, folder) },
-                overlapping = { store.restoreSubtree(scopeId, child, slug(), null, FIXTURE_EDITOR) },
+                overlapping = { store.restoreSubtree(scopeId, child, slug(), null, 0, FIXTURE_EDITOR) },
             )
             assertEquals(NodesStore.RestoreResult.NOT_FOUND, restored, "round $round: a child restored under a trashed parent")
             tx {
@@ -105,7 +105,7 @@ class NodeTreeRaceCoreSliceTest {
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val child = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
         store.deleteSubtree(scopeId, child)
-        assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, child, slug(), null, FIXTURE_EDITOR), "control")
+        assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, child, slug(), null, 0, FIXTURE_EDITOR), "control")
     }
 
     /**
@@ -129,7 +129,7 @@ class NodeTreeRaceCoreSliceTest {
                         } else {
                             assertEquals(
                                 NodesStore.ApplyResult.Applied,
-                                store.applyUpdate(scopeId, child, NodesStore.Placement(folder, "bmV3", slug(), CONTENT_KEY, null, 0), null, null, null, FIXTURE_EDITOR),
+                                store.applyUpdate(scopeId, child, NodesStore.Placement(folder, "bmV3", slug(), CONTENT_KEY, 0), null, null, null, FIXTURE_EDITOR),
                             )
                         }
                     },
@@ -164,10 +164,10 @@ class NodeTreeRaceCoreSliceTest {
                 change = {
                     assertEquals(
                         NodesStore.ApplyResult.Applied,
-                        store.applyUpdate(scopeId, first, NodesStore.Placement(folder, "bmV3", name, CONTENT_KEY, null, 0), null, null, null, FIXTURE_EDITOR),
+                        store.applyUpdate(scopeId, first, NodesStore.Placement(folder, "bmV3", name, CONTENT_KEY, 0), null, null, null, FIXTURE_EDITOR),
                     )
                 },
-                overlapping = { runCatching { handler.update(userId, scopeId, second, placementTo(folder, slugToken = name), null, null, null) } },
+                overlapping = { runCatching { handler.update(userId, scopeId, second, placementTo(folder, slugToken = name), null, null, null, null) } },
             )
             assertEquals(Result.success(UpdateNodeOutcome.SlugTaken), answer, "round $round: the loser of two renames onto one name")
             assertEquals(listOf(name, null), tx { listOf(first, second).map { NodeEntity.findById(it)!!.slugToken.takeIf { s -> s == name } } }, "round $round: only the winner holds the name")
@@ -176,7 +176,7 @@ class NodeTreeRaceCoreSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val node = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
-        assertEquals(UpdateNodeOutcome.Updated, handler.update(userId, scopeId, node, placementTo(folder), null, null, null), "control")
+        assertEquals(UpdateNodeOutcome.Updated, handler.update(userId, scopeId, node, placementTo(folder), null, null, null, null), "control")
     }
 
     @Inject lateinit var handler: NodesHandler
@@ -190,7 +190,7 @@ class NodeTreeRaceCoreSliceTest {
     // --- helpers ---
 
     private fun move(userId: String, scopeId: String, nodeId: String, parent: String): UpdateNodeOutcome =
-        handler.update(userId, scopeId, nodeId, placementTo(parent), null, null, null)
+        handler.update(userId, scopeId, nodeId, placementTo(parent), null, null, null, null)
 
     /** A trashed Memory with a Chapter under it, both stamped past the retention as one delete stamps them — and,
      *  as it does, only the root's slug token freed (a freed descendant would stay in the trash on a restore, #357).

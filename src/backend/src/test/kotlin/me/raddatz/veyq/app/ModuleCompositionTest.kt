@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.moderation.hold.HoldSnapshotContributor
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
+import me.raddatz.veyq.core.node.rekey.NodeRekeyParticipant
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.UploadAdmission
@@ -94,6 +95,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
     @Inject @All lateinit var reportableItems: MutableList<ReportableItems>
     @Inject @All lateinit var holdContributors: MutableList<HoldSnapshotContributor>
+    @Inject @All lateinit var rekeyParticipants: MutableList<NodeRekeyParticipant>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -117,6 +119,7 @@ class ModuleCompositionTest {
         MemberBlobRoles::class.java to memberRoles,
         ReportableItems::class.java to reportableItems,
         HoldSnapshotContributor::class.java to holdContributors,
+        NodeRekeyParticipant::class.java to rekeyParticipants,
     )
 
     private val compiled: List<Class<*>> by lazy {
@@ -271,14 +274,14 @@ class ModuleCompositionTest {
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$asMedium"}""")
+            .body("""{"uploadId":"$asMedium","nodeEpoch":0}""")
             .`when`().post("/api/scopes/$scopeId/files/$memory/content")
             .then().statusCode(422).body("code", equalTo("illegal_target"))
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200).body("media.size()", equalTo(0))
         // control: the same upload is a medium through Memories' own route
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"$memory","originalUploadId":"$asMedium","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"$memory","nodeEpoch":0,"originalUploadId":"$asMedium","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", equalTo(null))
     }
@@ -347,7 +350,7 @@ class ModuleCompositionTest {
 
     private fun complete(userId: String, scopeId: String, nodeId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"${UUID.randomUUID()}","originalUploadId":"${UUID.randomUUID()}","nodeId":"$nodeId"}]}""")
+            .body("""{"items":[{"mediaId":"${UUID.randomUUID()}","nodeEpoch":0,"originalUploadId":"${UUID.randomUUID()}","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
 

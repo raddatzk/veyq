@@ -83,7 +83,7 @@ class ModerationMeasuresSliceTest {
         Path("resolveShareBlob") { id -> given().`when`().get("/api/shares/$id/blobs/${w.cover}") },
         Path("createShareIdentity") { id ->
             given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(id))
-                .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
+                .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ==","nodeEpoch":0}""")
                 .`when`().post("/api/shares/$id/identities")
         },
     )
@@ -94,7 +94,7 @@ class ModerationMeasuresSliceTest {
             ownerId, shareId, newId, wrap = "d3JhcA==", sealedDropPublicKey = null, sealedName = "c2VhbGVk", expiresAt = null,
             sealedNote = null, sealedShareKey = "cmVjb3Zlcnk=", sealedShareKeyEpoch = 0, sealedShareName = null,
             passwordRequired = false, pwSalt = null, pwVerifier = null, sealedPassword = null,
-            writeVerifier = ShareWriteProof.verifier(newId),
+            writeVerifier = ShareWriteProof.verifier(newId), nodeEpoch = 0,
         ) to newId
     }
 
@@ -142,7 +142,7 @@ class ModerationMeasuresSliceTest {
         val (outcome, newId) = reissue(w.ownerId, link.shareId)
         assertTrue(outcome is ReissueShareOutcome.Created, "$outcome")
         val token = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(newId))
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ==","nodeEpoch":0}""")
             .`when`().post("/api/shares/$newId/identities").then().statusCode(201).extract().path<String>("contributorToken")
         GuestTreeShare.create(GuestTreeShare.Link(newId, token), w.root, NodeEntity.FOLDER).statusCode(201)
     }

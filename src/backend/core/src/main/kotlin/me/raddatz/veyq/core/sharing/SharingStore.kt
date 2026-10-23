@@ -268,6 +268,14 @@ class SharingStore(
             .setParameter("id", shareId).resultList.firstOrNull()
             ?.let { (it[0] as Boolean) to (it[1] as String) }
 
+    /** The share row's lock, and no copy of the row left in the transaction's context: a re-issue takes it before the
+     *  shared node's (scope → share → node, every guest write's order, ADR 0109 point 6), and its spend's own read must
+     *  still load the row after the spend ([enabledAndOwnerOf]'s reason) — so the locked copy is detached at once. */
+    fun lockShareRow(shareId: String) {
+        ShareEntity.find("id", shareId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+            ?.let { ShareEntity.getEntityManager().detach(it) }
+    }
+
     /** [find] under a row lock, for every write to a share but [reissue], whose compare-and-set takes the same row
      *  lock as its first write. Without the lock an edit that read the row before a delete committed would write its
      *  own ciphertext onto the tombstone, and a re-activation would turn it back on; locked, it waits for the delete
