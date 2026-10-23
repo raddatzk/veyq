@@ -17,7 +17,7 @@ Inbox #529, [ADR 0110](../docs/decisions/0110-a-node-header-shows-its-actions-by
 `NodeHeader` stops showing every action as a button at every width. The leading visual stays beside a name of at most
 two lines; the actions get a row of their own; as many as fit are buttons in the kind's priority order, the rest sit in
 one ⋯ menu; delete and report are always menu entries. Read the ADR before each phase — its decisions 1–7 are this
-work order's rules, and decision 3's wide-screen placement is a default the owner was shown, not yet confirmed.
+work order's rules.
 
 ## Context & constraints
 
@@ -68,16 +68,19 @@ work order's rules, and decision 3's wide-screen placement is a default the owne
    danger class, command), extracted to core next to the row model. The header's entries carry
    `veyq-node-header-menu-item veyq-node-header-action-<id>`; the ⋯ button `veyq-node-header-more` with
    `aria-haspopup="menu"` and a label of the rows' kind ("More actions for “{name}”").
-6. **Layout.** The header is a grid: the leading visual and the title share the first row at every width; no
-   stacking. ≤540 px: the actions row spans the header's full width under them, then subtitle and meta. Wider: the
-   visual spans the rows, and the column beside it holds the title, the actions row, the subtitle and the meta (ADR
-   0110 decision 3's default). The title is clamped to two lines (`line-clamp`) at every width and carries the full
-   name as its `title`; the DOM keeps the whole name, so a screen reader reads all of it.
+6. **Layout.** The leading visual and the title share the first row at every width; no stacking. ≤540 px: the
+   actions get a row of their own spanning the header's full width under them, then subtitle and meta. Wider: the
+   actions stay where they are today, at the right end of the title row (owner 2026-10-23, ADR 0110 decision 3) — the
+   title keeps its `flex-basis` minimum (12rem today) and the fit's available width is the title row's width minus
+   that minimum and the gap, so a long name never squeezes below it and the buttons take the rest. The title is
+   clamped to two lines (`line-clamp`) at every width and carries the full name as its `title`; the DOM keeps the
+   whole name, so a screen reader reads all of it.
 7. **The Memory's cover on a phone** is a 64 × 36 px tile (Memories' rule under its existing container query, replacing
    `width: 100%; max-width: 260px`); its hint over an empty cover shows the icon alone at that size, the words stay its
    accessible name and tooltip. #525's stretch rule and its test case go — there is no stacked header left.
 8. **The orders.** Memory (owner, 2026-10-23): favorite, upload, share, shareUpload, participants, download, cover,
-   banner, rename, move, copy. Defaults by the same reading (ADR 0110 decision 5), shown to the owner with this CR:
+   banner, rename, move, copy. Defaults by the same reading (ADR 0110 decision 5), shown to the owner with this CR on
+   2026-10-23 and not stopped:
    folder — favorite, share, download, cover, rename, move, copy; file — favorite, download, share, replace, rename,
    move, copy; drop box — favorite, share, download, cover, move, copy. Report and delete close every menu.
 9. **A primary action** (Memory's upload, file's download) keeps its filled look as a button and is a plain entry in
@@ -138,9 +141,3 @@ that point at a header button (EN and DE together: "… or in the ⋯ menu"), an
 **Done when:** every `scripts/validate_*.py` except `validate_guard_gaps.py` green; `npm run build` in `site/` green; the
 e2e specs are updated but **run in the heavy stage at the end of V1** (owner 2026-10-19), which the inbox row names as
 the proof still owed.
-
-## Open with the owner before implementation
-
-- ADR 0110 decision 3: on a wide screen the actions row sits beside the visual under the name (default) — or spans the
-  full width under both, as on a phone?
-- Decision 8's orders for a folder, a file and a drop box (defaults above).

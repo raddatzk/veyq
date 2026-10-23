@@ -30,9 +30,9 @@ same columns in every row.
    5.5 rem cover, the 42 px icon tile).
 2. **The name shows at most two lines**, then an ellipsis, at every width; the full name is the title's tooltip. A
    longer text belongs in a description under the name (#528), not in the name.
-3. **The actions have a row of their own** under the name. On a phone the row spans the header's full width below the
-   cover and the name; on a wide screen it sits in the column beside the visual, under the name. *(The wide-screen
-   placement is a default shown to the owner on 2026-10-23, not yet confirmed.)*
+3. **Where the actions sit.** On a phone they have a row of their own, spanning the header's full width below the cover
+   and the name. On a wide screen they stay where they are today: at the right end of the title row, beside the name
+   (owner, 2026-10-23); the name keeps its minimum width there, and the actions get the rest of the row.
 4. **As many actions as fit are buttons, in priority order; the rest are entries of one "more" menu (⋯) at the row's
    end.** The fit is measured from the row's width and measured again when that width changes, at every width — no
    breakpoint decides it.
@@ -40,7 +40,7 @@ same columns in every row.
    (favorite, cover, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload,
    share, upload request, participants, download, cover, banner, rename, move, copy. A folder's, a file's and a drop
    box's follow the same reading — favorite first, then what the kind is for, then sharing, then editing the node itself,
-   then moving and copying it.
+   then moving and copying it (defaults shown to the owner on 2026-10-23 and not stopped; they are in the CR).
 6. **Delete and report are never buttons.** They are always the last entries of the menu, behind a separator, delete
    last: a button that moves with the width is too easy to hit by mistake, and both open a consequential dialog.
 7. **No action is lost.** An action that does not fit is an entry of the menu with its label and icon; a disabled
