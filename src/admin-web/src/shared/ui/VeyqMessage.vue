@@ -19,10 +19,10 @@ const { t } = useI18n()
     <div class="veyq-message__wrapper">
       <div class="veyq-message__content">
         <div class="veyq-message__text"><slot /></div>
+        <button v-if="closable" type="button" class="veyq-message__close" :aria-label="t('ui.close')" @click="emit('close')">
+          <VeyqIcon name="times" />
+        </button>
       </div>
-      <button v-if="closable" type="button" class="veyq-message__close" :aria-label="t('ui.close')" @click="emit('close')">
-        <VeyqIcon name="times" />
-      </button>
     </div>
   </div>
 </template>

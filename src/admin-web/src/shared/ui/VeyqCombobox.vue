@@ -4,7 +4,9 @@
 // or the chevron opens the whole list. Each option is `{ label, value }`, as `VeyqSelect`'s. `clearable` adds a button
 // that empties the pick. The caller's `class` lands on the field's box, every other attribute (`aria-labelledby`, …)
 // on the input; `inputId` is the input's id, for a `<label for>`. Sheets reach it by `veyq-combobox`, its input by
-// `veyq-combobox__input` and its list by `veyq-combobox__list` (styled in `layer.css`).
+// `veyq-combobox__input` and its list by `veyq-combobox__list` (styled in `layer.css`). The input is `size="1"`: it grows
+// to the box by flex, so the field fits a narrow grid column as a select's would (a default `<input>` is ~20 characters
+// wide at its narrowest).
 import { computed, useAttrs } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -49,6 +51,7 @@ const labelOf = (value: unknown): string => props.options.find((o) => o.value ==
         :display-value="labelOf"
         :placeholder="placeholder"
         autocomplete="off"
+        :size="1"
       />
       <button
         v-if="clearable && model != null"
@@ -60,7 +63,7 @@ const labelOf = (value: unknown): string => props.options.find((o) => o.value ==
       >
         <VeyqIcon name="times" />
       </button>
-      <ComboboxTrigger class="veyq-combobox__trigger"><VeyqIcon name="chevron-down" /></ComboboxTrigger>
+      <ComboboxTrigger class="veyq-combobox__trigger" :aria-label="t('ui.showOptions')"><VeyqIcon name="chevron-down" /></ComboboxTrigger>
     </ComboboxAnchor>
     <ComboboxPortal>
       <ComboboxContent class="veyq-select__list veyq-combobox__list" position="popper" :side-offset="2" :collision-padding="8">

@@ -144,7 +144,7 @@ async function copy() {
         </label>
         <label>
           <span>{{ t('orders.receivedAt') }}</span>
-          <input v-model="receivedAt" type="datetime-local" class="p-inputtext order-received" />
+          <input v-model="receivedAt" type="datetime-local" class="veyq-input order-received" />
         </label>
         <label v-if="kind === 'INFORMATION'">
           <span>{{ t('orders.holdDays') }}</span>
@@ -152,7 +152,7 @@ async function copy() {
         </label>
         <label v-if="kind === 'REMOVAL'">
           <span>{{ t('orders.deferUntil') }}</span>
-          <input v-model="deferUntil" type="datetime-local" class="p-inputtext order-defer" />
+          <input v-model="deferUntil" type="datetime-local" class="veyq-input order-defer" />
         </label>
         <div>
           <VeyqButton type="submit" class="order-submit" :label="t('orders.submit')" icon="ban" :loading="pending" />

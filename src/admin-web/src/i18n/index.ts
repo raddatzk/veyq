@@ -21,7 +21,8 @@ const en = {
     "hidePassword": "Hide password",
     "notifications": "Notifications",
     "clear": "Clear",
-    "noMatches": "No matches"
+    "noMatches": "No matches",
+    "showOptions": "Show options"
   },
   "tenant": {
     "create": "Create tenant",
@@ -697,7 +698,8 @@ const de: typeof en = {
     "hidePassword": "Passwort verbergen",
     "notifications": "Benachrichtigungen",
     "clear": "Leeren",
-    "noMatches": "Keine Treffer"
+    "noMatches": "Keine Treffer",
+    "showOptions": "Optionen anzeigen"
   },
   "tenant": {
     "create": "Tenant anlegen",
