@@ -1,0 +1,19 @@
+useCase: uc.expenses.exchange-rates
+feature: expenses
+title: An entry in a foreign currency gets its rate
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-exchange-rates.md (after
+# cr-expenses-ledger), whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: the-days-table-straight-from-the-device
+    text: "Where an entry's currency differs from the base, the device fetches the whole day's table from the provider the instance names, straight from the browser, at most once a day for every Pot on the device; the request carries no currency, amount or veyq identity, and none goes through the backend."
+  - id: the-rate-is-sealed-and-never-moves
+    text: "The rate an entry is saved with is sealed into it as a decimal string; a later table never changes it, and it can always be typed."
+  - id: switched-off-or-unreachable-asks-for-the-rate
+    text: "With expenses.exchange-rates switched off, no provider named, the provider unreachable or the currency missing from its table, no request is sent or awaited and the editor asks for the rate."
+  - id: csp-and-notice-name-the-provider
+    text: "The content security policy admits the configured provider's origin only while the fetch is on, and the privacy notice and the security model name the provider and the fetch."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-exchange-rates after cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-exchange-rates after cr-expenses-ledger."

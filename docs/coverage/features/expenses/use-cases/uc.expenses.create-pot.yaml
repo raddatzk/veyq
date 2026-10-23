@@ -1,0 +1,20 @@
+useCase: uc.expenses.create-pot
+feature: expenses
+title: Create a Pot, set it up, delete it
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: member-creates-a-pot
+    text: "A member creates an EXPENSES_POT node in a folder or at the space root with its sealed name and meta (format version, base currency, own categories) and its participants as records at their first revision; the server sees the node's kind and the number of records."
+  - id: no-guest-creates-a-pot
+    text: "A guest of any link creates no Pot: Expenses declares no guest-creatable kind, and the server refuses the create from a link."
+  - id: switched-off-is-read-only
+    text: "With expenses switched off for the instance or the tenant, no Pot is offered or created and every write of an existing Pot is refused 422 capability_disabled, while it opens, shows its balances and downloads."
+  - id: settings-written-whole-with-the-revision-read
+    text: "A member writes the Pot's meta whole with the revision it read; a stale write is refused with the current revision; the base currency is not editable once an entry exists."
+  - id: a-deleted-pot-goes-to-the-trash-whole
+    text: "A deleted Pot goes to the space's node trash with every entry and receipt, and a restore brings it back whole; its erasure erases every Expenses row and receipt blob of the node."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."

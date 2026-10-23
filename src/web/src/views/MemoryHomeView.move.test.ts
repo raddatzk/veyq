@@ -223,9 +223,11 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
 
   it('from the guest\'s folder itself: its card offers the move out (and core\'s heart, copy and download), and nothing else', async () => {
     await mountAt('#~me/inbox/anna/')
-    const actions = [...document.body.querySelectorAll('.veyq-node-header-actions button')].map((b) => b.getAttribute('aria-label'))
-    // a copy of it is an ordinary folder elsewhere (uc.platform.copy-node); the folder itself stays the guest's
-    expect(actions).toEqual([t('node.favorite'), t('node.move.action'), t('node.copy.action'), t('export.action')])
+    const actions = [...document.body.querySelectorAll('.veyq-node-header-action')].map((b) => b.getAttribute('aria-label'))
+    // a copy of it is an ordinary folder elsewhere (uc.platform.copy-node); the folder itself stays the guest's - in a
+    // folder header's priority (ADR 0110), and nothing in a ⋯ menu
+    expect(actions).toEqual([t('node.favorite'), t('export.action'), t('node.move.action'), t('node.copy.action')])
+    expect(document.body.querySelector('.veyq-node-header-more')).toBeNull()
   })
 
   it('the drop box itself moves from its card, like any node', async () => {

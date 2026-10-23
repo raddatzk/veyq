@@ -1,0 +1,18 @@
+useCase: uc.expenses.entry-history
+feature: expenses
+title: See what changed, and restore a deleted entry
+status: planned
+# Refined 2026-10-23 (inbox #325, ADR 0108); built by changes/cr-expenses-ledger.md, whose phases turn
+# each gap below into refs.
+acceptanceCriteria:
+  - id: history-shows-every-revision
+    text: "An entry's history lists every revision the server holds, newest first, with what changed and when; an edited entry says so in the list."
+  - id: writer-names-for-members-only
+    text: "A member sees each revision's writer (a member's name or a link guest's name, as the platform recorded it); a guest is served no writer's name."
+  - id: deleted-entries-are-restorable
+    text: "Deleted entries are a list of the Pot's own; a writer restores one within the trash retention as a new revision, live again in the list and the balances."
+  - id: past-the-retention-a-line-without-receipts
+    text: "Past the trash retention a deleted entry stays a line in the history and restore is no longer offered."
+gaps:
+  web: "No Expenses client exists (no src/web/src/features/expenses); built by cr-expenses-ledger."
+  backend: "No :apps:expenses module, table or operation exists; built by cr-expenses-ledger."

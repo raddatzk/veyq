@@ -34,7 +34,7 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryParticipants.test.ts
           - src/features/memories/components/MemoryDetail.rights.test.ts
   - id: header-chips-and-picker
-    text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`pi-user-plus`) in the header's action bar that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
+    text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`users`) in the header (a button where the row has room, else an entry of its ⋯ menu) that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
     coverage:
       web:
         unit:

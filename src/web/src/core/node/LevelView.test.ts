@@ -40,6 +40,7 @@ import { STUB_ROW_ICON, stubRows, type StubRows } from '../../test/stubRows'
 import { ZipWriter } from '../export/zip'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
+import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../test/nodeHeader'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null, over: Partial<TreeNode> = {}): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
@@ -305,21 +306,29 @@ describe('LevelView: the folder header', () => {
     expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
   })
 
+  it('a folder\'s header in its priority (ADR 0110): favorite, share, download, cover, rename, move, copy; delete in the ⋯', async () => {
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, unlocked: true })
+    expect(headerButtonIds(w)).toEqual(['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'])
+    expect(await headerMenuIds(w)).toEqual(['delete'])
+  })
+
   it('emits renameFolder and deleteFolder from its actions', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
     await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
-    await w.find(`button[aria-label="${t('node.delete')}"]`).trigger('click')
+    await chooseHeaderEntry(w, 'delete')
     expect(w.emitted('renameFolder')).toHaveLength(1)
     expect(w.emitted('deleteFolder')).toHaveLength(1)
   })
 
   // Found in the browser, 2026-10-07: the three carried `memory-action-collapsible` / `memory-action-inline`, which
-  // memory.css hid at 721–1120 px and ≤ 720 px — and this card has no overflow menu to offer them instead. jsdom has no
-  // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
-  it('keeps share, rename, move and delete free of any width-hiding class (the card has no overflow menu)', () => {
+  // memory.css hid at 721–1120 px and ≤ 720 px. What does not fit is the ⋯ menu's now (ADR 0110), never hidden by a class:
+  // jsdom has no layout, so the contract pinned is the DOM one — the folder's priority, delete the menu's last entry, and
+  // no width-hiding class on any button.
+  it('shows the folder\'s actions in its priority, delete in the ⋯ menu, none with a width-hiding class', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true })
-    const actions = w.findAll('.veyq-node-header-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete')])
+    const actions = w.findAll('.veyq-node-header-action')
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('share.share'), t('node.rename'), t('node.move.action')])
+    expect(await headerMenuIds(w)).toEqual(['delete'])
     for (const b of actions) {
       expect(b.classes()).not.toContain('memory-action-collapsible')
       expect(b.classes()).not.toContain('memory-action-inline')

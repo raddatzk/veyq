@@ -20,6 +20,7 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
+import { actionMenuItems } from '../actionMenu'
 import { levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
 
 const props = withDefaults(
@@ -49,15 +50,7 @@ const details = computed(() => levelRowDetails(props.row))
 
 const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, props.row.actions)))
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
-const menuItems = computed<VeyqMenuItem[]>(() =>
-  split.value.menu.map((a: LevelRowAction) => ({
-    label: a.label,
-    icon: a.icon,
-    disabled: a.disabled === true || a.loading === true,
-    class: ['veyq-row-menu-item', `veyq-row-action-${a.id}`, a.severity === 'danger' ? 'is-danger' : ''].filter(Boolean).join(' '),
-    command: () => a.onClick(),
-  })),
-)
+const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu], 'veyq-row'))
 const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? 'primary' : 'secondary')
 </script>
 

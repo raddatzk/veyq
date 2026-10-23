@@ -40,8 +40,11 @@ media tables. What is built and what is open: the ADR's Consequences.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No activation step, but a switch to turn it off.** Created on demand inside a scope. The operator, and a tenant
   owner for their tenant, may switch an application or one of its functions off through the capability register
-  ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)): no new
-  nodes of it, what exists stays.
+  ([ADR 0088](../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)). A function
+  off: none of it new. The application off: read-only — every write of it refused, every read, download and removal
+  kept ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 8,
+  [uc.platform.switch-application-off](../features/platform/use-cases/uc.platform.switch-application-off.md); not built
+  yet, `cr-application-switches`).
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   and a blob's key is sealed bound to its node and its application's role token — so Depot needed no new seal purpose
@@ -53,7 +56,7 @@ media tables. What is built and what is open: the ADR's Consequences.
 |---|---|
 | [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`src/web/src/features/memories`, a build-time registry the shell asks, per-kind row factories and dialogs), the directory named for its owner like every application's (`features/<owner>`). What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
-| [Expenses](expenses.md) | Refined, not built, out of V1: [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md). A Pot is a node kind; its entries are sealed revisions in its own table. |
+| [Expenses](expenses.md) | Refined, not built, on the V1 line (owner 2026-10-23): [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md). A Pot is a node kind; its entries are sealed revisions in its own table. |
 | [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`, depending on `:core` only), contract `contracts/api/depot/`, web `src/web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
 
 ## How an application publishes a revisioned list
