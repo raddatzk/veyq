@@ -165,7 +165,17 @@ test(
   async () => {
     const { page } = guest
     await page.goto(shareLink)
-    await expect(page.getByText('Shared with you · read-only')).toBeVisible({ timeout: 60_000 })
+    // The space's terms may be in force: terms-operator-section.spec.ts publishes them and this file sorts after it
+    // (`workers: 1`, files in name order), so a whole run's guest meets the link's terms gate first and accepts it, as a
+    // guest does. Run on its own, the link opens straight away.
+    const shared = page.getByText('Shared with you · read-only')
+    const gate = page.getByText('Please accept the terms of use')
+    await expect(shared.or(gate)).toBeVisible({ timeout: 60_000 })
+    if (await gate.isVisible()) {
+      await page.getByRole('button', { name: 'Accept and continue' }).click()
+      await expect(gate).toBeHidden()
+    }
+    await expect(shared).toBeVisible({ timeout: 60_000 })
     await expect(page.getByRole('heading', { level: 1, name: memoryName })).toBeVisible({ timeout: 60_000 })
     await page.getByRole('button', { name: 'Open item 1' }).click({ timeout: 60_000 })
 
