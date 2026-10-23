@@ -16,6 +16,7 @@
 //   - **Cancel, Escape and dismiss are one answer.** Anything that is not the accept button is `false`; there is
 //     no third outcome a call site could forget to handle.
 import { computed, ref } from 'vue'
+import type { VeyqIconName } from '../ui/icons'
 
 /** What a call site says; every string is already i18n-resolved by the caller, as with `useToast`. */
 export interface ConfirmRequest {
@@ -26,8 +27,8 @@ export interface ConfirmRequest {
   /** The primary's label. Reuses the label of the button that opened it — a dialog whose primary reads
    *  differently from the control that summoned it is a new way to be wrong. */
   acceptLabel: string
-  /** Optional PrimeVue icon class for the primary, mirroring the opening button's icon. */
-  acceptIcon?: string
+  /** Optional icon for the primary, mirroring the opening button's icon. */
+  acceptIcon?: VeyqIconName
 }
 
 const pending = ref<ConfirmRequest | null>(null)

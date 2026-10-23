@@ -15,11 +15,13 @@ const en = {
     "create": "Create",
     "done": "Done"
   },
-  "primevue": {
-    "passwordPrompt": "Enter a password",
-    "aria": {
-      "close": "Close"
-    }
+  "ui": {
+    "close": "Close",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "notifications": "Notifications",
+    "clear": "Clear",
+    "noMatches": "No matches"
   },
   "tenant": {
     "create": "Create tenant",
@@ -689,11 +691,13 @@ const de: typeof en = {
     "create": "Erstellen",
     "done": "Fertig"
   },
-  "primevue": {
-    "passwordPrompt": "Passwort eingeben",
-    "aria": {
-      "close": "Schließen"
-    }
+  "ui": {
+    "close": "Schließen",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "notifications": "Benachrichtigungen",
+    "clear": "Leeren",
+    "noMatches": "Keine Treffer"
   },
   "tenant": {
     "create": "Tenant anlegen",

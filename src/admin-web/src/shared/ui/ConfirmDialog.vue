@@ -6,14 +6,14 @@
 //
 // Its footer is the styleguide's shape (§ Buttons & dialog actions: one `.veyq-dialog-action-row` — already
 // present verbatim in this package's `styles/ui.css` — cancel secondary-outlined on the left, the destructive
-// primary a filled `severity="danger"` with an explicit label on the right), which is the whole reason this is
-// an own component rather than PrimeVue's `ConfirmationService`: that service would have to be re-templated
-// through its `#container` slot to reach this same shape anyway.
+// primary a filled `variant="danger"` with an explicit label on the right), which is the whole reason this is
+// an own component rather than a component library's confirmation service: that service would have to be
+// re-templated to reach this same shape anyway.
 //
 // It renders and answers — it never runs the action. The busy state belongs to the control that opened it, so
 // there is no `:loading` here and nothing to disable: the dialog is gone before the mutation starts.
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import VeyqButton from './VeyqButton.vue'
+import VeyqDialog from './VeyqDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { confirmRequest, settleConfirm } from '../state/useConfirm'
 
@@ -21,34 +21,32 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     v-if="confirmRequest"
     :visible="true"
     :header="confirmRequest.header"
-    modal
-    :draggable="false"
     class="veyq-confirm-dialog"
     @update:visible="settleConfirm(false)"
   >
     <p class="dialog-copy">{{ confirmRequest.message }}</p>
     <div class="veyq-dialog-action-row">
-      <Button
+      <VeyqButton
         type="button"
         :label="t('common.cancel')"
-        icon="pi pi-times"
-        severity="secondary"
-        outlined
+        icon="times"
+        variant="secondary"
+        appearance="outlined"
         @click="settleConfirm(false)"
       />
-      <Button
+      <VeyqButton
         type="button"
         :label="confirmRequest.acceptLabel"
         :icon="confirmRequest.acceptIcon"
-        severity="danger"
+        variant="danger"
         @click="settleConfirm(true)"
       />
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

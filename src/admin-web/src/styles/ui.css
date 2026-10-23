@@ -32,7 +32,7 @@
   margin-left: auto;
 }
 
-.veyq-dialog-action-row .p-button,
+.veyq-dialog-action-row .veyq-button,
 .veyq-dialog-action-row button {
   max-width: 100%;
 }
@@ -51,10 +51,10 @@
 
 /* A radio or a checkbox is a control beside its label, never a field: full width, it takes the row in a flex
    label and squeezes the label's text to one character per line (the move dialog's destinations did). */
-.veyq-form .p-inputtext,
-.veyq-form .p-password,
-.veyq-form .p-select,
-.veyq-form .p-datepicker,
+.veyq-form .veyq-input,
+.veyq-form .veyq-password,
+.veyq-form .veyq-select,
+.veyq-form .veyq-combobox,
 .veyq-form input:not([type='radio']):not([type='checkbox']),
 .veyq-form select,
 .veyq-form textarea {
@@ -62,8 +62,8 @@
   min-width: 0;
 }
 
-.veyq-form .p-inputtext,
-.veyq-form .p-password-input,
+.veyq-form .veyq-input,
+.veyq-form .veyq-password__input,
 .veyq-form input:not([type='radio']):not([type='checkbox']),
 .veyq-form select,
 .veyq-form textarea {
@@ -105,7 +105,7 @@
   color: var(--app-warning-text);
 }
 
-.veyq-badge .pi {
+.veyq-badge .veyq-icon {
   margin-right: 0.3rem;
   font-size: 0.85em;
 }
@@ -128,7 +128,7 @@
     grid-template-columns: 1fr;
   }
 
-  .veyq-dialog-action-row .p-button,
+  .veyq-dialog-action-row .veyq-button,
   .veyq-dialog-action-row button {
     width: 100%;
   }

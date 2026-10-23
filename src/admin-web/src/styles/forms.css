@@ -7,17 +7,17 @@
   box-shadow: var(--app-shadow-md);
 }
 
-.login-card .p-card-title {
+.login-card .veyq-card-frame__title {
   color: var(--app-text);
   font-size: 1.65rem;
 }
 
-.login-card .p-card-content {
+.login-card .veyq-card-frame__content {
   padding-top: 0.5rem;
 }
 
 /* Margins, not a grid: a grid would stretch the card's bare action buttons to its full width. */
-.login-card .p-card-content > * + * {
+.login-card .veyq-card-frame__content > * + * {
   margin-top: 1rem;
 }
 
@@ -26,18 +26,18 @@
   max-height: calc(100dvh - 2rem);
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button:hover {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:hover {
   border: 0;
   background: var(--app-surface-muted);
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:focus-visible {
   outline: 2px solid var(--app-focus-ring);
   outline-offset: 2px;
   box-shadow: none;
@@ -59,7 +59,7 @@
     border-radius: var(--app-radius);
   }
 
-  .login-card .p-card-body {
+  .login-card .veyq-card-frame__body {
     padding: 1rem;
   }
 

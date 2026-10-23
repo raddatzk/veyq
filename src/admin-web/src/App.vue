@@ -4,12 +4,12 @@
 // shell is the fallback, so a new sign-in-shaped screen needs no decision; `router.ts` owns the vocabulary.
 //
 // The unreachable state is a card too, and it PRE-EMPTS the route rather than sitting above it as web's banner
-// does — with no reachable backend there is no console to render underneath. The <Toast> is the same transient
+// does — with no reachable backend there is no console to render underneath. The toaster is the same transient
 // acknowledgement surface the moved panels already expect (ADR 0039).
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import Toast from 'primevue/toast'
-import Message from 'primevue/message'
+import VeyqMessage from './shared/ui/VeyqMessage.vue'
+import VeyqToaster from './shared/ui/VeyqToaster.vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from './shared/ui/ConfirmDialog.vue'
 import { serverState } from './shared/state/serverState'
@@ -22,9 +22,9 @@ const cardLayout = computed(() => serverState.unreachable || route.meta.layout !
 <template>
   <main v-if="cardLayout" class="veyq-shell">
     <div class="veyq-shell-inner">
-      <Message v-if="serverState.unreachable" severity="error" :closable="false">
+      <VeyqMessage v-if="serverState.unreachable" tone="error">
         {{ t('admin.unreachable') }}
-      </Message>
+      </VeyqMessage>
       <RouterView v-else />
     </div>
   </main>
@@ -35,7 +35,7 @@ const cardLayout = computed(() => serverState.unreachable || route.meta.layout !
        `useConfirm` — the one that retired `window.confirm` here (cr-admin-web-own-confirm-dialog). It sits
        outside both shells because either may ask. -->
   <ConfirmDialog />
-  <Toast />
+  <VeyqToaster />
 </template>
 
 <style scoped>

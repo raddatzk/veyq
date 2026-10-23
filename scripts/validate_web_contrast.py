@@ -3,40 +3,37 @@
 
 **What it asserts.** Each sheet in `SHEETS` — `src/web/src/styles/base.css` and `src/admin-web/src/styles/base.css`, the
 deliberate copy ADR 0065 keeps (inbox #390) — is read the way the browser cascades it: every `:root { … }` block
-gives the light values, `:root.veyq-dark { … }` overrides them for dark, and the `--p-*` declarations in `:root`
-(the block that routes PrimeVue's colours onto our role tokens) are resolved per mode through those tokens —
-`var()`, `color-mix(in srgb, …)`, hex and `rgb()/rgba()`, with alpha composited over the surface. For each pair in
-`PAIRS` and each mode, the WCAG 2.x contrast ratio (relative luminance, `(L1+0.05)/(L2+0.05)`) must reach its floor:
-**4.5:1** for text, **3:1** for a UI component's boundary or fill (WCAG 1.4.3 / 1.4.11). A pair that reads a
-`--p-*` variable base.css does not set is **red, not skipped**: it means that colour falls back to the PrimeVue
-preset (Aura), which this buildless job cannot see — the routing was deleted, so nothing pins the pair any more. Both sheets answer to the same `PAIRS`: they carry the
-same role vocabulary, so a role pair one surface does not paint today is still the pair its next component would.
-A missing sheet is red, never a silent skip.
+gives the light values and `:root.veyq-dark { … }` overrides them for dark, and each pair is resolved per mode through
+those tokens — `var()`, `color-mix(in srgb, …)`, hex and `rgb()/rgba()`, with alpha composited over the surface. For
+each pair in `PAIRS` and each mode, the WCAG 2.x contrast ratio (relative luminance, `(L1+0.05)/(L2+0.05)`) must reach
+its floor: **4.5:1** for text, **3:1** for a UI component's boundary or fill (WCAG 1.4.3 / 1.4.11). A pair that reads a
+variable base.css does not set is **red, not skipped**: the UI layer (`shared/ui/`, ADR 0107) paints from these roles
+alone, so an unset one is a typo or a deleted role, never a fallback. Both sheets answer to the same `PAIRS`: they
+carry the same role vocabulary, so a role pair one surface does not paint today is still the pair its next component
+would. A missing sheet is red, never a silent skip.
 
-**The defect that bought it.** inbox #388 (from #385 (g)): the green primary button — Aura's emerald-500 `#10b981`
-under white text — measured **2.54:1**, app-wide, on every Save/Create/Confirm, for as long as the app had used
-PrimeVue's default primary. The same audit found 36 failing pairs (light and dark): Aura's danger/warn buttons and
-their text variants, its warn/success/error messages and toasts (2.8–4.4:1), its input/checkbox/switch boundaries
-(1.5:1 light, 2.2:1 dark), and white text on the dark theme's light fills (accent badges, the danger dialog
-button, the date picker's selected day: 1.9–2.8:1). Nothing failed a build: colour is invisible to every test.
+**The defect that bought it.** inbox #388 (from #385 (g)): the green primary button — the former component library's
+preset (Aura) emerald-500 `#10b981` under white text — measured **2.54:1**, app-wide, on every Save/Create/Confirm, for as
+long as the app had used that default primary. The same audit found 36 failing pairs (light and dark): the preset's
+danger/warn buttons and their text variants, its warn/success/error messages and toasts (2.8–4.4:1), its
+input/checkbox/switch boundaries (1.5:1 light, 2.2:1 dark), and white text on the dark theme's light fills (accent
+badges, the danger dialog button, the date picker's selected day: 1.9–2.8:1). Nothing failed a build: colour is
+invisible to every test. The layer that replaced the library (ADR 0107) moved every pair onto the roles it paints with.
 
-**Its limit.** Five.
+**Its limit.** Four.
   (a) **It proves the TOKENS, not the rendered page.** A component that paints a raw colour, or pairs a token with
       a background this list never names, is not seen. The pairs are the role pairs the styleguide prescribes
-      (text on surface, a role's text on its soft fill, on-fill on a role's fill, the PrimeVue routing); a new
+      (text on surface, a role's text on its soft fill, on-fill on a role's fill, each layer component's own); a new
       pairing in a component needs a row here, and nothing forces one. The #388 audit that found the 36 also
       measured the rendered harness with `getComputedStyle` — that is the proof of the page, this is the pin.
-  (b) **It trusts that the routing reaches PrimeVue.** It checks that `--p-primary-color` & co. are SET to our
-      tokens; whether PrimeVue still reads a variable of that name (a preset rename) needs `node_modules`, which
-      the trust-chain job does not have. A rename shows as the old Aura colour in the browser, not as red here.
-  (c) **Gradients, images and media scrims are out of scope**: a label over a photo or over
+  (b) **Gradients, images and media scrims are out of scope**: a label over a photo or over
       `linear-gradient(…)` has no single background (the styleguide's "rendered content" exception).
-  (d) **Disabled controls are exempt** (WCAG 1.4.3 "inactive user interface component"): PrimeVue paints them at
-      `opacity: .6`, and no pair here measures that.
-  (e) **Two sheets, one list — not one palette.** The copies may drift apart (that is the point of ADR 0065), and
+  (c) **Disabled controls are exempt** (WCAG 1.4.3 "inactive user interface component"): the layer paints them at
+      `opacity: .6` or on muted roles, and no pair here measures that.
+  (d) **Two sheets, one list — not one palette.** The copies may drift apart (that is the point of ADR 0065), and
       each is held to the floor on its own values; nothing here says they must agree. A third browser surface is
       a row in `SHEETS`, and nothing forces one. (Before inbox #390 `src/admin-web/` was not covered and failed the
-      same pairs on Aura's defaults: 23 light, 11 dark, measured on the rendered harness.)
+      same pairs on the preset's defaults: 23 light, 11 dark, measured on the rendered harness.)
 """
 from __future__ import annotations
 
@@ -170,7 +167,7 @@ def resolve(expr: str, tokens: dict[str, str], seen: tuple = ()) -> Colour:
             raise Unresolved(f"{name} refers to itself")
         if name in tokens:
             return resolve(tokens[name], tokens, seen + (name,))
-        raise Unresolved(f"{name} is not set in base.css")  # a fallback is the preset's job, never ours
+        raise Unresolved(f"{name} is not set in base.css")  # an unset role is a typo or a deleted role, never a fallback
     m = re.fullmatch(r"color-mix\(\s*in srgb\s*,(.+)\)", expr)
     if m:
         (a, pa), (b, pb) = [(re.sub(r"\s+[\d.]+%$", "", p), (re.findall(r"\s([\d.]+)%$", p) or [None])[0])
