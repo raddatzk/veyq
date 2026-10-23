@@ -4,8 +4,8 @@
 - **Primary actor:** A **member** of a space who may create nodes in a folder (or at the space's root).
 - **Goal:** Start a Pot for a trip, a flat or an evening, with the currency everyone's share is counted in and the
   people whose money it is.
-- **Preconditions:** The space exists. Like Memories and Depot, Expenses has no switch of its own in the capability
-  register; only its exchange-rate fetch does ([uc.expenses.exchange-rates](uc.expenses.exchange-rates.md)).
+- **Preconditions:** The space exists; Expenses is not switched off for the instance or the tenant
+  ([uc.platform.switch-application-off](../../platform/use-cases/uc.platform.switch-application-off.md)).
 - **Postconditions (success):** An `EXPENSES_POT` node in the folder, with its own key under the folder's
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)); its sealed
   `node-meta` holds the format version, the base currency and the Pot's own categories; each named participant is a
@@ -29,6 +29,8 @@
 
 ## Alternate / exception flows
 
+- **E0 — Expenses is switched off:** no Pot is offered or created; existing Pots are read-only — they open, show their
+  balances and download, and take no write.
 - **E1 — the participants' append fails after the node was created:** the Pot opens with no participants and offers to
   add them (step 3 of [uc.expenses.manage-participants](uc.expenses.manage-participants.md)); nothing is lost.
 - **E2 — the base currency once an entry exists:** shown, not editable — every entry carries its rate to it.
