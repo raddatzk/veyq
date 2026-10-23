@@ -8,12 +8,13 @@
 // link. (The uploader-links right is gated on the memory ACTION that opens the uploader dialog, not here.)
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import SelectButton from 'primevue/selectbutton'
-import ToggleSwitch from 'primevue/toggleswitch'
-import DatePicker from 'primevue/datepicker'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqToggleGroup from '../../../shared/ui/VeyqToggleGroup.vue'
+import VeyqSwitch from '../../../shared/ui/VeyqSwitch.vue'
+import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
+import { isoDateToLocalDate, localDateToIsoDate } from '../../../shared/isoDate'
 import LocaleMarkdownEditor from '../../../shared/ui/LocaleMarkdownEditor.vue'
 import { createShare, updateShare, reissueShare, isShareDeleted, readShareNote, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
 import { NO_NOTE, type ShareNote } from '../../../core/sharing/shareNote'
@@ -95,6 +96,15 @@ const minExpiry = new Date()
 const rules = linkRules()
 const maxExpiry = computed(() => lastExpiryDay(rules.maxDays, props.editShare?.createdAt ?? new Date()))
 const expiryMissing = computed(() => rules.maxDays !== null && !expiresAt.value)
+// The date field binds a calendar day (`YYYY-MM-DD`); the form keeps the picked day as a local `Date`.
+const expiresAtDay = computed<string>({
+  get: () => localDateToIsoDate(expiresAt.value),
+  set: (day) => {
+    expiresAt.value = isoDateToLocalDate(day)
+  },
+})
+const minExpiryDay = localDateToIsoDate(minExpiry)
+const maxExpiryDay = computed(() => (maxExpiry.value ? localDateToIsoDate(maxExpiry.value) : undefined))
 /** The server refused the link for a requirement the form could not know of (a rule set while the dialog was open). */
 const requirementRefused = ref(false)
 const error = ref(false)
@@ -234,10 +244,9 @@ function endOfDay(d: Date): Date {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="headerLabel"
-    modal
     class="share-dialog"
     :closable="!busy"
     :close-on-escape="!busy"
@@ -255,16 +264,16 @@ function endOfDay(d: Date): Date {
           :aria-label="t('share.linkLabel')"
           @focus="($event.target as HTMLInputElement).select()"
         />
-        <Button
+        <VeyqButton
           :label="copied ? t('share.copied') : t('share.copy')"
-          :icon="copied ? 'pi pi-check' : 'pi pi-copy'"
-          severity="secondary"
+          :icon="copied ? 'check' : 'copy'"
+          variant="secondary"
           @click="onCopy"
         />
       </div>
       <div class="veyq-dialog-action-row">
         <div class="veyq-action-group">
-          <Button :label="t('common.done')" icon="pi pi-check" @click="emit('close')" />
+          <VeyqButton :label="t('common.done')" icon="check" @click="emit('close')" />
         </div>
       </div>
     </template>
@@ -273,23 +282,22 @@ function endOfDay(d: Date): Date {
     <template v-else>
       <div class="share-field">
         <label for="share-create-name">{{ t('share.name') }}</label>
-        <InputText id="share-create-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="busy" />
+        <VeyqInput id="share-create-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="busy" />
       </div>
 
       <!-- Normal flow: pick READ/READ_WRITE on create AND edit (cr-0119, re-grade in place). Uploader flow: no
            switcher — just a short description of what a drop-box link does. -->
       <div v-if="showRoleSwitcher" class="share-field">
         <label>{{ t('share.roleLabel') }}</label>
-        <SelectButton v-model="role" :options="roleOptions" option-label="label" option-value="value" :allow-empty="false" :disabled="busy" class="share-role-switcher" />
+        <VeyqToggleGroup v-model="role" :options="roleOptions" :disabled="busy" class="share-role-switcher" />
         <p class="share-hint">{{ roleHint }}</p>
         <div v-if="roleNeedsReissue" class="share-role-needs-reissue">
           <p class="share-hint share-reissue-warning">{{ t('share.roleNeedsReissue') }}</p>
-          <Button
-            type="button"
+          <VeyqButton
             :label="t('share.reissue')"
-            icon="pi pi-replay"
-            severity="secondary"
-            outlined
+            icon="replay"
+            variant="secondary"
+            appearance="outlined"
             size="small"
             :disabled="busy"
             @click="emit('reissue', editShare!)"
@@ -306,7 +314,7 @@ function endOfDay(d: Date): Date {
             <div class="share-group-title">{{ t('share.noteSection') }}</div>
             <p class="share-group-sub">{{ t('share.noteSectionHint') }}</p>
           </div>
-          <ToggleSwitch v-model="noteEnabled" :aria-label="t('share.noteSection')" :disabled="busy" />
+          <VeyqSwitch v-model="noteEnabled" :aria-label="t('share.noteSection')" :disabled="busy" />
         </div>
         <div v-if="noteEnabled" class="share-group-body">
           <LocaleMarkdownEditor v-model="note" :placeholder="t('share.notePlaceholder')" />
@@ -324,13 +332,13 @@ function endOfDay(d: Date): Date {
             <div class="share-group-title">{{ t('share.passwordSection') }}</div>
             <p class="share-group-sub">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</p>
           </div>
-          <ToggleSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="busy || rules.passwordRequired" />
+          <VeyqSwitch v-model="passwordEnabled" :aria-label="t('share.passwordSection')" :disabled="busy || rules.passwordRequired" />
         </div>
         <p v-if="rules.passwordRequired" class="share-group-sub share-rule">{{ t('share.passwordRequiredByRule') }}</p>
         <div v-if="passwordEnabled" class="share-group-body">
           <label for="share-create-password">{{ t('share.passwordLabel') }}</label>
           <div class="share-password-row">
-            <InputText
+            <VeyqInput
               id="share-create-password"
               v-model="password"
               :type="revealPw ? 'text' : 'password'"
@@ -338,13 +346,12 @@ function endOfDay(d: Date): Date {
               :placeholder="t('share.passwordPlaceholder')"
               :disabled="busy"
             />
-            <Button
-              type="button"
-              :icon="revealPw ? 'pi pi-eye-slash' : 'pi pi-eye'"
+            <VeyqButton
+              :icon="revealPw ? 'eye-slash' : 'eye'"
               :aria-label="revealPw ? t('common.hide') : t('common.show')"
               :title="revealPw ? t('common.hide') : t('common.show')"
-              severity="secondary"
-              text
+              variant="secondary"
+              appearance="text"
               :disabled="busy"
               @click="revealPw = !revealPw"
             />
@@ -361,21 +368,17 @@ function endOfDay(d: Date): Date {
             <div class="share-group-title">{{ t('share.expirySection') }}</div>
             <p class="share-group-sub">{{ t('share.expirySectionHint') }}</p>
           </div>
-          <ToggleSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="busy || rules.maxDays !== null" />
+          <VeyqSwitch v-model="expiryEnabled" :aria-label="t('share.expirySection')" :disabled="busy || rules.maxDays !== null" />
         </div>
         <p v-if="rules.maxDays !== null" class="share-group-sub share-rule">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</p>
         <div v-if="expiryEnabled" class="share-group-body">
           <label for="share-create-expiry">{{ t('share.expiryLabel') }}</label>
-          <DatePicker
-            id="share-create-expiry"
-            v-model="expiresAt"
-            :min-date="minExpiry"
-            :max-date="maxExpiry ?? undefined"
-            date-format="yy-mm-dd"
-            show-icon
-            icon-display="input"
+          <VeyqDateField
+            v-model="expiresAtDay"
+            input-id="share-create-expiry"
+            :min-date="minExpiryDay"
+            :max-date="maxExpiryDay"
             :disabled="busy"
-            fluid
           />
         </div>
       </div>
@@ -384,19 +387,19 @@ function endOfDay(d: Date): Date {
       <p v-else-if="error && requirementRefused" class="share-error">{{ t('share.requirementRefused') }}</p>
       <p v-else-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : isReissue ? t('share.reissueFailed') : t('share.createFailed') }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
-        <Button
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="emit('close')" />
+        <VeyqButton
           :label="busy
             ? (isEdit ? t('share.noteSaving') : isReissue ? t('share.reissuing') : t('share.creating'))
             : (isEdit ? t('share.noteSave') : isReissue ? t('share.reissueSubmit') : t('share.create'))"
-          :icon="isEdit ? 'pi pi-check' : isReissue ? 'pi pi-replay' : 'pi pi-link'"
+          :icon="isEdit ? 'check' : isReissue ? 'replay' : 'link'"
           :loading="busy"
           :disabled="busy || passwordTooShort || alreadyReplaced || expiryMissing"
           @click="onSubmit"
         />
       </div>
     </template>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>
@@ -461,7 +464,7 @@ function endOfDay(d: Date): Date {
   gap: 0.4rem;
   align-items: center;
 }
-.share-password-row :deep(.p-inputtext) {
+.share-password-row :deep(.veyq-input) {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -470,7 +473,7 @@ function endOfDay(d: Date): Date {
   display: flex;
   width: 100%;
 }
-.share-role-switcher :deep(.p-togglebutton) {
+.share-role-switcher :deep(.veyq-toggle-group__item) {
   flex: 1 1 0;
 }
 .share-error {

@@ -120,12 +120,12 @@
   margin-left: auto;
 }
 
-.veyq-dialog-action-row .p-button,
+.veyq-dialog-action-row .veyq-button,
 .veyq-dialog-action-row button {
   max-width: 100%;
 }
 
-.veyq-icon-button.p-button,
+.veyq-icon-button.veyq-button,
 .veyq-icon-button {
   flex: 0 0 auto;
   width: 2.55rem;
@@ -134,7 +134,7 @@
   padding-inline: 0;
 }
 
-.veyq-prime-icon-button.p-button {
+.veyq-prime-icon-button.veyq-button {
   flex: 0 0 auto;
   width: 2.55rem;
   min-width: 2.55rem;
@@ -142,7 +142,7 @@
   padding-inline: 0;
 }
 
-.veyq-icon-button:not(.p-button) {
+.veyq-icon-button:not(.veyq-button) {
   display: grid;
   place-items: center;
   border: 1px solid var(--app-line);
@@ -154,11 +154,11 @@
   box-shadow: var(--app-shadow-sm);
 }
 
-.veyq-icon-button:not(.p-button):hover {
+.veyq-icon-button:not(.veyq-button):hover {
   background: var(--app-hover);
 }
 
-.veyq-icon-button:not(.p-button):focus-visible {
+.veyq-icon-button:not(.veyq-button):focus-visible {
   outline: 2px solid var(--app-focus);
   outline-offset: 2px;
 }
@@ -202,10 +202,10 @@
 
 /* A radio or a checkbox is a control beside its label, never a field: full width, it takes the row in a flex
    label and squeezes the label's text to one character per line (the move dialog's destinations did). */
-.veyq-form .p-inputtext,
-.veyq-form .p-password,
-.veyq-form .p-select,
-.veyq-form .p-datepicker,
+.veyq-form .veyq-input,
+.veyq-form .veyq-password,
+.veyq-form .veyq-select,
+.veyq-form .veyq-date-field,
 .veyq-form input:not([type='radio']):not([type='checkbox']),
 .veyq-form select,
 .veyq-form textarea {
@@ -213,67 +213,12 @@
   min-width: 0;
 }
 
-.veyq-form .p-inputtext,
-.veyq-form .p-password-input,
+.veyq-form .veyq-input,
+.veyq-form .veyq-password__input,
 .veyq-form input:not([type='radio']):not([type='checkbox']),
 .veyq-form select,
 .veyq-form textarea {
   border-radius: var(--app-radius-sm);
-}
-
-.veyq-date-field .p-datepicker-input {
-  min-height: 2.75rem;
-  padding-inline-end: 2.75rem;
-  border-radius: var(--app-radius-sm);
-}
-
-.veyq-date-field .p-datepicker-input-icon-container {
-  color: var(--app-muted);
-}
-
-.veyq-date-panel {
-  min-width: min(100%, 20rem);
-  margin-top: 0.4rem;
-  border: 1px solid var(--app-line);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface);
-  color: var(--app-text);
-  box-shadow: var(--app-shadow-md);
-}
-
-.veyq-date-panel .p-datepicker-header {
-  border-color: var(--app-line);
-  color: var(--app-text);
-}
-
-.veyq-date-panel .p-datepicker-weekday,
-.veyq-date-panel .p-datepicker-other-month .p-datepicker-day {
-  color: var(--app-muted);
-}
-
-.veyq-date-panel .p-datepicker-day,
-.veyq-date-panel .p-datepicker-month,
-.veyq-date-panel .p-datepicker-year {
-  border-radius: 8px;
-}
-
-.veyq-date-panel .p-datepicker-day:not(.p-disabled):hover,
-.veyq-date-panel .p-datepicker-month:not(.p-disabled):hover,
-.veyq-date-panel .p-datepicker-year:not(.p-disabled):hover {
-  background: var(--app-hover);
-  color: var(--app-text);
-}
-
-.veyq-date-panel .p-datepicker-day-selected,
-.veyq-date-panel .p-datepicker-month-selected,
-.veyq-date-panel .p-datepicker-year-selected {
-  background: var(--app-success);
-  color: var(--app-on-fill);
-}
-
-.veyq-date-panel .p-datepicker-today .p-datepicker-day:not(.p-datepicker-day-selected) {
-  color: var(--app-success-text);
-  background: var(--app-success-soft);
 }
 
 /* A list of rows, an `ul` as often as a `div`: no bullets and no indent (inbox #382). */
@@ -384,7 +329,7 @@
   background: var(--app-surface);
   color: var(--app-text);
   font-family: inherit;
-  font-size: var(--p-button-font-size, 1rem);
+  font-size: 1rem;
   line-height: normal;
   text-decoration: none;
   cursor: pointer;
@@ -395,7 +340,7 @@
 }
 
 .veyq-dialog-button {
-  font-weight: var(--p-button-label-font-weight, 500);
+  font-weight: 500;
 }
 
 .veyq-dialog-button.veyq-dialog-button span {
@@ -409,15 +354,15 @@
 }
 
 .veyq-dialog-button-primary {
-  border-color: var(--p-button-primary-border-color, var(--app-success));
-  background: var(--p-button-primary-background, var(--app-success));
-  color: var(--p-button-primary-color, var(--app-backdrop-strong));
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+  color: var(--app-on-fill);
 }
 
 .veyq-dialog-button-primary:hover:not(:disabled) {
-  border-color: var(--p-button-primary-hover-border-color, var(--app-success));
-  background: var(--p-button-primary-hover-background, var(--app-success));
-  color: var(--p-button-primary-hover-color, var(--app-backdrop-strong));
+  border-color: var(--app-primary-hover);
+  background: var(--app-primary-hover);
+  color: var(--app-on-fill);
 }
 
 .veyq-dialog-button-danger {
@@ -475,7 +420,7 @@
     grid-template-columns: 1fr;
   }
 
-  .veyq-dialog-action-row .p-button,
+  .veyq-dialog-action-row .veyq-button,
   .veyq-dialog-action-row button {
     width: 100%;
   }
@@ -520,34 +465,35 @@
   min-width: 0;
   margin-bottom: -0.5rem;
 }
-.veyq-level-tabs .p-tablist-tab-list {
+.veyq-level-tabs .veyq-tabs__list {
   overflow-x: auto;
   overflow-y: hidden;
   border-bottom: 1px solid var(--app-line);
   background: transparent;
   scrollbar-width: thin;
 }
-.veyq-level-tabs .p-tab {
+.veyq-level-tabs .veyq-tab {
   position: relative;
   flex: 0 0 auto;
   min-width: max-content;
 }
-.veyq-level-tabs .p-tab:focus {
+.veyq-level-tabs .veyq-tab:focus {
   outline: 0 !important;
 }
-.veyq-level-tabs .p-tab:focus-visible {
+.veyq-level-tabs .veyq-tab:focus-visible {
   z-index: 1;
   box-shadow: inset 0 3px 0 var(--app-focus) !important;
 }
-.veyq-level-tabs .p-tab.p-tab-active,
-.veyq-level-tabs .p-tab[data-p-active='true'] {
+.veyq-level-tabs .veyq-tab[aria-selected='true'] {
   color: var(--app-accent);
   font-weight: 800;
 }
-.veyq-level-tabs .p-tab:not(.p-tab-active):not([data-p-active='true']):hover {
+/* `.veyq-tabs__list` keeps the weight the old double `:not()` had: one less ties the library's own tab-hover rule,
+   which is injected later and would then win. */
+.veyq-level-tabs .veyq-tabs__list .veyq-tab:not([aria-selected='true']):hover {
   color: var(--app-text);
 }
-.veyq-level-tabs .p-tablist-active-bar {
+.veyq-level-tabs .veyq-tabs__ink {
   background: var(--app-accent);
 }
 
@@ -672,7 +618,7 @@
   max-width: 100%;
 }
 
-.veyq-node-header-action.is-pressed .p-button-icon {
+.veyq-node-header-action.is-pressed .veyq-button__icon {
   color: var(--app-favorite);
 }
 
@@ -690,20 +636,20 @@
   }
 }
 
-.veyq-danger-action.p-button,
-.veyq-danger-action.p-button.p-button-outlined {
+.veyq-danger-action.veyq-button,
+.veyq-danger-action.veyq-button.veyq-button--outlined {
   border-color: var(--app-danger);
   background: transparent !important;
   color: var(--app-danger);
 }
 
-.veyq-danger-action.p-button .p-button-icon {
+.veyq-danger-action.veyq-button .veyq-button__icon {
   background: transparent !important;
   color: inherit;
 }
 
-.veyq-danger-action.p-button:hover:not(:disabled),
-.veyq-danger-action.p-button:focus-visible {
+.veyq-danger-action.veyq-button:hover:not(:disabled),
+.veyq-danger-action.veyq-button:focus-visible {
   border-color: var(--app-danger-strong);
   background: transparent !important;
   color: var(--app-danger-strong);
@@ -991,8 +937,8 @@ div.veyq-level-item-main,
   font-size: 0.85rem;
 }
 
-.veyq-row-menu-item.is-danger .p-menu-item-label,
-.veyq-row-menu-item.is-danger .p-menu-item-icon {
+.veyq-row-menu-item.is-danger .veyq-menu__item-label,
+.veyq-row-menu-item.is-danger .veyq-menu__item-icon {
   color: var(--app-danger);
 }
 

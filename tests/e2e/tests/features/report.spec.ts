@@ -36,7 +36,7 @@ let shareLink: string
 async function fillReport(page: Page, category: string, reason: string, address?: string): Promise<void> {
   const dialog = page.getByRole('dialog', { name: 'Report' })
   await expect(dialog).toBeVisible()
-  await dialog.locator('.p-select').click()
+  await dialog.locator('.veyq-select').click()
   await page.getByRole('option', { name: category }).click()
   await dialog.locator('#veyq-report-reason').fill(recordTyped(reason))
   await dialog.getByText('I confirm that what I say here is accurate and complete to the best of my knowledge.').click()

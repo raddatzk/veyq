@@ -43,9 +43,9 @@ import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
 
 const stubs = {
-  Button: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" />' },
+  VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" />' },
   InviteMemberDialog: true,
 }
 

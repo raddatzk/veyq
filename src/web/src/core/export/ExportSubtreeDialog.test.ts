@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('./exportSubtree', async (orig) => ({ ...(await orig<typeof import('./exportSubtree')>()), prepareExport: vi.fn() }))
 vi.mock('../../shared/saveStream', async (orig) => ({ ...(await orig<typeof import('../../shared/saveStream')>()), openSaveTarget: vi.fn() }))
@@ -27,7 +26,7 @@ const prepared = (over: Partial<PreparedExport> = {}): PreparedExport => ({
 async function mountDialog(access: Access = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) })) {
   const w = mount(ExportSubtreeDialog, {
     props: { node, access, tree, displayName: 'Trip: 2025' },
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
     attachTo: document.body,
   })
   await flushPromises()

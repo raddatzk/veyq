@@ -6,7 +6,7 @@
 // which fixes it offers for the row (`canEdit`, `canRenew`); a fix it lacks is not shown.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import type { ShareGuestStop } from '../../api/generated/sharing'
 import { guestStopLines, type GuestStopFix, type GuestStopLine } from './guestStops'
 import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
@@ -43,14 +43,13 @@ const fixes = computed(() => {
   <span v-if="lines.length" class="share-guest-stops">
     <span class="veyq-badge warning share-guest-stops-badge">{{ t('share.guestStops.badge') }}</span>
     <span v-for="(line, i) in lines" :key="i" class="share-guest-stop">{{ text(line) }}</span>
-    <Button
+    <VeyqButton
       v-for="f in fixes"
       :key="f.fix"
-      type="button"
       :class="['share-guest-stops-fix', `share-guest-stops-${f.fix}`]"
       :label="f.label"
-      severity="secondary"
-      text
+      variant="secondary"
+      appearance="text"
       size="small"
       @click="f.fix === 'edit' ? emit('edit') : emit('renew')"
     />

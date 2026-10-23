@@ -12,7 +12,7 @@
 // Every other key stays PrimeVue's English default, unseen.
 import { watch, type App } from 'vue'
 import type { PrimeVueLocaleOptions } from 'primevue/config'
-import { i18n } from '../i18n'
+import { i18n } from '../../i18n'
 
 /** A list from the catalog (day and month names), each entry resolved. A missing or non-list key throws: a calendar
  *  with `undefined` month names fails silently on screen. */

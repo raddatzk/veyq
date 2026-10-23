@@ -130,7 +130,6 @@ import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_D
 import { realI18n, t } from '../test/i18n'
 import { chooseNew, hasNewMenu, newMenuLabels } from '../test/newMenu'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../test/levelRows'
-import PrimeVue from 'primevue/config'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
 import { stubApi } from '../test/apiMock'
@@ -155,7 +154,7 @@ async function mountAt(hash: string) {
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const SpaceMapStub = { name: 'SpaceMap', props: ['pins', 'covers'], emits: ['open'], template: '<div class="space-map-stub" />' }
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } } })
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } } })
   mounted.push(wrapper)
   await flushPromises()
   return wrapper

@@ -13,7 +13,6 @@ import { LIVE_POLL } from '../core/node/useLevelLive'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -94,7 +93,7 @@ async function mountPage(query = '') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })
   await router.push(`/s/${SHARE}${query}${HASH}`)
   await router.isReady()
-  const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } }, attachTo: document.body })
+  const w = mount(ShareView, { global: { plugins: [router, realI18n()] }, attachTo: document.body })
   await settle(0)
   await flushPromises()
   return w

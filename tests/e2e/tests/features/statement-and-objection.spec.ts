@@ -137,7 +137,7 @@ test(
     await g.locator('.lightbox-report-button').click()
     const dialog = g.getByRole('dialog', { name: 'Report' })
     await expect(dialog).toBeVisible()
-    await dialog.locator('.p-select').click()
+    await dialog.locator('.veyq-select').click()
     await g.getByRole('option', { name: 'Other illegal content' }).click()
     await dialog.locator('#veyq-report-reason').fill(recordTyped(guestReason))
     await dialog.locator('#veyq-report-contact').fill(reporterAddress())

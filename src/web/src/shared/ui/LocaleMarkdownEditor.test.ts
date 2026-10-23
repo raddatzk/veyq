@@ -15,17 +15,17 @@ import type { LocaleMap } from './localeMap'
 import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
-  Dialog: {
+  VeyqDialog: {
     props: ['visible', 'header'],
     emits: ['update:visible'],
     template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>',
   },
-  Button: {
-    props: ['label', 'icon', 'severity'],
+  VeyqButton: {
+    props: ['label', 'icon', 'variant'],
     // `emits` is load-bearing: without it the parent's @click also arrives as a native fallthrough listener,
     // so one click fires the handler twice (the same trap `ConfirmDialog.test.ts` records).
     emits: ['click'],
-    template: '<button v-bind="$attrs" :class="severity" @click="$emit(\'click\')">{{ label }}</button>',
+    template: '<button v-bind="$attrs" :class="variant" @click="$emit(\'click\')">{{ label }}</button>',
   },
 }
 

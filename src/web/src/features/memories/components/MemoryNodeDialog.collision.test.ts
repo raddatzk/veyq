@@ -18,11 +18,11 @@ import { realI18n, t } from '../../../test/i18n'
 import { treeNode } from '../../../test/models'
 
 const stubs = {
-  Dialog: { props: ['header'], template: '<div><slot /></div>' },
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Button: { props: ['type', 'label'], template: '<button :type="type || \'button\'" @click="$emit(\'click\', $event)">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Checkbox: true,
+  VeyqDialog: { props: ['header'], template: '<div><slot /></div>' },
+  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqButton: { props: ['type', 'label'], template: '<button :type="type || \'button\'" @click="$emit(\'click\', $event)">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqCheckbox: true,
 }
 const SCOPE = '11111111-1111-1111-1111-111111111111'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(7))

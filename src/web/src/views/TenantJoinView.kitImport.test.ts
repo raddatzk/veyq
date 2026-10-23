@@ -57,14 +57,14 @@ const OWNER_EMAIL = 'owner@acme.example'
 const OWNERS_KIT: KitData = { email: OWNER_EMAIL, secretKey: 'IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=' }
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label', 'loading', 'disabled', 'type'], template: '<button :type="type" :disabled="disabled">{{ label }}</button>' },
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  InputText: {
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label', 'loading', 'disabled', 'type'], template: '<button :type="type ?? \'button\'" :disabled="disabled">{{ label }}</button>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Password: {
+  VeyqPassword: {
     props: ['modelValue', 'inputId'],
     template: '<input type="password" :id="inputId" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
@@ -88,7 +88,7 @@ const secretField = (w: VueWrapper) => w.find('input[name="secret-key"]')
 const fileField = (w: VueWrapper) => w.find('input[type="file"]')
 const uploadIcon = (w: VueWrapper) =>
   w.findAll('button').find((b) => b.attributes('aria-label') === t('unlock.upload'))
-const warnings = (w: VueWrapper) => w.findAll('.msg').filter((m) => m.attributes('data-severity') === 'warn')
+const warnings = (w: VueWrapper) => w.findAll('.msg').filter((m) => m.attributes('data-tone') === 'warn')
 
 async function pickKit(w: VueWrapper, kit: KitData | null) {
   vi.mocked(importKitFromFile).mockResolvedValue(kit)

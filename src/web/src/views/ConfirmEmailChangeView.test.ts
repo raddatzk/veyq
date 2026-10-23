@@ -34,10 +34,10 @@ const OLD = 'me@example.com'
 const NEW = 'me.new@example.com'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Password: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="kit-password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqPassword: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="kit-password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   SecretKeyField: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="secret-key" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   EmergencyKitSave: { props: ['email', 'secretKey'], template: '<div class="kit-save" :data-email="email" :data-key="secretKey" />' },
 }

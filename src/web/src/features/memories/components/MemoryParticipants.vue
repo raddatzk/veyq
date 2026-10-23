@@ -9,9 +9,9 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import Avatar from 'primevue/avatar'
-import AvatarGroup from 'primevue/avatargroup'
-import Popover from 'primevue/popover'
+import VeyqAvatar from '../../../shared/ui/VeyqAvatar.vue'
+import VeyqAvatarGroup from '../../../shared/ui/VeyqAvatarGroup.vue'
+import VeyqPopover from '../../../shared/ui/VeyqPopover.vue'
 import MemoryParticipantsDialog from './MemoryParticipantsDialog.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import { personHash } from '../../../core/node/location'
@@ -55,7 +55,7 @@ const summary = computed(() => t('memory.participants.summary', { count: chips.v
 
 // The popover opens on hover / focus after a short intent delay and closes after a grace period, so crossing the gap
 // between the avatars and the list does not flicker it shut. It renders in place (not teleported) to keep the tab order.
-const pop = ref<InstanceType<typeof Popover> | null>(null)
+const pop = ref<InstanceType<typeof VeyqPopover> | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const open = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -70,7 +70,7 @@ function openNow() {
   open.value = true
   openedAt = Date.now()
   // the popover reads `currentTarget` to tell a click on its trigger from an outside click (which dismisses it)
-  pop.value?.show({ currentTarget: trigger.value } as unknown as Event, trigger.value)
+  pop.value?.show({ currentTarget: trigger.value } as unknown as Event)
 }
 function closeNow(refocus = false) {
   clear()
@@ -121,12 +121,12 @@ onBeforeUnmount(clear)
         @click="onClick"
         @focus="openSoon"
       >
-        <AvatarGroup>
+        <VeyqAvatarGroup>
           <PersonAvatar v-for="c in shown" :key="c.userId" :name="c.name" :user-id="c.former ? null : c.userId" :class="{ 'is-former': c.former }" data-testid="participant-avatar" />
-          <Avatar v-if="overflow" :label="`+${overflow}`" shape="circle" aria-hidden="true" data-testid="participant-overflow" />
-        </AvatarGroup>
+          <VeyqAvatar v-if="overflow" :label="`+${overflow}`" data-testid="participant-overflow" />
+        </VeyqAvatarGroup>
       </button>
-      <Popover ref="pop" append-to="self" class="memory-participants-popover" @hide="open = false" @mouseenter="clear" @mouseleave="closeSoon">
+      <VeyqPopover ref="pop" in-place class="memory-participants-popover" @hide="open = false" @mouseenter="clear" @mouseleave="closeSoon">
         <ul class="memory-participants-list" data-testid="participants-list">
           <li v-for="c in chips" :key="c.userId">
             <span v-if="c.former" class="memory-participant-row is-former" data-testid="participant-former">
@@ -146,7 +146,7 @@ onBeforeUnmount(clear)
             </RouterLink>
           </li>
         </ul>
-      </Popover>
+      </VeyqPopover>
     </div>
     <span v-if="p.namesPending.value" class="memory-participants-muted" role="status">{{ t('people.loading') }}</span>
     <span v-else-if="p.loadFailed.value && p.ids.value.length > 0" class="memory-participants-muted">{{ t('memory.participants.loadError') }}</span>
@@ -173,7 +173,7 @@ onBeforeUnmount(clear)
   /* the same optical pull as the date and place chips, so the first avatar starts flush with the title */
   margin-left: -0.45rem;
 }
-/* Deliberately NOT `position: relative`: the Popover is appended to this element (tab order) but PrimeVue places it in
+/* Deliberately NOT `position: relative`: the popover renders in place (tab order) but is placed in
  * DOCUMENT coordinates, so a positioned anchor would offset it a second time. */
 .memory-participants-anchor {
   display: inline-block;
@@ -194,11 +194,11 @@ a.memory-participant-row:focus-visible {
   outline: 2px solid var(--app-focus);
   outline-offset: 2px;
 }
-.memory-participants-group :deep(.p-avatar) {
+.memory-participants-group :deep(.veyq-avatar) {
   border: 2px solid var(--app-surface);
 }
-/* PrimeVue overlaps by 1rem, which hides half of a letter; half of that still reads as a stack. */
-.memory-participants-group :deep(.p-avatar-group .p-avatar + .p-avatar) {
+/* The group overlaps by 1rem, which hides half of a letter; half of that still reads as a stack. */
+.memory-participants-group :deep(.veyq-avatar-group .veyq-avatar + .veyq-avatar) {
   margin-inline-start: -0.5rem;
 }
 .memory-participants-group :deep(.is-former) {

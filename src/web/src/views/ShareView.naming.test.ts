@@ -2,12 +2,11 @@
 // The share page's ONE naming flow (inbox #401 S2): the shell builds the guest's access and owns `requestGuest` — a
 // READ_WRITE guest names itself in core's `GuestNaming` dialog, whichever view first writes (here the folder level's
 // create card), under the SHARE ROOT's key; the shell then says whose session this device holds, and its "Not you?"
-// asks first and forgets it. The app's real registry, PrimeVue and vue-router; the resolve and the identity call are
+// asks first and forgets it. The app's real registry, the UI layer and vue-router; the resolve and the identity call are
 // stubbed, the crypto is real.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 
@@ -59,13 +58,13 @@ function folderHead(role: ShareRole): PublicShareHead {
   }
 }
 
-// PrimeVue's Dialog teleports; rendered in place so the test reads it (the confirmation is the app's real one).
-const stubs = { Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' } }
+// The dialog teleports; rendered in place so the test reads it (the confirmation is the app's real one).
+const stubs = { VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' } }
 
 let router: Router
 async function mountPage(role: ShareRole) {
   vi.mocked(resolvePublicShare).mockResolvedValue(folderHead(role))
-  const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } } })
+  const w = mount(ShareView, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
   await vi.waitFor(() => expect(w.find('.veyq-node-header').exists()).toBe(true)) // the folder body loads lazily
   return w
@@ -149,7 +148,7 @@ describe("the share page's one naming flow", () => {
     expect(document.body.textContent).not.toContain(t('share.guest.nameTitle'))
     await createFolder(w)
     await flushPromises()
-    // (the real confirmation dialog is mounted beside the page, so PrimeVue's Dialog renders for real here: teleported)
+    // (the real confirmation dialog is mounted beside the page, so the layer's dialog renders for real here: teleported)
     expect(document.body.textContent, 'asked afresh').toContain(t('share.guest.nameTitle'))
   })
 

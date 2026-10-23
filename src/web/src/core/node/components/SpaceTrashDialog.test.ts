@@ -13,19 +13,20 @@ import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree
 import { epochsOf } from '../../../features/spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode } from '../../../test/models'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const stubs = {
-  Dialog: { template: '<div><slot /></div>' },
-  ProgressSpinner: { template: '<div class="spinner" />' },
-  InputText: {
+  VeyqDialog: { template: '<div><slot /></div>' },
+  VeyqSpinner: { template: '<div class="spinner" />' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input class="retry-name" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   // No `$emit('click')` here: the parent's `@click` already lands as a NATIVE listener via attribute
   // fallthrough, so re-emitting fires every handler twice — which silently consumed a `mockRejectedValueOnce`
   // and made a failed restore look like a successful one.
-  Button: { props: ['label'], template: '<button>{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqButton: { props: ['label'], template: '<button>{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 const SCOPE = '11111111-1111-1111-1111-111111111111'
@@ -90,10 +91,10 @@ describe('SpaceTrashDialog', () => {
     const wrapper = mountDialog()
     await settle(wrapper)
     const iconOf = (name: string) =>
-      wrapper.findAll('.trash-row').find((r) => r.text().includes(name))!.find('strong i').classes().join(' ')
-    expect(iconOf('AMem')).toBe('pi pi-images')
-    expect(iconOf('BFolder')).toBe('pi pi-folder')
-    expect(iconOf('CFuture')).toBe('pi pi-file')
+      wrapper.findAll('.trash-row').find((r) => r.text().includes(name))!.find('strong').findComponent(VeyqIcon).props('name')
+    expect(iconOf('AMem')).toBe('images')
+    expect(iconOf('BFolder')).toBe('folder')
+    expect(iconOf('CFuture')).toBe('file')
   })
 
   // Inbox #391: a node of a kind whose content IS its attachment (Depot's FILE, `emptyInTrash` through the real registry)

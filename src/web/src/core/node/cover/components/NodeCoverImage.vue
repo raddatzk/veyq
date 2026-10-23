@@ -2,18 +2,20 @@
 // A node's cover as every core surface draws it (inbox #411; Memories' `MemoryCoverImage` since cr-0072, made kind-blind):
 // the decrypted image in an `overflow:hidden` box, expanded and offset by `coverImageStyle` so ONE stored normalized crop reads
 // identically at any container size - a level tile, a list row, the node header, the sidebar's Favorites tile. With no `src`
-// it draws the kind's icon (`icon`, a PrimeIcons class) - the default look of a node without a cover or while it loads.
+// it draws the kind's icon (`icon`, a layer icon name) - the default look of a node without a cover or while it loads.
 import { computed } from 'vue'
+import VeyqIcon from '../../../../shared/ui/VeyqIcon.vue'
+import type { VeyqIconName } from '../../../../shared/ui/icons'
 import { coverImageStyle, type CoverCrop } from '../coverModel'
 
-const props = defineProps<{ src?: string | null; alt?: string; crop?: CoverCrop | null; icon?: string }>()
+const props = defineProps<{ src?: string | null; alt?: string; crop?: CoverCrop | null; icon?: VeyqIconName }>()
 const imageStyle = computed(() => coverImageStyle(props.crop))
 </script>
 
 <template>
   <span class="veyq-node-cover">
     <img v-if="src" :src="src" :alt="alt ?? ''" :style="imageStyle" loading="lazy" decoding="async" draggable="false" />
-    <span v-else-if="icon" class="veyq-node-cover-icon" :class="icon" aria-hidden="true" />
+    <VeyqIcon v-else-if="icon" class="veyq-node-cover-icon" :name="icon" />
   </span>
 </template>
 

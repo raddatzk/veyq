@@ -8,13 +8,11 @@
 // the draft is untouched, so a ticked person stays ticked while the filter hides them. Former members are never filtered.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
-import Dialog from 'primevue/dialog'
-import IconField from 'primevue/iconfield'
-import InputIcon from 'primevue/inputicon'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqSearchField from '../../../shared/ui/VeyqSearchField.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import type { Person } from '../../../core/people/directory'
 
@@ -51,27 +49,26 @@ function save() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('memory.participants.dialogTitle')" modal @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('memory.participants.dialogTitle')" @update:visible="emit('close')">
     <form class="veyq-form memory-participants-dialog" @submit.prevent="save">
       <p class="memory-participants-hint">{{ t('memory.participants.dialogHint') }}</p>
-      <Message v-if="loadFailed" severity="error" :closable="false">
+      <VeyqMessage v-if="loadFailed" tone="error">
         {{ t('memory.participants.loadError') }}
-        <Button type="button" :label="t('people.retry')" severity="secondary" text size="small" @click="emit('retry')" />
-      </Message>
+        <VeyqButton :label="t('people.retry')" variant="secondary" appearance="text" size="small" @click="emit('retry')" />
+      </VeyqMessage>
       <p v-else-if="!people" class="memory-participants-hint" role="status">{{ t('people.loading') }}</p>
       <fieldset v-else class="memory-participants-set">
         <legend class="visually-hidden">{{ t('memory.participants.title') }}</legend>
-        <IconField v-if="people.length > 0" class="memory-participants-search">
-          <InputIcon class="pi pi-search" />
-          <InputText v-model="query" type="search" :placeholder="t('memory.participants.search')" :aria-label="t('memory.participants.search')" autocomplete="off" data-testid="participants-search" />
-        </IconField>
+        <div v-if="people.length > 0" class="memory-participants-search">
+          <VeyqSearchField v-model="query" :placeholder="t('memory.participants.search')" :aria-label="t('memory.participants.search')" autocomplete="off" data-testid="participants-search" />
+        </div>
         <label v-for="id in former" :key="id" class="memory-participants-option is-former">
-          <Checkbox :model-value="true" binary :aria-label="t('memory.participants.former')" @update:model-value="toggle(id)" />
+          <VeyqCheckbox :model-value="true" :aria-label="t('memory.participants.former')" @update:model-value="toggle(id)" />
           <PersonAvatar :name="t('memory.participants.former')" />
           <span class="memory-participants-name">{{ t('memory.participants.former') }}</span>
         </label>
         <label v-for="p in visiblePeople" :key="p.userId" class="memory-participants-option">
-          <Checkbox :model-value="isChecked(p.userId)" binary :disabled="full && !isChecked(p.userId)" :aria-label="p.displayName" @update:model-value="toggle(p.userId)" />
+          <VeyqCheckbox :model-value="isChecked(p.userId)" :disabled="full && !isChecked(p.userId)" :aria-label="p.displayName" @update:model-value="toggle(p.userId)" />
           <PersonAvatar :name="p.displayName" :user-id="p.userId" />
           <span class="memory-participants-name">{{ p.displayName }}</span>
         </label>
@@ -80,11 +77,11 @@ function save() {
       </fieldset>
       <p v-if="full" class="memory-participants-hint" role="note">{{ t('memory.participants.full', { max }) }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="emit('close')" />
-        <Button type="submit" :label="t('common.save')" icon="pi pi-check" :disabled="!people" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="emit('close')" />
+        <VeyqButton type="submit" :label="t('common.save')" icon="check" :disabled="!people" />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>
@@ -108,10 +105,10 @@ function save() {
   border-radius: var(--app-radius-sm);
   cursor: pointer;
 }
-/* `.veyq-form input` makes every input full width. PrimeVue's checkbox input is an invisible overlay sized to its own
-   box (`.p-checkbox`, 1.25rem), so it stays right - but the box itself must not flex, or the name is pushed to the edge. */
-.memory-participants-option :deep(.p-checkbox),
-.memory-participants-option :deep(.p-avatar) {
+/* `.veyq-form input` makes every input full width. The checkbox's input is an invisible overlay sized to its own
+   box (`.veyq-checkbox`, 1.25rem), so it stays right - but the box itself must not flex, or the name is pushed to the edge. */
+.memory-participants-option :deep(.veyq-checkbox),
+.memory-participants-option :deep(.veyq-avatar) {
   flex: none;
 }
 .memory-participants-search {

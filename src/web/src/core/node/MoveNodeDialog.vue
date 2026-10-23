@@ -19,9 +19,9 @@
 // that moves the node back to where it was, through the same door (`useToast().showUndo`, as the trash's undo).
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { registry } from '../applications/registry'
@@ -89,7 +89,7 @@ async function submit() {
       header: t('node.move.identityTitle'),
       message: t('node.move.identityConfirm', { name: label.value }),
       acceptLabel: t('node.move.identityAccept'),
-      acceptIcon: 'pi pi-file-export',
+      acceptIcon: 'file-export',
     })
     if (!accepted) return
   }
@@ -132,10 +132,9 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="t('node.move.title', { name: label })"
-    modal
     :closable="!busy"
     :close-on-escape="!busy"
     class="move-dialog"
@@ -145,20 +144,20 @@ async function submit() {
       <p class="veyq-form-copy">{{ t('node.move.hint') }}</p>
       <MoveBrowser v-model:place="place" :nodes="nodes" :access="access" :tree="tree" :root-label="rootLabel" :disabled="busy" />
       <p v-if="hereBlock" id="move-here-why" class="move-here-why">{{ t(`node.move.here.${hereBlock}`) }}</p>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
-        <Button
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="emit('close')" />
+        <VeyqButton
           type="submit"
           :label="t('node.move.submit')"
-          icon="pi pi-file-export"
+          icon="file-export"
           :loading="busy"
           :disabled="hereBlock !== null || busy"
           :aria-describedby="hereBlock ? 'move-here-why' : undefined"
         />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

@@ -6,8 +6,9 @@
 // Admission (invite) is owner-only (the backend 403s otherwise); the directory is any key-holder's.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
@@ -147,7 +148,7 @@ async function removeIcon() {
     header: t('spaceIcon.removeConfirmTitle'),
     message: t('spaceIcon.removeConfirm'),
     acceptLabel: t('spaceIcon.remove'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!accepted) return
   iconBusy.value = true
@@ -196,7 +197,7 @@ async function remove(member: ScopeMember) {
     header: t('members.removeConfirmTitle'),
     message: t('members.removeConfirm'),
     acceptLabel: t('members.remove'),
-    acceptIcon: 'pi pi-user-minus',
+    acceptIcon: 'user-minus',
     option: { label: t('members.removeRevokeLinks'), hint: t('members.removeRevokeLinksHint') },
   })
   if (!answer) return
@@ -244,7 +245,7 @@ async function revokeAllLinks() {
     header: t('spaceLinks.revokeAll'),
     message: t('spaceLinks.revokeAllConfirm'),
     acceptLabel: t('spaceLinks.revokeAll'),
-    acceptIcon: 'pi pi-link',
+    acceptIcon: 'link',
   })
   if (!accepted || !activeSpace.scopeId) return
   actionError.value = ''
@@ -265,7 +266,7 @@ async function revoke(invite: PendingMemberInvite) {
     header: t('members.revokeConfirmTitle'),
     message: t('members.revokeConfirm'),
     acceptLabel: t('members.revoke'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!accepted) return
   actionError.value = ''
@@ -291,27 +292,27 @@ async function revoke(invite: PendingMemberInvite) {
         <TenantAvatar :name="tenantName" :icon="tenantIcon.url.value ?? undefined" />
         <h1 class="tenant-identity-name">{{ tenantName }}</h1>
         <div v-if="isOwner" class="tenant-identity-actions">
-          <Button
+          <VeyqButton
             :label="tenantIcon.url.value ? t('spaceIcon.change') : t('spaceIcon.add')"
-            icon="pi pi-image"
-            text
+            icon="image"
+            appearance="text"
             size="small"
             :disabled="iconBusy"
             @click="iconDialogOpen = true"
           />
-          <Button
+          <VeyqButton
             v-if="tenantIcon.url.value"
             :label="t('spaceIcon.remove')"
-            icon="pi pi-trash"
-            text
-            severity="danger"
+            icon="trash"
+            appearance="text"
+            variant="danger"
             size="small"
             :disabled="iconBusy"
             @click="removeIcon"
           />
         </div>
       </div>
-      <Message v-if="iconError" severity="error" :closable="false">{{ iconError }}</Message>
+      <VeyqMessage v-if="iconError" tone="error">{{ iconError }}</VeyqMessage>
       <CompromiseRotationNotice
         v-if="isOwner && activeSpace.scopeId"
         :scope-id="activeSpace.scopeId"
@@ -324,31 +325,31 @@ async function revoke(invite: PendingMemberInvite) {
           <h2>{{ t('members.title') }}</h2>
           <p>{{ t('members.sub') }}</p>
         </div>
-        <Button
+        <VeyqButton
           v-if="isOwner"
           :label="t('members.invite')"
-          icon="pi pi-user-plus"
+          icon="user-plus"
           size="small"
           @click="inviteOpen = true"
         />
       </div>
 
-      <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
       <!-- This device refused its own pin store (ADR 0028 Decision 7): no wrap to a foreign key until it reads. -->
-      <Message v-if="trustRefusal" severity="warn" :closable="false">
+      <VeyqMessage v-if="trustRefusal" tone="warn">
         {{ t(trustRefusal) }}
         <TrustResetLink />
-      </Message>
+      </VeyqMessage>
 
       <!-- A re-issue has no link to surface any more: the fresh secret went to the invitee (ADR 0055 §2). This
            is the confirmation, dismissible, not a handoff. -->
       <div v-if="reissuedTo" class="reissue-link">
         <div class="reissue-link-head">
           <p class="settings-muted">{{ t('members.inviteSentTo', { email: reissuedTo }) }}</p>
-          <Button
-            icon="pi pi-times"
-            severity="secondary"
-            outlined
+          <VeyqButton
+            icon="times"
+            variant="secondary"
+            appearance="outlined"
             size="small"
             :aria-label="t('common.done')"
             :title="t('common.done')"
@@ -358,12 +359,12 @@ async function revoke(invite: PendingMemberInvite) {
       </div>
 
       <p v-if="loading" class="settings-muted">{{ t('members.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="warn" :closable="false">
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="warn">
         {{ t('members.notAuthorized') }}
-      </Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">
+      </VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">
         {{ t('members.loadFailed') }}
-      </Message>
+      </VeyqMessage>
       <p v-else-if="members.length === 0" class="settings-muted">{{ t('members.empty') }}</p>
 
       <div v-else class="veyq-list management-list">
@@ -386,49 +387,49 @@ async function revoke(invite: PendingMemberInvite) {
                 <MemberTrustBadge :trust="trust[member.userId]" />
                 <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
                 <span v-if="unadmitted[member.userId]" class="veyq-badge changed">
-                  <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('members.badgeNotAdmitted') }}
+                  <VeyqIcon name="exclamation-triangle" />{{ t('members.badgeNotAdmitted') }}
                 </span>
               </div>
             </div>
             <div class="management-actions">
               <!-- Review a changed key (cr-0099), available to ANY member: compare expected-vs-current out-of-band,
                    then accept (re-pin) or refuse (leave blocked). -->
-              <Button
+              <VeyqButton
                 v-if="trust[member.userId]?.state === 'changed'"
                 :label="t('verify.review')"
-                icon="pi pi-exclamation-triangle"
-                severity="warn"
-                text
+                icon="exclamation-triangle"
+                variant="warn"
+                appearance="text"
                 size="small"
                 @click="openReview(member)"
               />
-              <Button
+              <VeyqButton
                 v-if="isOwner && member.role === 'MEMBER'"
                 :label="t('members.promote')"
-                icon="pi pi-arrow-up"
-                severity="secondary"
-                outlined
+                icon="arrow-up"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 :loading="roleBusy === member.userId"
                 :data-promote="member.userId"
                 @click="changeRole(member, SetTenantMemberRoleRequestRoleEnum.Owner)"
               />
-              <Button
+              <VeyqButton
                 v-else-if="isOwner && member.role === 'OWNER'"
                 :label="t('members.demote')"
-                icon="pi pi-arrow-down"
-                severity="secondary"
-                outlined
+                icon="arrow-down"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 :loading="roleBusy === member.userId"
                 :data-demote="member.userId"
                 @click="changeRole(member, SetTenantMemberRoleRequestRoleEnum.Member)"
               />
-              <Button
+              <VeyqButton
                 v-if="isOwner && member.role !== 'OWNER'"
-                icon="pi pi-user-minus"
-                severity="danger"
-                outlined
+                icon="user-minus"
+                variant="danger"
+                appearance="outlined"
                 size="small"
                 :aria-label="t('members.remove')"
                 :title="t('members.remove')"
@@ -460,19 +461,19 @@ async function revoke(invite: PendingMemberInvite) {
               </div>
             </div>
             <div class="management-actions">
-              <Button
-                icon="pi pi-link"
-                severity="secondary"
-                outlined
+              <VeyqButton
+                icon="link"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 :aria-label="t('members.reissue')"
                 :title="t('members.reissue')"
                 @click="reissue(invite)"
               />
-              <Button
-                icon="pi pi-trash"
-                severity="danger"
-                outlined
+              <VeyqButton
+                icon="trash"
+                variant="danger"
+                appearance="outlined"
                 size="small"
                 :aria-label="t('members.revoke')"
                 :title="t('members.revoke')"
@@ -491,11 +492,11 @@ async function revoke(invite: PendingMemberInvite) {
           <h2>{{ t('spaceLinks.title') }}</h2>
           <p>{{ t('spaceLinks.sub') }}</p>
         </div>
-        <Button
+        <VeyqButton
           :label="t('spaceLinks.revokeAll')"
-          icon="pi pi-link"
-          severity="danger"
-          outlined
+          icon="link"
+          variant="danger"
+          appearance="outlined"
           size="small"
           :loading="revokingLinks"
           @click="revokeAllLinks"

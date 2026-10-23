@@ -8,13 +8,13 @@
 // half of owner decision Q6.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
-import Select from 'primevue/select'
-import Checkbox from 'primevue/checkbox'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import SelectButton from 'primevue/selectbutton'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
 import { ReportCategory, type ReportReceipt } from '../../api/generated/moderation'
 import { PRIVACY_ANCHOR, privacyLink } from '../privacy/privacyNotice'
 import {
@@ -99,10 +99,9 @@ async function send(): Promise<void> {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="open"
     :header="t('report.title')"
-    modal
     :closable="!loading"
     :close-on-escape="!loading"
     class="veyq-report-dialog"
@@ -112,7 +111,7 @@ async function send(): Promise<void> {
       <p>{{ t('report.sent') }}</p>
       <p>{{ t('report.receipt', { reference: receipt.reportId.slice(0, 8), time: receivedAt }) }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('report.close')" @click="close" />
+        <VeyqButton :label="t('report.close')" @click="close" />
       </div>
     </div>
     <form v-else class="veyq-form" @submit.prevent="send">
@@ -120,59 +119,54 @@ async function send(): Promise<void> {
       <p class="veyq-report-count">{{ t('report.items', { count: chosen.length }, chosen.length) }}</p>
       <div v-if="nameOnly" class="veyq-form-field veyq-report-scope">
         <label>{{ t('report.scope') }}</label>
-        <SelectButton
+        <VeyqToggleGroup
           v-model="scope"
           :options="scopeOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
           :disabled="loading"
         />
         <span class="veyq-report-hint">{{ t(scope === 'name' ? 'report.scopeNameHint' : 'report.scopeWholeHint') }}</span>
       </div>
 
       <template v-if="tooMany">
-        <Message severity="warn" :closable="false">{{ t('report.tooMany', { count: chosen.length }) }}</Message>
-        <Button v-if="reportRequest?.enclosing" type="button" class="veyq-report-enclosing" :label="t('report.reportEnclosing')" outlined @click="useEnclosing" />
+        <VeyqMessage tone="warn">{{ t('report.tooMany', { count: chosen.length }) }}</VeyqMessage>
+        <VeyqButton v-if="reportRequest?.enclosing" class="veyq-report-enclosing" :label="t('report.reportEnclosing')" appearance="outlined" @click="useEnclosing" />
       </template>
 
       <template v-else>
         <label for="veyq-report-category">{{ t('report.category') }}</label>
-        <Select
+        <VeyqSelect
           v-model="category"
           input-id="veyq-report-category"
           :options="options"
-          option-label="label"
-          option-value="value"
           :placeholder="t('report.categoryPlaceholder')"
           :disabled="loading"
         />
-        <Message v-if="csam" severity="info" :closable="false" class="veyq-report-csam">{{ t('report.csamNote') }}</Message>
+        <VeyqMessage v-if="csam" tone="info" class="veyq-report-csam">{{ t('report.csamNote') }}</VeyqMessage>
 
         <label for="veyq-report-reason">{{ t('report.reason') }}</label>
         <textarea id="veyq-report-reason" v-model="reason" class="veyq-report-reason" rows="5" maxlength="2000" required :disabled="loading" />
         <span class="veyq-report-hint">{{ t('report.reasonHint') }}</span>
 
         <div class="veyq-report-good-faith">
-          <Checkbox v-model="goodFaith" input-id="veyq-report-good-faith" binary :disabled="loading" />
+          <VeyqCheckbox v-model="goodFaith" input-id="veyq-report-good-faith" :disabled="loading" />
           <label for="veyq-report-good-faith">{{ t('report.goodFaith') }}</label>
         </div>
 
         <label for="veyq-report-contact">{{ t('report.contact') }}</label>
-        <InputText id="veyq-report-contact" v-model="contact" type="email" autocomplete="email" maxlength="254" :disabled="loading" />
+        <VeyqInput id="veyq-report-contact" v-model="contact" type="email" autocomplete="email" maxlength="254" :disabled="loading" />
         <span class="veyq-report-hint">{{ t('report.contactHint') }}</span>
         <!-- GDPR Art. 13 applies here, where a contact is taken: the notice's passage on it, in a tab of its own (a share
              page's key rides its fragment). -->
         <a class="veyq-report-privacy" :href="privacyLink(PRIVACY_ANCHOR.reporterContact)" target="_blank" rel="noopener">{{ t('privacyNotice.atReport') }}</a>
       </template>
 
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="loading" @click="close" />
-        <Button type="submit" class="veyq-report-send" :label="t('report.send')" icon="pi pi-flag" :loading="loading" :disabled="!canSend" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="loading" @click="close" />
+        <VeyqButton type="submit" class="veyq-report-send" :label="t('report.send')" icon="flag" :loading="loading" :disabled="!canSend" />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

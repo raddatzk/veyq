@@ -25,7 +25,7 @@ function heart(t: Translate, failed: Failed, access: Access, node: { id: string;
     {
       id: 'favorite',
       label: pinned ? t('node.unfavorite') : t('node.favorite'),
-      icon: pinned ? 'pi pi-heart-fill' : 'pi pi-heart',
+      icon: pinned ? 'heart-fill' : 'heart',
       pressed: pinned,
       first: true,
       placement: 'before',

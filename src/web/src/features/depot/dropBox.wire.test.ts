@@ -34,7 +34,7 @@ type Req = { method: string; path: string; json?: Record<string, unknown> }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
 })
 afterEach(() => vi.unstubAllGlobals())
 

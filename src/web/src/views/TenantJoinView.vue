@@ -7,11 +7,11 @@
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Card from 'primevue/card'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Password from 'primevue/password'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqInput from '../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
+import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
@@ -307,14 +307,14 @@ async function mapError(e: unknown): Promise<string> {
 </script>
 
 <template>
-  <Card class="join-card">
+  <VeyqCard class="join-card">
     <template #title>{{ t('tenant.join.title') }}</template>
-    <template #content>
+    <template #default>
       <p v-if="phase === 'loading'" class="muted">{{ t('tenant.join.loading') }}</p>
 
-      <Message v-else-if="phase === 'missing'" severity="warn" :closable="false">{{ t('tenant.join.missing') }}</Message>
-      <Message v-else-if="phase === 'invalid'" severity="error" :closable="false">{{ t('tenant.join.invalid') }}</Message>
-      <Message v-else-if="phase === 'expired'" severity="warn" :closable="false">{{ t('tenant.join.expired') }}</Message>
+      <VeyqMessage v-else-if="phase === 'missing'" tone="warn">{{ t('tenant.join.missing') }}</VeyqMessage>
+      <VeyqMessage v-else-if="phase === 'invalid'" tone="error">{{ t('tenant.join.invalid') }}</VeyqMessage>
+      <VeyqMessage v-else-if="phase === 'expired'" tone="warn">{{ t('tenant.join.expired') }}</VeyqMessage>
 
       <template v-else-if="phase === 'register'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
@@ -322,37 +322,37 @@ async function mapError(e: unknown): Promise<string> {
         <p class="join-privacy"><a :href="privacyLink(PRIVACY_ANCHOR.account)" target="_blank" rel="noopener">{{ t('privacyNotice.atInvite') }}</a></p>
         <form class="veyq-form" @submit.prevent="prepareRegistration">
           <label>{{ t('tenant.join.username') }}
-            <InputText v-model="username" name="username" autocomplete="username" required />
+            <VeyqInput v-model="username" name="username" autocomplete="username" required />
             <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
           </label>
           <template v-if="!isMember">
             <div class="name-row">
               <label>{{ t('profile.firstName') }}
-                <InputText v-model="firstName" name="given-name" autocomplete="given-name" />
+                <VeyqInput v-model="firstName" name="given-name" autocomplete="given-name" />
               </label>
               <label>{{ t('profile.lastName') }}
-                <InputText v-model="lastName" name="family-name" autocomplete="family-name" />
+                <VeyqInput v-model="lastName" name="family-name" autocomplete="family-name" />
               </label>
             </div>
             <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
             <JoinPicturePicker v-model="avatarBytes" :name="`${firstName} ${lastName}`.trim() || username" />
           </template>
-          <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" @blur="checkBreaches" /></label>
+          <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="join-password" @blur="checkBreaches" /></label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
           <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="join" :disabled="busy" />
-          <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-          <Button type="submit" :label="t('tenant.join.continue')" icon="pi pi-arrow-right" :loading="busy"
+          <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+          <VeyqButton type="submit" :label="t('tenant.join.continue')" icon="arrow-right" :loading="busy"
                   :disabled="!username.trim() || password.length < MIN_PASSWORD_LENGTH" />
         </form>
       </template>
 
       <template v-else-if="phase === 'kit'">
-        <Message severity="info" :closable="false">{{ t('tenant.join.saveKitTitle') }}</Message>
+        <VeyqMessage tone="info">{{ t('tenant.join.saveKitTitle') }}</VeyqMessage>
         <EmergencyKitSave :email="ownerEmail" :secret-key="secretKeyDisplay" v-model="kitReady">
           <p class="veyq-form-copy">{{ t('tenant.join.saveKitSub') }}</p>
         </EmergencyKitSave>
-        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-        <Button :label="jcopy('join')" icon="pi pi-check" :loading="busy" :disabled="!kitReady" @click="finishRegistration" />
+        <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+        <VeyqButton :label="jcopy('join')" icon="check" :loading="busy" :disabled="!kitReady" @click="finishRegistration" />
       </template>
 
       <template v-else-if="phase === 'signin'">
@@ -362,16 +362,16 @@ async function mapError(e: unknown): Promise<string> {
         <!-- The per-tenant handle (ADR 0023): an existing account still picks a username for THIS tenant — unless it is
              handed the space it is a member of already, which keeps its handle. -->
         <label v-if="!handover" class="veyq-form-field">{{ t('tenant.join.username') }}
-          <InputText v-model="username" name="username" autocomplete="username" required />
+          <VeyqInput v-model="username" name="username" autocomplete="username" required />
           <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
         </label>
         <template v-if="!isMember && !handover">
           <div class="name-row">
             <label class="veyq-form-field">{{ t('profile.firstName') }}
-              <InputText v-model="firstName" name="given-name" autocomplete="given-name" />
+              <VeyqInput v-model="firstName" name="given-name" autocomplete="given-name" />
             </label>
             <label class="veyq-form-field">{{ t('profile.lastName') }}
-              <InputText v-model="lastName" name="family-name" autocomplete="family-name" />
+              <VeyqInput v-model="lastName" name="family-name" autocomplete="family-name" />
             </label>
           </div>
           <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
@@ -384,16 +384,16 @@ async function mapError(e: unknown): Promise<string> {
           <template v-if="needsReauth">
             <p class="veyq-form-copy">{{ t('tenant.join.reauthSub') }}</p>
             <form class="veyq-form" @submit.prevent="reauthAndAccept">
-              <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="reauth-password" /></label>
-              <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-              <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
+              <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="reauth-password" /></label>
+              <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+              <VeyqButton type="submit" :label="jcopy('join')" icon="check" :loading="busy"
                       :disabled="!usernameReady || password.length === 0" />
             </form>
           </template>
           <template v-else>
             <p class="veyq-form-copy">{{ jcopy('signinReadySub', { email: ownerEmail }) }}</p>
-            <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-            <Button :label="jcopy('join')" icon="pi pi-check" :loading="busy" :disabled="!usernameReady" @click="acceptDirect" />
+            <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+            <VeyqButton :label="jcopy('join')" icon="check" :loading="busy" :disabled="!usernameReady" @click="acceptDirect" />
           </template>
         </template>
 
@@ -401,27 +401,27 @@ async function mapError(e: unknown): Promise<string> {
         <template v-else>
           <p class="veyq-form-copy">{{ jcopy('signinSub', { email: ownerEmail }) }}</p>
           <form class="veyq-form" @submit.prevent="signInAndAccept">
-            <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="signin-password" /></label>
+            <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="signin-password" /></label>
             <label>{{ t('unlock.secretKey') }}
               <SecretKeyField v-model="secretKey" input-id="signin-secret-key" :expected-email="ownerEmail" required />
               <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
             </label>
-            <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-            <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
+            <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+            <VeyqButton type="submit" :label="jcopy('join')" icon="check" :loading="busy"
                     :disabled="!usernameReady || password.length === 0 || secretKey.trim().length === 0" />
           </form>
         </template>
       </template>
 
       <template v-else-if="phase === 'done'">
-        <Message severity="success" :closable="false">{{ jcopy('done', { tenant: tenantName }) }}</Message>
+        <VeyqMessage tone="success">{{ jcopy('done', { tenant: tenantName }) }}</VeyqMessage>
         <p class="veyq-form-copy">{{ jcopy('doneNote') }}</p>
         <!-- A handover leaves this browser signed in and unlocked on the space it now owns: open it. -->
-        <Button v-if="handover" :label="t('tenant.join.openSpace')" icon="pi pi-arrow-right" @click="router.push('/')" />
-        <Button v-else :label="t('login.title')" icon="pi pi-sign-in" @click="router.push({ name: 'login' })" />
+        <VeyqButton v-if="handover" :label="t('tenant.join.openSpace')" icon="arrow-right" @click="router.push('/')" />
+        <VeyqButton v-else :label="t('login.title')" icon="sign-in" @click="router.push({ name: 'login' })" />
       </template>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>

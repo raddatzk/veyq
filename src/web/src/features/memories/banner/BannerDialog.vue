@@ -10,9 +10,9 @@
 // plays. A video has no length bound (Q4): it is uploaded as it is, read by frame.
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import ProgressBar from 'primevue/progressbar'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqProgress from '../../../shared/ui/VeyqProgress.vue'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { createBrowserDeriver, type MediaDeriver } from '../../../shared/image/mediaDeriver'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
@@ -197,10 +197,9 @@ onBeforeUnmount(() => controller?.abort())
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="current ? t('memory.banner.change') : t('memory.banner.add')"
-    modal
     :closable="!busy"
     :close-on-escape="!busy"
     @update:visible="cancel"
@@ -209,7 +208,7 @@ onBeforeUnmount(() => controller?.abort())
       <p class="banner-dialog-copy">{{ t('memory.banner.hint') }}</p>
 
       <div class="banner-dialog-sources">
-        <Button type="button" :label="t('memory.banner.choose')" icon="pi pi-upload" severity="secondary" outlined :disabled="busy" @click="choose" />
+        <VeyqButton :label="t('memory.banner.choose')" icon="upload" variant="secondary" appearance="outlined" :disabled="busy" @click="choose" />
         <input ref="fileInput" type="file" accept="image/*,video/*" class="banner-dialog-file" tabindex="-1" aria-hidden="true" @change="onFilePicked" />
       </div>
       <p v-if="phase === 'preparing'" class="banner-dialog-copy" role="status">{{ t('memory.banner.preparing') }}</p>
@@ -269,27 +268,26 @@ onBeforeUnmount(() => controller?.abort())
       <p v-if="problem" class="banner-dialog-problem" role="alert">{{ problem }}</p>
       <div v-if="phase === 'saving'" class="banner-dialog-progress" role="status">
         <span>{{ progress === null ? t('memory.banner.preparing') : t('memory.banner.uploading', { percent: progress }) }}</span>
-        <ProgressBar :value="progress ?? 0" :show-value="false" />
+        <VeyqProgress :value="progress ?? 0" :show-value="false" />
       </div>
 
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="phase === 'preparing'" @click="cancel" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="phase === 'preparing'" @click="cancel" />
         <div class="veyq-action-group">
-          <Button
+          <VeyqButton
             v-if="current"
-            type="button"
             :label="t('memory.banner.remove')"
-            icon="pi pi-trash"
-            severity="danger"
-            outlined
+            icon="trash"
+            variant="danger"
+            appearance="outlined"
             :disabled="busy"
             @click="onRemove"
           />
-          <Button type="button" :label="t('memory.banner.save')" icon="pi pi-check" :disabled="!canSave" :loading="phase === 'saving'" @click="onSave" />
+          <VeyqButton :label="t('memory.banner.save')" icon="check" :disabled="!canSave" :loading="phase === 'saving'" @click="onSave" />
         </div>
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

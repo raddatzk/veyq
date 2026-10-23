@@ -6,10 +6,10 @@
 // race backstop, said as core's neutral `node.slugTaken`.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeCreateDialogEmits, NodeCreateDialogProps } from '../../../core/applications/registry'
 import { createDropBox } from '../dropBox'
 import { DROPBOX_KIND } from '../kinds'
@@ -49,18 +49,18 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('depot.dropBox.createTitle')" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('depot.dropBox.createTitle')" :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
     <form class="veyq-form" @submit.prevent="submit">
       <p class="veyq-form-copy">{{ t('depot.dropBox.createHint') }}</p>
       <label>
         {{ t('node.nameLabel') }}
-        <InputText v-model="name" autocomplete="off" required autofocus :disabled="loading" />
+        <VeyqInput v-model="name" autocomplete="off" required autofocus :disabled="loading" />
       </label>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="loading" @click="emit('close')" />
-        <Button type="submit" :label="t('common.create')" icon="pi pi-check" :loading="loading" :disabled="!canSubmit" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="loading" @click="emit('close')" />
+        <VeyqButton type="submit" :label="t('common.create')" icon="check" :loading="loading" :disabled="!canSubmit" />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>

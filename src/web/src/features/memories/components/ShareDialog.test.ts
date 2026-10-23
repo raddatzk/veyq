@@ -47,8 +47,8 @@ const share = (over: Record<string, unknown>) => ({
 })
 
 const stubs = {
-  Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
-  Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
   ShareCreateDialog: true,
 }
 
@@ -239,13 +239,13 @@ describe('ShareDialog — delete a link (ADR 0029 §7, W1)', () => {
 
     expect(w.findAll('.share-list-item')).toHaveLength(1) // only the live link until the fold opens
     expect(w.find('.share-fold-toggle').text()).toBe(realI18n().global.t('share.offCount', { count: 1 }, 1))
-    expect(button(w, t('share.revoke')).attributes('icon')).toBe('pi pi-ban')
+    expect(button(w, t('share.revoke')).attributes('icon')).toBe('ban')
     expect(button(w, t('share.delete')).exists()).toBe(false) // the enabled row, though deletable, offers none
 
     await openOff(w)
     expect(w.findAll('.share-list-item')).toHaveLength(2)
     expect(w.findAll('button[aria-label="' + t('share.delete') + '"]')).toHaveLength(1)
-    expect(button(w, t('share.delete')).attributes('icon')).toBe('pi pi-trash')
+    expect(button(w, t('share.delete')).attributes('icon')).toBe('trash')
   })
 
   it('deletes only after the confirm, and the row leaves the list', async () => {

@@ -6,7 +6,6 @@
 // (pre-filled from the current share, always re-sent — an edit that drops it clears it).
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 // The dialog decrypts an editShare on mount; stub the share data layer so it mounts crypto/network-free.
 // The dialog assembles the link itself now (the origin is a UI concern), so `shareLink` is its own stub.
@@ -28,6 +27,7 @@ import { realI18n, t } from '../../../test/i18n'
 import { buildShareLink } from '../shareLink'
 import * as share from '../share'
 import { setTenantCapabilities } from '../../../shared/state/useCapabilities'
+import { localDateToIsoDate } from '../../../shared/isoDate'
 
 const createShare = vi.mocked(share.createShare).mockResolvedValue({ shareId: 's1', kShare: new Uint8Array(32) })
 const updateShare = vi.mocked(share.updateShare).mockResolvedValue(undefined)
@@ -42,18 +42,18 @@ vi.mocked(share.hasLocaleText).mockReturnValue(false)
 vi.mocked(buildShareLink).mockImplementation((shareId) => `https://x/s/${shareId}#k=abc`)
 
 const stubs = {
-  Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
+  VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
   // Each option is a button that picks it, so a test can re-grade the role.
-  SelectButton: {
+  VeyqToggleGroup: {
     props: ['options', 'modelValue'],
     emits: ['update:modelValue'],
     template: '<div class="select-button"><button v-for="o in options" :key="o.value" class="opt" @click="$emit(\'update:modelValue\', o.value)">{{ o.label }}</button></div>',
   },
-  Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
-  InputText: true,
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqInput: true,
   // Controllable toggle/date stubs so a test can enable expiry + pick a date; $attrs forwards the aria-label.
-  ToggleSwitch: { props: ['modelValue'], emits: ['update:modelValue'], template: '<button v-bind="$attrs" @click="$emit(\'update:modelValue\', !modelValue)" />' },
-  DatePicker: { props: ['modelValue', 'maxDate'], emits: ['update:modelValue'], template: '<input class="datepicker" :data-max="maxDate ? maxDate.toDateString() : \'\'" />' },
+  VeyqSwitch: { props: ['modelValue'], emits: ['update:modelValue'], template: '<button v-bind="$attrs" @click="$emit(\'update:modelValue\', !modelValue)" />' },
+  VeyqDateField: { props: ['modelValue', 'maxDate'], emits: ['update:modelValue'], template: '<input class="datepicker" :data-max="maxDate ?? \'\'" />' },
   LocaleMarkdownEditor: true,
 }
 
@@ -127,7 +127,7 @@ describe('ShareCreateDialog (cr-0116)', () => {
     const w = mountDialog({})
     await w.find(`[aria-label="${t('share.expirySection')}"]`).trigger('click') // enable the expiry card
     const picker = w.findComponent('.datepicker') as unknown as { vm: { $emit: (e: string, v: unknown) => void } }
-    picker.vm.$emit('update:modelValue', new Date(2026, 7, 1)) // 1 Aug 2026, local midnight
+    picker.vm.$emit('update:modelValue', '2026-08-01') // 1 Aug 2026, the field's calendar day
     await w.vm.$nextTick()
     await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
 
@@ -248,19 +248,19 @@ describe('ShareCreateDialog — a role edit onto a link that holds no verifier (
 // uc.sharing.share-note: the note's acceptance switch is core's field (`ShareNoteAcceptField`) under the note editor,
 // read back on edit and sealed inside the note — the Memory dialog hands it on exactly as core's folder dialog does.
 describe("ShareCreateDialog — the note's acceptance switch", () => {
-  // The real Checkbox needs PrimeVue's config, which the stubbed suite above does not install.
-  const mountWithPrime = (props: Record<string, unknown>) =>
+  // Core's real acceptance field (its checkbox is the layer's, installed for every test), beside the stubs above.
+  const mountWithField = (props: Record<string, unknown>) =>
     mount(ShareCreateDialog, {
       props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
-      global: { plugins: [realI18n(), PrimeVue], stubs },
+      global: { plugins: [realI18n()], stubs },
     })
-  const mustAccept = (w: ReturnType<typeof mountWithPrime>) => w.find('#share-note-must-accept')
+  const mustAccept = (w: ReturnType<typeof mountWithField>) => w.find('#share-note-must-accept')
 
   it('is read back on edit and re-sent with the note', async () => {
     updateShare.mockClear()
     vi.mocked(share.readShareNote).mockReturnValueOnce({ texts: { en: 'Read me' }, mustAccept: true })
     vi.mocked(share.hasLocaleText).mockReturnValueOnce(true)
-    const w = mountWithPrime({ editShare: editShareWith({ sealedNote: 'n' }) })
+    const w = mountWithField({ editShare: editShareWith({ sealedNote: 'n' }) })
     await flushPromises()
     expect((mustAccept(w).element as HTMLInputElement).checked).toBe(true)
     await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click')
@@ -270,7 +270,7 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
 
   it('a new link with a note and the switch ticked asks to be accepted', async () => {
     createShare.mockClear()
-    const w = mountWithPrime({})
+    const w = mountWithField({})
     await w.find(`[aria-label="${t('share.noteSection')}"]`).trigger('click')
     w.findComponent({ name: 'LocaleMarkdownEditor' }).vm.$emit('update:modelValue', { en: 'Read me first' })
     await flushPromises()
@@ -293,7 +293,7 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
       // The picker ends on the last day a link made now may run, and starts filled with it.
       const last = new Date(Date.now() + 7 * 24 * 3600 * 1000)
       last.setDate(last.getDate() - 1)
-      expect(w.find('.datepicker').attributes('data-max')).toBe(last.toDateString())
+      expect(w.find('.datepicker').attributes('data-max')).toBe(localDateToIsoDate(last))
       // Without the required password the create does nothing.
       await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
       await flushPromises()
@@ -316,7 +316,7 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
 describe('ShareCreateDialog — a stopped link gets its password on the same link (#457)', () => {
   const typing = {
     ...stubs,
-    InputText: {
+    VeyqInput: {
       props: ['modelValue'],
       emits: ['update:modelValue'],
       template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',

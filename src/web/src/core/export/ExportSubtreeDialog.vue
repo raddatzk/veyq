@@ -7,10 +7,10 @@
 // or writes cancels it. (A file downloads as itself through its own action; it never reaches this dialog.)
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
-import ProgressBar from 'primevue/progressbar'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqProgress from '../../shared/ui/VeyqProgress.vue'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from '../node/tree'
 import { formatBytes } from '../../shared/formatBytes'
@@ -82,7 +82,7 @@ function close() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('export.title', { name: displayName })" modal class="export-dialog" @update:visible="close">
+  <VeyqDialog :visible="true" :header="t('export.title', { name: displayName })" class="export-dialog" @update:visible="close">
     <form class="veyq-form" data-testid="export-dialog" @submit.prevent="save">
       <p v-if="step === 'preparing'" class="veyq-form-copy" role="status">{{ t('export.preparing') }}</p>
       <template v-else-if="prepared">
@@ -95,24 +95,24 @@ function close() {
         </div>
         <template v-if="step === 'writing'">
           <p class="veyq-form-copy" role="status">{{ t('export.writing') }}</p>
-          <ProgressBar :value="Math.round(fraction * 100)" />
+          <VeyqProgress :value="Math.round(fraction * 100)" />
         </template>
       </template>
-      <Message v-if="error" severity="error" :closable="false" role="alert">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" role="alert">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="close" />
-        <Button
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="close" />
+        <VeyqButton
           v-if="step !== 'failed'"
           type="submit"
           :label="t('export.save')"
-          icon="pi pi-download"
+          icon="download"
           :disabled="step === 'preparing'"
           :loading="busy"
           data-testid="export-save"
         />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

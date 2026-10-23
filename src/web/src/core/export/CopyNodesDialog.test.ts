@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 // Core's copy dialog (uc.platform.copy-node, cr-copy-node Decisions 1, 4, 5) over the REAL registry (Memories and Depot,
-// filled by `src/test/setup.ts`), the real PrimeVue Dialog and the move's real browser, every step a DOM click. The walk and
+// filled by `src/test/setup.ts`), the real `VeyqDialog` and the move's real browser, every step a DOM click. The walk and
 // the replay are `prepareCopy`'s (mocked here: `copySubtree.test.ts` and `copy.wire.test.ts` pin them). What this pins: the
 // browser for a copy allows the nodes' own place and blocks them and their inside; the summary says what is created, its
 // bytes, what is left out and only the losses of the copied kinds; a quota "no" disables "Copy here" and writes nothing; a
 // copy runs under the place on screen and names the copy; a stop says N of M and that it was trashed.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('./copySubtree', () => ({ prepareCopy: vi.fn() }))
 vi.mock('../../features/tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
@@ -57,7 +56,7 @@ async function mountDialog(nodes: TreeNode[]) {
     attachTo: document.body,
     // every key open, as for an unlocked member
     props: { nodes, access, tree: { ...memberTreeOf(() => NODES), keyOf: (id: string) => (byId(id) ? new Uint8Array(32).fill(7) : null) }, rootLabel: 'Familie' },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
   await flushPromises()
   return w

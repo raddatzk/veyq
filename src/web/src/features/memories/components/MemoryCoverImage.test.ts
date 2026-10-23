@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MemoryCoverImage from './MemoryCoverImage.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
 import { FULL_FRAME, coverImageStyle } from '../memoryCover'
 
@@ -35,7 +36,7 @@ describe('MemoryCoverImage', () => {
     expect(w.find('img').exists()).toBe(false)
     const ph = w.find('.memory-cover-image-ph')
     expect(ph.exists()).toBe(true)
-    expect(ph.classes()).toContain('pi-images')
+    expect(w.findComponent(VeyqIcon).props('name')).toBe('images')
   })
 
   it('a host-supplied placeholder slot overrides the default tile', () => {

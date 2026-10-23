@@ -158,7 +158,7 @@ test(
   await g.locator('.lightbox-report-button').click()
   const report = g.getByRole('dialog', { name: 'Report' })
   await expect(report).toBeVisible()
-  await report.locator('.p-select').click()
+  await report.locator('.veyq-select').click()
   await g.getByRole('option', { name: 'A breach of the terms' }).click()
   await report.locator('#veyq-report-reason').fill(recordTyped(guestReason))
   await report.getByText('I confirm that what I say here is accurate and complete to the best of my knowledge.').click()

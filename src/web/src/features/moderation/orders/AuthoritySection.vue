@@ -8,7 +8,8 @@
 //     (ADR 0093 § 4, § 184b(5) StGB), and the hint and the confirmation say so — on any other it ends nothing.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import type { ModerationCase, ModerationCaseExport, ModerationHandoverKindEnum } from '../../../api/generated/moderation'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { getExport, recordHandover } from '../cases'
@@ -84,7 +85,7 @@ async function copy(key: string, text: string) {
 
 async function handover(kind: ModerationHandoverKindEnum) {
   const label = kind === 'REPORTED' ? t('moderation.authority.handedOver') : t('moderation.authority.informationGiven')
-  if (!(await ask({ header: label, message: t(endsHold.value ? 'moderation.authority.handoverConfirmCsam' : 'moderation.authority.handoverConfirm'), acceptLabel: label, acceptIcon: 'pi pi-send' }))) return
+  if (!(await ask({ header: label, message: t(endsHold.value ? 'moderation.authority.handoverConfirmCsam' : 'moderation.authority.handoverConfirm'), acceptLabel: label, acceptIcon: 'send' }))) return
   working.value = true
   try {
     emit('updated', await recordHandover(props.current.id, kind, reference.value))
@@ -109,7 +110,7 @@ async function handover(kind: ModerationHandoverKindEnum) {
           <p v-if="o.order.blockedAt" class="veyq-form-copy">{{ t('moderation.orders.blocked', { time: formTime(o.order.blockedAt) }) }}</p>
           <template v-if="o.annex">
             <textarea class="moderation-case-order-text" :value="o.annex" rows="10" readonly />
-            <Button severity="secondary" class="moderation-case-order-copy" icon="pi pi-copy" :label="copied === o.order.id ? t('moderation.orders.copied') : t('moderation.orders.copyText')" @click="copy(o.order.id, o.annex)" />
+            <VeyqButton variant="secondary" class="moderation-case-order-copy" icon="copy" :label="copied === o.order.id ? t('moderation.orders.copied') : t('moderation.orders.copyText')" @click="copy(o.order.id, o.annex)" />
           </template>
         </div>
       </div>
@@ -119,18 +120,18 @@ async function handover(kind: ModerationHandoverKindEnum) {
   <h4>{{ t('moderation.authority.title') }}</h4>
   <div class="veyq-form moderation-authority">
     <p class="veyq-form-copy">{{ t('moderation.authority.copy') }}</p>
-    <Button severity="secondary" class="moderation-export-prepare" icon="pi pi-list" :label="t('moderation.authority.prepare')" :loading="working" :disabled="busy" @click="prepare" />
+    <VeyqButton variant="secondary" class="moderation-export-prepare" icon="list" :label="t('moderation.authority.prepare')" :loading="working" :disabled="busy" @click="prepare" />
     <template v-if="exportText">
       <strong>{{ t('moderation.authority.exportTitle') }}</strong>
       <textarea class="moderation-export-text" :value="exportText" rows="12" readonly />
-      <Button severity="secondary" class="moderation-export-copy" icon="pi pi-copy" :label="copied === 'export' ? t('moderation.authority.copied') : t('moderation.authority.copyText')" @click="copy('export', exportText)" />
+      <VeyqButton variant="secondary" class="moderation-export-copy" icon="copy" :label="copied === 'export' ? t('moderation.authority.copied') : t('moderation.authority.copyText')" @click="copy('export', exportText)" />
     </template>
     <label for="moderation-handover-reference">{{ t('moderation.authority.handoverReference') }}</label>
-    <input id="moderation-handover-reference" v-model="reference" class="p-inputtext moderation-handover-reference" autocomplete="off" :disabled="busy || working" />
+    <VeyqInput id="moderation-handover-reference" v-model="reference" class="moderation-handover-reference" autocomplete="off" :disabled="busy || working" />
     <span class="veyq-form-copy">{{ t(endsHold ? 'moderation.authority.handoverHintCsam' : 'moderation.authority.handoverHint') }}</span>
     <div class="veyq-action-group">
-      <Button severity="secondary" class="moderation-handover-reported" icon="pi pi-send" :label="t('moderation.authority.handedOver')" :disabled="busy || working" @click="handover('REPORTED')" />
-      <Button severity="secondary" class="moderation-handover-information" icon="pi pi-send" :label="t('moderation.authority.informationGiven')" :disabled="busy || working" @click="handover('INFORMATION_GIVEN')" />
+      <VeyqButton variant="secondary" class="moderation-handover-reported" icon="send" :label="t('moderation.authority.handedOver')" :disabled="busy || working" @click="handover('REPORTED')" />
+      <VeyqButton variant="secondary" class="moderation-handover-information" icon="send" :label="t('moderation.authority.informationGiven')" :disabled="busy || working" @click="handover('INFORMATION_GIVEN')" />
     </div>
   </div>
 </template>

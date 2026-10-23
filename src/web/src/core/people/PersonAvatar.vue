@@ -5,7 +5,7 @@
 // load falls back to the letter by itself. Members only: a share view passes no `userId` and always shows the letter.
 // Decorative: the person's name is always printed or named next to it, so the avatar hides from assistive technology.
 import { computed, ref, watch } from 'vue'
-import Avatar from 'primevue/avatar'
+import VeyqAvatar from '../../shared/ui/VeyqAvatar.vue'
 import { avatarUrlOf } from './avatarCache'
 
 const props = withDefaults(
@@ -14,7 +14,7 @@ const props = withDefaults(
 )
 // PrimeVue's largest step is `xlarge` (4rem); `xxl` (8rem = 128 px, the profile page's picture) is ours, so the 256 px stored
 // picture is shown at half its pixels and stays sharp on a 2x screen.
-const primeSize = computed(() => (props.size === 'xxl' ? 'xlarge' : props.size))
+const baseSize = computed(() => (props.size === 'xxl' ? 'xlarge' : props.size))
 const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
 
 const src = computed(() => props.image ?? avatarUrlOf(props.userId))
@@ -25,16 +25,16 @@ const shown = computed(() => (src.value && src.value !== broken.value ? src.valu
 </script>
 
 <template>
-  <Avatar v-if="shown" :image="shown" shape="circle" :size="primeSize" :class="{ 'is-xxl': size === 'xxl' }" aria-hidden="true" data-avatar-image @error="broken = shown" />
-  <Avatar v-else :label="initialOf(name)" shape="circle" :size="primeSize" :class="{ 'is-xxl': size === 'xxl' }" aria-hidden="true" />
+  <VeyqAvatar v-if="shown" :image="shown" :size="baseSize" :class="{ 'is-xxl': size === 'xxl' }" data-avatar-image @error="broken = shown" />
+  <VeyqAvatar v-else :label="initialOf(name)" :size="baseSize" :class="{ 'is-xxl': size === 'xxl' }" />
 </template>
 
 <style scoped>
 /* An avatar keeps its size in a flex row: a shrinking circle becomes an oval. */
-.p-avatar {
+.veyq-avatar {
   flex: none;
 }
-.p-avatar.is-xxl {
+.veyq-avatar.is-xxl {
   width: 8rem;
   height: 8rem;
   font-size: 4rem;

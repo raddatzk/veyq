@@ -24,9 +24,10 @@
 // remote device's local key — that asymmetry is what forces two names, two confirms and two severities.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { isTrusted, untrustThisDevice, isTrustSupported } from './trustDevice'
 import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { account } from '../../../app/account'
@@ -91,11 +92,7 @@ async function confirmUntrust() {
 <template>
   <div class="device-trust">
     <p class="device-status">
-      <i
-        class="pi"
-        :class="!supported ? 'pi-info-circle' : hasConvenience ? 'pi-shield' : 'pi-lock'"
-        aria-hidden="true"
-      />
+      <VeyqIcon :name="!supported ? 'info-circle' : hasConvenience ? 'shield' : 'lock'" />
       <span>{{
         !supported
           ? t('sessions.deviceUnsupported')
@@ -112,12 +109,12 @@ async function confirmUntrust() {
     <!-- Offered only where a convenience tier is positively known to be here — the catch-path default is
          'none', so a failed read offers nothing rather than an action with no subject. -->
     <div v-if="supported && hasConvenience" class="device-action">
-      <Button
+      <VeyqButton
         type="button"
         :label="t('unlock.untrust')"
-        icon="pi pi-lock"
-        severity="danger"
-        outlined
+        icon="lock"
+        variant="danger"
+        appearance="outlined"
         size="small"
         @click="confirmOpen = true"
       />
@@ -125,20 +122,19 @@ async function confirmUntrust() {
 
     <!-- A dialog, where the neighbouring session actions use window.confirm: the two are not the same act and
          must not look like it. -->
-    <Dialog
+    <VeyqDialog
       v-model:visible="confirmOpen"
       :header="t('sessions.untrustConfirmTitle')"
-      modal
       :closable="!busy"
       :close-on-escape="!busy"
     >
       <p class="dialog-copy">{{ t('sessions.untrustConfirmBody') }}</p>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="confirmOpen = false" />
-        <Button type="button" :label="t('unlock.untrust')" icon="pi pi-lock" severity="danger" :loading="busy" @click="confirmUntrust" />
+        <VeyqButton type="button" :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="confirmOpen = false" />
+        <VeyqButton type="button" :label="t('unlock.untrust')" icon="lock" variant="danger" :loading="busy" @click="confirmUntrust" />
       </div>
-    </Dialog>
+    </VeyqDialog>
   </div>
 </template>
 
@@ -158,7 +154,7 @@ async function confirmUntrust() {
   color: var(--app-muted);
   font-size: 0.9rem;
 }
-.device-status .pi {
+.device-status .veyq-icon {
   color: var(--app-muted);
 }
 .device-action {

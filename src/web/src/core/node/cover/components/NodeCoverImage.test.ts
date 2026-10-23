@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import NodeCoverImage from './NodeCoverImage.vue'
+import VeyqIcon from '../../../../shared/ui/VeyqIcon.vue'
 
 describe('NodeCoverImage', () => {
   it('draws a stored crop with the display formula: inverse scale, offset to the crop\'s corner', () => {
@@ -28,9 +29,9 @@ describe('NodeCoverImage', () => {
   })
 
   it('without an image it draws the kind\'s icon, or nothing when none is given', () => {
-    const icon = mount(NodeCoverImage, { props: { src: null, icon: 'pi pi-folder' } })
+    const icon = mount(NodeCoverImage, { props: { src: null, icon: 'folder' } })
     expect(icon.find('img').exists()).toBe(false)
-    expect(icon.find('.pi-folder').exists()).toBe(true)
+    expect(icon.findComponent(VeyqIcon).props('name')).toBe('folder')
     expect(mount(NodeCoverImage, { props: { src: null } }).find('.veyq-node-cover-icon').exists()).toBe(false)
   })
 })

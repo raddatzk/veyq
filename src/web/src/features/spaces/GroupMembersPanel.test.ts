@@ -56,9 +56,9 @@ import type { ScopeMember } from '../../api/generated/scopes'
 import { memberProfile } from '../../test/models'
 
 const stubs = {
-  Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqButton: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -72,7 +72,7 @@ const stubs = {
     template: '<div class="icon-dialog"><button class="dialog-save" @click="doSave">save</button></div>',
   },
   ChangedKeyReviewDialog: true,
-  Checkbox: {
+  VeyqCheckbox: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input type="checkbox" class="revoke-links" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',

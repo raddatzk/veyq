@@ -96,20 +96,20 @@ async function opensDirectly(): Promise<boolean> {
 }
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label', 'type'], emits: ['click'], template: '<button :type="type" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div><slot /></div>' },
-  InputText: {
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label', 'type'], emits: ['click'], template: '<button :type="type ?? \'button\'" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue', 'type'],
     emits: ['update:modelValue'],
     template: '<input :type="type" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Password: {
+  VeyqPassword: {
     props: ['modelValue', 'inputId'],
     emits: ['update:modelValue'],
     template: '<input type="password" :id="inputId" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Checkbox: true,
+  VeyqCheckbox: true,
   KitScanner: true,
   JoinDeviceCard: true,
   SignInWithCodeCard: true,

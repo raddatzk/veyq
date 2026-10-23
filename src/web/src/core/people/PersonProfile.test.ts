@@ -4,7 +4,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import PrimeVue from 'primevue/config'
 
 vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadTenantPeople: vi.fn(), personNow: vi.fn(() => undefined) }))
 vi.mock('../../features/account/profile/profile', async (orig) => ({
@@ -48,7 +47,7 @@ const load = vi.mocked(loadTenantPeople)
 const anna: Person = { userId: ANNA, username: 'anna', realName: 'Anna Meyer', displayName: 'Anna Meyer' }
 
 async function mountPage(userId = ANNA) {
-  const w = mount(PersonProfile, { props: { userId }, global: { plugins: [realI18n(), PrimeVue] } })
+  const w = mount(PersonProfile, { props: { userId }, global: { plugins: [realI18n()] } })
   await flushPromises()
   return w
 }

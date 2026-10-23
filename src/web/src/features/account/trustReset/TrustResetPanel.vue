@@ -8,8 +8,8 @@
 // mirror SessionsPanel's veyq-list-row — the built panels are the design source.
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import TrustResetDialog from './TrustResetDialog.vue'
 import { refusedDocuments, type DocumentRefusal } from './refusedDocuments'
 import type { AccountDocument } from '../trustMarks'
@@ -58,10 +58,10 @@ async function onDone(result: ResetOutcome) {
         </div>
       </div>
 
-      <Message v-if="outcome" severity="success" :closable="false">
+      <VeyqMessage v-if="outcome" tone="success">
         {{ outcome === 'reset' ? t('trustReset.done') : t('trustReset.alreadyReadable') }}
-      </Message>
-      <Message v-if="loadFailed" severity="warn" :closable="false">{{ t('trustReset.loadFailed') }}</Message>
+      </VeyqMessage>
+      <VeyqMessage v-if="loadFailed" tone="warn">{{ t('trustReset.loadFailed') }}</VeyqMessage>
 
       <ul v-if="refusals && refusals.length" class="trust-reset-list">
         <li v-for="r in refusals" :key="r.document" class="veyq-list-row">
@@ -69,12 +69,12 @@ async function onDone(result: ResetOutcome) {
             <strong>{{ t(`trustReset.document.${r.document}`) }}</strong>
             <small>{{ t(`trustReset.code.${r.code}`) }}</small>
           </div>
-          <Button
+          <VeyqButton
             type="button"
             :label="t('trustReset.action')"
-            icon="pi pi-refresh"
-            severity="danger"
-            outlined
+            icon="refresh"
+            variant="danger"
+            appearance="outlined"
             :data-test="`trust-reset-open-${r.document}`"
             @click="open(r.document)"
           />

@@ -10,8 +10,8 @@
 // naming each with its reason, else it closes. Member only: no share role deletes a node, so no guest's level offers it.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import type { TreeNode } from '../tree'
 import { registry } from '../../applications/registry'
 import { joinList, type SelectedForDelete } from '../selection'
@@ -91,10 +91,9 @@ async function confirm() {
 </script>
 
 <template>
-  <Dialog
+  <VeyqDialog
     :visible="true"
     :header="t('node.deleteMany.title', { count: items.length })"
-    modal
     :closable="!busy"
     :close-on-escape="!busy"
     class="delete-nodes-dialog"
@@ -107,17 +106,17 @@ async function confirm() {
         <li v-for="(line, i) in summary.lines" :key="i">{{ line }}</li>
       </ul>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.close')" icon="pi pi-check" @click="emit('close')" />
+        <VeyqButton :label="t('common.close')" icon="check" @click="emit('close')" />
       </div>
     </div>
     <template v-else>
       <p class="dialog-copy">{{ t('node.deleteMany.copy', { count: items.length, kinds }) }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
-        <Button type="button" :label="t('node.delete')" icon="pi pi-trash" severity="danger" :loading="busy" @click="confirm" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="emit('close')" />
+        <VeyqButton :label="t('node.delete')" icon="trash" variant="danger" :loading="busy" @click="confirm" />
       </div>
     </template>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

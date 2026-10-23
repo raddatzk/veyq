@@ -25,12 +25,12 @@ import { realI18n, t } from '../test/i18n'
 import { invitePreview } from '../test/models'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: { props: ['label'], template: '<button>{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: { template: '<input />' },
-  Password: { template: '<input type="password" />' },
-  Checkbox: { template: '<input type="checkbox" />' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: { props: ['label'], template: '<button>{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: { template: '<input />' },
+  VeyqPassword: { template: '<input type="password" />' },
+  VeyqCheckbox: { template: '<input type="checkbox" />' },
 }
 
 function mountView() {

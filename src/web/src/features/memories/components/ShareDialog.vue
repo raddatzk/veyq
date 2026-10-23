@@ -14,8 +14,9 @@
 // recovered through the scope's epoch keys (K_SC), which no share link carries (ADR 0036 point 4).
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import ShareCreateDialog from './ShareCreateDialog.vue'
 import ShareGuestStops from '../../../core/sharing/ShareGuestStops.vue'
 import { useConfirm } from '../../../shared/state/useConfirm'
@@ -199,7 +200,7 @@ async function onDelete(share: ManagedShare) {
     header: t('share.deleteTitle'),
     message: isChapter.value ? t('share.chapterDeleteConfirm') : t('share.deleteConfirm'),
     acceptLabel: t('share.delete'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!confirmed) return
   deletingId.value = share.shareId
@@ -221,10 +222,10 @@ function fmtDate(d: Date): string {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="headerTitle" modal class="share-dialog" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="headerTitle" class="share-dialog" @update:visible="emit('close')">
     <div class="share-manage-head">
       <p class="share-intro">{{ introText }}</p>
-      <Button class="share-new-button" :label="createLabel" icon="pi pi-plus" @click="openCreate" />
+      <VeyqButton class="share-new-button" :label="createLabel" icon="plus" @click="openCreate" />
     </div>
 
     <p v-if="loadError" class="share-error">{{ t('share.loadFailed') }}</p>
@@ -234,7 +235,7 @@ function fmtDate(d: Date): string {
       <template v-for="section in sections" :key="section.key">
         <li v-if="section.foldable && section.shares.length" class="share-list-fold">
           <button type="button" class="share-fold-toggle" :aria-expanded="offOpen" @click="offOpen = !offOpen">
-            <i class="pi" :class="offOpen ? 'pi-chevron-down' : 'pi-chevron-right'" aria-hidden="true" />
+            <VeyqIcon :name="offOpen ? 'chevron-down' : 'chevron-right'" />
             <span>{{ t('share.offCount', { count: section.shares.length }, section.shares.length) }}</span>
           </button>
         </li>
@@ -247,7 +248,7 @@ function fmtDate(d: Date): string {
               <div class="share-list-badges">
                 <span class="share-list-role">{{ roleLabel(share.role) }}</span>
                 <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
-                <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" /> {{ t('share.passwordBadge') }}</span>
+                <span v-if="share.passwordRequired" class="veyq-badge"><VeyqIcon name="lock" /> {{ t('share.passwordBadge') }}</span>
                 <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>
                 <span v-if="!share.enabled" class="veyq-badge muted">{{ t('share.disabled') }}</span>
                 <!-- The server's re-activation verdict (ADR 0075 point 4), served on the row: such a link is marked and
@@ -269,69 +270,63 @@ function fmtDate(d: Date): string {
               />
             </div>
             <div class="share-list-actions">
-              <Button
+              <VeyqButton
                 v-if="share.enabled && shareLinks.get(share.shareId)"
-                type="button"
-                :icon="copiedLinkId === share.shareId ? 'pi pi-check' : 'pi pi-copy'"
+                :icon="copiedLinkId === share.shareId ? 'check' : 'copy'"
                 :aria-label="t('share.copy')"
                 :title="copiedLinkId === share.shareId ? t('share.copied') : t('share.copy')"
-                severity="secondary"
-                text
+                variant="secondary"
+                appearance="text"
                 @click="copyShareLink(share)"
               />
-              <Button
+              <VeyqButton
                 v-if="canEdit(share)"
-                type="button"
-                icon="pi pi-pencil"
+                icon="pencil"
                 :aria-label="t('share.edit')"
                 :title="t('share.edit')"
-                severity="secondary"
-                text
+                variant="secondary"
+                appearance="text"
                 @click="openEdit(share)"
               />
-              <Button
+              <VeyqButton
                 v-if="canReissue(share)"
-                type="button"
-                icon="pi pi-replay"
+                icon="replay"
                 :aria-label="t('share.reissue')"
                 :title="t('share.reissue')"
-                severity="secondary"
-                text
+                variant="secondary"
+                appearance="text"
                 @click="openReissue(share)"
               />
-              <Button
+              <VeyqButton
                 v-if="!share.enabled && !share.reissueRequired"
-                type="button"
-                icon="pi pi-refresh"
+                icon="refresh"
                 :aria-label="t('share.reactivate')"
                 :title="t('share.reactivate')"
-                severity="secondary"
-                text
+                variant="secondary"
+                appearance="text"
                 :disabled="reactivatingId === share.shareId"
                 @click="onReactivate(share)"
               />
-              <Button
+              <VeyqButton
                 v-else-if="share.enabled && share.mine"
-                type="button"
-                icon="pi pi-ban"
+                icon="ban"
                 :aria-label="t('share.revoke')"
                 :title="t('share.revoke')"
-                severity="danger"
-                text
+                variant="danger"
+                appearance="text"
                 :disabled="revokingId === share.shareId"
                 @click="onRevoke(share.shareId)"
               />
               <!-- Delete is offered on a switched-off link only, and only where the server's gate would let it through
                    (its owner, or anyone once the owner left): deleting a co-member's parked link would destroy their
                    note and password copy. -->
-              <Button
+              <VeyqButton
                 v-if="!share.enabled && share.deletable"
-                type="button"
-                icon="pi pi-trash"
+                icon="trash"
                 :aria-label="t('share.delete')"
                 :title="t('share.delete')"
-                severity="danger"
-                text
+                variant="danger"
+                appearance="text"
                 :disabled="deletingId === share.shareId"
                 @click="onDelete(share)"
               />
@@ -361,7 +356,7 @@ function fmtDate(d: Date): string {
       @close="onDialogClose"
       @reissue="openReissue"
     />
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

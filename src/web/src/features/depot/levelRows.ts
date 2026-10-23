@@ -223,7 +223,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
           header: t('depot.replaceTitle'),
           message: t('depot.replaceConfirm', { name: existing.name }),
           acceptLabel: t('depot.replaceAccept'),
-          acceptIcon: 'pi pi-upload',
+          acceptIcon: 'upload',
         })
         if (!accepted) continue
       }
@@ -408,7 +408,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       header: t(titleKey),
       message: t(copyKey, { name: node.name }),
       acceptLabel: t('depot.deleteAccept'),
-      acceptIcon: 'pi pi-trash',
+      acceptIcon: 'trash',
     })
     if (!accepted) return
     try {
@@ -432,21 +432,21 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const actions: LevelRowAction[] = [
       // The one first-class action: a file's purpose is to be taken.
       {
-        id: 'download', label: t('depot.download', { name }), icon: 'pi pi-download', first: true, shown: c.download,
+        id: 'download', label: t('depot.download', { name }), icon: 'download', first: true, shown: c.download,
         loading: downloading.value === node.id, disabled: !blob || !key || downloading.value !== null,
         onClick: () => void download(node, key, blob),
       },
-      { id: 'rename', label: t('depot.rename', { name }), icon: 'pi pi-pencil', shown: c.rename, onClick: () => source.rename?.(node) },
-      { id: 'move', label: t('depot.move', { name }), icon: 'pi pi-file-export', shown: c.moveFile, onClick: () => source.move?.(node) },
+      { id: 'rename', label: t('depot.rename', { name }), icon: 'pencil', shown: c.rename, onClick: () => source.rename?.(node) },
+      { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.moveFile, onClick: () => source.move?.(node) },
       // Delete also where nothing is placed: a guest's identity folder, where a member removes what a guest sent file by
       // file - a content-less one too, a guest's upload that never finished (inbox #391).
       {
-        id: 'delete', label: t('depot.delete', { name }), icon: 'pi pi-trash', severity: 'danger', shown: c.deleteFile,
+        id: 'delete', label: t('depot.delete', { name }), icon: 'trash', severity: 'danger', shown: c.deleteFile,
         onClick: () => void remove(node, 'depot.deleteConfirm', 'depot.deleteTitle'),
       },
     ]
     return {
-      icon: 'pi pi-file',
+      icon: 'file',
       title: name,
       meta: t('depot.kindFile'),
       details: fileDetails(key, node.id, blob),
@@ -464,15 +464,15 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const c = sourceRights(depotRights(ctx.value.access, targetOf(ctx.value.tree, node)), source)
     const guests = ctx.value.tree.children(node.id).length
     return {
-      icon: 'pi pi-inbox',
+      icon: 'inbox',
       title: name,
       meta: t('depot.dropBox.kind'),
       details: [{ id: 'people', text: t('depot.dropBox.people', guests) }],
       primary: { label: t('depot.dropBox.open', { name }), onClick: () => host.open(node) },
       actions: [
-        { id: 'move', label: t('depot.move', { name }), icon: 'pi pi-file-export', shown: c.moveNode, onClick: () => source.move?.(node) },
+        { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.moveNode, onClick: () => source.move?.(node) },
         {
-          id: 'delete', label: t('depot.delete', { name }), icon: 'pi pi-trash', severity: 'danger', shown: c.deleteNode && !!source.deleteFile,
+          id: 'delete', label: t('depot.delete', { name }), icon: 'trash', severity: 'danger', shown: c.deleteNode && !!source.deleteFile,
           onClick: () => void remove(node, 'depot.dropBox.deleteConfirm', 'depot.dropBox.delete'),
         },
       ],

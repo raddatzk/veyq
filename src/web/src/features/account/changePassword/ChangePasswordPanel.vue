@@ -9,10 +9,10 @@
 // built panel is the design source.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
-import Password from 'primevue/password'
-import Message from 'primevue/message'
+import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { changePassword, ChangePasswordRefused } from './changePassword'
 import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { masterKey } from '../../../app/vault'
@@ -127,16 +127,14 @@ function startOver() {
         <form class="veyq-form" @submit.prevent="submit">
           <label class="settings-field">
             {{ t('changePassword.currentPasswordLabel') }}
-            <Password v-model="currentPassword" :feedback="false" toggle-mask autocomplete="current-password" :disabled="busy" />
+            <VeyqPassword v-model="currentPassword" autocomplete="current-password" :disabled="busy" />
           </label>
           <RouterLink class="settings-link-action" to="/recover">{{ t('changePassword.forgotLink') }}</RouterLink>
 
           <label class="settings-field">
             {{ t('changePassword.newPasswordLabel') }}
-            <Password
+            <VeyqPassword
               v-model="newPassword"
-              :feedback="false"
-              toggle-mask
               autocomplete="new-password"
               :disabled="busy"
               input-id="change-password-new"
@@ -147,7 +145,7 @@ function startOver() {
           <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="change-password" :disabled="busy" />
           <label class="settings-field">
             {{ t('changePassword.confirmPasswordLabel') }}
-            <Password v-model="confirmPassword" :feedback="false" toggle-mask autocomplete="new-password" :disabled="busy" input-id="change-password-confirm" />
+            <VeyqPassword v-model="confirmPassword" autocomplete="new-password" :disabled="busy" input-id="change-password-confirm" />
           </label>
           <label class="settings-field">
             {{ t('changePassword.secretKeyLabel') }}
@@ -155,13 +153,13 @@ function startOver() {
             <small>{{ t('changePassword.secretKeyHint') }}</small>
           </label>
 
-          <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+          <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
 
           <div class="settings-action-row">
-            <Button
+            <VeyqButton
               type="submit"
               :label="busy ? t('changePassword.submitting') : t('changePassword.submit')"
-              icon="pi pi-lock"
+              icon="lock"
               :disabled="!canSubmit || busy"
               :loading="busy"
             />
@@ -170,16 +168,16 @@ function startOver() {
       </template>
 
       <template v-else>
-        <Message severity="success" :closable="false">{{ t('changePassword.done') }}</Message>
+        <VeyqMessage tone="success">{{ t('changePassword.done') }}</VeyqMessage>
         <p class="settings-muted">{{ t('changePassword.doneNote') }}</p>
 
         <div v-if="rememberSupported" class="settings-action-row">
-          <Button
+          <VeyqButton
             type="button"
             :label="t('changePassword.rememberDevice')"
-            icon="pi pi-shield"
-            severity="secondary"
-            outlined
+            icon="shield"
+            variant="secondary"
+            appearance="outlined"
             :loading="rememberBusy"
             @click="runRemember"
           />

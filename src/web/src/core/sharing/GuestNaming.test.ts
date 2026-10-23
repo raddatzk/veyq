@@ -3,7 +3,6 @@
 // id it names in an objection to the guest-write record (GDPR Art. 21(1) with 12(2)) is shown to copy — while this
 // link's writes are recorded, and only once the device holds an identity. Each absence beside its control.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import GuestNaming from './GuestNaming.vue'
 import { realI18n, t } from '../../test/i18n'
@@ -11,7 +10,7 @@ import { realI18n, t } from '../../test/i18n'
 const ID = '3f2b8c1e-6d4a-4e9b-a1c7-0b5d9e2f4a68'
 
 function mountLine(props: Record<string, unknown>) {
-  return mount(GuestNaming, { props, global: { plugins: [realI18n(), PrimeVue] } })
+  return mount(GuestNaming, { props, global: { plugins: [realI18n()] } })
 }
 
 afterEach(() => vi.unstubAllGlobals())

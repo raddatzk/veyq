@@ -20,6 +20,7 @@
 // a tenant removal is the first; the group removal asks the same thing through its inline confirm, which is a
 // different mechanism (ui-web-styleguide § Confirming a destructive action), not a copy of this one.
 import { computed, ref } from 'vue'
+import type { VeyqIconName } from '../ui/icons'
 
 /** What a call site says; every string is already i18n-resolved by the caller, as with `useToast`. */
 export interface ConfirmRequest {
@@ -30,8 +31,8 @@ export interface ConfirmRequest {
   /** The primary's label. Reuses the label of the button that opened it — a dialog whose primary reads
    *  differently from the control that summoned it is a new way to be wrong. */
   acceptLabel: string
-  /** Optional PrimeVue icon class for the primary, mirroring the opening button's icon. */
-  acceptIcon?: string
+  /** Optional icon for the primary, mirroring the opening button's icon. */
+  acceptIcon?: VeyqIconName
   /** An opt-in offered beside the consequence — only through `askWithOption`, which reads it back. */
   option?: ConfirmOption
 }

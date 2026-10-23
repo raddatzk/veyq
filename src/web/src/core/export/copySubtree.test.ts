@@ -61,7 +61,7 @@ let corrupt: string | null = null
 
 beforeAll(() => {
   registry.registerKind({
-    kind: FILE, icon: 'x', shareable: false, downloadsAsFile: true, importStreams: true, contentSchema: { application: 'c', version: 1 },
+    kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, importStreams: true, contentSchema: { application: 'c', version: 1 },
     copyLosses: ['c.fileLoss'],
     async exportContent(ctx) {
       const bytes = contents.get(ctx.node.id)
@@ -99,7 +99,7 @@ beforeAll(() => {
     },
   })
   registry.registerKind({
-    kind: ALBUM, icon: 'x', shareable: false, contentSchema: { application: 'c', version: 1 }, copyLosses: ['c.albumLoss'],
+    kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 'c', version: 1 }, copyLosses: ['c.albumLoss'],
     async exportContent(ctx) {
       const bytes = contents.get('pic')!
       // its payload CAN be read by frame: only its import's need for whole payloads keeps it out of a copy
@@ -111,7 +111,7 @@ beforeAll(() => {
     },
   })
   registry.registerKind({
-    kind: RAW, icon: 'x', shareable: false, importStreams: true, contentSchema: { application: 'c', version: 1 },
+    kind: RAW, icon: 'file', shareable: false, importStreams: true, contentSchema: { application: 'c', version: 1 },
     // its import would take a payload by frame, but its export offers none: the copy cannot read it so
     async exportContent(ctx) {
       const bytes = contents.get('pic')!
@@ -123,7 +123,7 @@ beforeAll(() => {
     },
   })
   registry.registerKind({
-    kind: BOX, icon: 'x', shareable: false, contentSchema: { application: 'c', version: 1 }, importsAsFolder: true, copyLosses: ['c.boxLoss'],
+    kind: BOX, icon: 'file', shareable: false, contentSchema: { application: 'c', version: 1 }, importsAsFolder: true, copyLosses: ['c.boxLoss'],
     exportContent: async () => ({ type: 'c.box', schema: 1 }),
   })
 })

@@ -8,9 +8,9 @@
 // different one is the case the compare exists for. Client-only, operator-blind.
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { safetyNumber, safetyNumberOfFingerprint, getPin } from '../account/identityPins'
 import { acceptChangedKey } from './acceptChangedKey'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
@@ -83,12 +83,12 @@ async function accept() {
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" :header="t('verify.reviewTitle', { name: '@' + member.username })" modal class="tenant-dialog" :closable="!busy" :close-on-escape="!busy">
+  <VeyqDialog v-model:visible="visible" :header="t('verify.reviewTitle', { name: '@' + member.username })" class="tenant-dialog" :closable="!busy" :close-on-escape="!busy">
     <div class="veyq-form review-body">
-      <Message v-if="wasVerified" severity="error" :closable="false" data-testid="review-verified-changed">
+      <VeyqMessage v-if="wasVerified" tone="error" data-testid="review-verified-changed">
         {{ t('safety.reviewVerifiedIntro', { name: '@' + member.username }) }}
-      </Message>
-      <Message v-else severity="warn" :closable="false">{{ t('verify.reviewIntro') }}</Message>
+      </VeyqMessage>
+      <VeyqMessage v-else tone="warn">{{ t('verify.reviewIntro') }}</VeyqMessage>
       <p class="settings-muted">{{ t('verify.reviewPendingRekey') }}</p>
 
       <div class="review-grid">
@@ -102,20 +102,20 @@ async function accept() {
         </section>
       </div>
 
-      <Message v-if="currentUnreadable" severity="error" :closable="false">{{ t('verify.currentUnreadable') }}</Message>
-      <Message v-else-if="expectedUnreadable" severity="warn" :closable="false">{{ t('verify.expectedUnreadable') }}</Message>
+      <VeyqMessage v-if="currentUnreadable" tone="error">{{ t('verify.currentUnreadable') }}</VeyqMessage>
+      <VeyqMessage v-else-if="expectedUnreadable" tone="warn">{{ t('verify.expectedUnreadable') }}</VeyqMessage>
 
-      <Message v-if="error" severity="error" :closable="false">
+      <VeyqMessage v-if="error" tone="error">
         {{ error }}
         <TrustResetLink v-if="trustRefused" />
-      </Message>
+      </VeyqMessage>
 
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('verify.refuse')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="visible = false" />
-        <Button type="button" :label="t('verify.accept')" icon="pi pi-shield" severity="warn" :loading="busy" :disabled="currentUnreadable" @click="accept" />
+        <VeyqButton :label="t('verify.refuse')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="visible = false" />
+        <VeyqButton :label="t('verify.accept')" icon="shield" variant="warn" :loading="busy" :disabled="currentUnreadable" @click="accept" />
       </div>
     </div>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

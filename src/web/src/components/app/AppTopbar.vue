@@ -13,8 +13,8 @@
 // same row as the breadcrumb, so each one is width the crumbs no longer have.
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import Breadcrumb from 'primevue/breadcrumb'
-import type { MenuItem } from 'primevue/menuitem'
+import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
+import type { VeyqMenuItem } from '../../shared/ui/menu'
 import { breadcrumb } from '../../app/breadcrumb'
 import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
 import UploadStatusMenu from '../../core/blob/UploadStatusMenu.vue'
@@ -27,11 +27,11 @@ const router = useRouter()
 // `AppShell.slots.test.ts`).
 const trayItems = registry.slotItems('topbarTray')
 
-const home = computed<MenuItem>(() => ({
+const home = computed<VeyqMenuItem>(() => ({
   label: breadcrumb.trail[0]?.name,
   command: () => void router.push({ hash: breadcrumb.trail[0]?.hash ?? '#~me' }),
 }))
-const items = computed<MenuItem[]>(() =>
+const items = computed<VeyqMenuItem[]>(() =>
   breadcrumb.trail.slice(1).map((crumb) => ({
     label: crumb.name,
     command: () => void router.push({ hash: crumb.hash }),
@@ -41,7 +41,7 @@ const items = computed<MenuItem[]>(() =>
 
 <template>
   <header class="workspace-topbar">
-    <Breadcrumb :model="items" :home="home" class="app-breadcrumb" />
+    <VeyqBreadcrumb :items="items" :home="home" class="app-breadcrumb" />
     <div class="workspace-topbar-actions">
       <InvitationsBadge />
       <UploadStatusMenu />

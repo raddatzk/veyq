@@ -24,9 +24,9 @@ import { signOut } from '../login/signOut'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  Button: {
-    props: ['label', 'icon', 'severity', 'loading', 'disabled'],
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance', 'loading', 'disabled'],
     // `emits` is load-bearing: without it Vue passes the parent's @click through as a native fallthrough
     // listener too, so one trigger fires the handler twice and every call-count assertion reads double.
     emits: ['click'],

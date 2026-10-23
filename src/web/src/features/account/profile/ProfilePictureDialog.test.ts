@@ -3,7 +3,6 @@
 // a non-image (E1) and an undecodable file; "remove" only while a picture exists. Presentation + pixels only: it emits bytes.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import { defineComponent } from 'vue'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -29,7 +28,7 @@ async function mountDialog(props: { hasPicture?: boolean } = {}) {
   const w = mount(ProfilePictureDialog, {
     props,
     attachTo: document.body,
-    global: { plugins: [realI18n(), PrimeVue], stubs: { ImageCropper: Cropper } },
+    global: { plugins: [realI18n()], stubs: { ImageCropper: Cropper } },
   })
   await flushPromises()
   return w

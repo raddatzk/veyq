@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The guest's folder page as it ships (inbox #401 S2): core's `ShareTreePage` with the app's REAL registry (Memories
-// and Depot, filled by `src/test/setup.ts`), the real PrimeVue and the real vue-router, every step a DOM click on the
+// and Depot, filled by `src/test/setup.ts`), the real UI layer and the real vue-router, every step a DOM click on the
 // rendered element. The folder level is core's member `LevelView` (inbox #407: ONE unified list, every item core's
 // `LevelRowItem`): a Memory, the sub-folder and the file are items of that list, the rows' data the applications' own
 // — and nothing a member alone may do is on the page (pins, marks, the trash,
@@ -10,7 +10,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -82,7 +81,7 @@ async function mountPage(role: ShareRole) {
   const h = head(role)
   const w = mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
-    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    global: { plugins: [router, realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
   })
   await flushPromises()
   return w
@@ -132,7 +131,7 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
     await vi.waitFor(() => expect(w.find('.veyq-node-header-title').exists()).toBe(true))
     expect(w.find('.veyq-node-header-title').text()).toBe('Rom 2026')
     expect(w.find('.memory-detail').exists(), "the member's Memory detail, not a guest body").toBe(true)
-    expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Rom 2026'])
+    expect(w.findAll('a.veyq-breadcrumb__link').map((a) => a.text())).toEqual(['Familie', 'Rom 2026'])
     expect(authenticatedCalls).toEqual([])
   })
 
@@ -143,7 +142,7 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
     await router.push(`/s/${SHARE_ID}?node=${FILE}${HASH}`)
     const w = mount(ShareTreePage, {
       props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
-      global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+      global: { plugins: [router, realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
     })
     await flushPromises()
     expect(w.find('.node-blocked').text()).toBe(t('node.blockedByOperator'))

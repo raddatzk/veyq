@@ -2,8 +2,8 @@
 // Proves the `enableAutoUnmount(afterEach)` line in `setup.ts`: a component a test leaves mounted must not
 // outlive the file's teardown.
 //
-// **The mechanism it pins.** PrimeVue's `TabList.mounted()` arms a 150 ms `setTimeout` and keeps no handle, so its
-// own `beforeUnmount` cannot clear it. That timer is **Node's**, not happy-dom's (vitest does not copy happy-dom's
+// **The mechanism it pins.** The layer's tab row (`VeyqTabList`) is drawn by PrimeVue's `TabList` in this phase, whose
+// `mounted()` arms a 150 ms `setTimeout` and keeps no handle, so its own `beforeUnmount` cannot clear it. That timer is **Node's**, not happy-dom's (vitest does not copy happy-dom's
 // timers onto the global), so `happyDOM.abort()` in vitest's teardown never cancels it. When it lands after the
 // teardown has deleted the DOM globals, `updateInkBar` → `getOuterWidth` throws
 // `ReferenceError: HTMLElement is not defined`, and vitest fails the whole run on that unhandled error while every
@@ -20,17 +20,16 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
-import Tabs from 'primevue/tabs'
-import TabList from 'primevue/tablist'
-import Tab from 'primevue/tab'
+import VeyqTabs from '../shared/ui/VeyqTabs.vue'
+import VeyqTabList from '../shared/ui/VeyqTabList.vue'
+import VeyqTab from '../shared/ui/VeyqTab.vue'
 
 type TeardownGlobal = { happyDOM?: { abort(): Promise<void> }; window?: { close(): void } } & Record<string, unknown>
 
 const TabsHost = defineComponent({
   render: () =>
-    h(Tabs, { value: 'a' }, () => [
-      h(TabList, null, () => [h(Tab, { value: 'a' }, () => 'A'), h(Tab, { value: 'b' }, () => 'B')]),
+    h(VeyqTabs, { value: 'a' }, () => [
+      h(VeyqTabList, null, () => [h(VeyqTab, { value: 'a' }, () => 'A'), h(VeyqTab, { value: 'b' }, () => 'B')]),
     ]),
 })
 
@@ -45,9 +44,9 @@ describe('a component left mounted by its test', () => {
     await new Promise((resolve) => setTimeout(resolve, 400))
   })
 
-  it('does not outlive the teardown that deletes the DOM globals (PrimeVue TabList timer)', () => {
+  it('does not outlive the teardown that deletes the DOM globals (the tab row ink-bar timer)', () => {
     // Deliberately no `unmount()`: the shared setup must do it.
-    const wrapper = mount(TabsHost, { global: { plugins: [PrimeVue] } })
-    expect(wrapper.findAll('[data-pc-name="tab"]')).toHaveLength(2)
+    const wrapper = mount(TabsHost)
+    expect(wrapper.findAll('.veyq-tab')).toHaveLength(2)
   })
 })

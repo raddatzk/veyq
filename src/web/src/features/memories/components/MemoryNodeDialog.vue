@@ -18,11 +18,11 @@
 // here an empty `account.userId` (no key material read) or a scope other than the open tenant / group one hides it too.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Checkbox from 'primevue/checkbox'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeParent } from '../../../core/node/tree'
 import type { NodeCreateDialogProps, NodeCreateDialogEmits } from '../../../core/applications/registry'
 import { createMemory, createChapter } from '../memoryNodes'
@@ -105,15 +105,15 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="header" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="header" :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
     <form class="veyq-form" @submit.prevent="submit">
       <label>
         {{ t('node.nameLabel') }}
-        <InputText v-model="name" autocomplete="off" required autofocus :disabled="loading" />
+        <VeyqInput v-model="name" autocomplete="off" required autofocus :disabled="loading" />
       </label>
 
       <div v-if="showLocationStep" class="node-location-optin">
-        <Checkbox v-model="wantsLocation" input-id="wants-location" binary :disabled="loading" />
+        <VeyqCheckbox v-model="wantsLocation" input-id="wants-location" :disabled="loading" />
         <label for="wants-location" class="node-location-optin-text">
           <span>{{ t('memory.place.autoOptIn') }}</span>
           <span class="node-location-optin-hint">{{ t('memory.place.autoOptInHint') }}</span>
@@ -121,20 +121,20 @@ async function submit() {
       </div>
 
       <div v-if="showWasThere" class="node-location-optin">
-        <Checkbox v-model="wasThere" input-id="was-there" binary :disabled="loading" />
+        <VeyqCheckbox v-model="wasThere" input-id="was-there" :disabled="loading" />
         <label for="was-there" class="node-location-optin-text">
           <span>{{ t('memory.participants.wasThere') }}</span>
           <span class="node-location-optin-hint">{{ t('memory.participants.wasThereHint') }}</span>
         </label>
       </div>
 
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="loading" @click="emit('close')" />
-        <Button type="submit" :label="confirmLabel" icon="pi pi-check" :loading="loading" :disabled="!canSubmit" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="loading" @click="emit('close')" />
+        <VeyqButton type="submit" :label="confirmLabel" icon="check" :loading="loading" :disabled="!canSubmit" />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

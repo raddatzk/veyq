@@ -2,14 +2,13 @@
 // PersonAvatar (ADR 0084): the member's picture when the directory cache holds one, else the letter; decorative either way.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 const avatarUrlOf = vi.hoisted(() => vi.fn())
 vi.mock('./avatarCache', () => ({ avatarUrlOf }))
 
 import PersonAvatar from './PersonAvatar.vue'
 
-const mountAvatar = (props: Record<string, unknown>) => mount(PersonAvatar, { props: props as { name: string }, global: { plugins: [PrimeVue] } })
+const mountAvatar = (props: Record<string, unknown>) => mount(PersonAvatar, { props: props as { name: string }, global: { plugins: [] } })
 
 beforeEach(() => {
   vi.clearAllMocks()

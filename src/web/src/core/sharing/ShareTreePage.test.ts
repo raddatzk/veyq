@@ -3,13 +3,12 @@
 // the kinds' member details handed a guest's access and tree, whatever the link's root kind), against a STUBBED registry
 // (a fresh `createRegistry()` behind a delegating Proxy, as `views/ShareView.registry.test.ts`): the test registers the
 // kinds, their level sections and details "an application" would, with stubs that render what they were handed. The subtree is real crypto (names and keys open
-// through the chain), the router and PrimeVue are real and every navigation is a DOM click on the rendered element, the
+// through the chain), the router and the UI layer are real and every navigation is a DOM click on the rendered element, the
 // clients are guarded (`test/guestMode.ts`: an authenticated one throws).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -86,7 +85,7 @@ const seenCtx = vi.hoisted(() => ({ ctx: null as null | LevelRowsContext }))
 const stubRows: LevelRowsFactory = (ctx, host) => ({
   row: (node) => {
     seenCtx.ctx = ctx.value
-    return { icon: 'pi pi-file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => host.open(node) }, actions: [] }
+    return { icon: 'file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => host.open(node) }, actions: [] }
   },
 })
 /** A WRITE_ONLY drop page an application claimed: never this page's to mount. */
@@ -111,9 +110,9 @@ const StubDetail = defineComponent({
     ]),
 })
 
-// The name dialog is PrimeVue's (teleported); stubbed to render in place.
+// The name dialog is the layer's `VeyqDialog` (teleported); stubbed to render in place.
 const stubs = {
-  Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
+  VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
 }
 
 let router: Router
@@ -124,7 +123,7 @@ async function mountBody(h0: PublicShareHead, o: { reload?: () => Promise<void>;
   const access = guestAccessFor(h0, { requestGuest: o.requestGuest })
   const w = mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h0, reload: o.reload ?? (async () => {}), access },
-    global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } },
+    global: { plugins: [router, realI18n()], stubs },
   })
   await flushPromises()
   return w
@@ -155,8 +154,8 @@ beforeEach(async () => {
   seenCtx.ctx = null
   const r = createRegistry()
   const list = { rows: stubRows }
-  r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: true, list })
-  r.registerKind({ kind: BROKEN_KIND, icon: 'pi pi-file', shareable: true, list })
+  r.registerKind({ kind: NOTE_KIND, icon: 'file', shareable: true, list })
+  r.registerKind({ kind: BROKEN_KIND, icon: 'file', shareable: true, list })
   r.claimShareBody(NOTE_KIND, StubBody) // a WRITE_ONLY drop page: never mounted on this page
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
@@ -214,7 +213,7 @@ describe("ShareTreePage browses a shared folder with core's level view", () => {
   it('the breadcrumb runs along the parent chain to the share root, each crumb a real link with the fragment', async () => {
     await at(NESTED)
     const w = await mountBody(head())
-    const links = w.findAll('a.p-breadcrumb-item-link')
+    const links = w.findAll('a.veyq-breadcrumb__link')
     expect(links.map((a) => a.text())).toEqual(['Familie', 'Briefe', 'Feldpost'])
     expect(links[1].attributes('href')).toBe(`/s/${SHARE_ID}?node=${LETTERS}${HASH}`)
     const e = await click(links[1].element)
@@ -255,7 +254,7 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
     return h0
   }
   beforeEach(() => {
-    holder.reg!.registerKind({ kind: BOX_KIND, icon: 'pi pi-inbox', shareable: true, detail: StubDetail })
+    holder.reg!.registerKind({ kind: BOX_KIND, icon: 'inbox', shareable: true, detail: StubDetail })
     holder.reg!.claimShareBody(BOX_KIND, StubBody) // its WRITE_ONLY drop page: not this page's
   })
 
@@ -268,7 +267,7 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
     expect(d.props('epochs')).toBeNull()
     expect(Array.from(d.props('contentKey') as Uint8Array), "the node's key from the chain").toEqual(Array.from(box.key))
     expect((d.props('access') as { mode: string }).mode).toBe('guest')
-    expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Postfach'])
+    expect(w.findAll('a.veyq-breadcrumb__link').map((a) => a.text())).toEqual(['Familie', 'Postfach'])
     expect(authenticatedCalls).toEqual([])
   })
 
@@ -299,7 +298,7 @@ describe('ShareTreePage on a link rooted at a non-folder node', () => {
     }
   }
   beforeEach(() => {
-    holder.reg!.registerKind({ kind: BOX_KIND, icon: 'pi pi-inbox', shareable: true, detail: StubDetail })
+    holder.reg!.registerKind({ kind: BOX_KIND, icon: 'inbox', shareable: true, detail: StubDetail })
     holder.reg!.claimShareBody(BOX_KIND, StubBody)
   })
 
@@ -313,7 +312,7 @@ describe('ShareTreePage on a link rooted at a non-folder node', () => {
       expect(w.find('.markdown-body').text()).toContain('Box note')
       expect(w.find('.share-folder-badge').text()).toBe(t(badge))
       expect(w.find('.drop-stub').exists()).toBe(false)
-      expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Rom 2026'])
+      expect(w.findAll('a.veyq-breadcrumb__link').map((a) => a.text())).toEqual(['Rom 2026'])
       expect(authenticatedCalls).toEqual([])
     })
   }
@@ -324,7 +323,7 @@ describe('ShareTreePage on a link rooted at a non-folder node', () => {
     expect(router.currentRoute.value.query.node).toBe(INNER)
     expect(router.currentRoute.value.hash).toBe(HASH)
     expect(w.find('.detail-of').text()).toBe(`${INNER}|Tag 1|${SCOPE_ID}`)
-    const links = w.findAll('a.p-breadcrumb-item-link')
+    const links = w.findAll('a.veyq-breadcrumb__link')
     expect(links.map((a) => a.text())).toEqual(['Rom 2026', 'Tag 1'])
     const e = await click(links[0].element)
     expect(e.defaultPrevented).toBe(true)
@@ -395,8 +394,8 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
   it("a guest's create of an application's kind is the page's name dialog, never the kind's createDialog, and sends no meta", async () => {
     const KindCreateDialog = defineComponent({ name: 'KindCreateDialog', setup: () => () => h('label', { class: 'kind-create-stub' }, t('memory.participants.wasThere')) })
     holder.reg!.registerKind({
-      kind: 'MEMO', icon: 'pi pi-images', shareable: true, list: { rows: stubRows }, createDialog: KindCreateDialog,
-      createEntry: { label: 'memory.create', icon: 'pi pi-images', order: 10, allowed: () => true },
+      kind: 'MEMO', icon: 'images', shareable: true, list: { rows: stubRows }, createDialog: KindCreateDialog,
+      createEntry: { label: 'memory.create', icon: 'images', order: 10, allowed: () => true },
     })
     saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0' })
     const api = stubApi(publicSharesApi, { createShareNode: { nodeId: 'x' } })

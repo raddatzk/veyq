@@ -19,14 +19,14 @@ const CURRENT = 'me@example.com'
 const NEW = 'me.new@example.com'
 
 const stubs = {
-  Button: {
+  VeyqButton: {
     props: ['label', 'loading', 'disabled', 'type'],
     emits: ['click'],
     template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  InputText: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="new-email" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Password: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
+  VeyqInput: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="new-email" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  VeyqPassword: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   SecretKeyField: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="secret-key" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
 }
 

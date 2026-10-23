@@ -35,7 +35,7 @@ const access = memberAccessOf({ scopeId: 's', epochs })
 const created: { kind: string; name: string; parent: string | null; bytes: string }[] = []
 beforeAll(() => {
   registry.registerKind({
-    kind: FILE, icon: 'x', shareable: false, downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
+    kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
     validateContent: (c) => (typeof c.note === 'string' && c.note.length > 10 ? { code: 'too_large', message: 'note' } : null),
     async exportContent(ctx) {
       const body = text(`bytes of ${ctx.node.name}`)
@@ -49,7 +49,7 @@ beforeAll(() => {
     },
   })
   registry.registerKind({
-    kind: ALBUM, icon: 'x', shareable: false, contentSchema: { application: 'h', version: 1 },
+    kind: ALBUM, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
     async exportContent(ctx) {
       const files = ['IMG.jpg', 'img.JPG'].map((n) => ctx.addPayload(n, { size: n.length, mediaType: 'image/jpeg', chunks: async function* () { yield text(n) } }))
       return { type: 'h.album', schema: 1, files }

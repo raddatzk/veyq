@@ -10,8 +10,8 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { getAccountEmail, requestEmailConfirmation, requestErrorKey, type AccountEmail } from './emailConfirmation'
 import { useAsyncData } from '../../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -58,23 +58,23 @@ const { run: send, pending: sending } = useAsyncAction(
     </div>
 
     <p v-if="loading" class="settings-muted">{{ t('emailConfirm.loading') }}</p>
-    <Message v-else-if="loadError || !account" severity="error" :closable="false">{{ t('emailConfirm.loadFailed') }}</Message>
+    <VeyqMessage v-else-if="loadError || !account" tone="error">{{ t('emailConfirm.loadFailed') }}</VeyqMessage>
 
     <template v-else>
       <p class="email-address" data-testid="email-address">
         <strong>{{ account.email }}</strong>
       </p>
-      <Message v-if="account.confirmed" severity="success" :closable="false">{{ t('emailConfirm.confirmed') }}</Message>
-      <Message v-else severity="warn" :closable="false">{{ t('emailConfirm.unconfirmed') }}</Message>
+      <VeyqMessage v-if="account.confirmed" tone="success">{{ t('emailConfirm.confirmed') }}</VeyqMessage>
+      <VeyqMessage v-else tone="warn">{{ t('emailConfirm.unconfirmed') }}</VeyqMessage>
 
-      <Message v-if="sent" severity="info" :closable="false">{{ t('emailConfirm.sent', { email: account.email }) }}</Message>
-      <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <VeyqMessage v-if="sent" tone="info">{{ t('emailConfirm.sent', { email: account.email }) }}</VeyqMessage>
+      <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
 
       <div class="email-actions">
-        <Button
+        <VeyqButton
           :label="t('emailConfirm.send')"
-          icon="pi pi-envelope"
-          :severity="account.confirmed ? 'secondary' : undefined"
+          icon="envelope"
+          :variant="account.confirmed ? 'secondary' : 'primary'"
           :loading="sending"
           @click="send()"
         />

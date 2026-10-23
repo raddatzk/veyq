@@ -24,10 +24,10 @@ import { realI18n, t } from '../../../test/i18n'
 import { myTenant } from '../../../test/models'
 
 const stubs = {
-  Button: { props: ['label', 'icon'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Dialog: true,
-  Password: true,
+  VeyqButton: { props: ['label', 'icon'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqDialog: true,
+  VeyqPassword: true,
   SecretKeyField: true,
   EmailAddressSection: true,
   TrustResetLink: true,
@@ -133,7 +133,7 @@ describe('KeyRotationPanel — the scopes re-keyed alone are labelled, never sho
     ...o,
   })
   const field = { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)">' }
-  const rotatingStubs = { ...stubs, Password: field, SecretKeyField: field, Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' } }
+  const rotatingStubs = { ...stubs, VeyqPassword: field, SecretKeyField: field, VeyqDialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' } }
   const alone = (w: ReturnType<typeof mount>, scopeId: string) => w.find(`[data-alone-scope="${scopeId}"]`)
 
   async function rotate(scopes: { scopeId: string; status: 'secured' | 'failed' }[]) {

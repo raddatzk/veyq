@@ -6,7 +6,6 @@
 // report to, and no action is shown.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { defineComponent, h } from 'vue'
-import PrimeVue from 'primevue/config'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
@@ -32,8 +31,8 @@ import { MEMORY_KIND } from '../features/memories/kinds'
 import { sealName, wrapContentKey } from '../core/node/tree'
 import { publicModerationApi, publicSharesApi } from '../api/client'
 import { ReportCategory, ResponseError } from '../api/generated/moderation'
-import Select from 'primevue/select'
-import Checkbox from 'primevue/checkbox'
+import VeyqSelect from '../shared/ui/VeyqSelect.vue'
+import VeyqCheckbox from '../shared/ui/VeyqCheckbox.vue'
 import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import { fakeApi, stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
@@ -75,7 +74,7 @@ function head(role: ShareRole): PublicShareHead {
 /** The share page with the app's one report dialog beside it, as App.vue mounts them. */
 function mountPage(): VueWrapper {
   const Page = defineComponent({ render: () => [h(ShareView), h(ReportDialog)] })
-  return mount(Page, { attachTo: document.body, global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  return mount(Page, { attachTo: document.body, global: { plugins: [realI18n()] } })
 }
 
 function publishKey() {
@@ -83,13 +82,13 @@ function publishKey() {
   stubApi(publicModerationApi, { getModerationKey: { epoch: 1, kemPublicKey: b64std(bundle.kem), signPublicKey: b64std(bundle.sign) } })
 }
 
-/** Fill the open dialog — a category, a reason, the good-faith tick — and send it. PrimeVue's Select and Checkbox are
+/** Fill the open dialog — a category, a reason, the good-faith tick — and send it. The layer's select and checkbox are
  *  driven through their components (their popups and inputs are the library's), the reason through its textarea. */
 async function fillAndSend(w: VueWrapper) {
   await vi.waitFor(() => expect(document.body.querySelector('.veyq-report-dialog')).not.toBeNull())
   const dialog = w.findComponent(ReportDialog)
-  dialog.findComponent(Select).vm.$emit('update:modelValue', ReportCategory.TermsBreach)
-  dialog.findComponent(Checkbox).vm.$emit('update:modelValue', true)
+  dialog.findComponent(VeyqSelect).vm.$emit('update:modelValue', ReportCategory.TermsBreach)
+  dialog.findComponent(VeyqCheckbox).vm.$emit('update:modelValue', true)
   const reason = document.body.querySelector<HTMLTextAreaElement>('#veyq-report-reason')!
   reason.value = 'canary-guest-reason'
   reason.dispatchEvent(new Event('input'))

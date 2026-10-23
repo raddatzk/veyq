@@ -6,7 +6,6 @@
 // and `favorites.wire.test.ts`'s). A share guest's mount of the same level has no heart anywhere.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('./favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn(), resealFavoritesUnderNewMasterKey: vi.fn() }))
@@ -14,6 +13,7 @@ vi.mock('../../app/vault', () => ({ masterKey: vi.fn() }))
 vi.mock('../../features/depot/api', () => ({ filesApi: vi.fn() }))
 
 import LevelView from '../node/LevelView.vue'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import { childrenOf } from '../node/browse'
 import { FOLDER_KIND } from '../node/kind'
 import type { TreeNode } from '../node/tree'
@@ -47,7 +47,7 @@ function mountLevel(folder: TreeNode | null, access: Access = memberAccessOf({ s
   const tree = memberTreeOf(() => TREE)
   return mount(LevelView, {
     props: { folder, level: childrenOf(TREE, folder?.id ?? null), access, tree },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 const heartIn = (el: ReturnType<typeof rowOf>) => el.find('[data-action="favorite"]')
@@ -89,7 +89,7 @@ describe('the heart in a level (real clicks, real registry)', () => {
       expect(pressed.attributes('aria-pressed')).toBe('true')
       expect(pressed.attributes('aria-label')).toBe(t('node.unfavorite'))
       expect(pressed.classes()).toContain('is-pressed')
-      expect(pressed.find('.pi-heart-fill').exists()).toBe(true)
+      expect(w.findAllComponents(VeyqButton).find((b) => b.element === pressed.element)!.props('icon')).toBe('heart-fill')
       expect(favoritesStore.ids.has(id)).toBe(true)
 
       await heartIn(rowOf(w, title)).trigger('click')

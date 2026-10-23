@@ -8,14 +8,16 @@
 // header decides nothing of its own. A share guest gets the same header as a member with fewer actions (inbox #401) —
 // there is no guest-only header.
 
+import type { VeyqIconName } from '../../shared/ui/icons'
+
 /** One button of the header's action row. */
 export interface NodeHeaderAction {
   /** Stable key within the header (`share`, `rename`, `upload`…); also the button's `data-action`. */
   id: string
   /** The button's accessible name and tooltip (already translated; an icon-only button must be labelled). */
   label: string
-  /** The PrimeIcons class. */
-  icon: string
+  /** The icon. */
+  icon: VeyqIconName
   onClick: () => void
   /** `primary` is the one filled call to action, `danger` a destructive one (delete). Default `secondary`. */
   severity?: 'primary' | 'secondary' | 'danger'
@@ -82,10 +84,10 @@ export function standardNodeActions(
 ): NodeHeaderAction[] {
   const noop = () => {}
   const all: NodeHeaderAction[] = [
-    { id: 'share', label: flags.shareLabel ?? t('share.share'), icon: 'pi pi-share-alt', onClick: on.share ?? noop, shown: !!flags.share },
-    { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', onClick: on.rename ?? noop, shown: !!flags.rename },
-    { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', onClick: on.move ?? noop, shown: !!flags.move },
-    { id: 'delete', label: flags.deleteLabel ?? t('node.delete'), icon: 'pi pi-trash', onClick: on.remove ?? noop, severity: 'danger', shown: !!flags.remove },
+    { id: 'share', label: flags.shareLabel ?? t('share.share'), icon: 'share-alt', onClick: on.share ?? noop, shown: !!flags.share },
+    { id: 'rename', label: t('node.rename'), icon: 'pencil', onClick: on.rename ?? noop, shown: !!flags.rename },
+    { id: 'move', label: t('node.move.action'), icon: 'file-export', onClick: on.move ?? noop, shown: !!flags.move },
+    { id: 'delete', label: flags.deleteLabel ?? t('node.delete'), icon: 'trash', onClick: on.remove ?? noop, severity: 'danger', shown: !!flags.remove },
   ]
   return all.filter((a) => a.shown)
 }

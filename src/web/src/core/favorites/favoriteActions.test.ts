@@ -28,7 +28,7 @@ describe('the heart', () => {
     const node = { id: 'n1', kind }
     for (const actions of [favoriteHeaderActions(t, failed, member, node), favoriteRowActions(t, failed, member, node)]) {
       expect(actions).toHaveLength(1)
-      expect(actions[0]).toMatchObject({ id: 'favorite', label: '<node.favorite>', icon: 'pi pi-heart', pressed: false, placement: 'before' })
+      expect(actions[0]).toMatchObject({ id: 'favorite', label: '<node.favorite>', icon: 'heart', pressed: false, placement: 'before' })
     }
     expect(favoriteRowActions(t, failed, member, node)[0].first, 'a visible button on a row, never in the menu').toBe(true)
   })
@@ -36,7 +36,7 @@ describe('the heart', () => {
   it('a pinned node shows the filled heart, pressed, and the way to remove it', () => {
     vi.mocked(isFavorite).mockImplementation((id) => id === 'n1')
     expect(favoriteRowActions(t, failed, member, { id: 'n1', kind: FOLDER_KIND })[0]).toMatchObject({
-      label: '<node.unfavorite>', icon: 'pi pi-heart-fill', pressed: true,
+      label: '<node.unfavorite>', icon: 'heart-fill', pressed: true,
     })
     expect(favoriteRowActions(t, failed, member, { id: 'n2', kind: FOLDER_KIND })[0]).toMatchObject({ pressed: false })
   })

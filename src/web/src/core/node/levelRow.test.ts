@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { MAX_FIRST_ACTIONS, levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRowAction } from './levelRow'
 
-const a = (id: string, over: Partial<CoreRowAction> = {}): CoreRowAction => ({ id, label: id, icon: 'pi pi-x', onClick: () => {}, ...over })
+const a = (id: string, over: Partial<CoreRowAction> = {}): CoreRowAction => ({ id, label: id, icon: 'times', onClick: () => {}, ...over })
 const ids = (list: readonly LevelRowAction[]) => list.map((x) => x.id)
 
 describe('splitRowActions', () => {

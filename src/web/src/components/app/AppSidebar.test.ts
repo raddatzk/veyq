@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 
 // The tenant list is a network call (onMounted) — hand it a single seeded tenant (a test overrides it for the
@@ -24,6 +24,7 @@ vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn() }))
 
 import AppSidebar from './AppSidebar.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import { listMyTenants, listMyGroups, openMyTenantIcon, type GroupSpace } from '../../features/spaces/scopes'
 import type { CompromiseRotation } from '../../api/generated/scopes'
 import { getMyProfile } from '../../features/account/profile/profile'
@@ -42,13 +43,17 @@ import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../../test/i18n'
 import { memberProfile, myTenant, treeNode } from '../../test/models'
 
-// The overview lives in a teleporting PrimeVue Popover — stub it with a pass-through that always renders its
+// The overview lives in a teleporting VeyqPopover — stub it with a pass-through that always renders its
 // slot (so the tenant list is assertable) and exposes the toggle/hide the trigger calls.
 const PopoverStub = { template: '<div class="popover-stub"><slot /></div>', methods: { toggle() {}, hide() {} } }
 
-// The mobile sheet's teleporting PrimeVue Dialog needs the PrimeVue plugin's config to render — stub it with a
-// pass-through that renders its slot only when visible (also lets the mobile-sheet test drive it).
+// The mobile sheet's teleporting VeyqDialog is stubbed with a pass-through that renders its slot only when visible
+// (also lets the mobile-sheet test drive it).
 const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dialog-stub"><slot /></div>' }
+
+/** The name of the icon drawn inside `el`, or undefined when none is. */
+const iconIn = (wrapper: VueWrapper, el: { element: Element }) =>
+  wrapper.findAllComponents(VeyqIcon).find((c) => el.element.contains(c.element))?.props('name')
 
 function makeRouter(): Router {
   return createRouter({
@@ -62,7 +67,7 @@ async function mountAt(hash: string) {
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const wrapper = mount(AppSidebar, {
-    global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, Popover: PopoverStub, Dialog: DialogStub } },
+    global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, VeyqPopover: PopoverStub, VeyqDialog: DialogStub } },
   })
   await flushPromises()
   return wrapper
@@ -123,7 +128,7 @@ describe('AppSidebar space list', () => {
     await router.replace({ name: 'home', hash: '' })
     await router.isReady()
     const wrapper = mount(AppSidebar, {
-      global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, Dialog: DialogStub, Popover: PopoverStub } },
+      global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, VeyqDialog: DialogStub, VeyqPopover: PopoverStub } },
     })
     await flushPromises()
 
@@ -270,7 +275,7 @@ describe('AppSidebar favorites — every kind of pinned node, with its kind icon
     for (const [i, kind] of ['FOLDER', 'MEMORY', 'FILE', 'DEPOT_DROPBOX'].entries()) {
       const info = registry.kind(kind)
       expect(info.supported, kind).toBe(true)
-      if (info.supported) expect(rows[i].find('.sidebar-favorite-cover span').classes().join(' '), kind).toBe(info.icon)
+      if (info.supported) expect(iconIn(wrapper, rows[i].get('.sidebar-favorite-cover')), kind).toBe(info.icon)
     }
   })
 
@@ -301,7 +306,7 @@ describe('AppSidebar favorites — every kind of pinned node, with its kind icon
 
     const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Plan.pdf'))!
     expect(row.classes()).toContain('mobile-nav-favorite')
-    expect(row.get('.sidebar-favorite-cover span').classes()).toContain('pi')
+    expect(iconIn(wrapper, row.get('.sidebar-favorite-cover'))).toBe('file')
   })
 })
 
@@ -352,9 +357,9 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
       expect(img.attributes('style'), 'the crop is applied, as on every other surface').toContain('200%')
     }
     expect(cell('DEPOT_DROPBOX').find('img').exists()).toBe(false)
-    expect(cell('DEPOT_DROPBOX').find('.pi-inbox').exists()).toBe(true)
+    expect(iconIn(wrapper, cell('DEPOT_DROPBOX'))).toBe('inbox')
     expect(cell('FILE').find('img').exists()).toBe(false)
-    expect(cell('FILE').find('.pi-file').exists()).toBe(true)
+    expect(iconIn(wrapper, cell('FILE'))).toBe('file')
   })
 
   it('the mobile sheet shows them too, and a cover that failed to open is the icon', async () => {
@@ -368,7 +373,7 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
     await flushPromises()
     const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Reisen'))!
     expect(row.find('.sidebar-favorite-cover img').exists()).toBe(false)
-    expect(row.find('.sidebar-favorite-cover .pi-folder').exists()).toBe(true)
+    expect(iconIn(wrapper, row.find('.sidebar-favorite-cover'))).toBe('folder')
   })
 })
 

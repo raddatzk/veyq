@@ -18,6 +18,7 @@ import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import type { ChunkProvider } from '../../../sw/protocol'
 import { bannerStyle, type Banner } from './bannerModel'
 import BannerFrame from './BannerFrame.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import type { BannerStatus } from './useMemoryBanner'
 
 const props = defineProps<{
@@ -126,7 +127,7 @@ onBeforeUnmount(stop)
         :title="t('memory.banner.play')"
         @click="play"
       >
-        <span class="pi" :class="loading ? 'pi-spin pi-spinner' : 'pi-play'" aria-hidden="true" />
+        <VeyqIcon :name="loading ? 'spinner' : 'play'" :spin="loading" />
       </button>
     </template>
     <p v-if="failed" class="memory-banner-error" role="status">{{ t('memory.banner.playFailed') }}</p>
@@ -195,7 +196,7 @@ onBeforeUnmount(stop)
   outline: 2px solid var(--app-focus);
   outline-offset: 2px;
 }
-.memory-banner-play .pi {
+.memory-banner-play .veyq-icon {
   margin-left: 0.2rem; /* optically center the play triangle */
 }
 .memory-banner-error {

@@ -153,13 +153,13 @@ describe('targetOf: the node as a rights function is asked about it', () => {
   it('a kind is shareable only when its descriptor says so AND brings a share dialog (FOLDER: core\'s own)', () => {
     expect(targetOf(tree, tree.node('f'))).toEqual({ kind: FOLDER_KIND, inIdentityFolder: true, shareable: true, parentKind: null })
     expect(targetOf(tree, tree.node('x')).shareable, 'a kind nobody registered').toBe(false)
-    holder.reg!.registerKind({ kind: 'ALPHA', icon: 'x', shareable: true })
+    holder.reg!.registerKind({ kind: 'ALPHA', icon: 'file', shareable: true })
     expect(targetOf(tree, tree.node('x')).shareable, 'shareable, but no dialog to mount').toBe(false)
     holder.reg = createRegistry()
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'x', shareable: false, shareDialog: Dialog })
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'file', shareable: false, shareDialog: Dialog })
     expect(targetOf(tree, tree.node('x')).shareable, 'a dialog, but the descriptor says no').toBe(false)
     holder.reg = createRegistry()
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'x', shareable: true, shareDialog: Dialog })
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'file', shareable: true, shareDialog: Dialog })
     expect(targetOf(tree, tree.node('x')).shareable, 'control: both').toBe(true)
   })
 

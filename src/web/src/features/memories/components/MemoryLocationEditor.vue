@@ -13,10 +13,11 @@
 // name is always typed here, even where the geocoder is on: the one consent it rides on is asked only with the map.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Select from 'primevue/select'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MemoryMap from './MemoryMap.vue'
 import { reverseGeocode, defaultLevel, nameAtLevel, type GeoLevel } from '../geocode'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
@@ -165,7 +166,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('memory.place.title')" modal @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('memory.place.title')" @update:visible="emit('close')">
     <form class="veyq-form memory-location-editor" @submit.prevent="save">
       <div v-if="withMap" class="memory-location-mapwrap">
         <MemoryMap
@@ -182,10 +183,10 @@ onBeforeUnmount(() => {
         />
         <div class="memory-location-pill">
           <template v-if="derivedMode === 'auto'">
-            <span class="pi pi-images" aria-hidden="true" /> {{ t('memory.place.followsPhotos') }}
+            <VeyqIcon name="images" /> {{ t('memory.place.followsPhotos') }}
           </template>
           <template v-else>
-            <span class="pi pi-map-marker" aria-hidden="true" /> {{ t('memory.place.customPlace') }}
+            <VeyqIcon name="map-marker" /> {{ t('memory.place.customPlace') }}
             <button v-if="hasMedoid" type="button" class="memory-location-follow" @click="followAgain">{{ t('memory.place.followAgain') }}</button>
           </template>
         </div>
@@ -193,28 +194,26 @@ onBeforeUnmount(() => {
 
       <p v-else class="memory-location-position">
         <template v-if="anchorPoint && derivedMode === 'auto'">
-          <span class="pi pi-images" aria-hidden="true" /> {{ t('memory.place.followsPhotos') }}
+          <VeyqIcon name="images" /> {{ t('memory.place.followsPhotos') }}
         </template>
         <template v-else-if="anchorPoint">
-          <span class="pi pi-map-marker" aria-hidden="true" /> {{ t('memory.place.customPlace') }}
+          <VeyqIcon name="map-marker" /> {{ t('memory.place.customPlace') }}
         </template>
         <template v-else>
-          <span class="pi pi-tag" aria-hidden="true" /> {{ t('memory.place.nameOnly') }}
+          <VeyqIcon name="tag" /> {{ t('memory.place.nameOnly') }}
         </template>
       </p>
 
       <div class="memory-location-name">
-        <Select
+        <VeyqSelect
           v-if="showLevelPicker"
           :model-value="chosenLevel"
           :options="levelOptions"
-          option-label="label"
-          option-value="value"
           class="memory-location-name-field"
           :aria-label="t('memory.place.name')"
-          @update:model-value="pickLevel"
+          @update:model-value="(key) => key && pickLevel(key)"
         />
-        <InputText
+        <VeyqInput
           v-else
           v-model="name"
           class="memory-location-name-field"
@@ -231,14 +230,14 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="emit('close')" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="emit('close')" />
         <div class="veyq-action-group">
-          <Button type="button" :label="t('memory.place.remove')" icon="pi pi-trash" severity="danger" outlined :disabled="!location" @click="remove" />
-          <Button type="submit" :label="t('common.save')" icon="pi pi-check" :disabled="!canSave" />
+          <VeyqButton :label="t('memory.place.remove')" icon="trash" variant="danger" appearance="outlined" :disabled="!location" @click="remove" />
+          <VeyqButton type="submit" :label="t('common.save')" icon="check" :disabled="!canSave" />
         </div>
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

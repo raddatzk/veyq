@@ -10,8 +10,8 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Card from 'primevue/card'
-import Message from 'primevue/message'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { loadPublishedOperator } from '../core/operator/operatorDetails'
 import { loadPrivacyNotice, type PrivacyNotice } from '../core/privacy/privacyNotice'
@@ -48,12 +48,12 @@ onMounted(async () => {
 </script>
 
 <template>
-  <Card class="privacy-notice-card">
+  <VeyqCard class="privacy-notice-card">
     <template #title>{{ t('privacyNotice.title') }}</template>
-    <template #content>
+    <template #default>
       <p v-if="phase === 'loading'" class="privacy-notice-muted">{{ t('privacyNotice.loading') }}</p>
       <template v-else-if="phase === 'failed'">
-        <Message severity="error" :closable="false">{{ t('privacyNotice.loadFailed') }}</Message>
+        <VeyqMessage tone="error">{{ t('privacyNotice.loadFailed') }}</VeyqMessage>
         <p v-if="contact" class="veyq-form-copy" data-testid="privacy-notice-contact">
           {{ t('privacyNotice.askContact') }} <a :href="`mailto:${contact}`">{{ contact }}</a>
         </p>
@@ -74,7 +74,7 @@ onMounted(async () => {
         <OperatorIdentification />
       </div>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>

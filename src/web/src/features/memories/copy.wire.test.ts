@@ -199,7 +199,7 @@ beforeAll(() => {
   for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
     if (!registry.kind(kind).supported) {
       registry.registerKind({
-        kind, icon: 'pi pi-images', shareable: false, contentSchema: MEMORIES_CONTENT_SCHEMA,
+        kind, icon: 'images', shareable: false, contentSchema: MEMORIES_CONTENT_SCHEMA,
         exportContent: exportMemoryContent, importContent: importMemoryContent(kind), importStreams: true,
       })
     }

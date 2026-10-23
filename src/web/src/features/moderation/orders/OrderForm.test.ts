@@ -27,12 +27,12 @@ const order = (over: Partial<AuthorityOrder> = {}): AuthorityOrder => ({
 })
 
 const stubs = {
-  Button: {
+  VeyqButton: {
     props: ['label'],
     emits: ['click'],
     template: '<button :class="$attrs.class" :type="$attrs.type ?? \'button\'" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Message: { template: '<div class="msg" :class="$attrs.class"><slot /></div>' },
+  VeyqMessage: { template: '<div class="msg" :class="$attrs.class"><slot /></div>' },
 }
 
 async function opened() {

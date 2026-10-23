@@ -19,8 +19,8 @@ import { realI18n, t } from '../../../test/i18n'
 import { activeSpace } from '../../../app/activeSpace'
 
 const stubs = {
-  Button: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
+  VeyqButton: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
 }
 
 const ADDRESS = 'owner@example.com'

@@ -325,7 +325,7 @@
   text-align: left;
 }
 
-.sidebar-profile .profile-button .p-avatar {
+.sidebar-profile .profile-button .veyq-avatar {
   width: 2.1rem;
   height: 2.1rem;
 }
@@ -459,14 +459,13 @@
   box-shadow: none;
 }
 
-.app-breadcrumb.p-breadcrumb,
-.app-breadcrumb .p-breadcrumb {
+.app-breadcrumb.veyq-breadcrumb {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.app-breadcrumb .p-breadcrumb-list {
+.app-breadcrumb .veyq-breadcrumb__list {
   flex-wrap: nowrap;
 }
 
@@ -848,14 +847,13 @@
     gap: 0.45rem;
   }
 
-  .app-breadcrumb.p-breadcrumb,
-  .app-breadcrumb .p-breadcrumb {
+  .app-breadcrumb.veyq-breadcrumb {
     display: flex;
     align-items: center;
     min-height: 2.35rem;
   }
 
-  .app-breadcrumb .p-breadcrumb-list {
+  .app-breadcrumb .veyq-breadcrumb__list {
     align-items: center;
   }
 
@@ -953,7 +951,7 @@
   }
 }
 
-.mobile-nav-dialog.p-dialog {
+.mobile-nav-dialog.veyq-dialog {
   width: 100vw;
   max-width: 100vw;
   max-height: min(82dvh, 42rem);
@@ -961,7 +959,7 @@
   border-radius: 18px 18px 0 0;
 }
 
-.mobile-nav-dialog .p-dialog-content {
+.mobile-nav-dialog .veyq-dialog__content {
   max-height: calc(min(82dvh, 42rem) - 4rem);
   overflow: auto;
 }

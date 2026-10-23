@@ -5,7 +5,6 @@
 // password/terms gates and the role dispatch are the shell's (views/ShareView*.test.ts). Its picker's E3 window is
 // `views/ShareView.picker.test.ts`'s.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -39,7 +38,7 @@ const DROP = { nodeId: DROP_NODE, sealedDropPublicKey }
 function mountPage(h: PublicShareHead) {
   return mount(MemoryShareBody, {
     props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
-    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true } },
+    global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true } },
   })
 }
 

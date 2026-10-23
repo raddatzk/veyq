@@ -13,7 +13,7 @@
 // only borrows them and cancels its own drawing when it goes.
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import type { PdfDocument, PdfRenderJob } from '../pdf/pdfEngine'
 
 const props = defineProps<{ doc: PdfDocument; name: string }>()
@@ -242,41 +242,38 @@ function fit(): void {
     <div class="pdf-toolbar" role="toolbar" :aria-label="t('depot.viewer.pdf.toolbar')">
       <span class="pdf-page-indicator">{{ t('depot.viewer.pdf.pageOf', { page: current, total: doc.numPages }) }}</span>
       <span class="pdf-zoom">
-        <Button
-          type="button"
+        <VeyqButton
           class="pdf-zoom-out"
-          icon="pi pi-search-minus"
+          icon="search-minus"
           :aria-label="t('depot.viewer.pdf.zoomOut')"
           :title="t('depot.viewer.pdf.zoomOut')"
           :disabled="!canZoomOut"
           size="small"
-          severity="secondary"
-          outlined
+          variant="secondary"
+          appearance="outlined"
           @click="zoomOut"
         />
         <span class="pdf-zoom-level" aria-live="polite">{{ Math.round(zoom * 100) }} %</span>
-        <Button
-          type="button"
+        <VeyqButton
           class="pdf-zoom-in"
-          icon="pi pi-search-plus"
+          icon="search-plus"
           :aria-label="t('depot.viewer.pdf.zoomIn')"
           :title="t('depot.viewer.pdf.zoomIn')"
           :disabled="!canZoomIn"
           size="small"
-          severity="secondary"
-          outlined
+          variant="secondary"
+          appearance="outlined"
           @click="zoomIn"
         />
-        <Button
-          type="button"
+        <VeyqButton
           class="pdf-zoom-fit"
-          icon="pi pi-arrows-h"
+          icon="arrows-h"
           :aria-label="t('depot.viewer.pdf.fitWidth')"
           :title="t('depot.viewer.pdf.fitWidth')"
           :disabled="zoom === 1"
           size="small"
-          severity="secondary"
-          outlined
+          variant="secondary"
+          appearance="outlined"
           @click="fit"
         />
       </span>

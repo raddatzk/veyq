@@ -5,7 +5,7 @@
 // seals them at accept) and keeps nothing: the chosen bytes live in the parent's ref and the preview URL is revoked on unmount.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import ProfilePictureDialog from './ProfilePictureDialog.vue'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
@@ -35,8 +35,8 @@ function remove() {
     <PersonAvatar :name="name || '?'" :image="has ? preview.url.value : null" size="large" />
     <div class="join-picture-text">
       <div class="join-picture-buttons">
-        <Button type="button" :label="has ? t('profilePicture.change') : t('profilePicture.choose')" icon="pi pi-image" severity="secondary" outlined size="small" data-testid="join-picture-open" @click="open = true" />
-        <Button v-if="has" type="button" :label="t('profilePicture.remove')" icon="pi pi-trash" severity="danger" text size="small" @click="remove" />
+        <VeyqButton type="button" :label="has ? t('profilePicture.change') : t('profilePicture.choose')" icon="image" variant="secondary" appearance="outlined" size="small" data-testid="join-picture-open" @click="open = true" />
+        <VeyqButton v-if="has" type="button" :label="t('profilePicture.remove')" icon="trash" variant="danger" appearance="text" size="small" @click="remove" />
       </div>
       <small class="field-hint">{{ t('profilePicture.joinHint') }}</small>
     </div>

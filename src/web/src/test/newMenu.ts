@@ -1,10 +1,10 @@
 // Test helpers for core's level "New" menu (`core/node/LevelView.vue`, inbox #406): a real click on its button opens the
-// PrimeVue popup (teleported to the body), a real click on an entry runs it. Used by every test that used to click a
+// popup `VeyqMenu` (teleported to the body), a real click on an entry runs it. Used by every test that used to click a
 // section's create button or tile.
 import { flushPromises, type VueWrapper } from '@vue/test-utils'
 
 const BUTTON = '.veyq-new-menu-button'
-const ITEM = 'li.p-menu-item'
+const ITEM = '.veyq-menu__item'
 
 /** Whether the level draws a "New" menu button at all (a READ guest's does not). */
 export const hasNewMenu = (w: VueWrapper): boolean => w.find(BUTTON).exists()
@@ -27,15 +27,15 @@ export async function newMenuLabels(w: VueWrapper): Promise<string[]> {
   return (await openNewMenu(w)).map((e) => e.textContent?.trim() ?? '')
 }
 
-/** Whether the entry is disabled in the opened menu (PrimeVue marks the item). */
-export const isDisabled = (item: HTMLElement): boolean => item.getAttribute('data-p-disabled') === 'true'
+/** Whether the entry is disabled in the opened menu (the menu marks the item `aria-disabled`). */
+export const isDisabled = (item: HTMLElement): boolean => item.getAttribute('aria-disabled') === 'true'
 
 /** Open the menu and click the entry with this label (a real click on its content); resolves with the entry. */
 export async function chooseNew(w: VueWrapper, label: string): Promise<HTMLElement> {
   const items = await openNewMenu(w)
   const item = items.find((e) => e.textContent?.trim() === label)
   if (!item) throw new Error(`no "New" entry "${label}" among: ${items.map((e) => e.textContent?.trim()).join(', ')}`)
-  item.querySelector<HTMLElement>('.p-menu-item-content')!.click()
+  item.querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
   await flushPromises()
   return item
 }

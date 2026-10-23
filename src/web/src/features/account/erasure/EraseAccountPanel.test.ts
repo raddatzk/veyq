@@ -22,18 +22,18 @@ import { loadTenantPeople, type Person } from '../../../core/people/directory'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
-  Button: { props: ['label', 'loading', 'disabled', 'type'], template: '<button :type="type" :disabled="disabled">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Password: {
+  VeyqButton: { props: ['label', 'loading', 'disabled', 'type'], template: '<button :type="type ?? \'button\'" :disabled="disabled">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqPassword: {
     props: ['modelValue', 'inputId'],
     template: '<input type="password" :id="inputId" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Select: {
-    props: ['modelValue', 'options', 'optionLabel', 'optionValue', 'inputId', 'placeholder'],
+  VeyqSelect: {
+    props: ['modelValue', 'options', 'inputId', 'placeholder'],
     template:
       '<select :id="inputId" :value="modelValue ?? \'\'" @change="$emit(\'update:modelValue\', $event.target.value)">' +
       '<option value="" disabled>{{ placeholder }}</option>' +
-      '<option v-for="o in options" :key="o[optionValue]" :value="o[optionValue]">{{ o[optionLabel] }}</option></select>',
+      '<option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
   },
 }
 

@@ -8,6 +8,8 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useViewMode, setViewMode } from '../../shared/state/useViewMode'
 import { effectiveViewMode, type LevelViewOption } from './levelViews'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqTooltip from '../../shared/ui/VeyqTooltip'
 
 const props = defineProps<{ views: readonly LevelViewOption[] }>()
 
@@ -18,19 +20,18 @@ const { t } = useI18n()
 
 <template>
   <div class="view-mode-toggle" role="group" :aria-label="t('node.viewMode')">
-    <button
-      v-for="view in views"
-      :key="view.mode"
-      v-tooltip.bottom="t(view.label)"
-      type="button"
-      class="view-mode-button"
-      :class="{ 'is-active': active === view.mode }"
-      :aria-label="t(view.label)"
-      :aria-pressed="active === view.mode"
-      @click="setViewMode(view.mode)"
-    >
-      <span :class="view.icon" aria-hidden="true" />
-    </button>
+    <VeyqTooltip v-for="view in views" :key="view.mode" :text="t(view.label)">
+      <button
+        type="button"
+        class="view-mode-button"
+        :class="{ 'is-active': active === view.mode }"
+        :aria-label="t(view.label)"
+        :aria-pressed="active === view.mode"
+        @click="setViewMode(view.mode)"
+      >
+        <VeyqIcon :name="view.icon" />
+      </button>
+    </VeyqTooltip>
   </div>
 </template>
 
@@ -63,7 +64,7 @@ const { t } = useI18n()
   color: var(--app-accent);
   box-shadow: var(--app-shadow-sm);
 }
-.view-mode-button .pi {
+.view-mode-button .veyq-icon {
   font-size: 0.9rem;
 }
 </style>

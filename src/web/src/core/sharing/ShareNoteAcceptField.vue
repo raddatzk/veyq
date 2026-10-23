@@ -5,7 +5,7 @@
 // (`./shareNote.ts`), so the operator cannot tell which links ask.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Checkbox from 'primevue/checkbox'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
 import { hasLocaleText } from './shareNote'
 import type { LocaleMap } from '../../shared/ui/localeMap'
 
@@ -18,9 +18,8 @@ const hasText = computed(() => hasLocaleText(props.note))
 
 <template>
   <label class="share-note-accept" :class="{ 'share-note-accept-off': !hasText }">
-    <Checkbox
+    <VeyqCheckbox
       v-model="mustAccept"
-      binary
       input-id="share-note-must-accept"
       data-testid="share-note-must-accept"
       :disabled="disabled || !hasText"
@@ -39,7 +38,7 @@ const hasText = computed(() => hasLocaleText(props.note))
   gap: 0.55rem;
   cursor: pointer;
 }
-.share-note-accept :deep(.p-checkbox) {
+.share-note-accept :deep(.veyq-checkbox) {
   flex: none;
   margin-top: 0.15rem;
 }

@@ -8,10 +8,10 @@
 // Cancel. A failure trashes what was created and says how far it got; a success reloads the tree and names what was left out.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
-import ProgressBar from 'primevue/progressbar'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqProgress from '../../shared/ui/VeyqProgress.vue'
 import type { Access } from '../access'
 import type { NodeParent } from '../node/tree'
 import { loadTree, treeStore } from '../node/treeStore'
@@ -127,7 +127,7 @@ function close() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('export.importTitle')" modal class="import-dialog" :closable="step !== 'running'" @update:visible="close">
+  <VeyqDialog :visible="true" :header="t('export.importTitle')" class="import-dialog" :closable="step !== 'running'" @update:visible="close">
     <form class="veyq-form" data-testid="import-dialog" @submit.prevent="run">
       <p v-if="step === 'reading'" class="veyq-form-copy" role="status">{{ t('export.reading') }}</p>
       <template v-else-if="plan && step !== 'invalid'">
@@ -144,38 +144,37 @@ function close() {
             </li>
           </ul>
         </div>
-        <Message v-if="fits === false" severity="warn" :closable="false" role="alert" data-testid="import-no-room">{{ t('export.importNoRoom', { size }) }}</Message>
+        <VeyqMessage v-if="fits === false" tone="warn" role="alert" data-testid="import-no-room">{{ t('export.importNoRoom', { size }) }}</VeyqMessage>
         <p v-if="canImport" class="veyq-form-copy import-note">{{ t('export.importNotice') }}</p>
         <template v-if="step === 'running'">
           <p class="veyq-form-copy" role="status">{{ t('export.importing', { done: progress.nodesDone, total: progress.nodesTotal }) }}</p>
-          <ProgressBar :value="Math.round((progress.nodesDone / Math.max(1, progress.nodesTotal)) * 100)" />
+          <VeyqProgress :value="Math.round((progress.nodesDone / Math.max(1, progress.nodesTotal)) * 100)" />
         </template>
       </template>
-      <Message v-if="error" severity="error" :closable="false" role="alert" data-testid="import-error">{{ error }}</Message>
+      <VeyqMessage v-if="error" tone="error" role="alert" data-testid="import-error">{{ error }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="step === 'running'" data-testid="import-cancel" @click="close" />
-        <Button
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="step === 'running'" data-testid="import-cancel" @click="close" />
+        <VeyqButton
           v-if="uploadAsFile"
-          type="button"
           :label="t('export.uploadAsFile')"
-          icon="pi pi-file"
-          severity="secondary"
+          icon="file"
+          variant="secondary"
           :disabled="step === 'running'"
           data-testid="import-upload-as-file"
           @click="uploadInstead"
         />
-        <Button
+        <VeyqButton
           v-if="step !== 'invalid' && (step === 'reading' || canImport)"
           type="submit"
           :label="leavesOut ? t('export.importRest') : t('export.importSubmit')"
-          icon="pi pi-upload"
+          icon="upload"
           :disabled="step === 'reading' || fits === false"
           :loading="step === 'running'"
           data-testid="import-submit"
         />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

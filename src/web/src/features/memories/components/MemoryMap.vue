@@ -11,6 +11,8 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { LatLng } from '../memoryLocation'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import { createIconElement } from '../../../shared/ui/iconElement'
 
 const props = defineProps<{
   tileUrl: string
@@ -33,7 +35,7 @@ let dotLayer: L.LayerGroup | null = null
 let userDragged = false // set by Leaflet's `dragstart` (user pan only), cleared after the next frame is reported
 
 // A CSS pin (divIcon) instead of Leaflet's default PNG marker — avoids bundler image-path breakage.
-const pinIcon = L.divIcon({ className: 'veyq-map-pin', html: '<span class="pi pi-map-marker"></span>', iconSize: [30, 30], iconAnchor: [15, 30] })
+const pinIcon = L.divIcon({ className: 'veyq-map-pin', html: createIconElement('map-marker'), iconSize: [30, 30], iconAnchor: [15, 30] })
 
 function syncPin(at: LatLng | null | undefined) {
   if (!map) return
@@ -108,7 +110,7 @@ defineExpose({
   <div class="memory-map-wrap">
     <div ref="el" class="memory-map" role="application" />
     <!-- centre crosshair: the framed point (the `fixed` position + the naming anchor) -->
-    <span v-if="crosshair" class="memory-map-crosshair pi pi-map-marker" aria-hidden="true" />
+    <VeyqIcon v-if="crosshair" name="map-marker" class="memory-map-crosshair" />
   </div>
 </template>
 
@@ -135,7 +137,7 @@ defineExpose({
   z-index: 500;
 }
 :deep(.veyq-map-pin) {
-  color: var(--p-primary-color, #6d5ae6);
+  color: var(--app-primary);
   font-size: 1.75rem;
   line-height: 1;
   text-align: center;

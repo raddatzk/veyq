@@ -6,16 +6,17 @@
 // as a kind's noun is. The level shows the stored mode only where something on screen offers it (`effectiveViewMode`, inbox
 // #404) and hands that mode to the row factories (`LevelRowsContext.viewMode`).
 import type { ViewMode } from '../../shared/state/useViewMode'
+import type { VeyqIconName } from '../../shared/ui/icons'
 
 /** One presentation: the mode it sets, its icon, and the i18n key of its label (tooltip and accessible name). */
 export interface LevelViewOption {
   readonly mode: ViewMode
-  readonly icon: string
+  readonly icon: VeyqIconName
   readonly label: string
 }
 
-export const GRID_VIEW: LevelViewOption = { mode: 'grid', icon: 'pi pi-th-large', label: 'node.viewGrid' }
-export const LIST_VIEW: LevelViewOption = { mode: 'list', icon: 'pi pi-bars', label: 'node.viewList' }
+export const GRID_VIEW: LevelViewOption = { mode: 'grid', icon: 'th-large', label: 'node.viewGrid' }
+export const LIST_VIEW: LevelViewOption = { mode: 'list', icon: 'bars', label: 'node.viewList' }
 
 /** What core draws for every row: tiles and rows. */
 export const FOLDER_VIEWS: readonly LevelViewOption[] = [GRID_VIEW, LIST_VIEW]

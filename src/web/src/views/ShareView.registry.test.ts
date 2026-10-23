@@ -7,7 +7,6 @@
 // (FOLDER, or a kind with a `detail`), and never a claimed drop page. The real registry + the real pages are covered in
 // ShareView.test.ts / .memory.test.ts / .folder.test.ts / .picker.test.ts. Every negative has its live control.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
@@ -79,13 +78,13 @@ const StubDetail = defineComponent({ name: 'StubDetail', setup: () => () => h('d
 
 function registryWith(claims: NodeKind[], details: NodeKind[] = []): Registry {
   const r = createRegistry()
-  for (const key of details) r.registerKind({ kind: key, icon: 'x', shareable: true, detail: StubDetail })
+  for (const key of details) r.registerKind({ kind: key, icon: 'file', shareable: true, detail: StubDetail })
   for (const key of claims) r.claimShareBody(key, StubBody)
   return r
 }
 
 function mountShare() {
-  return mount(ShareView, { global: { plugins: [realI18n(), PrimeVue] } })
+  return mount(ShareView, { global: { plugins: [realI18n()] } })
 }
 
 beforeEach(() => {

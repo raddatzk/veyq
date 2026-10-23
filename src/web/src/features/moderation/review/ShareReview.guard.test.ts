@@ -10,7 +10,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
@@ -129,7 +128,7 @@ async function mountReview() {
   await router.isReady()
   const w = mount(ReviewBody, {
     props: { caseId: CASE_ID },
-    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    global: { plugins: [router, realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
   })
   await flushPromises()
   await flushPromises()

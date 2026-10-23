@@ -13,9 +13,9 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Card from 'primevue/card'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import { confirmEmail } from '../features/account/email/emailConfirmation'
 import { session } from '../app/session'
 import { HttpStatus, httpStatus } from '../shared/httpError'
@@ -54,24 +54,24 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>{{ t('emailConfirm.pageTitle') }}</template>
-    <template #content>
+    <template #default>
       <p v-if="phase === 'noLink'" class="veyq-form-copy">{{ t('emailConfirm.noLink') }}</p>
       <p v-if="phase === 'confirming'" class="veyq-form-copy">{{ t('emailConfirm.confirming') }}</p>
 
       <template v-if="phase === 'done'">
-        <Message severity="success" :closable="false" class="form-message">{{ t('emailConfirm.done') }}</Message>
-        <Button :label="t('emailConfirm.toSettings')" icon="pi pi-cog" @click="router.push('/settings/security')" />
+        <VeyqMessage tone="success" class="form-message">{{ t('emailConfirm.done') }}</VeyqMessage>
+        <VeyqButton :label="t('emailConfirm.toSettings')" icon="cog" @click="router.push('/settings/security')" />
       </template>
 
       <template v-if="phase === 'signInFirst'">
-        <Message severity="info" :closable="false" class="form-message">{{ t('emailConfirm.signInFirst') }}</Message>
-        <Button :label="t('emailConfirm.toSignIn')" icon="pi pi-sign-in" @click="router.push({ name: 'login' })" />
+        <VeyqMessage tone="info" class="form-message">{{ t('emailConfirm.signInFirst') }}</VeyqMessage>
+        <VeyqButton :label="t('emailConfirm.toSignIn')" icon="sign-in" @click="router.push({ name: 'login' })" />
       </template>
 
-      <Message v-if="phase === 'invalid'" severity="error" :closable="false" class="form-message">{{ t('emailConfirm.invalid') }}</Message>
-      <Message v-if="phase === 'failed'" severity="error" :closable="false" class="form-message">{{ t('emailConfirm.failed') }}</Message>
+      <VeyqMessage v-if="phase === 'invalid'" tone="error" class="form-message">{{ t('emailConfirm.invalid') }}</VeyqMessage>
+      <VeyqMessage v-if="phase === 'failed'" tone="error" class="form-message">{{ t('emailConfirm.failed') }}</VeyqMessage>
     </template>
-  </Card>
+  </VeyqCard>
 </template>

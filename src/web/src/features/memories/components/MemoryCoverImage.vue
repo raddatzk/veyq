@@ -4,10 +4,11 @@
 // `overflow:hidden` box and is expanded + offset by `coverImageStyle`, so a single stored `0..1` crop reads
 // identically on the browse card, the detail header, the map pin and the sidebar's Favorites tile. No `src` ⇒
 // the placeholder — the soft-accent
-// `pi pi-images` tile, or a `placeholder` slot the host supplies. Ported component-for-component from the design
+// images-icon tile, or a `placeholder` slot the host supplies. Ported component-for-component from the design
 // source's `MemoryCoverImage`; only the `src` (a decrypted object URL under K_node) and the crop model are ours.
 import { computed } from 'vue'
 import { coverImageStyle, type CoverCrop } from '../memoryCover'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{ src?: string | null; alt?: string; crop?: CoverCrop | null }>()
 
@@ -18,7 +19,7 @@ const imageStyle = computed(() => coverImageStyle(props.crop))
   <span class="memory-cover-image">
     <img v-if="src" :src="src" :alt="alt ?? ''" :style="imageStyle" loading="lazy" decoding="async" draggable="false" />
     <slot v-else name="placeholder">
-      <span class="memory-cover-image-ph pi pi-images" />
+      <VeyqIcon name="images" class="memory-cover-image-ph" />
     </slot>
   </span>
 </template>

@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 // Core's move dialog for a level's selection (inbox #421) over the REAL registry (Memories and Depot, filled by
-// `src/test/setup.ts`), the real PrimeVue Dialog and the app's real confirmation dialog, every step a DOM click. The door
+// `src/test/setup.ts`), the real `VeyqDialog` and the app's real confirmation dialog, every step a DOM click. The door
 // is a recorder (`NodeMover.moveMany`): that it is N single-node writes and one re-read is `move.test.ts`' and
 // `move.wire.test.ts`'s. What this pins: the browser blocks a place ANY selected node cannot take, naming it; the
 // pre-check names and leaves out what cannot go and sends the rest; a server refusal part-way is named in one summary while
 // the rest moved; one toast whose Undo moves back exactly what moved; a drop-box guest's folders asked about once, no undo.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))
@@ -56,10 +55,10 @@ function mountDialog(
   return mount(MoveNodesDialog, {
     attachTo: document.body,
     props: { nodes, ...session, mover, rootLabel: 'Familie', afterUndo },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
-const errorText = () => document.body.querySelector('.p-message-error')?.textContent?.trim() ?? ''
+const errorText = () => document.body.querySelector('.veyq-message--error')?.textContent?.trim() ?? ''
 const summaryLines = () => [...document.body.querySelectorAll('.move-summary-lines li')].map((li) => li.textContent?.trim())
 const summaryMoved = () => document.body.querySelector('.move-summary .veyq-form-copy')?.textContent?.trim() ?? ''
 const coded = (status: number, code: string) => ({ response: new Response(JSON.stringify({ code }), { status, headers: { 'content-type': 'application/json' } }) })

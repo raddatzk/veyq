@@ -6,7 +6,7 @@
 // a qualified legal review (ADR 0093 § Legal basis).
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Message from 'primevue/message'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { loadOrderNotice, type OrderNotice } from './orderNotice'
 
 const props = defineProps<{ shareId: string }>()
@@ -28,14 +28,14 @@ onMounted(load)
 </script>
 
 <template>
-  <Message v-if="notice" severity="info" :closable="false" class="order-notice" data-testid="order-notice">
+  <VeyqMessage v-if="notice" tone="info" class="order-notice" data-testid="order-notice">
     <p v-for="(at, i) in notice.receivedAt" :key="i" class="order-notice-removal">
       {{ t('share.orderNotice.removed', { date: day(at) }) }}
     </p>
     <p class="order-notice-ask">
       {{ notice.contact ? t('share.orderNotice.ask', { contact: notice.contact }) : t('share.orderNotice.askOperator') }}
     </p>
-  </Message>
+  </VeyqMessage>
 </template>
 
 <style scoped>

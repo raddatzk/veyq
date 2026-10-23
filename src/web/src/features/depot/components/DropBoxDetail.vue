@@ -26,7 +26,9 @@
 // itself moves from the header card. A guest's source carries no move here (a drop box is read-only for it, #380).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
 import type { TreeNode } from '../../../core/node/tree'
 import { FOLDER_KIND } from '../../../core/node/kind'
@@ -116,7 +118,7 @@ async function removeFolder(folder: TreeNode, label: string) {
     header: t('depot.dropBox.deleteFolder', { name: label }),
     message: t('depot.dropBox.deleteFolderConfirm', { name: label }),
     acceptLabel: t('depot.deleteAccept'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!accepted) return
   try {
@@ -133,7 +135,7 @@ async function removeFolder(folder: TreeNode, label: string) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="pi pi-inbox" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
+    <NodeHeader icon="inbox" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions">
       <template v-if="nodeCover" #leading>
         <span class="veyq-node-header-cover"><NodeCoverImage :src="nodeCover.url" :crop="nodeCover.crop" /></span>
       </template>
@@ -149,33 +151,31 @@ async function removeFolder(folder: TreeNode, label: string) {
       <ul v-else class="veyq-list">
         <li v-for="row in folders" :key="row.folder.id" class="veyq-list-row">
           <button type="button" class="dropbox-row-open" :aria-label="t('depot.dropBox.open', { name: row.label })" @click="emit('openNode', row.folder)">
-            <span class="pi pi-folder" aria-hidden="true" />
+            <VeyqIcon name="folder" />
             <span class="veyq-row-main">
               <span class="veyq-row-title">{{ row.label }}</span>
               <span class="veyq-row-subtitle">{{ t('depot.dropBox.guestFiles', row.files) }}</span>
             </span>
           </button>
           <span class="veyq-action-group veyq-action-group-icons">
-            <Button
-              v-if="rights.moveFile"
-              v-tooltip.bottom="t('depot.dropBox.moveFolder', { name: row.label })"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-file-export"
-              :aria-label="t('depot.dropBox.moveFolder', { name: row.label })"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="source.move?.(row.folder)"
-            />
-            <Button
+            <VeyqTooltip v-if="rights.moveFile" :text="t('depot.dropBox.moveFolder', { name: row.label })">
+              <VeyqButton
+                class="veyq-icon-button veyq-prime-icon-button"
+                icon="file-export"
+                :aria-label="t('depot.dropBox.moveFolder', { name: row.label })"
+                variant="secondary"
+                appearance="outlined"
+                size="small"
+                @click="source.move?.(row.folder)"
+              />
+            </VeyqTooltip>
+            <VeyqButton
               v-if="rights.deleteFile"
-              type="button"
               class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-trash"
+              icon="trash"
               :aria-label="t('depot.dropBox.deleteFolder', { name: row.label })"
-              severity="danger"
-              outlined
+              variant="danger"
+              appearance="outlined"
               size="small"
               @click="removeFolder(row.folder, row.label)"
             />

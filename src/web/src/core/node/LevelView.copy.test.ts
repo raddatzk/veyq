@@ -5,7 +5,6 @@
 // guest of any role. Every control is clicked for real; the dialog is the host's (`CopyNodesDialog`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 const holder = vi.hoisted(() => ({ reg: null as null | import('../applications/registry').Registry }))
 vi.mock('../applications/registry', async (importOriginal) => {
@@ -49,17 +48,17 @@ beforeEach(() => {
   setViewMode('list')
   // ALPHA copies (both hooks, an import that takes a payload by frame); BETA has no hooks: it is no copy's.
   holder.reg.registerKind({
-    kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' },
+    kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' },
     exportContent: async () => null, importContent: async () => ({ nodeId: 'x', nodeKey: new Uint8Array(0) }), importStreams: true,
   })
   // BETA moves (its application's selection answer) but cannot be copied
-  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
+  holder.reg.registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
 })
 
 function mountLevel(access: Access) {
   return mount(LevelView, {
     props: { folder: TRIPS, level: childrenOf(TREE, 'Trips'), access, tree: memberTreeOf(() => TREE) },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
     attachTo: document.body,
   })
 }

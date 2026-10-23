@@ -8,7 +8,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 
 vi.mock('../../../api/client', () => ({ contentApi: vi.fn(), loginApi: vi.fn(), tokenApi: vi.fn(), sessionApi: vi.fn() }))
@@ -46,7 +45,7 @@ async function mountRow(opts: { ids?: string[]; show?: boolean; write?: NodeMeta
   await router.push('/')
   const w = mount(MemoryParticipants, {
     props: { scopeId: SCOPE, node: nodeWith(opts.ids ?? []), memoryKey: key, show: opts.show ?? true, write: opts.write === undefined ? memberMemorySource({ scopeId: () => SCOPE }).nodeMeta! : opts.write },
-    global: { plugins: [realI18n(), PrimeVue, router] },
+    global: { plugins: [realI18n(), router] },
     attachTo: document.body,
   })
   await flushPromises()
@@ -194,14 +193,14 @@ describe('MemoryParticipants: the popover', () => {
 })
 
 describe('MemoryParticipants: the picker', () => {
-  it('lists the scope\'s current members as PrimeVue checkboxes, writes the choice with the version it read, and stores ids only', async () => {
+  it('lists the scope\'s current members as the layer\'s checkboxes, writes the choice with the version it read, and stores ids only', async () => {
     const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode })
     const w = await mountRow({ ids: [A] })
     await openPicker(w)
-    expect(document.body.querySelectorAll('.memory-participants-option .p-checkbox')).toHaveLength(5) // not raw inputs
+    expect(document.body.querySelectorAll('.memory-participants-option .veyq-checkbox')).toHaveLength(5) // not raw inputs
     expect(rows().map((r) => r.querySelector('.memory-participants-name')!.textContent)).toEqual(['Anna', 'Ben', 'Carl', 'Dora', 'Élodie'])
-    expect(rows().every((r) => r.querySelector('.p-avatar'))).toBe(true)
+    expect(rows().every((r) => r.querySelector('.veyq-avatar'))).toBe(true)
     expect(boxes().map((b) => b.checked)).toEqual([true, false, false, false, false])
     boxes()[2].click() // Carl
     boxes()[1].click() // Ben
@@ -292,7 +291,7 @@ describe('MemoryParticipants: the picker', () => {
     const w = await mountRow({ ids: [A] })
     await openPicker(w)
     const first = rows()[0]
-    expect(first.querySelector('.p-checkbox')).not.toBeNull()
+    expect(first.querySelector('.veyq-checkbox')).not.toBeNull()
     expect(first.querySelectorAll('input')).toHaveLength(1) // one overlay input in the box, nothing stretching beside it
     void w
   })

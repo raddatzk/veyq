@@ -22,15 +22,15 @@ import { ScopeKind } from '../../../api/generated/scopes'
 const AUTO_PENDING = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 const ME = 'aaaaaaaa-0000-4000-8000-000000000001'
 const stubs = {
-  Dialog: { props: ['header'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
-  InputText: {
+  VeyqDialog: { props: ['header'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'input\', $event)" />',
   },
-  Button: { props: ['type', 'label'], template: '<button :type="type || \'button\'" @click="$emit(\'click\', $event)">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  Checkbox: {
-    props: ['modelValue', 'binary', 'inputId'],
+  VeyqButton: { props: ['type', 'label'], template: '<button :type="type || \'button\'" @click="$emit(\'click\', $event)">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqCheckbox: {
+    props: ['modelValue', 'inputId'],
     emits: ['update:modelValue'],
     template: `<input type="checkbox" :class="inputId" :checked="modelValue" @change="$emit('update:modelValue', $event.target.checked)" />`,
   },

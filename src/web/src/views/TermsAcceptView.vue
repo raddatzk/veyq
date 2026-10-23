@@ -8,9 +8,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Message from 'primevue/message'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import { getTenantTerms, acceptTenantTerms, type TenantTerms } from '../features/tenant/tenantTerms'
 import { tenantError } from '../features/tenant/tenantError'
 import { activeSpace, markTermsAccepted } from '../app/activeSpace'
@@ -95,12 +95,12 @@ async function accept() {
 </script>
 
 <template>
-  <Card class="terms-card">
+  <VeyqCard class="terms-card">
     <template #title>{{ t('terms.gateTitle') }}</template>
-    <template #content>
+    <template #default>
       <p v-if="phase === 'loading'" class="muted">{{ t('terms.loading') }}</p>
 
-      <Message v-else-if="phase === 'loadFailed'" severity="error" :closable="false">{{ t('terms.loadFailed') }}</Message>
+      <VeyqMessage v-else-if="phase === 'loadFailed'" tone="error">{{ t('terms.loadFailed') }}</VeyqMessage>
 
       <template v-else-if="phase === 'ready'">
         <p class="veyq-form-copy">{{ t('terms.gateIntro') }}</p>
@@ -109,25 +109,25 @@ async function accept() {
           <div class="markdown-body" v-html="renderedBody"></div>
           <OperatorSectionView v-if="terms" :section="terms.operatorSection" />
         </div>
-        <Message v-if="error" severity="warn" :closable="false">{{ error }}</Message>
+        <VeyqMessage v-if="error" tone="warn">{{ error }}</VeyqMessage>
         <div class="terms-actions">
-          <Button :label="t('terms.accept')" icon="pi pi-check" :loading="busy" @click="accept" />
+          <VeyqButton :label="t('terms.accept')" icon="check" :loading="busy" @click="accept" />
           <!-- The only way out without accepting is the one sign-out (uc.account.sign-out). Declining records
                nothing; the member stays out of the shell. -->
-          <Button
+          <VeyqButton
             :label="t('terms.signOut')"
-            icon="pi pi-sign-out"
-            severity="secondary"
-            text
+            icon="sign-out"
+            variant="secondary"
+            appearance="text"
             :disabled="busy"
             @click="signOut()"
           />
         </div>
       </template>
 
-      <Message v-else-if="phase === 'done'" severity="success" :closable="false">{{ t('terms.accepted') }}</Message>
+      <VeyqMessage v-else-if="phase === 'done'" tone="success">{{ t('terms.accepted') }}</VeyqMessage>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>
@@ -173,7 +173,7 @@ async function accept() {
   font-size: 0.85em;
 }
 .markdown-body :deep(a) {
-  color: var(--p-primary-color, inherit);
+  color: var(--app-primary, inherit);
 }
 .terms-actions {
   display: flex;

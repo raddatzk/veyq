@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 // The member's Memory detail mounted for a SHARE GUEST below a shared folder (inbox #401 S4, shipped in S5): core's page of
 // a link (`ShareTreePage`) with the app's REAL registry renders the kind's registered `detail` (`MemoryDetailHost` →
-// `MemoryDetail`) with the guest's access and tree, and the host hands it the guest's data source (`../source.ts`). Real
-// PrimeVue, the real vue-router, every step a DOM click on the rendered element. A link rooted at the Memory itself,
+// `MemoryDetail`) with the guest's access and tree, and the host hands it the guest's data source (`../source.ts`). The real
+// UI layer, the real vue-router, every step a DOM click on the rendered element. A link rooted at the Memory itself,
 // through the shell, is `views/ShareView.memory.test.ts`.
 //
 // What it proves: nothing reaches an AUTHENTICATED client (each throws and is recorded, `test/guestMode.ts`), nothing of
@@ -16,7 +16,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -143,7 +142,7 @@ async function mountPage(role: ShareRole, extraMeta: Record<string, unknown> = {
   requestGuest = vi.fn(async () => null)
   const w = mount(ShareTreePage, {
     props: { shareId: SHARE, fragmentKey: b64url(K_SHARE), pwToken: PW, head: h, reload: async () => {}, access: guestAccessFor(h, { pwToken: PW, requestGuest }) },
-    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [router, realI18n()] },
     attachTo: document.body,
   })
   await flushPromises()

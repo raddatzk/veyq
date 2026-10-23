@@ -23,11 +23,11 @@ import { getTenantTerms, acceptTenantTerms } from '../features/tenant/tenantTerm
 import { realI18n, t } from '../test/i18n'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
   // `emits` is load-bearing: without it the parent's @click also arrives as a native fallthrough listener.
-  Button: {
-    props: ['label', 'icon', 'severity', 'loading', 'disabled'],
+  VeyqButton: {
+    props: ['label', 'icon', 'variant', 'appearance', 'loading', 'disabled'],
     emits: ['click'],
     template: '<button :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },

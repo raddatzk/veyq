@@ -15,8 +15,10 @@
 // then the name lives in this page only: a reload before the first file asks for it again.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import type { VeyqIconName } from '../../../shared/ui/icons'
 import type { ShareBodyProps } from '../../../core/applications/registry'
 import { enqueue, retryFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { formatBytes } from '../../../shared/formatBytes'
@@ -89,10 +91,10 @@ function detail(item: UploadItem): string {
   if (item.status === 'done') return t('depot.dropBox.guestDone', { size: formatBytes(item.sizeBytes, locale.value) })
   return t('depot.dropBox.guestSending')
 }
-function icon(item: UploadItem): string {
-  if (item.status === 'done') return 'pi pi-check'
-  if (item.status === 'failed') return 'pi pi-times-circle'
-  return 'pi pi-spin pi-spinner'
+function icon(item: UploadItem): VeyqIconName {
+  if (item.status === 'done') return 'check'
+  if (item.status === 'failed') return 'times-circle'
+  return 'spinner'
 }
 /** A retry can help: not a gone link, not a full one, not a name this guest already sent. */
 const retryable = (item: UploadItem) =>
@@ -179,7 +181,7 @@ async function notYou() {
 <template>
   <section class="veyq-section dropbox-guest">
     <div class="veyq-section-header">
-      <h2><span class="pi pi-inbox" aria-hidden="true" /> {{ t('depot.dropBox.guestTitle') }}</h2>
+      <h2><VeyqIcon name="inbox" /> {{ t('depot.dropBox.guestTitle') }}</h2>
     </div>
     <p>{{ t('depot.dropBox.guestHint', { name: head.name }) }}</p>
 
@@ -203,39 +205,38 @@ async function notYou() {
         :forget-busy="restarting"
         :record-days="head.share.guestWriteRecordDays"
       />
-      <Message v-if="linkGone" severity="error" :closable="false">{{ t('depot.dropBox.guestGone') }}</Message>
+      <VeyqMessage v-if="linkGone" tone="error">{{ t('depot.dropBox.guestGone') }}</VeyqMessage>
       <!-- TCO Art. 11: when the link went away under an upload, an authority's removal order may be why. -->
       <OrderNotice v-if="linkGone" :share-id="shareId" />
       <template v-else>
         <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
         <div>
-          <Button type="button" :label="t('depot.dropBox.guestPick')" icon="pi pi-upload" @click="picker?.click()" />
+          <VeyqButton :label="t('depot.dropBox.guestPick')" icon="upload" @click="picker?.click()" />
         </div>
       </template>
       <div v-if="items.length">
         <h3>{{ t('depot.dropBox.guestSession') }}</h3>
         <ul class="veyq-list">
           <li v-for="item in items" :key="item.id" class="veyq-list-row dropbox-guest-row" :data-status="item.status">
-            <span :class="icon(item)" aria-hidden="true" />
+            <VeyqIcon :name="icon(item)" :spin="icon(item) === 'spinner'" />
             <span class="veyq-row-main">
               <span class="veyq-row-title" :title="item.name">{{ item.name }}</span>
               <span class="veyq-row-subtitle dropbox-guest-detail">{{ detail(item) }}</span>
             </span>
-            <Button
+            <VeyqButton
               v-if="retryable(item)"
-              type="button"
               :label="t('depot.dropBox.guestRetry')"
               :aria-label="t('depot.dropBox.guestRetryLabel', { name: item.name })"
               size="small"
-              severity="secondary"
-              text
+              variant="secondary"
+              appearance="text"
               @click="retryFile(item.id)"
             />
           </li>
         </ul>
       </div>
     </template>
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+    <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
   </section>
 </template>
 
@@ -250,10 +251,10 @@ async function notYou() {
 .dropbox-guest-row .veyq-row-main {
   flex: 1 1 auto;
 }
-.dropbox-guest-row[data-status='failed'] .pi {
+.dropbox-guest-row[data-status='failed'] .veyq-icon {
   color: var(--app-danger);
 }
-.dropbox-guest-row[data-status='done'] .pi {
+.dropbox-guest-row[data-status='done'] .veyq-icon {
   color: var(--app-success-text);
 }
 .dropbox-guest-detail {

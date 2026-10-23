@@ -64,7 +64,7 @@
   align-items: center;
 }
 
-.group-add-row .p-select {
+.group-add-row .veyq-select {
   width: 100%;
 }
 
@@ -86,7 +86,7 @@
   gap: 0.4rem;
 }
 
-.management-actions .p-button,
+.management-actions .veyq-button,
 .management-actions button {
   flex: 0 0 auto;
 }

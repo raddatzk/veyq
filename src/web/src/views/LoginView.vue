@@ -2,12 +2,12 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Checkbox from 'primevue/checkbox'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Password from 'primevue/password'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqCheckbox from '../shared/ui/VeyqCheckbox.vue'
+import VeyqInput from '../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
+import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { login } from '../features/account/login/login'
 import { leaveLiveSession, liveSessionAddress, sameAccountAddress } from '../features/account/login/liveSession'
 import { signOut, takeSignOutNotice, type SignOutNotice } from '../features/account/login/signOut'
@@ -38,6 +38,7 @@ import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { vaultState, masterKey } from '../app/vault'
 import { session } from '../app/session'
 import { takeRoute } from '../app/pendingRoute'
+import VeyqIcon from '../shared/ui/VeyqIcon.vue'
 
 // uc.account.remember-this-device (web, cr-0054) — ONE adaptive login/unlock screen with ONE "remember me"
 // toggle (ADR 0005 §17-21). The same password authenticates AND derives the DEVICE-wrap KEK, so login + unlock
@@ -435,7 +436,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>
       {{
         lockedEntry ? t('sessions.lockedTitle')
@@ -444,7 +445,7 @@ onMounted(async () => {
         : t('login.title')
       }}
     </template>
-    <template #content>
+    <template #default>
       <!-- §E3's locked state: signed in, deliberately not unlocked, one action. It replaces the form rather than
            sitting beside it — every field here would need the Secret Key this person does not have. -->
       <LockedSignOut v-if="lockedEntry" @unlock="onLockedUnlock" />
@@ -472,7 +473,7 @@ onMounted(async () => {
       <form v-else-if="!vaultState.unlocked" class="veyq-form" @submit.prevent="submit">
         <label>
           {{ t('common.email') }}
-          <InputText
+          <VeyqInput
             v-model="email"
             type="email"
             name="email"
@@ -483,13 +484,12 @@ onMounted(async () => {
         </label>
         <label>
           {{ t('common.password') }}
-          <Password
+          <VeyqPassword
             v-model="password"
             input-id="login-password"
-            :input-props="{ name: 'password', autocomplete: 'current-password' }"
+            name="password"
+            autocomplete="current-password"
             required
-            :feedback="false"
-            toggle-mask
             fluid
           />
         </label>
@@ -506,31 +506,31 @@ onMounted(async () => {
           <small class="field-hint">{{ t(heldBack ? 'unlock.deviceHeldBack' : 'unlock.secretKeyHint') }}</small>
         </label>
         <div v-if="rememberSupported" class="checkbox-row">
-          <Checkbox v-model="remember" input-id="remember-me" binary />
+          <VeyqCheckbox v-model="remember" input-id="remember-me" />
           <label for="remember-me">
             {{ t('login.rememberMe') }}
             <small class="field-hint">{{ t('login.rememberMeHint') }}</small>
           </label>
         </div>
-        <Button
+        <VeyqButton
           type="submit"
           :label="busy ? t('login.submitting') : t('login.submit')"
-          icon="pi pi-sign-in"
+          icon="sign-in"
           :loading="busy"
         />
-        <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
-        <Message v-if="notice" severity="success" :closable="false" class="form-message">{{ notice }}</Message>
-        <Message v-if="warning" severity="warn" :closable="false" class="form-message">{{ warning }}</Message>
+        <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
+        <VeyqMessage v-if="notice" tone="success" class="form-message">{{ notice }}</VeyqMessage>
+        <VeyqMessage v-if="warning" tone="warn" class="form-message">{{ warning }}</VeyqMessage>
         <!-- §E3's entry point. `type="button"` is what makes it work at all: the gate on this form is HTML5
              constraint validation, which runs on submit only, so a submit-typed control would be blocked by the
              very `required` Secret-Key field this person cannot fill. Offered exactly where that field is. -->
-        <Button
+        <VeyqButton
           v-if="needsSecretKey"
           type="button"
           :label="t('sessions.lockedEntry')"
-          icon="pi pi-lock"
-          severity="secondary"
-          text
+          icon="lock"
+          variant="secondary"
+          appearance="text"
           :loading="enteringLocked"
           :disabled="!email || !password"
           @click="enterLocked"
@@ -543,39 +543,39 @@ onMounted(async () => {
              It carries NO `scanSupported` gate, unlike the scan icon in the Secret-Key field. This device only
              DISPLAYS a code; the camera it needs is on the other one. Gating it here would withhold the entry
              from exactly the hardware it exists for (ADR 0059 §1). -->
-        <Button
+        <VeyqButton
           v-if="!liveSession && linkingSupported"
           type="button"
           :label="t('pairing.signInEntry')"
-          icon="pi pi-qrcode"
-          severity="secondary"
-          text
+          icon="qrcode"
+          variant="secondary"
+          appearance="text"
           @click="signInWithCode = true"
         />
         <!-- Recovery needs no session, so it is reachable from here even when sign-in keeps failing — which is
              exactly when someone needs it. -->
-        <Button
+        <VeyqButton
           v-if="!liveSession"
           type="button"
           :label="t('recovery.forgot')"
-          severity="secondary"
-          text
+          variant="secondary"
+          appearance="text"
           @click="router.push({ name: 'recover' })"
         />
-        <Button
+        <VeyqButton
           v-if="liveSession"
           type="button"
           :label="t('login.signOut')"
-          icon="pi pi-sign-out"
-          severity="secondary"
-          text
+          icon="sign-out"
+          variant="secondary"
+          appearance="text"
           @click="signOut()"
         />
       </form>
 
       <!-- Unlocked → redirecting into the shell. No confirmation card; the navigation is the feedback. -->
       <div v-else class="login-redirecting" aria-hidden="true">
-        <span class="pi pi-spin pi-spinner" />
+        <VeyqIcon name="spinner" spin />
       </div>
     </template>
     <!-- Who runs this instance (ADR 0035 decision 7): shown where the Server Owner published it, absent otherwise. -->
@@ -584,7 +584,7 @@ onMounted(async () => {
         <OperatorIdentification />
       </div>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
 
 <style scoped>
@@ -597,7 +597,7 @@ onMounted(async () => {
 .login-operator {
   text-align: center;
 }
-.login-redirecting .pi-spinner {
+.login-redirecting .veyq-icon {
   font-size: 1.5rem;
   color: var(--app-muted);
 }

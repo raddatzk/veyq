@@ -98,11 +98,11 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
     const c = memoryRights(ctx.value.access, targetOf(ctx.value.tree, node))
     const cover = coverMap.value.get(node.id)
     const actions: LevelRowAction[] = [
-      { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: c.rename, onClick: () => host.rename(node) },
-      { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: c.move, onClick: () => host.move(node) },
+      { id: 'rename', label: t('node.rename'), icon: 'pencil', shown: c.rename, onClick: () => host.rename(node) },
+      { id: 'move', label: t('node.move.action'), icon: 'file-export', shown: c.move, onClick: () => host.move(node) },
     ]
     return {
-      icon: 'pi pi-images',
+      icon: 'images',
       // The cover always: a Memory's tile stays a cover tile (the soft placeholder) while it has none or it is loading.
       leading: { component: MemoryRowCover, props: { src: cover?.url ?? null, crop: cover?.crop ?? null, alt: node.name } },
       title: node.name,

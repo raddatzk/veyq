@@ -65,12 +65,12 @@
 // (`deleteNodes`, core's delete question).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Menu from 'primevue/menu'
-import type { MenuItem } from 'primevue/menuitem'
-import Tabs from 'primevue/tabs'
-import TabList from 'primevue/tablist'
-import Tab from 'primevue/tab'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMenu from '../../shared/ui/VeyqMenu.vue'
+import type { VeyqMenuItem } from '../../shared/ui/menu'
+import VeyqTabs from '../../shared/ui/VeyqTabs.vue'
+import VeyqTabList from '../../shared/ui/VeyqTabList.vue'
+import VeyqTab from '../../shared/ui/VeyqTab.vue'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
@@ -163,7 +163,7 @@ const hideEmptyTabs = computed(() => inIdentityFolder.value)
 // upload) runs the handler its row source registered (`levelActions.ts`) - registered for the level's whole life, whichever
 // tab is shown; an entry whose handler says it is not ready (keys still locked) is disabled, never a click that does nothing.
 const levelActions = createLevelActions()
-const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'pi pi-folder', order: 0, allowed: () => true, kind: FOLDER_KIND }
+const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'folder', order: 0, allowed: () => true, kind: FOLDER_KIND }
 const registryMenu = registry.levelMenu()
 const menuCtx = computed<LevelActionContext>(() => ({
   access: props.access,
@@ -172,7 +172,7 @@ const menuCtx = computed<LevelActionContext>(() => ({
   epochs: props.access.mode === 'member' ? props.access.epochs : null,
 }))
 const menuEntries = computed(() => [...(rights.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value))])
-const menuItems = computed<MenuItem[]>(() =>
+const menuItems = computed<VeyqMenuItem[]>(() =>
   menuEntries.value.map((e) => {
     const handler = e.create === undefined ? levelActions.get(e.id) : undefined
     const ready = e.create !== undefined ? true : !!handler?.enabled()
@@ -185,7 +185,7 @@ const menuItems = computed<MenuItem[]>(() =>
     }
   }),
 )
-const newMenu = ref<InstanceType<typeof Menu> | null>(null)
+const newMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 // The folder header's actions: the rights answers for the folder on screen, in the header's fixed order.
 const folderActions = computed(() =>
   standardNodeActions(
@@ -315,7 +315,7 @@ function blockedItem(node: TreeNode, item: Item): Item {
   return {
     ...item,
     row: {
-      icon: 'pi pi-ban',
+      icon: 'ban',
       title: node.name,
       meta: t('node.blockedByOperator'),
       primary: { label: node.name, onClick: () => {}, disabled: true },
@@ -330,7 +330,7 @@ function unblockedItem(node: TreeNode): Item {
     return {
       key: node.id, node, kind: node.kind, folder: true, unsupported: false,
       row: {
-        icon: 'pi pi-folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [],
+        icon: 'folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [],
         selection: folderSelection(node),
       },
     }
@@ -343,7 +343,7 @@ function unblockedItem(node: TreeNode): Item {
   return {
     key: node.id, node, kind: node.kind, folder: false, unsupported: true,
     row: {
-      icon: info.supported ? info.icon : 'pi pi-question-circle', title: node.name, meta: `${node.kind} · ${t('home.unsupportedKind')}`,
+      icon: info.supported ? info.icon : 'question-circle', title: node.name, meta: `${node.kind} · ${t('home.unsupportedKind')}`,
       primary: { label: node.name, onClick: () => {} }, actions: [],
     },
   }
@@ -572,35 +572,32 @@ async function onDrop(e: DragEvent): Promise<void> {
          whole list, so it is the level's too - a guest's as well. -->
     <div v-if="menuEntries.length || rights.nodeTrash || showViews || canSelect" class="veyq-level-toolbar">
       <template v-if="menuEntries.length">
-        <Button
-          type="button"
+        <VeyqButton
           class="veyq-new-menu-button"
           :label="t('node.new')"
-          icon="pi pi-plus"
+          icon="plus"
           size="small"
           aria-haspopup="menu"
           @click="newMenu?.toggle($event)"
         />
-        <Menu ref="newMenu" :model="menuItems" popup />
+        <VeyqMenu ref="newMenu" :items="menuItems" />
       </template>
-      <Button
+      <VeyqButton
         v-if="rights.nodeTrash"
-        type="button"
         :label="t('node.trash.open')"
-        icon="pi pi-trash"
-        severity="secondary"
-        outlined
+        icon="trash"
+        variant="secondary"
+        appearance="outlined"
         size="small"
         @click="emit('openTrash')"
       />
-      <Button
+      <VeyqButton
         v-if="canSelect"
-        type="button"
         class="veyq-select-button"
         :label="t('node.select.action')"
-        icon="pi pi-check-square"
-        severity="secondary"
-        :outlined="!selecting"
+        icon="check-square"
+        variant="secondary"
+        :appearance="!selecting ? 'outlined' : 'filled'"
         size="small"
         :aria-pressed="selecting"
         @click="toggleSelecting"
@@ -608,7 +605,7 @@ async function onDrop(e: DragEvent): Promise<void> {
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
     <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-    <NodeHeader v-if="folder" icon="pi pi-folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions">
+    <NodeHeader v-if="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions">
       <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
       <template v-if="folderCover" #leading>
         <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
@@ -616,13 +613,13 @@ async function onDrop(e: DragEvent): Promise<void> {
     </NodeHeader>
 
     <!-- The application tabs (inbox #348): a filter over this folder's children, the folders in every tab; real buttons
-         (PrimeVue Tab), arrow keys move between them. -->
-    <Tabs v-if="tabBar" :value="shownTab" class="veyq-level-tabs" @update:value="onTab">
-      <TabList :pt="{ tabList: { 'aria-label': t('node.tabs') } }">
-        <Tab :value="ALL_TAB">{{ t('node.tabAll') }}</Tab>
-        <Tab v-for="tab in tabs" :key="tab.id" :value="tab.id">{{ t(tab.label) }}</Tab>
-      </TabList>
-    </Tabs>
+         (`VeyqTab`), arrow keys move between them. -->
+    <VeyqTabs v-if="tabBar" :value="shownTab" class="veyq-level-tabs" @update:value="onTab">
+      <VeyqTabList :aria-label="t('node.tabs')">
+        <VeyqTab :value="ALL_TAB">{{ t('node.tabAll') }}</VeyqTab>
+        <VeyqTab v-for="tab in tabs" :key="tab.id" :value="tab.id">{{ t(tab.label) }}</VeyqTab>
+      </VeyqTabList>
+    </VeyqTabs>
 
     <!-- What only an application can explain (why a file was not uploaded): above the list. -->
     <LevelNotices v-if="notices.length" :notices="notices" />
@@ -633,54 +630,50 @@ async function onDrop(e: DragEvent): Promise<void> {
 
     <!-- The selection's bar (inbox #421): All / None, the count (announced), and what the selection may do. -->
     <div v-if="selecting" class="veyq-level-selection-bar" role="group" :aria-label="t('node.select.bar')">
-      <Button type="button" class="veyq-select-all" :label="t('node.select.all')" severity="secondary" text size="small" @click="selection.all(shownIds)" />
-      <Button type="button" class="veyq-select-none" :label="t('node.select.none')" severity="secondary" text size="small" @click="selection.none(shownIds)" />
+      <VeyqButton class="veyq-select-all" :label="t('node.select.all')" variant="secondary" appearance="text" size="small" @click="selection.all(shownIds)" />
+      <VeyqButton class="veyq-select-none" :label="t('node.select.none')" variant="secondary" appearance="text" size="small" @click="selection.none(shownIds)" />
       <span class="veyq-level-selection-count" aria-live="polite">{{ countText }}</span>
       <span class="veyq-level-selection-actions">
-        <Button
+        <VeyqButton
           v-if="anyMove"
-          type="button"
           class="veyq-select-move"
           :label="t('node.move.action')"
-          icon="pi pi-file-export"
+          icon="file-export"
           size="small"
-          outlined
+          appearance="outlined"
           :disabled="movable.length === 0"
           :aria-describedby="cannotMoveText ? 'veyq-select-cannot-move' : undefined"
           @click="moveSelected"
         />
-        <Button
+        <VeyqButton
           v-if="anyCopy"
-          type="button"
           class="veyq-select-copy"
           :label="t('node.copy.action')"
-          icon="pi pi-copy"
+          icon="copy"
           size="small"
-          outlined
+          appearance="outlined"
           :disabled="copyable.length === 0"
           :aria-describedby="cannotCopyText ? 'veyq-select-cannot-copy' : undefined"
           @click="copySelected"
         />
-        <Button
+        <VeyqButton
           v-if="anyReport"
-          type="button"
           class="veyq-select-report"
           :label="t('report.action')"
-          icon="pi pi-flag"
+          icon="flag"
           size="small"
-          outlined
+          appearance="outlined"
           :disabled="reportable.length === 0"
           @click="reportSelected"
         />
-        <Button
+        <VeyqButton
           v-if="anyDelete"
-          type="button"
           class="veyq-select-delete"
           :label="t('node.delete')"
-          icon="pi pi-trash"
-          severity="danger"
+          icon="trash"
+          variant="danger"
           size="small"
-          outlined
+          appearance="outlined"
           :disabled="deletable.length === 0"
           :aria-describedby="cannotDeleteText ? 'veyq-select-cannot-delete' : undefined"
           @click="deleteSelected"

@@ -13,9 +13,9 @@ import { FOLDER_KIND } from '../kind'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
-  Dialog: { props: ['header'], template: '<div><h2 class="header">{{ header }}</h2><slot /></div>' },
-  Button: { props: ['label'], template: '<button>{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqDialog: { props: ['header'], template: '<div><h2 class="header">{{ header }}</h2><slot /></div>' },
+  VeyqButton: { props: ['label'], template: '<button>{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
 }
 
 const SCOPE = '11111111-1111-1111-1111-111111111111'

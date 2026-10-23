@@ -8,7 +8,8 @@
 // reads (styleguide § Color: raw values are for rendered content).
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Message from 'primevue/message'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 // `alt` / `failedText` let another screen that shows one of OUR codes reuse this plate (the safety-number QR on a
 // member's own profile, ADR 0028 Decision 3); the pairing screens pass neither.
@@ -35,10 +36,10 @@ watch(() => props.payload, render, { immediate: true })
 </script>
 
 <template>
-  <Message v-if="failed" severity="error" :closable="false">{{ failedText ?? t('pairing.codeFailed') }}</Message>
+  <VeyqMessage v-if="failed" tone="error">{{ failedText ?? t('pairing.codeFailed') }}</VeyqMessage>
   <img v-else-if="src" class="pairing-code" :src="src" :alt="alt ?? t('pairing.codeAlt')" />
   <div v-else class="pairing-code pairing-code-pending" aria-hidden="true">
-    <span class="pi pi-spin pi-spinner" />
+    <VeyqIcon name="spinner" spin />
   </div>
 </template>
 

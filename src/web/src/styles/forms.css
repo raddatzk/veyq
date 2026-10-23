@@ -7,12 +7,12 @@
   box-shadow: var(--app-shadow-md);
 }
 
-.login-card .p-card-title {
+.login-card .veyq-card-frame__title {
   color: var(--app-text);
   font-size: 1.65rem;
 }
 
-.login-card .p-card-content {
+.login-card .veyq-card-frame__content {
   padding-top: 0.5rem;
 }
 
@@ -25,26 +25,26 @@
   width: min(560px, calc(100vw - 2rem));
 }
 
-.share-dialog .veyq-form > .p-message:first-child {
+.share-dialog .veyq-form > .veyq-message:first-child {
   margin-top: 0.75rem;
 }
 
-.share-dialog .veyq-form > .p-message + .p-message {
+.share-dialog .veyq-form > .veyq-message + .veyq-message {
   margin-top: 0;
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button:hover {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:hover {
   border: 0;
   background: var(--app-surface-muted);
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
+.tenant-dialog .veyq-dialog__header-actions .veyq-dialog__close:focus-visible {
   outline: 2px solid var(--app-focus-ring);
   outline-offset: 2px;
   box-shadow: none;
@@ -66,7 +66,7 @@
     border-radius: var(--app-radius);
   }
 
-  .login-card .p-card-body {
+  .login-card .veyq-card-frame__body {
     padding: 1rem;
   }
 

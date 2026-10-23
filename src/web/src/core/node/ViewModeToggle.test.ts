@@ -9,9 +9,9 @@ import { setViewMode, viewModeStorageKey } from '../../shared/state/useViewMode'
 import { setAccountUserId } from '../../app/account'
 import { realI18n, t } from '../../test/i18n'
 
-const MAP: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
+const MAP: LevelViewOption = { mode: 'map', icon: 'map', label: 'memory.viewMap' }
 const mountToggle = (views: readonly LevelViewOption[] = [GRID_VIEW, LIST_VIEW]) =>
-  mount(ViewModeToggle, { props: { views }, global: { plugins: [realI18n()], directives: { tooltip: {} } } })
+  mount(ViewModeToggle, { props: { views }, global: { plugins: [realI18n()] } })
 
 beforeEach(() => {
   localStorage.clear()

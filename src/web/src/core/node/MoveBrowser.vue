@@ -14,8 +14,9 @@
 // to the list after a place was opened, so the next Tab reaches its first place.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Breadcrumb from 'primevue/breadcrumb'
-import type { MenuItem } from 'primevue/menuitem'
+import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
+import type { VeyqMenuItem } from '../../shared/ui/menu'
+import type { VeyqIconName } from '../../shared/ui/icons'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { FOLDER_KIND } from './kind'
@@ -51,7 +52,7 @@ function open(id: string | null): void {
 }
 
 // --- the trail ----------------------------------------------------------------------------------------------------------
-type Crumb = MenuItem & { id: string | null; current: boolean }
+type Crumb = VeyqMenuItem & { id: string | null; current: boolean }
 const crumbs = computed<Crumb[]>(() => {
   const trail = moveTrail(props.tree, place.value)
   return trail.map((id, i) => ({ key: id ?? '\u0000root', id, label: nameOf(id), current: i === trail.length - 1 }))
@@ -76,10 +77,10 @@ watch(
   { immediate: true },
 )
 
-function iconOf(kind: string): string {
-  if (kind === FOLDER_KIND) return 'pi pi-folder'
+function iconOf(kind: string): VeyqIconName {
+  if (kind === FOLDER_KIND) return 'folder'
   const info = registry.kind(kind)
-  return info.supported ? info.icon : 'pi pi-question-circle'
+  return info.supported ? info.icon : 'question-circle'
 }
 function rowOf(node: TreeNode, blocked: 'self' | 'inside' | null): LevelRow {
   const name = props.tree.nameOf(node.id) || node.name
@@ -107,7 +108,7 @@ watch(place, async () => {
 
 <template>
   <div class="move-browser">
-    <Breadcrumb :model="crumbs" class="app-breadcrumb move-browser-trail" :aria-label="t('node.move.trail')">
+    <VeyqBreadcrumb :items="crumbs" class="app-breadcrumb move-browser-trail" :aria-label="t('node.move.trail')">
       <template #item="{ item }">
         <button
           type="button"
@@ -119,7 +120,7 @@ watch(place, async () => {
           {{ item.label }}
         </button>
       </template>
-    </Breadcrumb>
+    </VeyqBreadcrumb>
     <div ref="region" class="move-browser-places" tabindex="-1" role="group" :aria-label="t('node.move.places', { place: placeName })">
       <ul v-if="places.length" class="veyq-level-list is-list">
         <LevelRowItem

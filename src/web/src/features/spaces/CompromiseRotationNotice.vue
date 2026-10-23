@@ -14,8 +14,8 @@
 // notice + its `TrustResetLink`), so this adds no new UI.
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { requeueScopeRotation } from './scopes'
 import type { CompromiseRotation } from '../../api/generated/scopes'
 
@@ -40,18 +40,17 @@ async function requeue() {
 </script>
 
 <template>
-  <Message v-if="state" severity="warn" :closable="false" class="compromise-rotation-notice">
+  <VeyqMessage v-if="state" tone="warn" class="compromise-rotation-notice">
     {{ t(`members.compromiseRotation.${state}`) }}
-    <Button
+    <VeyqButton
       v-if="state === 'failed'"
-      type="button"
       :label="t('members.compromiseRotationRequeue')"
-      icon="pi pi-replay"
+      icon="replay"
       size="small"
-      outlined
+      appearance="outlined"
       :loading="busy"
       @click="requeue"
     />
     <small v-if="error">{{ error }}</small>
-  </Message>
+  </VeyqMessage>
 </template>

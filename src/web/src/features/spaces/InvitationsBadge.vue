@@ -8,6 +8,7 @@
 // replicated here, as the tray does).
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import { useMyInvitations } from './invitations'
 
 const { t } = useI18n()
@@ -24,7 +25,7 @@ const { count } = useMyInvitations()
     :title="t('shell.invitations')"
     @click="router.push('/invitations')"
   >
-    <span class="pi pi-inbox" aria-hidden="true" />
+    <VeyqIcon name="inbox" />
     <span class="invitations-badge">{{ count }}</span>
   </button>
 </template>
@@ -45,7 +46,7 @@ const { count } = useMyInvitations()
   cursor: pointer;
 }
 .invitations-trigger:hover {
-  background: var(--p-content-hover-background, rgba(127, 127, 127, 0.08));
+  background: var(--app-hover);
 }
 .invitations-badge {
   position: absolute;

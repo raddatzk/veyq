@@ -3,7 +3,6 @@
 // and no request at all: the quota question is stubbed below the wire, so any fetch is a write the cancel let through.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../node/tree', async (orig) => ({ ...(await orig<typeof import('../node/tree')>()), createContentNode: vi.fn(), deleteNode: vi.fn() }))
 vi.mock('../../features/tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
@@ -46,7 +45,7 @@ describe('ImportSubtreeDialog: Cancel', () => {
   it('after the dry run of a real download, Cancel closes and nothing was written or requested', async () => {
     const w = mount(ImportSubtreeDialog, {
       props: { input: { kind: 'zip', file: await download() }, access: memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) }), parent: null, targetName: 'Home' },
-      global: { plugins: [realI18n(), PrimeVue] },
+      global: { plugins: [realI18n()] },
       attachTo: document.body,
     })
     await flushPromises()

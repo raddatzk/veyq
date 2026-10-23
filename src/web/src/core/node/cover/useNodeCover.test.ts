@@ -141,7 +141,7 @@ describe('the action', () => {
     const api = harness([FOLDER])
     const [set, ...rest] = api.headerActions(FOLDER)
     expect(rest, 'no separate remove').toEqual([])
-    expect([set.id, set.icon, set.label]).toEqual(['cover', 'pi pi-image', t('node.cover.set')])
+    expect([set.id, set.icon, set.label]).toEqual(['cover', 'image', t('node.cover.set')])
     declaredIds.add(FOLDER.id)
     expect(api.headerActions(FOLDER)[0].label).toBe(t('node.cover.change'))
     expect(api.rowActions(FOLDER).map((a) => a.id)).toEqual(['cover'])

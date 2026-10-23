@@ -23,12 +23,13 @@
 // sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
 import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Tabs from 'primevue/tabs'
-import TabList from 'primevue/tablist'
-import Tab from 'primevue/tab'
-import TabPanels from 'primevue/tabpanels'
-import TabPanel from 'primevue/tabpanel'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqTabs from '../../../shared/ui/VeyqTabs.vue'
+import VeyqTabList from '../../../shared/ui/VeyqTabList.vue'
+import VeyqTab from '../../../shared/ui/VeyqTab.vue'
+import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
+import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import type { TreeNode } from '../../../core/node/tree'
 import type { NodeShareOffer } from '../../../core/applications/registry'
 import { hasDerivatives, mediaTypeOf, isVideoMediaType, type MediaItem } from '../media'
@@ -56,8 +57,8 @@ import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import type { CoreHeaderAction, NodeHeaderAction } from '../../../core/node/nodeHeader'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
-import Dialog from 'primevue/dialog'
-import Menu from 'primevue/menu'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
 import type { MemoryRights } from '../rights'
@@ -148,7 +149,7 @@ const detailEl = ref<HTMLElement | null>(null)
 const occludedTop = ref(0)
 let stickyObserver: ResizeObserver | null = null
 function measureSticky() {
-  const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .p-tablist')
+  const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .veyq-tabs__bar')
   if (!row) return
   const top = parseFloat(getComputedStyle(row).top)
   occludedTop.value = Math.round((Number.isFinite(top) ? top : 0) + row.offsetHeight)
@@ -156,7 +157,7 @@ function measureSticky() {
 onMounted(() => {
   measureSticky()
   window.addEventListener('resize', measureSticky)
-  const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .p-tablist')
+  const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .veyq-tabs__bar')
   if (row && typeof ResizeObserver !== 'undefined') {
     stickyObserver = new ResizeObserver(measureSticky)
     stickyObserver.observe(row)
@@ -173,19 +174,19 @@ const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null
 /** The header's actions (core's `NodeHeader`): each is shown only where `can` grants it; a share guest gets the same list
  *  with fewer entries. The uploader (drop-box) link is its own action with its own dialog (no role switcher). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
-  { id: 'upload', label: t('media.upload'), icon: 'pi pi-cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
-  { id: 'share', label: t('share.share'), icon: 'pi pi-share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share', { contribute: can.value.shareContribute }) },
-  { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'pi pi-user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
+  { id: 'upload', label: t('media.upload'), icon: 'cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
+  { id: 'share', label: t('share.share'), icon: 'share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share', { contribute: can.value.shareContribute }) },
+  { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
   // Who was there (ADR 0083, owner decision 2026-10-14): the picker opens from here, not from the row under the title. Shown by
   // `participants` (a member's alone, fail-closed) where the list may be written - never in a personal scope, never during a
   // pending deletion (E2) - which is the row's own `canEdit`.
-  { id: 'participants', label: t('memory.participants.title'), icon: 'pi pi-users', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
+  { id: 'participants', label: t('memory.participants.title'), icon: 'users', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
   // The banner above the Memory (uc.memory.banner): who may choose the cover may set it (`setBanner`, a member's only).
-  { id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'pi pi-objects-column', shown: can.value.setBanner, disabled: !props.memoryKey, onClick: () => openBannerDialog() },
-  { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: can.value.rename, onClick: () => emit('rename') },
+  { id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', shown: can.value.setBanner, disabled: !props.memoryKey, onClick: () => openBannerDialog() },
+  { id: 'rename', label: t('node.rename'), icon: 'pencil', shown: can.value.rename, onClick: () => emit('rename') },
   // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
-  { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: can.value.move, onClick: () => emit('move') },
-  { id: 'delete', label: t('node.delete'), icon: 'pi pi-trash', severity: 'danger', shown: can.value.deleteNode, onClick: () => emit('delete') },
+  { id: 'move', label: t('node.move.action'), icon: 'file-export', shown: can.value.move, onClick: () => emit('move') },
+  { id: 'delete', label: t('node.delete'), icon: 'trash', severity: 'danger', shown: can.value.deleteNode, onClick: () => emit('delete') },
 ])
 
 // --- item favorites (ADR 0068) ---
@@ -473,7 +474,7 @@ async function onDeleteOwn(mediaId: string) {
     header: t('share.deletePhoto'),
     message: t('share.deleteOwnConfirm'),
     acceptLabel: t('share.deleteOwnAccept'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!confirmed) return
   deletingOwn.value = new Set(deletingOwn.value).add(mediaId)
@@ -511,7 +512,7 @@ async function onDeleteBannerPicture(payload: { mediaId: string }) {
     header: t('memory.banner.pictureTitle'),
     message: t('memory.banner.pictureNotice'),
     acceptLabel: t('media.delete'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
     option: { label: t('memory.banner.pictureRemove') },
   })
   if (!answer) return
@@ -588,7 +589,7 @@ watch(
         >
           <MemoryCoverImage :src="coverSrc" :crop="storedCover?.crop ?? null" :alt="node.name" />
           <span class="memory-cover-preview-hint">
-            <span class="pi pi-image" />
+            <VeyqIcon name="image" />
             <span>{{ storedCover ? t('node.cover.change') : t('node.cover.set') }}</span>
           </span>
         </button>
@@ -613,7 +614,7 @@ watch(
             :title="t('memory.date.edit')"
             @click="dateEditorOpen = true"
           >
-            <span class="pi pi-calendar" />
+            <VeyqIcon name="calendar" />
             <span>{{ dateLabel || t('memory.date.noDate') }}</span>
           </button>
           <button
@@ -625,7 +626,7 @@ watch(
             :title="locationResolved ? t('memory.place.edit') : t('memory.place.set')"
             @click="openLocationEditor"
           >
-            <span class="pi pi-map-marker" />
+            <VeyqIcon name="map-marker" />
             <span>{{ locationLabel || t('memory.place.set') }}</span>
           </button>
         </div>
@@ -646,19 +647,19 @@ watch(
 
     <!-- Tabbed detail (cr-0061, ported from the design source): Gallery (the media grid) + Chapters (the
          nested Memories). Other design tabs — journal / map / playlists — arrive with their features. -->
-    <Tabs v-model:value="activeTab" class="memory-tabs">
-      <TabList>
-        <Tab value="gallery">{{ t('memory.gallery') }}</Tab>
-        <Tab v-if="can.navigate" value="chapters">
+    <VeyqTabs v-model:value="activeTab" class="memory-tabs">
+      <VeyqTabList>
+        <VeyqTab value="gallery">{{ t('memory.gallery') }}</VeyqTab>
+        <VeyqTab v-if="can.navigate" value="chapters">
           {{ t('memory.chapters') }}<span v-if="chapters && chapters.length" class="tab-count">{{ chapters.length }}</span>
-        </Tab>
-        <Tab v-if="showBeitraege" value="beitraege">{{ t('memory.buckets.title') }}</Tab>
-        <Tab v-if="can.mediaTrash" value="trash">{{ t('memory.trash.title') }}</Tab>
-      </TabList>
-      <TabPanels>
-        <TabPanel value="gallery">
+        </VeyqTab>
+        <VeyqTab v-if="showBeitraege" value="beitraege">{{ t('memory.buckets.title') }}</VeyqTab>
+        <VeyqTab v-if="can.mediaTrash" value="trash">{{ t('memory.trash.title') }}</VeyqTab>
+      </VeyqTabList>
+      <VeyqTabPanels>
+        <VeyqTabPanel value="gallery">
           <div v-if="status === 'loading' && !hasContent" class="media-grid-placeholder">
-            <span class="pi pi-spin pi-spinner" />
+            <VeyqIcon name="spinner" spin />
             <span>{{ t('media.loading') }}</span>
           </div>
           <p v-else-if="status === 'error'" class="veyq-empty">{{ t('media.unavailable') }}</p>
@@ -672,7 +673,7 @@ watch(
                 :title="sortDir === 'newest' ? t('media.sortNewest') : t('media.sortOldest')"
                 @click="sortDir = sortDir === 'newest' ? 'oldest' : 'newest'"
               >
-                <span class="pi" :class="sortDir === 'newest' ? 'pi-sort-amount-down' : 'pi-sort-amount-up-alt'" />
+                <VeyqIcon :name="sortDir === 'newest' ? 'sort-amount-down' : 'sort-amount-up-alt'" />
                 <span>{{ sortDir === 'newest' ? t('media.sortNewest') : t('media.sortOldest') }}</span>
               </button>
               <!-- The mark filter. In a personal scope there is nobody to share a mark with, so it is HIDDEN
@@ -748,16 +749,16 @@ watch(
                       :title="t('share.deletePhoto')"
                       @click.stop="onDeleteOwn(item.media.mediaId)"
                     >
-                      <span :class="deletingOwn.has(item.media.mediaId) ? 'pi pi-spin pi-spinner' : 'pi pi-trash'" aria-hidden="true" />
+                      <VeyqIcon :name="deletingOwn.has(item.media.mediaId) ? 'spinner' : 'trash'" :spin="deletingOwn.has(item.media.mediaId)" />
                     </button>
                   </template>
                 </MediaTile>
               </template>
             </MediaGrid>
           </template>
-        </TabPanel>
+        </VeyqTabPanel>
 
-        <TabPanel v-if="can.navigate" value="chapters">
+        <VeyqTabPanel v-if="can.navigate" value="chapters">
           <!-- Chapters as a MemoryCard grid + a create card, like the level's Memories (design source).
                Each chapter opens to its own gallery; its media is sealed under the chapter's own K_node. -->
           <div class="chapters-toolbar">
@@ -782,16 +783,16 @@ watch(
               :disabled="!memoryKey"
               @click="$emit('createChapter')"
             >
-              <span class="pi pi-plus" />
+              <VeyqIcon name="plus" />
               <strong>{{ t('memory.addChapter') }}</strong>
             </button>
           </div>
-        </TabPanel>
+        </VeyqTabPanel>
 
         <!-- Beiträge tab (uc.memory.buckets, cr-0113): the media ORGANIZER — a hierarchy picker (your primary +
              sub-buckets), create/rename/delete sub-buckets, move media in, upload into a bucket. Ported from the
              legacy MemoryAssetBuckets UX. Always present; the primary is virtual until a sub-bucket/upload materializes it. -->
-        <TabPanel v-if="showBeitraege" value="beitraege">
+        <VeyqTabPanel v-if="showBeitraege" value="beitraege">
           <MemoryBuckets
             ref="bucketsView"
             :scope-id="scopeId"
@@ -805,13 +806,13 @@ watch(
             @upload-bucket="onBucketUpload"
             @window="(ids) => wantThumbs('buckets', ids)"
           />
-        </TabPanel>
+        </VeyqTabPanel>
 
         <!-- Trash tab (uc.memory.delete-media, cr-0110/0111): the Memory's soft-deleted media in the SAME justified
              MediaGrid, with a per-tile checkbox (batch select) + a 3-dot menu (restore / purge). Lazy on open. -->
-        <TabPanel v-if="can.mediaTrash" value="trash">
+        <VeyqTabPanel v-if="can.mediaTrash" value="trash">
           <div v-if="trashStatus === 'loading'" class="media-grid-placeholder">
-            <span class="pi pi-spin pi-spinner" />
+            <VeyqIcon name="spinner" spin />
             <span>{{ t('media.loading') }}</span>
           </div>
           <p v-else-if="trashStatus === 'error'" class="veyq-empty">{{ t('media.unavailable') }}</p>
@@ -826,10 +827,10 @@ watch(
                   {{ allTrashSelected ? t('memory.trash.deselectAll') : t('memory.trash.selectAllVisible') }}
                 </button>
                 <button type="button" class="bucket-action-button" :disabled="!selectedTrash.size" @click="restoreSelected">
-                  <span class="pi pi-replay" /><span class="bucket-action-label">{{ t('memory.trash.restore') }}</span>
+                  <VeyqIcon name="replay" /><span class="bucket-action-label">{{ t('memory.trash.restore') }}</span>
                 </button>
                 <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selectedTrash.size" @click="purgeSelected">
-                  <span class="pi pi-trash" /><span class="bucket-action-label">{{ t('memory.trash.purge') }}</span>
+                  <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.trash.purge') }}</span>
                 </button>
               </div>
             </div>
@@ -854,7 +855,7 @@ watch(
                   <template #overlay>
                     <label class="media-tile-check" :class="{ 'is-on': selectedTrash.has(item.media.mediaId) }">
                       <input type="checkbox" :checked="selectedTrash.has(item.media.mediaId)" :aria-label="t('media.openItem', { index: item.index + 1 })" @click.stop @change="toggleTrashSelect(item.media.mediaId)" />
-                      <span class="pi pi-check" aria-hidden="true" />
+                      <VeyqIcon name="check" />
                     </label>
                     <button
                       type="button"
@@ -862,17 +863,17 @@ watch(
                       :aria-label="t('common.more')"
                       @click.stop="openTrashMenu($event, item.media.mediaId)"
                     >
-                      <span class="pi pi-ellipsis-v" />
+                      <VeyqIcon name="ellipsis-v" />
                     </button>
                   </template>
                 </MediaTile>
               </template>
             </MediaGrid>
-            <Menu ref="trashMenu" :model="trashMenuModel" popup />
+            <VeyqMenu ref="trashMenu" :items="trashMenuModel" />
           </template>
-        </TabPanel>
-      </TabPanels>
-    </Tabs>
+        </VeyqTabPanel>
+      </VeyqTabPanels>
+    </VeyqTabs>
 
     <MediaLightbox
       v-if="lightboxIndex !== null && memoryKey"
@@ -922,26 +923,24 @@ watch(
       @close="locationEditorOpen = false"
     />
 
-    <Dialog
+    <VeyqDialog
       :visible="consentDialogOpen"
       :header="t('memory.place.consentTitle')"
-      modal
       class="memory-location-consent"
       :style="{ width: 'min(28rem, 92vw)' }"
       @update:visible="consentDialogOpen = false"
     >
       <p>{{ t('memory.place.consentBody') }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="consentDialogOpen = false" />
-        <Button type="button" :label="t('memory.place.consentEnable')" icon="pi pi-map" @click="enableMaps" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="consentDialogOpen = false" />
+        <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />
       </div>
-    </Dialog>
+    </VeyqDialog>
 
     <!-- Confirm the irreversible purge (cr-0111): permanently deletes the trashed media NOW (bypasses the 30-day retention). -->
-    <Dialog
+    <VeyqDialog
       :visible="purgeConfirm !== null"
       :header="t('memory.trash.purgeConfirmTitle')"
-      modal
       class="memory-trash-purge-dialog"
       :closable="!purgeBusy"
       :close-on-escape="!purgeBusy"
@@ -949,10 +948,10 @@ watch(
     >
       <p>{{ t('memory.trash.purgeConfirmBody', { count: purgeConfirm?.ids.length ?? 0 }, purgeConfirm?.ids.length ?? 0) }}</p>
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="purgeBusy" @click="purgeConfirm = null" />
-        <Button type="button" :label="t('memory.trash.purge')" icon="pi pi-trash" severity="danger" :loading="purgeBusy" @click="confirmPurge" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="purgeBusy" @click="purgeConfirm = null" />
+        <VeyqButton :label="t('memory.trash.purge')" icon="trash" variant="danger" :loading="purgeBusy" @click="confirmPurge" />
       </div>
-    </Dialog>
+    </VeyqDialog>
   </div>
 </template>
 
@@ -1004,7 +1003,7 @@ watch(
   outline: 2px solid var(--app-focus);
   outline-offset: 2px;
 }
-.gallery-sort-toggle .pi {
+.gallery-sort-toggle .veyq-icon {
   font-size: 0.9rem;
 }
 /* Query container on the detail surface so the header responds to its OWN width (not the viewport — the sidebar
@@ -1017,7 +1016,7 @@ watch(
    the WINDOW, and so does the gallery's windowing (`MediaGrid` takes the nearest scrolling ancestor, which is the window
    here): one scroller, so the row sticks over exactly what the grid measures, and `MediaGrid` reads how far down the
    sticky stack reaches from `--media-grid-occluded-top` (set below from the row's measured bottom). */
-.memory-tabs :deep(.p-tablist) {
+.memory-tabs :deep(.veyq-tabs__bar) {
   position: sticky;
   top: var(--app-sticky-top, 0px);
   z-index: 6;
@@ -1063,7 +1062,7 @@ watch(
 .memory-cover-preview:focus-visible .memory-cover-preview-hint {
   opacity: 1;
 }
-.memory-cover-preview-hint .pi {
+.memory-cover-preview-hint .veyq-icon {
   font-size: 0.85rem;
 }
 @container memory-detail-surface (max-width: 460px) {
@@ -1111,11 +1110,11 @@ watch(
   color: var(--app-muted);
   font-weight: 500;
 }
-.memory-date-chip .pi {
+.memory-date-chip .veyq-icon {
   font-size: 0.95rem;
   color: var(--app-accent);
 }
-.memory-date-chip.is-empty .pi {
+.memory-date-chip.is-empty .veyq-icon {
   color: var(--app-muted);
 }
 

@@ -12,7 +12,6 @@
 // registry and the components are real.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
@@ -30,6 +29,8 @@ vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCove
 vi.mock('../../../features/memories/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
 
 import LevelView from '../LevelView.vue'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { childrenOf } from '../browse'
 import { FOLDER_KIND } from '../kind'
 import type { TreeNode } from '../tree'
@@ -76,13 +77,18 @@ function mountLevel(folder: TreeNode | null, o: { access?: ReturnType<typeof mem
   const tree = { ...memberTreeOf(() => TREE, { scopeId: SCOPE }), keyOf: () => KEY }
   return mount(LevelView, {
     props: { folder, level: childrenOf(TREE, folder?.id ?? null), access: o.access ?? memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 const headerAction = (w: VueWrapper, action: string) => w.find(`.veyq-node-header-actions [data-action="${action}"]`)
+/** The icon name a `VeyqIcon` inside `el` draws (null: none). */
+const iconIn = (el: ReturnType<VueWrapper['find']>) => {
+  const icon = el.findComponent(VeyqIcon)
+  return icon.exists() ? icon.props('name') : null
+}
 const png = () => new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'image/png' })
 
-// --- the dialog, as a user drives it: it is PrimeVue's, teleported into the body ---------------------------------------------
+// --- the dialog, as a user drives it: it is the layer's `VeyqDialog`, teleported into the body ---------------------------------------------
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
 const dialogButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.trim() === label)
 const openedDialog = async () => { await vi.waitFor(() => expect(dialog(), 'the cover dialog is open').not.toBeNull()) }
@@ -153,7 +159,8 @@ describe('who is offered the cover action, and on which kinds (rights matrix, fa
   it('the action and the icon are one image icon, not two look-alikes', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
-    expect(headerAction(w, 'cover').find('.pi-image').exists()).toBe(true)
+    const action = headerAction(w, 'cover')
+    expect(w.findAllComponents(VeyqButton).find((b) => b.element === action.element)!.props('icon')).toBe('image')
   })
 
   it('a node that has a cover says Change; one without says Set', async () => {
@@ -328,7 +335,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
       await vi.waitFor(() => expect(visual(w, title).find('img').attributes('src'), title).toMatch(/^blob:cover-/))
     }
     expect(visual(w, 'Plan.pdf').find('img').exists()).toBe(false)
-    expect(visual(w, 'Plan.pdf').find('.pi-file').exists()).toBe(true)
+    expect(iconIn(visual(w, 'Plan.pdf'))).toBe('file')
   })
 
   it('a cover that does not open, or a node without one, is the kind\'s icon - silently', async () => {
@@ -339,8 +346,8 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     await vi.waitFor(() => expect(openBlob).toHaveBeenCalled())
     await flushPromises()
     expect(visual(w, 'Sub').find('img').exists()).toBe(false)
-    expect(visual(w, 'Sub').find('.pi-folder').exists()).toBe(true)
-    expect(visual(w, 'Inbox').find('.pi-inbox').exists()).toBe(true)
+    expect(iconIn(visual(w, 'Sub'))).toBe('folder')
+    expect(iconIn(visual(w, 'Inbox'))).toBe('inbox')
   })
 
   it('the folder on screen shows its cover in the header, the folder icon without one', async () => {
@@ -352,7 +359,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     const plain = mountLevel(TRIPS)
     await flushPromises()
     expect(plain.find('.veyq-node-header-cover').exists()).toBe(false)
-    expect(plain.find('.veyq-node-header-icon.pi-folder').exists()).toBe(true)
+    expect(iconIn(plain.find('.veyq-node-header-leading'))).toBe('folder')
   })
 
   it('a removed cover drops its image at once: the meta is patched, the icon returns', async () => {
@@ -368,7 +375,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     withCover.metaRevision = 5
     await w.setProps({ level: childrenOf([...TREE], TRIPS.id) })
     await vi.waitFor(() => expect(visual(w, 'Sub').find('img').exists()).toBe(false))
-    expect(visual(w, 'Sub').find('.pi-folder').exists()).toBe(true)
+    expect(iconIn(visual(w, 'Sub'))).toBe('folder')
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(shown)
   })
 })

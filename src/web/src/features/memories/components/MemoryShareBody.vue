@@ -33,6 +33,7 @@ import { renderMarkdown } from '../../../shared/markdown'
 import { ShareRole } from '../../../api/generated/sharing'
 import MediaGrid from './MediaGrid.vue'
 import OptimisticTile from './OptimisticTile.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 // The props are the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the SFC compiler
 // reads them statically.
@@ -168,7 +169,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
       <div v-if="renderedNote" class="share-note markdown-body" v-html="renderedNote"></div>
       <!-- warning #1 of 4 (ADR 0031 §5): the session-only ephemerality, up front before the first upload -->
       <p class="share-uploader-warning">
-        <span class="pi pi-info-circle" />
+        <VeyqIcon name="info-circle" />
         <span>{{ t('share.uploaderEphemeralWarning') }}</span>
       </p>
       <!-- core's one naming form; who reads the name: the Memory's members, never another link holder (ADR 0030 point 8) -->
@@ -182,14 +183,14 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
         <h1 class="gallery-title">{{ head.name }}</h1>
         <!-- warning #2 of 4: the persistent badge -->
         <span class="share-view-badge">
-          <span class="pi pi-cloud-upload" />
+          <VeyqIcon name="cloud-upload" />
           {{ t('share.uploaderBadge') }}
         </span>
         <GuestNaming v-if="session" :current="session" :forget="forgetUploader" :record-days="head.share.guestWriteRecordDays" />
       </div>
       <div class="share-view-actions">
         <button type="button" class="share-add-button" @click="fileInput?.click()">
-          <span class="pi pi-plus" />
+          <VeyqIcon name="plus" />
           <span>{{ t('share.addPhotos') }}</span>
         </button>
         <input
@@ -208,7 +209,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 
     <!-- warning #4 of 4 (ADR 0031 §5): a persistent note that the own-view is session-only + delete-in-session -->
     <p v-if="tiles.length" class="share-uploader-note">
-      <span class="pi pi-info-circle" />
+      <VeyqIcon name="info-circle" />
       <span>{{ t('share.uploaderSessionNote') }}</span>
     </p>
     <p v-if="deleteError" class="share-error">{{ t('share.deleteFailed') }}</p>
@@ -275,7 +276,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
   font-size: 0.82rem;
   font-weight: 700;
 }
-.share-view-badge .pi {
+.share-view-badge .veyq-icon {
   font-size: 0.85rem;
 }
 /* The uploader's ephemerality warning in the name pre-screen + the persistent session note above the grid. */
@@ -296,8 +297,8 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 .share-uploader-note {
   margin-bottom: 1rem;
 }
-.share-uploader-warning .pi,
-.share-uploader-note .pi {
+.share-uploader-warning .veyq-icon,
+.share-uploader-note .veyq-icon {
   margin-top: 0.1rem;
   color: var(--app-warning-text);
 }

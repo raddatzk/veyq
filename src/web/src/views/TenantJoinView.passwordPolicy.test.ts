@@ -51,26 +51,26 @@ import { pwnedCount } from '../shared/pwned'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview, setupStatus } from '../test/models'
 
-// PrimeVue's real components need the plugin's config injection, which this file has no reason to install:
-// what it asserts is a `:disabled` prop and a rendered hint, not PrimeVue's own rendering. Same stub set as
+// The layer's real components are stubbed: what this file asserts is a `:disabled` prop and a rendered hint, not
+// the layer's own rendering. Same stub set as
 // RecoverView.test.ts, plus the two this view uses.
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
-  Button: {
+  VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
+  VeyqButton: {
     props: ['label', 'loading', 'disabled'],
     template: '<button :disabled="disabled">{{ label }}</button>',
   },
-  Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Password: {
+  VeyqPassword: {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   // The breach warning's "Use it anyway": a native checkbox, so a test ticks it with `setValue(true)`.
-  Checkbox: {
+  VeyqCheckbox: {
     props: ['modelValue'],
     template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },

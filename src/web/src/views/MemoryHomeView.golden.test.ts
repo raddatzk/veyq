@@ -5,9 +5,9 @@
 // file is the proof of that promise. It mounts the REAL host (`MemoryHomeView`), the REAL registry as `main.ts` fills
 // it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), core's REAL `LevelView` (since
 // P4b: the overview card and the Folders section), Memories' REAL `MemoriesSection` and `MemoryCard`, core's REAL `ViewModeToggle`, and
-// PrimeVue buttons, real crypto (every date and pin below is sealed
+// the layer's buttons, real crypto (every date and pin below is sealed
 // and unsealed for real), and the real i18n catalog. Stubbed: the scope/tree/favourites state (no network), the Leaflet
-// map (no canvas in happy-dom) and the tooltip directive.
+// map (no canvas in happy-dom).
 //
 // What it does NOT pin: layout and computed CSS (a width rule that hides an element is invisible — the 721–1120 px
 // hiding of the folder card's actions was CSS-only and found in a real browser), the dialogs a click opens, and
@@ -18,7 +18,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import PrimeVue from 'primevue/config'
 
 vi.mock('leaflet', () => ({ default: {} }))
 const fixed = vi.hoisted(() => ({
@@ -128,7 +127,7 @@ async function golden(hash: string, mode: ViewMode = 'grid'): Promise<string> {
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const w = mount(MemoryHomeView, {
-    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
+    global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } },
   })
   await flushPromises()
   return serializeDom(w.element)

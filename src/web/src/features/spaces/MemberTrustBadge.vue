@@ -5,6 +5,7 @@
 // A `pinned` (trust-on-first-use) or unpinned contact shows nothing: that is the ordinary state of every member.
 // One component for both panels, so the two lists cannot drift apart in what they say.
 import { useI18n } from 'vue-i18n'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import type { ContactTrust } from '../account/identityPins'
 
 defineProps<{ trust?: ContactTrust }>()
@@ -13,9 +14,9 @@ const { t } = useI18n()
 
 <template>
   <span v-if="trust?.state === 'verified'" class="veyq-badge success" data-testid="member-trust-verified">
-    <i class="pi pi-verified" aria-hidden="true"></i>{{ t('safety.stateVerified') }}
+    <VeyqIcon name="verified" />{{ t('safety.stateVerified') }}
   </span>
   <span v-else-if="trust?.state === 'changed'" class="veyq-badge changed" data-testid="member-trust-changed">
-    <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ trust.pinVerified ? t('safety.badgeVerifiedChanged') : t('verify.badgeChanged') }}
+    <VeyqIcon name="exclamation-triangle" />{{ trust.pinVerified ? t('safety.badgeVerifiedChanged') : t('verify.badgeChanged') }}
   </span>
 </template>

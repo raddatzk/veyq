@@ -1,53 +1,53 @@
 div.veyq-node-host
-  transition-stub.pending-delete-banner
+  transition-stub.pending-delete-banner.veyq-message.veyq-message--warn
     div.p-component.p-message.p-message-warn [role="alert"]
       div.p-message-content-wrapper
-        div.p-message-content
-          div.p-message-text
+        div.p-message-content.veyq-message__content
+          div.p-message-text.veyq-message__text
             "Scheduled for deletion on 11/15/2026. Members can still view it; nothing new can be added."
   div.veyq-level-view
     div.veyq-level-toolbar
       div.view-mode-toggle [role="group"] [aria-label="View"]
         button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
-          span.pi.pi-th-large
+          span.pi.pi-th-large.veyq-icon
         button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
-          span.pi.pi-bars
+          span.pi.pi-bars.veyq-icon
         button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
-          span.pi.pi-map
+          span.pi.pi-map.veyq-icon
     header.veyq-node-header
       div.veyq-node-header-leading
-        span.pi.pi-folder.veyq-node-header-icon
+        span.pi.pi-folder.veyq-icon.veyq-node-header-icon
       div.veyq-node-header-body
         div.veyq-node-header-titlerow
           h2.veyq-node-header-title
             "Trips"
           div.veyq-node-header-actions
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-              span.p-button-icon.pi.pi-heart
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
-              span.p-button-icon.pi.pi-share-alt
-            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
-              span.p-button-icon.pi.pi-download
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+              span.p-button-icon.pi.pi-heart.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
+              span.p-button-icon.pi.pi-share-alt.veyq-button__icon
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
+              span.p-button-icon.pi.pi-download.veyq-button__icon
     ul.veyq-level-list
       li.is-folder.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Rome"]
           span.veyq-level-item-visual
-            span.pi.pi-folder.veyq-level-item-icon
+            span.pi.pi-folder.veyq-icon.veyq-level-item-icon
           span.veyq-level-item-text
             strong.veyq-level-item-title
               "Rome"
             small.veyq-level-item-meta
               "Folder"
         span.veyq-level-item-actions
-          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-            span.p-button-icon.pi.pi-heart
-          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
-            span.p-button-icon.pi.pi-ellipsis-h
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart.veyq-button__icon
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
+            span.p-button-icon.pi.pi-ellipsis-h.veyq-button__icon
       li.has-cover.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Italy"]
           span.veyq-level-item-visual
             span.memory-cover-image
-              span.memory-cover-image-ph.pi.pi-images
+              span.memory-cover-image-ph.pi.pi-images.veyq-icon
           span.veyq-level-item-text
             strong.veyq-level-item-title
               "Italy"
@@ -60,7 +60,7 @@ div.veyq-node-host
               span.veyq-level-item-detail
                 "p-1"
         span.veyq-level-item-actions
-          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-            span.p-button-icon.pi.pi-heart
-          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
-            span.p-button-icon.pi.pi-ellipsis-h
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart.veyq-button__icon
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
+            span.p-button-icon.pi.pi-ellipsis-h.veyq-button__icon

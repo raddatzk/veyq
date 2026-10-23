@@ -20,7 +20,7 @@ describe('registerDepot', () => {
     expect(registry.kind(FILE_KIND)).toEqual({
       supported: true,
       kind: FILE_KIND,
-      icon: 'pi pi-file',
+      icon: 'file',
       shareable: true,
       detail: FileDetail,
       shareDialog: FileShareDialog,
@@ -42,8 +42,8 @@ describe('registerDepot', () => {
       // "Upload files" takes files dropped onto the level too (core hands them over only while the entry is enabled)
       // …and so does "Upload folder…" beside it (a dropped directory, inbox #424)
       levelActions: [
-        { id: 'depot.upload', label: 'depot.upload', icon: 'pi pi-upload', order: 30, acceptsDrop: true, allowed: expect.any(Function) },
-        { id: 'depot.uploadFolder', label: 'depot.uploadFolder', icon: 'pi pi-folder-open', order: 31, acceptsDrop: true, allowed: expect.any(Function) },
+        { id: 'depot.upload', label: 'depot.upload', icon: 'upload', order: 30, acceptsDrop: true, allowed: expect.any(Function) },
+        { id: 'depot.uploadFolder', label: 'depot.uploadFolder', icon: 'folder-open', order: 31, acceptsDrop: true, allowed: expect.any(Function) },
       ],
       placement: { root: true, parents: [FOLDER_KIND] },
     })
@@ -81,7 +81,7 @@ describe('registerDepot', () => {
     expect(registry.kind(DROPBOX_KIND)).toEqual({
       supported: true,
       kind: DROPBOX_KIND,
-      icon: 'pi pi-inbox',
+      icon: 'inbox',
       cover: {}, // a drop box carries a cover (inbox #411)
       shareable: true,
       detail: DropBoxDetail,
@@ -90,7 +90,7 @@ describe('registerDepot', () => {
       nounWithArticle: 'depot.dropBox.aDropBox',
       list: { rows: depotRows, tabLabel: 'depot.dropBox.section', emptyText: expect.any(Function) },
       createDialog: DropBoxCreateDialog,
-      createEntry: { label: 'depot.dropBox.create', icon: 'pi pi-inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
+      createEntry: { label: 'depot.dropBox.create', icon: 'inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
       shareDialog: DropBoxShareDialog,
       placement: { root: true, parents: [FOLDER_KIND] },
       // downloaded as a directory of its guests' folders, imported as a plain folder (cr-download-is-the-export Decision 7)

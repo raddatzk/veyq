@@ -5,8 +5,8 @@
 // remove functions, there is no second UI.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import ProfilePictureDialog from './ProfilePictureDialog.vue'
 import type { NameAndPicture } from './useNameAndPicture'
@@ -23,24 +23,24 @@ const m = computed(() => props.model)
       <div class="picture-actions">
         <span class="picture-label">{{ t('profilePicture.label') }}</span>
         <div class="picture-buttons">
-          <Button
+          <VeyqButton
             type="button"
             :label="m.hasPicture ? t('profilePicture.change') : t('profilePicture.choose')"
-            icon="pi pi-image"
-            severity="secondary"
-            outlined
+            icon="image"
+            variant="secondary"
+            appearance="outlined"
             size="small"
             :disabled="!m.hasKey"
             data-testid="profile-picture-open"
             @click="m.dialogOpen = true"
           />
-          <Button
+          <VeyqButton
             v-if="m.hasPicture"
             type="button"
             :label="t('profilePicture.remove')"
-            icon="pi pi-trash"
-            severity="danger"
-            text
+            icon="trash"
+            variant="danger"
+            appearance="text"
             size="small"
             :disabled="!m.hasKey"
             data-testid="profile-picture-remove-inline"
@@ -55,8 +55,8 @@ const m = computed(() => props.model)
     </div>
 
     <div class="name-row">
-      <label>{{ t('profile.firstName') }}<InputText v-model="m.firstName" autocomplete="given-name" :disabled="!m.hasKey" /></label>
-      <label>{{ t('profile.lastName') }}<InputText v-model="m.lastName" autocomplete="family-name" :disabled="!m.hasKey" /></label>
+      <label>{{ t('profile.firstName') }}<VeyqInput v-model="m.firstName" autocomplete="given-name" :disabled="!m.hasKey" /></label>
+      <label>{{ t('profile.lastName') }}<VeyqInput v-model="m.lastName" autocomplete="family-name" :disabled="!m.hasKey" /></label>
     </div>
     <small v-if="!m.hasKey" class="field-hint">{{ t('profile.noNameYet') }}</small>
 

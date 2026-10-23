@@ -13,9 +13,9 @@
 // abuse material "Block the content" leads the decision panel as the proposed first step — a human still decides.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import DatePicker from 'primevue/datepicker'
-import Message from 'primevue/message'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDateField from '../../shared/ui/VeyqDateField.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import type {
   HoldExtensionReason,
   ModerationCase,
@@ -25,6 +25,8 @@ import type {
   ModerationTargetUploader,
 } from '../../api/generated/moderation'
 import { useConfirm } from '../../shared/state/useConfirm'
+import { isoDateToLocalDate, localDateToIsoDate } from '../../shared/isoDate'
+import type { VeyqIconName } from '../../shared/ui/icons'
 import {
   barReporter,
   decideObjection,
@@ -158,8 +160,15 @@ const tenantName = computed(() => current.value?.tenantDomain ?? short(current.v
 const extendMin = computed(() => current.value?.hold?.endsAt ?? new Date())
 const extendMax = computed(() => new Date(Date.now() + SIX_MONTHS_DAYS * 24 * 60 * 60 * 1000))
 
+/** A date field binds the ISO day (`VeyqDateField`); the page keeps the picked day as a local-midnight `Date`. */
+const isoDay = (d: Date | null | undefined) => localDateToIsoDate(d)
+const dayField = (target: { value: Date | null }) =>
+  computed({ get: () => isoDay(target.value), set: (v: string) => (target.value = isoDateToLocalDate(v)) })
+const extendUntilDay = dayField(extendUntil)
+const deferUntilDay = dayField(deferUntil)
+
 /** Confirm a step by its label and reach, then take it; the case it answers with replaces the shown one. */
-async function decide(label: string, reach: string, icon: string, action: (note: string) => Promise<ModerationCase>) {
+async function decide(label: string, reach: string, icon: VeyqIconName, action: (note: string) => Promise<ModerationCase>) {
   if (!(await ask({ header: label, message: reach, acceptLabel: label, acceptIcon: icon }))) return
   busy.value = true
   error.value = ''
@@ -177,7 +186,7 @@ async function decide(label: string, reach: string, icon: string, action: (note:
 const id = () => current.value!.id
 
 const dismiss = () =>
-  decide(t('moderation.decide.dismiss'), t('moderation.decide.dismissReach'), 'pi pi-check', (n) =>
+  decide(t('moderation.decide.dismiss'), t('moderation.decide.dismissReach'), 'check', (n) =>
     dismissCase(id(), n, reporterNoticesOf(current.value!)),
   )
 
@@ -200,7 +209,7 @@ function block(label: string, reach: string, kind: MeasureKind, target: { shareI
   }
   const deferral = deferAsked.value ? { until: deferUntil.value!, reason: deferReason.value } : null
   const statement = { ground: (ground.value || current.value!.category) as ModerationGround, provision: provision.value, facts: facts.value, deferral }
-  return decide(label, reach, 'pi pi-ban', async (n) => {
+  return decide(label, reach, 'ban', async (n) => {
     const answered = await takeMeasure(id(), kind, target, n, statement, reporterNoticesOf(current.value!))
     facts.value = ''
     deferAsked.value = false
@@ -251,27 +260,27 @@ const blockGuest = (u: ModerationTargetUploader) =>
   block(t('moderation.decide.blockUploader', { id: short(u.id) }), t('moderation.decide.blockUploaderReach'), 'GUEST_IDENTITY', { targetId: u.id })
 
 const uphold = (objectionId: string) =>
-  decide(t('moderation.case.uphold'), t('moderation.case.upholdReach'), 'pi pi-check', (n) => decideObjection(id(), objectionId, 'UPHOLD', n))
+  decide(t('moderation.case.uphold'), t('moderation.case.upholdReach'), 'check', (n) => decideObjection(id(), objectionId, 'UPHOLD', n))
 
 const liftOnObjection = (objectionId: string) =>
-  decide(t('moderation.case.liftOnObjection'), t('moderation.case.liftOnObjectionReach'), 'pi pi-undo', (n) =>
+  decide(t('moderation.case.liftOnObjection'), t('moderation.case.liftOnObjectionReach'), 'undo', (n) =>
     decideObjection(id(), objectionId, 'LIFT', n),
   )
 
 const proposeSignIn = (u: ModerationTargetUploader) =>
-  decide(t('moderation.decide.proposeSignIn', { id: short(u.id) }), t('moderation.decide.proposeSignInReach'), 'pi pi-send', (n) =>
+  decide(t('moderation.decide.proposeSignIn', { id: short(u.id) }), t('moderation.decide.proposeSignInReach'), 'send', (n) =>
     proposeStep(id(), 'MEMBER_SIGN_IN', u.id, n),
   )
 
 const proposeOffline = () =>
-  decide(t('moderation.decide.proposeOffline', { domain: tenantName.value }), t('moderation.decide.proposeOfflineReach'), 'pi pi-send', (n) =>
+  decide(t('moderation.decide.proposeOffline', { domain: tenantName.value }), t('moderation.decide.proposeOfflineReach'), 'send', (n) =>
     proposeStep(id(), 'TENANT_OFFLINE', null, n),
   )
 
 const lift = (measureId: string) =>
-  decide(t('moderation.case.lift'), t('moderation.case.liftReach'), 'pi pi-undo', (n) => liftMeasure(id(), measureId, n))
+  decide(t('moderation.case.lift'), t('moderation.case.liftReach'), 'undo', (n) => liftMeasure(id(), measureId, n))
 
-const bar = (reportId: string) => decide(t('moderation.decide.bar'), t('moderation.decide.barReach'), 'pi pi-ban', (n) => barReporter(id(), reportId, n))
+const bar = (reportId: string) => decide(t('moderation.decide.bar'), t('moderation.decide.barReach'), 'ban', (n) => barReporter(id(), reportId, n))
 
 async function extend() {
   error.value = ''
@@ -309,10 +318,10 @@ onMounted(load)
 <template>
   <div class="veyq-section moderation-case" :data-case-id="caseId">
     <div class="veyq-section-header">
-      <Button severity="secondary" class="moderation-case-back" icon="pi pi-arrow-left" :label="t('moderation.case.back')" :disabled="busy" @click="emit('back')" />
+      <VeyqButton variant="secondary" class="moderation-case-back" icon="arrow-left" :label="t('moderation.case.back')" :disabled="busy" @click="emit('back')" />
     </div>
-    <Message v-if="error" severity="error" :closable="false" class="form-message moderation-case-error">{{ error }}</Message>
-    <Message v-if="notice" severity="success" :closable="false" class="form-message">{{ notice }}</Message>
+    <VeyqMessage v-if="error" tone="error" class="form-message moderation-case-error">{{ error }}</VeyqMessage>
+    <VeyqMessage v-if="notice" tone="success" class="form-message">{{ notice }}</VeyqMessage>
     <p v-if="loading" class="veyq-form-copy">{{ t('moderation.case.loading') }}</p>
 
     <template v-else-if="current">
@@ -326,7 +335,7 @@ onMounted(load)
       <!-- Only a report's case has a report share to review: an order acted on ids, and a case a restore brought back
            as a stub (ADR 0056 decision 8) lost its reports and everything sealed with the capture. -->
       <div v-if="current.origin === 'REPORT'" class="veyq-form">
-        <Button class="moderation-case-review" icon="pi pi-eye" :label="t('moderation.case.review')" :disabled="busy" @click="review" />
+        <VeyqButton class="moderation-case-review" icon="eye" :label="t('moderation.case.review')" :disabled="busy" @click="review" />
         <p class="veyq-form-copy">{{ t('moderation.case.reviewHint') }}</p>
       </div>
 
@@ -345,7 +354,7 @@ onMounted(load)
             <p v-else class="veyq-form-copy moderation-report-sealed">{{ t('moderation.case.cannotOpen') }}</p>
             <div v-if="r.barred" class="veyq-row-meta"><span class="veyq-badge warning">{{ t('moderation.case.barred') }}</span></div>
           </div>
-          <Button v-if="!r.barred" severity="danger" outlined class="moderation-bar" :label="t('moderation.decide.bar')" :disabled="busy" @click="bar(r.id)" />
+          <VeyqButton v-if="!r.barred" variant="danger" appearance="outlined" class="moderation-bar" :label="t('moderation.decide.bar')" :disabled="busy" @click="bar(r.id)" />
         </div>
       </div>
 
@@ -358,16 +367,12 @@ onMounted(load)
         </p>
         <form class="veyq-form moderation-extend" @submit.prevent="extend">
           <label for="moderation-extend-until">{{ t('moderation.case.extendUntil') }}</label>
-          <DatePicker
-            v-model="extendUntil"
+          <VeyqDateField
+            v-model="extendUntilDay"
             input-id="moderation-extend-until"
-            :min-date="extendMin"
-            :max-date="extendMax"
-            date-format="yy-mm-dd"
-            show-icon
-            icon-display="input"
+            :min-date="isoDay(extendMin)"
+            :max-date="isoDay(extendMax)"
             :disabled="busy"
-            fluid
           />
           <span class="veyq-form-copy">{{ t('moderation.case.extendUntilHint') }}</span>
           <label for="moderation-extend-type">{{ csam ? t('moderation.case.extendType') : t('moderation.case.extendTypeOptional') }}</label>
@@ -378,7 +383,7 @@ onMounted(load)
           <label for="moderation-extend-reason">{{ t('moderation.case.extendReason') }}</label>
           <textarea id="moderation-extend-reason" v-model="extendReason" class="moderation-extend-reason" rows="3" maxlength="2000" required :disabled="busy" />
           <span class="veyq-form-copy">{{ t(csam ? 'moderation.case.extendReasonHintCsam' : 'moderation.case.extendReasonHint') }}</span>
-          <Button type="submit" severity="secondary" class="moderation-extend-submit" icon="pi pi-clock" :label="t('moderation.case.extend')" :loading="busy" />
+          <VeyqButton type="submit" variant="secondary" class="moderation-extend-submit" icon="clock" :label="t('moderation.case.extend')" :loading="busy" />
         </form>
       </template>
       <p v-else class="veyq-form-copy">{{ t('moderation.case.noHold') }}</p>
@@ -412,27 +417,24 @@ onMounted(load)
                 @submit.prevent="renew(m.statement.id)"
               >
                 <label :for="`moderation-renew-until-${m.statement.id}`">{{ t('moderation.deferral.renewUntil') }}</label>
-                <DatePicker
-                  v-model="renewUntil[m.statement.id]"
+                <VeyqDateField
+                  :model-value="isoDay(renewUntil[m.statement.id])"
                   :input-id="`moderation-renew-until-${m.statement.id}`"
-                  :min-date="m.statement.deferredUntil"
-                  :max-date="deferMax"
-                  date-format="yy-mm-dd"
-                  show-icon
-                  icon-display="input"
+                  :min-date="isoDay(m.statement.deferredUntil)"
+                  :max-date="isoDay(deferMax)"
                   :disabled="busy"
-                  fluid
+                  @update:model-value="renewUntil[m.statement.id] = isoDateToLocalDate($event)"
                 />
                 <label :for="`moderation-renew-reason-${m.statement.id}`">{{ t('moderation.deferral.renewReason') }}</label>
                 <textarea :id="`moderation-renew-reason-${m.statement.id}`" v-model="renewReason[m.statement.id]" class="moderation-renew-reason" rows="2" maxlength="2000" :disabled="busy" />
-                <Button type="submit" severity="secondary" class="moderation-renew-submit" icon="pi pi-clock" :label="t('moderation.deferral.renew')" :loading="busy" />
+                <VeyqButton type="submit" variant="secondary" class="moderation-renew-submit" icon="clock" :label="t('moderation.deferral.renew')" :loading="busy" />
               </form>
               <p v-if="openedFacts.get(m.id) !== undefined" class="veyq-form-copy moderation-measure-facts">
                 {{ t('moderation.case.statementFacts') }}: {{ openedFacts.get(m.id) ?? t('moderation.case.noteSealed') }}
               </p>
             </template>
           </div>
-          <Button v-if="!m.liftedAt" severity="secondary" class="moderation-lift" icon="pi pi-undo" :label="t('moderation.case.lift')" :disabled="busy" @click="lift(m.id)" />
+          <VeyqButton v-if="!m.liftedAt" variant="secondary" class="moderation-lift" icon="undo" :label="t('moderation.case.lift')" :disabled="busy" @click="lift(m.id)" />
         </div>
       </div>
 
@@ -454,8 +456,8 @@ onMounted(load)
               <p v-if="!o.outcome && !o.mayDecide" class="veyq-form-copy moderation-objection-another">{{ t('moderation.case.anotherDecides') }}</p>
             </div>
             <template v-if="!o.outcome && o.mayDecide">
-              <Button severity="secondary" class="moderation-objection-uphold" icon="pi pi-check" :label="t('moderation.case.uphold')" :disabled="busy" @click="uphold(o.id)" />
-              <Button severity="danger" outlined class="moderation-objection-lift" icon="pi pi-undo" :label="t('moderation.case.liftOnObjection')" :disabled="busy" @click="liftOnObjection(o.id)" />
+              <VeyqButton variant="secondary" class="moderation-objection-uphold" icon="check" :label="t('moderation.case.uphold')" :disabled="busy" @click="uphold(o.id)" />
+              <VeyqButton variant="danger" appearance="outlined" class="moderation-objection-lift" icon="undo" :label="t('moderation.case.liftOnObjection')" :disabled="busy" @click="liftOnObjection(o.id)" />
             </template>
           </div>
         </div>
@@ -504,16 +506,12 @@ onMounted(load)
         </label>
         <template v-if="deferAsked">
           <label for="moderation-defer-until">{{ t('moderation.deferral.until') }}</label>
-          <DatePicker
-            v-model="deferUntil"
+          <VeyqDateField
+            v-model="deferUntilDay"
             input-id="moderation-defer-until"
-            :min-date="new Date()"
-            :max-date="deferMax"
-            date-format="yy-mm-dd"
-            show-icon
-            icon-display="input"
+            :min-date="isoDay(new Date())"
+            :max-date="isoDay(deferMax)"
             :disabled="busy"
-            fluid
           />
           <label for="moderation-defer-reason">{{ t('moderation.deferral.reason') }}</label>
           <textarea id="moderation-defer-reason" v-model="deferReason" class="moderation-defer-reason" rows="2" maxlength="2000" :disabled="busy" />
@@ -528,7 +526,7 @@ onMounted(load)
               <div class="veyq-row-meta"><span class="veyq-badge warning">{{ t('moderation.csam.proposed') }}</span></div>
               <p class="veyq-form-copy">{{ t('moderation.decide.blockContentReach') }}</p>
             </div>
-            <Button severity="danger" class="moderation-block-content" icon="pi pi-ban" :label="t('moderation.decide.blockContent')" :disabled="busy" @click="blockContent" />
+            <VeyqButton variant="danger" class="moderation-block-content" icon="ban" :label="t('moderation.decide.blockContent')" :disabled="busy" @click="blockContent" />
           </div>
 
           <div v-if="open" class="veyq-list-row">
@@ -536,7 +534,7 @@ onMounted(load)
               <strong class="veyq-row-title">{{ t('moderation.decide.dismiss') }}</strong>
               <p class="veyq-form-copy">{{ t('moderation.decide.dismissReach') }}</p>
             </div>
-            <Button class="moderation-dismiss" icon="pi pi-check" :label="t('moderation.decide.dismiss')" :disabled="busy" @click="dismiss" />
+            <VeyqButton class="moderation-dismiss" icon="check" :label="t('moderation.decide.dismiss')" :disabled="busy" @click="dismiss" />
           </div>
 
           <div v-for="l in linksToBlock" :key="l.shareId" class="veyq-list-row">
@@ -545,7 +543,7 @@ onMounted(load)
               <span class="veyq-row-subtitle">{{ t(`moderation.decide.linkRelations.${l.relation}`) }} · {{ t(`moderation.decide.linkRoles.${l.role}`) }}</span>
               <p class="veyq-form-copy">{{ t('moderation.decide.blockLinkReach') }}</p>
             </div>
-            <Button severity="danger" class="moderation-block-link" icon="pi pi-ban" :label="t('moderation.decide.blockLink', { id: short(l.shareId) })" :disabled="busy" @click="blockLink(l)" />
+            <VeyqButton variant="danger" class="moderation-block-link" icon="ban" :label="t('moderation.decide.blockLink', { id: short(l.shareId) })" :disabled="busy" @click="blockLink(l)" />
           </div>
 
           <div v-if="contentBlockable && !csam" class="veyq-list-row">
@@ -553,7 +551,7 @@ onMounted(load)
               <strong class="veyq-row-title">{{ t('moderation.decide.blockContent') }}</strong>
               <p class="veyq-form-copy">{{ t('moderation.decide.blockContentReach') }}</p>
             </div>
-            <Button severity="danger" class="moderation-block-content" icon="pi pi-ban" :label="t('moderation.decide.blockContent')" :disabled="busy" @click="blockContent" />
+            <VeyqButton variant="danger" class="moderation-block-content" icon="ban" :label="t('moderation.decide.blockContent')" :disabled="busy" @click="blockContent" />
           </div>
 
           <template v-if="uploaders.length > 0 && !closed">
@@ -568,11 +566,11 @@ onMounted(load)
                 <p v-if="u.contentBlocked" class="veyq-form-copy">{{ t('moderation.decide.everythingBlocked') }}</p>
                 <p v-else-if="u.items > 0" class="veyq-form-copy">{{ t('moderation.decide.blockEverythingReach', { count: u.items }) }}</p>
               </div>
-              <Button
+              <VeyqButton
                 v-if="!u.contentBlocked && u.items > 0"
-                severity="danger"
+                variant="danger"
                 class="moderation-block-everything"
-                icon="pi pi-ban"
+                icon="ban"
                 :label="t('moderation.decide.blockEverything', { count: u.items })"
                 :disabled="busy"
                 @click="blockEverything(u)"
@@ -585,7 +583,7 @@ onMounted(load)
               <strong class="veyq-row-title" :title="u.id">{{ t('moderation.decide.blockUploader', { id: short(u.id) }) }}</strong>
               <p class="veyq-form-copy">{{ t('moderation.decide.blockUploaderReach') }}</p>
             </div>
-            <Button severity="danger" class="moderation-block-guest" icon="pi pi-ban" :label="t('moderation.decide.blockUploader', { id: short(u.id) })" :disabled="busy" @click="blockGuest(u)" />
+            <VeyqButton variant="danger" class="moderation-block-guest" icon="ban" :label="t('moderation.decide.blockUploader', { id: short(u.id) })" :disabled="busy" @click="blockGuest(u)" />
           </div>
         </div>
 
@@ -597,14 +595,14 @@ onMounted(load)
               <strong class="veyq-row-title" :title="u.id">{{ t('moderation.decide.proposeSignIn', { id: short(u.id) }) }}</strong>
               <p class="veyq-form-copy">{{ t('moderation.decide.proposeSignInReach') }}</p>
             </div>
-            <Button severity="secondary" class="moderation-propose-sign-in" icon="pi pi-send" :label="t('moderation.decide.proposeSignIn', { id: short(u.id) })" :disabled="busy" @click="proposeSignIn(u)" />
+            <VeyqButton variant="secondary" class="moderation-propose-sign-in" icon="send" :label="t('moderation.decide.proposeSignIn', { id: short(u.id) })" :disabled="busy" @click="proposeSignIn(u)" />
           </div>
           <div v-if="offlineProposable" class="veyq-list-row">
             <div class="veyq-row-main">
               <strong class="veyq-row-title">{{ t('moderation.decide.proposeOffline', { domain: tenantName }) }}</strong>
               <p class="veyq-form-copy">{{ t('moderation.decide.proposeOfflineReach') }}</p>
             </div>
-            <Button severity="secondary" class="moderation-propose-offline" icon="pi pi-send" :label="t('moderation.decide.proposeOffline', { domain: tenantName })" :disabled="busy" @click="proposeOffline" />
+            <VeyqButton variant="secondary" class="moderation-propose-offline" icon="send" :label="t('moderation.decide.proposeOffline', { domain: tenantName })" :disabled="busy" @click="proposeOffline" />
           </div>
         </div>
       </div>

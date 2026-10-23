@@ -2,7 +2,7 @@
 // The surface half of the confirmation channel (cr-web-own-confirm-dialog). `useConfirm.test.ts` owns the
 // promise semantics; what only this file can pin is that every way OUT of the dialog reaches them — the
 // accept button, the cancel button, and the close the dialog itself reports (Escape, the X, a click on the
-// mask all arrive as PrimeVue's one `update:visible` event). A dialog that renders the question and answers
+// mask all arrive as VeyqDialog's one `update:visible` event). A dialog that renders the question and answers
 // none of them would leave the call site awaiting forever, with no error anywhere.
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
@@ -15,25 +15,25 @@ const REQUEST = {
   header: 'Sign this device out',
   message: 'It will have to sign in again.',
   acceptLabel: 'Sign this device out',
-  acceptIcon: 'pi pi-sign-out',
+  acceptIcon: 'sign-out' as const,
 }
 
 const stubs = {
-  // Passthrough: the dialog's own chrome is PrimeVue's, but its close event is the one this component must wire.
-  Dialog: {
+  // Passthrough: the dialog's own chrome is the layer's, but its close event is the one this component must wire.
+  VeyqDialog: {
     props: ['visible', 'header'],
     emits: ['update:visible'],
     template:
       '<div class="dlg"><h2>{{ header }}</h2><slot /><button class="dlg-close" @click="$emit(\'update:visible\', false)">x</button></div>',
   },
-  Button: {
-    props: ['label', 'icon', 'severity'],
+  VeyqButton: {
+    props: ['label', 'icon', 'variant'],
     // `emits` is load-bearing: without it the parent's @click also arrives as a native fallthrough listener,
     // so one trigger settles twice — and the second settle would silently answer the NEXT request.
     emits: ['click'],
-    template: '<button :class="severity" @click="$emit(\'click\')">{{ label }}</button>',
+    template: '<button :class="variant" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Checkbox: {
+  VeyqCheckbox: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input type="checkbox" class="opt" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',

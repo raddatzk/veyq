@@ -14,8 +14,8 @@ import { realI18n, t } from '../../test/i18n'
 import type { ModerationCaseSummary } from '../../api/generated/moderation'
 
 const stubs = {
-  Button: { props: ['label'], emits: ['click'], template: '<button :class="$attrs.class" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { template: '<div class="msg"><slot /></div>' },
+  VeyqButton: { props: ['label'], emits: ['click'], template: '<button :class="$attrs.class" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { template: '<div class="msg"><slot /></div>' },
   CaseDetail: { props: ['caseId'], emits: ['back'], template: '<div class="case-detail-stub">{{ caseId }}<button class="stub-back" @click="$emit(\'back\')" /></div>' },
   OrderForm: { emits: ['openCase'], template: '<div class="order-form-stub"><button class="stub-order-case" @click="$emit(\'openCase\', \'order-case\')" /></div>' },
 }

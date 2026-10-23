@@ -5,7 +5,6 @@
 // what is SHOWN: a truncated text copies its shown part and says so. The text stays `textContent`, never markup.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../../../sw/register', () => ({
   registerPlayback: vi.fn(async () => null),
@@ -42,7 +41,7 @@ function mountText(text: string, id = 'blob-1') {
   const w = mount(FileViewer, {
     props: { target: target(providerOf(utf8(text)), id), name: 'notes.txt', canDownload: true },
     attachTo: document.body,
-    global: { plugins: [realI18n(), PrimeVue] },
+    global: { plugins: [realI18n()] },
   })
   mounted.push(w)
   return w
@@ -216,7 +215,7 @@ describe('Copy', () => {
     const w = mount(FileViewer, {
       props: { target: target(providerOf(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52]))), name: 'a.png', canDownload: true },
       attachTo: document.body,
-      global: { plugins: [realI18n(), PrimeVue] },
+      global: { plugins: [realI18n()] },
     })
     mounted.push(w)
     await flushPromises()

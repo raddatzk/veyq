@@ -82,7 +82,7 @@ const rowOf = (w: VueWrapper, title: string) => {
 /** The titles of the drawn rows, in order. */
 export const titlesOf = (w: VueWrapper): string[] => w.findAll('.veyq-level-item-title').map((t) => t.text())
 
-const menuItems = (): HTMLElement[] => [...document.body.querySelectorAll<HTMLElement>('li.p-menu-item')]
+const menuItems = (): HTMLElement[] => [...document.body.querySelectorAll<HTMLElement>('.veyq-menu__item')]
 
 /** The ids of the row's actions as a person finds them: the first-class buttons, then the entries of its "more" menu
  *  (opened with a real click and closed again). */
@@ -114,7 +114,7 @@ export async function clickAction(w: VueWrapper, title: string, id: string): Pro
   await flushPromises()
   const item = menuItems().find((i) => i.classList.contains(`veyq-row-action-${id}`))
   if (!item) throw new Error(`row "${title}" has no action "${id}" in its menu`)
-  item.querySelector<HTMLElement>('.p-menu-item-content')!.click()
+  item.querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
   await flushPromises()
 }
 
@@ -143,7 +143,7 @@ export async function actionDisabled(w: VueWrapper, title: string, id: string): 
   await more.trigger('click')
   await flushPromises()
   const item = menuItems().find((i) => i.classList.contains(`veyq-row-action-${id}`))
-  const disabled = item?.getAttribute('data-p-disabled') === 'true'
+  const disabled = item?.getAttribute('aria-disabled') === 'true'
   await more.trigger('click')
   await flushPromises()
   return disabled

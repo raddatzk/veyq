@@ -31,13 +31,13 @@ import { realI18n, t } from '../../test/i18n'
 import { myTenant } from '../../test/models'
 
 const stubs = {
-  Button: {
+  VeyqButton: {
     props: ['label', 'loading', 'disabled'],
     emits: ['click'],
     template: '<button v-bind="$attrs" :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
   },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  Dialog: { props: ['visible', 'header'], emits: ['update:visible'], template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqDialog: { props: ['visible', 'header'], emits: ['update:visible'], template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>' },
 }
 
 async function mountPanel() {

@@ -75,7 +75,7 @@ const localeLabel = (p: LocalePreference) => (p === 'system' ? t('shell.systemDe
   justify-content: space-between;
   gap: 1rem;
   padding: 0.6rem 0;
-  border-top: 0.5px solid var(--p-content-border-color);
+  border-top: 0.5px solid var(--app-line);
 }
 .settings-row-label {
   font-weight: 500;
@@ -87,7 +87,7 @@ const localeLabel = (p: LocalePreference) => (p === 'system' ? t('shell.systemDe
 }
 .settings-choice-btn {
   padding: 0.35rem 0.8rem;
-  border: 1px solid var(--p-content-border-color);
+  border: 1px solid var(--app-line);
   border-radius: 0.5rem;
   background: transparent;
   color: inherit;
@@ -95,8 +95,8 @@ const localeLabel = (p: LocalePreference) => (p === 'system' ? t('shell.systemDe
   font: inherit;
 }
 .settings-choice-btn.is-active {
-  background: var(--p-primary-color);
-  color: var(--p-primary-contrast-color);
-  border-color: var(--p-primary-color);
+  background: var(--app-primary);
+  color: var(--app-on-fill);
+  border-color: var(--app-primary);
 }
 </style>

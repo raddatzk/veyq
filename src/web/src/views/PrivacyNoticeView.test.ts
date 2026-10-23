@@ -18,8 +18,8 @@ import { realI18n, t } from '../test/i18n'
 import { PRIVACY_ANCHOR, privacyLink } from '../core/privacy/privacyNotice'
 
 const stubs = {
-  Card: { template: '<div><slot name="title" /><slot name="content" /><slot name="footer" /></div>' },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  VeyqCard: { template: '<div><slot name="title" /><slot /><slot name="footer" /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
 }
 
 const NOTICE = {

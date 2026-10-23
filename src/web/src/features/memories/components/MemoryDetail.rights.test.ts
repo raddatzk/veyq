@@ -11,7 +11,6 @@ vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import exifr from 'exifr'
-import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
@@ -26,6 +25,7 @@ import { fakeApi, stubApi } from '../../../test/apiMock'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/models'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -65,7 +65,7 @@ async function seedDated(memoryKey: Uint8Array) {
 async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean } = {}) {
   const w = mount(MemoryDetail, {
     props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
     ...(o.attach ? { attachTo: document.body } : {}),
   })
   await flushPromises()
@@ -110,7 +110,7 @@ describe('MemoryDetail follows rights', () => {
     await seedDated(memoryKey)
     mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false } },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+      global: { plugins: [realI18n()] },
     })
     await flushPromises()
     await flushPromises()
@@ -118,7 +118,7 @@ describe('MemoryDetail follows rights', () => {
     // control: the same Memory with editMeta self-heals its date on open
     mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights() },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+      global: { plugins: [realI18n()] },
     })
     await flushPromises()
     await flushPromises()
@@ -134,7 +134,7 @@ describe('MemoryDetail follows rights', () => {
       updateNode.mockClear()
       const w = mount(MemoryDetail, {
         props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setCover } },
-        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+        global: { plugins: [realI18n()] },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
       await w.find('.memory-cover-preview').trigger('click')
@@ -153,7 +153,7 @@ describe('MemoryDetail follows rights', () => {
     for (const setBanner of [false, true]) {
       const w = mount(MemoryDetail, {
         props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setBanner } },
-        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+        global: { plugins: [realI18n()] },
         attachTo: document.body,
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
@@ -174,8 +174,8 @@ describe('MemoryDetail follows rights', () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { attach: true })
     const action = w.find('.veyq-node-header-actions button[data-action="participants"]')
     expect(action.attributes('aria-label')).toBe(t('memory.participants.title'))
-    // its own icon: "Request uploads" is `pi-user-plus`, and two actions of one bar never share one (inbox #425)
-    expect(action.find('.pi-users').exists()).toBe(true)
+    // its own icon: "Request uploads" is `user-plus`, and two actions of one bar never share one (inbox #425)
+    expect(w.findAllComponents(VeyqButton).find((b) => b.element === action.element)?.props('icon')).toBe('users')
     const picker = () => document.body.querySelector('.memory-participants-dialog')
     expect(picker(), 'no picker before the click').toBeNull()
     await action.trigger('click')

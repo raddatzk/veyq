@@ -7,10 +7,11 @@
 // — they're sealed under K_tenant, which a group owner needn't hold (the active key here is the group's K_SC).
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Checkbox from 'primevue/checkbox'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqCheckbox from '../../shared/ui/VeyqCheckbox.vue'
 import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
 import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, openScopeById, revokeScopeShares } from './scopes'
 import { zeroEpochKeys } from './epochs'
@@ -262,7 +263,7 @@ async function revokeAllLinks() {
     header: t('spaceLinks.revokeAll'),
     message: t('spaceLinks.revokeAllConfirm'),
     acceptLabel: t('spaceLinks.revokeAll'),
-    acceptIcon: 'pi pi-link',
+    acceptIcon: 'link',
   })
   if (!accepted) return
   lifecycleError.value = ''
@@ -362,7 +363,7 @@ async function removeIcon() {
     header: t('spaceIcon.removeConfirmTitle'),
     message: t('spaceIcon.removeConfirm'),
     acceptLabel: t('spaceIcon.remove'),
-    acceptIcon: 'pi pi-trash',
+    acceptIcon: 'trash',
   })
   if (!accepted) return
   iconBusy.value = true
@@ -406,35 +407,35 @@ async function onRestore() {
       <!-- The group's own name (cr-0097): owner-only inline rename (re-seals under the current epoch, forward-secret). -->
       <div class="group-name-header">
         <template v-if="renaming">
-          <InputText
+          <VeyqInput
             v-model="nameDraft"
             class="group-name-input"
             autocomplete="off"
             :placeholder="t('groups.renamePlaceholder')"
             @keyup.enter="saveRename"
           />
-          <Button :label="t('common.save')" icon="pi pi-check" size="small" :loading="renameBusy" @click="saveRename" />
-          <Button :label="t('common.cancel')" severity="secondary" outlined size="small" :disabled="renameBusy" @click="renaming = false" />
+          <VeyqButton :label="t('common.save')" icon="check" size="small" :loading="renameBusy" @click="saveRename" />
+          <VeyqButton :label="t('common.cancel')" variant="secondary" appearance="outlined" size="small" :disabled="renameBusy" @click="renaming = false" />
         </template>
         <template v-else>
           <TenantAvatar :name="displayName" :icon="groupIcon.url.value ?? undefined" />
           <h1 class="group-name-title">{{ displayName || t('groups.untitled') }}</h1>
-          <Button v-if="isOwner" :label="t('groups.rename')" icon="pi pi-pencil" text size="small" @click="startRename" />
+          <VeyqButton v-if="isOwner" :label="t('groups.rename')" icon="pencil" appearance="text" size="small" @click="startRename" />
           <div v-if="isOwner" class="group-icon-actions">
-            <Button
+            <VeyqButton
               :label="groupIcon.url.value ? t('spaceIcon.change') : t('spaceIcon.add')"
-              icon="pi pi-image"
-              text
+              icon="image"
+              appearance="text"
               size="small"
               :disabled="iconBusy"
               @click="iconDialogOpen = true"
             />
-            <Button
+            <VeyqButton
               v-if="groupIcon.url.value"
               :label="t('spaceIcon.remove')"
-              icon="pi pi-trash"
-              text
-              severity="danger"
+              icon="trash"
+              appearance="text"
+              variant="danger"
               size="small"
               :disabled="iconBusy"
               @click="removeIcon"
@@ -442,8 +443,8 @@ async function onRestore() {
           </div>
         </template>
       </div>
-      <Message v-if="renameError" severity="error" :closable="false">{{ renameError }}</Message>
-      <Message v-if="iconError" severity="error" :closable="false">{{ iconError }}</Message>
+      <VeyqMessage v-if="renameError" tone="error">{{ renameError }}</VeyqMessage>
+      <VeyqMessage v-if="iconError" tone="error">{{ iconError }}</VeyqMessage>
       <CompromiseRotationNotice v-if="isOwner" :scope-id="scopeId" :state="stuckRotation" @requeued="stuckRotation = $event" />
 
       <div class="settings-section-header">
@@ -457,38 +458,37 @@ async function onRestore() {
       <form v-if="isOwner" class="group-add-form" @submit.prevent="submit">
         <label class="settings-muted" for="group-add-username">{{ t('groups.addMemberIntro') }}</label>
         <div class="group-add-row">
-          <InputText id="group-add-username" v-model="username" autocomplete="off" :placeholder="t('groups.usernamePlaceholder')" />
-          <Button type="submit" :label="t('groups.addMember')" icon="pi pi-user-plus" :loading="adding" :disabled="!canAdd" />
+          <VeyqInput id="group-add-username" v-model="username" autocomplete="off" :placeholder="t('groups.usernamePlaceholder')" />
+          <VeyqButton type="submit" :label="t('groups.addMember')" icon="user-plus" :loading="adding" :disabled="!canAdd" />
         </div>
-        <Message v-if="addError" severity="error" :closable="false">{{ addError }}</Message>
+        <VeyqMessage v-if="addError" tone="error">{{ addError }}</VeyqMessage>
         <!-- Changed-identity notice (cr-0098): accept re-pins the new key and retries the add (human path). -->
         <div v-if="pendingKeyChange" class="group-key-change">
-          <Button
-            type="button"
-            severity="warn"
+          <VeyqButton
+            variant="warn"
             size="small"
             :label="t('groups.acceptKeyChange')"
-            icon="pi pi-shield"
+            icon="shield"
             :loading="adding"
             @click="acceptChangedKeyAndRetry"
           />
         </div>
       </form>
 
-      <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <VeyqMessage v-if="actionError" tone="error">{{ actionError }}</VeyqMessage>
       <!-- This device refused its own pin store (ADR 0028 Decision 7): no wrap to a foreign key until it reads. -->
-      <Message v-if="trustRefusal" severity="warn" :closable="false">
+      <VeyqMessage v-if="trustRefusal" tone="warn">
         {{ t(trustRefusal) }}
         <TrustResetLink />
-      </Message>
+      </VeyqMessage>
 
       <p v-if="loading" class="settings-muted">{{ t('members.loading') }}</p>
-      <Message v-else-if="loadError === 'notAuthorized'" severity="warn" :closable="false">
+      <VeyqMessage v-else-if="loadError === 'notAuthorized'" tone="warn">
         {{ t('members.notAuthorized') }}
-      </Message>
-      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">
+      </VeyqMessage>
+      <VeyqMessage v-else-if="loadError === 'failed'" tone="error">
         {{ t('members.loadFailed') }}
-      </Message>
+      </VeyqMessage>
       <p v-else-if="members.length === 0" class="settings-muted">{{ t('members.empty') }}</p>
 
       <div v-else class="veyq-list management-list">
@@ -507,14 +507,14 @@ async function onRestore() {
                 <MemberTrustBadge :trust="trust[m.userId]" />
                 <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
                 <span v-if="unadmitted[m.userId]" class="veyq-badge changed">
-                  <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('members.badgeNotAdmitted') }}
+                  <VeyqIcon name="exclamation-triangle" />{{ t('members.badgeNotAdmitted') }}
                 </span>
               </div>
             </div>
             <!-- Review a changed key (cr-0099), available to ANY member: compare expected-vs-current out-of-band,
                  then accept (re-pin) or refuse (leave blocked). -->
             <div v-if="trust[m.userId]?.state === 'changed'" class="trust-actions">
-              <Button :label="t('verify.review')" icon="pi pi-exclamation-triangle" severity="warn" text size="small" @click="openReview(m)" />
+              <VeyqButton :label="t('verify.review')" icon="exclamation-triangle" variant="warn" appearance="text" size="small" @click="openReview(m)" />
             </div>
             <!-- Owner-only controls (cr-0088/0089): promote a member to co-owner, demote a co-owner, or remove a
                  member. Remove is destructive (rotates the scope key forward) so it takes an inline confirm. The
@@ -522,24 +522,24 @@ async function onRestore() {
             <div v-if="isOwner && pendingRemove === m.userId" class="management-actions">
               <span class="settings-muted remove-confirm-label">{{ t('groups.removeConfirm') }}</span>
               <div class="remove-revoke-links">
-                <Checkbox v-model="revokeLinks" input-id="remove-revoke-links" binary :disabled="removing" />
+                <VeyqCheckbox v-model="revokeLinks" input-id="remove-revoke-links" :disabled="removing" />
                 <label for="remove-revoke-links">
                   <span>{{ t('groups.removeRevokeLinks') }}</span>
                   <span class="settings-muted remove-revoke-links-hint">{{ t('groups.removeRevokeLinksHint') }}</span>
                 </label>
               </div>
-              <Button
+              <VeyqButton
                 :label="t('groups.removeConfirmYes')"
-                icon="pi pi-user-minus"
-                severity="danger"
+                icon="user-minus"
+                variant="danger"
                 size="small"
                 :loading="removing"
                 @click="removeMember(m)"
               />
-              <Button
+              <VeyqButton
                 :label="t('common.cancel')"
-                severity="secondary"
-                outlined
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 :disabled="removing"
                 @click="pendingRemove = null"
@@ -548,40 +548,40 @@ async function onRestore() {
             <!-- A pending consent proposal (cr-0094): the only owner action is to rescind (withdraw). No promote/
                  demote/remove — they are not yet a real member, and nothing was keyed, so rescind never rotates. -->
             <div v-else-if="isOwner && m.pendingConsent" class="management-actions">
-              <Button
+              <VeyqButton
                 :label="t('groups.rescind')"
-                icon="pi pi-times"
-                severity="secondary"
-                outlined
+                icon="times"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 @click="rescind(m)"
               />
             </div>
             <div v-else-if="isOwner" class="management-actions">
-              <Button
+              <VeyqButton
                 v-if="m.role === 'MEMBER'"
                 :label="t('groups.promote')"
-                icon="pi pi-arrow-up"
-                severity="secondary"
-                outlined
+                icon="arrow-up"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 @click="changeRole(m, SetMemberRoleRequestRoleEnum.Owner)"
               />
-              <Button
+              <VeyqButton
                 v-else
                 :label="t('groups.demote')"
-                icon="pi pi-arrow-down"
-                severity="secondary"
-                outlined
+                icon="arrow-down"
+                variant="secondary"
+                appearance="outlined"
                 size="small"
                 @click="changeRole(m, SetMemberRoleRequestRoleEnum.Member)"
               />
-              <Button
+              <VeyqButton
                 v-if="m.username !== myUsername"
                 :label="t('groups.remove')"
-                icon="pi pi-user-minus"
-                severity="danger"
-                outlined
+                icon="user-minus"
+                variant="danger"
+                appearance="outlined"
                 size="small"
                 @click="askRemove(m.userId)"
               />
@@ -600,11 +600,11 @@ async function onRestore() {
           </div>
         </div>
         <div class="danger-row">
-          <Button
+          <VeyqButton
             :label="t('spaceLinks.revokeAll')"
-            icon="pi pi-link"
-            severity="danger"
-            outlined
+            icon="link"
+            variant="danger"
+            appearance="outlined"
             :loading="revokingLinks"
             @click="revokeAllLinks"
           />
@@ -622,19 +622,19 @@ async function onRestore() {
           </div>
         </div>
 
-        <Message v-if="lifecycleError" severity="error" :closable="false">{{ lifecycleError }}</Message>
+        <VeyqMessage v-if="lifecycleError" tone="error">{{ lifecycleError }}</VeyqMessage>
 
         <div v-if="isPending" class="danger-row">
-          <Message severity="warn" :closable="false">{{ t('groups.pendingDeletion', { day: purgeDay }) }}</Message>
-          <Button :label="t('groups.restore')" icon="pi pi-undo" :loading="lifecycleBusy" @click="onRestore" />
+          <VeyqMessage tone="warn">{{ t('groups.pendingDeletion', { day: purgeDay }) }}</VeyqMessage>
+          <VeyqButton :label="t('groups.restore')" icon="undo" :loading="lifecycleBusy" @click="onRestore" />
         </div>
         <div v-else-if="confirmingDelete" class="danger-row">
           <span class="settings-muted">{{ t('groups.deleteConfirm') }}</span>
-          <Button :label="t('groups.deleteConfirmYes')" icon="pi pi-trash" severity="danger" :loading="lifecycleBusy" @click="onDelete" />
-          <Button :label="t('common.cancel')" severity="secondary" outlined :disabled="lifecycleBusy" @click="confirmingDelete = false" />
+          <VeyqButton :label="t('groups.deleteConfirmYes')" icon="trash" variant="danger" :loading="lifecycleBusy" @click="onDelete" />
+          <VeyqButton :label="t('common.cancel')" variant="secondary" appearance="outlined" :disabled="lifecycleBusy" @click="confirmingDelete = false" />
         </div>
         <div v-else class="danger-row">
-          <Button :label="t('groups.deleteGroup')" icon="pi pi-trash" severity="danger" outlined @click="confirmingDelete = true" />
+          <VeyqButton :label="t('groups.deleteGroup')" icon="trash" variant="danger" appearance="outlined" @click="confirmingDelete = true" />
         </div>
       </section>
     </section>
@@ -682,7 +682,7 @@ async function onRestore() {
   align-items: center;
   flex-wrap: wrap;
 }
-.danger-row :deep(.p-message) {
+.danger-row :deep(.veyq-message) {
   margin: 0;
   flex: 1;
   min-width: 0;
@@ -717,7 +717,7 @@ async function onRestore() {
   gap: 0.5rem;
   align-items: center;
 }
-.group-add-row :deep(.p-inputtext) {
+.group-add-row :deep(.veyq-input) {
   flex: 1;
   min-width: 0;
 }

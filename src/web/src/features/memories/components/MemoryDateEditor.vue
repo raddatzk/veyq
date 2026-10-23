@@ -2,15 +2,15 @@
 // The Memory date editor (cr-0067, uc.memory.date main flow §2). A mode switch — `auto` / `single` /
 // `range` / `ongoing` — reveals the fitting inputs (none / one day / from+to / a start). `auto` shows the
 // materialized range derived from the Memory's media (read-only preview); the manual modes take `YYYY-MM-DD`
-// days via the ported IsoDateField. On save the parent seals the chosen [MemoryDate] under `K_node` — this
+// days via the shared `VeyqDateField`. On save the parent seals the chosen [MemoryDate] under `K_node` — this
 // component is presentation only, it never touches crypto. Invalid manual range (`to` < `from`) is blocked (E4).
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import Message from 'primevue/message'
-import SelectButton from 'primevue/selectbutton'
-import IsoDateField from './IsoDateField.vue'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
+import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqToggleGroup from '../../../shared/ui/VeyqToggleGroup.vue'
+import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import { formatClosedRange, isValidMemoryDateRange } from '../memoryDateRange'
 import type { MemoryDate, MemoryDateMode } from '../memoryDate'
 
@@ -70,14 +70,11 @@ function save() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="t('memory.date.title')" modal @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('memory.date.title')" @update:visible="emit('close')">
     <form class="veyq-form memory-date-editor" @submit.prevent="save">
-      <SelectButton
+      <VeyqToggleGroup
         v-model="mode"
         :options="modeOptions"
-        option-label="label"
-        option-value="value"
-        :allow-empty="false"
         :aria-label="t('memory.date.title')"
       />
 
@@ -88,33 +85,33 @@ function save() {
 
       <label v-else-if="mode === 'single'">
         {{ t('memory.date.day') }}
-        <IsoDateField v-model="from" :aria-label="t('memory.date.day')" />
+        <VeyqDateField v-model="from" :aria-label="t('memory.date.day')" />
       </label>
 
       <template v-else-if="mode === 'range'">
         <label>
           {{ t('memory.date.from') }}
-          <IsoDateField v-model="from" :max-date="to" :aria-label="t('memory.date.from')" />
+          <VeyqDateField v-model="from" :max-date="to" :aria-label="t('memory.date.from')" />
         </label>
         <label>
           {{ t('memory.date.to') }}
-          <IsoDateField v-model="to" :min-date="from" :aria-label="t('memory.date.to')" />
+          <VeyqDateField v-model="to" :min-date="from" :aria-label="t('memory.date.to')" />
         </label>
       </template>
 
       <label v-else>
         {{ t('memory.date.start') }}
-        <IsoDateField v-model="from" :aria-label="t('memory.date.start')" />
+        <VeyqDateField v-model="from" :aria-label="t('memory.date.start')" />
       </label>
 
-      <Message v-if="rangeInvalid" severity="error" :closable="false">{{ t('memory.date.invalidRange') }}</Message>
+      <VeyqMessage v-if="rangeInvalid" tone="error">{{ t('memory.date.invalidRange') }}</VeyqMessage>
 
       <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined @click="emit('close')" />
-        <Button type="submit" :label="t('common.save')" icon="pi pi-check" :disabled="!canSave" />
+        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="emit('close')" />
+        <VeyqButton type="submit" :label="t('common.save')" icon="check" :disabled="!canSave" />
       </div>
     </form>
-  </Dialog>
+  </VeyqDialog>
 </template>
 
 <style scoped>

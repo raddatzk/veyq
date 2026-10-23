@@ -7,7 +7,7 @@
 import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { activeSpace } from '../../../app/activeSpace'
 import { account } from '../../../app/account'
 import { getMyProfile, openOwnNameKey, unsealName } from './profile'
@@ -55,8 +55,8 @@ function openProfile() {
       <span>{{ t('profilePicture.finish.body') }}</span>
     </div>
     <div class="finish-profile-actions">
-      <Button type="button" :label="t('profilePicture.finish.open')" icon="pi pi-user" size="small" data-testid="finish-profile-open" @click="openProfile" />
-      <Button type="button" :label="t('profilePicture.finish.dismiss')" severity="secondary" text size="small" data-testid="finish-profile-dismiss" @click="dismiss" />
+      <VeyqButton type="button" :label="t('profilePicture.finish.open')" icon="user" size="small" data-testid="finish-profile-open" @click="openProfile" />
+      <VeyqButton type="button" :label="t('profilePicture.finish.dismiss')" variant="secondary" appearance="text" size="small" data-testid="finish-profile-dismiss" @click="dismiss" />
     </div>
   </section>
 </template>

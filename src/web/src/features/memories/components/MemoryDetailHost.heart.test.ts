@@ -11,7 +11,6 @@ vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import MemoryDetailHost from './MemoryDetailHost.vue'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { blobApi } from '../../../api/client'
@@ -49,7 +48,7 @@ async function mountHost(kind: string, access: NodeDetailProps['access']) {
       node, scopeId: SCOPE, epochs: null, contentKey: new Uint8Array(32).fill(5), children: { folders: [], byKind: new Map() },
       access, tree: memberTreeOf(() => [node], { scopeId: SCOPE }),
     } as unknown as NodeDetailProps,
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
   await flushPromises()
   await flushPromises()

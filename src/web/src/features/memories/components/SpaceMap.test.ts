@@ -53,7 +53,7 @@ import { realI18n, t } from '../../../test/i18n'
 import { treeNode } from '../../../test/models'
 
 const stubs = {
-  Button: { props: ['label'], template: `<button class="p-btn" @click="$emit('click', $event)">{{ label }}</button>` },
+  VeyqButton: { props: ['label'], template: `<button class="btn-stub" @click="$emit('click', $event)">{{ label }}</button>` },
 }
 
 const pin = (id: string, name: string, lat: number, lng: number): LocatedPin => ({
@@ -92,7 +92,7 @@ describe('SpaceMap', () => {
     expect(wrapper.text()).toContain(t('memory.place.consentTitle'))
     expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
 
-    await wrapper.find('.p-btn').trigger('click') // "Enable maps"
+    await wrapper.find('.btn-stub').trigger('click') // "Enable maps"
     await flushPromises()
 
     expect(wrapper.find('.space-map-canvas').exists()).toBe(true)

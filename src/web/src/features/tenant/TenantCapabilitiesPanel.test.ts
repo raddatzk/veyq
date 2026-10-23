@@ -29,9 +29,9 @@ import { ScopeKind } from '../../api/generated/scopes'
 import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
-  Button: { props: ['label', 'loading', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  InputText: {
+  VeyqButton: { props: ['label', 'loading', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',

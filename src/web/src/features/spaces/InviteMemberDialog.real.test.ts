@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
-// The invite dialog over the REAL PrimeVue Dialog, held open by a host that refreshes behind it as TenantMembersPanel does
+// The invite dialog over the REAL dialog (VeyqDialog), held open by a host that refreshes behind it as TenantMembersPanel does
 // (`@invited` → reload): `InviteMemberDialog.test.ts` stubs the Dialog, so it cannot see the success view being drawn
 // (or not) in the teleported dialog. A DOM submit, then the confirmation must be on screen.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 import { defineComponent, h, ref } from 'vue'
 
 vi.mock('./members', () => ({ inviteMember: vi.fn(), memberError: vi.fn() }))
@@ -41,7 +40,7 @@ describe('InviteMemberDialog over the real Dialog', () => {
           ])
       },
     })
-    wrapper = mount(Host, { attachTo: document.body, global: { plugins: [realI18n(), PrimeVue] } })
+    wrapper = mount(Host, { attachTo: document.body, global: { plugins: [realI18n()] } })
     await flushPromises()
 
     const input = document.body.querySelector('input[type="email"]') as HTMLInputElement

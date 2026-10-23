@@ -38,7 +38,7 @@ import { ScopeKind, type MyTenant } from '../api/generated/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import type { TreeNode } from '../core/node/tree'
-import Message from 'primevue/message'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
 import DeleteNodesDialog from '../core/node/components/DeleteNodesDialog.vue'
 import type { SelectedForDelete } from '../core/node/selection'
@@ -399,9 +399,9 @@ async function onDeleteDone() {
       <TrustResetLink v-if="activeSpace.trustRefusal" />
     </div>
     <template v-else>
-      <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">
+      <VeyqMessage v-if="isPendingDeletion" tone="warn" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
-      </Message>
+      </VeyqMessage>
       <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
       <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason; a member
            the statement of reasons names reads it below (uc.moderation.object-to-a-measure). -->

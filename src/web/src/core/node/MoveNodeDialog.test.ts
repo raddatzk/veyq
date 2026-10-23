@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Core's move dialog (inbox #358) and its folder browser (owner decision 2026-10-14) over the REAL registry (Memories and
-// Depot, filled by `src/test/setup.ts`), the real PrimeVue Dialog and Breadcrumb (teleported to the body) and the app's
+// Depot, filled by `src/test/setup.ts`), the real `VeyqDialog` and `VeyqBreadcrumb` (teleported to the body) and the app's
 // real confirmation dialog, every step a DOM click on the rendered element. The door is a recorder (`NodeMover`): which
 // session moves through what is `move.test.ts`'s; the request body on the wire `move.wire.test.ts`'s and, for a guest,
 // `ShareTreePage.move.test.ts`'s. What this pins: where the browser opens, what it lists and lets open, where "Move here"
@@ -8,7 +8,6 @@
 // the undo. The clients are guarded (`test/guestMode.ts`), so a guest's mount proves it calls no authenticated one.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import PrimeVue from 'primevue/config'
 
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))
@@ -55,7 +54,7 @@ function mountDialog(
   return mount(MoveNodeDialog, {
     attachTo: document.body,
     props: { node, ...session, mover, rootLabel: 'Familie', afterUndo },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 type W = ReturnType<typeof mountDialog>
@@ -63,7 +62,7 @@ async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
 }
-const errorText = () => document.body.querySelector('.p-message-error')?.textContent?.trim() ?? ''
+const errorText = () => document.body.querySelector('.veyq-message--error')?.textContent?.trim() ?? ''
 const submitButton = moveHereButton
 const moveTo = moveHere
 

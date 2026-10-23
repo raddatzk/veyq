@@ -21,7 +21,6 @@ vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocod
 
 import { mount, flushPromises } from '@vue/test-utils'
 import exifr from 'exifr'
-import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, MEDIA_PAGE_LIMIT, type MediaDeriver } from '../media'
@@ -69,7 +68,7 @@ function stubDeriver(): MediaDeriver {
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
   return mount(MemoryDetail, {
     props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }), ...props },
-    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 
@@ -408,7 +407,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     }
     const wrapper = mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
+      global: { plugins: [realI18n()] },
       attachTo: document.body,
     })
     await flushPromises()
@@ -566,7 +565,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     }
     const wrapper = mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryDateEditor: DateEditorStub } },
+      global: { plugins: [realI18n()], stubs: { MemoryDateEditor: DateEditorStub } },
     })
     await flushPromises()
     await wrapper.find('.memory-date-chip').trigger('click') // open the editor
@@ -603,7 +602,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     setMapsConsent(true) // skip the consent dialog — go straight into the (stubbed) editor
     return mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub } },
+      global: { plugins: [realI18n()], stubs: { MemoryLocationEditor: LocationEditorStub } },
     })
   }
 
@@ -797,7 +796,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
     const wrapper = mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), rights: memberMemoryRights({ publicShares: false }) },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub, Dialog: DialogStub } },
+      global: { plugins: [realI18n()], stubs: { MemoryLocationEditor: LocationEditorStub, VeyqDialog: DialogStub } },
     })
     await flushPromises()
     await wrapper.find('.memory-location-chip').trigger('click')
@@ -833,7 +832,7 @@ describe('MemoryDetail (a place on a server without a map, #458)', () => {
   function mountReal(memoryKey: Uint8Array, wrappedMeta: string | null = null) {
     return mount(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
-      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { Dialog: DialogStub } },
+      global: { plugins: [realI18n()], stubs: { VeyqDialog: DialogStub } },
     })
   }
   async function nameAndSave(wrapper: ReturnType<typeof mountReal>, name: string) {

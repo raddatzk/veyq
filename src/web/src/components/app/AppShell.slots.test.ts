@@ -39,7 +39,7 @@ vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
 
 import AppTopbar from './AppTopbar.vue'
 import AppSidebar from './AppSidebar.vue'
-import Breadcrumb from 'primevue/breadcrumb'
+import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
 import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
 import UploadStatusMenu from '../../core/blob/UploadStatusMenu.vue'
 import { enqueue, clearUploads } from '../../core/blob/queue'
@@ -70,7 +70,7 @@ async function mountSidebar() {
   await router.replace({ name: 'home', hash: '' })
   await router.isReady()
   const w = mount(AppSidebar, {
-    global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, Popover: PopoverStub, Dialog: DialogStub } },
+    global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, VeyqPopover: PopoverStub, VeyqDialog: DialogStub } },
   })
   await flushPromises()
   return w
@@ -79,7 +79,7 @@ const mountTopbar = (component: Component = AppTopbar) =>
   mount(component, {
     global: {
       plugins: [realI18n()],
-      stubs: { InvitationsBadge: true, Breadcrumb: true },
+      stubs: { InvitationsBadge: true, VeyqBreadcrumb: true },
     },
   })
 
@@ -87,11 +87,11 @@ const mountTopbar = (component: Component = AppTopbar) =>
 // Memories installed held exactly one item, Memories' `memories.upload-status` → the upload status menu. Its menu is
 // the one that moved verbatim to core (the old file's markup, minus nothing).
 const PreB3Topbar = defineComponent({
-  components: { Breadcrumb, InvitationsBadge },
+  components: { VeyqBreadcrumb, InvitationsBadge },
   setup: () => ({ trayItems: [{ id: 'memories.upload-status', component: UploadStatusMenu }] }),
   template: `
   <header class="workspace-topbar">
-    <Breadcrumb class="app-breadcrumb" />
+    <VeyqBreadcrumb class="app-breadcrumb" :items="[]" />
     <div class="workspace-topbar-actions">
       <InvitationsBadge />
       <component :is="item.component" v-for="item in trayItems" :key="item.id" />

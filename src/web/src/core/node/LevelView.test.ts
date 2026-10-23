@@ -24,6 +24,8 @@ vi.mock('../applications/registry', async (importOriginal) => {
 
 import { defineComponent, h } from 'vue'
 import LevelView from './LevelView.vue'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import { createRegistry, type Registry } from '../applications/registry'
 import { childrenOf } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
@@ -34,7 +36,7 @@ import { realI18n, t } from '../../test/i18n'
 import { chooseNew, hasNewMenu, isDisabled, newMenuLabels, openNewMenu } from '../../test/newMenu'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
-import { stubRows, type StubRows } from '../../test/stubRows'
+import { STUB_ROW_ICON, stubRows, type StubRows } from '../../test/stubRows'
 import { ZipWriter } from '../export/zip'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
@@ -60,14 +62,14 @@ function mountLevel(
       folderName: over.folderName,
       liveTick: over.liveTick,
     },
-    global: { plugins: [realI18n()], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 }
 type Level = ReturnType<typeof mountLevel>
 const mountGuest = (role: ShareRole, tree: TreeNode[] = [TRIPS], folder: TreeNode | null = TRIPS) =>
   mount(LevelView, {
     props: { folder, level: childrenOf(tree, folder?.id ?? null), access: guestAccessOf(role), tree: memberTreeOf(() => tree) },
-    global: { plugins: [realI18n()], directives: { tooltip: {} } },
+    global: { plugins: [realI18n()] },
   })
 
 /** The level's top-level blocks in DOM order - but the toolbar, which has its own tests. */
@@ -91,8 +93,8 @@ const reg = (): Registry => holder.reg!
 function twoKinds() {
   const a = stubRows('a')
   const b = stubRows('b')
-  reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory } })
-  reg().registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: b.factory } })
+  reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory } })
+  reg().registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory } })
   return { a, b }
 }
 
@@ -125,16 +127,16 @@ describe('LevelView: the one list', () => {
     expect(folder.classes()).toContain('is-folder')
     expect(folder.find('.veyq-level-item-meta').text()).toBe(t('node.kindFolder'))
     expect(folder.find('.veyq-level-item-visual').attributes('aria-hidden')).toBe('true')
-    expect(folder.find('.veyq-level-item-visual .pi-folder').exists()).toBe(true)
+    expect(folder.find('.veyq-level-item-visual').findComponent(VeyqIcon).props('name')).toBe('folder')
     const row = rowOf(w, 'a1')
-    expect(row.find('.veyq-level-item-visual .pi-a').exists()).toBe(true)
+    expect(row.find('.veyq-level-item-visual').findComponent(VeyqIcon).props('name')).toBe(STUB_ROW_ICON)
     expect(row.find('.veyq-level-item-meta').text()).toBe('a meta')
   })
 
   it('calls a row factory ONCE per level view, shared by two kinds, handed the nodes of both (kinds in registration order)', async () => {
     const shared = stubRows('s')
-    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: shared.factory } })
-    reg().registerKind({ kind: 'ALPHA_PART', icon: 'pi pi-a', shareable: false, list: { rows: shared.factory } })
+    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: shared.factory } })
+    reg().registerKind({ kind: 'ALPHA_PART', icon: 'images', shareable: false, list: { rows: shared.factory } })
     const w = mountLevel([node('p1', 'ALPHA_PART'), node('a1', 'ALPHA'), node('a2', 'ALPHA')])
     expect(shared.calls()).toBe(1)
     expect(shared.ctx().value.nodes.map((n) => n.name)).toEqual(['a1', 'a2', 'p1'])
@@ -188,7 +190,7 @@ describe('LevelView: the one list', () => {
 
   it('a row the factory has none for is the explicit unsupported row, never dropped', () => {
     const nothing = { row: () => null }
-    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: () => nothing } })
+    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: () => nothing } })
     const w = mountLevel([node('a1', 'ALPHA')])
     const row = rowOf(w, 'a1')
     expect(row.classes()).toContain('is-unsupported')
@@ -200,12 +202,12 @@ describe('LevelView: the one list', () => {
 describe('LevelView: a kind no application serves (the unsupported row)', () => {
   it('lists a registered kind without a list: its icon, its name and the unsupported state, not clickable', () => {
     twoKinds()
-    reg().registerKind({ kind: 'LEAF', icon: 'pi pi-leaf', shareable: false })
+    reg().registerKind({ kind: 'LEAF', icon: 'file-check', shareable: false })
     const w = mountLevel([node('a1', 'ALPHA'), node('l1', 'LEAF'), node('l2', 'LEAF')])
     expect(titlesOf(w)).toEqual(['a1', 'l1', 'l2'])
     for (const name of ['l1', 'l2']) {
       const row = rowOf(w, name)
-      expect(row.find('.pi-leaf').exists()).toBe(true)
+      expect(row.findComponent(VeyqIcon).props('name')).toBe('file-check')
       expect(row.text()).toContain(t('home.unsupportedKind'))
       expect(row.classes()).toContain('is-unsupported')
       expect(row.element.querySelectorAll('button')).toHaveLength(0)
@@ -216,7 +218,7 @@ describe('LevelView: a kind no application serves (the unsupported row)', () => 
   it('lists a kind nobody registered too (a generic icon), named by its kind token in the meta line', () => {
     const w = mountLevel([node('z1', 'ZULU'), node('y1', 'YANKEE')])
     expect(titlesOf(w)).toEqual(['y1', 'z1'])
-    expect(w.findAll('.veyq-level-item .pi-question-circle')).toHaveLength(2)
+    expect(w.findAllComponents(VeyqIcon).filter((i) => i.props('name') === 'question-circle' && i.element.closest('.veyq-level-item'))).toHaveLength(2)
     expect(rowOf(w, 'z1').find('.veyq-level-item-meta').text()).toBe(`ZULU · ${t('home.unsupportedKind')}`)
   })
 
@@ -292,7 +294,7 @@ describe('LevelView: the folder header', () => {
   it('shows the share button on a shareable folder and emits share', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true })
     expect(shareButton(w).exists()).toBe(true)
-    expect(shareButton(w).find('.pi-share-alt').exists()).toBe(true)
+    expect(w.findAllComponents(VeyqButton).find((b) => b.element === shareButton(w).element)!.props('icon')).toBe('share-alt')
     await shareButton(w).trigger('click')
     expect(w.emitted('share')).toHaveLength(1)
   })
@@ -369,7 +371,7 @@ describe('LevelView: the toolbar', () => {
 // inbox #370 / #407: the view switch governs the whole list, so it is the level's — offered as the union of the presentations
 // on screen: core's grid and list for every row, and each shown kind's own `views` (the stand-in for Memories' map).
 describe('LevelView: the view switch', () => {
-  const MAP = { mode: 'map', icon: 'pi pi-map', label: 'node.folders' } as const // core's test names no application key
+  const MAP = { mode: 'map', icon: 'map', label: 'node.folders' } as const // core's test names no application key
   const trash = (w: Level) => w.findAll('.veyq-level-toolbar button').find((b) => b.text() === t('node.trash.open'))
   const switchLabels = (w: Level) => w.findAll('.veyq-level-toolbar .view-mode-button').map((b) => b.attributes('aria-label'))
 
@@ -384,7 +386,7 @@ describe('LevelView: the view switch', () => {
 
   it('adds a kind\'s own view, each mode once in the order first named; choosing it replaces the list by that presentation', async () => {
     const a = stubRows('a', { presentationFor: 'map' })
-    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, MAP] } })
+    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, MAP] } })
     const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS })
     expect(switchLabels(w)).toEqual([t('node.viewGrid'), t('node.folders'), t('node.viewList')])
     await w.findAll('.view-mode-button')[1].trigger('click')
@@ -406,7 +408,7 @@ describe('LevelView: the view switch', () => {
 // inbox #404: the level decides which mode it shows — the stored one where something on screen offers it, else the grid —
 // and hands that to its factories; the stored preference is never rewritten by the clamp.
 describe('LevelView: the mode it shows', () => {
-  const MAP = { mode: 'map', icon: 'pi pi-map', label: 'node.folders' } as const
+  const MAP = { mode: 'map', icon: 'map', label: 'node.folders' } as const
   const pressed = (w: Level) =>
     w.findAll('.veyq-level-toolbar .view-mode-button').filter((b) => b.attributes('aria-pressed') === 'true').map((b) => b.attributes('aria-label'))
   const stored = () => useViewMode().viewMode.value
@@ -416,8 +418,8 @@ describe('LevelView: the mode it shows', () => {
     // ALPHA offers the map (its empty tab is left out in an identity folder); BETA has the rows only, as Depot's.
     a = stubRows('a', { presentationFor: 'map' })
     b = stubRows('b')
-    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
-    reg().registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: b.factory } })
+    reg().registerKind({ kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
+    reg().registerKind({ kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory } })
     setViewMode('map')
   })
   const anna = node('Anna', FOLDER_KIND, 'Trips')
@@ -476,8 +478,8 @@ describe('LevelView: the empty level', () => {
   beforeEach(() => {
     const a = stubRows('a')
     reg().registerKind({
-      kind: 'ALPHA', icon: 'pi pi-a', shareable: false, createDialog: Dialog, list: { rows: a.factory, tabLabel: 'memory.memories', emptyText: () => 'memory.memoryEmpty' },
-      createEntry: { label: 'node.anItem', icon: 'pi pi-a', order: 10, allowed: allowAll },
+      kind: 'ALPHA', icon: 'images', shareable: false, createDialog: Dialog, list: { rows: a.factory, tabLabel: 'memory.memories', emptyText: () => 'memory.memoryEmpty' },
+      createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed: allowAll },
     })
   })
 
@@ -526,9 +528,9 @@ describe('LevelView: the "New" menu', () => {
       },
     })
     reg().registerKind({
-      kind: 'ALPHA', icon: 'pi pi-a', shareable: false, createDialog: Dialog, list: { rows: rows.factory },
-      createEntry: { label: 'node.anItem', icon: 'pi pi-a', order: 10, allowed },
-      levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'pi pi-upload', order: 30, allowed, acceptsDrop: true }],
+      kind: 'ALPHA', icon: 'images', shareable: false, createDialog: Dialog, list: { rows: rows.factory },
+      createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed },
+      levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'upload', order: 30, allowed, acceptsDrop: true }],
     })
   })
 
@@ -604,8 +606,8 @@ describe('LevelView: the "New" menu', () => {
       holder.reg = createRegistry()
       const rows = stubRows('a', { action: { id: 'x.upload', handler: { enabled: () => true, run: () => {}, drop: (f) => dropped.push(f.map((x) => x.name)) } } })
       holder.reg.registerKind({
-        kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: rows.factory },
-        levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'pi pi-upload', order: 30, allowed: () => true }],
+        kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: rows.factory },
+        levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'upload', order: 30, allowed: () => true }],
       })
       await drop(mountLevel([TRIPS], { folder: TRIPS }), 'a.txt')
       expect(dropped).toEqual([])

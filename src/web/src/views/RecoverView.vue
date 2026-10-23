@@ -13,14 +13,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import Card from 'primevue/card'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Password from 'primevue/password'
+import VeyqCard from '../shared/ui/VeyqCard.vue'
+import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqInput from '../shared/ui/VeyqInput.vue'
+import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import PasswordBreachNotice from '../features/account/PasswordBreachNotice.vue'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
-import Message from 'primevue/message'
+import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from '../features/account/recovery/recovery'
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
@@ -154,28 +154,28 @@ async function setNewPassword() {
 </script>
 
 <template>
-  <Card class="login-card">
+  <VeyqCard class="login-card">
     <template #title>{{ stepTitle }}</template>
-    <template #content>
+    <template #default>
       <p v-if="!hasToken" class="veyq-form-copy">{{ t('recovery.intro') }}</p>
 
       <!-- Step 1 — ask for a link. -->
       <form v-if="!hasToken && !sent" class="veyq-form" @submit.prevent="askForLink">
         <label class="veyq-field">
           {{ t('recovery.emailLabel') }}
-          <InputText v-model="email" type="email" name="email" autocomplete="email" required />
+          <VeyqInput v-model="email" type="email" name="email" autocomplete="email" required />
         </label>
-        <Button
+        <VeyqButton
           type="submit"
           :label="busy ? t('recovery.requestSubmitting') : t('recovery.requestSubmit')"
-          icon="pi pi-envelope"
+          icon="envelope"
           :loading="busy"
         />
       </form>
 
-      <Message v-if="sent" severity="info" :closable="false" class="form-message">
+      <VeyqMessage v-if="sent" tone="info" class="form-message">
         {{ t('recovery.requestSent') }}
-      </Message>
+      </VeyqMessage>
 
       <!-- Step 2 — the Secret Key. The link got us the wrap; this is what opens it. -->
       <form v-if="hasToken && material && !opened" class="veyq-form" @submit.prevent="openAccount">
@@ -186,37 +186,37 @@ async function setNewPassword() {
           <SecretKeyField v-model="secretKey" :expected-email="material.email" required />
           <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
         </label>
-        <Button type="submit" :label="t('recovery.continueLabel')" icon="pi pi-key" :loading="busy" />
+        <VeyqButton type="submit" :label="t('recovery.continueLabel')" icon="key" :loading="busy" />
       </form>
 
       <!-- Step 3 — the new password. -->
       <form v-if="opened && !done" class="veyq-form" @submit.prevent="setNewPassword">
         <label class="veyq-field">
           {{ t('recovery.newPassword') }}
-          <Password v-model="newPassword" toggle-mask :feedback="false" input-id="recovery-password" required @blur="checkBreaches" />
+          <VeyqPassword v-model="newPassword" input-id="recovery-password" required @blur="checkBreaches" />
         </label>
         <label class="veyq-field">
           {{ t('recovery.confirmPassword') }}
-          <Password v-model="confirmPassword" toggle-mask :feedback="false" input-id="recovery-confirm" required />
+          <VeyqPassword v-model="confirmPassword" input-id="recovery-confirm" required />
         </label>
         <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
         <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="recovery" :disabled="busy" />
         <p class="field-hint">{{ t('recovery.deviceNote') }}</p>
-        <Button
+        <VeyqButton
           type="submit"
           :label="busy ? t('recovery.submitting') : t('recovery.submit')"
-          icon="pi pi-check"
+          icon="check"
           :loading="busy"
           :disabled="newPassword.length < MIN_PASSWORD_LENGTH"
         />
       </form>
 
-      <Message v-if="done" severity="success" :closable="false" class="form-message">
+      <VeyqMessage v-if="done" tone="success" class="form-message">
         {{ t('recovery.done') }}
-      </Message>
-      <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
+      </VeyqMessage>
+      <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
 
       <p class="field-hint">{{ t('recovery.noEscrow') }}</p>
     </template>
-  </Card>
+  </VeyqCard>
 </template>
