@@ -122,7 +122,7 @@ function guestRights(role: string, at: RightsTarget): DepotRights {
       // lets any kind out of and into a folder; the move dialog offers the subtree's folders only); nothing in a guest's
       // identity folder (only a member moves out of a drop box, inbox #377 (a)); a drop box below the link is read-only
       // for it, its move included (inbox #380). Rename is the server's (core's `updateShareNode`) but offered nowhere
-      // yet; a guest deletes no file (whether it may delete content of its own is inbox #467).
+      // yet; a guest deletes no file (ADR 0080 decision 6: no node that holds anything).
       if (at.kind === FOLDER_KIND) {
         const place = !at.inIdentityFolder
         return { ...NO_DEPOT_RIGHTS, download: true, upload: place, replace: place, moveFile: place }

@@ -58,8 +58,8 @@
 
 - A file can also be shared **on its own** ([uc.depot.share-file](uc.depot.share-file.md)); a file *inside* a folder link
   opens to the same file view (a row's info button).
-- A guest **deletes nothing** but its own empty placeholders (E5): a node records who last wrote its name, not whose its
-  content is (inbox #467), and the page offers no rename; a contributor moves a file
+- A guest **deletes nothing** but its own empty placeholders (E5): a guest deletes no node that holds anything
+  ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6), and the page offers no rename; a contributor moves a file
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
 - The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/depot.md § How a file is stored).
 
