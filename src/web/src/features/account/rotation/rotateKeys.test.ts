@@ -80,6 +80,7 @@ import { httpError } from '../../../test/httpError'
 import { registry } from '../../../core/applications/registry'
 import { memoriesLifecycle } from '../../memories/lifecycle'
 import { listScopeMembers } from '../../spaces/members'
+import { rekeyScope } from '../../../core/node/rekey/rekeyScope'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { grantSignatureVerifies, signGrant, tagAdmission } from '../../spaces/grant'
@@ -459,6 +460,21 @@ describe('what a rotation leaves behind', () => {
     // And the vault is told this session is still cold — it was proven cold moments ago, so a rotation must
     // not leave the person unable to rotate again.
     expect(swapped[2]).toBe('cold')
+  })
+
+  it('then re-keys every node of the scope it secured, under the new identity, and reports one left unfinished (ADR 0109)', async () => {
+    const e0 = v1.randomBytes(32)
+    fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, e0)] })
+    const own = tagAdmission(e0, { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' }, 0, ME)
+    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored', ...own })])
+    vi.mocked(rekeyScope).mockResolvedValueOnce({ done: false, committed: 3 })
+
+    const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
+
+    expect(rekeyScope).toHaveBeenCalledWith(SCOPE_PERSONAL)
+    // after the vault holds the new identity: the re-key opens the scope under the grant the rotation just made
+    expect(vi.mocked(setUnlocked).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(rekeyScope).mock.invocationCallOrder[0])
+    expect(result.scopes).toEqual([{ scopeId: SCOPE_PERSONAL, status: 'rekeying' }])
   })
 
   it('refuses to re-key a "sole" scope that turns out to have another member', async () => {

@@ -97,7 +97,13 @@ class RekeyCoreSliceTest {
             assertEquals("c2hhcmUtd3JhcA==", ShareEntity.findById(w.shareId)!!.wrap)
             assertEquals("bmV3LW5hbWU=", ShareIdentityEntity.findById(w.identityId)!!.sealedDisplayName)
             assertEquals(0L, NodeRekeyStageEntity.count("rekeyId", rekeyId.toString()), "the commit took its stage")
+            // ADR 0109 point 4: only the node key's wrap moved; the recovery copy stays at its epoch
+            val share = ShareEntity.findById(w.shareId)!!
+            assertEquals(listOf("cmVjb3Zlcnk=", 0), listOf(share.sealedShareKey, share.sealedShareKeyEpoch))
         }
+        // ...so the link keeps showing what is added and stays marked for renewal
+        given().header("Authorization", bearer(w.owner)).`when`().get("/api/shares?nodeId=${w.root}")
+            .then().statusCode(200).body("find { it.shareId == '${w.shareId}' }.reissueRequired", equalTo(true))
         // the child, its parent now current
         commitChild(w, UUID.randomUUID(), placementRevision = 1).statusCode(204)
         assertEquals(1, row(w.child).epoch)
@@ -294,6 +300,7 @@ class RekeyCoreSliceTest {
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = root; role = "READ_WRITE"
                 wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
+                sealedName = "bGluaw==" // a listed share is never a tombstone
             }.persist()
             ShareIdentityEntity().apply {
                 id = identityId; this.shareId = shareId; sealedDisplayName = "b2xkLW5hbWU="; tokenHash = "h-$identityId".take(64)
