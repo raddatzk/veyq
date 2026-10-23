@@ -5,7 +5,7 @@ A READING, never a check: nothing it records can turn red because the product go
 claim (ADR 0040). Run by hand on one quiet machine; no CI job runs it. What it can refuse is a run whose files would be
 unsafe or meaningless — a busy machine, a profile file holding a secret, a recording whose secret filter is unarmed.
 
-    profile_hot_paths.py --app IMG --admin IMG [--scenario s1] [--runs 3] [--throttles 1,4] [--keep] [--ignore-load]
+    profile_hot_paths.py --app IMG --admin IMG [--scenario s1,s2,s3,crypto] [--runs 3] [--throttles 1,4] [--keep] [--ignore-load]
 
 **What it profiles on.** A throwaway instance of the PRODUCTION recipe booted from the two candidate images, exactly as
 lane L1 installs it — `scripts/run_stack_e2e.py`'s own stages (assets, release mirror, Pebble, `veyqctl install
@@ -49,7 +49,19 @@ client files are checked for that owner's password and Secret Key before a run i
 are of the JVM's threads only (the database and the store are other containers, seen through the statement counters
 and the request times). The statement counters are MariaDB's GLOBAL ones, so a background job inside a window counts;
 the idle drift is subtracted as an estimate, never attributed. The CPU throttle is Chromium's emulation, not a slower
-device. S2 and S3 (decision 1) join `--scenario` with their readings (the CR's phase 2).
+device.
+
+**The scenarios** (decision 1; `--scenario` takes several, comma-separated, run one after another on ONE instance, so
+their readings share its seed — the CR's Q3):
+  - `s1` unlock: a new device signs in and opens the space (`s1-unlock.profile.ts`).
+  - `s2` upload: 50 phone-sized photos into one Chapter, a fresh Memory per run (`s2-upload.profile.ts`); the window's
+    store requests are the wire (#261).
+  - `s3` open a 1,000-photo Chapter (`s3-open-chapter.profile.ts`), seeded once before its first run by
+    `s3-seed.profile.ts` through the browser, unprofiled.
+  - `crypto`: decision 3's micro-reading, AES-256-GCM through `@noble/ciphers` against WebCrypto over 4 MB and 64 MB
+    (`crypto-aead.profile.ts`, its numbers in `<stem>.crypto.json`).
+  The photos S2 and S3 upload are synthetic: ffmpeg's `testsrc2` with temporal noise, rendered on this host into the run
+  directory's `fixtures/` before the first run (`render_photos`), so ffmpeg must be on the PATH for those two.
 """
 from __future__ import annotations
 
@@ -76,7 +88,12 @@ import run_stack_e2e as stack  # noqa: E402 - lane L1's own stages, so the insta
 ROOT = Path(__file__).resolve().parent.parent
 PROFILES = ROOT / ".run" / "profiles"
 PROFILE_CONFIG = (repo_layout.E2E_DIR / "profile" / "playwright.config.ts").relative_to(repo_layout.E2E_DIR)
-SCENARIOS = {"s1": "s1-unlock"}
+SCENARIOS = {"s1": "s1-unlock", "s2": "s2-upload", "s3": "s3-open-chapter", "crypto": "crypto-aead"}
+# What a scenario needs on the instance before its first run, run once and never profiled.
+SEEDS = {"s3": "s3-seed"}
+# The synthetic photos per scenario: how many, their size, and ffmpeg's JPEG quality — S2's a phone's (12 MP, about 4 MB),
+# S3's smaller, since S3 reads the grid's thumbnails and not the originals.
+PHOTOS = {"s2": (50, "4032x3024", 2), "s3": (1000, "1280x960", 4)}
 LOAD_LIMIT = 3.0
 IDLE_SECS = 20
 # Where the app writes its recording: a bind mount of the run directory's `jfr/`, since the recipe's /tmp is a tmpfs
@@ -211,6 +228,39 @@ def statements(before: dict[str, int], after: dict[str, int]) -> int:
 # ---------------------------------------------------------------- the browser leg
 
 
+def render_photos(workdir: Path, scenario: str) -> int:
+    """The scenario's synthetic photos in `fixtures/<scenario>/` of the run directory (the browser's /out): a test
+    pattern with temporal noise, so no two frames are alike (the upload deduplicates identical content), bit-exact and
+    without metadata. Returns the bytes rendered."""
+    count, size, quality = PHOTOS[scenario]
+    target = workdir / "fixtures" / scenario
+    target.mkdir(parents=True, exist_ok=True)
+    sh(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=1,noise=alls=12:allf=t",
+        "-frames:v", str(count), "-q:v", str(quality), "-map_metadata", "-1", "-fflags", "+bitexact",
+        "-flags:v", "+bitexact", str(target / f"{scenario}-%04d.jpg")])
+    rendered = sorted(target.glob("*.jpg"))
+    if len(rendered) != count:
+        raise Refused(f"ffmpeg rendered {len(rendered)} photos for {scenario}, not {count}")
+    return sum(f.stat().st_size for f in rendered)
+
+
+def seed_run(compose: list[str], workdir: Path, scenario: str) -> None:
+    """The scenario's seed, once, unprofiled: the same browser leg with the seed's spec file."""
+    seed = SEEDS[scenario]
+    (workdir / "profile-spec.json").write_text(json.dumps(
+        {"scenario": seed, "run": 0, "throttle": 1, "stem": seed}), encoding="utf-8")
+    cmd = [*compose, "run", "--rm", "--no-deps", "-T", "-e", f"VEYQ_PROFILE_DOMAIN={stack.DOMAIN}",
+           "browser", "-c", str(PROFILE_CONFIG), seed]
+    started = time.monotonic()
+    with (workdir / "profile-browser.log").open("a", encoding="utf-8") as log:
+        log.write(f"\n== {seed}\n")
+        log.flush()
+        status = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, text=True).returncode
+    if status != 0:
+        raise Refused(f"{seed}: Playwright exited {status} — profile-browser.log in the run directory says why")
+    say(f"{seed}: seeded in {time.monotonic() - started:.0f}s")
+
+
 def browser_run(compose: list[str], workdir: Path, scenario: str, run: int, throttle: int) -> dict:
     stem = f"{scenario}-t{throttle}-r{run}"
     (workdir / "profile-spec.json").write_text(json.dumps(
@@ -269,7 +319,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--app", required=True, help="the candidate app image (a local build's bare name:tag)")
     parser.add_argument("--admin", required=True, help="the candidate admin image")
-    parser.add_argument("--scenario", choices=sorted(SCENARIOS), default="s1")
+    parser.add_argument("--scenario", type=lambda s: s.split(","), default=["s1"],
+                        help=f"scenarios, comma-separated, run in this order on one instance: {', '.join(SCENARIOS)}")
     parser.add_argument("--runs", type=int, default=3, help="runs per throttle (decision 2: 3)")
     parser.add_argument("--throttles", type=lambda s: [int(x) for x in s.split(",")], default=[1, 4],
                         help="CPU throttle rates, comma-separated (decision 2: 1,4)")
@@ -277,6 +328,9 @@ def main() -> int:
     parser.add_argument("--ignore-load", action="store_true",
                         help="profile on a busy machine anyway; the run is marked quiet: false")
     args = parser.parse_args()
+    unknown = [s for s in args.scenario if s not in SCENARIOS]
+    if unknown:
+        parser.error(f"unknown scenario(s) {', '.join(unknown)}; choose from {', '.join(SCENARIOS)}")
 
     load = os.getloadavg()[0]
     if load > LOAD_LIMIT and not args.ignore_load:
@@ -292,7 +346,7 @@ def main() -> int:
     canary = f"veyq-profile-canary-{secrets.token_hex(12)}"
     os.environ.setdefault("VEYQ_STACK_WAIT_SECS", "900")
     os.environ.setdefault("VEYQ_STACK_CERT_SECS", "300")
-    say(f"profile run {stamp}: {args.scenario}, {args.runs} run(s) at throttle {args.throttles}, load {load:.2f}; "
+    say(f"profile run {stamp}: {', '.join(args.scenario)}, {args.runs} run(s) at throttle {args.throttles}, load {load:.2f}; "
         f"files in {workdir.relative_to(ROOT)}")
 
     verdicts: list[str] = []
@@ -301,6 +355,8 @@ def main() -> int:
     before = None
     try:
         before = stack.host_snapshot()
+        for scenario in (s for s in args.scenario if s in PHOTOS):
+            say(f"{scenario}: {render_photos(workdir, scenario) / 1048576:,.0f} MiB of synthetic photos rendered")
         stack.ports_free()
         stack.browser_pins()
         stack.browser_image()
@@ -325,22 +381,25 @@ def main() -> int:
         idle = statements(idle_from, counters(installed.compose)) / IDLE_SECS
         server = {"idleStatementsPerSec": idle, "runs": []}
 
-        for throttle in args.throttles:
-            for run in range(1, args.runs + 1):
-                c0 = counters(installed.compose)
-                window = browser_run(installed.compose, workdir, args.scenario, run, throttle)
-                c1 = counters(installed.compose)
-                client_files_clean(workdir, window["stem"], owner)
-                secs = (window["endedAt"] - window["startedAt"]) / 1000
-                count = statements(c0, c1)
-                api = len(window["apiRequests"])
-                estimate = (count - idle * secs) / api if api else None
-                server["runs"].append({"stem": window["stem"], "startedAt": window["startedAt"],
-                                       "endedAt": window["endedAt"], "statements": count, "apiRequests": api,
-                                       "statementsPerRequest": estimate,
-                                       "counters": {n: c1[n] - c0[n] for n in STATUS_VARS}})
-                say(f"{window['stem']}: {window['operationMs']:.0f} ms, {api} API request(s), {count} statement(s)"
-                    + (f" ≈ {estimate:.1f} per request" if estimate is not None else ""))
+        for scenario in args.scenario:
+            if scenario in SEEDS:
+                seed_run(installed.compose, workdir, scenario)
+            for throttle in args.throttles:
+                for run in range(1, args.runs + 1):
+                    c0 = counters(installed.compose)
+                    window = browser_run(installed.compose, workdir, scenario, run, throttle)
+                    c1 = counters(installed.compose)
+                    client_files_clean(workdir, window["stem"], owner)
+                    secs = (window["endedAt"] - window["startedAt"]) / 1000
+                    count = statements(c0, c1)
+                    api = len(window["apiRequests"])
+                    estimate = (count - idle * secs) / api if api else None
+                    server["runs"].append({"stem": window["stem"], "startedAt": window["startedAt"],
+                                           "endedAt": window["endedAt"], "statements": count, "apiRequests": api,
+                                           "statementsPerRequest": estimate,
+                                           "counters": {n: c1[n] - c0[n] for n in STATUS_VARS}})
+                    say(f"{window['stem']}: {window['operationMs']:.0f} ms, {api} API request(s), {count} statement(s)"
+                        + (f" ≈ {estimate:.1f} per request" if estimate is not None else ""))
         (workdir / "server.json").write_text(json.dumps(server, indent=2), encoding="utf-8")
 
         say("\n== the recording: the app stops, JFR dumps")

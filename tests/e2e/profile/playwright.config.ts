@@ -19,7 +19,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: true,
-  // One run is one unlock (or, later, one upload or one open); under a CPU throttle of 4 Argon2id alone takes long.
+  // One run is one unlock, one open or the crypto reading; under a CPU throttle of 4 Argon2id alone takes long. The upload
+  // and the seed set their own, longer timeouts.
   timeout: 10 * 60_000,
   reporter: [['list']],
   use: {
