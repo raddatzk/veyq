@@ -160,8 +160,13 @@ test(
     const editor = page.getByRole('dialog', { name: 'Date' })
     await editor.getByRole('button', { name: 'Single day' }).click()
     recordTyped(sealedDay)
-    await editor.getByRole('combobox', { name: 'Day' }).fill(recordTyped(memoryDay))
-    await editor.getByRole('combobox', { name: 'Day' }).press('Tab')
+    // The day is typed into the field's segments (ADR 0107: Reka's date field, one spinbutton per part, `mm/dd/yyyy` in
+    // English), as a keyboard does: each segment moves on to the next once it is full.
+    const day = editor.getByRole('group', { name: 'Day' })
+    await day.getByRole('spinbutton', { name: 'Month' }).click()
+    await page.keyboard.type(recordTyped(memoryDay).replace(/\D/g, ''))
+    await expect(day.getByRole('spinbutton', { name: 'Year' })).toHaveText('2021')
+    await page.keyboard.press('Tab')
     await editor.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(editor).toBeHidden()
 
