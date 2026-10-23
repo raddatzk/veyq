@@ -11,9 +11,18 @@ and anyone in the Pot sees at any time who owes whom.
 ## The Pot
 
 - **Participants** are only names in this Pot, linked to no account — a link guest has no stable identity to link
-  to. Whoever may write adds and renames one. A member **hides** one whose balance is settled: old entries keep the
-  name, new ones cannot pick it, and an edit that unsettles it brings it back. A member **deletes** one no live entry
-  names. Each of these is a line in the Pot's history like an entry's change (ADR 0108 decisions 2 and 6).
+  to. Whoever may write adds and renames one. The rest is a member's (ADR 0108 decisions 3 and 6):
+
+  | Step | Only when | Entries show | New entries, overviews | Undone |
+  |---|---|---|---|---|
+  | **Deactivate** | balance settled | the name | not offered, not shown | a member activates it again |
+  | **Delete** | balance settled | "deleted people" (all deleted participants as one) | not offered, not shown | never; the name is erased from storage |
+  | **Remove** | no revision of any entry, live or deleted, names it | — | gone | never; erased from storage |
+
+  A deactivated or deleted participant counts in the balances as before. Should an edit of an old entry unsettle one,
+  it shows again in the balances and the settle-up — a deactivated one by name, a deleted one as "deleted people" — so
+  the group sees what is open. In the data every deleted participant keeps its own id, which entries and the rounding
+  order use; only the screen merges them.
 - **Categories**: a default set with stable ids the client translates, plus the Pot's own (a member's to add):
 
   | id | de | en |
@@ -90,7 +99,7 @@ A share is the member's view with functions removed. On a Pot:
 | see entries, history, balances, overviews; download receipts | ✓ | ✓ | ✓ |
 | create, edit, delete and restore entries; add and remove receipts | ✓ | ✗ | ✓ |
 | add and rename participants | ✓ | ✗ | ✓ |
-| hide a settled participant, delete one no entry names | ✓ | ✗ | ✗ |
+| deactivate, activate, delete and remove participants | ✓ | ✗ | ✗ |
 | own categories, base currency (the Pot's meta) | ✓ | ✗ | ✗ |
 | create a Pot | ✓ | ✗ | ✗ |
 
