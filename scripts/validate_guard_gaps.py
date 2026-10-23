@@ -317,6 +317,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      stands. **Left open on purpose** — the same data-flow gap as 25: a constant holding the whole name IS caught,
      and the realistic regression (a hand parse in the moderation CR's guest-write path) spells the name. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
+  93 a ciphertext column named outside `wrapped_*` / `sealed_*` / `encrypted_*` (`node_ciphertext`) that no re-key
+     rewrites passes `validate_node_rekey_arity`, which derives its subject from column NAMES. **Left open on purpose**:
+     every column sealed under a node key today carries one of those prefixes or is named in the guard, and a guard
+     that read types or seal purposes would need the client's seal map, which the backend does not have. Pinned so the
+     name limit in its docstring is executable.
   84 a baseline entry recording a `500` under `status_code_conformance`, with a reason, passes
      `validate_api_fuzz_baseline`, which keeps `not_a_server_error` out of the baseline by its check name. **Left
      open on purpose** — the same response is red under `not_a_server_error` in the same run, and that entry is the
@@ -1474,6 +1479,16 @@ def forge_epoch_refusal_unnamed(root: pathlib.Path) -> str:
     return "commitNodeRekey's 409 no longer names node_rekey_pending (must be REJECTED)"
 
 
+def forge_rekey_column_named_outside_the_prefixes(root: pathlib.Path) -> str:
+    f = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/node/rekey/NodeRekeyStageEntity.kt"
+    anchor = '    @Column(name = "revision")\n'
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("NodeRekeyStageEntity: anchor not found (moved or drifted?)")
+    probe = '    @Column(name = "node_ciphertext")\n    var nodeCiphertext: String? = null\n\n'
+    f.write_text(f.read_text().replace(anchor, probe + anchor, 1))
+    return "a ciphertext column named node_ciphertext that no re-key rewrites (must stay ACCEPTED — the gap is open)"
+
+
 def forge_revision_field_named_version(root: pathlib.Path) -> str:
     # Both sides renamed together, so every other rule still holds: only the word is wrong.
     _in_operation(root, "account.openapi.yaml", "writeIdentityPins", "          - field: revision\n",
@@ -1637,6 +1652,7 @@ CASES = [
     ("82", WRITE_CONCURRENCY, forge_revision_field_named_version, False),
     ("91", WRITE_CONCURRENCY, forge_batch_epoch_undeclared, False),
     ("92", WRITE_CONCURRENCY, forge_epoch_refusal_unnamed, False),
+    ("93", "validate_node_rekey_arity.py", forge_rekey_column_named_outside_the_prefixes, True),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),

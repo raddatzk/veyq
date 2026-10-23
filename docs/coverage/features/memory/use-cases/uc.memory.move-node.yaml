@@ -12,7 +12,7 @@ acceptanceCriteria:
     text: "A move re-wraps only the moved node's own content key under the destination's key (K_SC at the current epoch at the scope root, the destination node's key elsewhere) and re-seals its name and slug token there at the next placement revision, stating the revision it was built on; every key below opens as before. A move into or out of the scope root seals at the current epoch, a move between two folders at the node's stored one."
     coverage:
       backend:
-        integration: [NodePlacementCoreSliceTest.theEpochIsCheckedOnlyAtTheRoot, NodePlacementCoreSliceTest.theListingServesThePlacementRevisionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
+        integration: [NodePlacementCoreSliceTest.aPlacementKeepsTheNodesEpochAndWaitsForItsDestination, NodePlacementCoreSliceTest.theListingServesThePlacementRevisionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
       web:
         unit: [src/core/node/move.wire.test.ts, src/core/node/tree.wire.test.ts]
 
@@ -36,7 +36,7 @@ acceptanceCriteria:
     text: "Each server refusal of a move is said by its code — slug_taken, illegal_structure, illegal_scope, stale_epoch, share_not_contributable, a gone node or link, rate_limited, scope_deleting — and a lost race (stale_placement, after the write's own bounded re-read) re-reads the tree so the next attempt builds on the node as it now is; a guest who declines to name itself sends nothing and is told nothing."
     coverage:
       backend:
-        integration: [ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, NodePlacementCoreSliceTest.anEpochAboveTheCurrentIsRefusedForAnyDestination]
+        integration: [ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, NodePlacementCoreSliceTest.anEpochThatIsNotTheNodesIsRefusedForAnyDestination]
       web:
         unit: [src/core/node/move.test.ts, src/core/node/MoveNodeDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts]
 
