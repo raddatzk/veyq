@@ -149,6 +149,14 @@ turned the closing quote of `'E2E Files'` into a broken string. So after each sw
 whole tree, untracked moves included (`git grep` does not see a directory moved with plain `mv`; `grep -r` does),
 and every remaining hit is spared by name — the CR's look-alike list, or a comment at the line that says why.
 
+**A locator for a class name searches the bare name, not only its selector form.** cr-own-ui-components-on-reka's
+inventory found the library's classes as `\.p-[a-z]` — the way a sheet or a query writes them — so two native
+inputs with `class="p-inputtext order-received"` in admin-web's order form passed every phase's locator, the call-site
+agents' closing grep and every guard, and lost their field look the day the library's global sheet went; only the
+browser pass saw it. A class name has three spellings in this repo: the selector (`.x`), the attribute value
+(`class="… x …"`, `:class`) and the string a script builds (`'x'`). A locator meant to prove an absence greps the bare
+word (`\bp-[a-z][a-z-]*`) and spares its look-alikes by name.
+
 **"Measured against `main`, so no phase re-derives it" means *don't rebuild the inventory* — never *believe every
 row*.** A CR that carries its measurements in a table earns the implementer's time, and the clause that hands
 them over is doing the opposite of what it reads as: it suppresses re-derivation of the whole set, which is

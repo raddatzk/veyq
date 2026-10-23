@@ -1,7 +1,7 @@
 ---
 id: cr-own-ui-components-on-reka
 title: The clients own their UI components — a wrapper layer on PrimeVue 4.5.5, then Reka UI underneath, then PrimeVue out
-status: planned
+status: done
 satisfies: []
 adrs: ["0107", "0039", "0065", "0079"]
 invariants:
@@ -230,3 +230,42 @@ retrospective written; the CR deleted after its lessons are moved where they bin
 - **The e2e suites' run** (web-e2e, L1) follows the owner's V1-end rule; their selectors move in phases 1–5, and a red
   there at V1 end that names a `veyq-*` hook or a role from this CR goes back to the layer.
 - **Inbox #523**: whether `style-src 'unsafe-inline'` can go once PrimeVue is out.
+
+## Retrospective
+
+- **Planning — the inventory measured what reaches into the library, not what the library did unasked, and the work
+  was in the second.** Every locator counted imports, `.p-*` classes and `--p-*` reads; none listed the defaults the
+  screens relied on. Each one surfaced only in a browser pass or a red test run:
+  - the date picker opened on focus on every field, not only the Memory's;
+  - the dialog focused `[autofocus]`;
+  - a typed date outside min/max was refused;
+  - the select showed its placeholder;
+  - a `<label>` forwarded its click to the first labelable element;
+  - a tab switched on click (Reka switches on the press; 27 tests and one test silently on the wrong tab);
+  - the hover card answered mouse events.
+
+  The fix is an inventory row per component — focus target, placeholder, keyboard, refusal, label behaviour —
+  measured at refine. The class locators also matched only the dotted selector form, which let two
+  `class="p-inputtext"` inputs through to the last browser pass (harvested: `changes/README.md`, a class-name locator
+  searches the bare name).
+- **Planning and process — the browser pass named states without the instance and the credentials they need, a rule
+  this file already had** (§ *A live proof that names a screen names the instance state that screen needs*). Three
+  states had no such instance:
+  - first-run setup needs a fresh instance;
+  - the console needs a Server-Owner sign-in with an owner-chosen password;
+  - the statement notice needs an active tenant.
+
+  The sign-in question reached the owner at the end of phase 5, not before phase 1. The relayed consents (unsigned
+  commits, the teardown) were refused by the classifier and had to be given again in-session.
+- **Execution — my own slips, each cheap to prevent:**
+  - an `npx prettier` with no repository config rewrote a file;
+  - commits chained with `;` let a staged `git rm` land in the wrong commit (a reset to the absolute hash fixed it);
+  - a `docker run` pulled an image I had assumed was local, without asking first;
+  - the bundle locator spelled `createElement("style")`, where the build writes backticks;
+  - one pass measured a hidden browser pane, where ResizeObserver never fires.
+
+  The machine-local ones are in my notes; the bundle locator's spelling is in inbox #523's row.
+
+**Next time:** before phase 1, list each browser-pass state with the instance, the credentials and the downloads it
+needs, and ask for every consent the CR will need in one message to the owner, in the implementing session.
+
