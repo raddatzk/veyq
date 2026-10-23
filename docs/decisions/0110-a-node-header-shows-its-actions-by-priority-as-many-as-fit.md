@@ -1,6 +1,9 @@
 # ADR 0110 — A node header shows its actions by priority, as many as fit, and the rest in one menu
 
-- Status: Accepted (owner design 2026-10-23, inbox #529), built by cr-node-header-actions-by-priority (2026-10-23).
+- Status: Accepted (owner design 2026-10-23, inbox #529), built by cr-node-header-actions-by-priority (2026-10-23);
+  decisions 1–3 and 8 as they stand here (owner, 2026-10-23, inbox #531) are built by
+  `changes/cr-node-header-layout-by-fit.md` — until it lands, a 540 px viewport query places the actions and a 460 px
+  container query sizes the Memory's cover (§ Context, last paragraph).
 - Date: 2026-10-23
 
 ## Context
@@ -22,19 +25,34 @@ The level list already splits a row's actions (#407, `src/web/src/core/node/leve
 buttons, every other shown action sits in one `VeyqMenu`. That split is fixed, not measured, because a list needs the
 same columns in every row.
 
+The first build placed the actions by a viewport query: a row of their own up to 540 px, the right end of the title row
+above it beside a 12rem minimum name, with the name in two lines at every width — and the Memory's cover had its own
+460 px container query. Measured 2026-10-23 (#531): a Memory showed 9 of its 11 buttons at 540 px, **1** at 541 px, 6 at
+768 px and 10 at 1280 px; a folder and a file 7, 4, 7, 7 at 540, 541, 768 and 1280 px; and between the two queries a
+180 px cover sat beside the name in a narrow header. The owner then decided (2026-10-23): *the title comes first and
+pushes actions into the menu, but only while favorite and upload stay visible — after that the title is shortened*; *two
+lines only on a phone — on a desktop, lines two and three beside the big cover are date, place and participants*; *and
+on a desktop the title and the actions are always one row*.
+
 ## Decision
 
-1. **The leading visual stays beside the name at every width; the header never stacks.** On a phone a Memory's cover
-   is a small 16:9 tile (64 × 36 px); on a wide screen the sizes of today stay (the Memory's 180 px cover, a folder's
-   5.5 rem cover, the 42 px icon tile).
-2. **The name shows at most two lines**, then an ellipsis, at every width; the full name is the title's tooltip. A
-   longer text belongs in a description under the name (#528), not in the name.
-3. **Where the actions sit.** On a phone they have a row of their own, spanning the header's full width below the cover
-   and the name. On a wide screen they stay where they are today: at the right end of the title row, beside the name
-   (owner, 2026-10-23); the name keeps its minimum width there, and the actions get the rest of the row.
+1. **Two layouts, and the leading visual stays beside the name in both; the header never stacks.**
+   - **Compact** (a phone): a small leading visual — a Memory's or a folder's cover a 16:9 tile of 64 × 36 px, the icon
+     tile its 42 px —, the name beside it in **at most two lines**, the actions in a row of their own, the header's full
+     width, below them; then subtitle and meta.
+   - **Wide** (a desktop): today's sizes (the Memory's 180 px cover, a folder's 5.5 rem cover, the 42 px icon tile), and
+     the name and the actions **always one row** — the name **one line**, because the lines beside a big cover belong to
+     the subtitle and the meta (a Memory's date, place and participants). The actions never get a row of their own here.
+2. **The full name is the title's tooltip** in both layouts, and the DOM keeps all of it. A longer text belongs in a
+   description under the name (#528), not in the name.
+3. **On a wide header the name comes first.** It takes its natural width; the actions yield to the ⋯ menu from the back
+   of the priority order, down to a **floor: the kind's first two shown actions** (a Memory favorite and upload, a folder
+   favorite and share, a file favorite and download, a drop box favorite and share; a guest, who has no favorite, keeps
+   the next two — a Memory's upload and download). Only below the floor is the name shortened, one line, with an
+   ellipsis. On a compact header the name has its own two lines, and the actions' row holds as many as fit.
 4. **As many actions as fit are buttons, in priority order; the rest are entries of one "more" menu (⋯) at the row's
-   end.** The fit is measured from the row's width and measured again when that width changes, at every width — no
-   breakpoint decides it.
+   end.** The fit is measured from the row's width and measured again when that width changes (decision 8 picks the
+   layout, this decision fills its row).
 5. **The priority is the order of the node kind's list**, which the page that draws the header supplies, core's actions
    (favorite, cover, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload,
    share, upload request, participants, download, cover, banner, rename, move, copy. A folder's, a file's and a drop
@@ -44,13 +62,23 @@ same columns in every row.
    last: a button that moves with the width is too easy to hit by mistake, and both open a consequential dialog.
 7. **No action is lost.** An action that does not fit is an entry of the menu with its label and icon; a disabled
    action is a disabled entry. Every entry is reachable by keyboard (the layer's menu).
+8. **The header's own width picks the layout, by fit — no viewport query.** Wide applies while the wide leading visual,
+   the name's minimum (**12rem**, 192 px: about "Rom 2026" in a Memory's 2 rem name, about "Omas 80. Geburtstag" in the
+   1.15 rem name of the other kinds), the floor's two buttons and the ⋯, with their gaps, fit in one row; otherwise
+   compact. Cover size, name lines and where the actions sit all follow this one answer, so a big cover can no longer
+   sit beside a name in a narrow header. Its inputs are the header's width (which its layout does not change) and fixed
+   sizes — never the name's text or the layout in force — so it cannot flip back and forth. From the sizes measured
+   2026-10-23 it switches at a header width of 541 px for a Memory and 403 px for a folder, a file and a drop box (449 px for a folder
+   with a cover): a 375 px phone is compact for every kind.
 
 ## Consequences
 
 - The header and the level rows split their actions by two rules: the header by its measured width, a row by its fixed
   two `first` actions. They share the menu's entries (label, icon, disabled, danger) and nothing else.
-- On a wide screen a Memory is expected to show all eleven of its other actions as buttons, the menu holding report
-  and delete only (an expectation from the button size, measured by the CR's browser pass, not yet a measurement).
+- On a wide screen a Memory with a short name shows 10 of its 11 other actions (measured 2026-10-23 at 1280 px with
+  "Rom 2026"); with a long name it shows its floor, favorite and upload, and the name ends in an ellipsis on one line.
+- A long name costs the wide header its buttons before it costs the name its text — the owner's priority. A guest's
+  floor is whatever the guest's first two actions are; a guest with fewer than two has no floor to keep.
 - The rule "every action is visible at every width" is retired in `ui.css`, `src/web/CLAUDE.md` and the styleguide; the
   published pages that say an action is "a button next to the name" learn that it may sit in the ⋯ menu.
 - #525's rule (a stacked header's leading box spans the header) has no stacked header left to serve and goes.
@@ -69,3 +97,11 @@ same columns in every row.
   long name beside a small cover to look bad, and one line hides too much; two lines are the middle (E2).
 - **The cover above the name on a phone** (today's stacking): it pushes the content a screen down and is what the owner
   asked to change.
+- **A viewport breakpoint for the layout** (the first build, 540 px): it ignores what the header holds — a Memory's 180
+  px cover and an icon tile switch at the same width — and it jumped from 9 buttons to 1 at 541 px (#531). The header's
+  own width, read against what it must fit, decides instead.
+- **The actions first on a wide header, the name at a fixed minimum** (the first build): a long name squeezed to 12rem
+  in two lines beside the buttons; the owner put the name first.
+- **Two lines of name on a wide header:** beside a 180 px cover those lines are the date, place and participants.
+- **A name minimum in characters (10ch):** it scales with the font, but at 119 px for the 1.15 rem names it switches a
+  folder to the wide layout on a 375 px phone, with three buttons instead of six; 12rem keeps every phone compact.
