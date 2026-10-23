@@ -49,7 +49,10 @@ mints an entry's id ([ADR 0072](0072-a-seal-binds-its-object.md) decision 3). Ev
 of that entry: the server takes revision `n + 1` only where `n` is the entry's latest and answers anything else
 `409 stale_revision`, so two concurrent edits never overwrite each other silently. A delete is a revision too, with a
 server-visible tombstone flag (the server needs it for decision 6's purge). Revision rows stay as long as the Pot does:
-the history of every entry, with who wrote each revision, is what makes decision 5 safe. The list is published with
+the history of every entry, with who wrote each revision, is what makes decision 5 safe. The one exception is a deleted
+participant (decision 6): a member writes a sealed **erasure** revision on its record, and the server then erases that
+record's earlier revisions, so its name and every earlier spelling of it are gone from storage. Entries name a
+participant by its id only, so none of them changes. The list is published with
 core's revisioned-list primitive ([docs/apps](../apps/README.md) § How an application publishes a revisioned list).
 
 **4. Each revision is sealed under a new field purpose, `expense-entry`,** bound to (scope, node, entry, revision) under
@@ -65,6 +68,8 @@ missing. That catches the server dropping any revision somebody wrote after; it 
 being held back, which looks exactly like a stale read — the platform's freshness limit
 ([ADR 0072](0072-a-seal-binds-its-object.md) decision 5, inbox #161), stated, not closed. No signature is needed: the
 seal under the Pot's key already proves a revision came from a key holder, and the server cannot forge a reference.
+A named revision may be missing only where a sealed erasure of its record covers it (decision 3); the server cannot
+write one, so it cannot use one to hide anything.
 
 **6. Members and `READ_WRITE` guests create, edit and delete entries alike** — Expenses' interpretation of
 `READ_WRITE` for its kind (ADR 0080 decision 6), and a share stays the member's view with functions removed. A guest
@@ -73,10 +78,13 @@ nothing: whoever may write can cancel any entry with a counter-entry. What prote
 ADR 0080 decision 6 refuses a guest's node delete: an edit or a delete is a revision, every revision stays
 readable with its writer, a deleted entry is shown in the Pot's own deleted list and restorable for the platform's
 trash retention ([ADR 0061](0061-node-deletion-reversible-node-trash.md)), and no guest action erases anything at once.
-**Participants** follow the same shape (owner 2026-10-23): whoever may write adds and renames one; a member hides one
-whose balance is settled (old entries keep showing the name, new ones cannot pick it, and an edit that unsettles it
-shows it again) and deletes one no live entry names. The server cannot see which of these a revision is, so the rule is
-the client's, and a revision that breaks it is visible in the history and undone like any other.
+**Participants** follow the same shape (owner 2026-10-23): whoever may write adds and renames one, and the rest is a
+member's. A member **deactivates** a settled participant (entries keep the name; new entries and the overviews no longer
+offer it; a member activates it again), **deletes** a settled one (entries show it as one merged "deleted people", and
+its name is erased, decision 3), or **removes** one that no revision of any entry, live or deleted, names (it is
+erased and appears nowhere). The server cannot see which of the reversible steps a revision is, so those rules are the
+client's, and a revision that breaks them is visible in the history like any other. An erasure is the one write that
+removes something, so it is a server-visible operation the server takes from a member only.
 There is no extra permission; the server knows each revision's writer (a member's user id or a link identity, the
 pair core's attachments record), so "only one's own entries" could be enforced later without the server learning more.
 A member reads the history with each writer's name; a guest reads every revision and its time but no writer's name,
@@ -113,7 +121,7 @@ every device computes the same balance from the same entries.
 
 - **What the operator sees, beyond the node's kind:** per Pot the number of entries, of revisions per entry and of
   receipts per entry; every revision's time, size class and writer (a member or a link identity); which entries are
-  deleted; receipt sizes. Not who owes whom, no amount, no participant, no category, no currency.
+  deleted; which records were erased; receipt sizes. Not who owes whom, no amount, no participant, no category, no currency.
 - **New on the platform:** the first blobless record list (decision 3), the first guest write that is a record
   (decision 6), a seal purpose (decision 4), the second record type with its own blobs after media (decision 7). A
   generic "record with attachments" primitive in core waits for a third concrete user (Inventory is a concept).
