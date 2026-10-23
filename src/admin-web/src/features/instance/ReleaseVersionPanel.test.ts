@@ -18,7 +18,7 @@ import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
 }
 
 async function mountPanel() {

@@ -19,13 +19,13 @@ import { getBackupRetention, needsReason, parseRetentionDays, setBackupRetention
 import { i18n } from '../../i18n'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-severity="tone"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input class="input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  Button: {
+  VeyqButton: {
     props: ['label', 'disabled'],
     emits: ['click'],
     template: '<button type="button" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',

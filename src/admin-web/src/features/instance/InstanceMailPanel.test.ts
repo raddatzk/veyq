@@ -19,14 +19,14 @@ import { i18n } from '../../i18n'
 import { httpError } from '../../test/httpError'
 
 const stubs = {
-  Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },
-  InputText: {
+  VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-severity="tone"><slot /></div>' },
+  VeyqInput: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  ToggleSwitch: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
-  Button: {
+  VeyqSwitch: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
+  VeyqButton: {
     props: ['label', 'disabled', 'type'],
     emits: ['click'],
     template: '<button :type="type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)">{{ label }}</button>',
